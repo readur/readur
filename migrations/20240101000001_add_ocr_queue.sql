@@ -1,6 +1,6 @@
 -- Add OCR queue table for robust processing
 CREATE TABLE IF NOT EXISTS ocr_queue (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
     status VARCHAR(20) DEFAULT 'pending',
     priority INT DEFAULT 5,
@@ -31,7 +31,7 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_error TEXT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_completed_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS ocr_metrics (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     date DATE DEFAULT CURRENT_DATE,
     hour INT DEFAULT EXTRACT(HOUR FROM NOW()),
     total_processed INT DEFAULT 0,

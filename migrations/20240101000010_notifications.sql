@@ -1,6 +1,6 @@
 -- Create notifications table for backend-to-frontend notifications
 CREATE TABLE IF NOT EXISTS notifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     notification_type VARCHAR(20) NOT NULL CHECK (notification_type IN ('success', 'error', 'info', 'warning')),
     title VARCHAR(255) NOT NULL,
