@@ -9,7 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
-struct OcrHealthResponse {
+pub struct OcrHealthResponse {
     status: String,
     tesseract_installed: bool,
     available_languages: Vec<String>,
@@ -18,7 +18,7 @@ struct OcrHealthResponse {
 }
 
 #[derive(Serialize)]
-struct OcrErrorResponse {
+pub struct OcrErrorResponse {
     error: String,
     error_code: String,
     details: Option<String>,
@@ -26,7 +26,7 @@ struct OcrErrorResponse {
 }
 
 #[derive(Deserialize)]
-struct OcrRequest {
+pub struct OcrRequest {
     file_path: String,
     language: Option<String>,
     use_fallback: Option<bool>,

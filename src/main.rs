@@ -9,34 +9,11 @@ use std::sync::Arc;
 use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
 use tracing::{info, error};
 
-mod auth;
-mod batch_ingest;
-mod config;
-mod db;
-mod enhanced_ocr;
-mod file_service;
-mod models;
-mod ocr;
-mod ocr_queue;
-mod routes;
-mod seed;
-mod swagger;
-mod watcher;
-mod webdav_service;
-mod webdav_scheduler;
-mod webdav_xml_parser;
+use readur::{config::Config, db::Database, AppState, *};
 
 #[cfg(test)]
 mod tests;
 
-use config::Config;
-use db::Database;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub db: Database,
-    pub config: Config,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -144,16 +121,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let app = Router::new()
         .route("/api/health", get(readur::health_check))
-        .nest("/api/auth", routes::auth::router())
-        .nest("/api/documents", routes::documents::router())
-        .nest("/api/metrics", routes::metrics::router())
-        .nest("/api/notifications", routes::notifications::router())
-        .nest("/api/queue", routes::queue::router())
-        .nest("/api/search", routes::search::router())
-        .nest("/api/settings", routes::settings::router())
-        .nest("/api/users", routes::users::router())
-        .nest("/api/webdav", routes::webdav::router())
-        .merge(swagger::create_swagger_router())
+        .nest("/api/auth", readur::routes::auth::router())
+        .nest("/api/documents", readur::routes::documents::router())
+        .nest("/api/metrics", readur::routes::metrics::router())
+        .nest("/api/notifications", readur::routes::notifications::router())
+        .nest("/api/queue", readur::routes::queue::router())
+        .nest("/api/search", readur::routes::search::router())
+        .nest("/api/settings", readur::routes::settings::router())
+        .nest("/api/users", readur::routes::users::router())
+        .nest("/api/webdav", readur::routes::webdav::router())
+        .merge(readur::swagger::create_swagger_router())
         .nest_service("/", ServeDir::new("/app/frontend").fallback(ServeFile::new("/app/frontend/index.html")))
         .fallback(serve_spa)
         .layer(CorsLayer::permissive())
@@ -161,7 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let watcher_config = config.clone();
     tokio::spawn(async move {
-        if let Err(e) = watcher::start_folder_watcher(watcher_config).await {
+        if let Err(e) = readur::watcher::start_folder_watcher(watcher_config).await {
             error!("Folder watcher error: {}", e);
         }
     });
@@ -170,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let queue_db = Database::new(&config.database_url).await?;
     let queue_pool = sqlx::PgPool::connect(&config.database_url).await?;
     let concurrent_jobs = 4; // TODO: Get from config/settings
-    let queue_service = Arc::new(ocr_queue::OcrQueueService::new(queue_db, queue_pool, concurrent_jobs));
+    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(queue_db, queue_pool, concurrent_jobs));
     
     let queue_worker = queue_service.clone();
     tokio::spawn(async move {
@@ -199,7 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     // Start WebDAV background sync scheduler
-    let webdav_scheduler = webdav_scheduler::WebDAVScheduler::new(state.clone());
+    let webdav_scheduler = readur::webdav_scheduler::WebDAVScheduler::new(state.clone());
     tokio::spawn(async move {
         info!("Starting WebDAV background sync scheduler");
         webdav_scheduler.start().await;

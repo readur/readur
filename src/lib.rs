@@ -14,6 +14,7 @@ pub mod ocr_queue;
 pub mod ocr_tests;
 pub mod routes;
 pub mod seed;
+pub mod swagger;
 pub mod watcher;
 pub mod webdav_service;
 pub mod webdav_scheduler;
