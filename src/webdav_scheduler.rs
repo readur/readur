@@ -143,11 +143,21 @@ impl WebDAVScheduler {
                 let elapsed_minutes = elapsed.num_minutes();
                 
                 if elapsed_minutes < sync_interval_minutes as i64 {
-                    info!("Sync not due for user {} (last sync {} minutes ago, interval {} minutes)", 
-                        user_settings.user_id, elapsed_minutes, sync_interval_minutes);
+                    // Only log this occasionally to avoid spam
+                    if elapsed_minutes % 10 == 0 {
+                        info!("Sync not due for user {} (last sync {} minutes ago, interval {} minutes)", 
+                            user_settings.user_id, elapsed_minutes, sync_interval_minutes);
+                    }
                     return Ok(false);
                 }
+                
+                info!("Sync is due for user {} (last sync {} minutes ago, interval {} minutes)", 
+                    user_settings.user_id, elapsed_minutes, sync_interval_minutes);
+            } else {
+                info!("No previous sync found for user {}, sync is due", user_settings.user_id);
             }
+        } else {
+            info!("No sync state found for user {}, sync is due", user_settings.user_id);
         }
 
         // Sync is due

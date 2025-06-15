@@ -218,21 +218,25 @@ async fn process_single_file(
     info!("Processing file: {}", file_info.path);
     
     // Check if we've already processed this file
+    info!("Checking WebDAV tracking for: {}", file_info.path);
     match state.db.get_webdav_file_by_path(user_id, &file_info.path).await {
         Ok(Some(existing_file)) => {
+            info!("Found existing WebDAV file record: {} (current ETag: {}, remote ETag: {})", 
+                file_info.path, existing_file.etag, file_info.etag);
+            
             // Check if file has changed (compare ETags)
             if existing_file.etag == file_info.etag {
-                info!("Skipping unchanged file: {} (ETag: {})", file_info.path, file_info.etag);
+                info!("Skipping unchanged WebDAV file: {} (ETag: {})", file_info.path, file_info.etag);
                 return Ok(false); // Not processed (no change)
             }
-            info!("File has changed: {} (old ETag: {}, new ETag: {})", 
+            info!("WebDAV file has changed: {} (old ETag: {}, new ETag: {})", 
                 file_info.path, existing_file.etag, file_info.etag);
         }
         Ok(None) => {
-            info!("New file found: {}", file_info.path);
+            info!("New WebDAV file detected: {}", file_info.path);
         }
         Err(e) => {
-            warn!("Error checking existing file {}: {}", file_info.path, e);
+            warn!("Error checking existing WebDAV file {}: {}", file_info.path, e);
         }
     }
     
@@ -245,39 +249,50 @@ async fn process_single_file(
     // Calculate file hash for deduplication 
     let file_hash = calculate_file_hash(&file_data);
     
-    // Check if this exact file content already exists in the system
+    // Check if this exact file content already exists for this user
     // This prevents downloading and processing duplicate files from WebDAV
+    info!("Checking for duplicate content for user {}: {} (hash: {}, size: {} bytes)", 
+        user_id, file_info.name, &file_hash[..8], file_data.len());
+    
+    // Query documents with the same file size for this user only
+    let size_filter = file_data.len() as i64;
     if let Ok(existing_docs) = state.db.get_documents_by_user_with_role(user_id, crate::models::UserRole::User, 1000, 0).await {
-        for existing_doc in existing_docs {
-            // Quick size check first (much faster than hash comparison)
-            if existing_doc.file_size == file_data.len() as i64 {
-                // Read the existing file and compare hashes
-                if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
-                    let existing_hash = calculate_file_hash(&existing_file_data);
-                    if file_hash == existing_hash {
-                        info!("Skipping duplicate WebDAV file content: {} (hash: {}, already exists as: {})", 
-                            file_info.name, &file_hash[..8], existing_doc.original_filename);
-                        
-                        // Still record this WebDAV file in the tracking table to prevent re-downloading
-                        let webdav_file = CreateWebDAVFile {
-                            user_id,
-                            webdav_path: file_info.path.clone(),
-                            etag: file_info.etag.clone(),
-                            last_modified: file_info.last_modified,
-                            file_size: file_info.size,
-                            mime_type: file_info.mime_type.clone(),
-                            document_id: Some(existing_doc.id), // Link to existing document
-                            sync_status: "duplicate_content".to_string(),
-                            sync_error: None,
-                        };
-                        
-                        if let Err(e) = state.db.create_or_update_webdav_file(&webdav_file).await {
-                            error!("Failed to record duplicate WebDAV file: {}", e);
-                        }
-                        
-                        return Ok(false); // Not processed (duplicate)
+        let matching_docs: Vec<_> = existing_docs.into_iter()
+            .filter(|doc| doc.file_size == size_filter)
+            .collect();
+            
+        info!("Found {} documents with same size for user {}", matching_docs.len(), user_id);
+        
+        for existing_doc in matching_docs {
+            // Read the existing file and compare hashes
+            if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
+                let existing_hash = calculate_file_hash(&existing_file_data);
+                if file_hash == existing_hash {
+                    info!("Found duplicate content for user {}: {} matches existing document {}", 
+                        user_id, file_info.name, existing_doc.original_filename);
+                    
+                    // Record this WebDAV file as a duplicate but link to existing document
+                    let webdav_file = CreateWebDAVFile {
+                        user_id,
+                        webdav_path: file_info.path.clone(),
+                        etag: file_info.etag.clone(),
+                        last_modified: file_info.last_modified,
+                        file_size: file_info.size,
+                        mime_type: file_info.mime_type.clone(),
+                        document_id: Some(existing_doc.id), // Link to existing document
+                        sync_status: "duplicate_content".to_string(),
+                        sync_error: None,
+                    };
+                    
+                    if let Err(e) = state.db.create_or_update_webdav_file(&webdav_file).await {
+                        error!("Failed to record duplicate WebDAV file: {}", e);
                     }
+                    
+                    info!("WebDAV file marked as duplicate_content, skipping processing");
+                    return Ok(false); // Not processed (duplicate)
                 }
+            } else {
+                warn!("Could not read existing file for hash comparison: {}", existing_doc.file_path);
             }
         }
     }
@@ -325,8 +340,10 @@ async fn process_single_file(
     
     // Queue for OCR processing if enabled
     if enable_background_ocr {
+        info!("Background OCR is enabled, queueing document {} for processing", created_document.id);
+        
         match state.db.pool.acquire().await {
-            Ok(conn) => {
+            Ok(_conn) => {
                 let queue_service = crate::ocr_queue::OcrQueueService::new(
                     state.db.clone(), 
                     state.db.pool.clone(), 
@@ -350,6 +367,8 @@ async fn process_single_file(
                 error!("Failed to connect to database for OCR queueing: {}", e);
             }
         }
+    } else {
+        info!("Background OCR is disabled, skipping OCR queue for document {}", created_document.id);
     }
     
     Ok(true) // Successfully processed

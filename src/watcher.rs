@@ -13,6 +13,16 @@ use crate::{config::Config, db::Database, file_service::FileService, ocr_queue::
 
 pub async fn start_folder_watcher(config: Config, db: Database) -> Result<()> {
     info!("Starting hybrid folder watcher on: {}", config.watch_folder);
+    info!("Upload path configured as: {}", config.upload_path);
+    
+    // Debug: Check if paths resolve correctly
+    let watch_canonical = std::path::Path::new(&config.watch_folder).canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&config.watch_folder));
+    let upload_canonical = std::path::Path::new(&config.upload_path).canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&config.upload_path));
+    
+    info!("Watch folder canonical path: {:?}", watch_canonical);
+    info!("Upload folder canonical path: {:?}", upload_canonical);
     
     // Initialize services with shared database
     let file_service = FileService::new(config.upload_path.clone());
@@ -167,6 +177,7 @@ async fn scan_directory(
     {
         if entry.file_type().is_file() {
             let path = entry.path().to_path_buf();
+            debug!("Found file during scan: {:?}", path);
             
             if let Ok(metadata) = entry.metadata() {
                 if let Ok(modified) = metadata.modified() {
@@ -307,20 +318,26 @@ async fn process_file(
     // Calculate file hash for deduplication
     let file_hash = calculate_file_hash(&file_data);
     
-    // Check if this exact file content already exists in the system by comparing
-    // against existing files with the same size (performance optimization)
+    // Check if this exact file content already exists for the admin user
+    debug!("Checking for duplicate content for admin user: {} (hash: {}, size: {} bytes)", 
+        filename, &file_hash[..8], file_size);
+    
+    // Query documents with the same file size for the admin user only
     if let Ok(existing_docs) = db.get_documents_by_user_with_role(admin_user_id, crate::models::UserRole::Admin, 1000, 0).await {
-        for existing_doc in existing_docs {
-            // Quick size check first (much faster than hash comparison)
-            if existing_doc.file_size == file_size {
-                // Read the existing file and compare hashes
-                if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
-                    let existing_hash = calculate_file_hash(&existing_file_data);
-                    if file_hash == existing_hash {
-                        info!("Skipping duplicate file content: {} (hash: {}, already exists as: {})", 
-                            filename, &file_hash[..8], existing_doc.original_filename);
-                        return Ok(());
-                    }
+        let matching_docs: Vec<_> = existing_docs.into_iter()
+            .filter(|doc| doc.file_size == file_size)
+            .collect();
+            
+        debug!("Found {} documents with same size for admin user", matching_docs.len());
+        
+        for existing_doc in matching_docs {
+            // Read the existing file and compare hashes
+            if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
+                let existing_hash = calculate_file_hash(&existing_file_data);
+                if file_hash == existing_hash {
+                    info!("Skipping duplicate file content: {} (hash: {}, already exists as: {})", 
+                        filename, &file_hash[..8], existing_doc.original_filename);
+                    return Ok(());
                 }
             }
         }
