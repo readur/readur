@@ -779,4 +779,5 @@ pub struct WebDAVSourceConfig {
     pub file_extensions: Vec<String>,
     pub auto_sync: bool,
     pub sync_interval_minutes: i32,
+    pub server_type: Option<String>,
 }

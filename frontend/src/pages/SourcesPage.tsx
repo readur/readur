@@ -989,6 +989,249 @@ const SourcesPage: React.FC = () => {
                       sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                     />
                   )}
+
+                  <Divider sx={{ my: 2 }} />
+
+                  {/* Folder Management */}
+                  <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                    <Avatar 
+                      sx={{ 
+                        bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                        color: theme.palette.secondary.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      <FolderIcon />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="medium">
+                      Folders to Monitor
+                    </Typography>
+                  </Stack>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Specify which folders to scan for files. Use absolute paths starting with "/".
+                  </Typography>
+
+                  <Stack direction="row" spacing={1} mb={2}>
+                    <TextField
+                      label="Add Folder Path"
+                      value={newFolder}
+                      onChange={(e) => setNewFolder(e.target.value)}
+                      placeholder="/Documents"
+                      sx={{ 
+                        flexGrow: 1,
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                      }}
+                    />
+                    <Button 
+                      variant="outlined" 
+                      onClick={addFolder} 
+                      disabled={!newFolder}
+                      sx={{ borderRadius: 2, px: 3 }}
+                    >
+                      Add
+                    </Button>
+                  </Stack>
+
+                  <Box sx={{ mb: 3 }}>
+                    {formData.watch_folders.map((folder, index) => (
+                      <Chip
+                        key={index}
+                        label={folder}
+                        onDelete={() => removeFolder(folder)}
+                        sx={{ 
+                          mr: 1, 
+                          mb: 1,
+                          borderRadius: 2,
+                          bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                          color: theme.palette.secondary.main,
+                        }}
+                      />
+                    ))}
+                  </Box>
+
+                  {/* File Extensions */}
+                  <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                    <Avatar 
+                      sx={{ 
+                        bgcolor: alpha(theme.palette.warning.main, 0.1),
+                        color: theme.palette.warning.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      <ExtensionIcon />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="medium">
+                      File Extensions
+                    </Typography>
+                  </Stack>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    File types to sync and process with OCR.
+                  </Typography>
+
+                  <Stack direction="row" spacing={1} mb={2}>
+                    <TextField
+                      label="Add Extension"
+                      value={newExtension}
+                      onChange={(e) => setNewExtension(e.target.value)}
+                      placeholder="docx"
+                      sx={{ 
+                        flexGrow: 1,
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                      }}
+                    />
+                    <Button 
+                      variant="outlined" 
+                      onClick={addFileExtension} 
+                      disabled={!newExtension}
+                      sx={{ borderRadius: 2, px: 3 }}
+                    >
+                      Add
+                    </Button>
+                  </Stack>
+
+                  <Box sx={{ mb: 3 }}>
+                    {formData.file_extensions.map((extension, index) => (
+                      <Chip
+                        key={index}
+                        label={extension}
+                        onDelete={() => removeFileExtension(extension)}
+                        sx={{ 
+                          mr: 1, 
+                          mb: 1,
+                          borderRadius: 2,
+                          bgcolor: alpha(theme.palette.warning.main, 0.1),
+                          color: theme.palette.warning.main,
+                        }}
+                      />
+                    ))}
+                  </Box>
+
+                  {/* Crawl Estimation */}
+                  {editingSource && formData.server_url && formData.username && formData.watch_folders.length > 0 && (
+                    <>
+                      <Divider sx={{ my: 2 }} />
+                      
+                      <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                        <Avatar 
+                          sx={{ 
+                            bgcolor: alpha(theme.palette.info.main, 0.1),
+                            color: theme.palette.info.main,
+                            width: 32,
+                            height: 32,
+                          }}
+                        >
+                          <AssessmentIcon />
+                        </Avatar>
+                        <Typography variant="h6" fontWeight="medium">
+                          Crawl Estimation
+                        </Typography>
+                      </Stack>
+                      
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Estimate how many files will be processed and how long it will take.
+                      </Typography>
+
+                      <Button
+                        variant="outlined"
+                        onClick={estimateCrawl}
+                        disabled={estimatingCrawl}
+                        startIcon={estimatingCrawl ? <CircularProgress size={20} /> : <AssessmentIcon />}
+                        sx={{ mb: 2, borderRadius: 2 }}
+                      >
+                        {estimatingCrawl ? 'Estimating...' : 'Estimate Crawl'}
+                      </Button>
+
+                      {estimatingCrawl && (
+                        <Box sx={{ mb: 2 }}>
+                          <LinearProgress sx={{ borderRadius: 1 }} />
+                          <Typography variant="body2" sx={{ mt: 1 }}>
+                            Analyzing folders and counting files...
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {crawlEstimate && (
+                        <Paper 
+                          sx={{ 
+                            p: 3, 
+                            borderRadius: 3,
+                            bgcolor: alpha(theme.palette.info.main, 0.03),
+                            border: `1px solid ${alpha(theme.palette.info.main, 0.1)}`,
+                            mb: 2
+                          }}
+                        >
+                          <Typography variant="h6" sx={{ mb: 2 }}>
+                            Estimation Results
+                          </Typography>
+                          <Grid container spacing={2} sx={{ mb: 2 }}>
+                            <Grid item xs={6} sm={3}>
+                              <Box sx={{ textAlign: 'center' }}>
+                                <Typography variant="h4" color="primary">
+                                  {crawlEstimate.total_files?.toLocaleString() || '0'}
+                                </Typography>
+                                <Typography variant="body2">Total Files</Typography>
+                              </Box>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Box sx={{ textAlign: 'center' }}>
+                                <Typography variant="h4" color="success.main">
+                                  {crawlEstimate.total_supported_files?.toLocaleString() || '0'}
+                                </Typography>
+                                <Typography variant="body2">Supported Files</Typography>
+                              </Box>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Box sx={{ textAlign: 'center' }}>
+                                <Typography variant="h4" color="warning.main">
+                                  {crawlEstimate.total_estimated_time_hours?.toFixed(1) || '0'}h
+                                </Typography>
+                                <Typography variant="body2">Estimated Time</Typography>
+                              </Box>
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                              <Box sx={{ textAlign: 'center' }}>
+                                <Typography variant="h4" color="info.main">
+                                  {crawlEstimate.total_size_mb ? (crawlEstimate.total_size_mb / 1024).toFixed(1) : '0'}GB
+                                </Typography>
+                                <Typography variant="body2">Total Size</Typography>
+                              </Box>
+                            </Grid>
+                          </Grid>
+
+                          {crawlEstimate.folders && crawlEstimate.folders.length > 0 && (
+                            <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Folder</TableCell>
+                                    <TableCell align="right">Total Files</TableCell>
+                                    <TableCell align="right">Supported</TableCell>
+                                    <TableCell align="right">Est. Time</TableCell>
+                                    <TableCell align="right">Size (MB)</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {crawlEstimate.folders.map((folder: any) => (
+                                    <TableRow key={folder.path}>
+                                      <TableCell>{folder.path}</TableCell>
+                                      <TableCell align="right">{folder.total_files?.toLocaleString() || '0'}</TableCell>
+                                      <TableCell align="right">{folder.supported_files?.toLocaleString() || '0'}</TableCell>
+                                      <TableCell align="right">{folder.estimated_time_hours?.toFixed(1) || '0'}h</TableCell>
+                                      <TableCell align="right">{folder.total_size_mb?.toFixed(1) || '0'}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          )}
+                        </Paper>
+                      )}
+                    </>
+                  )}
                 </Stack>
               </Paper>
             )}
