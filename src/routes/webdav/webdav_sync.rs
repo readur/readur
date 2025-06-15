@@ -87,6 +87,14 @@ async fn perform_sync_internal(
     
     // Process each watch folder
     for folder_path in &config.watch_folders {
+        // Check if sync has been cancelled before processing each folder
+        if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
+            if !sync_state.is_running {
+                info!("WebDAV sync cancelled, stopping folder processing");
+                return Err("Sync cancelled by user".into());
+            }
+        }
+        
         info!("Syncing folder: {}", folder_path);
         
         // Update current folder in sync state
@@ -161,6 +169,17 @@ async fn perform_sync_internal(
                 
                 // Process files concurrently and collect results
                 while let Some(result) = file_futures.next().await {
+                    // Check if sync has been cancelled
+                    if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
+                        if !sync_state.is_running {
+                            info!("WebDAV sync cancelled during file processing, stopping");
+                            // Cancel remaining futures
+                            file_futures.clear();
+                            sync_errors.push("Sync cancelled by user during file processing".to_string());
+                            break;
+                        }
+                    }
+                    
                     match result {
                         Ok(processed) => {
                             if processed {
@@ -214,6 +233,14 @@ async fn process_single_file(
 ) -> Result<bool, String> {
     // Acquire semaphore permit to limit concurrent downloads
     let _permit = semaphore.acquire().await.map_err(|e| format!("Semaphore error: {}", e))?;
+    
+    // Check if sync has been cancelled before processing this file
+    if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
+        if !sync_state.is_running {
+            info!("Sync cancelled, skipping file: {}", file_info.path);
+            return Err("Sync cancelled by user".to_string());
+        }
+    }
     
     info!("Processing file: {}", file_info.path);
     

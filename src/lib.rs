@@ -31,6 +31,7 @@ use db::Database;
 pub struct AppState {
     pub db: Database,
     pub config: Config,
+    pub webdav_scheduler: Option<std::sync::Arc<webdav_scheduler::WebDAVScheduler>>,
 }
 
 /// Health check endpoint for monitoring

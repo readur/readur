@@ -128,25 +128,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     
-    let state = AppState { db, config: config.clone() };
+    let state = AppState { 
+        db, 
+        config: config.clone(),
+        webdav_scheduler: None, // Will be set after creating scheduler
+    };
     let state = Arc::new(state);
-    
-    let app = Router::new()
-        .route("/api/health", get(readur::health_check))
-        .nest("/api/auth", readur::routes::auth::router())
-        .nest("/api/documents", readur::routes::documents::router())
-        .nest("/api/metrics", readur::routes::metrics::router())
-        .nest("/metrics", readur::routes::prometheus_metrics::router())
-        .nest("/api/notifications", readur::routes::notifications::router())
-        .nest("/api/queue", readur::routes::queue::router())
-        .nest("/api/search", readur::routes::search::router())
-        .nest("/api/settings", readur::routes::settings::router())
-        .nest("/api/users", readur::routes::users::router())
-        .nest("/api/webdav", readur::routes::webdav::router())
-        .merge(readur::swagger::create_swagger_router())
-        .fallback_service(ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")))
-        .layer(CorsLayer::permissive())
-        .with_state(state.clone());
     
     let watcher_config = config.clone();
     let watcher_db = state.db.clone();
@@ -197,12 +184,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     
+    // Create WebDAV scheduler and update AppState
+    let webdav_scheduler = Arc::new(readur::webdav_scheduler::WebDAVScheduler::new(state.clone()));
+    
+    // Update the state to include the scheduler
+    let updated_state = AppState {
+        db: state.db.clone(),
+        config: state.config.clone(),
+        webdav_scheduler: Some(webdav_scheduler.clone()),
+    };
+    let state = Arc::new(updated_state);
+    
     // Start WebDAV background sync scheduler on background runtime
-    let webdav_scheduler = readur::webdav_scheduler::WebDAVScheduler::new(state.clone());
+    let scheduler_for_background = webdav_scheduler.clone();
     background_runtime.spawn(async move {
-        info!("Starting WebDAV background sync scheduler");
-        webdav_scheduler.start().await;
+        info!("Starting WebDAV background sync scheduler with 30-second startup delay");
+        // Wait 30 seconds before starting scheduler to allow server to fully initialize
+        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        info!("WebDAV background sync scheduler starting after startup delay");
+        scheduler_for_background.start().await;
     });
+    
+    // Create the router with the updated state
+    let app = Router::new()
+        .route("/api/health", get(readur::health_check))
+        .nest("/api/auth", readur::routes::auth::router())
+        .nest("/api/documents", readur::routes::documents::router())
+        .nest("/api/metrics", readur::routes::metrics::router())
+        .nest("/metrics", readur::routes::prometheus_metrics::router())
+        .nest("/api/notifications", readur::routes::notifications::router())
+        .nest("/api/queue", readur::routes::queue::router())
+        .nest("/api/search", readur::routes::search::router())
+        .nest("/api/settings", readur::routes::settings::router())
+        .nest("/api/sources", readur::routes::sources::router())
+        .nest("/api/users", readur::routes::users::router())
+        .nest("/api/webdav", readur::routes::webdav::router())
+        .merge(readur::swagger::create_swagger_router())
+        .fallback_service(ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")))
+        .layer(CorsLayer::permissive())
+        .with_state(state.clone());
     
     let listener = tokio::net::TcpListener::bind(&config.server_address).await?;
     info!("Server starting on {}", config.server_address);

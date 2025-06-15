@@ -31,6 +31,7 @@ import {
   AccountCircle as AccountIcon,
   Logout as LogoutIcon,
   Description as DocumentIcon,
+  Storage as StorageIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -61,6 +62,7 @@ const navigationItems: NavigationItem[] = [
   { text: 'Upload', icon: UploadIcon, path: '/upload' },
   { text: 'Documents', icon: DocumentIcon, path: '/documents' },
   { text: 'Search', icon: SearchIcon, path: '/search' },
+  { text: 'Sources', icon: StorageIcon, path: '/sources' },
   { text: 'Watch Folder', icon: FolderIcon, path: '/watch' },
 ];
 

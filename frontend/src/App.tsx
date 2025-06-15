@@ -12,6 +12,7 @@ import DocumentsPage from './pages/DocumentsPage';
 import SearchPage from './pages/SearchPage';
 import DocumentDetailsPage from './pages/DocumentDetailsPage';
 import SettingsPage from './pages/SettingsPage';
+import SourcesPage from './pages/SourcesPage';
 import WatchFolderPage from './pages/WatchFolderPage';
 
 function App(): JSX.Element {
@@ -65,6 +66,7 @@ function App(): JSX.Element {
                     <Route path="/documents" element={<DocumentsPage />} />
                     <Route path="/documents/:id" element={<DocumentDetailsPage />} />
                     <Route path="/search" element={<SearchPage />} />
+                    <Route path="/sources" element={<SourcesPage />} />
                     <Route path="/watch" element={<WatchFolderPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/profile" element={<div>Profile Page - Coming Soon</div>} />

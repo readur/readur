@@ -421,3 +421,22 @@ impl WebDAVService {
     }
 
 }
+
+pub async fn test_webdav_connection(
+    server_url: &str,
+    username: &str,
+    password: &str,
+) -> Result<bool> {
+    let client = Client::new();
+    
+    // Try to list the root directory to test connectivity
+    let response = client
+        .request(Method::from_bytes(b"PROPFIND")?, server_url)
+        .header("Depth", "0")
+        .basic_auth(username, Some(password))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await?;
+
+    Ok(response.status().is_success())
+}

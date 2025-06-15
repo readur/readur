@@ -30,6 +30,11 @@ impl WebDAVScheduler {
     pub async fn start(&self) {
         info!("Starting WebDAV background sync scheduler");
         
+        // First, check for any interrupted syncs that need to be resumed
+        if let Err(e) = self.resume_interrupted_syncs().await {
+            error!("Error resuming interrupted syncs: {}", e);
+        }
+        
         let mut interval_timer = interval(self.check_interval);
         
         loop {
@@ -39,6 +44,90 @@ impl WebDAVScheduler {
                 error!("Error in WebDAV sync scheduler: {}", e);
             }
         }
+    }
+
+    async fn resume_interrupted_syncs(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Checking for interrupted WebDAV syncs to resume");
+        
+        // Get all users with settings
+        let users_with_settings = self.db.get_all_user_settings().await?;
+        
+        for user_settings in users_with_settings {
+            // Skip if WebDAV is not enabled
+            if !user_settings.webdav_enabled {
+                continue;
+            }
+            
+            // Check if there's an interrupted sync for this user
+            if let Ok(Some(sync_state)) = self.db.get_webdav_sync_state(user_settings.user_id).await {
+                // Check if sync was interrupted (has errors containing "server restart" message)
+                let was_interrupted = sync_state.errors.iter().any(|e| e.contains("server restart"));
+                
+                if was_interrupted && user_settings.webdav_auto_sync {
+                    info!("Found interrupted WebDAV sync for user {}, will resume", user_settings.user_id);
+                    
+                    // Clear the interruption error and resume sync
+                    let cleared_errors: Vec<String> = sync_state.errors.into_iter()
+                        .filter(|e| !e.contains("server restart"))
+                        .collect();
+                    
+                    let reset_state = crate::models::UpdateWebDAVSyncState {
+                        last_sync_at: sync_state.last_sync_at,
+                        sync_cursor: sync_state.sync_cursor,
+                        is_running: false,
+                        files_processed: sync_state.files_processed,
+                        files_remaining: 0,
+                        current_folder: None,
+                        errors: cleared_errors,
+                    };
+                    
+                    if let Err(e) = self.db.update_webdav_sync_state(user_settings.user_id, &reset_state).await {
+                        error!("Failed to reset interrupted sync state: {}", e);
+                        continue;
+                    }
+                    
+                    // Trigger a new sync for this user
+                    if let Ok(webdav_config) = self.build_webdav_config(&user_settings) {
+                        if let Ok(webdav_service) = WebDAVService::new(webdav_config.clone()) {
+                            let state_clone = self.state.clone();
+                            let user_id = user_settings.user_id;
+                            let enable_background_ocr = user_settings.enable_background_ocr;
+                            
+                            info!("Resuming interrupted WebDAV sync for user {}", user_id);
+                            
+                            tokio::spawn(async move {
+                                match perform_webdav_sync_with_tracking(state_clone.clone(), user_id, webdav_service, webdav_config, enable_background_ocr).await {
+                                    Ok(files_processed) => {
+                                        info!("Resumed WebDAV sync completed for user {}: {} files processed", user_id, files_processed);
+                                        
+                                        // Send notification
+                                        let notification = crate::models::CreateNotification {
+                                            notification_type: "success".to_string(),
+                                            title: "WebDAV Sync Resumed".to_string(),
+                                            message: format!("Resumed sync after server restart. Processed {} files", files_processed),
+                                            action_url: Some("/documents".to_string()),
+                                            metadata: Some(serde_json::json!({
+                                                "sync_type": "webdav_resume",
+                                                "files_processed": files_processed
+                                            })),
+                                        };
+                                        
+                                        if let Err(e) = state_clone.db.create_notification(user_id, &notification).await {
+                                            error!("Failed to create resume notification: {}", e);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!("Resumed WebDAV sync failed for user {}: {}", user_id, e);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
     }
 
     async fn check_and_sync_users(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -188,6 +277,12 @@ impl WebDAVScheduler {
             timeout_seconds: 30,
             server_type: Some("nextcloud".to_string()),
         })
+    }
+
+    pub async fn trigger_sync(&self, source_id: uuid::Uuid) {
+        info!("Triggering manual sync for source {}", source_id);
+        // TODO: Implement manual sync trigger for sources
+        // For now, this is a placeholder that the routes can call
     }
 }
 

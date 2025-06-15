@@ -621,3 +621,162 @@ pub struct FileInfo {
     pub etag: String,
     pub is_directory: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub enum SourceType {
+    #[serde(rename = "webdav")]
+    WebDAV,
+    #[serde(rename = "local_folder")]
+    LocalFolder,
+    #[serde(rename = "s3")]
+    S3,
+}
+
+impl std::fmt::Display for SourceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SourceType::WebDAV => write!(f, "webdav"),
+            SourceType::LocalFolder => write!(f, "local_folder"),
+            SourceType::S3 => write!(f, "s3"),
+        }
+    }
+}
+
+impl TryFrom<String> for SourceType {
+    type Error = String;
+    
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "webdav" => Ok(SourceType::WebDAV),
+            "local_folder" => Ok(SourceType::LocalFolder),
+            "s3" => Ok(SourceType::S3),
+            _ => Err(format!("Invalid source type: {}", value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub enum SourceStatus {
+    #[serde(rename = "idle")]
+    Idle,
+    #[serde(rename = "syncing")]
+    Syncing,
+    #[serde(rename = "error")]
+    Error,
+}
+
+impl std::fmt::Display for SourceStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SourceStatus::Idle => write!(f, "idle"),
+            SourceStatus::Syncing => write!(f, "syncing"),
+            SourceStatus::Error => write!(f, "error"),
+        }
+    }
+}
+
+impl TryFrom<String> for SourceStatus {
+    type Error = String;
+    
+    fn try_from(value: String) -> Result<Self, <SourceStatus as TryFrom<String>>::Error> {
+        match value.as_str() {
+            "idle" => Ok(SourceStatus::Idle),
+            "syncing" => Ok(SourceStatus::Syncing),
+            "error" => Ok(SourceStatus::Error),
+            _ => Err(format!("Invalid source status: {}", value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+pub struct Source {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub name: String,
+    #[sqlx(try_from = "String")]
+    pub source_type: SourceType,
+    pub enabled: bool,
+    pub config: serde_json::Value,
+    #[sqlx(try_from = "String")]
+    pub status: SourceStatus,
+    pub last_sync_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub last_error_at: Option<DateTime<Utc>>,
+    pub total_files_synced: i64,
+    pub total_files_pending: i64,
+    pub total_size_bytes: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SourceResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub source_type: SourceType,
+    pub enabled: bool,
+    pub config: serde_json::Value,
+    pub status: SourceStatus,
+    pub last_sync_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub last_error_at: Option<DateTime<Utc>>,
+    pub total_files_synced: i64,
+    pub total_files_pending: i64,
+    pub total_size_bytes: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CreateSource {
+    pub name: String,
+    pub source_type: SourceType,
+    pub enabled: Option<bool>,
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct UpdateSource {
+    pub name: Option<String>,
+    pub enabled: Option<bool>,
+    pub config: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SourceWithStats {
+    pub source: SourceResponse,
+    pub recent_documents: Vec<DocumentResponse>,
+    pub sync_progress: Option<f32>,
+}
+
+impl From<Source> for SourceResponse {
+    fn from(source: Source) -> Self {
+        Self {
+            id: source.id,
+            name: source.name,
+            source_type: source.source_type,
+            enabled: source.enabled,
+            config: source.config,
+            status: source.status,
+            last_sync_at: source.last_sync_at,
+            last_error: source.last_error,
+            last_error_at: source.last_error_at,
+            total_files_synced: source.total_files_synced,
+            total_files_pending: source.total_files_pending,
+            total_size_bytes: source.total_size_bytes,
+            created_at: source.created_at,
+            updated_at: source.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct WebDAVSourceConfig {
+    pub server_url: String,
+    pub username: String,
+    pub password: String,
+    pub watch_folders: Vec<String>,
+    pub file_extensions: Vec<String>,
+    pub auto_sync: bool,
+    pub sync_interval_minutes: i32,
+}
