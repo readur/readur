@@ -1649,6 +1649,26 @@ impl Database {
         Ok(())
     }
 
+    // Reset any running WebDAV syncs on startup (handles server restart during sync)
+    pub async fn reset_running_webdav_syncs(&self) -> Result<i64> {
+        let result = sqlx::query(
+            r#"UPDATE webdav_sync_state 
+               SET is_running = false, 
+                   current_folder = NULL,
+                   errors = CASE 
+                       WHEN array_length(errors, 1) IS NULL OR array_length(errors, 1) = 0 
+                       THEN ARRAY['Sync interrupted by server restart']
+                       ELSE array_append(errors, 'Sync interrupted by server restart')
+                   END,
+                   updated_at = NOW()
+               WHERE is_running = true"#
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() as i64)
+    }
+
     // WebDAV file tracking operations
     pub async fn get_webdav_file_by_path(&self, user_id: Uuid, webdav_path: &str) -> Result<Option<crate::models::WebDAVFile>> {
         let row = sqlx::query(

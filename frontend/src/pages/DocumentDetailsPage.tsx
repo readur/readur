@@ -64,6 +64,12 @@ const DocumentDetailsPage: React.FC = () => {
     }
   }, [id]);
 
+  useEffect(() => {
+    if (document && document.has_ocr_text && !ocrData) {
+      fetchOcrText();
+    }
+  }, [document]);
+
   const fetchDocumentDetails = async (): Promise<void> => {
     try {
       setLoading(true);
@@ -395,6 +401,106 @@ const DocumentDetailsPage: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
+
+        {/* OCR Text Section */}
+        {document.has_ocr_text && (
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+                  Extracted Text (OCR)
+                </Typography>
+                
+                {ocrLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
+                    <CircularProgress size={24} sx={{ mr: 2 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Loading OCR text...
+                    </Typography>
+                  </Box>
+                ) : ocrData ? (
+                  <>
+                    {/* OCR Stats */}
+                    <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      {ocrData.ocr_confidence && (
+                        <Chip 
+                          label={`${Math.round(ocrData.ocr_confidence)}% confidence`} 
+                          color="primary" 
+                          size="small" 
+                        />
+                      )}
+                      {ocrData.ocr_word_count && (
+                        <Chip 
+                          label={`${ocrData.ocr_word_count} words`} 
+                          color="secondary" 
+                          size="small" 
+                        />
+                      )}
+                      {ocrData.ocr_processing_time_ms && (
+                        <Chip 
+                          label={`${ocrData.ocr_processing_time_ms}ms processing`} 
+                          color="info" 
+                          size="small" 
+                        />
+                      )}
+                    </Box>
+
+                    {/* OCR Error Display */}
+                    {ocrData.ocr_error && (
+                      <Alert severity="error" sx={{ mb: 3 }}>
+                        OCR Error: {ocrData.ocr_error}
+                      </Alert>
+                    )}
+
+                    {/* OCR Text Content */}
+                    <Paper
+                      sx={{
+                        p: 3,
+                        backgroundColor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : 'grey.900',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        maxHeight: 400,
+                        overflow: 'auto',
+                        position: 'relative',
+                      }}
+                    >
+                      {ocrData.ocr_text ? (
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.6,
+                            color: 'text.primary',
+                          }}
+                        >
+                          {ocrData.ocr_text}
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                          No OCR text available for this document.
+                        </Typography>
+                      )}
+                    </Paper>
+
+                    {/* Processing Info */}
+                    {ocrData.ocr_completed_at && (
+                      <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Processing completed: {new Date(ocrData.ocr_completed_at).toLocaleString()}
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
+                ) : (
+                  <Alert severity="info">
+                    OCR text is available but failed to load. Try clicking the "View OCR" button above.
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
       </Grid>
 
       {/* OCR Text Dialog */}

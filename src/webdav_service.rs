@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
-use reqwest::{Client, Method};
+use reqwest::{Client, Method, Url};
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -389,9 +389,19 @@ impl WebDAVService {
     }
 
     async fn download_file_impl(&self, file_path: &str) -> Result<Vec<u8>> {
-        let file_url = format!("{}{}", self.base_webdav_url, file_path);
+        // For Nextcloud/ownCloud, the file_path might already be an absolute WebDAV path
+        // The path comes from href which is already URL-encoded
+        let file_url = if file_path.starts_with("/remote.php/dav/") {
+            // Use the server URL + the full WebDAV path
+            // Don't double-encode - the path from href is already properly encoded
+            format!("{}{}", self.config.server_url.trim_end_matches('/'), file_path)
+        } else {
+            // Traditional approach for other WebDAV servers or relative paths
+            format!("{}{}", self.base_webdav_url, file_path)
+        };
         
         debug!("Downloading file: {}", file_url);
+        debug!("Original file_path: {}", file_path);
 
         let response = self.client
             .get(&file_url)

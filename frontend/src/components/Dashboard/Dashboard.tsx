@@ -322,6 +322,9 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
                     </Avatar>
                   </ListItemAvatar>
                   <ListItemText
+                    sx={{ 
+                      pr: 8, // Add padding-right to prevent overlap with secondary action
+                    }}
                     primary={
                       <Typography
                         variant="subtitle2"
@@ -330,6 +333,7 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
+                          maxWidth: '100%',
                         }}
                       >
                         {doc.original_filename || doc.filename || 'Unknown Document'}

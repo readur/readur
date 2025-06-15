@@ -34,10 +34,11 @@ import {
   SelectChangeEvent,
   Chip,
   LinearProgress,
+  CircularProgress,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, 
          CloudSync as CloudSyncIcon, Folder as FolderIcon,
-         Assessment as AssessmentIcon } from '@mui/icons-material';
+         Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 
@@ -163,6 +164,12 @@ const WebDAVTabContent: React.FC<WebDAVTabContentProps> = ({
   const [estimatingCrawl, setEstimatingCrawl] = useState(false);
   const [newFolder, setNewFolder] = useState('');
   
+  // WebDAV sync state
+  const [syncStatus, setSyncStatus] = useState<any>(null);
+  const [startingSync, setStartingSync] = useState(false);
+  const [cancellingSync, setCancellingSync] = useState(false);
+  const [pollingSyncStatus, setPollingSyncStatus] = useState(false);
+  
   // Local state for input fields to prevent focus loss
   const [localWebdavServerUrl, setLocalWebdavServerUrl] = useState(settings.webdavServerUrl);
   const [localWebdavUsername, setLocalWebdavUsername] = useState(settings.webdavUsername);
@@ -284,6 +291,109 @@ const WebDAVTabContent: React.FC<WebDAVTabContentProps> = ({
     { value: 'owncloud', label: 'ownCloud' },
     { value: 'generic', label: 'Generic WebDAV' },
   ];
+
+  // WebDAV sync functions
+  const fetchSyncStatus = async () => {
+    try {
+      const response = await api.get('/webdav/sync-status');
+      setSyncStatus(response.data);
+    } catch (error) {
+      console.error('Failed to fetch sync status:', error);
+    }
+  };
+
+  const startManualSync = async () => {
+    setStartingSync(true);
+    try {
+      const response = await api.post('/webdav/start-sync');
+      if (response.data.success) {
+        onShowSnackbar('WebDAV sync started successfully', 'success');
+        setPollingSyncStatus(true);
+        fetchSyncStatus(); // Get initial status
+      } else if (response.data.error === 'sync_already_running') {
+        onShowSnackbar('A WebDAV sync is already in progress', 'warning');
+      } else {
+        onShowSnackbar(response.data.message || 'Failed to start sync', 'error');
+      }
+    } catch (error: any) {
+      console.error('Failed to start sync:', error);
+      onShowSnackbar('Failed to start WebDAV sync', 'error');
+    } finally {
+      setStartingSync(false);
+    }
+  };
+
+  const cancelManualSync = async () => {
+    setCancellingSync(true);
+    try {
+      const response = await api.post('/webdav/cancel-sync');
+      if (response.data.success) {
+        onShowSnackbar('WebDAV sync cancelled successfully', 'info');
+        fetchSyncStatus(); // Update status
+      } else {
+        onShowSnackbar(response.data.message || 'Failed to cancel sync', 'error');
+      }
+    } catch (error: any) {
+      console.error('Failed to cancel sync:', error);
+      onShowSnackbar('Failed to cancel WebDAV sync', 'error');
+    } finally {
+      setCancellingSync(false);
+    }
+  };
+
+  // Poll sync status when enabled
+  useEffect(() => {
+    if (!settings.webdavEnabled) {
+      setSyncStatus(null);
+      setPollingSyncStatus(false);
+      return;
+    }
+
+    // Initial fetch
+    fetchSyncStatus();
+
+    // Set up polling interval
+    const interval = setInterval(() => {
+      fetchSyncStatus();
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [settings.webdavEnabled]);
+
+  // Stop polling when sync is not running
+  useEffect(() => {
+    if (syncStatus && !syncStatus.is_running && pollingSyncStatus) {
+      setPollingSyncStatus(false);
+    }
+  }, [syncStatus, pollingSyncStatus]);
+
+  // Auto-restart sync when folder list changes (if sync was running)
+  const [previousFolders, setPreviousFolders] = useState<string[]>([]);
+  useEffect(() => {
+    if (previousFolders.length > 0 && 
+        JSON.stringify(previousFolders.sort()) !== JSON.stringify([...settings.webdavWatchFolders].sort()) &&
+        syncStatus?.is_running) {
+      
+      onShowSnackbar('Folder list changed - restarting WebDAV sync', 'info');
+      
+      // Cancel current sync and start a new one
+      const restartSync = async () => {
+        try {
+          await api.post('/webdav/cancel-sync');
+          // Small delay to ensure cancellation is processed
+          setTimeout(() => {
+            startManualSync();
+          }, 1000);
+        } catch (error) {
+          console.error('Failed to restart sync after folder change:', error);
+        }
+      };
+      
+      restartSync();
+    }
+    
+    setPreviousFolders([...settings.webdavWatchFolders]);
+  }, [settings.webdavWatchFolders, syncStatus?.is_running]);
 
   return (
     <Box>
@@ -473,7 +583,7 @@ const WebDAVTabContent: React.FC<WebDAVTabContentProps> = ({
       )}
 
       {/* Crawl Estimation */}
-      {settings.webdavEnabled && connectionResult?.success && (
+      {settings.webdavEnabled && settings.webdavServerUrl && settings.webdavUsername && settings.webdavWatchFolders.length > 0 && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="subtitle1" sx={{ mb: 2 }}>
@@ -570,6 +680,129 @@ const WebDAVTabContent: React.FC<WebDAVTabContentProps> = ({
                 </TableContainer>
               </Box>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Manual Sync & Status */}
+      {settings.webdavEnabled && settings.webdavServerUrl && settings.webdavUsername && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="subtitle1" sx={{ mb: 2 }}>
+              <PlayArrowIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+              Manual Sync & Status
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            
+            <Grid container spacing={3}>
+              {/* Sync Controls */}
+              <Grid item xs={12} md={6}>
+                <Box>
+                  <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+                    Start a manual WebDAV sync to immediately pull new or changed files from your configured folders.
+                  </Typography>
+                  
+                  <Button
+                    variant="contained"
+                    startIcon={startingSync ? <CircularProgress size={16} /> : <PlayArrowIcon />}
+                    onClick={startManualSync}
+                    disabled={startingSync || loading || syncStatus?.is_running}
+                    sx={{ mr: 2 }}
+                  >
+                    {startingSync ? 'Starting...' : syncStatus?.is_running ? 'Sync Running...' : 'Start Sync Now'}
+                  </Button>
+                  
+                  {syncStatus?.is_running && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={cancellingSync ? <CircularProgress size={16} /> : undefined}
+                      onClick={cancelManualSync}
+                      disabled={cancellingSync || loading}
+                      sx={{ mr: 2 }}
+                    >
+                      {cancellingSync ? 'Cancelling...' : 'Cancel Sync'}
+                    </Button>
+                  )}
+                  
+                  {syncStatus?.is_running && (
+                    <Chip
+                      label="Sync Active"
+                      color="primary"
+                      variant="outlined"
+                      icon={<CircularProgress size={12} />}
+                      sx={{ ml: 1 }}
+                    />
+                  )}
+                </Box>
+              </Grid>
+
+              {/* Sync Status */}
+              <Grid item xs={12} md={6}>
+                {syncStatus && (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                      Sync Status
+                    </Typography>
+                    
+                    <Grid container spacing={1}>
+                      <Grid item xs={6}>
+                        <Paper sx={{ p: 1.5, textAlign: 'center' }}>
+                          <Typography variant="h6" color="primary">
+                            {syncStatus.files_processed || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Files Processed
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Paper sx={{ p: 1.5, textAlign: 'center' }}>
+                          <Typography variant="h6" color="secondary">
+                            {syncStatus.files_remaining || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Files Remaining
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+
+                    {syncStatus.current_folder && (
+                      <Alert severity="info" sx={{ mt: 2 }}>
+                        <Typography variant="body2">
+                          <strong>Currently syncing:</strong> {syncStatus.current_folder}
+                        </Typography>
+                      </Alert>
+                    )}
+
+                    {syncStatus.last_sync && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                        Last sync: {new Date(syncStatus.last_sync).toLocaleString()}
+                      </Typography>
+                    )}
+
+                    {syncStatus.errors && syncStatus.errors.length > 0 && (
+                      <Alert severity="error" sx={{ mt: 2 }}>
+                        <Typography variant="body2" sx={{ mb: 1 }}>
+                          <strong>Recent Errors:</strong>
+                        </Typography>
+                        {syncStatus.errors.slice(0, 3).map((error: string, index: number) => (
+                          <Typography key={index} variant="caption" sx={{ display: 'block' }}>
+                            • {error}
+                          </Typography>
+                        ))}
+                        {syncStatus.errors.length > 3 && (
+                          <Typography variant="caption" color="text.secondary">
+                            ... and {syncStatus.errors.length - 3} more errors
+                          </Typography>
+                        )}
+                      </Alert>
+                    )}
+                  </Box>
+                )}
+              </Grid>
+            </Grid>
           </CardContent>
         </Card>
       )}

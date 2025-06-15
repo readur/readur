@@ -34,6 +34,51 @@ pub async fn perform_webdav_sync_with_tracking(
     if let Err(e) = state.db.update_webdav_sync_state(user_id, &sync_state_update).await {
         error!("Failed to update sync state: {}", e);
     }
+
+    // Ensure sync state is cleared on any exit path
+    let cleanup_sync_state = |errors: Vec<String>, files_processed: usize| {
+        let state_clone = state.clone();
+        let user_id_clone = user_id;
+        tokio::spawn(async move {
+            let final_state = UpdateWebDAVSyncState {
+                last_sync_at: Some(Utc::now()),
+                sync_cursor: None,
+                is_running: false,
+                files_processed: files_processed as i64,
+                files_remaining: 0,
+                current_folder: None,
+                errors,
+            };
+            
+            if let Err(e) = state_clone.db.update_webdav_sync_state(user_id_clone, &final_state).await {
+                error!("Failed to cleanup sync state: {}", e);
+            }
+        });
+    };
+
+    // Perform sync with proper cleanup
+    let sync_result = perform_sync_internal(state.clone(), user_id, webdav_service, config, enable_background_ocr).await;
+    
+    match &sync_result {
+        Ok(files_processed) => {
+            cleanup_sync_state(Vec::new(), *files_processed);
+        }
+        Err(e) => {
+            let error_msg = format!("Sync failed: {}", e);
+            cleanup_sync_state(vec![error_msg], 0);
+        }
+    }
+    
+    sync_result
+}
+
+async fn perform_sync_internal(
+    state: Arc<AppState>,
+    user_id: uuid::Uuid,
+    webdav_service: WebDAVService,
+    config: WebDAVConfig,
+    enable_background_ocr: bool,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     
     let mut total_files_processed = 0;
     let mut sync_errors = Vec::new();
@@ -265,21 +310,6 @@ pub async fn perform_webdav_sync_with_tracking(
                 sync_errors.push(format!("Failed to list folder {}: {}", folder_path, e));
             }
         }
-    }
-    
-    // Update final sync state
-    let final_state = UpdateWebDAVSyncState {
-        last_sync_at: Some(Utc::now()),
-        sync_cursor: None,
-        is_running: false,
-        files_processed: total_files_processed as i64,
-        files_remaining: 0,
-        current_folder: None,
-        errors: sync_errors,
-    };
-    
-    if let Err(e) = state.db.update_webdav_sync_state(user_id, &final_state).await {
-        error!("Failed to update final sync state: {}", e);
     }
     
     info!("WebDAV sync completed for user {}: {} files processed", user_id, total_files_processed);

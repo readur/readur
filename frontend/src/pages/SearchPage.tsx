@@ -1111,7 +1111,7 @@ const SearchPage: React.FC = () => {
                           </Box>
                         )}
                         
-                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        <Box sx={{ flexGrow: 1, minWidth: 0, pr: 1 }}>
                           <Typography 
                             variant="h6" 
                             sx={{ 

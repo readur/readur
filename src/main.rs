@@ -7,7 +7,7 @@ use axum::{
 use sqlx::Row;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
-use tracing::{info, error};
+use tracing::{info, error, warn};
 
 use readur::{config::Config, db::Database, AppState, *};
 
@@ -115,6 +115,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Seed system user for watcher
     seed::seed_system_user(&db).await?;
+    
+    // Reset any running WebDAV syncs from previous server instance
+    match db.reset_running_webdav_syncs().await {
+        Ok(count) => {
+            if count > 0 {
+                info!("Reset {} orphaned WebDAV sync states from server restart", count);
+            }
+        }
+        Err(e) => {
+            warn!("Failed to reset running WebDAV syncs: {}", e);
+        }
+    }
     
     let state = AppState { db, config: config.clone() };
     let state = Arc::new(state);

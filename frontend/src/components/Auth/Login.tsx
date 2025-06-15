@@ -23,6 +23,8 @@ import {
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme as useMuiTheme } from '@mui/material/styles';
 
 interface LoginFormData {
   username: string;
@@ -35,6 +37,8 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { mode } = useTheme();
+  const theme = useMuiTheme();
   
   const {
     register,
@@ -63,7 +67,9 @@ const Login: React.FC = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: mode === 'light' 
+          ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+          : 'linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -102,7 +108,9 @@ const Login: React.FC = () => {
                   color: 'white',
                   fontWeight: 700,
                   mb: 1,
-                  textShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                  textShadow: mode === 'light' 
+                    ? '0 4px 6px rgba(0, 0, 0, 0.1)'
+                    : '0 4px 12px rgba(0, 0, 0, 0.5)',
                 }}
               >
                 Welcome to Readur
@@ -110,7 +118,9 @@ const Login: React.FC = () => {
               <Typography
                 variant="h6"
                 sx={{
-                  color: 'rgba(255, 255, 255, 0.8)',
+                  color: mode === 'light' 
+                    ? 'rgba(255, 255, 255, 0.8)'
+                    : 'rgba(255, 255, 255, 0.9)',
                   fontWeight: 400,
                 }}
               >
@@ -125,9 +135,15 @@ const Login: React.FC = () => {
                 sx={{
                   borderRadius: 4,
                   backdropFilter: 'blur(20px)',
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                  backgroundColor: mode === 'light' 
+                    ? 'rgba(255, 255, 255, 0.95)'
+                    : 'rgba(30, 30, 30, 0.95)',
+                  border: mode === 'light'
+                    ? '1px solid rgba(255, 255, 255, 0.2)'
+                    : '1px solid rgba(255, 255, 255, 0.1)',
+                  boxShadow: mode === 'light'
+                    ? '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+                    : '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
                 }}
               >
                 <CardContent sx={{ p: 4 }}>
@@ -242,7 +258,9 @@ const Login: React.FC = () => {
               <Typography
                 variant="body2"
                 sx={{
-                  color: 'rgba(255, 255, 255, 0.7)',
+                  color: mode === 'light' 
+                    ? 'rgba(255, 255, 255, 0.7)'
+                    : 'rgba(255, 255, 255, 0.8)',
                 }}
               >
                 © 2026 Readur. Powered by advanced OCR and AI technology.

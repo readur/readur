@@ -18,6 +18,7 @@ import {
   Alert,
   Button,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -47,6 +48,7 @@ const WatchFolderPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [requeuingFailed, setRequeuingFailed] = useState<boolean>(false);
 
   // Mock configuration data (would typically come from API)
   const watchConfig: WatchConfig = {
@@ -76,6 +78,26 @@ const WatchFolderPage: React.FC = () => {
       setError('Failed to fetch queue statistics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const requeueFailedJobs = async (): Promise<void> => {
+    try {
+      setRequeuingFailed(true);
+      const response = await queueService.requeueFailedItems();
+      const requeued = response.data.requeued_count || 0;
+      
+      if (requeued > 0) {
+        // Show success message
+        setError(null);
+        // Refresh stats to see updated counts
+        await fetchQueueStats();
+      }
+    } catch (err) {
+      console.error('Error requeuing failed jobs:', err);
+      setError('Failed to requeue failed jobs');
+    } finally {
+      setRequeuingFailed(false);
     }
   };
 
@@ -132,9 +154,22 @@ const WatchFolderPage: React.FC = () => {
           startIcon={<RefreshIcon />}
           onClick={fetchQueueStats}
           disabled={loading}
+          sx={{ mr: 2 }}
         >
           Refresh
         </Button>
+        
+        {queueStats && queueStats.failed_count > 0 && (
+          <Button
+            variant="contained"
+            color="warning"
+            startIcon={requeuingFailed ? <CircularProgress size={16} /> : <RefreshIcon />}
+            onClick={requeueFailedJobs}
+            disabled={requeuingFailed || loading}
+          >
+            {requeuingFailed ? 'Requeuing...' : `Retry ${queueStats.failed_count} Failed Jobs`}
+          </Button>
+        )}
       </Box>
 
       {error && (

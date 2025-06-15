@@ -29,6 +29,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/estimate-crawl", post(estimate_webdav_crawl))
         .route("/sync-status", get(get_webdav_sync_status))
         .route("/start-sync", post(start_webdav_sync))
+        .route("/cancel-sync", post(cancel_webdav_sync))
 }
 
 async fn get_user_webdav_config(state: &Arc<AppState>, user_id: uuid::Uuid) -> Result<WebDAVConfig, StatusCode> {
@@ -303,6 +304,25 @@ async fn start_webdav_sync(
 ) -> Result<Json<Value>, StatusCode> {
     info!("Starting WebDAV sync for user: {}", auth_user.user.username);
 
+    // Check if a sync is already running for this user
+    match state.db.get_webdav_sync_state(auth_user.user.id).await {
+        Ok(Some(sync_state)) if sync_state.is_running => {
+            warn!("WebDAV sync already running for user {}", auth_user.user.id);
+            return Ok(Json(serde_json::json!({
+                "success": false,
+                "error": "sync_already_running",
+                "message": "A WebDAV sync is already in progress. Please wait for it to complete before starting a new sync."
+            })));
+        }
+        Ok(_) => {
+            // No sync running or no sync state exists yet - proceed
+        }
+        Err(e) => {
+            error!("Failed to check sync state for user {}: {}", auth_user.user.id, e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+
     // Get user's WebDAV configuration and settings
     let webdav_config = get_user_webdav_config(&state, auth_user.user.id).await?;
     
@@ -376,5 +396,92 @@ async fn start_webdav_sync(
         "success": true,
         "message": "WebDAV sync started successfully"
     })))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/webdav/cancel-sync",
+    tag = "webdav",
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Sync cancelled successfully"),
+        (status = 400, description = "No sync running or WebDAV not configured"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+async fn cancel_webdav_sync(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+) -> Result<Json<Value>, StatusCode> {
+    info!("Cancelling WebDAV sync for user: {}", auth_user.user.username);
+
+    // Check if a sync is currently running
+    match state.db.get_webdav_sync_state(auth_user.user.id).await {
+        Ok(Some(sync_state)) if sync_state.is_running => {
+            // Mark sync as cancelled
+            let cancelled_state = crate::models::UpdateWebDAVSyncState {
+                last_sync_at: Some(chrono::Utc::now()),
+                sync_cursor: sync_state.sync_cursor,
+                is_running: false,
+                files_processed: sync_state.files_processed,
+                files_remaining: 0,
+                current_folder: None,
+                errors: vec!["Sync cancelled by user".to_string()],
+            };
+            
+            if let Err(e) = state.db.update_webdav_sync_state(auth_user.user.id, &cancelled_state).await {
+                error!("Failed to update sync state for cancellation: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+            
+            info!("WebDAV sync cancelled for user {}", auth_user.user.id);
+            
+            // Send cancellation notification
+            let notification = crate::models::CreateNotification {
+                notification_type: "info".to_string(),
+                title: "WebDAV Sync Cancelled".to_string(),
+                message: "WebDAV sync was cancelled by user request".to_string(),
+                action_url: Some("/settings".to_string()),
+                metadata: Some(serde_json::json!({
+                    "sync_type": "webdav_manual",
+                    "cancelled": true
+                })),
+            };
+            
+            if let Err(e) = state.db.create_notification(auth_user.user.id, &notification).await {
+                error!("Failed to create cancellation notification: {}", e);
+            }
+            
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "message": "WebDAV sync cancelled successfully"
+            })))
+        }
+        Ok(Some(_)) => {
+            // No sync running
+            warn!("Attempted to cancel WebDAV sync for user {} but no sync is running", auth_user.user.id);
+            Ok(Json(serde_json::json!({
+                "success": false,
+                "error": "no_sync_running",
+                "message": "No WebDAV sync is currently running"
+            })))
+        }
+        Ok(None) => {
+            // No sync state exists
+            warn!("No WebDAV sync state found for user {}", auth_user.user.id);
+            Ok(Json(serde_json::json!({
+                "success": false,
+                "error": "no_sync_state",
+                "message": "No WebDAV sync state found"
+            })))
+        }
+        Err(e) => {
+            error!("Failed to get sync state for user {}: {}", auth_user.user.id, e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 

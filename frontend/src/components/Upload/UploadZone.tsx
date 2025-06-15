@@ -339,8 +339,21 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                   </ListItemIcon>
                   
                   <ListItemText
+                    sx={{ 
+                      pr: 6, // Add padding-right to prevent overlap with secondary action
+                    }}
                     primary={
-                      <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
+                      <Typography 
+                        variant="subtitle2" 
+                        sx={{ 
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '100%',
+                        }}
+                        title={fileItem.file.name}
+                      >
                         {fileItem.file.name}
                       </Typography>
                     }

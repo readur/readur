@@ -357,11 +357,13 @@ const DocumentsPage: React.FC = () => {
                   display: 'flex',
                   flexDirection: viewMode === 'list' ? 'row' : 'column',
                   transition: 'all 0.2s ease-in-out',
+                  cursor: 'pointer',
                   '&:hover': {
                     transform: 'translateY(-4px)',
                     boxShadow: (theme) => theme.shadows[4],
                   },
                 }}
+                onClick={() => navigate(`/documents/${doc.id}`)}
               >
                 {viewMode === 'grid' && (
                   <Box
@@ -449,7 +451,10 @@ const DocumentsPage: React.FC = () => {
                     
                     <IconButton
                       size="small"
-                      onClick={(e) => handleDocMenuClick(e, doc)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDocMenuClick(e, doc);
+                      }}
                     >
                       <MoreIcon />
                     </IconButton>
@@ -461,7 +466,10 @@ const DocumentsPage: React.FC = () => {
                     <Button 
                       size="small" 
                       startIcon={<DownloadIcon />}
-                      onClick={() => handleDownload(doc)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(doc);
+                      }}
                       fullWidth
                     >
                       Download

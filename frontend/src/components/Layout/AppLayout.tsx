@@ -94,7 +94,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   };
 
   const handleNotificationClick = (event: React.MouseEvent<HTMLElement>): void => {
-    setNotificationAnchorEl(event.currentTarget);
+    setNotificationAnchorEl(notificationAnchorEl ? null : event.currentTarget);
   };
 
   const handleNotificationClose = (): void => {

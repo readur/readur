@@ -195,21 +195,18 @@ mod tests {
     fn test_image_size_validation() {
         let checker = OcrHealthChecker::new();
         
-        // Assuming we have at least 100MB available
-        let available = checker.check_memory_available();
-        if available > 100 {
-            // Small image should pass
-            assert!(checker.validate_memory_for_image(640, 480).is_ok());
-            
-            // Extremely large image should fail
-            let result = checker.validate_memory_for_image(50000, 50000);
-            assert!(result.is_err());
-            
-            if let Err(OcrError::InsufficientMemory { required, available }) = result {
-                assert!(required > available);
-            } else {
-                panic!("Expected InsufficientMemory error");
-            }
+        // Small image should pass
+        assert!(checker.validate_memory_for_image(640, 480).is_ok());
+        
+        // Test with a ridiculously large image that would require more memory than any system has
+        // 100,000 x 100,000 pixels = 10 billion pixels * 4 bytes * 3 buffers = ~120GB
+        let result = checker.validate_memory_for_image(100000, 100000);
+        assert!(result.is_err());
+        
+        if let Err(OcrError::InsufficientMemory { required, available }) = result {
+            assert!(required > available);
+        } else {
+            panic!("Expected InsufficientMemory error, got: {:?}", result);
         }
     }
 }
