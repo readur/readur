@@ -143,14 +143,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     
-    // Create dedicated runtime for background tasks to prevent interference
+    // Create dedicated runtime for OCR processing to prevent interference with WebDAV
+    let ocr_runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(3)  // Dedicated threads for OCR work
+        .thread_name("readur-ocr")
+        .enable_all()
+        .build()?;
+    
+    // Create separate runtime for other background tasks (WebDAV, maintenance)
     let background_runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)  // Dedicated threads for background work
+        .worker_threads(2)  // Dedicated threads for WebDAV and maintenance
         .thread_name("readur-background")
         .enable_all()
         .build()?;
     
-    // Start OCR queue worker on dedicated runtime
+    // Start OCR queue worker on dedicated OCR runtime
     let concurrent_jobs = 4; // TODO: Get from config/settings  
     let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(
         state.db.clone(), 
@@ -159,15 +166,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     
     let queue_worker = queue_service.clone();
-    background_runtime.spawn(async move {
+    ocr_runtime.spawn(async move {
         if let Err(e) = queue_worker.start_worker().await {
             error!("OCR queue worker error: {}", e);
         }
     });
     
-    // Start maintenance tasks on background runtime
+    // Start OCR maintenance tasks on dedicated OCR runtime
     let queue_maintenance = queue_service.clone();
-    background_runtime.spawn(async move {
+    ocr_runtime.spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(300)); // Every 5 minutes
         loop {
             interval.tick().await;
