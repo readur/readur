@@ -10,14 +10,12 @@ use walkdir::WalkDir;
 
 use crate::{config::Config, db::Database, file_service::FileService, ocr_queue::OcrQueueService};
 
-pub async fn start_folder_watcher(config: Config) -> Result<()> {
+pub async fn start_folder_watcher(config: Config, db: Database) -> Result<()> {
     info!("Starting hybrid folder watcher on: {}", config.watch_folder);
     
-    // Initialize services
-    let db = Database::new(&config.database_url).await?;
-    let pool = sqlx::PgPool::connect(&config.database_url).await?;
+    // Initialize services with shared database
     let file_service = FileService::new(config.upload_path.clone());
-    let queue_service = OcrQueueService::new(db.clone(), pool, 1);
+    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1);
     
     // Determine watch strategy based on filesystem type
     let watch_path = Path::new(&config.watch_folder);

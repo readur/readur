@@ -121,6 +121,18 @@ export const documentService = {
     return api.get<OcrResponse>(`/documents/${id}/ocr`)
   },
 
+  view: (id: string) => {
+    return api.get(`/documents/${id}/view`, {
+      responseType: 'blob',
+    })
+  },
+
+  getThumbnail: (id: string) => {
+    return api.get(`/documents/${id}/thumbnail`, {
+      responseType: 'blob',
+    })
+  },
+
   search: (searchRequest: SearchRequest) => {
     return api.get<SearchResponse>('/search', {
       params: searchRequest,

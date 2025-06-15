@@ -32,11 +32,7 @@ async fn get_queue_stats(
     State(state): State<Arc<AppState>>,
     _auth_user: AuthUser, // Require authentication
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let pool = sqlx::PgPool::connect(&state.config.database_url)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let queue_service = OcrQueueService::new(state.db.clone(), pool, 1);
+    let queue_service = OcrQueueService::new(state.db.clone(), state.db.get_pool().clone(), 1);
     
     let stats = queue_service
         .get_stats()
@@ -69,11 +65,7 @@ async fn requeue_failed(
     State(state): State<Arc<AppState>>,
     _auth_user: AuthUser, // Require authentication
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let pool = sqlx::PgPool::connect(&state.config.database_url)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let queue_service = OcrQueueService::new(state.db.clone(), pool, 1);
+    let queue_service = OcrQueueService::new(state.db.clone(), state.db.get_pool().clone(), 1);
     
     let count = queue_service
         .requeue_failed_items()

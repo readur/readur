@@ -35,6 +35,7 @@ import {
   Edit as EditIcon,
 } from '@mui/icons-material';
 import { documentService, OcrResponse } from '../services/api';
+import DocumentViewer from '../components/DocumentViewer';
 
 interface Document {
   id: string;
@@ -57,6 +58,8 @@ const DocumentDetailsPage: React.FC = () => {
   const [ocrData, setOcrData] = useState<OcrResponse | null>(null);
   const [showOcrDialog, setShowOcrDialog] = useState<boolean>(false);
   const [ocrLoading, setOcrLoading] = useState<boolean>(false);
+  const [showViewDialog, setShowViewDialog] = useState<boolean>(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -67,6 +70,12 @@ const DocumentDetailsPage: React.FC = () => {
   useEffect(() => {
     if (document && document.has_ocr_text && !ocrData) {
       fetchOcrText();
+    }
+  }, [document]);
+
+  useEffect(() => {
+    if (document) {
+      loadThumbnail();
     }
   }, [document]);
 
@@ -132,6 +141,23 @@ const DocumentDetailsPage: React.FC = () => {
     if (!ocrData) {
       fetchOcrText();
     }
+  };
+
+  const loadThumbnail = async (): Promise<void> => {
+    if (!document) return;
+    
+    try {
+      const response = await documentService.getThumbnail(document.id);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      setThumbnailUrl(url);
+    } catch (err) {
+      console.log('Thumbnail not available:', err);
+      // Thumbnail not available, use fallback icon
+    }
+  };
+
+  const handleViewDocument = (): void => {
+    setShowViewDialog(true);
   };
 
   const getFileIcon = (mimeType?: string): React.ReactElement => {
@@ -227,18 +253,40 @@ const DocumentDetailsPage: React.FC = () => {
                   p: 3,
                   background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
                   borderRadius: 2,
+                  minHeight: 200,
                 }}
               >
-                {getFileIcon(document.mime_type)}
+                {thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt={document.original_filename}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '200px',
+                      borderRadius: '8px',
+                      objectFit: 'contain',
+                    }}
+                  />
+                ) : (
+                  getFileIcon(document.mime_type)
+                )}
               </Box>
               
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
                 {document.original_filename}
               </Typography>
               
-              <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 3 }}>
+              <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 3, flexWrap: 'wrap' }}>
                 <Button
                   variant="contained"
+                  startIcon={<ViewIcon />}
+                  onClick={handleViewDocument}
+                  sx={{ borderRadius: 2 }}
+                >
+                  View
+                </Button>
+                <Button
+                  variant="outlined"
                   startIcon={<DownloadIcon />}
                   onClick={handleDownload}
                   sx={{ borderRadius: 2 }}
@@ -252,7 +300,7 @@ const DocumentDetailsPage: React.FC = () => {
                     onClick={handleViewOcr}
                     sx={{ borderRadius: 2 }}
                   >
-                    View OCR
+                    OCR Text
                   </Button>
                 )}
               </Stack>
@@ -586,6 +634,49 @@ const DocumentDetailsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowOcrDialog(false)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Document View Dialog */}
+      <Dialog
+        open={showViewDialog}
+        onClose={() => setShowViewDialog(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { height: '90vh' }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              {document?.original_filename}
+            </Typography>
+            <Box>
+              <Button
+                startIcon={<DownloadIcon />}
+                onClick={handleDownload}
+                size="small"
+                sx={{ mr: 1 }}
+              >
+                Download
+              </Button>
+            </Box>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
+          {document && (
+            <DocumentViewer
+              documentId={document.id}
+              filename={document.original_filename}
+              mimeType={document.mime_type}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowViewDialog(false)}>
             Close
           </Button>
         </DialogActions>

@@ -46,6 +46,7 @@ impl Default for RetryConfig {
 
 
 
+#[derive(Clone)]
 pub struct WebDAVService {
     client: Client,
     config: WebDAVConfig,

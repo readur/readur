@@ -40,6 +40,7 @@ import {
   Visibility as ViewIcon,
 } from '@mui/icons-material';
 import { documentService } from '../services/api';
+import DocumentThumbnail from '../components/DocumentThumbnail';
 
 interface Document {
   id: string;
@@ -375,9 +376,11 @@ const DocumentsPage: React.FC = () => {
                       background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
                     }}
                   >
-                    <Box sx={{ fontSize: '3rem' }}>
-                      {getFileIcon(doc.mime_type)}
-                    </Box>
+                    <DocumentThumbnail
+                      documentId={doc.id}
+                      mimeType={doc.mime_type}
+                      size="large"
+                    />
                   </Box>
                 )}
                 
@@ -385,7 +388,11 @@ const DocumentsPage: React.FC = () => {
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                     {viewMode === 'list' && (
                       <Box sx={{ mr: 1, mt: 0.5 }}>
-                        {getFileIcon(doc.mime_type)}
+                        <DocumentThumbnail
+                          documentId={doc.id}
+                          mimeType={doc.mime_type}
+                          size="small"
+                        />
                       </Box>
                     )}
                     

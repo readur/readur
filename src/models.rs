@@ -269,7 +269,7 @@ pub struct UpdateUser {
     pub password: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Settings {
     pub id: Uuid,
     pub user_id: Uuid,

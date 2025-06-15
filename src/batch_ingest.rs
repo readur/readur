@@ -78,10 +78,11 @@ impl BatchIngester {
             let user_id_clone = user_id;
             
             // Process file asynchronously
+            let db_clone = self.db.clone();
             let handle = tokio::spawn(async move {
                 let permit = semaphore_clone.acquire().await.unwrap();
                 let _permit = permit;
-                process_single_file(path_clone, file_service, user_id_clone).await
+                process_single_file(path_clone, file_service, user_id_clone, db_clone).await
             });
             
             batch.push(handle);
@@ -166,6 +167,7 @@ async fn process_single_file(
     path: PathBuf,
     file_service: FileService,
     user_id: Uuid,
+    db: Database,
 ) -> Result<Option<(Uuid, i64)>> {
     let filename = path
         .file_name()
@@ -204,7 +206,6 @@ async fn process_single_file(
     );
     
     // Save to database (without OCR)
-    let db = Database::new(&std::env::var("DATABASE_URL")?).await?;
     let created_doc = db.create_document(document).await?;
     
     Ok(Some((created_doc.id, file_size)))

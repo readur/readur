@@ -2454,6 +2454,7 @@ dependencies = [
  "chrono",
  "clap",
  "dotenvy",
+ "futures",
  "futures-util",
  "hostname",
  "image",

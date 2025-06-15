@@ -1,7 +1,7 @@
 use axum::{
     extract::{Multipart, Path, Query, State},
-    http::StatusCode,
-    response::Json,
+    http::{StatusCode, header::CONTENT_TYPE},
+    response::{Json, Response},
     routing::{get, post},
     Router,
 };
@@ -28,6 +28,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/", post(upload_document))
         .route("/", get(list_documents))
         .route("/:id/download", get(download_document))
+        .route("/:id/view", get(view_document))
+        .route("/:id/thumbnail", get(get_document_thumbnail))
         .route("/:id/ocr", get(get_document_ocr))
 }
 
@@ -111,10 +113,7 @@ async fn upload_document(
             let enable_background_ocr = settings.enable_background_ocr;
             
             if enable_background_ocr {
-                // Use connection pool from state to enqueue the document
-                let pool = sqlx::PgPool::connect(&state.config.database_url).await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                let queue_service = OcrQueueService::new(state.db.clone(), pool, 1);
+                let queue_service = OcrQueueService::new(state.db.clone(), state.db.pool.clone(), 1);
                 
                 // Calculate priority based on file size
                 let priority = match file_size {
@@ -210,6 +209,109 @@ async fn download_document(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     Ok(file_data)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/documents/{id}/view",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Document ID")
+    ),
+    responses(
+        (status = 200, description = "Document content for viewing in browser"),
+        (status = 404, description = "Document not found"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn view_document(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Path(document_id): Path<uuid::Uuid>,
+) -> Result<Response, StatusCode> {
+    let documents = state
+        .db
+        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let document = documents
+        .into_iter()
+        .find(|doc| doc.id == document_id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    
+    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_data = file_service
+        .read_file(&document.file_path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    // Determine content type from file extension
+    let content_type = mime_guess::from_path(&document.filename)
+        .first_or_octet_stream()
+        .to_string();
+    
+    let response = Response::builder()
+        .header(CONTENT_TYPE, content_type)
+        .header("Content-Length", file_data.len())
+        .body(file_data.into())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(response)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/documents/{id}/thumbnail",
+    tag = "documents", 
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Document ID")
+    ),
+    responses(
+        (status = 200, description = "Document thumbnail image", content_type = "image/jpeg"),
+        (status = 404, description = "Document not found or thumbnail not available"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn get_document_thumbnail(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Path(document_id): Path<uuid::Uuid>,
+) -> Result<Response, StatusCode> {
+    let documents = state
+        .db
+        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let document = documents
+        .into_iter()
+        .find(|doc| doc.id == document_id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    
+    let file_service = FileService::new(state.config.upload_path.clone());
+    
+    // Try to generate or get cached thumbnail
+    match file_service.get_or_generate_thumbnail(&document.file_path, &document.filename).await {
+        Ok(thumbnail_data) => {
+            Ok(Response::builder()
+                .header(CONTENT_TYPE, "image/jpeg")
+                .header("Content-Length", thumbnail_data.len())
+                .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+                .body(thumbnail_data.into())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
+        }
+        Err(_) => {
+            // Return a placeholder thumbnail or 404
+            Err(StatusCode::NOT_FOUND)
+        }
+    }
 }
 
 #[utoipa::path(

@@ -6,6 +6,9 @@ use uuid::Uuid;
 
 use crate::models::Document;
 
+#[cfg(feature = "ocr")]
+use image::{DynamicImage, ImageFormat, imageops::FilterType};
+
 #[derive(Clone)]
 pub struct FileService {
     upload_path: String,
@@ -86,5 +89,106 @@ impl FileService {
     pub async fn read_file(&self, file_path: &str) -> Result<Vec<u8>> {
         let data = fs::read(file_path).await?;
         Ok(data)
+    }
+
+    #[cfg(feature = "ocr")]
+    pub async fn get_or_generate_thumbnail(&self, file_path: &str, filename: &str) -> Result<Vec<u8>> {
+        // Create thumbnails directory if it doesn't exist
+        let thumbnails_dir = Path::new(&self.upload_path).join("thumbnails");
+        if !thumbnails_dir.exists() {
+            fs::create_dir_all(&thumbnails_dir).await?;
+        }
+
+        // Generate thumbnail filename based on original file path
+        let file_stem = Path::new(file_path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+        let thumbnail_path = thumbnails_dir.join(format!("{}_thumb.jpg", file_stem));
+
+        // Check if thumbnail already exists
+        if thumbnail_path.exists() {
+            return self.read_file(&thumbnail_path.to_string_lossy()).await;
+        }
+
+        // Generate thumbnail
+        let thumbnail_data = self.generate_thumbnail(file_path, filename).await?;
+        
+        // Save thumbnail to cache
+        fs::write(&thumbnail_path, &thumbnail_data).await?;
+        
+        Ok(thumbnail_data)
+    }
+
+    #[cfg(feature = "ocr")]
+    async fn generate_thumbnail(&self, file_path: &str, filename: &str) -> Result<Vec<u8>> {
+        let file_data = self.read_file(file_path).await?;
+        
+        // Determine file type from extension
+        let extension = Path::new(filename)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        match extension.as_str() {
+            "jpg" | "jpeg" | "png" | "bmp" | "tiff" | "gif" => {
+                self.generate_image_thumbnail(&file_data).await
+            }
+            "pdf" => {
+                // For PDFs, we'd need pdf2image or similar
+                // For now, return a placeholder
+                self.generate_placeholder_thumbnail("PDF").await
+            }
+            _ => {
+                // For other file types, generate a placeholder
+                self.generate_placeholder_thumbnail(&extension.to_uppercase()).await
+            }
+        }
+    }
+
+    #[cfg(feature = "ocr")]
+    async fn generate_image_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
+        let img = image::load_from_memory(file_data)?;
+        let thumbnail = img.resize(200, 200, FilterType::Lanczos3);
+        
+        let mut buffer = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut buffer);
+        thumbnail.write_to(&mut cursor, ImageFormat::Jpeg)?;
+        
+        Ok(buffer)
+    }
+
+    #[cfg(feature = "ocr")]
+    async fn generate_placeholder_thumbnail(&self, file_type: &str) -> Result<Vec<u8>> {
+        // Create a simple colored rectangle as placeholder
+        use image::{RgbImage, Rgb};
+        
+        let mut img = RgbImage::new(200, 200);
+        
+        // Different colors for different file types
+        let color = match file_type {
+            "PDF" => Rgb([220, 38, 27]),   // Red for PDF
+            "TXT" => Rgb([34, 139, 34]),   // Green for text
+            "DOC" | "DOCX" => Rgb([41, 128, 185]), // Blue for Word docs
+            _ => Rgb([108, 117, 125]),     // Gray for unknown
+        };
+        
+        // Fill with solid color
+        for pixel in img.pixels_mut() {
+            *pixel = color;
+        }
+        
+        let dynamic_img = DynamicImage::ImageRgb8(img);
+        let mut buffer = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut buffer);
+        dynamic_img.write_to(&mut cursor, ImageFormat::Jpeg)?;
+        
+        Ok(buffer)
+    }
+
+    #[cfg(not(feature = "ocr"))]
+    pub async fn get_or_generate_thumbnail(&self, _file_path: &str, _filename: &str) -> Result<Vec<u8>> {
+        anyhow::bail!("Thumbnail generation requires OCR feature")
     }
 }

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Row, postgres::PgPoolOptions};
+use std::time::Duration;
 use uuid::Uuid;
 
 use crate::models::{CreateUser, Document, SearchRequest, SearchMode, SearchSnippet, HighlightRange, EnhancedDocumentResponse, User};
@@ -12,8 +13,18 @@ pub struct Database {
 
 impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
-        let pool = PgPool::connect(database_url).await?;
+        let pool = PgPoolOptions::new()
+            .max_connections(20)                          // Increase from default 10
+            .acquire_timeout(Duration::from_secs(3))      // 3 second timeout
+            .idle_timeout(Duration::from_secs(600))       // 10 minute idle timeout
+            .max_lifetime(Duration::from_secs(1800))      // 30 minute max lifetime
+            .connect(database_url)
+            .await?;
         Ok(Self { pool })
+    }
+    
+    pub fn get_pool(&self) -> &PgPool {
+        &self.pool
     }
 
     pub async fn migrate(&self) -> Result<()> {

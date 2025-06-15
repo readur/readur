@@ -149,28 +149,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(state.clone());
     
     let watcher_config = config.clone();
+    let watcher_db = state.db.clone();
     tokio::spawn(async move {
-        if let Err(e) = readur::watcher::start_folder_watcher(watcher_config).await {
+        if let Err(e) = readur::watcher::start_folder_watcher(watcher_config, watcher_db).await {
             error!("Folder watcher error: {}", e);
         }
     });
     
-    // Start OCR queue worker
-    let queue_db = Database::new(&config.database_url).await?;
-    let queue_pool = sqlx::PgPool::connect(&config.database_url).await?;
-    let concurrent_jobs = 4; // TODO: Get from config/settings
-    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(queue_db, queue_pool, concurrent_jobs));
+    // Create dedicated runtime for background tasks to prevent interference
+    let background_runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)  // Dedicated threads for background work
+        .thread_name("readur-background")
+        .enable_all()
+        .build()?;
+    
+    // Start OCR queue worker on dedicated runtime
+    let concurrent_jobs = 4; // TODO: Get from config/settings  
+    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(
+        state.db.clone(), 
+        state.db.get_pool().clone(), 
+        concurrent_jobs
+    ));
     
     let queue_worker = queue_service.clone();
-    tokio::spawn(async move {
+    background_runtime.spawn(async move {
         if let Err(e) = queue_worker.start_worker().await {
             error!("OCR queue worker error: {}", e);
         }
     });
     
-    // Start maintenance tasks
+    // Start maintenance tasks on background runtime
     let queue_maintenance = queue_service.clone();
-    tokio::spawn(async move {
+    background_runtime.spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(300)); // Every 5 minutes
         loop {
             interval.tick().await;
@@ -187,9 +197,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     
-    // Start WebDAV background sync scheduler
+    // Start WebDAV background sync scheduler on background runtime
     let webdav_scheduler = readur::webdav_scheduler::WebDAVScheduler::new(state.clone());
-    tokio::spawn(async move {
+    background_runtime.spawn(async move {
         info!("Starting WebDAV background sync scheduler");
         webdav_scheduler.start().await;
     });

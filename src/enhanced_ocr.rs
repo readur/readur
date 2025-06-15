@@ -58,16 +58,28 @@ impl EnhancedOcrService {
             file_path.to_string()
         };
 
-        // Configure Tesseract with optimal settings
-        let mut tesseract = self.configure_tesseract(&processed_image_path, settings)?;
+        // Move CPU-intensive OCR operations to blocking thread pool
+        let processed_image_path_clone = processed_image_path.clone();
+        let settings_clone = settings.clone();
+        let temp_dir = self.temp_dir.clone();
         
-        // Extract text with confidence
-        let text = tesseract.get_text()?.trim().to_string();
-        let confidence = self.calculate_overall_confidence(&mut tesseract)?;
+        let ocr_result = tokio::task::spawn_blocking(move || -> Result<(String, f32)> {
+            // Configure Tesseract with optimal settings
+            let ocr_service = EnhancedOcrService::new(temp_dir);
+            let mut tesseract = ocr_service.configure_tesseract(&processed_image_path_clone, &settings_clone)?;
+            
+            // Extract text with confidence
+            let text = tesseract.get_text()?.trim().to_string();
+            let confidence = ocr_service.calculate_overall_confidence(&mut tesseract)?;
+            
+            Ok((text, confidence))
+        }).await??;
+        
+        let (text, confidence) = ocr_result;
         
         // Clean up temporary files if created
         if processed_image_path != file_path {
-            let _ = std::fs::remove_file(&processed_image_path);
+            let _ = tokio::fs::remove_file(&processed_image_path).await;
         }
         
         let processing_time = start_time.elapsed().as_millis() as u64;
@@ -502,7 +514,7 @@ impl EnhancedOcrService {
         let start_time = std::time::Instant::now();
         info!("Extracting text from PDF: {}", file_path);
         
-        let bytes = std::fs::read(file_path)?;
+        let bytes = tokio::fs::read(file_path).await?;
         
         // Check if it's a valid PDF (handles leading null bytes)
         if !is_valid_pdf(&bytes) {
@@ -566,7 +578,7 @@ impl EnhancedOcrService {
             }
             "text/plain" => {
                 let start_time = std::time::Instant::now();
-                let text = std::fs::read_to_string(file_path)?;
+                let text = tokio::fs::read_to_string(file_path).await?;
                 let processing_time = start_time.elapsed().as_millis() as u64;
                 let word_count = text.split_whitespace().count();
                 

@@ -54,9 +54,8 @@ async fn main() -> Result<()> {
     
     let config = Config::from_env()?;
     let db = Database::new(&config.database_url).await?;
-    let pool = sqlx::PgPool::connect(&config.database_url).await?;
     let file_service = FileService::new(config.upload_path.clone());
-    let queue_service = OcrQueueService::new(db.clone(), pool, 1);
+    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1);
     
     let ingester = BatchIngester::new(db, queue_service, file_service, config);
     
