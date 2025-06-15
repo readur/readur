@@ -22,6 +22,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/test", post(test_connection))
         .route("/{id}/estimate", post(estimate_crawl))
         .route("/estimate", post(estimate_crawl_with_config))
+        .route("/test-connection", post(test_connection_with_config))
 }
 
 #[utoipa::path(
@@ -338,10 +339,54 @@ async fn test_connection(
                 }))),
             }
         }
-        _ => Ok(Json(serde_json::json!({
-            "success": false,
-            "message": "Source type not implemented"
-        }))),
+        crate::models::SourceType::LocalFolder => {
+            // Test Local Folder access
+            let config: crate::models::LocalFolderSourceConfig = serde_json::from_value(source.config)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            match crate::local_folder_service::LocalFolderService::new(config) {
+                Ok(service) => {
+                    match service.test_connection().await {
+                        Ok(message) => Ok(Json(serde_json::json!({
+                            "success": true,
+                            "message": message
+                        }))),
+                        Err(e) => Ok(Json(serde_json::json!({
+                            "success": false,
+                            "message": format!("Local folder test failed: {}", e)
+                        }))),
+                    }
+                }
+                Err(e) => Ok(Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("Local folder configuration error: {}", e)
+                }))),
+            }
+        }
+        crate::models::SourceType::S3 => {
+            // Test S3 connection
+            let config: crate::models::S3SourceConfig = serde_json::from_value(source.config)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            match crate::s3_service::S3Service::new(config).await {
+                Ok(service) => {
+                    match service.test_connection().await {
+                        Ok(message) => Ok(Json(serde_json::json!({
+                            "success": true,
+                            "message": message
+                        }))),
+                        Err(e) => Ok(Json(serde_json::json!({
+                            "success": false,
+                            "message": format!("S3 test failed: {}", e)
+                        }))),
+                    }
+                }
+                Err(e) => Ok(Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("S3 configuration error: {}", e)
+                }))),
+            }
+        }
     }
 }
 
@@ -359,7 +404,16 @@ fn validate_config_for_type(
                 serde_json::from_value(config.clone()).map_err(|_| "Invalid WebDAV configuration")?;
             Ok(())
         }
-        _ => Ok(()), // Other types not implemented yet
+        crate::models::SourceType::LocalFolder => {
+            let _: crate::models::LocalFolderSourceConfig =
+                serde_json::from_value(config.clone()).map_err(|_| "Invalid Local Folder configuration")?;
+            Ok(())
+        }
+        crate::models::SourceType::S3 => {
+            let _: crate::models::S3SourceConfig =
+                serde_json::from_value(config.clone()).map_err(|_| "Invalid S3 configuration")?;
+            Ok(())
+        }
     }
 }
 
@@ -467,5 +521,104 @@ async fn estimate_webdav_crawl_internal(
             "total_estimated_time_hours": 0.0,
             "total_size_mb": 0.0,
         }))),
+    }
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+struct TestConnectionRequest {
+    source_type: crate::models::SourceType,
+    config: serde_json::Value,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/sources/test-connection",
+    tag = "sources",
+    security(
+        ("bearer_auth" = [])
+    ),
+    request_body = TestConnectionRequest,
+    responses(
+        (status = 200, description = "Connection test result", body = serde_json::Value),
+        (status = 400, description = "Bad request - invalid configuration"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn test_connection_with_config(
+    _auth_user: AuthUser,
+    State(_state): State<Arc<AppState>>,
+    Json(request): Json<TestConnectionRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    match request.source_type {
+        crate::models::SourceType::WebDAV => {
+            // Test WebDAV connection
+            let config: crate::models::WebDAVSourceConfig = serde_json::from_value(request.config)
+                .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+            match crate::webdav_service::test_webdav_connection(
+                &config.server_url,
+                &config.username,
+                &config.password,
+            )
+            .await
+            {
+                Ok(success) => Ok(Json(serde_json::json!({
+                    "success": success,
+                    "message": if success { "WebDAV connection successful" } else { "WebDAV connection failed" }
+                }))),
+                Err(e) => Ok(Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("WebDAV connection failed: {}", e)
+                }))),
+            }
+        }
+        crate::models::SourceType::LocalFolder => {
+            // Test Local Folder access
+            let config: crate::models::LocalFolderSourceConfig = serde_json::from_value(request.config)
+                .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+            match crate::local_folder_service::LocalFolderService::new(config) {
+                Ok(service) => {
+                    match service.test_connection().await {
+                        Ok(message) => Ok(Json(serde_json::json!({
+                            "success": true,
+                            "message": message
+                        }))),
+                        Err(e) => Ok(Json(serde_json::json!({
+                            "success": false,
+                            "message": format!("Local folder test failed: {}", e)
+                        }))),
+                    }
+                }
+                Err(e) => Ok(Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("Local folder configuration error: {}", e)
+                }))),
+            }
+        }
+        crate::models::SourceType::S3 => {
+            // Test S3 connection
+            let config: crate::models::S3SourceConfig = serde_json::from_value(request.config)
+                .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+            match crate::s3_service::S3Service::new(config).await {
+                Ok(service) => {
+                    match service.test_connection().await {
+                        Ok(message) => Ok(Json(serde_json::json!({
+                            "success": true,
+                            "message": message
+                        }))),
+                        Err(e) => Ok(Json(serde_json::json!({
+                            "success": false,
+                            "message": format!("S3 test failed: {}", e)
+                        }))),
+                    }
+                }
+                Err(e) => Ok(Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("S3 configuration error: {}", e)
+                }))),
+            }
+        }
     }
 }

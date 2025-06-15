@@ -143,6 +143,26 @@ const SourcesPage: React.FC = () => {
     loadSources();
   }, []);
 
+  // Update default folders when source type changes
+  useEffect(() => {
+    if (!editingSource) { // Only for new sources
+      let defaultFolders;
+      switch (formData.source_type) {
+        case 'local_folder':
+          defaultFolders = ['/home/user/Documents'];
+          break;
+        case 's3':
+          defaultFolders = ['documents/'];
+          break;
+        case 'webdav':
+        default:
+          defaultFolders = ['/Documents'];
+          break;
+      }
+      setFormData(prev => ({ ...prev, watch_folders: defaultFolders }));
+    }
+  }, [formData.source_type, editingSource]);
+
   const loadSources = async () => {
     try {
       const response = await api.get('/sources');
@@ -228,16 +248,43 @@ const SourcesPage: React.FC = () => {
 
   const handleSaveSource = async () => {
     try {
-      const config = {
-        server_url: formData.server_url,
-        username: formData.username,
-        password: formData.password,
-        watch_folders: formData.watch_folders,
-        file_extensions: formData.file_extensions,
-        auto_sync: formData.auto_sync,
-        sync_interval_minutes: formData.sync_interval_minutes,
-        server_type: formData.server_type,
-      };
+      let config = {};
+      
+      // Build config based on source type
+      if (formData.source_type === 'webdav') {
+        config = {
+          server_url: formData.server_url,
+          username: formData.username,
+          password: formData.password,
+          watch_folders: formData.watch_folders,
+          file_extensions: formData.file_extensions,
+          auto_sync: formData.auto_sync,
+          sync_interval_minutes: formData.sync_interval_minutes,
+          server_type: formData.server_type,
+        };
+      } else if (formData.source_type === 'local_folder') {
+        config = {
+          watch_folders: formData.watch_folders,
+          file_extensions: formData.file_extensions,
+          auto_sync: formData.auto_sync,
+          sync_interval_minutes: formData.sync_interval_minutes,
+          recursive: formData.recursive,
+          follow_symlinks: formData.follow_symlinks,
+        };
+      } else if (formData.source_type === 's3') {
+        config = {
+          bucket_name: formData.bucket_name,
+          region: formData.region,
+          access_key_id: formData.access_key_id,
+          secret_access_key: formData.secret_access_key,
+          endpoint_url: formData.endpoint_url,
+          prefix: formData.prefix,
+          watch_folders: formData.watch_folders,
+          file_extensions: formData.file_extensions,
+          auto_sync: formData.auto_sync,
+          sync_interval_minutes: formData.sync_interval_minutes,
+        };
+      }
 
       if (editingSource) {
         await api.put(`/sources/${editingSource.id}`, {
@@ -282,20 +329,47 @@ const SourcesPage: React.FC = () => {
   const handleTestConnection = async () => {
     setTestingConnection(true);
     try {
-      const response = await api.post('/webdav/test-connection', {
-        server_url: formData.server_url,
-        username: formData.username,
-        password: formData.password,
-        server_type: formData.server_type,
-      });
-      if (response.data.success) {
-        showSnackbar('Connection successful!', 'success');
-      } else {
-        showSnackbar(response.data.message || 'Connection failed', 'error');
+      let response;
+      if (formData.source_type === 'webdav') {
+        response = await api.post('/webdav/test-connection', {
+          server_url: formData.server_url,
+          username: formData.username,
+          password: formData.password,
+          server_type: formData.server_type,
+        });
+      } else if (formData.source_type === 'local_folder') {
+        response = await api.post('/sources/test-connection', {
+          source_type: 'local_folder',
+          config: {
+            watch_folders: formData.watch_folders,
+            file_extensions: formData.file_extensions,
+            recursive: formData.recursive,
+            follow_symlinks: formData.follow_symlinks,
+          }
+        });
+      } else if (formData.source_type === 's3') {
+        response = await api.post('/sources/test-connection', {
+          source_type: 's3',
+          config: {
+            bucket_name: formData.bucket_name,
+            region: formData.region,
+            access_key_id: formData.access_key_id,
+            secret_access_key: formData.secret_access_key,
+            endpoint_url: formData.endpoint_url,
+            prefix: formData.prefix,
+          }
+        });
       }
-    } catch (error) {
+
+      if (response && response.data.success) {
+        showSnackbar(response.data.message || 'Connection successful!', 'success');
+      } else {
+        showSnackbar(response?.data.message || 'Connection failed', 'error');
+      }
+    } catch (error: any) {
       console.error('Failed to test connection:', error);
-      showSnackbar('Failed to test connection', 'error');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to test connection';
+      showSnackbar(errorMessage, 'error');
     } finally {
       setTestingConnection(false);
     }
@@ -391,9 +465,9 @@ const SourcesPage: React.FC = () => {
       case 'webdav':
         return <CloudIcon />;
       case 's3':
-        return <StorageIcon />;
+        return <CloudIcon />;
       case 'local_folder':
-        return <StorageIcon />;
+        return <FolderIcon />;
       default:
         return <StorageIcon />;
     }
@@ -1282,6 +1356,485 @@ const SourcesPage: React.FC = () => {
               </Paper>
             )}
 
+            {formData.source_type === 'local_folder' && (
+              <Paper 
+                sx={{ 
+                  p: 3, 
+                  borderRadius: 3,
+                  bgcolor: alpha(theme.palette.warning.main, 0.03),
+                  border: `1px solid ${alpha(theme.palette.warning.main, 0.1)}`,
+                }}
+              >
+                <Stack spacing={3}>
+                  <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                    <Avatar 
+                      sx={{ 
+                        bgcolor: alpha(theme.palette.warning.main, 0.1),
+                        color: theme.palette.warning.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      <FolderIcon />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="medium">
+                      Local Folder Configuration
+                    </Typography>
+                  </Stack>
+                  
+                  <Alert severity="info" sx={{ borderRadius: 2 }}>
+                    <Typography variant="body2">
+                      Monitor local filesystem directories for new documents. 
+                      Ensure the application has read access to the specified paths.
+                    </Typography>
+                  </Alert>
+
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.recursive}
+                        onChange={(e) => setFormData({ ...formData, recursive: e.target.checked })}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          Recursive Scanning
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Scan subdirectories recursively
+                        </Typography>
+                      </Box>
+                    }
+                  />
+
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.follow_symlinks}
+                        onChange={(e) => setFormData({ ...formData, follow_symlinks: e.target.checked })}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          Follow Symbolic Links
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Follow symlinks when scanning directories
+                        </Typography>
+                      </Box>
+                    }
+                  />
+
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.auto_sync}
+                        onChange={(e) => setFormData({ ...formData, auto_sync: e.target.checked })}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          Enable Automatic Sync
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Automatically scan for new files on a schedule
+                        </Typography>
+                      </Box>
+                    }
+                  />
+
+                  {formData.auto_sync && (
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Sync Interval (minutes)"
+                      value={formData.sync_interval_minutes}
+                      onChange={(e) => setFormData({ ...formData, sync_interval_minutes: parseInt(e.target.value) || 60 })}
+                      inputProps={{ min: 15, max: 1440 }}
+                      helperText="How often to scan for new files (15 min - 24 hours)"
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                    />
+                  )}
+
+                  <Divider sx={{ my: 2 }} />
+
+                  {/* Folder Management */}
+                  <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                    <Avatar 
+                      sx={{ 
+                        bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                        color: theme.palette.secondary.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      <FolderIcon />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="medium">
+                      Directories to Monitor
+                    </Typography>
+                  </Stack>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Specify which local directories to scan for files. Use absolute paths.
+                  </Typography>
+
+                  <Stack direction="row" spacing={1} mb={2}>
+                    <TextField
+                      label="Add Directory Path"
+                      value={newFolder}
+                      onChange={(e) => setNewFolder(e.target.value)}
+                      placeholder="/home/user/Documents"
+                      sx={{ 
+                        flexGrow: 1,
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                      }}
+                    />
+                    <Button 
+                      variant="outlined" 
+                      onClick={addFolder} 
+                      disabled={!newFolder}
+                      sx={{ borderRadius: 2, px: 3 }}
+                    >
+                      Add
+                    </Button>
+                  </Stack>
+
+                  <Box sx={{ mb: 3 }}>
+                    {formData.watch_folders.map((folder, index) => (
+                      <Chip
+                        key={index}
+                        label={folder}
+                        onDelete={() => removeFolder(folder)}
+                        sx={{ 
+                          mr: 1, 
+                          mb: 1,
+                          borderRadius: 2,
+                          bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                          color: theme.palette.secondary.main,
+                        }}
+                      />
+                    ))}
+                  </Box>
+
+                  {/* File Extensions */}
+                  <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                    <Avatar 
+                      sx={{ 
+                        bgcolor: alpha(theme.palette.warning.main, 0.1),
+                        color: theme.palette.warning.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      <ExtensionIcon />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="medium">
+                      File Extensions
+                    </Typography>
+                  </Stack>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    File types to monitor and process with OCR.
+                  </Typography>
+
+                  <Stack direction="row" spacing={1} mb={2}>
+                    <TextField
+                      label="Add Extension"
+                      value={newExtension}
+                      onChange={(e) => setNewExtension(e.target.value)}
+                      placeholder="docx"
+                      sx={{ 
+                        flexGrow: 1,
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                      }}
+                    />
+                    <Button 
+                      variant="outlined" 
+                      onClick={addFileExtension} 
+                      disabled={!newExtension}
+                      sx={{ borderRadius: 2, px: 3 }}
+                    >
+                      Add
+                    </Button>
+                  </Stack>
+
+                  <Box sx={{ mb: 3 }}>
+                    {formData.file_extensions.map((extension, index) => (
+                      <Chip
+                        key={index}
+                        label={extension}
+                        onDelete={() => removeFileExtension(extension)}
+                        sx={{ 
+                          mr: 1, 
+                          mb: 1,
+                          borderRadius: 2,
+                          bgcolor: alpha(theme.palette.warning.main, 0.1),
+                          color: theme.palette.warning.main,
+                        }}
+                      />
+                    ))}
+                  </Box>
+                </Stack>
+              </Paper>
+            )}
+
+            {formData.source_type === 's3' && (
+              <Paper 
+                sx={{ 
+                  p: 3, 
+                  borderRadius: 3,
+                  bgcolor: alpha(theme.palette.success.main, 0.03),
+                  border: `1px solid ${alpha(theme.palette.success.main, 0.1)}`,
+                }}
+              >
+                <Stack spacing={3}>
+                  <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                    <Avatar 
+                      sx={{ 
+                        bgcolor: alpha(theme.palette.success.main, 0.1),
+                        color: theme.palette.success.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      <CloudIcon />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="medium">
+                      S3 Compatible Storage Configuration
+                    </Typography>
+                  </Stack>
+                  
+                  <Alert severity="info" sx={{ borderRadius: 2 }}>
+                    <Typography variant="body2">
+                      Connect to AWS S3, MinIO, or any S3-compatible storage service. 
+                      For MinIO, provide the endpoint URL of your server.
+                    </Typography>
+                  </Alert>
+
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Bucket Name"
+                        value={formData.bucket_name}
+                        onChange={(e) => setFormData({ ...formData, bucket_name: e.target.value })}
+                        placeholder="my-documents-bucket"
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Region"
+                        value={formData.region}
+                        onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                        placeholder="us-east-1"
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                      />
+                    </Grid>
+                  </Grid>
+
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Access Key ID"
+                        value={formData.access_key_id}
+                        onChange={(e) => setFormData({ ...formData, access_key_id: e.target.value })}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Secret Access Key"
+                        type="password"
+                        value={formData.secret_access_key}
+                        onChange={(e) => setFormData({ ...formData, secret_access_key: e.target.value })}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                      />
+                    </Grid>
+                  </Grid>
+
+                  <TextField
+                    fullWidth
+                    label="Endpoint URL (Optional)"
+                    value={formData.endpoint_url}
+                    onChange={(e) => setFormData({ ...formData, endpoint_url: e.target.value })}
+                    placeholder="https://minio.example.com (for MinIO/S3-compatible services)"
+                    helperText="Leave empty for AWS S3, or provide custom endpoint for MinIO/other S3-compatible storage"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="Object Key Prefix (Optional)"
+                    value={formData.prefix}
+                    onChange={(e) => setFormData({ ...formData, prefix: e.target.value })}
+                    placeholder="documents/"
+                    helperText="Optional prefix to limit scanning to specific object keys"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                  />
+
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.auto_sync}
+                        onChange={(e) => setFormData({ ...formData, auto_sync: e.target.checked })}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          Enable Automatic Sync
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Automatically check for new objects on a schedule
+                        </Typography>
+                      </Box>
+                    }
+                  />
+
+                  {formData.auto_sync && (
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Sync Interval (minutes)"
+                      value={formData.sync_interval_minutes}
+                      onChange={(e) => setFormData({ ...formData, sync_interval_minutes: parseInt(e.target.value) || 60 })}
+                      inputProps={{ min: 15, max: 1440 }}
+                      helperText="How often to check for new objects (15 min - 24 hours)"
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                    />
+                  )}
+
+                  <Divider sx={{ my: 2 }} />
+
+                  {/* Folder Management (prefixes for S3) */}
+                  <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                    <Avatar 
+                      sx={{ 
+                        bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                        color: theme.palette.secondary.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      <FolderIcon />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="medium">
+                      Object Prefixes to Monitor
+                    </Typography>
+                  </Stack>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Specify which object prefixes (like folders) to scan for files.
+                  </Typography>
+
+                  <Stack direction="row" spacing={1} mb={2}>
+                    <TextField
+                      label="Add Object Prefix"
+                      value={newFolder}
+                      onChange={(e) => setNewFolder(e.target.value)}
+                      placeholder="documents/"
+                      sx={{ 
+                        flexGrow: 1,
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                      }}
+                    />
+                    <Button 
+                      variant="outlined" 
+                      onClick={addFolder} 
+                      disabled={!newFolder}
+                      sx={{ borderRadius: 2, px: 3 }}
+                    >
+                      Add
+                    </Button>
+                  </Stack>
+
+                  <Box sx={{ mb: 3 }}>
+                    {formData.watch_folders.map((folder, index) => (
+                      <Chip
+                        key={index}
+                        label={folder}
+                        onDelete={() => removeFolder(folder)}
+                        sx={{ 
+                          mr: 1, 
+                          mb: 1,
+                          borderRadius: 2,
+                          bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                          color: theme.palette.secondary.main,
+                        }}
+                      />
+                    ))}
+                  </Box>
+
+                  {/* File Extensions */}
+                  <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                    <Avatar 
+                      sx={{ 
+                        bgcolor: alpha(theme.palette.warning.main, 0.1),
+                        color: theme.palette.warning.main,
+                        width: 32,
+                        height: 32,
+                      }}
+                    >
+                      <ExtensionIcon />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="medium">
+                      File Extensions
+                    </Typography>
+                  </Stack>
+                  
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    File types to sync and process with OCR.
+                  </Typography>
+
+                  <Stack direction="row" spacing={1} mb={2}>
+                    <TextField
+                      label="Add Extension"
+                      value={newExtension}
+                      onChange={(e) => setNewExtension(e.target.value)}
+                      placeholder="docx"
+                      sx={{ 
+                        flexGrow: 1,
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                      }}
+                    />
+                    <Button 
+                      variant="outlined" 
+                      onClick={addFileExtension} 
+                      disabled={!newExtension}
+                      sx={{ borderRadius: 2, px: 3 }}
+                    >
+                      Add
+                    </Button>
+                  </Stack>
+
+                  <Box sx={{ mb: 3 }}>
+                    {formData.file_extensions.map((extension, index) => (
+                      <Chip
+                        key={index}
+                        label={extension}
+                        onDelete={() => removeFileExtension(extension)}
+                        sx={{ 
+                          mr: 1, 
+                          mb: 1,
+                          borderRadius: 2,
+                          bgcolor: alpha(theme.palette.warning.main, 0.1),
+                          color: theme.palette.warning.main,
+                        }}
+                      />
+                    ))}
+                  </Box>
+                </Stack>
+              </Paper>
+            )}
+
             <FormControlLabel
               control={
                 <Switch
@@ -1310,10 +1863,14 @@ const SourcesPage: React.FC = () => {
           >
             Cancel
           </Button>
-          {editingSource && formData.source_type === 'webdav' && (
+          {(formData.source_type === 'webdav' || formData.source_type === 'local_folder' || formData.source_type === 's3') && (
             <Button
               onClick={handleTestConnection}
-              disabled={testingConnection}
+              disabled={testingConnection || 
+                (formData.source_type === 'webdav' && (!formData.server_url || !formData.username)) ||
+                (formData.source_type === 'local_folder' && formData.watch_folders.length === 0) ||
+                (formData.source_type === 's3' && (!formData.bucket_name || !formData.access_key_id || !formData.secret_access_key))
+              }
               startIcon={testingConnection ? <CircularProgress size={20} /> : <SecurityIcon />}
               sx={{ borderRadius: 2 }}
             >
