@@ -8,7 +8,7 @@ use tokio::time::{sleep, Duration};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{db::Database, enhanced_ocr::EnhancedOcrService};
+use crate::{db::Database, enhanced_ocr::EnhancedOcrService, db_guardrails_simple::DocumentTransactionManager};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct OcrQueueItem {
@@ -43,16 +43,19 @@ pub struct OcrQueueService {
     pool: PgPool,
     max_concurrent_jobs: usize,
     worker_id: String,
+    transaction_manager: DocumentTransactionManager,
 }
 
 impl OcrQueueService {
     pub fn new(db: Database, pool: PgPool, max_concurrent_jobs: usize) -> Self {
         let worker_id = format!("worker-{}-{}", hostname::get().unwrap_or_default().to_string_lossy(), Uuid::new_v4());
+        let transaction_manager = DocumentTransactionManager::new(pool.clone());
         Self {
             db,
             pool,
             max_concurrent_jobs,
             worker_id,
+            transaction_manager,
         }
     }
 
@@ -108,51 +111,104 @@ impl OcrQueueService {
         Ok(ids)
     }
 
-    /// Get the next item from the queue
-    async fn dequeue(&self) -> Result<Option<OcrQueueItem>> {
-        let row = sqlx::query(
+    /// Get the next item from the queue with atomic job claiming and retry logic
+    pub async fn dequeue(&self) -> Result<Option<OcrQueueItem>> {
+        // Retry up to 3 times for race condition scenarios
+        for attempt in 1..=3 {
+            // Use a transaction to ensure atomic job claiming
+            let mut tx = self.pool.begin().await?;
+        
+        // Step 1: Find and lock the next available job atomically
+        let job_row = sqlx::query(
+            r#"
+            SELECT id, document_id, priority, status, attempts, max_attempts, 
+                   created_at, started_at, completed_at, error_message, 
+                   worker_id, processing_time_ms, file_size
+            FROM ocr_queue
+            WHERE status = 'pending'
+              AND attempts < max_attempts
+            ORDER BY priority DESC, created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+            "#
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let job_id = match job_row {
+            Some(ref row) => row.get::<Uuid, _>("id"),
+            None => {
+                // No jobs available
+                tx.rollback().await?;
+                return Ok(None);
+            }
+        };
+
+        // Step 2: Atomically update the job to processing state
+        let updated_rows = sqlx::query(
             r#"
             UPDATE ocr_queue
             SET status = 'processing',
                 started_at = NOW(),
                 worker_id = $1,
                 attempts = attempts + 1
-            WHERE id = (
-                SELECT id
-                FROM ocr_queue
-                WHERE status = 'pending'
-                  AND attempts < max_attempts
-                ORDER BY priority DESC, created_at ASC
-                FOR UPDATE SKIP LOCKED
-                LIMIT 1
-            )
-            RETURNING *
+            WHERE id = $2
+              AND status = 'pending'  -- Extra safety check
             "#
         )
         .bind(&self.worker_id)
-        .fetch_optional(&self.pool)
+        .bind(job_id)
+        .execute(&mut *tx)
         .await?;
 
-        let item = match row {
-            Some(row) => Some(OcrQueueItem {
-                id: row.get("id"),
-                document_id: row.get("document_id"),
-                status: row.get("status"),
-                priority: row.get("priority"),
-                attempts: row.get("attempts"),
-                max_attempts: row.get("max_attempts"),
-                created_at: row.get("created_at"),
-                started_at: row.get("started_at"),
-                completed_at: row.get("completed_at"),
-                error_message: row.get("error_message"),
-                worker_id: row.get("worker_id"),
-                processing_time_ms: row.get("processing_time_ms"),
-                file_size: row.get("file_size"),
-            }),
-            None => None,
+        if updated_rows.rows_affected() != 1 {
+            // Job was claimed by another worker between SELECT and UPDATE
+            tx.rollback().await?;
+            warn!("Job {} was claimed by another worker, retrying", job_id);
+            return Ok(None);
+        }
+
+        // Step 3: Get the updated job details
+        let row = sqlx::query(
+            r#"
+            SELECT id, document_id, priority, status, attempts, max_attempts, 
+                   created_at, started_at, completed_at, error_message, 
+                   worker_id, processing_time_ms, file_size
+            FROM ocr_queue
+            WHERE id = $1
+            "#
+        )
+        .bind(job_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        // Return the successfully claimed job
+        let item = OcrQueueItem {
+            id: row.get("id"),
+            document_id: row.get("document_id"),
+            status: row.get("status"),
+            priority: row.get("priority"),
+            attempts: row.get("attempts"),
+            max_attempts: row.get("max_attempts"),
+            created_at: row.get("created_at"),
+            started_at: row.get("started_at"),
+            completed_at: row.get("completed_at"),
+            error_message: row.get("error_message"),
+            worker_id: row.get("worker_id"),
+            processing_time_ms: row.get("processing_time_ms"),
+            file_size: row.get("file_size"),
         };
 
-        Ok(item)
+        info!("✅ Worker {} successfully claimed job {} for document {}", 
+              self.worker_id, item.id, item.document_id);
+        
+        return Ok(Some(item));
+        }
+        
+        // If all retry attempts failed, return None
+        Ok(None)
     }
 
     /// Mark an item as completed
@@ -209,10 +265,10 @@ impl OcrQueueService {
         
         info!("Processing OCR job {} for document {}", item.id, item.document_id);
         
-        // Get document details
+        // Get document details including filename for validation
         let document = sqlx::query(
             r#"
-            SELECT file_path, mime_type, user_id
+            SELECT file_path, mime_type, user_id, filename
             FROM documents
             WHERE id = $1
             "#
@@ -226,6 +282,7 @@ impl OcrQueueService {
                 let file_path: String = row.get("file_path");
                 let mime_type: String = row.get("mime_type");
                 let user_id: Option<Uuid> = row.get("user_id");
+                let filename: String = row.get("filename");
                 // Get user's OCR settings or use defaults
                 let settings = if let Some(user_id) = user_id {
                     self.db.get_user_settings(user_id).await.ok().flatten()
@@ -263,27 +320,33 @@ impl OcrQueueService {
                         }
                         
                         if !ocr_result.text.is_empty() {
-                            // Update document with enhanced OCR text and metadata
-                            sqlx::query(
-                                r#"
-                                UPDATE documents
-                                SET ocr_text = $2,
-                                    ocr_status = 'completed',
-                                    ocr_completed_at = NOW(),
-                                    ocr_confidence = $3,
-                                    ocr_word_count = $4,
-                                    ocr_processing_time_ms = $5,
-                                    updated_at = NOW()
-                                WHERE id = $1
-                                "#
-                            )
-                            .bind(item.document_id)
-                            .bind(&ocr_result.text)
-                            .bind(ocr_result.confidence)
-                            .bind(ocr_result.word_count as i32)
-                            .bind(ocr_result.processing_time_ms as i32)
-                            .execute(&self.pool)
-                            .await?;
+                            // Use transaction-safe OCR update to prevent corruption
+                            let processing_time_ms = start_time.elapsed().as_millis() as i64;
+                            
+                            match self.transaction_manager.update_ocr_with_validation(
+                                item.document_id,
+                                &filename,
+                                &ocr_result.text,
+                                ocr_result.confidence as f64,
+                                ocr_result.word_count as i32,
+                                processing_time_ms,
+                            ).await {
+                                Ok(true) => {
+                                    info!("✅ Transaction-safe OCR update successful for document {}", item.document_id);
+                                }
+                                Ok(false) => {
+                                    let error_msg = "OCR update failed validation (document may have been modified)";
+                                    warn!("{} for document {}", error_msg, item.document_id);
+                                    self.mark_failed(item.id, error_msg).await?;
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    let error_msg = format!("Transaction-safe OCR update failed: {}", e);
+                                    error!("{}", error_msg);
+                                    self.mark_failed(item.id, &error_msg).await?;
+                                    return Ok(());
+                                }
+                            }
                         }
 
                         let processing_time_ms = start_time.elapsed().as_millis() as i32;
@@ -354,8 +417,9 @@ impl OcrQueueService {
                     });
                 }
                 Ok(None) => {
-                    // No items in queue, sleep briefly
-                    sleep(Duration::from_secs(1)).await;
+                    // No items in queue or all jobs were claimed by other workers
+                    // Use shorter sleep for high-concurrency scenarios
+                    sleep(Duration::from_millis(100)).await;
                 }
                 Err(e) => {
                     error!("Error dequeuing item: {}", e);

@@ -2,6 +2,7 @@ pub mod auth;
 pub mod batch_ingest;
 pub mod config;
 pub mod db;
+pub mod db_guardrails_simple;
 pub mod enhanced_ocr;
 pub mod file_service;
 pub mod local_folder_service;

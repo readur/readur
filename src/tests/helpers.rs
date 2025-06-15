@@ -2,19 +2,18 @@ use crate::{AppState, models::UserResponse};
 use axum::Router;
 use serde_json::json;
 use std::sync::Arc;
-use testcontainers::{clients::Cli, RunnableImage};
+use testcontainers::{core::WaitFor, runners::AsyncRunner, ContainerAsync, GenericImage};
 use testcontainers_modules::postgres::Postgres;
 use tower::util::ServiceExt;
 
-pub async fn create_test_app() -> (Router, testcontainers::Container<'static, Postgres>) {
-    let docker = Box::leak(Box::new(Cli::default()));
-    let postgres_image = RunnableImage::from(Postgres::default())
+pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
+    let postgres_image = Postgres::default()
         .with_env_var(("POSTGRES_USER", "test"))
         .with_env_var(("POSTGRES_PASSWORD", "test"))
         .with_env_var(("POSTGRES_DB", "test"));
     
-    let container = docker.run(postgres_image);
-    let port = container.get_host_port_ipv4(5432);
+    let container = postgres_image.start().await.expect("Failed to start postgres container");
+    let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
     
     let database_url = format!("postgresql://test:test@localhost:{}/test", port);
     let db = crate::db::Database::new(&database_url).await.unwrap();
@@ -42,7 +41,12 @@ pub async fn create_test_app() -> (Router, testcontainers::Container<'static, Po
         cpu_priority: "normal".to_string(),
     };
     
-    let state = Arc::new(AppState { db, config });
+    let state = Arc::new(AppState { 
+        db, 
+        config,
+        webdav_scheduler: None,
+        source_scheduler: None,
+    });
     
     let app = Router::new()
         .nest("/api/auth", crate::routes::auth::router())
