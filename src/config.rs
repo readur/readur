@@ -28,7 +28,7 @@ impl Config {
     pub fn from_env() -> Result<Self> {
         dotenvy::dotenv().ok();
         
-        Ok(Config {
+        let config = Config {
             database_url: env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgresql://readur:readur@localhost/readur".to_string()),
             server_address: {
@@ -85,6 +85,68 @@ impl Config {
                 .unwrap_or(512),
             cpu_priority: env::var("CPU_PRIORITY")
                 .unwrap_or_else(|_| "normal".to_string()),
-        })
+        };
+        
+        // Validate configuration to prevent recursion issues
+        config.validate_paths()?;
+        
+        Ok(config)
+    }
+    
+    fn validate_paths(&self) -> Result<()> {
+        use std::path::Path;
+        
+        let upload_path = Path::new(&self.upload_path);
+        let watch_path = Path::new(&self.watch_folder);
+        
+        // Normalize paths to handle relative paths and symlinks
+        let upload_canonical = upload_path.canonicalize()
+            .unwrap_or_else(|_| upload_path.to_path_buf());
+        let watch_canonical = watch_path.canonicalize()
+            .unwrap_or_else(|_| watch_path.to_path_buf());
+        
+        // Check if paths are the same
+        if upload_canonical == watch_canonical {
+            return Err(anyhow::anyhow!(
+                "Configuration Error: UPLOAD_PATH and WATCH_FOLDER cannot be the same directory.\n\
+                 This would cause infinite recursion where WebDAV files are downloaded to the upload \n\
+                 directory and then immediately reprocessed by the watcher.\n\
+                 Current config:\n\
+                 - UPLOAD_PATH: {}\n\
+                 - WATCH_FOLDER: {}\n\
+                 Please set them to different directories.",
+                self.upload_path, self.watch_folder
+            ));
+        }
+        
+        // Check if watch folder is inside upload folder
+        if watch_canonical.starts_with(&upload_canonical) {
+            return Err(anyhow::anyhow!(
+                "Configuration Error: WATCH_FOLDER cannot be inside UPLOAD_PATH.\n\
+                 This would cause recursion where WebDAV files downloaded to uploads are \n\
+                 detected by the watcher as new files.\n\
+                 Current config:\n\
+                 - UPLOAD_PATH: {}\n\
+                 - WATCH_FOLDER: {}\n\
+                 Please move the watch folder outside the upload directory.",
+                self.upload_path, self.watch_folder
+            ));
+        }
+        
+        // Check if upload folder is inside watch folder
+        if upload_canonical.starts_with(&watch_canonical) {
+            return Err(anyhow::anyhow!(
+                "Configuration Error: UPLOAD_PATH cannot be inside WATCH_FOLDER.\n\
+                 This would cause recursion where files from the watch folder are \n\
+                 copied to uploads (inside the watch folder) and reprocessed.\n\
+                 Current config:\n\
+                 - UPLOAD_PATH: {}\n\
+                 - WATCH_FOLDER: {}\n\
+                 Please move the upload directory outside the watch folder.",
+                self.upload_path, self.watch_folder
+            ));
+        }
+        
+        Ok(())
     }
 }

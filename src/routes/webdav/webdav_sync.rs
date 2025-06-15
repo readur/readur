@@ -4,6 +4,7 @@ use tracing::{error, info, warn};
 use chrono::Utc;
 use tokio::sync::Semaphore;
 use futures::stream::{FuturesUnordered, StreamExt};
+use sha2::{Sha256, Digest};
 
 use crate::{
     AppState,
@@ -241,6 +242,46 @@ async fn process_single_file(
     
     info!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
     
+    // Calculate file hash for deduplication 
+    let file_hash = calculate_file_hash(&file_data);
+    
+    // Check if this exact file content already exists in the system
+    // This prevents downloading and processing duplicate files from WebDAV
+    if let Ok(existing_docs) = state.db.get_documents_by_user_with_role(user_id, crate::models::UserRole::User, 1000, 0).await {
+        for existing_doc in existing_docs {
+            // Quick size check first (much faster than hash comparison)
+            if existing_doc.file_size == file_data.len() as i64 {
+                // Read the existing file and compare hashes
+                if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
+                    let existing_hash = calculate_file_hash(&existing_file_data);
+                    if file_hash == existing_hash {
+                        info!("Skipping duplicate WebDAV file content: {} (hash: {}, already exists as: {})", 
+                            file_info.name, &file_hash[..8], existing_doc.original_filename);
+                        
+                        // Still record this WebDAV file in the tracking table to prevent re-downloading
+                        let webdav_file = CreateWebDAVFile {
+                            user_id,
+                            webdav_path: file_info.path.clone(),
+                            etag: file_info.etag.clone(),
+                            last_modified: file_info.last_modified,
+                            file_size: file_info.size,
+                            mime_type: file_info.mime_type.clone(),
+                            document_id: Some(existing_doc.id), // Link to existing document
+                            sync_status: "duplicate_content".to_string(),
+                            sync_error: None,
+                        };
+                        
+                        if let Err(e) = state.db.create_or_update_webdav_file(&webdav_file).await {
+                            error!("Failed to record duplicate WebDAV file: {}", e);
+                        }
+                        
+                        return Ok(false); // Not processed (duplicate)
+                    }
+                }
+            }
+        }
+    }
+    
     // Create file service and save file to disk
     let file_service = FileService::new(state.config.upload_path.clone());
     
@@ -312,4 +353,11 @@ async fn process_single_file(
     }
     
     Ok(true) // Successfully processed
+}
+
+fn calculate_file_hash(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    format!("{:x}", result)
 }

@@ -80,23 +80,22 @@ const DocumentDetailsPage: React.FC = () => {
   }, [document]);
 
   const fetchDocumentDetails = async (): Promise<void> => {
+    if (!id) {
+      setError('No document ID provided');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
       
-      // Since we don't have a direct document details endpoint, 
-      // we'll fetch the document from the list and find the matching one
-      const response = await documentService.list(1000, 0);
-      const foundDoc = response.data.find(doc => doc.id === id);
-      
-      if (foundDoc) {
-        setDocument(foundDoc);
-      } else {
-        setError('Document not found');
-      }
-    } catch (err) {
-      setError('Failed to load document details');
-      console.error(err);
+      const response = await documentService.getById(id);
+      setDocument(response.data);
+    } catch (err: any) {
+      const errorMessage = err.message || 'Failed to load document details';
+      setError(errorMessage);
+      console.error('Failed to fetch document details:', err);
     } finally {
       setLoading(false);
     }

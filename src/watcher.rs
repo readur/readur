@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
 use walkdir::WalkDir;
+use sha2::{Sha256, Digest};
 
 use crate::{config::Config, db::Database, file_service::FileService, ocr_queue::OcrQueueService};
 
@@ -134,7 +135,9 @@ async fn start_polling_watcher(
     let mut interval = interval(Duration::from_secs(config.watch_interval_seconds.unwrap_or(30)));
     
     // Initial scan
+    info!("Starting initial scan of watch directory: {}", config.watch_folder);
     scan_directory(&config.watch_folder, &mut known_files, &db, &file_service, &queue_service, &config).await?;
+    info!("Initial scan completed. Found {} files to track", known_files.len());
     
     loop {
         interval.tick().await;
@@ -242,6 +245,19 @@ async fn process_file(
         return Ok(());
     }
     
+    // CRITICAL: Skip files that are in the upload directory - these are managed by WebDAV/manual uploads
+    let path_str = path.to_string_lossy();
+    let upload_path_normalized = std::path::Path::new(&config.upload_path)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&config.upload_path));
+    
+    if let Ok(file_canonical) = path.canonicalize() {
+        if file_canonical.starts_with(&upload_path_normalized) {
+            debug!("Skipping file in upload directory (managed by WebDAV/manual upload): {}", filename);
+            return Ok(());
+        }
+    }
+    
     // Check file age if configured
     if let Some(max_age_hours) = config.max_file_age_hours {
         if let Ok(metadata) = tokio::fs::metadata(path).await {
@@ -255,7 +271,7 @@ async fn process_file(
         }
     }
     
-    info!("Processing new file: {:?}", path);
+    info!("Processing new file: {:?} (from watch directory: {})", path, config.watch_folder);
     
     let file_data = tokio::fs::read(path).await?;
     let file_size = file_data.len() as i64;
@@ -283,15 +299,34 @@ async fn process_file(
         return Ok(());  
     }
     
-    // Check for duplicate files (same filename and size)
-    if let Ok(existing_docs) = db.find_documents_by_filename(&filename).await {
-        for doc in existing_docs {
-            if doc.file_size == file_size {
-                info!("Skipping duplicate file: {} (already exists with same size)", filename);
-                return Ok(());
+    // Fetch admin user ID from database for watch folder documents
+    let admin_user = db.get_user_by_username("admin").await?
+        .ok_or_else(|| anyhow::anyhow!("Admin user not found. Please ensure the admin user is created."))?;
+    let admin_user_id = admin_user.id;
+    
+    // Calculate file hash for deduplication
+    let file_hash = calculate_file_hash(&file_data);
+    
+    // Check if this exact file content already exists in the system by comparing
+    // against existing files with the same size (performance optimization)
+    if let Ok(existing_docs) = db.get_documents_by_user_with_role(admin_user_id, crate::models::UserRole::Admin, 1000, 0).await {
+        for existing_doc in existing_docs {
+            // Quick size check first (much faster than hash comparison)
+            if existing_doc.file_size == file_size {
+                // Read the existing file and compare hashes
+                if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
+                    let existing_hash = calculate_file_hash(&existing_file_data);
+                    if file_hash == existing_hash {
+                        info!("Skipping duplicate file content: {} (hash: {}, already exists as: {})", 
+                            filename, &file_hash[..8], existing_doc.original_filename);
+                        return Ok(());
+                    }
+                }
             }
         }
     }
+    
+    debug!("File content is unique: {} (hash: {})", filename, &file_hash[..8]);
     
     // Validate PDF files before processing
     if mime_type == "application/pdf" {
@@ -309,11 +344,6 @@ async fn process_file(
     }
     
     let saved_file_path = file_service.save_file(&filename, &file_data).await?;
-    
-    // Fetch admin user ID from database for watch folder documents
-    let admin_user = db.get_user_by_username("admin").await?
-        .ok_or_else(|| anyhow::anyhow!("Admin user not found. Please ensure the admin user is created."))?;
-    let admin_user_id = admin_user.id;
     
     let document = file_service.create_document(
         &filename,
@@ -410,4 +440,11 @@ fn clean_pdf_data(data: &[u8]) -> &[u8] {
     
     // If no PDF header found, return original data
     data
+}
+
+fn calculate_file_hash(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    format!("{:x}", result)
 }

@@ -33,35 +33,18 @@ import {
   AccessTime as TimeIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { documentService, SearchRequest } from '../../services/api';
+import { documentService, SearchRequest, EnhancedDocument, SearchResponse } from '../../services/api';
 
 interface GlobalSearchBarProps {
   sx?: SxProps<Theme>;
   [key: string]: any;
 }
 
-interface Document {
-  id: string;
-  original_filename: string;
-  filename?: string;
-  file_size: number;
-  mime_type: string;
-  has_ocr_text?: boolean;
-  search_rank?: number;
-  snippets?: Array<{ text: string }>;
-}
-
-interface SearchResponse {
-  documents: Document[];
-  total_count: number;
-  search_time_ms: number;
-}
-
 const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const [query, setQuery] = useState<string>('');
-  const [results, setResults] = useState<Document[]>([]);
+  const [results, setResults] = useState<EnhancedDocument[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [showResults, setShowResults] = useState<boolean>(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -221,7 +204,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
     setSearchProgress(0);
   };
 
-  const handleDocumentClick = (doc: Document): void => {
+  const handleDocumentClick = (doc: EnhancedDocument): void => {
     saveRecentSearch(query);
     setShowResults(false);
     navigate(`/documents/${doc.id}`);
@@ -661,7 +644,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                                   flex: 1,
                                 }}
                               >
-                                {highlightText(generateContextSnippet(doc.original_filename, query), query)}
+                                {highlightText(doc.original_filename || doc.filename, query)}
                               </Typography>
                             }
                             secondary={
@@ -725,7 +708,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                                       flex: 1,
                                     }}
                                   >
-                                    {highlightText(doc.snippets[0].text.substring(0, 80) + '...', query)}
+                                    {highlightText(doc.snippets[0]?.text?.substring(0, 80) + '...' || '', query)}
                                   </Typography>
                                 )}
                               </Box>

@@ -8,6 +8,7 @@ use axum::{
 use serde::Deserialize;
 use std::sync::Arc;
 use utoipa::ToSchema;
+use sha2::{Sha256, Digest};
 
 use crate::{
     auth::AuthUser,
@@ -85,6 +86,27 @@ async fn upload_document(
                 return Err(StatusCode::PAYLOAD_TOO_LARGE);
             }
             
+            // Calculate file hash for deduplication
+            let file_hash = calculate_file_hash(&data);
+            
+            // Check if this exact file content already exists in the system
+            // This prevents uploading and processing duplicate files
+            if let Ok(existing_docs) = state.db.get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0).await {
+                for existing_doc in existing_docs {
+                    // Quick size check first (much faster than hash comparison)
+                    if existing_doc.file_size == file_size {
+                        // Read the existing file and compare hashes
+                        if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
+                            let existing_hash = calculate_file_hash(&existing_file_data);
+                            if file_hash == existing_hash {
+                                // Return the existing document instead of creating a duplicate
+                                return Ok(Json(existing_doc.into()));
+                            }
+                        }
+                    }
+                }
+            }
+            
             let mime_type = mime_guess::from_path(&filename)
                 .first_or_octet_stream()
                 .to_string();
@@ -133,6 +155,13 @@ async fn upload_document(
     }
     
     Err(StatusCode::BAD_REQUEST)
+}
+
+fn calculate_file_hash(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    format!("{:x}", result)
 }
 
 #[utoipa::path(

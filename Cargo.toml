@@ -48,6 +48,7 @@ hostname = "0.4"
 walkdir = "2"
 clap = { version = "4", features = ["derive"] }
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+sha2 = "0.10"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 
 [features]
