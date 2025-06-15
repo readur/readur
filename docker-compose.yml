@@ -29,7 +29,7 @@ services:
       
       # Method 2: Use SERVER_HOST and SERVER_PORT separately
       SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8080
+      SERVER_PORT: 8000
       
       # Security
       JWT_SECRET: your-secret-key-change-this-in-production
@@ -57,7 +57,7 @@ services:
     ports:
       # Map container port to host port
       # Format: "host_port:container_port"
-      - "8080:8080"
+      - "8000:8000"
     
     volumes:
       # Persistent storage for uploads
