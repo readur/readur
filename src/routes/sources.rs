@@ -20,6 +20,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/", get(list_sources).post(create_source))
         .route("/{id}", get(get_source).put(update_source).delete(delete_source))
         .route("/{id}/sync", post(trigger_sync))
+        .route("/{id}/sync/stop", post(stop_sync))
         .route("/{id}/test", post(test_connection))
         .route("/{id}/estimate", post(estimate_crawl))
         .route("/estimate", post(estimate_crawl_with_config))
@@ -164,6 +165,8 @@ async fn update_source(
     State(state): State<Arc<AppState>>,
     Json(update_data): Json<UpdateSource>,
 ) -> Result<Json<SourceResponse>, StatusCode> {
+    use tracing::info;
+    info!("Updating source {} with data: {:?}", source_id, update_data);
     // Check if source exists
     let existing = state
         .db
@@ -174,7 +177,9 @@ async fn update_source(
 
     // Validate config if provided
     if let Some(config) = &update_data.config {
-        if let Err(_) = validate_config_for_type(&existing.source_type, config) {
+        if let Err(validation_error) = validate_config_for_type(&existing.source_type, config) {
+            error!("Config validation failed for source {}: {}", source_id, validation_error);
+            error!("Invalid config received: {:?}", config);
             return Err(StatusCode::BAD_REQUEST);
         }
     }
@@ -183,8 +188,12 @@ async fn update_source(
         .db
         .update_source(auth_user.user.id, source_id, &update_data)
         .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|e| {
+            error!("Failed to update source {} in database: {}", source_id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
+    info!("Successfully updated source {}: {}", source_id, source.name);
     Ok(Json(source.into()))
 }
 
@@ -310,6 +319,62 @@ async fn trigger_sync(
                 return Err(StatusCode::NOT_IMPLEMENTED);
             }
         }
+    }
+
+    Ok(StatusCode::OK)
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/sources/{id}/sync/stop",
+    tag = "sources",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Source ID")
+    ),
+    responses(
+        (status = 200, description = "Sync stopped successfully"),
+        (status = 404, description = "Source not found"),
+        (status = 409, description = "Source is not currently syncing"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn stop_sync(
+    auth_user: AuthUser,
+    Path(source_id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+) -> Result<StatusCode, StatusCode> {
+    let source = state
+        .db
+        .get_source(auth_user.user.id, source_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Check if currently syncing
+    if !matches!(source.status, crate::models::SourceStatus::Syncing) {
+        return Err(StatusCode::CONFLICT);
+    }
+
+    // Stop sync using the universal source scheduler
+    if let Some(scheduler) = &state.source_scheduler {
+        if let Err(e) = scheduler.stop_sync(source_id).await {
+            error!("Failed to stop sync for source {}: {}", source_id, e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    } else {
+        // Update status directly if no scheduler available (fallback)
+        state
+            .db
+            .update_source_status(
+                source_id,
+                crate::models::SourceStatus::Idle,
+                Some("Sync cancelled by user".to_string()),
+            )
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
 
     Ok(StatusCode::OK)

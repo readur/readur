@@ -48,6 +48,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   PlayArrow as PlayArrowIcon,
+  Stop as StopIcon,
   Storage as StorageIcon,
   Cloud as CloudIcon,
   Speed as SpeedIcon,
@@ -138,6 +139,7 @@ const SourcesPage: React.FC = () => {
 
   const [testingConnection, setTestingConnection] = useState(false);
   const [syncingSource, setSyncingSource] = useState<string | null>(null);
+  const [stoppingSync, setStoppingSync] = useState<string | null>(null);
 
   useEffect(() => {
     loadSources();
@@ -393,6 +395,24 @@ const SourcesPage: React.FC = () => {
     }
   };
 
+  const handleStopSync = async (sourceId: string) => {
+    setStoppingSync(sourceId);
+    try {
+      await api.post(`/sources/${sourceId}/sync/stop`);
+      showSnackbar('Sync stopped successfully', 'success');
+      setTimeout(loadSources, 1000);
+    } catch (error: any) {
+      console.error('Failed to stop sync:', error);
+      if (error.response?.status === 409) {
+        showSnackbar('Source is not currently syncing', 'warning');
+      } else {
+        showSnackbar('Failed to stop sync', 'error');
+      }
+    } finally {
+      setStoppingSync(null);
+    }
+  };
+
   // Utility functions for folder management
   const addFolder = () => {
     if (newFolder && !formData.watch_folders.includes(newFolder)) {
@@ -645,24 +665,46 @@ const SourcesPage: React.FC = () => {
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
-              <Tooltip title="Trigger Sync">
-                <span>
-                  <IconButton
-                    onClick={() => handleTriggerSync(source.id)}
-                    disabled={source.status === 'syncing' || !source.enabled}
-                    sx={{
-                      bgcolor: alpha(theme.palette.primary.main, 0.1),
-                      '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) },
-                    }}
-                  >
-                    {syncingSource === source.id ? (
-                      <CircularProgress size={20} />
-                    ) : (
-                      <PlayArrowIcon />
-                    )}
-                  </IconButton>
-                </span>
-              </Tooltip>
+              {source.status === 'syncing' ? (
+                <Tooltip title="Stop Sync">
+                  <span>
+                    <IconButton
+                      onClick={() => handleStopSync(source.id)}
+                      disabled={stoppingSync === source.id}
+                      sx={{
+                        bgcolor: alpha(theme.palette.warning.main, 0.1),
+                        '&:hover': { bgcolor: alpha(theme.palette.warning.main, 0.2) },
+                        color: theme.palette.warning.main,
+                      }}
+                    >
+                      {stoppingSync === source.id ? (
+                        <CircularProgress size={20} />
+                      ) : (
+                        <StopIcon />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              ) : (
+                <Tooltip title="Trigger Sync">
+                  <span>
+                    <IconButton
+                      onClick={() => handleTriggerSync(source.id)}
+                      disabled={syncingSource === source.id || !source.enabled}
+                      sx={{
+                        bgcolor: alpha(theme.palette.primary.main, 0.1),
+                        '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) },
+                      }}
+                    >
+                      {syncingSource === source.id ? (
+                        <CircularProgress size={20} />
+                      ) : (
+                        <PlayArrowIcon />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
               <Tooltip title="Edit Source">
                 <IconButton 
                   onClick={() => handleEditSource(source)}

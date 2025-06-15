@@ -66,6 +66,31 @@ interface Settings {
   memoryLimitMb: number;
   cpuPriority: string;
   enableBackgroundOcr: boolean;
+  ocrPageSegmentationMode: number;
+  ocrEngineMode: number;
+  ocrMinConfidence: number;
+  ocrDpi: number;
+  ocrEnhanceContrast: boolean;
+  ocrRemoveNoise: boolean;
+  ocrDetectOrientation: boolean;
+  ocrWhitelistChars: string;
+  ocrBlacklistChars: string;
+  ocrBrightnessBoost: number;
+  ocrContrastMultiplier: number;
+  ocrNoiseReductionLevel: number;
+  ocrSharpeningStrength: number;
+  ocrMorphologicalOperations: boolean;
+  ocrAdaptiveThresholdWindowSize: number;
+  ocrHistogramEqualization: boolean;
+  ocrUpscaleFactor: number;
+  ocrMaxImageWidth: number;
+  ocrMaxImageHeight: number;
+  saveProcessedImages: boolean;
+  ocrQualityThresholdBrightness: number;
+  ocrQualityThresholdContrast: number;
+  ocrQualityThresholdNoise: number;
+  ocrQualityThresholdSharpness: number;
+  ocrSkipEnhancement: boolean;
   webdavEnabled: boolean;
   webdavServerUrl: string;
   webdavUsername: string;
@@ -830,6 +855,31 @@ const SettingsPage: React.FC = () => {
     memoryLimitMb: 512,
     cpuPriority: 'normal',
     enableBackgroundOcr: true,
+    ocrPageSegmentationMode: 3,
+    ocrEngineMode: 3,
+    ocrMinConfidence: 30.0,
+    ocrDpi: 300,
+    ocrEnhanceContrast: true,
+    ocrRemoveNoise: true,
+    ocrDetectOrientation: true,
+    ocrWhitelistChars: '',
+    ocrBlacklistChars: '',
+    ocrBrightnessBoost: 0.0,
+    ocrContrastMultiplier: 1.0,
+    ocrNoiseReductionLevel: 1,
+    ocrSharpeningStrength: 0.0,
+    ocrMorphologicalOperations: true,
+    ocrAdaptiveThresholdWindowSize: 15,
+    ocrHistogramEqualization: false,
+    ocrUpscaleFactor: 1.0,
+    ocrMaxImageWidth: 10000,
+    ocrMaxImageHeight: 10000,
+    saveProcessedImages: false,
+    ocrQualityThresholdBrightness: 40.0,
+    ocrQualityThresholdContrast: 0.15,
+    ocrQualityThresholdNoise: 0.3,
+    ocrQualityThresholdSharpness: 0.15,
+    ocrSkipEnhancement: false,
     webdavEnabled: false,
     webdavServerUrl: '',
     webdavUsername: '',
@@ -900,6 +950,31 @@ const SettingsPage: React.FC = () => {
         memoryLimitMb: response.data.memory_limit_mb || 512,
         cpuPriority: response.data.cpu_priority || 'normal',
         enableBackgroundOcr: response.data.enable_background_ocr !== undefined ? response.data.enable_background_ocr : true,
+        ocrPageSegmentationMode: response.data.ocr_page_segmentation_mode || 3,
+        ocrEngineMode: response.data.ocr_engine_mode || 3,
+        ocrMinConfidence: response.data.ocr_min_confidence || 30.0,
+        ocrDpi: response.data.ocr_dpi || 300,
+        ocrEnhanceContrast: response.data.ocr_enhance_contrast !== undefined ? response.data.ocr_enhance_contrast : true,
+        ocrRemoveNoise: response.data.ocr_remove_noise !== undefined ? response.data.ocr_remove_noise : true,
+        ocrDetectOrientation: response.data.ocr_detect_orientation !== undefined ? response.data.ocr_detect_orientation : true,
+        ocrWhitelistChars: response.data.ocr_whitelist_chars || '',
+        ocrBlacklistChars: response.data.ocr_blacklist_chars || '',
+        ocrBrightnessBoost: response.data.ocr_brightness_boost || 0.0,
+        ocrContrastMultiplier: response.data.ocr_contrast_multiplier || 1.0,
+        ocrNoiseReductionLevel: response.data.ocr_noise_reduction_level || 1,
+        ocrSharpeningStrength: response.data.ocr_sharpening_strength || 0.0,
+        ocrMorphologicalOperations: response.data.ocr_morphological_operations !== undefined ? response.data.ocr_morphological_operations : true,
+        ocrAdaptiveThresholdWindowSize: response.data.ocr_adaptive_threshold_window_size || 15,
+        ocrHistogramEqualization: response.data.ocr_histogram_equalization || false,
+        ocrUpscaleFactor: response.data.ocr_upscale_factor || 1.0,
+        ocrMaxImageWidth: response.data.ocr_max_image_width || 10000,
+        ocrMaxImageHeight: response.data.ocr_max_image_height || 10000,
+        saveProcessedImages: response.data.save_processed_images || false,
+        ocrQualityThresholdBrightness: response.data.ocr_quality_threshold_brightness || 40.0,
+        ocrQualityThresholdContrast: response.data.ocr_quality_threshold_contrast || 0.15,
+        ocrQualityThresholdNoise: response.data.ocr_quality_threshold_noise || 0.3,
+        ocrQualityThresholdSharpness: response.data.ocr_quality_threshold_sharpness || 0.15,
+        ocrSkipEnhancement: response.data.ocr_skip_enhancement || false,
         webdavEnabled: response.data.webdav_enabled || false,
         webdavServerUrl: response.data.webdav_server_url || '',
         webdavUsername: response.data.webdav_username || '',
@@ -1042,6 +1117,7 @@ const SettingsPage: React.FC = () => {
       <Paper sx={{ width: '100%' }}>
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="settings tabs">
           <Tab label="General" />
+          <Tab label="OCR Settings" />
           <Tab label="WebDAV Integration" />
           <Tab label="User Management" />
         </Tabs>
@@ -1317,6 +1393,242 @@ const SettingsPage: React.FC = () => {
           )}
 
           {tabValue === 1 && (
+            <Box>
+              <Typography variant="h6" sx={{ mb: 3 }}>
+                OCR Image Processing Settings
+              </Typography>
+
+              <Card sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                    Enhancement Controls
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={settings.ocrSkipEnhancement}
+                        onChange={(e) => handleSettingsChange('ocrSkipEnhancement', e.target.checked)}
+                      />
+                    }
+                    label="Skip All Image Enhancement (Use Original Images Only)"
+                    sx={{ mb: 2 }}
+                  />
+                  
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Brightness Boost"
+                        type="number"
+                        value={settings.ocrBrightnessBoost}
+                        onChange={(e) => handleSettingsChange('ocrBrightnessBoost', parseFloat(e.target.value) || 0)}
+                        helperText="Manual brightness adjustment (0 = auto, >0 = boost amount)"
+                        inputProps={{ step: 0.1, min: 0, max: 100 }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Contrast Multiplier"
+                        type="number"
+                        value={settings.ocrContrastMultiplier}
+                        onChange={(e) => handleSettingsChange('ocrContrastMultiplier', parseFloat(e.target.value) || 1)}
+                        helperText="Manual contrast adjustment (1.0 = auto, >1.0 = increase)"
+                        inputProps={{ step: 0.1, min: 0.1, max: 5 }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Noise Reduction Level</InputLabel>
+                        <Select
+                          value={settings.ocrNoiseReductionLevel}
+                          label="Noise Reduction Level"
+                          onChange={(e) => handleSettingsChange('ocrNoiseReductionLevel', e.target.value as number)}
+                        >
+                          <MenuItem value={0}>None</MenuItem>
+                          <MenuItem value={1}>Light</MenuItem>
+                          <MenuItem value={2}>Moderate</MenuItem>
+                          <MenuItem value={3}>Heavy</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Sharpening Strength"
+                        type="number"
+                        value={settings.ocrSharpeningStrength}
+                        onChange={(e) => handleSettingsChange('ocrSharpeningStrength', parseFloat(e.target.value) || 0)}
+                        helperText="Image sharpening amount (0 = auto, >0 = manual)"
+                        inputProps={{ step: 0.1, min: 0, max: 2 }}
+                      />
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+
+              <Card sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                    Quality Thresholds (when to apply enhancements)
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Brightness Threshold"
+                        type="number"
+                        value={settings.ocrQualityThresholdBrightness}
+                        onChange={(e) => handleSettingsChange('ocrQualityThresholdBrightness', parseFloat(e.target.value) || 40)}
+                        helperText="Enhance if brightness below this value (0-255)"
+                        inputProps={{ step: 1, min: 0, max: 255 }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Contrast Threshold"
+                        type="number"
+                        value={settings.ocrQualityThresholdContrast}
+                        onChange={(e) => handleSettingsChange('ocrQualityThresholdContrast', parseFloat(e.target.value) || 0.15)}
+                        helperText="Enhance if contrast below this value (0-1)"
+                        inputProps={{ step: 0.01, min: 0, max: 1 }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Noise Threshold"
+                        type="number"
+                        value={settings.ocrQualityThresholdNoise}
+                        onChange={(e) => handleSettingsChange('ocrQualityThresholdNoise', parseFloat(e.target.value) || 0.3)}
+                        helperText="Enhance if noise above this value (0-1)"
+                        inputProps={{ step: 0.01, min: 0, max: 1 }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Sharpness Threshold"
+                        type="number"
+                        value={settings.ocrQualityThresholdSharpness}
+                        onChange={(e) => handleSettingsChange('ocrQualityThresholdSharpness', parseFloat(e.target.value) || 0.15)}
+                        helperText="Enhance if sharpness below this value (0-1)"
+                        inputProps={{ step: 0.01, min: 0, max: 1 }}
+                      />
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+
+              <Card sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                    Advanced Processing Options
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={settings.ocrMorphologicalOperations}
+                            onChange={(e) => handleSettingsChange('ocrMorphologicalOperations', e.target.checked)}
+                          />
+                        }
+                        label="Morphological Operations (text cleanup)"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={settings.ocrHistogramEqualization}
+                            onChange={(e) => handleSettingsChange('ocrHistogramEqualization', e.target.checked)}
+                          />
+                        }
+                        label="Histogram Equalization"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={settings.saveProcessedImages}
+                            onChange={(e) => handleSettingsChange('saveProcessedImages', e.target.checked)}
+                          />
+                        }
+                        label="Save Processed Images for Review"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Adaptive Threshold Window Size"
+                        type="number"
+                        value={settings.ocrAdaptiveThresholdWindowSize}
+                        onChange={(e) => handleSettingsChange('ocrAdaptiveThresholdWindowSize', parseInt(e.target.value) || 15)}
+                        helperText="Window size for contrast enhancement (odd number)"
+                        inputProps={{ step: 2, min: 3, max: 101 }}
+                      />
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+              
+              <Card sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                    Image Size and Scaling
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Max Image Width"
+                        type="number"
+                        value={settings.ocrMaxImageWidth}
+                        onChange={(e) => handleSettingsChange('ocrMaxImageWidth', parseInt(e.target.value) || 10000)}
+                        helperText="Maximum image width in pixels"
+                        inputProps={{ step: 100, min: 100, max: 50000 }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Max Image Height"
+                        type="number"
+                        value={settings.ocrMaxImageHeight}
+                        onChange={(e) => handleSettingsChange('ocrMaxImageHeight', parseInt(e.target.value) || 10000)}
+                        helperText="Maximum image height in pixels"
+                        inputProps={{ step: 100, min: 100, max: 50000 }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Upscale Factor"
+                        type="number"
+                        value={settings.ocrUpscaleFactor}
+                        onChange={(e) => handleSettingsChange('ocrUpscaleFactor', parseFloat(e.target.value) || 1.0)}
+                        helperText="Image scaling factor (1.0 = no scaling)"
+                        inputProps={{ step: 0.1, min: 0.1, max: 5 }}
+                      />
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+            </Box>
+          )}
+
+          {tabValue === 2 && (
             <WebDAVTabContent 
               settings={settings}
               loading={loading}
@@ -1325,7 +1637,7 @@ const SettingsPage: React.FC = () => {
             />
           )}
 
-          {tabValue === 2 && (
+          {tabValue === 3 && (
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h6">

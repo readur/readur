@@ -33,6 +33,7 @@ import {
   Visibility as ViewIcon,
   Search as SearchIcon,
   Edit as EditIcon,
+  PhotoFilter as ProcessedImageIcon,
 } from '@mui/icons-material';
 import { documentService, OcrResponse } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
@@ -59,6 +60,9 @@ const DocumentDetailsPage: React.FC = () => {
   const [showOcrDialog, setShowOcrDialog] = useState<boolean>(false);
   const [ocrLoading, setOcrLoading] = useState<boolean>(false);
   const [showViewDialog, setShowViewDialog] = useState<boolean>(false);
+  const [showProcessedImageDialog, setShowProcessedImageDialog] = useState<boolean>(false);
+  const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
+  const [processedImageLoading, setProcessedImageLoading] = useState<boolean>(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -139,6 +143,23 @@ const DocumentDetailsPage: React.FC = () => {
     setShowOcrDialog(true);
     if (!ocrData) {
       fetchOcrText();
+    }
+  };
+
+  const handleViewProcessedImage = async (): Promise<void> => {
+    if (!document) return;
+    
+    setProcessedImageLoading(true);
+    try {
+      const response = await documentService.getProcessedImage(document.id);
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'image/png' }));
+      setProcessedImageUrl(url);
+      setShowProcessedImageDialog(true);
+    } catch (err: any) {
+      console.log('Processed image not available:', err);
+      alert('No processed image available for this document. This feature requires "Save Processed Images" to be enabled in OCR settings.');
+    } finally {
+      setProcessedImageLoading(false);
     }
   };
 
@@ -300,6 +321,17 @@ const DocumentDetailsPage: React.FC = () => {
                     sx={{ borderRadius: 2 }}
                   >
                     OCR Text
+                  </Button>
+                )}
+                {document.mime_type?.includes('image') && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<ProcessedImageIcon />}
+                    onClick={handleViewProcessedImage}
+                    disabled={processedImageLoading}
+                    sx={{ borderRadius: 2 }}
+                  >
+                    {processedImageLoading ? 'Loading...' : 'Processed Image'}
                   </Button>
                 )}
               </Stack>
@@ -676,6 +708,48 @@ const DocumentDetailsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowViewDialog(false)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Processed Image Dialog */}
+      <Dialog
+        open={showProcessedImageDialog}
+        onClose={() => setShowProcessedImageDialog(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          Processed Image - OCR Enhancement Applied
+        </DialogTitle>
+        <DialogContent>
+          {processedImageUrl ? (
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              <img 
+                src={processedImageUrl}
+                alt="Processed image that was fed to OCR"
+                style={{ 
+                  maxWidth: '100%', 
+                  maxHeight: '70vh', 
+                  objectFit: 'contain',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              />
+              <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                This is the enhanced image that was actually processed by the OCR engine.
+                You can adjust OCR enhancement settings in the Settings page.
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography>No processed image available</Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowProcessedImageDialog(false)}>
             Close
           </Button>
         </DialogActions>

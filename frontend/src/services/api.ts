@@ -150,6 +150,12 @@ export const documentService = {
     })
   },
 
+  getProcessedImage: (id: string) => {
+    return api.get(`/documents/${id}/processed-image`, {
+      responseType: 'blob',
+    })
+  },
+
   search: (searchRequest: SearchRequest) => {
     return api.get<SearchResponse>('/search', {
       params: searchRequest,

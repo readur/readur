@@ -1272,6 +1272,11 @@ impl Database {
                    cpu_priority, enable_background_ocr, ocr_page_segmentation_mode, ocr_engine_mode,
                    ocr_min_confidence, ocr_dpi, ocr_enhance_contrast, ocr_remove_noise,
                    ocr_detect_orientation, ocr_whitelist_chars, ocr_blacklist_chars,
+                   ocr_brightness_boost, ocr_contrast_multiplier, ocr_noise_reduction_level, ocr_sharpening_strength,
+                   ocr_morphological_operations, ocr_adaptive_threshold_window_size, ocr_histogram_equalization,
+                   ocr_upscale_factor, ocr_max_image_width, ocr_max_image_height, save_processed_images,
+                   ocr_quality_threshold_brightness, ocr_quality_threshold_contrast, ocr_quality_threshold_noise,
+                   ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                    webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                    webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
                    created_at, updated_at
@@ -1311,6 +1316,22 @@ impl Database {
                 ocr_detect_orientation: row.get("ocr_detect_orientation"),
                 ocr_whitelist_chars: row.get("ocr_whitelist_chars"),
                 ocr_blacklist_chars: row.get("ocr_blacklist_chars"),
+                ocr_brightness_boost: row.get("ocr_brightness_boost"),
+                ocr_contrast_multiplier: row.get("ocr_contrast_multiplier"),
+                ocr_noise_reduction_level: row.get("ocr_noise_reduction_level"),
+                ocr_sharpening_strength: row.get("ocr_sharpening_strength"),
+                ocr_morphological_operations: row.get("ocr_morphological_operations"),
+                ocr_adaptive_threshold_window_size: row.get("ocr_adaptive_threshold_window_size"),
+                ocr_histogram_equalization: row.get("ocr_histogram_equalization"),
+                ocr_upscale_factor: row.get("ocr_upscale_factor"),
+                ocr_max_image_width: row.get("ocr_max_image_width"),
+                ocr_max_image_height: row.get("ocr_max_image_height"),
+                save_processed_images: row.get("save_processed_images"),
+                ocr_quality_threshold_brightness: row.get("ocr_quality_threshold_brightness"),
+                ocr_quality_threshold_contrast: row.get("ocr_quality_threshold_contrast"),
+                ocr_quality_threshold_noise: row.get("ocr_quality_threshold_noise"),
+                ocr_quality_threshold_sharpness: row.get("ocr_quality_threshold_sharpness"),
+                ocr_skip_enhancement: row.get("ocr_skip_enhancement"),
                 webdav_enabled: row.get("webdav_enabled"),
                 webdav_server_url: row.get("webdav_server_url"),
                 webdav_username: row.get("webdav_username"),
@@ -1336,6 +1357,11 @@ impl Database {
                cpu_priority, enable_background_ocr, ocr_page_segmentation_mode, ocr_engine_mode,
                ocr_min_confidence, ocr_dpi, ocr_enhance_contrast, ocr_remove_noise,
                ocr_detect_orientation, ocr_whitelist_chars, ocr_blacklist_chars,
+               ocr_brightness_boost, ocr_contrast_multiplier, ocr_noise_reduction_level, ocr_sharpening_strength,
+               ocr_morphological_operations, ocr_adaptive_threshold_window_size, ocr_histogram_equalization,
+               ocr_upscale_factor, ocr_max_image_width, ocr_max_image_height, save_processed_images,
+               ocr_quality_threshold_brightness, ocr_quality_threshold_contrast, ocr_quality_threshold_noise,
+               ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
                created_at, updated_at
@@ -1375,6 +1401,22 @@ impl Database {
                 ocr_detect_orientation: row.get("ocr_detect_orientation"),
                 ocr_whitelist_chars: row.get("ocr_whitelist_chars"),
                 ocr_blacklist_chars: row.get("ocr_blacklist_chars"),
+                ocr_brightness_boost: row.get("ocr_brightness_boost"),
+                ocr_contrast_multiplier: row.get("ocr_contrast_multiplier"),
+                ocr_noise_reduction_level: row.get("ocr_noise_reduction_level"),
+                ocr_sharpening_strength: row.get("ocr_sharpening_strength"),
+                ocr_morphological_operations: row.get("ocr_morphological_operations"),
+                ocr_adaptive_threshold_window_size: row.get("ocr_adaptive_threshold_window_size"),
+                ocr_histogram_equalization: row.get("ocr_histogram_equalization"),
+                ocr_upscale_factor: row.get("ocr_upscale_factor"),
+                ocr_max_image_width: row.get("ocr_max_image_width"),
+                ocr_max_image_height: row.get("ocr_max_image_height"),
+                save_processed_images: row.get("save_processed_images"),
+                ocr_quality_threshold_brightness: row.get("ocr_quality_threshold_brightness"),
+                ocr_quality_threshold_contrast: row.get("ocr_quality_threshold_contrast"),
+                ocr_quality_threshold_noise: row.get("ocr_quality_threshold_noise"),
+                ocr_quality_threshold_sharpness: row.get("ocr_quality_threshold_sharpness"),
+                ocr_skip_enhancement: row.get("ocr_skip_enhancement"),
                 webdav_enabled: row.get("webdav_enabled"),
                 webdav_server_url: row.get("webdav_server_url"),
                 webdav_username: row.get("webdav_username"),
@@ -1413,10 +1455,15 @@ impl Database {
                 cpu_priority, enable_background_ocr, ocr_page_segmentation_mode, ocr_engine_mode,
                 ocr_min_confidence, ocr_dpi, ocr_enhance_contrast, ocr_remove_noise,
                 ocr_detect_orientation, ocr_whitelist_chars, ocr_blacklist_chars,
+                ocr_brightness_boost, ocr_contrast_multiplier, ocr_noise_reduction_level, ocr_sharpening_strength,
+                ocr_morphological_operations, ocr_adaptive_threshold_window_size, ocr_histogram_equalization,
+                ocr_upscale_factor, ocr_max_image_width, ocr_max_image_height, save_processed_images,
+                ocr_quality_threshold_brightness, ocr_quality_threshold_contrast, ocr_quality_threshold_noise,
+                ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                 webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                 webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50)
             ON CONFLICT (user_id) DO UPDATE SET
                 ocr_language = $2,
                 concurrent_ocr_jobs = $3,
@@ -1443,14 +1490,30 @@ impl Database {
                 ocr_detect_orientation = $24,
                 ocr_whitelist_chars = $25,
                 ocr_blacklist_chars = $26,
-                webdav_enabled = $27,
-                webdav_server_url = $28,
-                webdav_username = $29,
-                webdav_password = $30,
-                webdav_watch_folders = $31,
-                webdav_file_extensions = $32,
-                webdav_auto_sync = $33,
-                webdav_sync_interval_minutes = $34,
+                ocr_brightness_boost = $27,
+                ocr_contrast_multiplier = $28,
+                ocr_noise_reduction_level = $29,
+                ocr_sharpening_strength = $30,
+                ocr_morphological_operations = $31,
+                ocr_adaptive_threshold_window_size = $32,
+                ocr_histogram_equalization = $33,
+                ocr_upscale_factor = $34,
+                ocr_max_image_width = $35,
+                ocr_max_image_height = $36,
+                save_processed_images = $37,
+                ocr_quality_threshold_brightness = $38,
+                ocr_quality_threshold_contrast = $39,
+                ocr_quality_threshold_noise = $40,
+                ocr_quality_threshold_sharpness = $41,
+                ocr_skip_enhancement = $42,
+                webdav_enabled = $43,
+                webdav_server_url = $44,
+                webdav_username = $45,
+                webdav_password = $46,
+                webdav_watch_folders = $47,
+                webdav_file_extensions = $48,
+                webdav_auto_sync = $49,
+                webdav_sync_interval_minutes = $50,
                 updated_at = NOW()
             RETURNING id, user_id, ocr_language, concurrent_ocr_jobs, ocr_timeout_seconds,
                       max_file_size_mb, allowed_file_types, auto_rotate_images, enable_image_preprocessing,
@@ -1459,6 +1522,11 @@ impl Database {
                       cpu_priority, enable_background_ocr, ocr_page_segmentation_mode, ocr_engine_mode,
                       ocr_min_confidence, ocr_dpi, ocr_enhance_contrast, ocr_remove_noise,
                       ocr_detect_orientation, ocr_whitelist_chars, ocr_blacklist_chars,
+                      ocr_brightness_boost, ocr_contrast_multiplier, ocr_noise_reduction_level, ocr_sharpening_strength,
+                      ocr_morphological_operations, ocr_adaptive_threshold_window_size, ocr_histogram_equalization,
+                      ocr_upscale_factor, ocr_max_image_width, ocr_max_image_height, save_processed_images,
+                      ocr_quality_threshold_brightness, ocr_quality_threshold_contrast, ocr_quality_threshold_noise,
+                      ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                       webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                       webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
                       created_at, updated_at
@@ -1490,6 +1558,22 @@ impl Database {
         .bind(settings.ocr_detect_orientation.unwrap_or(current.ocr_detect_orientation))
         .bind(settings.ocr_whitelist_chars.as_ref().unwrap_or(&current.ocr_whitelist_chars))
         .bind(settings.ocr_blacklist_chars.as_ref().unwrap_or(&current.ocr_blacklist_chars))
+        .bind(settings.ocr_brightness_boost.unwrap_or(current.ocr_brightness_boost))
+        .bind(settings.ocr_contrast_multiplier.unwrap_or(current.ocr_contrast_multiplier))
+        .bind(settings.ocr_noise_reduction_level.unwrap_or(current.ocr_noise_reduction_level))
+        .bind(settings.ocr_sharpening_strength.unwrap_or(current.ocr_sharpening_strength))
+        .bind(settings.ocr_morphological_operations.unwrap_or(current.ocr_morphological_operations))
+        .bind(settings.ocr_adaptive_threshold_window_size.unwrap_or(current.ocr_adaptive_threshold_window_size))
+        .bind(settings.ocr_histogram_equalization.unwrap_or(current.ocr_histogram_equalization))
+        .bind(settings.ocr_upscale_factor.unwrap_or(current.ocr_upscale_factor))
+        .bind(settings.ocr_max_image_width.unwrap_or(current.ocr_max_image_width))
+        .bind(settings.ocr_max_image_height.unwrap_or(current.ocr_max_image_height))
+        .bind(settings.save_processed_images.unwrap_or(current.save_processed_images))
+        .bind(settings.ocr_quality_threshold_brightness.unwrap_or(current.ocr_quality_threshold_brightness))
+        .bind(settings.ocr_quality_threshold_contrast.unwrap_or(current.ocr_quality_threshold_contrast))
+        .bind(settings.ocr_quality_threshold_noise.unwrap_or(current.ocr_quality_threshold_noise))
+        .bind(settings.ocr_quality_threshold_sharpness.unwrap_or(current.ocr_quality_threshold_sharpness))
+        .bind(settings.ocr_skip_enhancement.unwrap_or(current.ocr_skip_enhancement))
         .bind(settings.webdav_enabled.unwrap_or(current.webdav_enabled))
         .bind(settings.webdav_server_url.as_ref().unwrap_or(&current.webdav_server_url))
         .bind(settings.webdav_username.as_ref().unwrap_or(&current.webdav_username))
@@ -1529,6 +1613,22 @@ impl Database {
             ocr_detect_orientation: row.get("ocr_detect_orientation"),
             ocr_whitelist_chars: row.get("ocr_whitelist_chars"),
             ocr_blacklist_chars: row.get("ocr_blacklist_chars"),
+            ocr_brightness_boost: row.get("ocr_brightness_boost"),
+            ocr_contrast_multiplier: row.get("ocr_contrast_multiplier"),
+            ocr_noise_reduction_level: row.get("ocr_noise_reduction_level"),
+            ocr_sharpening_strength: row.get("ocr_sharpening_strength"),
+            ocr_morphological_operations: row.get("ocr_morphological_operations"),
+            ocr_adaptive_threshold_window_size: row.get("ocr_adaptive_threshold_window_size"),
+            ocr_histogram_equalization: row.get("ocr_histogram_equalization"),
+            ocr_upscale_factor: row.get("ocr_upscale_factor"),
+            ocr_max_image_width: row.get("ocr_max_image_width"),
+            ocr_max_image_height: row.get("ocr_max_image_height"),
+            save_processed_images: row.get("save_processed_images"),
+            ocr_quality_threshold_brightness: row.get("ocr_quality_threshold_brightness"),
+            ocr_quality_threshold_contrast: row.get("ocr_quality_threshold_contrast"),
+            ocr_quality_threshold_noise: row.get("ocr_quality_threshold_noise"),
+            ocr_quality_threshold_sharpness: row.get("ocr_quality_threshold_sharpness"),
+            ocr_skip_enhancement: row.get("ocr_skip_enhancement"),
             webdav_enabled: row.get("webdav_enabled"),
             webdav_server_url: row.get("webdav_server_url"),
             webdav_username: row.get("webdav_username"),
@@ -2214,5 +2314,85 @@ impl Database {
         } else {
             Ok(None)
         }
+    }
+
+    // Processed images operations
+    pub async fn create_processed_image(&self, processed_image: &crate::models::CreateProcessedImage) -> Result<crate::models::ProcessedImage> {
+        let row = sqlx::query(
+            r#"INSERT INTO processed_images 
+               (document_id, user_id, original_image_path, processed_image_path, 
+                processing_parameters, processing_steps, image_width, image_height, file_size)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               RETURNING id, document_id, user_id, original_image_path, processed_image_path,
+                         processing_parameters, processing_steps, image_width, image_height, 
+                         file_size, created_at"#
+        )
+        .bind(processed_image.document_id)
+        .bind(processed_image.user_id)
+        .bind(&processed_image.original_image_path)
+        .bind(&processed_image.processed_image_path)
+        .bind(&processed_image.processing_parameters)
+        .bind(&processed_image.processing_steps)
+        .bind(processed_image.image_width)
+        .bind(processed_image.image_height)
+        .bind(processed_image.file_size)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(crate::models::ProcessedImage {
+            id: row.get("id"),
+            document_id: row.get("document_id"),
+            user_id: row.get("user_id"),
+            original_image_path: row.get("original_image_path"),
+            processed_image_path: row.get("processed_image_path"),
+            processing_parameters: row.get("processing_parameters"),
+            processing_steps: row.get("processing_steps"),
+            image_width: row.get("image_width"),
+            image_height: row.get("image_height"),
+            file_size: row.get("file_size"),
+            created_at: row.get("created_at"),
+        })
+    }
+
+    pub async fn get_processed_image_by_document_id(&self, document_id: Uuid, user_id: Uuid) -> Result<Option<crate::models::ProcessedImage>> {
+        let row = sqlx::query(
+            r#"SELECT id, document_id, user_id, original_image_path, processed_image_path,
+                      processing_parameters, processing_steps, image_width, image_height, 
+                      file_size, created_at
+               FROM processed_images 
+               WHERE document_id = $1 AND user_id = $2
+               ORDER BY created_at DESC
+               LIMIT 1"#
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            Ok(Some(crate::models::ProcessedImage {
+                id: row.get("id"),
+                document_id: row.get("document_id"),
+                user_id: row.get("user_id"),
+                original_image_path: row.get("original_image_path"),
+                processed_image_path: row.get("processed_image_path"),
+                processing_parameters: row.get("processing_parameters"),
+                processing_steps: row.get("processing_steps"),
+                image_width: row.get("image_width"),
+                image_height: row.get("image_height"),
+                file_size: row.get("file_size"),
+                created_at: row.get("created_at"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn delete_processed_images_by_document_id(&self, document_id: Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM processed_images WHERE document_id = $1")
+            .bind(document_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 }

@@ -298,6 +298,22 @@ pub struct Settings {
     pub ocr_detect_orientation: bool,
     pub ocr_whitelist_chars: Option<String>,
     pub ocr_blacklist_chars: Option<String>,
+    pub ocr_brightness_boost: f32,
+    pub ocr_contrast_multiplier: f32,
+    pub ocr_noise_reduction_level: i32,
+    pub ocr_sharpening_strength: f32,
+    pub ocr_morphological_operations: bool,
+    pub ocr_adaptive_threshold_window_size: i32,
+    pub ocr_histogram_equalization: bool,
+    pub ocr_upscale_factor: f32,
+    pub ocr_max_image_width: i32,
+    pub ocr_max_image_height: i32,
+    pub save_processed_images: bool,
+    pub ocr_quality_threshold_brightness: f32,
+    pub ocr_quality_threshold_contrast: f32,
+    pub ocr_quality_threshold_noise: f32,
+    pub ocr_quality_threshold_sharpness: f32,
+    pub ocr_skip_enhancement: bool,
     pub webdav_enabled: bool,
     pub webdav_server_url: Option<String>,
     pub webdav_username: Option<String>,
@@ -337,6 +353,22 @@ pub struct SettingsResponse {
     pub ocr_detect_orientation: bool,
     pub ocr_whitelist_chars: Option<String>,
     pub ocr_blacklist_chars: Option<String>,
+    pub ocr_brightness_boost: f32,
+    pub ocr_contrast_multiplier: f32,
+    pub ocr_noise_reduction_level: i32,
+    pub ocr_sharpening_strength: f32,
+    pub ocr_morphological_operations: bool,
+    pub ocr_adaptive_threshold_window_size: i32,
+    pub ocr_histogram_equalization: bool,
+    pub ocr_upscale_factor: f32,
+    pub ocr_max_image_width: i32,
+    pub ocr_max_image_height: i32,
+    pub save_processed_images: bool,
+    pub ocr_quality_threshold_brightness: f32,
+    pub ocr_quality_threshold_contrast: f32,
+    pub ocr_quality_threshold_noise: f32,
+    pub ocr_quality_threshold_sharpness: f32,
+    pub ocr_skip_enhancement: bool,
     pub webdav_enabled: bool,
     pub webdav_server_url: Option<String>,
     pub webdav_username: Option<String>,
@@ -374,6 +406,22 @@ pub struct UpdateSettings {
     pub ocr_detect_orientation: Option<bool>,
     pub ocr_whitelist_chars: Option<Option<String>>,
     pub ocr_blacklist_chars: Option<Option<String>>,
+    pub ocr_brightness_boost: Option<f32>,
+    pub ocr_contrast_multiplier: Option<f32>,
+    pub ocr_noise_reduction_level: Option<i32>,
+    pub ocr_sharpening_strength: Option<f32>,
+    pub ocr_morphological_operations: Option<bool>,
+    pub ocr_adaptive_threshold_window_size: Option<i32>,
+    pub ocr_histogram_equalization: Option<bool>,
+    pub ocr_upscale_factor: Option<f32>,
+    pub ocr_max_image_width: Option<i32>,
+    pub ocr_max_image_height: Option<i32>,
+    pub save_processed_images: Option<bool>,
+    pub ocr_quality_threshold_brightness: Option<f32>,
+    pub ocr_quality_threshold_contrast: Option<f32>,
+    pub ocr_quality_threshold_noise: Option<f32>,
+    pub ocr_quality_threshold_sharpness: Option<f32>,
+    pub ocr_skip_enhancement: Option<bool>,
     pub webdav_enabled: Option<bool>,
     pub webdav_server_url: Option<Option<String>>,
     pub webdav_username: Option<Option<String>>,
@@ -412,6 +460,22 @@ impl From<Settings> for SettingsResponse {
             ocr_detect_orientation: settings.ocr_detect_orientation,
             ocr_whitelist_chars: settings.ocr_whitelist_chars,
             ocr_blacklist_chars: settings.ocr_blacklist_chars,
+            ocr_brightness_boost: settings.ocr_brightness_boost,
+            ocr_contrast_multiplier: settings.ocr_contrast_multiplier,
+            ocr_noise_reduction_level: settings.ocr_noise_reduction_level,
+            ocr_sharpening_strength: settings.ocr_sharpening_strength,
+            ocr_morphological_operations: settings.ocr_morphological_operations,
+            ocr_adaptive_threshold_window_size: settings.ocr_adaptive_threshold_window_size,
+            ocr_histogram_equalization: settings.ocr_histogram_equalization,
+            ocr_upscale_factor: settings.ocr_upscale_factor,
+            ocr_max_image_width: settings.ocr_max_image_width,
+            ocr_max_image_height: settings.ocr_max_image_height,
+            save_processed_images: settings.save_processed_images,
+            ocr_quality_threshold_brightness: settings.ocr_quality_threshold_brightness,
+            ocr_quality_threshold_contrast: settings.ocr_quality_threshold_contrast,
+            ocr_quality_threshold_noise: settings.ocr_quality_threshold_noise,
+            ocr_quality_threshold_sharpness: settings.ocr_quality_threshold_sharpness,
+            ocr_skip_enhancement: settings.ocr_skip_enhancement,
             webdav_enabled: settings.webdav_enabled,
             webdav_server_url: settings.webdav_server_url,
             webdav_username: settings.webdav_username,
@@ -462,6 +526,22 @@ impl Default for Settings {
             ocr_detect_orientation: true, // Enable orientation detection
             ocr_whitelist_chars: None, // No character whitelist by default
             ocr_blacklist_chars: None, // No character blacklist by default
+            ocr_brightness_boost: 1.0, // Conservative brightness boost
+            ocr_contrast_multiplier: 1.2, // Conservative contrast enhancement
+            ocr_noise_reduction_level: 1, // Light noise reduction
+            ocr_sharpening_strength: 0.5, // Light sharpening
+            ocr_morphological_operations: false, // Conservative - no morphological ops by default
+            ocr_adaptive_threshold_window_size: 15, // Small window for adaptive threshold
+            ocr_histogram_equalization: false, // Conservative - no histogram equalization by default
+            ocr_upscale_factor: 1.0, // No upscaling by default
+            ocr_max_image_width: 3000, // Reasonable max width
+            ocr_max_image_height: 3000, // Reasonable max height
+            save_processed_images: false, // Conservative - don't save by default
+            ocr_quality_threshold_brightness: 0.3, // Conservative threshold
+            ocr_quality_threshold_contrast: 0.2, // Conservative threshold
+            ocr_quality_threshold_noise: 0.7, // Conservative threshold
+            ocr_quality_threshold_sharpness: 0.3, // Conservative threshold
+            ocr_skip_enhancement: false, // Allow enhancement by default
             webdav_enabled: false,
             webdav_server_url: None,
             webdav_username: None,
@@ -804,4 +884,32 @@ pub struct S3SourceConfig {
     pub file_extensions: Vec<String>,
     pub auto_sync: bool,
     pub sync_interval_minutes: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+pub struct ProcessedImage {
+    pub id: Uuid,
+    pub document_id: Uuid,
+    pub user_id: Uuid,
+    pub original_image_path: String,
+    pub processed_image_path: String,
+    pub processing_parameters: serde_json::Value,
+    pub processing_steps: Vec<String>,
+    pub image_width: i32,
+    pub image_height: i32,
+    pub file_size: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CreateProcessedImage {
+    pub document_id: Uuid,
+    pub user_id: Uuid,
+    pub original_image_path: String,
+    pub processed_image_path: String,
+    pub processing_parameters: serde_json::Value,
+    pub processing_steps: Vec<String>,
+    pub image_width: i32,
+    pub image_height: i32,
+    pub file_size: i64,
 }

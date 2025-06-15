@@ -32,6 +32,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/view", get(view_document))
         .route("/{id}/thumbnail", get(get_document_thumbnail))
         .route("/{id}/ocr", get(get_document_ocr))
+        .route("/{id}/processed-image", get(get_processed_image))
 }
 
 #[utoipa::path(
@@ -389,4 +390,61 @@ async fn get_document_ocr(
         "ocr_error": document.ocr_error,
         "ocr_completed_at": document.ocr_completed_at
     })))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/documents/{id}/processed-image",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Document ID")
+    ),
+    responses(
+        (status = 200, description = "Processed image file", content_type = "image/png"),
+        (status = 404, description = "Document or processed image not found"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn get_processed_image(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Path(document_id): Path<uuid::Uuid>,
+) -> Result<Response, StatusCode> {
+    // Check if document exists and belongs to user
+    let documents = state
+        .db
+        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let _document = documents
+        .into_iter()
+        .find(|doc| doc.id == document_id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    
+    // Get processed image record
+    let processed_image = state
+        .db
+        .get_processed_image_by_document_id(document_id, auth_user.user.id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    
+    // Read processed image file
+    let image_data = tokio::fs::read(&processed_image.processed_image_path)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    
+    // Return image as PNG
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "image/png")
+        .header("Cache-Control", "public, max-age=86400") // Cache for 1 day
+        .body(image_data.into())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(response)
 }

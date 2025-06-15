@@ -1,8 +1,12 @@
 use std::sync::Arc;
 use std::time::Duration;
+use std::collections::HashMap;
 use tokio::time::interval;
+use tokio::sync::{Mutex, RwLock};
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use chrono::Utc;
+use uuid::Uuid;
 
 use crate::{
     AppState,
@@ -14,6 +18,8 @@ pub struct SourceScheduler {
     state: Arc<AppState>,
     sync_service: SourceSyncService,
     check_interval: Duration,
+    // Track running sync tasks and their cancellation tokens
+    running_syncs: Arc<RwLock<HashMap<Uuid, CancellationToken>>>,
 }
 
 impl SourceScheduler {
@@ -24,6 +30,7 @@ impl SourceScheduler {
             state,
             sync_service,
             check_interval: Duration::from_secs(60), // Check every minute for due syncs
+            running_syncs: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -146,13 +153,24 @@ impl SourceScheduler {
                 let sync_service = self.sync_service.clone();
                 let source_clone = source.clone();
                 let state_clone = self.state.clone();
+                let running_syncs_clone = self.running_syncs.clone();
+                
+                // Create cancellation token for this sync
+                let cancellation_token = CancellationToken::new();
+                
+                // Register the sync task
+                {
+                    let mut running_syncs = running_syncs_clone.write().await;
+                    running_syncs.insert(source.id, cancellation_token.clone());
+                }
                 
                 // Start sync in background task
-                tokio::spawn(async move {
+                let sync_handle = tokio::spawn(async move {
                     // Get user's OCR setting - simplified, you might want to store this in source config  
                     let enable_background_ocr = true; // Default to true, could be made configurable per source
                     
-                    match sync_service.sync_source(&source_clone, enable_background_ocr).await {
+                    // Pass cancellation token to sync service
+                    match sync_service.sync_source_with_cancellation(&source_clone, enable_background_ocr, cancellation_token.clone()).await {
                         Ok(files_processed) => {
                             info!("Background sync completed for source {}: {} files processed", 
                                   source_clone.name, files_processed);
@@ -212,6 +230,12 @@ impl SourceScheduler {
                                 error!("Failed to create error notification: {}", e);
                             }
                         }
+                    }
+                    
+                    // Cleanup: Remove the sync from running list
+                    {
+                        let mut running_syncs = running_syncs_clone.write().await;
+                        running_syncs.remove(&source_clone.id);
                     }
                 });
             }
@@ -281,11 +305,21 @@ impl SourceScheduler {
         if let Some(source) = self.state.db.get_source_by_id(source_id).await? {
             let sync_service = self.sync_service.clone();
             let state_clone = self.state.clone();
+            let running_syncs_clone = self.running_syncs.clone();
+            
+            // Create cancellation token for this sync
+            let cancellation_token = CancellationToken::new();
+            
+            // Register the sync task
+            {
+                let mut running_syncs = running_syncs_clone.write().await;
+                running_syncs.insert(source_id, cancellation_token.clone());
+            }
             
             tokio::spawn(async move {
                 let enable_background_ocr = true; // Could be made configurable
                 
-                match sync_service.sync_source(&source, enable_background_ocr).await {
+                match sync_service.sync_source_with_cancellation(&source, enable_background_ocr, cancellation_token).await {
                     Ok(files_processed) => {
                         info!("Manual sync completed for source {}: {} files processed", 
                               source.name, files_processed);
@@ -309,11 +343,53 @@ impl SourceScheduler {
                         error!("Manual sync failed for source {}: {}", source.name, e);
                     }
                 }
+                
+                // Cleanup: Remove the sync from running list
+                {
+                    let mut running_syncs = running_syncs_clone.write().await;
+                    running_syncs.remove(&source.id);
+                }
             });
             
             Ok(())
         } else {
             Err("Source not found".into())
+        }
+    }
+
+    pub async fn stop_sync(&self, source_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Stopping sync for source {}", source_id);
+        
+        // Get the cancellation token for this sync
+        let cancellation_token = {
+            let running_syncs = self.running_syncs.read().await;
+            running_syncs.get(&source_id).cloned()
+        };
+        
+        if let Some(token) = cancellation_token {
+            // Cancel the sync operation
+            token.cancel();
+            info!("Cancellation signal sent for source {}", source_id);
+            
+            // Update source status to indicate cancellation
+            if let Err(e) = sqlx::query(
+                r#"UPDATE sources SET status = 'idle', last_error = 'Sync cancelled by user', last_error_at = NOW(), updated_at = NOW() WHERE id = $1"#
+            )
+            .bind(source_id)
+            .execute(self.state.db.get_pool())
+            .await {
+                error!("Failed to update source status after cancellation: {}", e);
+            }
+            
+            // Remove from running syncs list
+            {
+                let mut running_syncs = self.running_syncs.write().await;
+                running_syncs.remove(&source_id);
+            }
+            
+            Ok(())
+        } else {
+            Err("No running sync found for this source".into())
         }
     }
 }

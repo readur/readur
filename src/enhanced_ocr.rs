@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use tracing::{debug, info, warn};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 #[cfg(feature = "ocr")]
 use image::{DynamicImage, ImageBuffer, Luma, GenericImageView};
@@ -50,13 +51,14 @@ impl EnhancedOcrService {
         let mut preprocessing_applied = Vec::new();
         
         // Load and preprocess the image
-        let processed_image_path = if settings.enable_image_preprocessing {
-            let processed_path = self.preprocess_image(file_path, settings).await?;
-            preprocessing_applied.push("Image preprocessing enabled".to_string());
-            processed_path
+        let (processed_image_path, mut preprocess_steps) = if settings.enable_image_preprocessing {
+            let (processed_path, steps) = self.preprocess_image(file_path, settings).await?;
+            (processed_path, steps)
         } else {
-            file_path.to_string()
+            (file_path.to_string(), Vec::new())
         };
+        
+        preprocessing_applied.extend(preprocess_steps);
 
         // Move CPU-intensive OCR operations to blocking thread pool
         let processed_image_path_clone = processed_image_path.clone();
@@ -101,9 +103,10 @@ impl EnhancedOcrService {
 
     /// Preprocess image for optimal OCR quality, especially for challenging conditions
     #[cfg(feature = "ocr")]
-    async fn preprocess_image(&self, input_path: &str, settings: &Settings) -> Result<String> {
+    async fn preprocess_image(&self, input_path: &str, settings: &Settings) -> Result<(String, Vec<String>)> {
         let img = image::open(input_path)?;
         let mut processed_img = img;
+        let mut preprocessing_applied = Vec::new();
         
         info!("Original image dimensions: {}x{}", processed_img.width(), processed_img.height());
         
@@ -121,31 +124,62 @@ impl EnhancedOcrService {
         
         // Analyze image quality and apply appropriate enhancements
         let quality_stats = self.analyze_image_quality(&processed_gray);
-        info!("Image quality analysis: brightness={:.1}, contrast={:.1}, noise_level={:.1}", 
-               quality_stats.average_brightness, quality_stats.contrast_ratio, quality_stats.noise_level);
+        info!("Image quality analysis: brightness={:.1}, contrast={:.1}, noise_level={:.1}, sharpness={:.1}", 
+               quality_stats.average_brightness, quality_stats.contrast_ratio, quality_stats.noise_level, quality_stats.sharpness);
         
-        // Apply adaptive brightness correction for dim images
-        if quality_stats.average_brightness < 80.0 || quality_stats.contrast_ratio < 0.3 {
-            processed_gray = self.enhance_brightness_and_contrast(processed_gray, &quality_stats)?;
+        // Determine if image needs enhancement based on quality thresholds
+        let needs_enhancement = self.needs_enhancement(&quality_stats, settings);
+        
+        if !needs_enhancement {
+            info!("Image quality is good, skipping enhancement steps");
+        } else {
+            info!("Image quality needs improvement, applying selective enhancements");
+            
+            // Apply brightness correction only for very dim images
+            if quality_stats.average_brightness < 50.0 || settings.ocr_brightness_boost > 0.0 {
+                processed_gray = self.enhance_brightness_and_contrast(processed_gray, &quality_stats, settings)?;
+                preprocessing_applied.push("Brightness/contrast correction".to_string());
+            }
+            
+            // Apply noise removal only for very noisy images
+            if quality_stats.noise_level > 0.25 || (settings.ocr_remove_noise && settings.ocr_noise_reduction_level > 1) {
+                processed_gray = self.adaptive_noise_removal(processed_gray, &quality_stats, settings)?;
+                preprocessing_applied.push("Noise reduction".to_string());
+            }
+            
+            // Apply contrast enhancement only for very low contrast images
+            if quality_stats.contrast_ratio < 0.2 || (settings.ocr_enhance_contrast && settings.ocr_adaptive_threshold_window_size > 0) {
+                let original_gray = processed_gray.clone();
+                match self.adaptive_contrast_enhancement(processed_gray, &quality_stats, settings) {
+                    Ok(enhanced) => {
+                        processed_gray = enhanced;
+                        preprocessing_applied.push("Contrast enhancement".to_string());
+                    }
+                    Err(e) => {
+                        warn!("Contrast enhancement failed, using alternative method: {}", e);
+                        // Fallback to basic contrast enhancement
+                        processed_gray = self.apply_alternative_contrast_enhancement(original_gray.clone(), &quality_stats, settings)
+                            .unwrap_or_else(|_| {
+                                warn!("Alternative contrast enhancement also failed, using original image");
+                                original_gray
+                            });
+                        preprocessing_applied.push("Basic contrast enhancement".to_string());
+                    }
+                }
+            }
+            
+            // Apply sharpening only for very blurry images
+            if quality_stats.sharpness < 0.2 || settings.ocr_sharpening_strength > 0.5 {
+                processed_gray = self.sharpen_image(processed_gray, settings)?;
+                preprocessing_applied.push("Image sharpening".to_string());
+            }
+            
+            // Apply morphological operations only if explicitly enabled and image needs it
+            if settings.ocr_morphological_operations && quality_stats.noise_level > 0.15 {
+                processed_gray = self.apply_morphological_operations(processed_gray)?;
+                preprocessing_applied.push("Morphological operations".to_string());
+            }
         }
-        
-        // Apply noise removal (more aggressive for noisy images)
-        if settings.ocr_remove_noise || quality_stats.noise_level > 0.15 {
-            processed_gray = self.adaptive_noise_removal(processed_gray, &quality_stats)?;
-        }
-        
-        // Apply contrast enhancement (adaptive based on image quality)
-        if settings.ocr_enhance_contrast {
-            processed_gray = self.adaptive_contrast_enhancement(processed_gray, &quality_stats)?;
-        }
-        
-        // Apply sharpening for blurry images
-        if quality_stats.sharpness < 0.4 {
-            processed_gray = self.sharpen_image(processed_gray)?;
-        }
-        
-        // Apply morphological operations for text clarity
-        processed_gray = self.apply_morphological_operations(processed_gray)?;
         
         // Save processed image to temporary file
         let temp_filename = format!("processed_{}_{}.png", 
@@ -158,7 +192,42 @@ impl EnhancedOcrService {
         dynamic_processed.save(&temp_path)?;
         
         info!("Processed image saved to: {}", temp_path);
-        Ok(temp_path)
+        Ok((temp_path, preprocessing_applied))
+    }
+
+    /// Determine if image needs enhancement based on quality thresholds
+    #[cfg(feature = "ocr")]
+    fn needs_enhancement(&self, stats: &ImageQualityStats, settings: &Settings) -> bool {
+        // If user wants to skip enhancement entirely, respect that
+        if settings.ocr_skip_enhancement {
+            info!("OCR enhancement disabled by user setting");
+            return false;
+        }
+        
+        // Use user-configurable thresholds
+        let brightness_threshold = settings.ocr_quality_threshold_brightness;
+        let contrast_threshold = settings.ocr_quality_threshold_contrast;
+        let noise_threshold = settings.ocr_quality_threshold_noise;
+        let sharpness_threshold = settings.ocr_quality_threshold_sharpness;
+        
+        // Check if any metric falls below acceptable quality thresholds
+        let needs_brightness_fix = stats.average_brightness < brightness_threshold;
+        let needs_contrast_fix = stats.contrast_ratio < contrast_threshold;
+        let needs_noise_fix = stats.noise_level > noise_threshold;
+        let needs_sharpening = stats.sharpness < sharpness_threshold;
+        
+        // Also check if user has explicitly enabled aggressive enhancement
+        let user_wants_enhancement = settings.ocr_brightness_boost > 0.0 ||
+                                    settings.ocr_contrast_multiplier > 1.0 ||
+                                    settings.ocr_noise_reduction_level > 1 ||
+                                    settings.ocr_sharpening_strength > 0.0;
+        
+        let needs_enhancement = needs_brightness_fix || needs_contrast_fix || needs_noise_fix || needs_sharpening || user_wants_enhancement;
+        
+        info!("Enhancement decision: brightness_ok={}, contrast_ok={}, noise_ok={}, sharpness_ok={}, user_enhancement={}, needs_enhancement={}", 
+              !needs_brightness_fix, !needs_contrast_fix, !needs_noise_fix, !needs_sharpening, user_wants_enhancement, needs_enhancement);
+        
+        needs_enhancement
     }
     
     /// Configure Tesseract with optimal settings
@@ -370,12 +439,14 @@ impl EnhancedOcrService {
     
     /// Enhanced brightness and contrast correction for dim images
     #[cfg(feature = "ocr")]
-    fn enhance_brightness_and_contrast(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>, stats: &ImageQualityStats) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
+    fn enhance_brightness_and_contrast(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>, stats: &ImageQualityStats, settings: &Settings) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
         let (width, height) = img.dimensions();
         let mut enhanced = ImageBuffer::new(width, height);
         
-        // Calculate enhancement parameters based on image statistics
-        let brightness_boost = if stats.average_brightness < 50.0 {
+        // Calculate enhancement parameters based on image statistics and user settings
+        let brightness_boost = if settings.ocr_brightness_boost > 0.0 {
+            settings.ocr_brightness_boost  // Use user-configured value
+        } else if stats.average_brightness < 50.0 {
             60.0 - stats.average_brightness  // Aggressive boost for very dim images
         } else if stats.average_brightness < 80.0 {
             30.0 - (stats.average_brightness - 50.0) * 0.5  // Moderate boost
@@ -383,7 +454,9 @@ impl EnhancedOcrService {
             0.0  // No boost needed
         };
         
-        let contrast_multiplier = if stats.contrast_ratio < 0.2 {
+        let contrast_multiplier = if settings.ocr_contrast_multiplier > 0.0 {
+            settings.ocr_contrast_multiplier  // Use user-configured value
+        } else if stats.contrast_ratio < 0.2 {
             2.5  // Aggressive contrast boost for flat images
         } else if stats.contrast_ratio < 0.4 {
             1.8  // Moderate contrast boost
@@ -408,23 +481,38 @@ impl EnhancedOcrService {
     
     /// Adaptive noise removal based on detected noise level
     #[cfg(feature = "ocr")]
-    fn adaptive_noise_removal(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>, stats: &ImageQualityStats) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
+    fn adaptive_noise_removal(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>, stats: &ImageQualityStats, settings: &Settings) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
         let mut processed = img;
         
-        if stats.noise_level > 0.2 {
-            // Heavy noise - apply multiple filters
-            processed = median_filter(&processed, 2, 2);  // Larger median filter
-            processed = gaussian_blur_f32(&processed, 0.8);  // More blur
-            info!("Applied heavy noise reduction (noise level: {:.2})", stats.noise_level);
+        // Use user-configured noise reduction level if specified
+        let noise_level = if settings.ocr_noise_reduction_level > 0 {
+            settings.ocr_noise_reduction_level
+        } else if stats.noise_level > 0.2 {
+            3  // Heavy noise
         } else if stats.noise_level > 0.1 {
-            // Moderate noise
-            processed = median_filter(&processed, 1, 1);
-            processed = gaussian_blur_f32(&processed, 0.5);
-            info!("Applied moderate noise reduction");
+            2  // Moderate noise
         } else {
-            // Light noise or clean image
-            processed = median_filter(&processed, 1, 1);
-            info!("Applied light noise reduction");
+            1  // Light noise
+        };
+        
+        match noise_level {
+            3 => {
+                // Heavy noise - apply multiple filters
+                processed = median_filter(&processed, 2, 2);  // Larger median filter
+                processed = gaussian_blur_f32(&processed, 0.8);  // More blur
+                info!("Applied heavy noise reduction");
+            },
+            2 => {
+                // Moderate noise
+                processed = median_filter(&processed, 1, 1);
+                processed = gaussian_blur_f32(&processed, 0.5);
+                info!("Applied moderate noise reduction");
+            },
+            1 | _ => {
+                // Light noise or clean image
+                processed = median_filter(&processed, 1, 1);
+                info!("Applied light noise reduction");
+            }
         }
         
         Ok(processed)
@@ -432,12 +520,22 @@ impl EnhancedOcrService {
     
     /// Adaptive contrast enhancement based on image quality
     #[cfg(feature = "ocr")]
-    fn adaptive_contrast_enhancement(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>, stats: &ImageQualityStats) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
+    fn adaptive_contrast_enhancement(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>, stats: &ImageQualityStats, settings: &Settings) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
         // Choose threshold size based on image dimensions and quality
         let (width, height) = img.dimensions();
         let min_dimension = width.min(height);
         
-        let threshold_size = if stats.contrast_ratio < 0.2 {
+        // Check if image is too large for safe adaptive threshold processing
+        // The integral image calculation can overflow with large images
+        if width as u64 * height as u64 > 1_500_000 {
+            info!("Image too large for adaptive threshold ({}x{}), using alternative contrast enhancement", width, height);
+            return self.apply_alternative_contrast_enhancement(img, stats, settings);
+        }
+        
+        let threshold_size = if settings.ocr_adaptive_threshold_window_size > 0 {
+            // Use user-configured window size
+            settings.ocr_adaptive_threshold_window_size as u32
+        } else if stats.contrast_ratio < 0.2 {
             // Low contrast - use smaller windows for more aggressive local adaptation
             (min_dimension / 20).max(11).min(31)
         } else {
@@ -449,14 +547,107 @@ impl EnhancedOcrService {
         let threshold_size = if threshold_size % 2 == 0 { threshold_size + 1 } else { threshold_size };
         
         info!("Applying adaptive threshold with window size: {}", threshold_size);
-        let enhanced = adaptive_threshold(&img, threshold_size);
+        
+        // Wrap in panic-safe block to catch overflow errors
+        let enhanced = catch_unwind(AssertUnwindSafe(|| {
+            adaptive_threshold(&img, threshold_size)
+        }));
+        
+        match enhanced {
+            Ok(result) => Ok(result),
+            Err(_) => {
+                warn!("Adaptive threshold panicked (likely overflow), using alternative method");
+                self.apply_alternative_contrast_enhancement(img, stats, settings)
+            }
+        }
+    }
+    
+    /// Alternative contrast enhancement for large images to avoid overflow
+    #[cfg(feature = "ocr")]
+    fn apply_alternative_contrast_enhancement(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>, stats: &ImageQualityStats, settings: &Settings) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
+        let (width, height) = img.dimensions();
+        let mut enhanced = ImageBuffer::new(width, height);
+        
+        // Use histogram equalization instead of adaptive threshold for large images
+        if settings.ocr_histogram_equalization {
+            info!("Applying histogram equalization for contrast enhancement (user enabled)");
+        } else {
+            info!("Applying histogram equalization for contrast enhancement (fallback)");
+        }
+        
+        // Calculate histogram
+        let mut histogram = [0u32; 256];
+        for pixel in img.pixels() {
+            histogram[pixel[0] as usize] += 1;
+        }
+        
+        // Calculate cumulative distribution function
+        let total_pixels = width as u32 * height as u32;
+        let mut cdf = [0u32; 256];
+        cdf[0] = histogram[0];
+        for i in 1..256 {
+            cdf[i] = cdf[i - 1] + histogram[i];
+        }
+        
+        // Create lookup table for histogram equalization
+        let mut lookup = [0u8; 256];
+        for i in 0..256 {
+            if cdf[i] > 0 {
+                lookup[i] = ((cdf[i] as f64 / total_pixels as f64) * 255.0) as u8;
+            }
+        }
+        
+        // Apply histogram equalization
+        for (x, y, pixel) in img.enumerate_pixels() {
+            let old_value = pixel[0];
+            let new_value = lookup[old_value as usize];
+            enhanced.put_pixel(x, y, Luma([new_value]));
+        }
+        
+        // Apply additional contrast stretching if needed
+        if stats.contrast_ratio < 0.3 {
+            enhanced = self.apply_contrast_stretching(enhanced)?;
+        }
+        
+        Ok(enhanced)
+    }
+    
+    /// Apply contrast stretching to improve dynamic range
+    #[cfg(feature = "ocr")]
+    fn apply_contrast_stretching(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
+        let (width, height) = img.dimensions();
+        let mut enhanced = ImageBuffer::new(width, height);
+        
+        // Find min and max values
+        let mut min_val = 255u8;
+        let mut max_val = 0u8;
+        
+        for pixel in img.pixels() {
+            let val = pixel[0];
+            min_val = min_val.min(val);
+            max_val = max_val.max(val);
+        }
+        
+        // Avoid division by zero
+        if max_val == min_val {
+            return Ok(img);
+        }
+        
+        let range = max_val - min_val;
+        
+        // Apply contrast stretching
+        for (x, y, pixel) in img.enumerate_pixels() {
+            let old_value = pixel[0];
+            let new_value = (((old_value - min_val) as f32 / range as f32) * 255.0) as u8;
+            enhanced.put_pixel(x, y, Luma([new_value]));
+        }
         
         Ok(enhanced)
     }
     
     /// Sharpen blurry images
     #[cfg(feature = "ocr")]
-    fn sharpen_image(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
+    fn sharpen_image(&self, img: ImageBuffer<Luma<u8>, Vec<u8>>, settings: &Settings) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
         let (width, height) = img.dimensions();
         let mut sharpened = ImageBuffer::new(width, height);
         
