@@ -27,10 +27,10 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", post(upload_document))
         .route("/", get(list_documents))
-        .route("/:id/download", get(download_document))
-        .route("/:id/view", get(view_document))
-        .route("/:id/thumbnail", get(get_document_thumbnail))
-        .route("/:id/ocr", get(get_document_ocr))
+        .route("/{id}/download", get(download_document))
+        .route("/{id}/view", get(view_document))
+        .route("/{id}/thumbnail", get(get_document_thumbnail))
+        .route("/{id}/ocr", get(get_document_ocr))
 }
 
 #[utoipa::path(

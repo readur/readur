@@ -64,7 +64,7 @@ async fn get_user_webdav_config(state: &Arc<AppState>, user_id: uuid::Uuid) -> R
         password,
         watch_folders: settings.webdav_watch_folders,
         file_extensions: settings.webdav_file_extensions,
-        timeout_seconds: 30, // Default timeout
+        timeout_seconds: 300, // 5 minutes timeout for crawl estimation
         server_type: Some("nextcloud".to_string()), // Default to Nextcloud
     })
 }
@@ -99,7 +99,7 @@ async fn test_webdav_connection(
         password: test_config.password.clone(),
         watch_folders: Vec::new(),
         file_extensions: Vec::new(),
-        timeout_seconds: 30,
+        timeout_seconds: 300, // 5 minutes timeout for crawl estimation
         server_type: test_config.server_type.clone(),
     };
 

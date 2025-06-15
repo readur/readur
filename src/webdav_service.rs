@@ -39,7 +39,7 @@ impl Default for RetryConfig {
             initial_delay_ms: 1000, // 1 second
             max_delay_ms: 30000,    // 30 seconds
             backoff_multiplier: 2.0,
-            timeout_seconds: 120,   // 2 minutes total timeout
+            timeout_seconds: 300,   // 5 minutes total timeout for crawl operations
         }
     }
 }

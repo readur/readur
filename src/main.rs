@@ -1,6 +1,6 @@
 use axum::{
     http::StatusCode,
-    response::{Json, Html},
+    response::Html,
     routing::get,
     Router,
 };
@@ -144,8 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api/users", readur::routes::users::router())
         .nest("/api/webdav", readur::routes::webdav::router())
         .merge(readur::swagger::create_swagger_router())
-        .nest_service("/", ServeDir::new("/app/frontend").fallback(ServeFile::new("/app/frontend/index.html")))
-        .fallback(serve_spa)
+        .fallback_service(ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")))
         .layer(CorsLayer::permissive())
         .with_state(state.clone());
     
@@ -215,7 +214,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
 async fn serve_spa() -> Result<Html<String>, StatusCode> {
-    match tokio::fs::read_to_string("/app/frontend/index.html").await {
+    match tokio::fs::read_to_string("frontend/dist/index.html").await {
         Ok(html) => Ok(Html(html)),
         Err(_) => Err(StatusCode::NOT_FOUND),
     }

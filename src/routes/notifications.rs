@@ -24,9 +24,9 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(get_notifications))
         .route("/summary", get(get_notification_summary))
-        .route("/:id/read", post(mark_notification_read))
+        .route("/{id}/read", post(mark_notification_read))
         .route("/read-all", post(mark_all_notifications_read))
-        .route("/:id", delete(delete_notification))
+        .route("/{id}", delete(delete_notification))
 }
 
 #[utoipa::path(

@@ -17,7 +17,7 @@ use crate::{
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(list_users).post(create_user))
-        .route("/:id", get(get_user).put(update_user).delete(delete_user))
+        .route("/{id}", get(get_user).put(update_user).delete(delete_user))
 }
 
 #[utoipa::path(

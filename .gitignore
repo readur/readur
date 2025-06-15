@@ -5,3 +5,4 @@ node_modules/
 assets/
 frontend/dist/
 .claude/
+uploads/
