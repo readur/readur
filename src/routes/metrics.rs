@@ -152,43 +152,50 @@ async fn collect_ocr_metrics(state: &Arc<AppState>) -> Result<OcrMetrics, Status
 }
 
 async fn collect_document_metrics(state: &Arc<AppState>) -> Result<DocumentMetrics, StatusCode> {
-    // Get total document count
-    let total_docs = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM documents")
-        .fetch_one(&state.db.pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get total document count: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    // Get total document count using retry mechanism
+    let total_docs = state.db.with_retry(|| async {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM documents")
+            .fetch_one(&state.db.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get total document count: {}", e))
+    }).await.map_err(|e| {
+        tracing::error!("Failed to get total document count: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     
     // Get documents uploaded today
-    let docs_today = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM documents WHERE DATE(created_at) = CURRENT_DATE"
-    )
-    .fetch_one(&state.db.pool)
-    .await
-    .map_err(|e| {
+    let docs_today = state.db.with_retry(|| async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM documents WHERE DATE(created_at) = CURRENT_DATE"
+        )
+        .fetch_one(&state.db.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to get today's document count: {}", e))
+    }).await.map_err(|e| {
         tracing::error!("Failed to get today's document count: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     
     // Get total storage size
-    let total_size = sqlx::query_scalar::<_, Option<i64>>("SELECT SUM(file_size) FROM documents")
-        .fetch_one(&state.db.pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get total storage size: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .unwrap_or(0);
+    let total_size = state.db.with_retry(|| async {
+        sqlx::query_scalar::<_, Option<f64>>("SELECT CAST(COALESCE(SUM(file_size), 0) AS DOUBLE PRECISION) FROM documents")
+            .fetch_one(&state.db.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get total storage size: {}", e))
+    }).await.map_err(|e| {
+        tracing::error!("Failed to get total storage size: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?.unwrap_or(0.0) as i64;
     
     // Get documents with and without OCR
-    let docs_with_ocr = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM documents WHERE has_ocr_text = true"
-    )
-    .fetch_one(&state.db.pool)
-    .await
-    .map_err(|e| {
+    let docs_with_ocr = state.db.with_retry(|| async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM documents WHERE ocr_text IS NOT NULL AND ocr_text != ''"
+        )
+        .fetch_one(&state.db.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to get OCR document count: {}", e))
+    }).await.map_err(|e| {
         tracing::error!("Failed to get OCR document count: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;

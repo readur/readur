@@ -142,18 +142,18 @@ async fn collect_document_metrics(state: &Arc<AppState>) -> Result<DocumentMetri
     })?;
     
     // Get total storage size
-    let total_size = sqlx::query_scalar::<_, Option<i64>>("SELECT SUM(file_size) FROM documents")
+    let total_size = sqlx::query_scalar::<_, Option<f64>>("SELECT CAST(COALESCE(SUM(file_size), 0) AS DOUBLE PRECISION) FROM documents")
         .fetch_one(&state.db.pool)
         .await
         .map_err(|e| {
             tracing::error!("Failed to get total storage size: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?
-        .unwrap_or(0);
+        .unwrap_or(0.0) as i64;
     
     // Get documents with and without OCR
     let docs_with_ocr = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM documents WHERE has_ocr_text = true"
+        "SELECT COUNT(*) FROM documents WHERE ocr_text IS NOT NULL AND ocr_text != ''"
     )
     .fetch_one(&state.db.pool)
     .await
