@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Check current migration status
     let applied_result = sqlx::query("SELECT version, description FROM _sqlx_migrations ORDER BY version")
-        .fetch_all(&db.pool)
+        .fetch_all(web_db.get_pool())
         .await;
     
     match applied_result {
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Check if ocr_error column exists
     let check_column = sqlx::query("SELECT column_name FROM information_schema.columns WHERE table_name = 'documents' AND column_name = 'ocr_error'")
-        .fetch_optional(&db.pool)
+        .fetch_optional(web_db.get_pool())
         .await;
     
     match check_column {
@@ -67,12 +67,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Try to add the column manually as a fallback
             info!("Attempting to add missing columns...");
             if let Err(e) = sqlx::query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_error TEXT")
-                .execute(&db.pool)
+                .execute(web_db.get_pool())
                 .await {
                 error!("Failed to add ocr_error column: {}", e);
             }
             if let Err(e) = sqlx::query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_completed_at TIMESTAMPTZ")
-                .execute(&db.pool)
+                .execute(web_db.get_pool())
                 .await {
                 error!("Failed to add ocr_completed_at column: {}", e);
             }
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => error!("Failed to check for ocr_error column: {}", e),
     }
     
-    let result = migrations.run(&db.pool).await;
+    let result = migrations.run(web_db.get_pool()).await;
     match result {
         Ok(_) => info!("SQLx migrations completed successfully"),
         Err(e) => {
@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
          WHERE table_name = 'documents' AND table_schema = 'public'
          ORDER BY ordinal_position"
     )
-    .fetch_all(&db.pool)
+    .fetch_all(web_db.get_pool())
     .await;
     
     match columns_result {

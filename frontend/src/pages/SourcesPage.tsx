@@ -244,11 +244,14 @@ const SourcesPage: React.FC = () => {
   };
 
   const handleTestConnection = async () => {
-    if (!editingSource) return;
-
     setTestingConnection(true);
     try {
-      const response = await api.post(`/sources/${editingSource.id}/test`);
+      const response = await api.post('/webdav/test-connection', {
+        server_url: formData.server_url,
+        username: formData.username,
+        password: formData.password,
+        server_type: formData.server_type,
+      });
       if (response.data.success) {
         showSnackbar('Connection successful!', 'success');
       } else {
@@ -318,18 +321,25 @@ const SourcesPage: React.FC = () => {
 
   // Crawl estimation function
   const estimateCrawl = async () => {
-    if (!editingSource) return;
-
     setEstimatingCrawl(true);
     try {
-      const response = await api.post('/webdav/estimate', {
-        server_url: formData.server_url,
-        username: formData.username,
-        password: formData.password,
-        watch_folders: formData.watch_folders,
-        file_extensions: formData.file_extensions,
-        server_type: formData.server_type,
-      });
+      let response;
+      if (editingSource) {
+        // Use the source-specific endpoint for existing sources
+        response = await api.post(`/sources/${editingSource.id}/estimate`);
+      } else {
+        // Use the general endpoint with provided config for new sources
+        response = await api.post('/sources/estimate', {
+          server_url: formData.server_url,
+          username: formData.username,
+          password: formData.password,
+          watch_folders: formData.watch_folders,
+          file_extensions: formData.file_extensions,
+          auto_sync: formData.auto_sync,
+          sync_interval_minutes: formData.sync_interval_minutes,
+          server_type: formData.server_type,
+        });
+      }
       setCrawlEstimate(response.data);
       showSnackbar('Crawl estimation completed', 'success');
     } catch (error) {
