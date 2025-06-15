@@ -781,3 +781,27 @@ pub struct WebDAVSourceConfig {
     pub sync_interval_minutes: i32,
     pub server_type: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LocalFolderSourceConfig {
+    pub watch_folders: Vec<String>,
+    pub file_extensions: Vec<String>,
+    pub auto_sync: bool,
+    pub sync_interval_minutes: i32,
+    pub recursive: bool,
+    pub follow_symlinks: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct S3SourceConfig {
+    pub bucket_name: String,
+    pub region: String,
+    pub access_key_id: String,
+    pub secret_access_key: String,
+    pub endpoint_url: Option<String>, // For S3-compatible services
+    pub prefix: Option<String>,       // Optional path prefix
+    pub watch_folders: Vec<String>,   // S3 prefixes to monitor
+    pub file_extensions: Vec<String>,
+    pub auto_sync: bool,
+    pub sync_interval_minutes: i32,
+}

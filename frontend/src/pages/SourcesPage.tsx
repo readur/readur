@@ -108,14 +108,26 @@ const SourcesPage: React.FC = () => {
     name: '',
     source_type: 'webdav' as 'webdav' | 'local_folder' | 's3',
     enabled: true,
+    // WebDAV fields
     server_url: '',
     username: '',
     password: '',
+    server_type: 'generic' as 'nextcloud' | 'owncloud' | 'generic',
+    // Local Folder fields
+    recursive: true,
+    follow_symlinks: false,
+    // S3 fields
+    bucket_name: '',
+    region: 'us-east-1',
+    access_key_id: '',
+    secret_access_key: '',
+    endpoint_url: '',
+    prefix: '',
+    // Common fields
     watch_folders: ['/Documents'],
     file_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
     auto_sync: false,
     sync_interval_minutes: 60,
-    server_type: 'generic' as 'nextcloud' | 'owncloud' | 'generic',
   });
 
   // Additional state for enhanced features
@@ -153,14 +165,26 @@ const SourcesPage: React.FC = () => {
       name: '',
       source_type: 'webdav',
       enabled: true,
+      // WebDAV fields
       server_url: '',
       username: '',
       password: '',
+      server_type: 'generic',
+      // Local Folder fields
+      recursive: true,
+      follow_symlinks: false,
+      // S3 fields
+      bucket_name: '',
+      region: 'us-east-1',
+      access_key_id: '',
+      secret_access_key: '',
+      endpoint_url: '',
+      prefix: '',
+      // Common fields
       watch_folders: ['/Documents'],
       file_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
       auto_sync: false,
       sync_interval_minutes: 60,
-      server_type: 'generic',
     });
     setCrawlEstimate(null);
     setNewFolder('');
@@ -175,14 +199,26 @@ const SourcesPage: React.FC = () => {
       name: source.name,
       source_type: source.source_type,
       enabled: source.enabled,
+      // WebDAV fields
       server_url: config.server_url || '',
       username: config.username || '',
       password: config.password || '',
+      server_type: config.server_type || 'generic',
+      // Local Folder fields
+      recursive: config.recursive !== undefined ? config.recursive : true,
+      follow_symlinks: config.follow_symlinks || false,
+      // S3 fields
+      bucket_name: config.bucket_name || '',
+      region: config.region || 'us-east-1',
+      access_key_id: config.access_key_id || '',
+      secret_access_key: config.secret_access_key || '',
+      endpoint_url: config.endpoint_url || '',
+      prefix: config.prefix || '',
+      // Common fields
       watch_folders: config.watch_folders || ['/Documents'],
       file_extensions: config.file_extensions || ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
       auto_sync: config.auto_sync || false,
       sync_interval_minutes: config.sync_interval_minutes || 60,
-      server_type: config.server_type || 'generic',
     });
     setCrawlEstimate(null);
     setNewFolder('');
@@ -841,24 +877,24 @@ const SourcesPage: React.FC = () => {
                       </Box>
                     </Stack>
                   </MenuItem>
-                  <MenuItem value="local_folder" disabled>
+                  <MenuItem value="local_folder">
                     <Stack direction="row" alignItems="center" spacing={2}>
-                      <StorageIcon />
+                      <FolderIcon />
                       <Box>
                         <Typography variant="body1">Local Folder</Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Coming Soon
+                          Monitor local filesystem directories
                         </Typography>
                       </Box>
                     </Stack>
                   </MenuItem>
-                  <MenuItem value="s3" disabled>
+                  <MenuItem value="s3">
                     <Stack direction="row" alignItems="center" spacing={2}>
                       <CloudIcon />
                       <Box>
                         <Typography variant="body1">S3 Compatible</Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Coming Soon
+                          AWS S3, MinIO, and other S3-compatible storage
                         </Typography>
                       </Box>
                     </Stack>

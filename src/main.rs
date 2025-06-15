@@ -209,10 +209,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     
-    // Create WebDAV scheduler with background state
+    // Create universal source scheduler with background state (handles WebDAV, Local, S3)
+    let source_scheduler = Arc::new(readur::source_scheduler::SourceScheduler::new(background_state.clone()));
+    
+    // Keep WebDAV scheduler for backward compatibility with existing WebDAV endpoints
     let webdav_scheduler = Arc::new(readur::webdav_scheduler::WebDAVScheduler::new(background_state.clone()));
     
-    // Update the web state to include the scheduler reference
+    // Update the web state to include scheduler references
     let updated_web_state = AppState {
         db: web_state.db.clone(),
         config: web_state.config.clone(),
@@ -220,13 +223,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let web_state = Arc::new(updated_web_state);
     
-    // Start WebDAV background sync scheduler on background runtime
-    let scheduler_for_background = webdav_scheduler.clone();
+    // Start universal source scheduler on background runtime
+    let scheduler_for_background = source_scheduler.clone();
     background_runtime.spawn(async move {
-        info!("Starting WebDAV background sync scheduler with 30-second startup delay");
+        info!("Starting universal source sync scheduler with 30-second startup delay");
         // Wait 30 seconds before starting scheduler to allow server to fully initialize
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-        info!("WebDAV background sync scheduler starting after startup delay");
+        info!("Universal source sync scheduler starting after startup delay");
         scheduler_for_background.start().await;
     });
     

@@ -2104,4 +2104,115 @@ impl Database {
 
         Ok(documents)
     }
+
+    // Source management operations
+    pub async fn get_all_sources(&self) -> Result<Vec<crate::models::Source>> {
+        let rows = sqlx::query(
+            r#"SELECT id, user_id, name, source_type, enabled, config, status, 
+               last_sync_at, last_error, last_error_at, total_files_synced, 
+               total_files_pending, total_size_bytes, created_at, updated_at
+               FROM sources ORDER BY created_at DESC"#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut sources = Vec::new();
+        for row in rows {
+            sources.push(crate::models::Source {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                name: row.get("name"),
+                source_type: row.get::<String, _>("source_type").try_into()
+                    .map_err(|e| anyhow::anyhow!("Invalid source type: {}", e))?,
+                enabled: row.get("enabled"),
+                config: row.get("config"),
+                status: row.get::<String, _>("status").try_into()
+                    .map_err(|e| anyhow::anyhow!("Invalid source status: {}", e))?,
+                last_sync_at: row.get("last_sync_at"),
+                last_error: row.get("last_error"),
+                last_error_at: row.get("last_error_at"),
+                total_files_synced: row.get("total_files_synced"),
+                total_files_pending: row.get("total_files_pending"),
+                total_size_bytes: row.get("total_size_bytes"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(sources)
+    }
+
+    pub async fn get_sources_for_sync(&self) -> Result<Vec<crate::models::Source>> {
+        let rows = sqlx::query(
+            r#"SELECT id, user_id, name, source_type, enabled, config, status, 
+               last_sync_at, last_error, last_error_at, total_files_synced, 
+               total_files_pending, total_size_bytes, created_at, updated_at
+               FROM sources 
+               WHERE enabled = true AND status != 'syncing'
+               ORDER BY last_sync_at ASC NULLS FIRST"#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut sources = Vec::new();
+        for row in rows {
+            sources.push(crate::models::Source {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                name: row.get("name"),
+                source_type: row.get::<String, _>("source_type").try_into()
+                    .map_err(|e| anyhow::anyhow!("Invalid source type: {}", e))?,
+                enabled: row.get("enabled"),
+                config: row.get("config"),
+                status: row.get::<String, _>("status").try_into()
+                    .map_err(|e| anyhow::anyhow!("Invalid source status: {}", e))?,
+                last_sync_at: row.get("last_sync_at"),
+                last_error: row.get("last_error"),
+                last_error_at: row.get("last_error_at"),
+                total_files_synced: row.get("total_files_synced"),
+                total_files_pending: row.get("total_files_pending"),
+                total_size_bytes: row.get("total_size_bytes"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(sources)
+    }
+
+    pub async fn get_source_by_id(&self, source_id: Uuid) -> Result<Option<crate::models::Source>> {
+        let row = sqlx::query(
+            r#"SELECT id, user_id, name, source_type, enabled, config, status, 
+               last_sync_at, last_error, last_error_at, total_files_synced, 
+               total_files_pending, total_size_bytes, created_at, updated_at
+               FROM sources WHERE id = $1"#
+        )
+        .bind(source_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            Ok(Some(crate::models::Source {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                name: row.get("name"),
+                source_type: row.get::<String, _>("source_type").try_into()
+                    .map_err(|e| anyhow::anyhow!("Invalid source type: {}", e))?,
+                enabled: row.get("enabled"),
+                config: row.get("config"),
+                status: row.get::<String, _>("status").try_into()
+                    .map_err(|e| anyhow::anyhow!("Invalid source status: {}", e))?,
+                last_sync_at: row.get("last_sync_at"),
+                last_error: row.get("last_error"),
+                last_error_at: row.get("last_error_at"),
+                total_files_synced: row.get("total_files_synced"),
+                total_files_pending: row.get("total_files_pending"),
+                total_size_bytes: row.get("total_size_bytes"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
 }
