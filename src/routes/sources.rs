@@ -7,6 +7,7 @@ use axum::{
 };
 use std::sync::Arc;
 use uuid::Uuid;
+use tracing::error;
 
 use crate::{
     auth::AuthUser,
@@ -262,26 +263,52 @@ async fn trigger_sync(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Trigger the appropriate sync based on source type
-    match source.source_type {
-        crate::models::SourceType::WebDAV => {
-            // Send a message to trigger WebDAV sync
-            if let Some(scheduler) = &state.webdav_scheduler {
-                scheduler.trigger_sync(source_id).await;
-            }
-        }
-        _ => {
-            // Other source types not implemented yet
+    // Trigger sync using the universal source scheduler
+    if let Some(scheduler) = &state.source_scheduler {
+        if let Err(e) = scheduler.trigger_sync(source_id).await {
+            error!("Failed to trigger sync for source {}: {}", source_id, e);
             state
                 .db
                 .update_source_status(
                     source_id,
                     crate::models::SourceStatus::Error,
-                    Some("Source type not implemented".to_string()),
+                    Some(format!("Failed to trigger sync: {}", e)),
                 )
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            return Err(StatusCode::NOT_IMPLEMENTED);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    } else {
+        // Fallback to WebDAV scheduler for backward compatibility
+        match source.source_type {
+            crate::models::SourceType::WebDAV => {
+                if let Some(webdav_scheduler) = &state.webdav_scheduler {
+                    webdav_scheduler.trigger_sync(source_id).await;
+                } else {
+                    state
+                        .db
+                        .update_source_status(
+                            source_id,
+                            crate::models::SourceStatus::Error,
+                            Some("No scheduler available".to_string()),
+                        )
+                        .await
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            }
+            _ => {
+                state
+                    .db
+                    .update_source_status(
+                        source_id,
+                        crate::models::SourceStatus::Error,
+                        Some("Source type not supported".to_string()),
+                    )
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                return Err(StatusCode::NOT_IMPLEMENTED);
+            }
         }
     }
 

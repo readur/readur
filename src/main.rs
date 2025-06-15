@@ -135,6 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db: web_db, 
         config: config.clone(),
         webdav_scheduler: None, // Will be set after creating scheduler
+        source_scheduler: None, // Will be set after creating scheduler
     };
     let web_state = Arc::new(web_state);
     
@@ -143,6 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db: background_db,
         config: config.clone(),
         webdav_scheduler: None,
+        source_scheduler: None,
     };
     let background_state = Arc::new(background_state);
     
@@ -220,6 +222,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db: web_state.db.clone(),
         config: web_state.config.clone(),
         webdav_scheduler: Some(webdav_scheduler.clone()),
+        source_scheduler: Some(source_scheduler.clone()),
     };
     let web_state = Arc::new(updated_web_state);
     
