@@ -148,11 +148,11 @@ Readur supports flexible port configuration:
 
 ```bash
 # Method 1: Specify full server address
-SERVER_ADDRESS=0.0.0.0:3000
+SERVER_ADDRESS=0.0.0.0:8000
 
 # Method 2: Use separate host and port (recommended)
 SERVER_HOST=0.0.0.0
-SERVER_PORT=3000
+SERVER_PORT=8000
 
 # For development: Configure frontend port
 CLIENT_PORT=5173
