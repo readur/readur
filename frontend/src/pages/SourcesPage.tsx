@@ -61,7 +61,7 @@ import {
   Folder as FolderIcon,
   Assessment as AssessmentIcon,
   Extension as ExtensionIcon,
-  Server as ServerIcon,
+  Storage as ServerIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';

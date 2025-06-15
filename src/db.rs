@@ -24,6 +24,18 @@ impl Database {
             .await?;
         Ok(Self { pool })
     }
+
+    pub async fn new_with_pool_config(database_url: &str, max_connections: u32, min_connections: u32) -> Result<Self> {
+        let pool = PgPoolOptions::new()
+            .max_connections(max_connections)
+            .acquire_timeout(Duration::from_secs(10))
+            .idle_timeout(Duration::from_secs(600))
+            .max_lifetime(Duration::from_secs(1800))
+            .min_connections(min_connections)
+            .connect(database_url)
+            .await?;
+        Ok(Self { pool })
+    }
     
     pub fn get_pool(&self) -> &PgPool {
         &self.pool
