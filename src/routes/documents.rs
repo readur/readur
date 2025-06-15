@@ -22,6 +22,7 @@ use crate::{
 struct PaginationQuery {
     limit: Option<i64>,
     offset: Option<i64>,
+    ocr_status: Option<String>,
 }
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -174,7 +175,8 @@ fn calculate_file_hash(data: &[u8]) -> String {
     ),
     params(
         ("limit" = Option<i64>, Query, description = "Number of documents to return (default: 50)"),
-        ("offset" = Option<i64>, Query, description = "Number of documents to skip (default: 0)")
+        ("offset" = Option<i64>, Query, description = "Number of documents to skip (default: 0)"),
+        ("ocr_status" = Option<String>, Query, description = "Filter by OCR status (pending, processing, completed, failed)")
     ),
     responses(
         (status = 200, description = "List of user documents", body = Vec<DocumentResponse>),
@@ -185,17 +187,40 @@ async fn list_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Query(pagination): Query<PaginationQuery>,
-) -> Result<Json<Vec<DocumentResponse>>, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let limit = pagination.limit.unwrap_or(50);
     let offset = pagination.offset.unwrap_or(0);
     
-    let documents = state
-        .db
-        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, limit, offset)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user_id = auth_user.user.id;
+    let user_role = auth_user.user.role;
+    let ocr_filter = pagination.ocr_status.as_deref();
     
-    let response: Vec<DocumentResponse> = documents.into_iter().map(|doc| doc.into()).collect();
+    let (documents, total_count) = tokio::try_join!(
+        state.db.get_documents_by_user_with_role_and_filter(
+            user_id, 
+            user_role.clone(), 
+            limit, 
+            offset, 
+            ocr_filter
+        ),
+        state.db.get_documents_count_with_role_and_filter(
+            user_id,
+            user_role,
+            ocr_filter
+        )
+    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let documents_response: Vec<DocumentResponse> = documents.into_iter().map(|doc| doc.into()).collect();
+    
+    let response = serde_json::json!({
+        "documents": documents_response,
+        "pagination": {
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + limit < total_count
+        }
+    });
     
     Ok(Json(response))
 }

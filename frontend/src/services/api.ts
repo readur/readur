@@ -111,6 +111,16 @@ export const documentService = {
     })
   },
 
+  listWithPagination: (limit = 20, offset = 0, ocrStatus?: string) => {
+    const params: any = { limit, offset };
+    if (ocrStatus) {
+      params.ocr_status = ocrStatus;
+    }
+    return api.get<{documents: Document[], pagination: {total: number, limit: number, offset: number, has_more: boolean}}>('/documents', {
+      params,
+    })
+  },
+
   getById: (id: string) => {
     // Use the document list endpoint with pagination to find the specific document
     // This is a temporary solution until we have a proper document details endpoint

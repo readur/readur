@@ -503,6 +503,147 @@ impl Database {
         Ok(documents)
     }
 
+    pub async fn get_documents_by_user_with_role_and_filter(&self, user_id: Uuid, user_role: crate::models::UserRole, limit: i64, offset: i64, ocr_status: Option<&str>) -> Result<Vec<Document>> {
+        let rows = match (user_role == crate::models::UserRole::Admin, ocr_status) {
+            (true, Some(status)) => {
+                // Admin with OCR filter
+                sqlx::query(
+                    r#"
+                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+                    FROM documents 
+                    WHERE ocr_status = $3
+                    ORDER BY created_at DESC 
+                    LIMIT $1 OFFSET $2
+                    "#
+                )
+                .bind(limit)
+                .bind(offset)
+                .bind(status)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (true, None) => {
+                // Admin without OCR filter
+                sqlx::query(
+                    r#"
+                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+                    FROM documents 
+                    ORDER BY created_at DESC 
+                    LIMIT $1 OFFSET $2
+                    "#
+                )
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (false, Some(status)) => {
+                // Regular user with OCR filter
+                sqlx::query(
+                    r#"
+                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+                    FROM documents 
+                    WHERE user_id = $3 AND ocr_status = $4
+                    ORDER BY created_at DESC 
+                    LIMIT $1 OFFSET $2
+                    "#
+                )
+                .bind(limit)
+                .bind(offset)
+                .bind(user_id)
+                .bind(status)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            (false, None) => {
+                // Regular user without OCR filter
+                sqlx::query(
+                    r#"
+                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+                    FROM documents 
+                    WHERE user_id = $3 
+                    ORDER BY created_at DESC 
+                    LIMIT $1 OFFSET $2
+                    "#
+                )
+                .bind(limit)
+                .bind(offset)
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
+
+        let documents = rows
+            .into_iter()
+            .map(|row| Document {
+                id: row.get("id"),
+                filename: row.get("filename"),
+                original_filename: row.get("original_filename"),
+                file_path: row.get("file_path"),
+                file_size: row.get("file_size"),
+                mime_type: row.get("mime_type"),
+                content: row.get("content"),
+                ocr_text: row.get("ocr_text"),
+                ocr_confidence: row.get("ocr_confidence"),
+                ocr_word_count: row.get("ocr_word_count"),
+                ocr_processing_time_ms: row.get("ocr_processing_time_ms"),
+                ocr_status: row.get("ocr_status"),
+                ocr_error: row.get("ocr_error"),
+                ocr_completed_at: row.get("ocr_completed_at"),
+                tags: row.get("tags"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                user_id: row.get("user_id"),
+            })
+            .collect();
+
+        Ok(documents)
+    }
+
+    pub async fn get_documents_count_with_role_and_filter(&self, user_id: Uuid, user_role: crate::models::UserRole, ocr_status: Option<&str>) -> Result<i64> {
+        let count = match (user_role == crate::models::UserRole::Admin, ocr_status) {
+            (true, Some(status)) => {
+                // Admin with OCR filter
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM documents WHERE ocr_status = $1"
+                )
+                .bind(status)
+                .fetch_one(&self.pool)
+                .await?
+            }
+            (true, None) => {
+                // Admin without OCR filter
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM documents"
+                )
+                .fetch_one(&self.pool)
+                .await?
+            }
+            (false, Some(status)) => {
+                // Regular user with OCR filter
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM documents WHERE user_id = $1 AND ocr_status = $2"
+                )
+                .bind(user_id)
+                .bind(status)
+                .fetch_one(&self.pool)
+                .await?
+            }
+            (false, None) => {
+                // Regular user without OCR filter
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM documents WHERE user_id = $1"
+                )
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?
+            }
+        };
+
+        Ok(count)
+    }
+
     pub async fn get_documents_by_user(&self, user_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Document>> {
         let rows = sqlx::query(
             r#"

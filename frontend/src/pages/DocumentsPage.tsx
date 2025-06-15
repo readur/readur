@@ -22,6 +22,10 @@ import {
   Divider,
   CircularProgress,
   Alert,
+  Pagination,
+  FormControl,
+  InputLabel,
+  Select,
 } from '@mui/material';
 import {
   GridView as GridViewIcon,
@@ -38,6 +42,8 @@ import {
   CalendarToday as DateIcon,
   Storage as SizeIcon,
   Visibility as ViewIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import { documentService } from '../services/api';
 import DocumentThumbnail from '../components/DocumentThumbnail';
@@ -50,7 +56,21 @@ interface Document {
   mime_type: string;
   created_at: string;
   has_ocr_text?: boolean;
+  ocr_status?: string;
+  ocr_confidence?: number;
   tags: string[];
+}
+
+interface PaginationInfo {
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+interface DocumentsResponse {
+  documents: Document[];
+  pagination: PaginationInfo;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -60,12 +80,14 @@ type SortOrder = 'asc' | 'desc';
 const DocumentsPage: React.FC = () => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [pagination, setPagination] = useState<PaginationInfo>({ total: 0, limit: 20, offset: 0, has_more: false });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortField>('created_at');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [ocrFilter, setOcrFilter] = useState<string>('');
   
   // Menu states
   const [sortMenuAnchor, setSortMenuAnchor] = useState<null | HTMLElement>(null);
@@ -74,13 +96,18 @@ const DocumentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchDocuments();
-  }, []);
+  }, [pagination.limit, pagination.offset, ocrFilter]);
 
   const fetchDocuments = async (): Promise<void> => {
     try {
       setLoading(true);
-      const response = await documentService.list(100, 0);
-      setDocuments(response.data);
+      const response = await documentService.listWithPagination(
+        pagination.limit, 
+        pagination.offset, 
+        ocrFilter || undefined
+      );
+      setDocuments(response.data.documents);
+      setPagination(response.data.pagination);
     } catch (err) {
       setError('Failed to load documents');
       console.error(err);
@@ -179,6 +206,39 @@ const DocumentsPage: React.FC = () => {
     handleSortMenuClose();
   };
 
+  const handlePageChange = (event: React.ChangeEvent<unknown>, page: number): void => {
+    const newOffset = (page - 1) * pagination.limit;
+    setPagination(prev => ({ ...prev, offset: newOffset }));
+  };
+
+  const handleOcrFilterChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    setOcrFilter(event.target.value);
+    setPagination(prev => ({ ...prev, offset: 0 })); // Reset to first page when filtering
+  };
+
+  const getOcrStatusChip = (doc: Document) => {
+    if (!doc.ocr_status) return null;
+    
+    const statusConfig = {
+      'completed': { color: 'success' as const, label: doc.ocr_confidence ? `OCR ${Math.round(doc.ocr_confidence)}%` : 'OCR Done' },
+      'processing': { color: 'warning' as const, label: 'Processing...' },
+      'failed': { color: 'error' as const, label: 'OCR Failed' },
+      'pending': { color: 'default' as const, label: 'Pending' },
+    };
+    
+    const config = statusConfig[doc.ocr_status as keyof typeof statusConfig];
+    if (!config) return null;
+    
+    return (
+      <Chip 
+        label={config.label}
+        size="small" 
+        color={config.color}
+        variant="outlined"
+      />
+    );
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -256,6 +316,22 @@ const DocumentsPage: React.FC = () => {
             <ListViewIcon />
           </ToggleButton>
         </ToggleButtonGroup>
+
+        {/* OCR Filter */}
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>OCR Status</InputLabel>
+          <Select
+            value={ocrFilter}
+            label="OCR Status"
+            onChange={handleOcrFilterChange}
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="completed">Completed</MenuItem>
+            <MenuItem value="processing">Processing</MenuItem>
+            <MenuItem value="failed">Failed</MenuItem>
+            <MenuItem value="pending">Pending</MenuItem>
+          </Select>
+        </FormControl>
 
         {/* Sort Button */}
         <Button
@@ -418,14 +494,7 @@ const DocumentsPage: React.FC = () => {
                           size="small" 
                           variant="outlined"
                         />
-                        {doc.has_ocr_text && (
-                          <Chip 
-                            label="OCR" 
-                            size="small" 
-                            color="success"
-                            variant="outlined"
-                          />
-                        )}
+                        {getOcrStatusChip(doc)}
                       </Stack>
                       
                       {doc.tags.length > 0 && (
@@ -489,12 +558,29 @@ const DocumentsPage: React.FC = () => {
         </Grid>
       )}
 
-      {/* Results count */}
-      <Box sx={{ mt: 3, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
-          Showing {sortedDocuments.length} of {documents.length} documents
-          {searchQuery && ` matching "${searchQuery}"`}
-        </Typography>
+      {/* Results count and pagination */}
+      <Box sx={{ mt: 3 }}>
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} documents
+            {ocrFilter && ` with OCR status: ${ocrFilter}`}
+            {searchQuery && ` matching "${searchQuery}"`}
+          </Typography>
+        </Box>
+        
+        {pagination.total > pagination.limit && (
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <Pagination
+              count={Math.ceil(pagination.total / pagination.limit)}
+              page={Math.floor(pagination.offset / pagination.limit) + 1}
+              onChange={handlePageChange}
+              color="primary"
+              size="large"
+              showFirstButton
+              showLastButton
+            />
+          </Box>
+        )}
       </Box>
     </Box>
   );
