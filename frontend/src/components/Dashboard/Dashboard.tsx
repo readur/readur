@@ -505,24 +505,43 @@ const Dashboard: React.FC = () => {
     searchablePages: 0,
   });
   const [loading, setLoading] = useState<boolean>(true);
+  const [metrics, setMetrics] = useState<any>(null);
 
   useEffect(() => {
     const fetchDashboardData = async (): Promise<void> => {
       try {
-        const response = await api.get<Document[]>('/documents');
-        const docs = response.data || [];
+        // Fetch both documents and metrics
+        const [docsResponse, metricsResponse] = await Promise.all([
+          api.get<Document[]>('/documents'),
+          api.get<any>('/metrics')
+        ]);
+        
+        const docs = docsResponse.data || [];
         setDocuments(docs);
         
-        // Calculate stats
-        const totalSize = docs.reduce((sum, doc) => sum + (doc.file_size || 0), 0);
-        const ocrProcessed = docs.filter(doc => doc.ocr_text).length;
+        const metricsData = metricsResponse.data;
+        setMetrics(metricsData);
         
-        setStats({
-          totalDocuments: docs.length,
-          totalSize,
-          ocrProcessed,
-          searchablePages: docs.length, // Assuming each doc is searchable
-        });
+        // Use backend metrics if available, otherwise fall back to client calculation
+        if (metricsData?.documents) {
+          setStats({
+            totalDocuments: metricsData.documents.total_documents || 0,
+            totalSize: metricsData.documents.total_storage_bytes || 0,
+            ocrProcessed: metricsData.documents.documents_with_ocr || 0,
+            searchablePages: metricsData.documents.documents_with_ocr || 0,
+          });
+        } else {
+          // Fallback to client-side calculation
+          const totalSize = docs.reduce((sum, doc) => sum + (doc.file_size || 0), 0);
+          const ocrProcessed = docs.filter(doc => doc.ocr_text).length;
+          
+          setStats({
+            totalDocuments: docs.length,
+            totalSize,
+            ocrProcessed,
+            searchablePages: docs.length,
+          });
+        }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
       } finally {
@@ -596,7 +615,7 @@ const Dashboard: React.FC = () => {
             subtitle="Text extracted documents"
             icon={OcrIcon}
             color="#f59e0b"
-            trend={`${Math.round((stats.ocrProcessed / Math.max(stats.totalDocuments, 1)) * 100)}% completion`}
+            trend={stats.totalDocuments > 0 ? `${Math.round((stats.ocrProcessed / stats.totalDocuments) * 100)}% completion` : '0% completion'}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>

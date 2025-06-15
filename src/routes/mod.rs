@@ -2,6 +2,7 @@ pub mod auth;
 pub mod documents;
 pub mod metrics;
 pub mod notifications;
+pub mod prometheus_metrics;
 pub mod queue;
 pub mod search;
 pub mod settings;

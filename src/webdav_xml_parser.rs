@@ -19,7 +19,7 @@ struct PropFindResponse {
 
 pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
     let mut reader = Reader::from_str(xml_text);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
     
     let mut files = Vec::new();
     let mut current_response: Option<PropFindResponse> = None;

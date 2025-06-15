@@ -136,6 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api/auth", readur::routes::auth::router())
         .nest("/api/documents", readur::routes::documents::router())
         .nest("/api/metrics", readur::routes::metrics::router())
+        .nest("/metrics", readur::routes::prometheus_metrics::router())
         .nest("/api/notifications", readur::routes::notifications::router())
         .nest("/api/queue", readur::routes::queue::router())
         .nest("/api/search", readur::routes::search::router())

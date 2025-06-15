@@ -1,6 +1,5 @@
 use anyhow::Result;
 use axum::{
-    async_trait,
     extract::FromRequestParts,
     http::{request::Parts, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -24,7 +23,6 @@ pub struct AuthUser {
     pub user: User,
 }
 
-#[async_trait]
 impl FromRequestParts<Arc<AppState>> for AuthUser {
     type Rejection = Response;
 

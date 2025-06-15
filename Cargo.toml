@@ -13,16 +13,16 @@ path = "src/bin/test_runner.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-axum = { version = "0.7", features = ["multipart"] }
-tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.5", features = ["cors", "fs"] }
+axum = { version = "0.8", features = ["multipart"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "sqlite", "chrono", "uuid", "migrate"] }
-regex = "1.0"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "sqlite", "chrono", "uuid", "migrate"] }
+regex = "1.11"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-bcrypt = "0.15"
+bcrypt = "0.17"
 base64ct = "=1.6.0"
 jsonwebtoken = "9"
 anyhow = "1"
@@ -31,24 +31,24 @@ tracing-subscriber = "0.3"
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = "0.3"
 futures = "0.3"
-notify = "6"
+notify = "8"
 mime_guess = "2"
 tesseract = { version = "0.15", optional = true }
-pdf-extract = { version = "0.7", optional = true }
-image = { version = "0.24", features = ["png", "jpeg", "tiff", "bmp"], optional = true }
-imageproc = { version = "0.23", optional = true }
-thiserror = "1.0"
-sysinfo = "0.30"
+pdf-extract = { version = "0.9", optional = true }
+image = { version = "0.25", features = ["png", "jpeg", "tiff", "bmp"], optional = true }
+imageproc = { version = "0.25", optional = true }
+thiserror = "2.0"
+sysinfo = "0.35"
 raw-cpuid = { version = "11", optional = true }
-reqwest = { version = "0.11", features = ["json", "multipart"] }
-quick-xml = { version = "0.31", features = ["serialize"] }
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+quick-xml = { version = "0.37", features = ["serialize"] }
 urlencoding = "2.1"
 dotenvy = "0.15"
 hostname = "0.4"
 walkdir = "2"
 clap = { version = "4", features = ["derive"] }
-utoipa = { version = "4", features = ["axum_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "6", features = ["axum"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
 
 [features]
 default = ["ocr"]
@@ -56,5 +56,5 @@ ocr = ["tesseract", "pdf-extract", "image", "imageproc", "raw-cpuid"]
 
 [dev-dependencies]
 tempfile = "3"
-testcontainers = "0.15"
-testcontainers-modules = { version = "0.3", features = ["postgres"] }
+testcontainers = "0.24"
+testcontainers-modules = { version = "0.12", features = ["postgres"] }
