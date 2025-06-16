@@ -363,7 +363,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           
           <Typography variant="h6" noWrap component="div" sx={{ 
             fontWeight: 700, 
-            mr: 2,
+            mr: 1,
+            fontSize: '1.1rem',
             background: theme.palette.mode === 'light'
               ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
               : 'linear-gradient(135deg, #f8fafc 0%, #a855f7 100%)',
@@ -376,7 +377,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </Typography>
 
           {/* Global Search Bar */}
-          <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', mr: 3 }}>
+          <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', mx: 2 }}>
             <GlobalSearchBar />
           </Box>
 

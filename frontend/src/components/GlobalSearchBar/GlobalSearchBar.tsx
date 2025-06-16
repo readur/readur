@@ -142,7 +142,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
         query: searchQuery.trim(),
         limit: 5, // Show only top 5 results in global search
         include_snippets: true, // Include snippets for context
-        snippet_length: 100, // Shorter snippets for quick search
+        snippet_length: 200, // Longer snippets for better context in quick search
         search_mode: searchQuery.length < 4 ? 'fuzzy' : 'simple', // Use fuzzy for short queries (substring matching)
       };
 
@@ -364,8 +364,9 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
               ),
             }}
             sx={{
-              minWidth: 320,
-              maxWidth: 420,
+              width: '100%',
+              minWidth: 600,
+              maxWidth: 1200,
               '& .MuiOutlinedInput-root': {
                 background: theme.palette.mode === 'light'
                   ? 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.90) 100%)'
@@ -698,17 +699,18 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                                     variant="caption" 
                                     color="text.secondary"
                                     sx={{
-                                      display: 'block',
+                                      display: '-webkit-box',
                                       overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap',
+                                      WebkitBoxOrient: 'vertical',
+                                      WebkitLineClamp: 2,
                                       fontSize: '0.7rem',
                                       fontStyle: 'italic',
                                       maxWidth: '100%',
                                       flex: 1,
+                                      lineHeight: 1.3,
                                     }}
                                   >
-                                    {highlightText(doc.snippets[0]?.text?.substring(0, 80) + '...' || '', query)}
+                                    {highlightText(doc.snippets[0]?.text?.substring(0, 150) + '...' || '', query)}
                                   </Typography>
                                 )}
                               </Box>
