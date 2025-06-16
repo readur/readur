@@ -1,72 +1,74 @@
 {{- define "readur.hardcodedValues" -}}
 controllers:
   main:
-    initContainers:
-      fixperms:
-        image:
-          repository: busybox
-          tag: latest
-        args: ["sh", "-c", "chown -R 1000:1000 /home/node/readur-data"]
-        securityContext:
-          runAsUser: 0
-          runAsGroup: 0
     containers:
       readur:
         image:
-          repository: perfectra1n/readur
-          tag: v0.90.8
+          repository: readur/readur
+          tag: latest
           pullPolicy: IfNotPresent
+        
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
 
         probes:
           startup:
             enabled: true
             custom: true
-            type: TCP
+            type: HTTP
             spec:
-              initialDelaySeconds: 45  # Time to wait before starting the probe
-              periodSeconds: 10        # How often to perform the probe
-              timeoutSeconds: 5        # Number of seconds after which the probe times out
-              failureThreshold: 10     # Number of times to try the probe before giving up
+              initialDelaySeconds: 30
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 30
               httpGet: &probesPath
-                path: /login
-                port: 8080
+                path: /api/health
+                port: 8000
           readiness: &probes
             enabled: true
             custom: true
             spec:
-              initialDelaySeconds: 5   # Time to wait before starting the probe after startup probe succeeds
-              periodSeconds: 10        # How often to perform the probe
-              timeoutSeconds: 10       # Number of seconds after which the probe times out
-              failureThreshold: 3      # Number of times to try the probe before considering the container not ready
+              initialDelaySeconds: 5
+              periodSeconds: 10
+              timeoutSeconds: 10
+              failureThreshold: 3
               httpGet: *probesPath
-
           liveness: *probes
 
-
+        resources:
+          limits:
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 512Mi
 
 persistence:
-  data:
+  uploads:
     enabled: true
     type: persistentVolumeClaim
-    size: 20Gi
+    size: 10Gi
     retain: true
-    # Since it's SQLite, the PVC should only be RWO
     accessMode: ReadWriteOnce
     globalMounts:
-      - path: /home/node/readur-data
+      - path: /app/uploads
         readOnly: false
-  config:
+  
+  watch:
     enabled: true
-    type: configMap
-    name: {{ .Release.Name }}-config
-    readOnly: true
-    advancedMounts:
-      main:
-        readur:
-          - path: /home/node/readur-data/config.ini
-            subPath: config.ini
-    
-
+    type: persistentVolumeClaim
+    size: 5Gi
+    retain: true
+    accessMode: ReadWriteOnce
+    globalMounts:
+      - path: /app/watch
+        readOnly: false
 
 service:
   main:
@@ -74,14 +76,10 @@ service:
     enabled: true
     ports:
       http:
-        # What port the cluster is listening on
-        port: 8080
-        # What port the container is listening on
-        targetPort: 8080
+        port: 8000
+        targetPort: 8000
 
 {{ end }}
-
-
 
 {{- $ctx := deepCopy . -}}
 # Merge with ALL the values in `values.yaml`

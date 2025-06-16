@@ -1,42 +1,17 @@
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
-  name: {{ .Release.Name }}-config
+  name: readur-db-secret
   labels:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ .Chart.Name }}
     app.kubernetes.io/version: {{ .Chart.AppVersion }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-data:
-  config.ini: |
-    [General]
-    # Instance name can be used to distinguish between different instances using backend api.getInstanceName()
-    instanceName={{ .Values.configini.general.instanceName }}
-
-    # set to true to allow using readur without authentication (makes sense for server build only, desktop build doesn't need password)
-    noAuthentication={{ .Values.configini.general.noAuthentication }}
-
-    # set to true to disable backups (e.g. because of limited space on server)
-    noBackup={{ .Values.configini.general.noBackup }}
-
-    # Disable automatically generating desktop icon
-    # noDesktopIcon=true
-
-    [Network]
-    # host setting is relevant only for web deployments - set the host on which the server will listen
-    host={{ .Values.configini.network.host }}
-    # port setting is relevant only for web deployments, desktop builds run on a fixed port (changeable with readur_PORT environment variable)
-    port={{ .Values.configini.network.port }}
-    # true for TLS/SSL/HTTPS (secure), false for HTTP (unsecure).
-    https={{ .Values.configini.network.https }}
-    # path to certificate (run "bash bin/generate-cert.sh" to generate self-signed certificate). Relevant only if https=true
-    certPath={{ .Values.configini.network.certPath }}
-    keyPath={{ .Values.configini.network.keyPath }}
-    # setting to give trust to reverse proxies, a comma-separated list of trusted rev. proxy IPs can be specified (CIDR notation is permitted),
-    # alternatively 'true' will make use of the leftmost IP in X-Forwarded-For, ultimately an integer can be used to tell about the number of hops between
-    # readur (which is hop 0) and the first trusted rev. proxy.
-    # once set, expressjs will use the X-Forwarded-For header set by the rev. proxy to determinate the real IPs of clients.
-    # expressjs shortcuts are supported: loopback(127.0.0.1/8, ::1/128), linklocal(169.254.0.0/16, fe80::/10), uniquelocal(10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7)
-    trustedReverseProxy={{ .Values.configini.network.trustedReverseProxy }}
-
+type: Opaque
+stringData:
+  {{- if .Values.postgresql.enabled }}
+  database-url: "postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ .Release.Name }}-postgresql:5432/{{ .Values.postgresql.auth.database }}"
+  {{- else if .Values.externalDatabase.enabled }}
+  database-url: "postgresql://{{ .Values.externalDatabase.username }}:{{ .Values.externalDatabase.password }}@{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}"
+  {{- end }}

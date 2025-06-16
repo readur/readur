@@ -8,42 +8,115 @@ controllers:
     containers:
       readur:
         image:
-          repository: perfectra1n/readur
-          tag: v0.92.4
+          repository: readur/readur
+          tag: latest
           pullPolicy: IfNotPresent
         env:
-          key: "value"
+          # Server Configuration
+          SERVER_HOST: "0.0.0.0"
+          SERVER_PORT: "8000"
+          
+          # Security
+          JWT_SECRET: "changeme-in-production"
+          
+          # File Management
+          UPLOAD_PATH: "/app/uploads"
+          WATCH_FOLDER: "/app/watch"
+          ALLOWED_FILE_TYPES: "pdf,txt,doc,docx,png,jpg,jpeg"
+          MAX_FILE_SIZE_MB: "50"
+          MAX_FILE_AGE_HOURS: "24"
+          
+          # OCR Settings
+          OCR_LANGUAGE: "eng"
+          CONCURRENT_OCR_JOBS: "4"
+          OCR_TIMEOUT_SECONDS: "300"
+          
+          # Performance
+          MEMORY_LIMIT_MB: "512"
+          CPU_PRIORITY: "normal"
+          
+          # File Watching
+          WATCH_INTERVAL_SECONDS: "30"
+          FILE_STABILITY_CHECK_MS: "1000"
+          
+          # Database URL will be set automatically when PostgreSQL is enabled
+          DATABASE_URL:
+            valueFrom:
+              secretKeyRef:
+                name: readur-db-secret
+                key: database-url
 
 persistence:
-  data:
+  uploads:
     enabled: true
     type: persistentVolumeClaim
-    existingClaim:
+    storageClass:
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    globalMounts:
+      - path: /app/uploads
+  
+  watch:
+    enabled: true
+    type: persistentVolumeClaim
+    storageClass:
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    globalMounts:
+      - path: /app/watch
 
-# This is used to modify the config.ini of the readur instance
-configini:
-  general:
-    instanceName: ""
-    # Disable authentication to readur? (if you're running it on a private network, or have authentication handled by another component)
-    noAuthentication: false
-    # Disable backups of the database?
-    noBackup: false
-  network:
-    host: "0.0.0.0"
-    port: 8080
-    https: false
-    certPath: ""
-    keyPath: ""
-    trustedReverseProxy: true
-#ingress:
-#  main:
-#    enabled: true
-#    annotations:
-#      # proxy-body-size is set to 0 to remove the body limit on file uploads
-#      nginx.ingress.kubernetes.io/proxy-body-size: "0"
-#    hosts:
-#      - host: readur.local
-#        paths:
-#          - path: "/api/v1"
-#    tls: []
+service:
+  main:
+    controller: main
+    enabled: true
+    ports:
+      http:
+        port: 8000
+        targetPort: 8000
 
+ingress:
+  main:
+    enabled: false
+    className: nginx
+    annotations:
+      # proxy-body-size is set to 100m to match Nginx config
+      nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    hosts:
+      - host: readur.local
+        paths:
+          - path: /
+            pathType: Prefix
+            service:
+              identifier: main
+              port: http
+    tls: []
+
+# PostgreSQL subchart configuration
+postgresql:
+  enabled: true
+  auth:
+    username: readur
+    password: readur
+    database: readur
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        memory: 256Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+# Optional: External PostgreSQL configuration
+# Use this if you want to connect to an existing PostgreSQL instance
+externalDatabase:
+  enabled: false
+  host: ""
+  port: 5432
+  username: readur
+  password: ""
+  database: readur
+  # existingSecret: ""
+  # existingSecretPasswordKey: ""
