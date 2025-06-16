@@ -277,12 +277,10 @@ impl OcrQueueService {
     pub async fn process_item(&self, item: OcrQueueItem, ocr_service: &EnhancedOcrService) -> Result<()> {
         let start_time = std::time::Instant::now();
         
-        info!("Processing OCR job {} for document {}", item.id, item.document_id);
-        
         // Get document details including filename for validation
         let document = sqlx::query(
             r#"
-            SELECT file_path, mime_type, user_id, filename
+            SELECT file_path, mime_type, user_id, filename, file_size
             FROM documents
             WHERE id = $1
             "#
@@ -297,6 +295,15 @@ impl OcrQueueService {
                 let mime_type: String = row.get("mime_type");
                 let user_id: Option<Uuid> = row.get("user_id");
                 let filename: String = row.get("filename");
+                let file_size: i64 = row.get("file_size");
+                
+                // Format file size for better readability
+                let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
+                
+                info!(
+                    "Processing OCR job {} for document {} | File: '{}' | Type: {} | Size: {:.2} MB", 
+                    item.id, item.document_id, filename, mime_type, file_size_mb
+                );
                 // Get user's OCR settings or use defaults
                 let settings = if let Some(user_id) = user_id {
                     self.db.get_user_settings(user_id).await.ok().flatten()
@@ -306,13 +313,14 @@ impl OcrQueueService {
                 };
 
                 // Perform enhanced OCR
-                match ocr_service.extract_text(&file_path, &mime_type, &settings).await {
+                match ocr_service.extract_text_with_context(&file_path, &mime_type, &filename, file_size, &settings).await {
                     Ok(ocr_result) => {
                         // Validate OCR quality
                         if !ocr_service.validate_ocr_quality(&ocr_result, &settings) {
                             let error_msg = format!("OCR quality below threshold: {:.1}% confidence, {} words", 
                                                    ocr_result.confidence, ocr_result.word_count);
-                            warn!("{}", error_msg);
+                            warn!("⚠️  OCR quality issues for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words", 
+                                  filename, item.id, item.document_id, ocr_result.confidence, ocr_result.word_count);
                             
                             // Mark as failed for quality issues
                             sqlx::query(
@@ -392,14 +400,15 @@ impl OcrQueueService {
                         self.mark_completed(item.id, processing_time_ms).await?;
                         
                         info!(
-                            "Successfully processed OCR job {} for document {} in {}ms - Enhanced OCR: {:.1}% confidence, {} words, Preprocessing: {:?}",
-                            item.id, item.document_id, processing_time_ms, 
-                            ocr_result.confidence, ocr_result.word_count, ocr_result.preprocessing_applied
+                            "✅ OCR completed for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words | {}ms | Preprocessing: {:?}",
+                            filename, item.id, item.document_id, 
+                            ocr_result.confidence, ocr_result.word_count, processing_time_ms, ocr_result.preprocessing_applied
                         );
                     }
                     Err(e) => {
                         let error_msg = format!("OCR extraction failed: {}", e);
-                        warn!("{}", error_msg);
+                        warn!("❌ OCR failed for '{}' | Job: {} | Document: {} | Error: {}", 
+                              filename, item.id, item.document_id, e);
                         
                         // Update document status
                         sqlx::query(

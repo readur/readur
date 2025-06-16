@@ -321,27 +321,32 @@ impl EnhancedOcrService {
         }
     }
     
-    /// Smart resize for OCR - aggressive upscaling for low-res images
+    /// Smart resize for OCR - optimize image size for best OCR performance
     #[cfg(feature = "ocr")]
-    fn smart_resize_for_ocr(&self, img: DynamicImage, target_dpi: i32) -> Result<DynamicImage> {
+    fn smart_resize_for_ocr(&self, img: DynamicImage, _target_dpi: i32) -> Result<DynamicImage> {
         let (width, height) = img.dimensions();
+        let max_dimension = width.max(height);
         let min_dimension = width.min(height);
         
-        // Calculate target dimensions
+        // Calculate optimal dimensions for OCR
         let mut new_width = width;
         let mut new_height = height;
         
-        // If image is very small, aggressively upscale
-        if min_dimension < 300 {
-            let scale_factor = 600.0 / min_dimension as f32; // Scale to at least 600px on smallest side
+        // Scale DOWN large images for better OCR performance and memory efficiency
+        if max_dimension > 2048 {
+            let scale_factor = 2048.0 / max_dimension as f32;
             new_width = (width as f32 * scale_factor) as u32;
             new_height = (height as f32 * scale_factor) as u32;
-            info!("Aggressively upscaling small image by factor {:.2}x", scale_factor);
-        } else if target_dpi > 0 && target_dpi != 72 {
-            // Apply DPI scaling
-            let scale_factor = target_dpi as f32 / 72.0;
+            info!("Scaling down large image ({}x{}) by factor {:.2}x to {}x{} for optimal OCR", 
+                  width, height, scale_factor, new_width, new_height);
+        }
+        // Scale UP very small images that would produce poor OCR results
+        else if min_dimension < 300 {
+            let scale_factor = 600.0 / min_dimension as f32;
             new_width = (width as f32 * scale_factor) as u32;
             new_height = (height as f32 * scale_factor) as u32;
+            info!("Scaling up small image ({}x{}) by factor {:.2}x to {}x{} for better OCR", 
+                  width, height, scale_factor, new_width, new_height);
         }
         
         if new_width != width || new_height != height {
@@ -355,22 +360,17 @@ impl EnhancedOcrService {
     /// Analyze image quality metrics
     #[cfg(feature = "ocr")]
     fn analyze_image_quality(&self, img: &ImageBuffer<Luma<u8>, Vec<u8>>) -> ImageQualityStats {
-        let pixels: Vec<u8> = img.pixels().map(|p| p[0]).collect();
-        let pixel_count = pixels.len() as f32;
+        let (width, height) = img.dimensions();
+        let pixel_count = (width as u64) * (height as u64);
         
-        // Calculate average brightness
-        let sum: u32 = pixels.iter().map(|&p| p as u32).sum();
-        let average_brightness = sum as f32 / pixel_count;
+        // For very large images, use sampling to avoid performance issues and overflow
+        let (average_brightness, variance) = if pixel_count > 4_000_000 { // > 4 megapixels
+            self.analyze_quality_sampled(img)
+        } else {
+            self.analyze_quality_full(img)
+        };
         
-        // Calculate contrast (standard deviation of pixel values)
-        let variance: f32 = pixels.iter()
-            .map(|&p| {
-                let diff = p as f32 - average_brightness;
-                diff * diff
-            })
-            .sum::<f32>() / pixel_count;
-        let std_dev = variance.sqrt();
-        let contrast_ratio = std_dev / 255.0;
+        let contrast_ratio = variance.sqrt() / 255.0;
         
         // Estimate noise level using local variance
         let noise_level = self.estimate_noise_level(img);
@@ -384,6 +384,67 @@ impl EnhancedOcrService {
             noise_level,
             sharpness,
         }
+    }
+    
+    /// Analyze quality for normal-sized images (< 4 megapixels)
+    #[cfg(feature = "ocr")]
+    fn analyze_quality_full(&self, img: &ImageBuffer<Luma<u8>, Vec<u8>>) -> (f32, f32) {
+        let pixels: Vec<u8> = img.pixels().map(|p| p[0]).collect();
+        let pixel_count = pixels.len() as f32;
+        
+        // Calculate average brightness using u64 to prevent overflow
+        let sum: u64 = pixels.iter().map(|&p| p as u64).sum();
+        let average_brightness = sum as f32 / pixel_count;
+        
+        // Calculate variance
+        let variance: f32 = pixels.iter()
+            .map(|&p| {
+                let diff = p as f32 - average_brightness;
+                diff * diff
+            })
+            .sum::<f32>() / pixel_count;
+            
+        (average_brightness, variance)
+    }
+    
+    /// Analyze quality for large images using sampling
+    #[cfg(feature = "ocr")]
+    fn analyze_quality_sampled(&self, img: &ImageBuffer<Luma<u8>, Vec<u8>>) -> (f32, f32) {
+        let (width, height) = img.dimensions();
+        let mut pixel_sum = 0u64;
+        let mut sample_count = 0u32;
+        
+        // Sample every 10th pixel to avoid overflow and improve performance
+        for y in (0..height).step_by(10) {
+            for x in (0..width).step_by(10) {
+                pixel_sum += img.get_pixel(x, y)[0] as u64;
+                sample_count += 1;
+            }
+        }
+        
+        let average_brightness = if sample_count > 0 {
+            pixel_sum as f32 / sample_count as f32
+        } else {
+            128.0 // Default middle brightness
+        };
+        
+        // Calculate variance using sampled pixels
+        let mut variance_sum = 0.0f32;
+        for y in (0..height).step_by(10) {
+            for x in (0..width).step_by(10) {
+                let pixel_value = img.get_pixel(x, y)[0] as f32;
+                let diff = pixel_value - average_brightness;
+                variance_sum += diff * diff;
+            }
+        }
+        
+        let variance = if sample_count > 0 {
+            variance_sum / sample_count as f32
+        } else {
+            0.0
+        };
+        
+        (average_brightness, variance)
     }
     
     /// Estimate noise level in image
@@ -429,11 +490,15 @@ impl EnhancedOcrService {
     fn estimate_sharpness(&self, img: &ImageBuffer<Luma<u8>, Vec<u8>>) -> f32 {
         let (width, height) = img.dimensions();
         let mut gradient_sum = 0.0f32;
-        let mut sample_count = 0u32;
+        let mut sample_count = 0u64; // Use u64 to prevent overflow
+        
+        // For large images, sample pixels to avoid performance issues and overflow
+        let total_pixels = (width as u64) * (height as u64);
+        let step_size = if total_pixels > 4_000_000 { 10 } else { 1 }; // Sample every 10th pixel for large images
         
         // Calculate gradients for interior pixels
-        for y in 1..height-1 {
-            for x in 1..width-1 {
+        for y in (1..height-1).step_by(step_size) {
+            for x in (1..width-1).step_by(step_size) {
                 let _center = img.get_pixel(x, y)[0] as f32;
                 let left = img.get_pixel(x-1, y)[0] as f32;
                 let right = img.get_pixel(x+1, y)[0] as f32;
@@ -594,15 +659,15 @@ impl EnhancedOcrService {
             info!("Applying histogram equalization for contrast enhancement (fallback)");
         }
         
-        // Calculate histogram
-        let mut histogram = [0u32; 256];
+        // Calculate histogram using u64 to prevent overflow
+        let mut histogram = [0u64; 256];
         for pixel in img.pixels() {
             histogram[pixel[0] as usize] += 1;
         }
         
         // Calculate cumulative distribution function
-        let total_pixels = width as u32 * height as u32;
-        let mut cdf = [0u32; 256];
+        let total_pixels = (width as u64) * (height as u64);
+        let mut cdf = [0u64; 256];
         cdf[0] = histogram[0];
         for i in 1..256 {
             cdf[i] = cdf[i - 1] + histogram[i];
@@ -718,11 +783,25 @@ impl EnhancedOcrService {
         Ok(closed)
     }
     
-    /// Extract text from PDF
+    /// Extract text from PDF with size and time limits
     #[cfg(feature = "ocr")]
     pub async fn extract_text_from_pdf(&self, file_path: &str, _settings: &Settings) -> Result<OcrResult> {
         let start_time = std::time::Instant::now();
         info!("Extracting text from PDF: {}", file_path);
+        
+        // Check file size before loading into memory
+        let metadata = tokio::fs::metadata(file_path).await?;
+        let file_size = metadata.len();
+        
+        // Limit PDF size to 100MB to prevent memory exhaustion
+        const MAX_PDF_SIZE: u64 = 100 * 1024 * 1024; // 100MB
+        if file_size > MAX_PDF_SIZE {
+            return Err(anyhow!(
+                "PDF file too large: {:.1} MB (max: {:.1} MB). Consider splitting the PDF.",
+                file_size as f64 / (1024.0 * 1024.0),
+                MAX_PDF_SIZE as f64 / (1024.0 * 1024.0)
+            ));
+        }
         
         let bytes = tokio::fs::read(file_path).await?;
         
@@ -740,22 +819,47 @@ impl EnhancedOcrService {
         // Clean the PDF data (remove leading null bytes)
         let clean_bytes = clean_pdf_data(&bytes);
         
-        let text = match pdf_extract::extract_text_from_mem(&clean_bytes) {
-            Ok(text) => text,
-            Err(e) => {
-                // Provide more detailed error information
+        // Add timeout for PDF extraction to prevent hanging
+        let extraction_result = tokio::time::timeout(
+            std::time::Duration::from_secs(120), // 2 minute timeout
+            tokio::task::spawn_blocking(move || {
+                pdf_extract::extract_text_from_mem(&clean_bytes)
+            })
+        ).await;
+        
+        let text = match extraction_result {
+            Ok(Ok(Ok(text))) => text,
+            Ok(Ok(Err(e))) => {
                 return Err(anyhow!(
                     "PDF text extraction failed for file '{}' (size: {} bytes): {}. This may indicate a corrupted or unsupported PDF format.",
-                    file_path, bytes.len(), e
+                    file_path, file_size, e
+                ));
+            }
+            Ok(Err(e)) => {
+                return Err(anyhow!("PDF extraction task failed: {}", e));
+            }
+            Err(_) => {
+                return Err(anyhow!(
+                    "PDF extraction timed out after 2 minutes for file '{}' (size: {} bytes). The PDF may be corrupted or too complex.",
+                    file_path, file_size
                 ));
             }
         };
         
+        // Limit extracted text size to prevent memory issues
+        const MAX_TEXT_SIZE: usize = 10 * 1024 * 1024; // 10MB of text
+        let trimmed_text = if text.len() > MAX_TEXT_SIZE {
+            warn!("PDF text too large ({} chars), truncating to {} chars", text.len(), MAX_TEXT_SIZE);
+            format!("{}... [TEXT TRUNCATED DUE TO SIZE]", &text[..MAX_TEXT_SIZE])
+        } else {
+            text.trim().to_string()
+        };
+        
         let processing_time = start_time.elapsed().as_millis() as u64;
-        let word_count = text.split_whitespace().count();
+        let word_count = self.count_words_safely(&trimmed_text);
         
         Ok(OcrResult {
-            text: text.trim().to_string(),
+            text: trimmed_text,
             confidence: 95.0, // PDF text extraction is generally high confidence
             processing_time_ms: processing_time,
             word_count,
@@ -768,6 +872,19 @@ impl EnhancedOcrService {
     async fn resolve_file_path(&self, file_path: &str) -> Result<String> {
         // Use the FileService's resolve_file_path method
         self.file_service.resolve_file_path(file_path).await
+    }
+
+    /// Extract text from any supported file type with enhanced logging
+    pub async fn extract_text_with_context(&self, file_path: &str, mime_type: &str, filename: &str, file_size: i64, settings: &Settings) -> Result<OcrResult> {
+        // Format file size for better readability
+        let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
+        
+        info!(
+            "Starting OCR extraction | File: '{}' | Type: {} | Size: {:.2} MB | Path: {}", 
+            filename, mime_type, file_size_mb, file_path
+        );
+        
+        self.extract_text(file_path, mime_type, settings).await
     }
 
     /// Extract text from any supported file type
@@ -797,12 +914,37 @@ impl EnhancedOcrService {
             }
             "text/plain" => {
                 let start_time = std::time::Instant::now();
+                
+                // Check file size before loading into memory
+                let metadata = tokio::fs::metadata(&resolved_path).await?;
+                let file_size = metadata.len();
+                
+                // Limit text file size to 50MB to prevent memory exhaustion
+                const MAX_TEXT_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50MB
+                if file_size > MAX_TEXT_FILE_SIZE {
+                    return Err(anyhow!(
+                        "Text file too large: {:.1} MB (max: {:.1} MB). Consider splitting the file.",
+                        file_size as f64 / (1024.0 * 1024.0),
+                        MAX_TEXT_FILE_SIZE as f64 / (1024.0 * 1024.0)
+                    ));
+                }
+                
                 let text = tokio::fs::read_to_string(&resolved_path).await?;
+                
+                // Limit text content size in memory
+                const MAX_TEXT_CONTENT_SIZE: usize = 10 * 1024 * 1024; // 10MB of text content
+                let trimmed_text = if text.len() > MAX_TEXT_CONTENT_SIZE {
+                    warn!("Text file content too large ({} chars), truncating to {} chars", text.len(), MAX_TEXT_CONTENT_SIZE);
+                    format!("{}... [TEXT TRUNCATED DUE TO SIZE]", &text[..MAX_TEXT_CONTENT_SIZE])
+                } else {
+                    text.trim().to_string()
+                };
+                
                 let processing_time = start_time.elapsed().as_millis() as u64;
-                let word_count = text.split_whitespace().count();
+                let word_count = self.count_words_safely(&trimmed_text);
                 
                 Ok(OcrResult {
-                    text: text.trim().to_string(),
+                    text: trimmed_text,
                     confidence: 100.0, // Plain text is 100% confident
                     processing_time_ms: processing_time,
                     word_count,
@@ -811,6 +953,24 @@ impl EnhancedOcrService {
                 })
             }
             _ => Err(anyhow::anyhow!("Unsupported file type: {}", mime_type)),
+        }
+    }
+    
+    /// Safely count words to prevent overflow on very large texts
+    #[cfg(feature = "ocr")]
+    fn count_words_safely(&self, text: &str) -> usize {
+        // For very large texts, sample to estimate word count to prevent overflow
+        if text.len() > 1_000_000 { // > 1MB of text
+            // Sample first 100KB and extrapolate
+            let sample_size = 100_000;
+            let sample_text = &text[..sample_size.min(text.len())];
+            let sample_words = sample_text.split_whitespace().count();
+            let estimated_total = (sample_words as f64 * (text.len() as f64 / sample_size as f64)) as usize;
+            
+            // Cap at reasonable maximum to prevent display issues
+            estimated_total.min(10_000_000) // Max 10M words
+        } else {
+            text.split_whitespace().count()
         }
     }
     
