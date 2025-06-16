@@ -360,8 +360,9 @@ async fn get_document_thumbnail(
                 .body(thumbnail_data.into())
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?)
         }
-        Err(_) => {
-            // Return a placeholder thumbnail or 404
+        Err(e) => {
+            // Log the error for debugging
+            tracing::error!("Failed to generate thumbnail for document {}: {}", document_id, e);
             Err(StatusCode::NOT_FOUND)
         }
     }

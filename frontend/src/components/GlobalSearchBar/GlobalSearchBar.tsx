@@ -643,8 +643,6 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap',
                                   maxWidth: '100%',
-                                  width: 0,
-                                  minWidth: 0,
                                   flex: 1,
                                 }}
                               >
@@ -707,8 +705,6 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                                       fontSize: '0.7rem',
                                       fontStyle: 'italic',
                                       maxWidth: '100%',
-                                      width: 0,
-                                      minWidth: 0,
                                       flex: 1,
                                     }}
                                   >

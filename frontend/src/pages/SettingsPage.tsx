@@ -38,9 +38,10 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, 
          CloudSync as CloudSyncIcon, Folder as FolderIcon,
-         Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon } from '@mui/icons-material';
+         Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon,
+         Pause as PauseIcon, Stop as StopIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
+import api, { queueService } from '../services/api';
 
 interface User {
   id: string;
@@ -906,6 +907,10 @@ const SettingsPage: React.FC = () => {
     email: '', 
     password: '' 
   });
+  
+  // OCR Admin Controls State
+  const [ocrStatus, setOcrStatus] = useState<{ is_paused: boolean; status: 'paused' | 'running' } | null>(null);
+  const [ocrActionLoading, setOcrActionLoading] = useState(false);
 
   const ocrLanguages: OcrLanguage[] = [
     { code: 'eng', name: 'English' },
@@ -928,6 +933,7 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     fetchSettings();
     fetchUsers();
+    fetchOcrStatus();
   }, []);
 
   const fetchSettings = async (): Promise<void> => {
@@ -1108,6 +1114,52 @@ const SettingsPage: React.FC = () => {
     handleSettingsChange('searchResultsPerPage', event.target.value);
   };
 
+  const fetchOcrStatus = async (): Promise<void> => {
+    try {
+      const response = await queueService.getOcrStatus();
+      setOcrStatus(response.data);
+    } catch (error: any) {
+      console.error('Error fetching OCR status:', error);
+      // Don't show error for OCR status since it might not be available for non-admin users
+    }
+  };
+
+  const handlePauseOcr = async (): Promise<void> => {
+    setOcrActionLoading(true);
+    try {
+      await queueService.pauseOcr();
+      showSnackbar('OCR processing paused successfully', 'success');
+      fetchOcrStatus(); // Refresh status
+    } catch (error: any) {
+      console.error('Error pausing OCR:', error);
+      if (error.response?.status === 403) {
+        showSnackbar('Admin access required to pause OCR processing', 'error');
+      } else {
+        showSnackbar('Failed to pause OCR processing', 'error');
+      }
+    } finally {
+      setOcrActionLoading(false);
+    }
+  };
+
+  const handleResumeOcr = async (): Promise<void> => {
+    setOcrActionLoading(true);
+    try {
+      await queueService.resumeOcr();
+      showSnackbar('OCR processing resumed successfully', 'success');
+      fetchOcrStatus(); // Refresh status
+    } catch (error: any) {
+      console.error('Error resuming OCR:', error);
+      if (error.response?.status === 403) {
+        showSnackbar('Admin access required to resume OCR processing', 'error');
+      } else {
+        showSnackbar('Failed to resume OCR processing', 'error');
+      }
+    } finally {
+      setOcrActionLoading(false);
+    }
+  };
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Typography variant="h4" sx={{ mb: 4 }}>
@@ -1193,6 +1245,69 @@ const SettingsPage: React.FC = () => {
                       </FormControl>
                     </Grid>
                   </Grid>
+                </CardContent>
+              </Card>
+
+              {/* Admin OCR Controls */}
+              <Card sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                    <StopIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                    OCR Processing Controls (Admin Only)
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  
+                  <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+                    Control OCR processing to manage CPU usage and allow users to use the application without performance impact.
+                  </Typography>
+
+                  <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} md={6}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Button
+                          variant={ocrStatus?.is_paused ? "outlined" : "contained"}
+                          color={ocrStatus?.is_paused ? "success" : "warning"}
+                          startIcon={ocrActionLoading ? <CircularProgress size={16} /> : 
+                                   (ocrStatus?.is_paused ? <PlayArrowIcon /> : <PauseIcon />)}
+                          onClick={ocrStatus?.is_paused ? handleResumeOcr : handlePauseOcr}
+                          disabled={ocrActionLoading || loading}
+                          size="large"
+                        >
+                          {ocrActionLoading ? 'Processing...' : 
+                           ocrStatus?.is_paused ? 'Resume OCR Processing' : 'Pause OCR Processing'}
+                        </Button>
+                      </Box>
+                    </Grid>
+                    
+                    <Grid item xs={12} md={6}>
+                      {ocrStatus && (
+                        <Box>
+                          <Chip
+                            label={`OCR Status: ${ocrStatus.status.toUpperCase()}`}
+                            color={ocrStatus.is_paused ? "warning" : "success"}
+                            variant="outlined"
+                            icon={ocrStatus.is_paused ? <PauseIcon /> : <PlayArrowIcon />}
+                            size="medium"
+                          />
+                          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
+                            {ocrStatus.is_paused 
+                              ? 'OCR processing is paused. No new jobs will be processed.' 
+                              : 'OCR processing is active. Documents will be processed automatically.'}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Grid>
+                  </Grid>
+
+                  {ocrStatus?.is_paused && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      <Typography variant="body2">
+                        <strong>OCR Processing Paused</strong><br />
+                        New documents will not be processed for OCR text extraction until processing is resumed.
+                        Users can still upload and view documents, but search functionality may be limited.
+                      </Typography>
+                    </Alert>
+                  )}
                 </CardContent>
               </Card>
 

@@ -7,12 +7,23 @@ use axum::{
 };
 use std::sync::Arc;
 
-use crate::{auth::AuthUser, ocr_queue::OcrQueueService, AppState};
+use crate::{auth::AuthUser, ocr_queue::OcrQueueService, AppState, models::UserRole};
+
+fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
+    if auth_user.user.role != UserRole::Admin {
+        Err(StatusCode::FORBIDDEN)
+    } else {
+        Ok(())
+    }
+}
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/stats", get(get_queue_stats))
         .route("/requeue-failed", post(requeue_failed))
+        .route("/pause", post(pause_ocr_processing))
+        .route("/resume", post(resume_ocr_processing))
+        .route("/status", get(get_ocr_status))
 }
 
 #[utoipa::path(
@@ -74,5 +85,86 @@ async fn requeue_failed(
     
     Ok(Json(serde_json::json!({
         "requeued_count": count,
+    })))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/queue/pause",
+    tag = "queue",
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "OCR processing paused successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required")
+    )
+)]
+async fn pause_ocr_processing(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    require_admin(&auth_user)?;
+    
+    state.queue_service.pause();
+    
+    Ok(Json(serde_json::json!({
+        "status": "paused",
+        "message": "OCR processing has been paused"
+    })))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/queue/resume",
+    tag = "queue",
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "OCR processing resumed successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required")
+    )
+)]
+async fn resume_ocr_processing(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    require_admin(&auth_user)?;
+    
+    state.queue_service.resume();
+    
+    Ok(Json(serde_json::json!({
+        "status": "resumed",
+        "message": "OCR processing has been resumed"
+    })))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/queue/status",
+    tag = "queue",
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "OCR processing status"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required")
+    )
+)]
+async fn get_ocr_status(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    require_admin(&auth_user)?;
+    
+    let is_paused = state.queue_service.is_paused();
+    
+    Ok(Json(serde_json::json!({
+        "is_paused": is_paused,
+        "status": if is_paused { "paused" } else { "running" }
     })))
 }

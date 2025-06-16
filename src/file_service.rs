@@ -152,9 +152,22 @@ impl FileService {
         let img = image::load_from_memory(file_data)?;
         let thumbnail = img.resize(200, 200, FilterType::Lanczos3);
         
+        // Convert to RGB if the image has an alpha channel (RGBA)
+        // JPEG doesn't support transparency, so we need to remove the alpha channel
+        let rgb_thumbnail = match thumbnail {
+            image::DynamicImage::ImageRgba8(_) => {
+                // Convert RGBA to RGB by compositing against a white background
+                let rgb_img = image::DynamicImage::ImageRgb8(
+                    thumbnail.to_rgb8()
+                );
+                rgb_img
+            },
+            _ => thumbnail, // Already RGB or other compatible format
+        };
+        
         let mut buffer = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buffer);
-        thumbnail.write_to(&mut cursor, ImageFormat::Jpeg)?;
+        rgb_thumbnail.write_to(&mut cursor, ImageFormat::Jpeg)?;
         
         Ok(buffer)
     }

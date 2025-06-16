@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool, Row};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Semaphore;
 use tokio::time::{sleep, Duration};
 use tracing::{error, info, warn};
@@ -45,6 +46,7 @@ pub struct OcrQueueService {
     worker_id: String,
     transaction_manager: DocumentTransactionManager,
     processing_throttler: Arc<RequestThrottler>,
+    is_paused: Arc<AtomicBool>,
 }
 
 impl OcrQueueService {
@@ -67,6 +69,7 @@ impl OcrQueueService {
             worker_id,
             transaction_manager,
             processing_throttler,
+            is_paused: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -401,6 +404,23 @@ impl OcrQueueService {
         Ok(())
     }
 
+    /// Pause OCR processing
+    pub fn pause(&self) {
+        self.is_paused.store(true, Ordering::SeqCst);
+        info!("OCR processing paused for worker {}", self.worker_id);
+    }
+
+    /// Resume OCR processing
+    pub fn resume(&self) {
+        self.is_paused.store(false, Ordering::SeqCst);
+        info!("OCR processing resumed for worker {}", self.worker_id);
+    }
+
+    /// Check if OCR processing is paused
+    pub fn is_paused(&self) -> bool {
+        self.is_paused.load(Ordering::SeqCst)
+    }
+
     /// Start the worker loop
     pub async fn start_worker(self: Arc<Self>) -> Result<()> {
         let semaphore = Arc::new(Semaphore::new(self.max_concurrent_jobs));
@@ -412,6 +432,13 @@ impl OcrQueueService {
         );
 
         loop {
+            // Check if processing is paused
+            if self.is_paused() {
+                info!("OCR processing is paused, waiting...");
+                sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+
             // Check for items to process
             match self.dequeue().await {
                 Ok(Some(item)) => {
