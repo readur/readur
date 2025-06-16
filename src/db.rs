@@ -1979,6 +1979,26 @@ impl Database {
         Ok(result.rows_affected() as i64)
     }
 
+    // Reset any running source syncs on startup (handles server restart during sync)
+    pub async fn reset_running_source_syncs(&self) -> Result<i64> {
+        let result = sqlx::query(
+            r#"UPDATE sources 
+               SET status = 'idle',
+                   last_error = CASE 
+                       WHEN last_error IS NULL OR last_error = ''
+                       THEN 'Sync interrupted by server restart'
+                       ELSE last_error || '; Sync interrupted by server restart'
+                   END,
+                   last_error_at = NOW(),
+                   updated_at = NOW()
+               WHERE status = 'syncing'"#
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() as i64)
+    }
+
     // WebDAV file tracking operations
     pub async fn get_webdav_file_by_path(&self, user_id: Uuid, webdav_path: &str) -> Result<Option<crate::models::WebDAVFile>> {
         let row = sqlx::query(

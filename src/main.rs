@@ -147,6 +147,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     
+    // Reset any running universal source syncs from previous server instance
+    match background_db.reset_running_source_syncs().await {
+        Ok(count) => {
+            if count > 0 {
+                info!("Reset {} orphaned source sync states from server restart", count);
+            }
+        }
+        Err(e) => {
+            warn!("Failed to reset running source syncs: {}", e);
+        }
+    }
+    
     // Create shared OCR queue service for both web and background operations
     let concurrent_jobs = 15; // Limit concurrent OCR jobs to prevent DB pool exhaustion
     let shared_queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(

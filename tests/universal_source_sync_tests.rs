@@ -327,7 +327,8 @@ fn extract_extension(filename: &str) -> String {
 #[test]
 fn test_sync_cancellation_handling() {
     // Test sync cancellation logic
-    use std::sync::{Arc, AtomicBool};
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
     use std::sync::atomic::Ordering;
     
     let cancellation_token = Arc::new(AtomicBool::new(false));

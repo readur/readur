@@ -76,24 +76,10 @@ impl SourceScheduler {
                     continue;
                 }
                 
-                // Check if auto-sync is enabled for this source
-                let should_resume = match source.source_type {
-                    SourceType::WebDAV => {
-                        if let Ok(config) = serde_json::from_value::<WebDAVSourceConfig>(source.config.clone()) {
-                            config.auto_sync
-                        } else { false }
-                    }
-                    SourceType::LocalFolder => {
-                        if let Ok(config) = serde_json::from_value::<LocalFolderSourceConfig>(source.config.clone()) {
-                            config.auto_sync
-                        } else { false }
-                    }
-                    SourceType::S3 => {
-                        if let Ok(config) = serde_json::from_value::<S3SourceConfig>(source.config.clone()) {
-                            config.auto_sync
-                        } else { false }
-                    }
-                };
+                // Always resume interrupted syncs regardless of auto_sync setting
+                // This ensures that manually triggered syncs that were interrupted by server restart
+                // will continue downloading files instead of just starting OCR on existing files
+                let should_resume = true;
                 
                 if should_resume {
                     info!("Resuming interrupted sync for source {}", source.name);
