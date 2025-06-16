@@ -52,7 +52,7 @@ RUN mkdir -p /app/uploads /app/watch /app/frontend
 RUN chmod 755 /app/watch
 
 # Copy built frontend from frontend-builder
-COPY --from=frontend-builder /frontend/dist /app/frontend
+COPY --from=frontend-builder /frontend/dist /app/frontend/dist
 
 EXPOSE 8000
 
