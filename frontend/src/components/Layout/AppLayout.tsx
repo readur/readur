@@ -377,7 +377,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </Typography>
 
           {/* Global Search Bar */}
-          <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', mx: 2 }}>
+          <Box sx={{ flexGrow: 2, display: 'flex', justifyContent: 'center', mx: 1, flex: '1 1 auto' }}>
             <GlobalSearchBar />
           </Box>
 
