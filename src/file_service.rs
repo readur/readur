@@ -8,7 +8,7 @@ use tracing::{info, warn, error};
 use crate::models::Document;
 
 #[cfg(feature = "ocr")]
-use image::{DynamicImage, ImageFormat, imageops::FilterType};
+use image::{DynamicImage, ImageFormat, imageops::FilterType, Rgb, RgbImage, Rgba, ImageBuffer};
 
 #[derive(Clone)]
 pub struct FileService {
@@ -275,9 +275,13 @@ impl FileService {
                 self.generate_image_thumbnail(&file_data).await
             }
             "pdf" => {
-                // For PDFs, we'd need pdf2image or similar
-                // For now, return a placeholder
-                self.generate_placeholder_thumbnail("PDF").await
+                self.generate_pdf_thumbnail(&file_data).await
+            }
+            "txt" => {
+                self.generate_text_thumbnail(&file_data).await
+            }
+            "doc" | "docx" => {
+                self.generate_placeholder_thumbnail("DOC").await
             }
             _ => {
                 // For other file types, generate a placeholder
@@ -307,6 +311,86 @@ impl FileService {
         let mut buffer = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buffer);
         rgb_thumbnail.write_to(&mut cursor, ImageFormat::Jpeg)?;
+        
+        Ok(buffer)
+    }
+
+    #[cfg(feature = "ocr")]
+    async fn generate_pdf_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
+        use image::Rgb;
+        
+        // Try to extract first page as image using pdf-extract
+        match pdf_extract::extract_text_from_mem(file_data) {
+            Ok(text) => {
+                // If we can extract text, create a text-based thumbnail
+                self.generate_text_based_thumbnail(&text, "PDF", Rgb([220, 38, 27])).await
+            }
+            Err(_) => {
+                // Fall back to placeholder if PDF extraction fails
+                self.generate_placeholder_thumbnail("PDF").await
+            }
+        }
+    }
+
+    #[cfg(feature = "ocr")]
+    async fn generate_text_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
+        use image::Rgb;
+        
+        // Convert bytes to text
+        let text = String::from_utf8_lossy(file_data);
+        self.generate_text_based_thumbnail(&text, "TXT", Rgb([34, 139, 34])).await
+    }
+
+    #[cfg(feature = "ocr")]
+    async fn generate_text_based_thumbnail(&self, text: &str, file_type: &str, bg_color: image::Rgb<u8>) -> Result<Vec<u8>> {
+        use image::{RgbImage, Rgb, DynamicImage, ImageFormat};
+        
+        let width = 200;
+        let height = 200;
+        let mut img = RgbImage::new(width, height);
+        
+        // Fill background
+        for pixel in img.pixels_mut() {
+            *pixel = bg_color;
+        }
+        
+        // Add file type indicator at the top
+        let text_color = Rgb([255, 255, 255]); // White text
+        let preview_text = if text.len() > 300 {
+            format!("{}\n{}", file_type, &text[..300].trim())
+        } else {
+            format!("{}\n{}", file_type, text.trim())
+        };
+        
+        // Simple text rendering - just place some characters as visual indicators
+        // For a more sophisticated approach, you'd use a text rendering library
+        let lines: Vec<&str> = preview_text.lines().take(15).collect();
+        for (line_idx, line) in lines.iter().enumerate() {
+            let y_offset = 20 + (line_idx * 12);
+            if y_offset >= height as usize - 10 { break; }
+            
+            // Simple character placement (very basic text rendering)
+            for (char_idx, _) in line.chars().take(25).enumerate() {
+                let x_offset = 10 + (char_idx * 7);
+                if x_offset >= width as usize - 10 { break; }
+                
+                // Draw a simple "character" representation as white pixels
+                if x_offset < width as usize && y_offset < height as usize {
+                    if let Some(pixel) = img.get_pixel_mut_checked(x_offset as u32, y_offset as u32) {
+                        *pixel = text_color;
+                    }
+                    // Add some thickness
+                    if let Some(pixel) = img.get_pixel_mut_checked(x_offset as u32 + 1, y_offset as u32) {
+                        *pixel = text_color;
+                    }
+                }
+            }
+        }
+        
+        let dynamic_img = DynamicImage::ImageRgb8(img);
+        let mut buffer = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut buffer);
+        dynamic_img.write_to(&mut cursor, ImageFormat::Jpeg)?;
         
         Ok(buffer)
     }

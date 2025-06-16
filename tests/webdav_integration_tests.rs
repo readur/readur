@@ -85,7 +85,14 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
     };
 
     let db = Database::new(&db_url).await.expect("Failed to connect to test database");
-    let state = Arc::new(AppState { db, config });
+    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
+    let state = Arc::new(AppState { 
+        db, 
+        config,
+        webdav_scheduler: None,
+        source_scheduler: None,
+        queue_service,
+    });
 
     let app = Router::new()
         .nest("/api/auth", routes::auth::router())

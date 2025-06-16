@@ -8,9 +8,9 @@ use tower::util::ServiceExt;
 
 pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
     let postgres_image = Postgres::default()
-        .with_env_var(("POSTGRES_USER", "test"))
-        .with_env_var(("POSTGRES_PASSWORD", "test"))
-        .with_env_var(("POSTGRES_DB", "test"));
+        .with_env_var("POSTGRES_USER", "test")
+        .with_env_var("POSTGRES_PASSWORD", "test")
+        .with_env_var("POSTGRES_DB", "test");
     
     let container = postgres_image.start().await.expect("Failed to start postgres container");
     let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
@@ -41,11 +41,14 @@ pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
         cpu_priority: "normal".to_string(),
     };
     
+    let queue_service = Arc::new(crate::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
+    
     let state = Arc::new(AppState { 
         db, 
         config,
         webdav_scheduler: None,
         source_scheduler: None,
+        queue_service,
     });
     
     let app = Router::new()

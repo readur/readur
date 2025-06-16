@@ -407,20 +407,34 @@ impl OcrQueueService {
                     }
                     Err(e) => {
                         let error_msg = format!("OCR extraction failed: {}", e);
-                        warn!("❌ OCR failed for '{}' | Job: {} | Document: {} | Error: {}", 
-                              filename, item.id, item.document_id, e);
+                        let error_str = e.to_string();
                         
-                        // Update document status
+                        // Detect specific PDF font encoding issues
+                        let is_pdf_font_issue = error_str.contains("font encoding") || 
+                                               error_str.contains("missing unicode map") ||
+                                               error_str.contains("corrupted internal structure");
+                        
+                        if is_pdf_font_issue {
+                            warn!("⚠️  PDF font encoding issue for '{}' | Job: {} | Document: {} | Error: {}", 
+                                  filename, item.id, item.document_id, e);
+                        } else {
+                            warn!("❌ OCR failed for '{}' | Job: {} | Document: {} | Error: {}", 
+                                  filename, item.id, item.document_id, e);
+                        }
+                        
+                        // Update document status with more specific error information
+                        let ocr_status = if is_pdf_font_issue { "pdf_font_error" } else { "failed" };
                         sqlx::query(
                             r#"
                             UPDATE documents
-                            SET ocr_status = 'failed',
-                                ocr_error = $2,
+                            SET ocr_status = $2,
+                                ocr_error = $3,
                                 updated_at = NOW()
                             WHERE id = $1
                             "#
                         )
                         .bind(item.document_id)
+                        .bind(ocr_status)
                         .bind(&error_msg)
                         .execute(&self.pool)
                         .await?;
@@ -566,6 +580,22 @@ impl OcrQueueService {
         
         info!("Successfully copied processed image to: {:?}", permanent_path);
         
+        // Get actual image dimensions and file size
+        let image_metadata = tokio::fs::metadata(&permanent_path).await
+            .map_err(|e| anyhow::anyhow!("Failed to get processed image metadata: {}", e))?;
+        let file_size = image_metadata.len() as i64;
+        
+        // Get image dimensions using image crate
+        let (image_width, image_height) = tokio::task::spawn_blocking({
+            let path = permanent_path.clone();
+            move || -> Result<(u32, u32), anyhow::Error> {
+                let img = image::open(&path)
+                    .map_err(|e| anyhow::anyhow!("Failed to open processed image for dimensions: {}", e))?;
+                Ok((img.width(), img.height()))
+            }
+        }).await
+        .map_err(|e| anyhow::anyhow!("Failed to get image dimensions: {}", e))??;
+        
         // Save to database
         let processing_parameters = serde_json::json!({
             "steps": processing_steps,
@@ -576,14 +606,8 @@ impl OcrQueueService {
         // Save metadata to database with error handling
         if let Err(e) = sqlx::query(
             r#"
-            INSERT INTO processed_images (document_id, user_id, original_image_path, processed_image_path, processing_parameters, processing_steps, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (document_id) 
-            DO UPDATE SET 
-                processed_image_path = EXCLUDED.processed_image_path,
-                processing_parameters = EXCLUDED.processing_parameters,
-                processing_steps = EXCLUDED.processing_steps,
-                created_at = NOW()
+            INSERT INTO processed_images (document_id, user_id, original_image_path, processed_image_path, processing_parameters, processing_steps, image_width, image_height, file_size, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
             "#
         )
         .bind(document_id)
@@ -592,6 +616,9 @@ impl OcrQueueService {
         .bind(permanent_path.to_string_lossy().as_ref())
         .bind(&processing_parameters)
         .bind(processing_steps)
+        .bind(image_width as i32)
+        .bind(image_height as i32)
+        .bind(file_size)
         .execute(&self.pool)
         .await {
             error!("Failed to save processed image metadata to database for document {}: {}", document_id, e);

@@ -118,17 +118,19 @@ async fn create_test_app_state() -> Arc<AppState> {
         database_url: "sqlite::memory:".to_string(),
         server_address: "127.0.0.1:8080".to_string(),
         jwt_secret: "test_secret".to_string(),
-        upload_dir: "/tmp/test_uploads".to_string(),
-        max_file_size: 10 * 1024 * 1024,
+        upload_path: "/tmp/test_uploads".to_string(),
+        max_file_size_mb: 10 * 1024 * 1024,
     };
 
     let db = Database::new(&config.database_url).await.unwrap();
     
+    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
     Arc::new(AppState {
         db,
         config,
         webdav_scheduler: None,
         source_scheduler: None,
+        queue_service,
     })
 }
 
@@ -181,8 +183,8 @@ fn test_config_parsing_local_folder() {
     assert!(config.is_ok(), "Local Folder config should parse successfully");
     
     let local_config = config.unwrap();
-    assert_eq!(local_config.paths.len(), 1);
-    assert_eq!(local_config.paths[0], "/home/user/documents");
+    assert_eq!(local_config.watch_folders.len(), 1);
+    assert_eq!(local_config.watch_folders[0], "/home/user/documents");
     assert!(local_config.recursive);
     assert!(!local_config.follow_symlinks);
     assert_eq!(local_config.sync_interval_minutes, 30);

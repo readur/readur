@@ -25,7 +25,7 @@ use readur::{
 /// Create a test local folder configuration
 fn create_test_local_config() -> LocalFolderSourceConfig {
     LocalFolderSourceConfig {
-        paths: vec!["/test/documents".to_string(), "/test/images".to_string()],
+        watch_folders: vec!["/test/documents".to_string(), "/test/images".to_string()],
         recursive: true,
         follow_symlinks: false,
         auto_sync: true,
@@ -60,9 +60,9 @@ fn create_test_directory_structure() -> Result<TempDir, std::io::Error> {
 fn test_local_folder_config_creation() {
     let config = create_test_local_config();
     
-    assert_eq!(config.paths.len(), 2);
-    assert_eq!(config.paths[0], "/test/documents");
-    assert_eq!(config.paths[1], "/test/images");
+    assert_eq!(config.watch_folders.len(), 2);
+    assert_eq!(config.watch_folders[0], "/test/documents");
+    assert_eq!(config.watch_folders[1], "/test/images");
     assert!(config.recursive);
     assert!(!config.follow_symlinks);
     assert!(config.auto_sync);
@@ -75,8 +75,8 @@ fn test_local_folder_config_validation() {
     let config = create_test_local_config();
     
     // Test paths validation
-    assert!(!config.paths.is_empty(), "Should have at least one path");
-    for path in &config.paths {
+    assert!(!config.watch_folders.is_empty(), "Should have at least one path");
+    for path in &config.watch_folders {
         assert!(Path::new(path).is_absolute() || path.starts_with('.'), 
                 "Path should be absolute or relative: {}", path);
     }
@@ -328,7 +328,7 @@ fn test_error_handling() {
     
     // Non-existent path
     let non_existent_config = LocalFolderSourceConfig {
-        paths: vec!["/this/path/does/not/exist".to_string()],
+        watch_folders: vec!["/this/path/does/not/exist".to_string()],
         recursive: true,
         follow_symlinks: false,
         auto_sync: true,
@@ -336,11 +336,11 @@ fn test_error_handling() {
         file_extensions: vec![".txt".to_string()],
     };
     
-    assert_eq!(non_existent_config.paths[0], "/this/path/does/not/exist");
+    assert_eq!(non_existent_config.watch_folders[0], "/this/path/does/not/exist");
     
     // Empty paths
     let empty_paths_config = LocalFolderSourceConfig {
-        paths: Vec::new(),
+        watch_folders: Vec::new(),
         recursive: true,
         follow_symlinks: false,
         auto_sync: true,
@@ -348,11 +348,11 @@ fn test_error_handling() {
         file_extensions: vec![".txt".to_string()],
     };
     
-    assert!(empty_paths_config.paths.is_empty());
+    assert!(empty_paths_config.watch_folders.is_empty());
     
     // Invalid sync interval
     let invalid_interval_config = LocalFolderSourceConfig {
-        paths: vec!["/test".to_string()],
+        watch_folders: vec!["/test".to_string()],
         recursive: true,
         follow_symlinks: false,
         auto_sync: true,

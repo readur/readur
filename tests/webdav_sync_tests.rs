@@ -29,7 +29,7 @@ fn create_test_webdav_config() -> WebDAVConfig {
         watch_folders: vec!["/Documents".to_string(), "/Photos".to_string()],
         file_extensions: vec![".pdf".to_string(), ".txt".to_string(), ".jpg".to_string()],
         timeout_seconds: 30,
-        server_type: "nextcloud".to_string(),
+        server_type: Some("nextcloud".to_string()),
     }
 }
 
@@ -43,7 +43,7 @@ fn create_test_source_config() -> WebDAVSourceConfig {
         file_extensions: vec![".pdf".to_string(), ".txt".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,
-        server_type: "nextcloud".to_string(),
+        server_type: Some("nextcloud".to_string()),
     }
 }
 
@@ -314,7 +314,7 @@ fn test_error_handling_scenarios() {
         watch_folders: vec!["/test".to_string()],
         file_extensions: vec![".pdf".to_string()],
         timeout_seconds: 1, // Very short timeout
-        server_type: "nextcloud".to_string(),
+        server_type: Some("nextcloud".to_string()),
     };
     
     assert_eq!(timeout_config.timeout_seconds, 1);
@@ -327,7 +327,7 @@ fn test_error_handling_scenarios() {
         watch_folders: vec!["/test".to_string()],
         file_extensions: vec![".pdf".to_string()],
         timeout_seconds: 30,
-        server_type: "nextcloud".to_string(),
+        server_type: Some("nextcloud".to_string()),
     };
     
     assert_eq!(auth_config.username, "invalid_user");
@@ -341,7 +341,7 @@ fn test_error_handling_scenarios() {
         watch_folders: vec!["/nonexistent_folder".to_string()],
         file_extensions: vec![".pdf".to_string()],
         timeout_seconds: 30,
-        server_type: "nextcloud".to_string(),
+        server_type: Some("nextcloud".to_string()),
     };
     
     assert_eq!(invalid_path_config.watch_folders[0], "/nonexistent_folder");

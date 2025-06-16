@@ -819,20 +819,31 @@ impl EnhancedOcrService {
         // Clean the PDF data (remove leading null bytes)
         let clean_bytes = clean_pdf_data(&bytes);
         
-        // Add timeout for PDF extraction to prevent hanging
+        // Add timeout and panic recovery for PDF extraction
         let extraction_result = tokio::time::timeout(
             std::time::Duration::from_secs(120), // 2 minute timeout
             tokio::task::spawn_blocking(move || {
-                pdf_extract::extract_text_from_mem(&clean_bytes)
+                // Catch panics from pdf-extract library
+                catch_unwind(AssertUnwindSafe(|| {
+                    pdf_extract::extract_text_from_mem(&clean_bytes)
+                }))
             })
         ).await;
         
         let text = match extraction_result {
-            Ok(Ok(Ok(text))) => text,
-            Ok(Ok(Err(e))) => {
+            Ok(Ok(Ok(Ok(text)))) => text,
+            Ok(Ok(Ok(Err(e)))) => {
                 return Err(anyhow!(
                     "PDF text extraction failed for file '{}' (size: {} bytes): {}. This may indicate a corrupted or unsupported PDF format.",
                     file_path, file_size, e
+                ));
+            }
+            Ok(Ok(Err(_panic))) => {
+                // pdf-extract panicked (e.g., missing unicode map, corrupted font encoding)
+                warn!("PDF extraction panicked for file '{}' - likely corrupted font encoding or missing unicode map. Fallback to OCR not yet implemented.", file_path);
+                return Err(anyhow!(
+                    "PDF extraction failed due to corrupted or unsupported font encoding in file '{}' (size: {} bytes). The PDF may have non-standard fonts or corrupted internal structure. Consider converting the PDF to images for OCR.",
+                    file_path, file_size
                 ));
             }
             Ok(Err(e)) => {
