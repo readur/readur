@@ -807,7 +807,7 @@ const WebDAVTabContent: React.FC<WebDAVTabContentProps> = ({
                       </Typography>
                     )}
 
-                    {syncStatus.errors && syncStatus.errors.length > 0 && (
+                    {syncStatus.errors && Array.isArray(syncStatus.errors) && syncStatus.errors.length > 0 && (
                       <Alert severity="error" sx={{ mt: 2 }}>
                         <Typography variant="body2" sx={{ mb: 1 }}>
                           <strong>Recent Errors:</strong>

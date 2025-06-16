@@ -200,6 +200,9 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Ico
 const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => {
   const navigate = useNavigate();
   const theme = useTheme();
+  
+  // Ensure documents is always an array
+  const safeDocuments = Array.isArray(documents) ? documents : [];
 
   const getFileIcon = (mimeType?: string): React.ComponentType<any> => {
     if (mimeType?.includes('pdf')) return PdfIcon;
@@ -270,7 +273,7 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
           />
         </Box>
         
-        {documents.length === 0 ? (
+        {safeDocuments.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Box sx={{
               width: 64,
@@ -298,7 +301,7 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
           </Box>
         ) : (
           <List sx={{ p: 0 }}>
-            {documents.slice(0, 5).map((doc, index) => {
+            {safeDocuments.slice(0, 5).map((doc, index) => {
               const FileIconComponent = getFileIcon(doc.mime_type);
               
               return (

@@ -275,8 +275,12 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
             key={index}
             component="mark"
             sx={{
-              backgroundColor: 'primary.light',
-              color: 'primary.contrastText',
+              backgroundColor: theme.palette.mode === 'light' 
+                ? 'rgba(102, 126, 234, 0.2)' 
+                : 'rgba(155, 181, 255, 0.25)',
+              color: theme.palette.mode === 'light'
+                ? theme.palette.primary.dark
+                : theme.palette.primary.light,
               padding: '0 2px',
               borderRadius: '2px',
               fontWeight: 600,
@@ -288,7 +292,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
       }
       return part;
     });
-  }, []);
+  }, [theme.palette.mode, theme.palette.primary]);
 
   // Enhanced search with context snippets
   const generateContextSnippet = useCallback((filename: string, searchTerm: string): string => {
