@@ -124,13 +124,13 @@ export const documentService = {
   getById: (id: string) => {
     // Use the document list endpoint with pagination to find the specific document
     // This is a temporary solution until we have a proper document details endpoint
-    return api.get<Document[]>('/documents', {
+    return api.get<PaginatedResponse<Document>>('/documents', {
       params: { 
         limit: 1000, // Fetch a reasonable amount to find our document
         offset: 0 
       }
     }).then(response => {
-      const document = response.data.find(doc => doc.id === id);
+      const document = response.data.documents.find(doc => doc.id === id);
       if (!document) {
         throw new Error('Document not found');
       }

@@ -99,13 +99,15 @@ impl SourceSyncService {
         info!("WebDAV source sync config: server_url={}, username={}, watch_folders={:?}, file_extensions={:?}, server_type={:?}", 
             config.server_url, config.username, config.watch_folders, config.file_extensions, config.server_type);
 
+        // Requests to list files in a Nextcloud folder might take > 2 minutes
+        // Set timeout to 3 minutes to accommodate large folder structures
         let webdav_config = WebDAVConfig {
             server_url: config.server_url,
             username: config.username,
             password: config.password,
             watch_folders: config.watch_folders,
             file_extensions: config.file_extensions,
-            timeout_seconds: 30,
+            timeout_seconds: 180, // 3 minutes for discover_files_in_folder operations
             server_type: config.server_type,
         };
 
