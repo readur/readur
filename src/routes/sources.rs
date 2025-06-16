@@ -7,7 +7,7 @@ use axum::{
 };
 use std::sync::Arc;
 use uuid::Uuid;
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{
     auth::AuthUser,
@@ -353,16 +353,30 @@ async fn stop_sync(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Check if currently syncing
-    if !matches!(source.status, crate::models::SourceStatus::Syncing) {
-        return Err(StatusCode::CONFLICT);
-    }
+    // Allow stopping sync regardless of current status to handle edge cases
+    // where the database status might be out of sync with actual running tasks
 
     // Stop sync using the universal source scheduler
     if let Some(scheduler) = &state.source_scheduler {
         if let Err(e) = scheduler.stop_sync(source_id).await {
-            error!("Failed to stop sync for source {}: {}", source_id, e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            let error_msg = e.to_string();
+            // If no sync is running, treat it as success since the desired state is achieved
+            if error_msg.contains("No running sync found") {
+                info!("No sync was running for source {}, updating status to idle", source_id);
+                // Update status to idle since no sync is running
+                state
+                    .db
+                    .update_source_status(
+                        source_id,
+                        crate::models::SourceStatus::Idle,
+                        None,
+                    )
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            } else {
+                error!("Failed to stop sync for source {}: {}", source_id, e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
         }
     } else {
         // Update status directly if no scheduler available (fallback)
