@@ -24,7 +24,7 @@ use readur::{
     request_throttler::RequestThrottler,
 };
 
-const TEST_DB_URL: &str = "postgresql://readur_user:readur_password@localhost:5432/readur";
+const TEST_DB_URL: &str = "postgresql://readur:readur@localhost:5432/readur";
 
 struct ThrottledTestHarness {
     db: Database,
