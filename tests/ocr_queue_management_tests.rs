@@ -11,7 +11,7 @@
  */
 
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -38,7 +38,7 @@ impl OCRQueueTestClient {
     }
     
     /// Register and login a test user
-    async fn register_and_login(&mut self, role: UserRole) -> Result<String, Box<dyn std::error::Error>> {
+    async fn register_and_login(&mut self, role: UserRole) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -100,7 +100,7 @@ impl OCRQueueTestClient {
     }
     
     /// Get OCR queue statistics
-    async fn get_queue_stats(&self) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn get_queue_stats(&self) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
@@ -118,7 +118,7 @@ impl OCRQueueTestClient {
     }
     
     /// Requeue failed OCR jobs
-    async fn requeue_failed_jobs(&self) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn requeue_failed_jobs(&self) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
@@ -136,7 +136,7 @@ impl OCRQueueTestClient {
     }
     
     /// Upload a document for OCR processing
-    async fn upload_document(&self, content: &str, filename: &str) -> Result<DocumentResponse, Box<dyn std::error::Error>> {
+    async fn upload_document(&self, content: &str, filename: &str) -> Result<DocumentResponse, Box<dyn std::error::Error + Send + Sync>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let part = reqwest::multipart::Part::text(content.to_string())
@@ -161,7 +161,7 @@ impl OCRQueueTestClient {
     }
     
     /// Upload multiple documents concurrently
-    async fn upload_multiple_documents(&self, count: usize, base_content: &str) -> Result<Vec<DocumentResponse>, Box<dyn std::error::Error>> {
+    async fn upload_multiple_documents(&self, count: usize, base_content: &str) -> Result<Vec<DocumentResponse>, Box<dyn std::error::Error + Send + Sync>> {
         let mut handles = Vec::new();
         
         for i in 0..count {
@@ -180,7 +180,7 @@ impl OCRQueueTestClient {
         for handle in handles {
             match handle.await? {
                 Ok(doc) => documents.push(doc),
-                Err(e) => return Err(e),
+                Err(e) => return Err(format!("Upload failed: {}", e).into()),
             }
         }
         
@@ -188,7 +188,7 @@ impl OCRQueueTestClient {
     }
     
     /// Wait for OCR processing to complete for multiple documents
-    async fn wait_for_multiple_ocr_completion(&self, document_ids: &[String]) -> Result<Vec<bool>, Box<dyn std::error::Error>> {
+    async fn wait_for_multiple_ocr_completion(&self, document_ids: &[String]) -> Result<Vec<bool>, Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
         let mut completed_status = vec![false; document_ids.len()];
         
@@ -224,7 +224,7 @@ impl OCRQueueTestClient {
     }
     
     /// Get all documents for the user
-    async fn get_documents(&self) -> Result<Vec<DocumentResponse>, Box<dyn std::error::Error>> {
+    async fn get_documents(&self) -> Result<Vec<DocumentResponse>, Box<dyn std::error::Error + Send + Sync>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
@@ -478,13 +478,13 @@ async fn test_queue_performance_monitoring() {
         
         let sample_duration = sample_time.elapsed();
         
-        performance_samples.push((start_time.elapsed(), stats, sample_duration));
-        
         println!("📊 Sample at {:?}: response_time={:?}, pending={}, processing={}",
                  start_time.elapsed(),
                  sample_duration,
                  stats["pending"].as_i64().unwrap_or(0),
                  stats["processing"].as_i64().unwrap_or(0));
+        
+        performance_samples.push((start_time.elapsed(), stats, sample_duration));
         
         if start_time.elapsed() + sample_interval < monitoring_duration {
             sleep(sample_interval).await;

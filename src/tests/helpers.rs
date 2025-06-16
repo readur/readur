@@ -2,7 +2,7 @@ use crate::{AppState, models::UserResponse};
 use axum::Router;
 use serde_json::json;
 use std::sync::Arc;
-use testcontainers::{core::WaitFor, runners::AsyncRunner, ContainerAsync, GenericImage};
+use testcontainers::{core::WaitFor, runners::AsyncRunner, ContainerAsync, GenericImage, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 use tower::util::ServiceExt;
 

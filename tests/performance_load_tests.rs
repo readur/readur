@@ -13,7 +13,7 @@
  */
 
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
@@ -126,7 +126,7 @@ impl LoadTestClient {
     }
     
     /// Setup a test user for load testing
-    async fn setup_user(&mut self, user_index: usize) -> Result<String, Box<dyn std::error::Error>> {
+    async fn setup_user(&mut self, user_index: usize) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -188,7 +188,7 @@ impl LoadTestClient {
     }
     
     /// Perform a timed document upload
-    async fn timed_upload(&self, content: &str, filename: &str) -> Result<(DocumentResponse, Duration), Box<dyn std::error::Error>> {
+    async fn timed_upload(&self, content: &str, filename: &str) -> Result<(DocumentResponse, Duration), Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
@@ -216,7 +216,7 @@ impl LoadTestClient {
     }
     
     /// Perform a timed document list request
-    async fn timed_list_documents(&self) -> Result<(Vec<DocumentResponse>, Duration), Box<dyn std::error::Error>> {
+    async fn timed_list_documents(&self) -> Result<(Vec<DocumentResponse>, Duration), Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
@@ -237,7 +237,7 @@ impl LoadTestClient {
     }
     
     /// Perform a timed search request
-    async fn timed_search(&self, query: &str) -> Result<(Value, Duration), Box<dyn std::error::Error>> {
+    async fn timed_search(&self, query: &str) -> Result<(Value, Duration), Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         

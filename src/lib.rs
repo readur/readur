@@ -14,6 +14,7 @@ pub mod ocr_error;
 pub mod ocr_health;
 pub mod ocr_queue;
 pub mod ocr_tests;
+pub mod request_throttler;
 pub mod routes;
 pub mod s3_service;
 pub mod seed;
@@ -38,6 +39,7 @@ pub struct AppState {
     pub config: Config,
     pub webdav_scheduler: Option<std::sync::Arc<webdav_scheduler::WebDAVScheduler>>,
     pub source_scheduler: Option<std::sync::Arc<source_scheduler::SourceScheduler>>,
+    pub queue_service: std::sync::Arc<ocr_queue::OcrQueueService>,
 }
 
 /// Health check endpoint for monitoring

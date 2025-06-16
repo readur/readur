@@ -14,7 +14,6 @@ use crate::{
     auth::AuthUser,
     file_service::FileService,
     models::DocumentResponse,
-    ocr_queue::OcrQueueService,
     AppState,
 };
 
@@ -137,8 +136,7 @@ async fn upload_document(
             let enable_background_ocr = settings.enable_background_ocr;
             
             if enable_background_ocr {
-                let queue_service = OcrQueueService::new(state.db.clone(), state.db.pool.clone(), 1);
-                
+                // Use the shared queue service from AppState instead of creating a new one
                 // Calculate priority based on file size
                 let priority = match file_size {
                     0..=1048576 => 10,          // <= 1MB: highest priority
@@ -148,7 +146,7 @@ async fn upload_document(
                     _ => 2,                     // > 50MB: lowest priority
                 };
                 
-                queue_service.enqueue_document(document_id, priority, file_size).await
+                state.queue_service.enqueue_document(document_id, priority, file_size).await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
             

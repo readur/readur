@@ -14,7 +14,7 @@
  */
 
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -177,8 +177,13 @@ impl FileProcessingTestClient {
                                 original_filename: doc.original_filename.clone(),
                                 file_size: doc.file_size,
                                 mime_type: doc.mime_type.clone(),
+                                tags: doc.tags.clone(),
+                                created_at: doc.created_at,
+                                has_ocr_text: doc.has_ocr_text,
+                                ocr_confidence: doc.ocr_confidence,
+                                ocr_word_count: doc.ocr_word_count,
+                                ocr_processing_time_ms: doc.ocr_processing_time_ms,
                                 ocr_status: doc.ocr_status.clone(),
-                                upload_date: doc.upload_date,
                             };
                             return Ok(doc_copy);
                         }
@@ -772,7 +777,7 @@ async fn test_pipeline_performance_monitoring() {
     
     // Analyze performance results
     println!("📊 Performance Analysis:");
-    println!("  {'File':<12} {'Size':<8} {'Upload':<10} {'Processing':<12} {'Reported':<10} {'Status'}");
+    println!("  {:<12} {:<8} {:<10} {:<12} {:<10} {}", "File", "Size", "Upload", "Processing", "Reported", "Status");
     println!("  {}", "-".repeat(70));
     
     for (filename, size, upload_time, processing_time, reported_time, status) in &performance_results {
@@ -782,7 +787,7 @@ async fn test_pipeline_performance_monitoring() {
         
         let status_str = status.as_deref().unwrap_or("unknown");
         
-        println!("  {:<12} {:<8} {:?:<10} {:?:<12} {:<10} {}", 
+        println!("  {:<12} {:<8} {:<10?} {:<12?} {:<10} {}", 
                  filename, size, upload_time, processing_time, reported_str, status_str);
     }
     

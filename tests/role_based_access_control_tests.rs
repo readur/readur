@@ -14,7 +14,6 @@
 
 use reqwest::Client;
 use serde_json::{json, Value};
-use std::time::Duration;
 use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
@@ -732,26 +731,24 @@ async fn test_data_visibility_boundaries() {
     println!("✅ Document visibility boundaries verified");
     
     // Test search isolation (if available)
-    if let Ok((user1_search, _)) = client.client
+    let search_response = client.client
         .get(&format!("{}/api/search", BASE_URL))
         .header("Authorization", format!("Bearer {}", client.user1_token.as_ref().unwrap()))
         .query(&[("q", "confidential")])
         .send()
-        .await
-        .and_then(|r| async move {
-            let status = r.status();
-            let json: Result<Value, _> = r.json().await;
-            json.map(|j| (j, status))
-        })
-        .await
-    {
-        if let Some(results) = user1_search["documents"].as_array() {
-            let user1_search_sees_user2 = results.iter().any(|doc| {
-                doc["id"] == user2_doc_id
-            });
-            
-            assert!(!user1_search_sees_user2, "User1 search should not return User2 documents");
-            println!("✅ Search isolation verified");
+        .await;
+    
+    if let Ok(response) = search_response {
+        let status = response.status();
+        if let Ok(user1_search) = response.json::<Value>().await {
+            if let Some(results) = user1_search["documents"].as_array() {
+                let user1_search_sees_user2 = results.iter().any(|doc| {
+                    doc["id"] == user2_doc_id
+                });
+                
+                assert!(!user1_search_sees_user2, "User1 search should not return User2 documents");
+                println!("✅ Search isolation verified");
+            }
         }
     }
     
@@ -820,7 +817,7 @@ async fn test_token_and_session_security() {
     // Test 2: Token for one user accessing another user's resources
     println!("🔍 Testing token cross-contamination...");
     
-    let user1_token = client.user1_token.as_ref().unwrap();
+    let _user1_token = client.user1_token.as_ref().unwrap();
     let user2_token = client.user2_token.as_ref().unwrap();
     
     // Upload documents with each user

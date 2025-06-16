@@ -35,9 +35,10 @@ struct OCRPipelineTestHarness {
 
 impl OCRPipelineTestHarness {
     async fn new() -> Result<Self> {
-        // Initialize database connection
+        // Initialize database connection with higher limits for stress testing
         let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(10)
+            .max_connections(50)  // Increased to support high concurrency tests
+            .acquire_timeout(std::time::Duration::from_secs(10))
             .connect(TEST_DB_URL)
             .await?;
         

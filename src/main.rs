@@ -130,21 +130,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     
-    // Create web-facing state with dedicated web DB pool
+    // Create shared OCR queue service for both web and background operations
+    let concurrent_jobs = 15; // Limit concurrent OCR jobs to prevent DB pool exhaustion
+    let shared_queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(
+        background_db.clone(), 
+        background_db.get_pool().clone(), 
+        concurrent_jobs
+    ));
+    
+    // Create web-facing state with shared queue service
     let web_state = AppState { 
         db: web_db, 
         config: config.clone(),
         webdav_scheduler: None, // Will be set after creating scheduler
         source_scheduler: None, // Will be set after creating scheduler
+        queue_service: shared_queue_service.clone(),
     };
     let web_state = Arc::new(web_state);
     
-    // Create background state with dedicated background DB pool  
+    // Create background state with shared queue service
     let background_state = AppState {
         db: background_db,
         config: config.clone(),
         webdav_scheduler: None,
         source_scheduler: None,
+        queue_service: shared_queue_service.clone(),
     };
     let background_state = Arc::new(background_state);
     
@@ -177,15 +187,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?;
     
-    // Start OCR queue worker on dedicated OCR runtime using background DB pool
-    let concurrent_jobs = 4; // TODO: Get from config/settings  
-    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(
-        background_state.db.clone(), 
-        background_state.db.get_pool().clone(), 
-        concurrent_jobs
-    ));
-    
-    let queue_worker = queue_service.clone();
+    // Start OCR queue worker on dedicated OCR runtime using shared queue service
+    let queue_worker = shared_queue_service.clone();
     ocr_runtime.spawn(async move {
         if let Err(e) = queue_worker.start_worker().await {
             error!("OCR queue worker error: {}", e);
@@ -193,7 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     // Start OCR maintenance tasks on dedicated OCR runtime
-    let queue_maintenance = queue_service.clone();
+    let queue_maintenance = shared_queue_service.clone();
     ocr_runtime.spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(300)); // Every 5 minutes
         loop {
@@ -223,6 +226,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: web_state.config.clone(),
         webdav_scheduler: Some(webdav_scheduler.clone()),
         source_scheduler: Some(source_scheduler.clone()),
+        queue_service: shared_queue_service.clone(),
     };
     let web_state = Arc::new(updated_web_state);
     

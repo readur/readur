@@ -8,7 +8,7 @@ use tokio::time::{sleep, Duration};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{db::Database, enhanced_ocr::EnhancedOcrService, db_guardrails_simple::DocumentTransactionManager};
+use crate::{db::Database, enhanced_ocr::EnhancedOcrService, db_guardrails_simple::DocumentTransactionManager, request_throttler::RequestThrottler};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct OcrQueueItem {
@@ -44,18 +44,29 @@ pub struct OcrQueueService {
     max_concurrent_jobs: usize,
     worker_id: String,
     transaction_manager: DocumentTransactionManager,
+    processing_throttler: Arc<RequestThrottler>,
 }
 
 impl OcrQueueService {
     pub fn new(db: Database, pool: PgPool, max_concurrent_jobs: usize) -> Self {
         let worker_id = format!("worker-{}-{}", hostname::get().unwrap_or_default().to_string_lossy(), Uuid::new_v4());
         let transaction_manager = DocumentTransactionManager::new(pool.clone());
+        
+        // Create a processing throttler to limit concurrent OCR operations
+        // This prevents overwhelming the database connection pool
+        let processing_throttler = Arc::new(RequestThrottler::new(
+            max_concurrent_jobs.min(15), // Don't exceed 15 concurrent OCR processes
+            60, // 60 second max wait time for OCR processing
+            format!("ocr-processing-{}", worker_id),
+        ));
+        
         Self {
             db,
             pool,
             max_concurrent_jobs,
             worker_id,
             transaction_manager,
+            processing_throttler,
         }
     }
 
@@ -260,7 +271,7 @@ impl OcrQueueService {
     }
 
     /// Process a single queue item
-    async fn process_item(&self, item: OcrQueueItem, ocr_service: &EnhancedOcrService) -> Result<()> {
+    pub async fn process_item(&self, item: OcrQueueItem, ocr_service: &EnhancedOcrService) -> Result<()> {
         let start_time = std::time::Instant::now();
         
         info!("Processing OCR job {} for document {}", item.id, item.document_id);
@@ -408,10 +419,24 @@ impl OcrQueueService {
                     let self_clone = self.clone();
                     let ocr_service_clone = ocr_service.clone();
                     
-                    // Spawn task to process item
+                    // Spawn task to process item with throttling
                     tokio::spawn(async move {
-                        if let Err(e) = self_clone.process_item(item, &ocr_service_clone).await {
-                            error!("Error processing OCR item: {}", e);
+                        // Acquire throttling permit to prevent overwhelming the database
+                        match self_clone.processing_throttler.acquire_permit().await {
+                            Ok(_throttle_permit) => {
+                                // Process the item with both semaphore and throttle permits held
+                                if let Err(e) = self_clone.process_item(item, &ocr_service_clone).await {
+                                    error!("Error processing OCR item: {}", e);
+                                }
+                                // Permits are automatically released when dropped
+                            }
+                            Err(e) => {
+                                error!("Failed to acquire throttling permit for OCR processing: {}", e);
+                                // Mark the item as failed due to throttling
+                                if let Err(mark_err) = self_clone.mark_failed(item.id, &format!("Throttling error: {}", e)).await {
+                                    error!("Failed to mark item as failed after throttling error: {}", mark_err);
+                                }
+                            }
                         }
                         drop(permit);
                     });
