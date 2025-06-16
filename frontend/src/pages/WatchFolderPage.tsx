@@ -52,7 +52,7 @@ const WatchFolderPage: React.FC = () => {
 
   // Mock configuration data (would typically come from API)
   const watchConfig: WatchConfig = {
-    watchFolder: process.env.REACT_APP_WATCH_FOLDER || './watch',
+    watchFolder: import.meta.env.VITE_WATCH_FOLDER || './watch',
     watchInterval: 30,
     maxFileAge: 24,
     allowedTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt', 'doc', 'docx'],

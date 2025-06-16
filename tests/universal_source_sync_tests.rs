@@ -198,7 +198,7 @@ fn test_config_parsing_s3() {
     assert!(config.is_ok(), "S3 config should parse successfully");
     
     let s3_config = config.unwrap();
-    assert_eq!(s3_config.bucket, "test-documents");
+    assert_eq!(s3_config.bucket_name, "test-documents");
     assert_eq!(s3_config.region, "us-east-1");
     assert_eq!(s3_config.prefix, "documents/");
     assert_eq!(s3_config.sync_interval_minutes, 120);
