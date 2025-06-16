@@ -15,6 +15,7 @@ use imageproc::{
 use tesseract::{Tesseract, PageSegMode, OcrEngineMode};
 
 use crate::models::Settings;
+use crate::file_service::FileService;
 
 #[derive(Debug, Clone)]
 pub struct ImageQualityStats {
@@ -31,15 +32,19 @@ pub struct OcrResult {
     pub processing_time_ms: u64,
     pub word_count: usize,
     pub preprocessing_applied: Vec<String>,
+    pub processed_image_path: Option<String>,
 }
 
 pub struct EnhancedOcrService {
     pub temp_dir: String,
+    pub file_service: FileService,
 }
 
 impl EnhancedOcrService {
     pub fn new(temp_dir: String) -> Self {
-        Self { temp_dir }
+        let upload_path = std::env::var("UPLOAD_PATH").unwrap_or_else(|_| "./uploads".to_string());
+        let file_service = FileService::new(upload_path);
+        Self { temp_dir, file_service }
     }
 
     /// Extract text from image with high-quality OCR settings
@@ -79,11 +84,6 @@ impl EnhancedOcrService {
         
         let (text, confidence) = ocr_result;
         
-        // Clean up temporary files if created
-        if processed_image_path != file_path {
-            let _ = tokio::fs::remove_file(&processed_image_path).await;
-        }
-        
         let processing_time = start_time.elapsed().as_millis() as u64;
         let word_count = text.split_whitespace().count();
         
@@ -92,19 +92,38 @@ impl EnhancedOcrService {
             word_count, confidence, processing_time
         );
         
-        Ok(OcrResult {
+        // Return the processed image path if different from original (caller will handle cleanup/saving)
+        let result_processed_image_path = if processed_image_path != file_path {
+            Some(processed_image_path.clone())
+        } else {
+            None
+        };
+        
+        let result = OcrResult {
             text,
             confidence,
             processing_time_ms: processing_time,
             word_count,
             preprocessing_applied,
-        })
+            processed_image_path: result_processed_image_path,
+        };
+        
+        // Clean up temporary files if not saved for review
+        if let Some(ref temp_path) = result.processed_image_path {
+            if !settings.save_processed_images {
+                let _ = tokio::fs::remove_file(temp_path).await;
+            }
+        }
+        
+        Ok(result)
     }
 
     /// Preprocess image for optimal OCR quality, especially for challenging conditions
     #[cfg(feature = "ocr")]
     async fn preprocess_image(&self, input_path: &str, settings: &Settings) -> Result<(String, Vec<String>)> {
-        let img = image::open(input_path)?;
+        // Resolve the file path first
+        let resolved_path = self.resolve_file_path(input_path).await?;
+        let img = image::open(&resolved_path)?;
         let mut processed_img = img;
         let mut preprocessing_applied = Vec::new();
         
@@ -741,16 +760,25 @@ impl EnhancedOcrService {
             processing_time_ms: processing_time,
             word_count,
             preprocessing_applied: vec!["PDF text extraction".to_string()],
+            processed_image_path: None, // No image processing for PDF text extraction
         })
     }
     
+    /// Resolve file path to actual location, handling both old and new directory structures
+    async fn resolve_file_path(&self, file_path: &str) -> Result<String> {
+        // Use the FileService's resolve_file_path method
+        self.file_service.resolve_file_path(file_path).await
+    }
+
     /// Extract text from any supported file type
     pub async fn extract_text(&self, file_path: &str, mime_type: &str, settings: &Settings) -> Result<OcrResult> {
+        // Resolve the actual file path
+        let resolved_path = self.resolve_file_path(file_path).await?;
         match mime_type {
             "application/pdf" => {
                 #[cfg(feature = "ocr")]
                 {
-                    self.extract_text_from_pdf(file_path, settings).await
+                    self.extract_text_from_pdf(&resolved_path, settings).await
                 }
                 #[cfg(not(feature = "ocr"))]
                 {
@@ -760,7 +788,7 @@ impl EnhancedOcrService {
             mime if mime.starts_with("image/") => {
                 #[cfg(feature = "ocr")]
                 {
-                    self.extract_text_from_image(file_path, settings).await
+                    self.extract_text_from_image(&resolved_path, settings).await
                 }
                 #[cfg(not(feature = "ocr"))]
                 {
@@ -769,7 +797,7 @@ impl EnhancedOcrService {
             }
             "text/plain" => {
                 let start_time = std::time::Instant::now();
-                let text = tokio::fs::read_to_string(file_path).await?;
+                let text = tokio::fs::read_to_string(&resolved_path).await?;
                 let processing_time = start_time.elapsed().as_millis() as u64;
                 let word_count = text.split_whitespace().count();
                 
@@ -779,6 +807,7 @@ impl EnhancedOcrService {
                     processing_time_ms: processing_time,
                     word_count,
                     preprocessing_applied: vec!["Plain text read".to_string()],
+                    processed_image_path: None, // No image processing for plain text
                 })
             }
             _ => Err(anyhow::anyhow!("Unsupported file type: {}", mime_type)),

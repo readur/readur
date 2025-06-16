@@ -20,6 +20,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     
     let config = Config::from_env()?;
+    
+    // Initialize upload directory structure
+    info!("Initializing upload directory structure...");
+    let file_service = readur::file_service::FileService::new(config.upload_path.clone());
+    if let Err(e) = file_service.initialize_directory_structure().await {
+        error!("Failed to initialize directory structure: {}", e);
+        return Err(e.into());
+    }
+    info!("✅ Upload directory structure initialized");
+    
+    // Migrate existing files to new structure (one-time operation)
+    info!("Migrating existing files to structured directories...");
+    if let Err(e) = file_service.migrate_existing_files().await {
+        warn!("Failed to migrate some existing files: {}", e);
+        // Don't fail startup for migration issues
+    }
+    
     // Create separate database pools for different workloads
     let web_db = Database::new_with_pool_config(&config.database_url, 20, 2).await?;  // Web UI pool
     let background_db = Database::new_with_pool_config(&config.database_url, 30, 3).await?;  // Background operations pool

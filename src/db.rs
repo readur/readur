@@ -2195,7 +2195,7 @@ impl Database {
 
     pub async fn update_source(&self, user_id: Uuid, source_id: Uuid, update: &crate::models::UpdateSource) -> Result<crate::models::Source> {
         let mut query = String::from("UPDATE sources SET updated_at = NOW()");
-        let mut bind_count = 1;
+        let mut bind_count = 0;
 
         if update.name.is_some() {
             bind_count += 1;

@@ -363,6 +363,31 @@ impl OcrQueueService {
                             }
                         }
 
+                        // Save processed image if setting is enabled and image was processed
+                        if settings.save_processed_images {
+                            if let Some(ref processed_image_path) = ocr_result.processed_image_path {
+                                match self.save_processed_image_for_review(
+                                    item.document_id,
+                                    user_id.unwrap_or_default(),
+                                    &file_path,
+                                    processed_image_path,
+                                    &ocr_result.preprocessing_applied,
+                                ).await {
+                                    Ok(_) => {
+                                        info!("✅ Saved processed image for document {} for review", item.document_id);
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to save processed image for document {}: {}", item.document_id, e);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Clean up temporary processed image file if it exists
+                        if let Some(ref temp_path) = ocr_result.processed_image_path {
+                            let _ = tokio::fs::remove_file(temp_path).await;
+                        }
+
                         let processing_time_ms = start_time.elapsed().as_millis() as i32;
                         self.mark_completed(item.id, processing_time_ms).await?;
                         
@@ -479,6 +504,100 @@ impl OcrQueueService {
                 }
             }
         }
+    }
+
+    /// Save processed image for review when the setting is enabled
+    async fn save_processed_image_for_review(
+        &self,
+        document_id: Uuid,
+        user_id: Uuid,
+        original_image_path: &str,
+        processed_image_path: &str,
+        processing_steps: &[String],
+    ) -> Result<()> {
+        use std::path::Path;
+        
+        // Use the FileService to get the proper processed images directory
+        use crate::file_service::FileService;
+        let base_upload_dir = std::env::var("UPLOAD_PATH").unwrap_or_else(|_| "uploads".to_string());
+        let file_service = FileService::new(base_upload_dir);
+        let processed_images_dir = file_service.get_processed_images_path();
+        
+        // Ensure the directory exists with proper error handling
+        if let Err(e) = tokio::fs::create_dir_all(&processed_images_dir).await {
+            error!("Failed to create processed images directory {:?}: {}", processed_images_dir, e);
+            return Err(anyhow::anyhow!("Failed to create processed images directory: {}", e));
+        }
+        
+        info!("Ensured processed images directory exists: {:?}", processed_images_dir);
+        
+        // Generate a unique filename for the processed image
+        let file_stem = Path::new(processed_image_path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("processed");
+        let extension = Path::new(processed_image_path)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("jpg");
+        
+        let permanent_filename = format!("{}_processed_{}.{}", document_id, chrono::Utc::now().timestamp(), extension);
+        let permanent_path = processed_images_dir.join(&permanent_filename);
+        
+        // Verify source file exists before copying
+        if !Path::new(processed_image_path).exists() {
+            return Err(anyhow::anyhow!("Source processed image file does not exist: {}", processed_image_path));
+        }
+        
+        // Copy the processed image to permanent location with error handling
+        if let Err(e) = tokio::fs::copy(processed_image_path, &permanent_path).await {
+            error!("Failed to copy processed image from {} to {:?}: {}", processed_image_path, permanent_path, e);
+            return Err(anyhow::anyhow!("Failed to copy processed image: {}", e));
+        }
+        
+        info!("Successfully copied processed image to: {:?}", permanent_path);
+        
+        // Save to database
+        let processing_parameters = serde_json::json!({
+            "steps": processing_steps,
+            "timestamp": chrono::Utc::now(),
+            "original_path": original_image_path,
+        });
+        
+        // Save metadata to database with error handling
+        if let Err(e) = sqlx::query(
+            r#"
+            INSERT INTO processed_images (document_id, user_id, original_image_path, processed_image_path, processing_parameters, processing_steps, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (document_id) 
+            DO UPDATE SET 
+                processed_image_path = EXCLUDED.processed_image_path,
+                processing_parameters = EXCLUDED.processing_parameters,
+                processing_steps = EXCLUDED.processing_steps,
+                created_at = NOW()
+            "#
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .bind(original_image_path)
+        .bind(permanent_path.to_string_lossy().as_ref())
+        .bind(&processing_parameters)
+        .bind(processing_steps)
+        .execute(&self.pool)
+        .await {
+            error!("Failed to save processed image metadata to database for document {}: {}", document_id, e);
+            
+            // Clean up the copied file if database save fails
+            if let Err(cleanup_err) = tokio::fs::remove_file(&permanent_path).await {
+                warn!("Failed to clean up processed image file after database error: {}", cleanup_err);
+            }
+            
+            return Err(anyhow::anyhow!("Failed to save processed image metadata: {}", e));
+        }
+        
+        info!("Successfully saved processed image metadata for document {} to database", document_id);
+        
+        Ok(())
     }
 
     /// Get queue statistics

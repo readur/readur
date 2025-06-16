@@ -1,8 +1,9 @@
 use anyhow::Result;
 use chrono::Utc;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use uuid::Uuid;
+use tracing::{info, warn, error};
 
 use crate::models::Document;
 
@@ -19,6 +20,106 @@ impl FileService {
         Self { upload_path }
     }
 
+    /// Initialize the upload directory structure
+    pub async fn initialize_directory_structure(&self) -> Result<()> {
+        let base_path = Path::new(&self.upload_path);
+        
+        // Create subdirectories for organized file storage
+        let directories = [
+            "documents",        // Final uploaded documents
+            "thumbnails",       // Document thumbnails
+            "processed_images", // OCR processed images for review
+            "temp",            // Temporary files during processing
+            "backups",         // Document backups
+        ];
+        
+        for dir in directories.iter() {
+            let dir_path = base_path.join(dir);
+            if let Err(e) = fs::create_dir_all(&dir_path).await {
+                error!("Failed to create directory {:?}: {}", dir_path, e);
+                return Err(anyhow::anyhow!("Failed to create directory structure: {}", e));
+            }
+            info!("Ensured directory exists: {:?}", dir_path);
+        }
+        
+        Ok(())
+    }
+
+    /// Get the path for a specific subdirectory
+    pub fn get_subdirectory_path(&self, subdir: &str) -> PathBuf {
+        Path::new(&self.upload_path).join(subdir)
+    }
+
+    /// Get the documents directory path
+    pub fn get_documents_path(&self) -> PathBuf {
+        self.get_subdirectory_path("documents")
+    }
+
+    /// Get the thumbnails directory path
+    pub fn get_thumbnails_path(&self) -> PathBuf {
+        self.get_subdirectory_path("thumbnails")
+    }
+
+    /// Get the processed images directory path
+    pub fn get_processed_images_path(&self) -> PathBuf {
+        self.get_subdirectory_path("processed_images")
+    }
+
+    /// Get the temp directory path
+    pub fn get_temp_path(&self) -> PathBuf {
+        self.get_subdirectory_path("temp")
+    }
+
+    /// Migrate existing files from the root upload directory to the structured format
+    pub async fn migrate_existing_files(&self) -> Result<()> {
+        let base_path = Path::new(&self.upload_path);
+        let documents_dir = self.get_documents_path();
+        let thumbnails_dir = self.get_thumbnails_path();
+        
+        info!("Starting migration of existing files to structured directories...");
+        let mut migrated_count = 0;
+        let mut thumbnail_count = 0;
+        
+        // Read all files in the base upload directory
+        let mut entries = fs::read_dir(base_path).await?;
+        
+        while let Some(entry) = entries.next_entry().await? {
+            let file_path = entry.path();
+            
+            // Skip directories and already structured subdirectories
+            if file_path.is_dir() {
+                continue;
+            }
+            
+            if let Some(filename) = file_path.file_name().and_then(|n| n.to_str()) {
+                // Handle thumbnail files
+                if filename.ends_with("_thumb.jpg") {
+                    let new_path = thumbnails_dir.join(filename);
+                    if let Err(e) = fs::rename(&file_path, &new_path).await {
+                        warn!("Failed to migrate thumbnail {}: {}", filename, e);
+                    } else {
+                        thumbnail_count += 1;
+                        info!("Migrated thumbnail: {} -> {:?}", filename, new_path);
+                    }
+                }
+                // Handle regular document files
+                else {
+                    let new_path = documents_dir.join(filename);
+                    if let Err(e) = fs::rename(&file_path, &new_path).await {
+                        warn!("Failed to migrate document {}: {}", filename, e);
+                    } else {
+                        migrated_count += 1;
+                        info!("Migrated document: {} -> {:?}", filename, new_path);
+                    }
+                }
+            }
+        }
+        
+        info!("Migration completed: {} documents, {} thumbnails moved to structured directories", 
+              migrated_count, thumbnail_count);
+        Ok(())
+    }
+
     pub async fn save_file(&self, filename: &str, data: &[u8]) -> Result<String> {
         let file_id = Uuid::new_v4();
         let extension = Path::new(filename)
@@ -32,10 +133,14 @@ impl FileService {
             format!("{}.{}", file_id, extension)
         };
         
-        let file_path = Path::new(&self.upload_path).join(&saved_filename);
+        // Save to documents subdirectory
+        let documents_dir = self.get_documents_path();
+        let file_path = documents_dir.join(&saved_filename);
         
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).await?;
+        // Ensure the documents directory exists
+        if let Err(e) = fs::create_dir_all(&documents_dir).await {
+            error!("Failed to create documents directory: {}", e);
+            return Err(anyhow::anyhow!("Failed to create documents directory: {}", e));
         }
         
         fs::write(&file_path, data).await?;
@@ -86,17 +191,50 @@ impl FileService {
         }
     }
 
+    /// Resolve file path to actual location, handling both old and new directory structures
+    pub async fn resolve_file_path(&self, file_path: &str) -> Result<String> {
+        // If the file exists at the given path, use it
+        if Path::new(file_path).exists() {
+            return Ok(file_path.to_string());
+        }
+        
+        // Try to find the file in the new structured directory
+        if file_path.starts_with("./uploads/") && !file_path.contains("/documents/") {
+            let new_path = file_path.replace("./uploads/", "./uploads/documents/");
+            if Path::new(&new_path).exists() {
+                info!("Found file in new structured directory: {} -> {}", file_path, new_path);
+                return Ok(new_path);
+            }
+        }
+        
+        // Try without the ./ prefix
+        if file_path.starts_with("uploads/") && !file_path.contains("/documents/") {
+            let new_path = file_path.replace("uploads/", "uploads/documents/");
+            if Path::new(&new_path).exists() {
+                info!("Found file in new structured directory: {} -> {}", file_path, new_path);
+                return Ok(new_path);
+            }
+        }
+        
+        // File not found in any expected location
+        Err(anyhow::anyhow!("File not found: {} (checked original path and structured directory)", file_path))
+    }
+
     pub async fn read_file(&self, file_path: &str) -> Result<Vec<u8>> {
-        let data = fs::read(file_path).await?;
+        let resolved_path = self.resolve_file_path(file_path).await?;
+        let data = fs::read(&resolved_path).await?;
         Ok(data)
     }
 
     #[cfg(feature = "ocr")]
     pub async fn get_or_generate_thumbnail(&self, file_path: &str, filename: &str) -> Result<Vec<u8>> {
-        // Create thumbnails directory if it doesn't exist
-        let thumbnails_dir = Path::new(&self.upload_path).join("thumbnails");
+        // Use the structured thumbnails directory
+        let thumbnails_dir = self.get_thumbnails_path();
         if !thumbnails_dir.exists() {
-            fs::create_dir_all(&thumbnails_dir).await?;
+            if let Err(e) = fs::create_dir_all(&thumbnails_dir).await {
+                error!("Failed to create thumbnails directory: {}", e);
+                return Err(anyhow::anyhow!("Failed to create thumbnails directory: {}", e));
+            }
         }
 
         // Generate thumbnail filename based on original file path
@@ -111,8 +249,9 @@ impl FileService {
             return self.read_file(&thumbnail_path.to_string_lossy()).await;
         }
 
-        // Generate thumbnail
-        let thumbnail_data = self.generate_thumbnail(file_path, filename).await?;
+        // Resolve file path and generate thumbnail
+        let resolved_path = self.resolve_file_path(file_path).await?;
+        let thumbnail_data = self.generate_thumbnail(&resolved_path, filename).await?;
         
         // Save thumbnail to cache
         fs::write(&thumbnail_path, &thumbnail_data).await?;
