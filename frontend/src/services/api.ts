@@ -183,6 +183,12 @@ export const documentService = {
     })
   },
 
+  getDuplicates: (limit = 25, offset = 0) => {
+    return api.get(`/documents/duplicates`, {
+      params: { limit, offset },
+    })
+  },
+
   search: (searchRequest: SearchRequest) => {
     return api.get<SearchResponse>('/search', {
       params: searchRequest,

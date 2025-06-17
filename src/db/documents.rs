@@ -991,6 +991,7 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
+                file_hash: row.get("file_hash"),
             });
         }
 
@@ -1125,6 +1126,7 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
+                file_hash: row.get("file_hash"),
             })),
             None => Ok(None),
         }
@@ -1169,5 +1171,125 @@ impl Database {
             })),
             None => Ok(None),
         }
+    }
+
+    /// Get documents grouped by duplicate hashes for a user
+    pub async fn get_user_duplicates(&self, user_id: Uuid, user_role: crate::models::UserRole, limit: i64, offset: i64) -> Result<(Vec<serde_json::Value>, i64)> {
+        let (docs_query, count_query) = if user_role == crate::models::UserRole::Admin {
+            // Admins can see all duplicates
+            (
+                r#"
+                SELECT 
+                    file_hash,
+                    COUNT(*) as duplicate_count,
+                    MIN(created_at) as first_uploaded,
+                    MAX(created_at) as last_uploaded,
+                    json_agg(
+                        json_build_object(
+                            'id', id,
+                            'filename', filename, 
+                            'original_filename', original_filename,
+                            'file_size', file_size,
+                            'mime_type', mime_type,
+                            'created_at', created_at,
+                            'user_id', user_id
+                        ) ORDER BY created_at
+                    ) as documents
+                FROM documents 
+                WHERE file_hash IS NOT NULL
+                GROUP BY file_hash 
+                HAVING COUNT(*) > 1
+                ORDER BY duplicate_count DESC, first_uploaded DESC
+                LIMIT $1 OFFSET $2
+                "#,
+                r#"
+                SELECT COUNT(*) as total FROM (
+                    SELECT file_hash 
+                    FROM documents 
+                    WHERE file_hash IS NOT NULL
+                    GROUP BY file_hash 
+                    HAVING COUNT(*) > 1
+                ) as duplicate_groups
+                "#
+            )
+        } else {
+            // Regular users see only their own duplicates
+            (
+                r#"
+                SELECT 
+                    file_hash,
+                    COUNT(*) as duplicate_count,
+                    MIN(created_at) as first_uploaded,
+                    MAX(created_at) as last_uploaded,
+                    json_agg(
+                        json_build_object(
+                            'id', id,
+                            'filename', filename,
+                            'original_filename', original_filename,
+                            'file_size', file_size,
+                            'mime_type', mime_type,
+                            'created_at', created_at,
+                            'user_id', user_id
+                        ) ORDER BY created_at
+                    ) as documents
+                FROM documents 
+                WHERE user_id = $3 AND file_hash IS NOT NULL
+                GROUP BY file_hash 
+                HAVING COUNT(*) > 1
+                ORDER BY duplicate_count DESC, first_uploaded DESC
+                LIMIT $1 OFFSET $2
+                "#,
+                r#"
+                SELECT COUNT(*) as total FROM (
+                    SELECT file_hash 
+                    FROM documents 
+                    WHERE user_id = $1 AND file_hash IS NOT NULL
+                    GROUP BY file_hash 
+                    HAVING COUNT(*) > 1
+                ) as duplicate_groups
+                "#
+            )
+        };
+
+        let rows = if user_role == crate::models::UserRole::Admin {
+            sqlx::query(docs_query)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.pool)
+                .await?
+        } else {
+            sqlx::query(docs_query)
+                .bind(limit)
+                .bind(offset)
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?
+        };
+
+        let duplicates: Vec<serde_json::Value> = rows
+            .into_iter()
+            .map(|row| {
+                serde_json::json!({
+                    "file_hash": row.get::<String, _>("file_hash"),
+                    "duplicate_count": row.get::<i64, _>("duplicate_count"),
+                    "first_uploaded": row.get::<chrono::DateTime<chrono::Utc>, _>("first_uploaded"),
+                    "last_uploaded": row.get::<chrono::DateTime<chrono::Utc>, _>("last_uploaded"),
+                    "documents": row.get::<serde_json::Value, _>("documents")
+                })
+            })
+            .collect();
+
+        let total = if user_role == crate::models::UserRole::Admin {
+            sqlx::query_scalar::<_, i64>(count_query)
+                .fetch_one(&self.pool)
+                .await?
+        } else {
+            sqlx::query_scalar::<_, i64>(count_query)
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?
+        };
+
+        Ok((duplicates, total))
     }
 }

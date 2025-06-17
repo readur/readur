@@ -48,6 +48,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             user_id,
+            file_hash: Some("abcd1234567890123456789012345678901234567890123456789012345678".to_string()),
         }
     }
 

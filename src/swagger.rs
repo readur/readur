@@ -8,7 +8,12 @@ use crate::{
     models::{
         CreateUser, LoginRequest, LoginResponse, UserResponse, UpdateUser,
         DocumentResponse, SearchRequest, SearchResponse, EnhancedDocumentResponse,
-        SettingsResponse, UpdateSettings, SearchMode, SearchSnippet, HighlightRange
+        SettingsResponse, UpdateSettings, SearchMode, SearchSnippet, HighlightRange,
+        FacetItem, SearchFacetsResponse, Notification, NotificationSummary, CreateNotification,
+        Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
+        WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
+        WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
+        ProcessedImage, CreateProcessedImage
     },
     routes::metrics::{
         SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
@@ -26,10 +31,19 @@ use crate::{
         // Document endpoints
         crate::routes::documents::upload_document,
         crate::routes::documents::list_documents,
+        crate::routes::documents::get_document_by_id,
         crate::routes::documents::download_document,
+        crate::routes::documents::view_document,
+        crate::routes::documents::get_document_thumbnail,
+        crate::routes::documents::get_document_ocr,
+        crate::routes::documents::get_processed_image,
+        crate::routes::documents::retry_ocr,
+        crate::routes::documents::get_failed_ocr_documents,
+        crate::routes::documents::get_user_duplicates,
         // Search endpoints
         crate::routes::search::search_documents,
         crate::routes::search::enhanced_search_documents,
+        crate::routes::search::get_search_facets,
         // Settings endpoints
         crate::routes::settings::get_settings,
         crate::routes::settings::update_settings,
@@ -42,14 +56,46 @@ use crate::{
         // Queue endpoints
         crate::routes::queue::get_queue_stats,
         crate::routes::queue::requeue_failed,
+        crate::routes::queue::get_ocr_status,
+        crate::routes::queue::pause_ocr_processing,
+        crate::routes::queue::resume_ocr_processing,
         // Metrics endpoints
         crate::routes::metrics::get_system_metrics,
+        // Notifications endpoints
+        crate::routes::notifications::get_notifications,
+        crate::routes::notifications::get_notification_summary,
+        crate::routes::notifications::mark_notification_read,
+        crate::routes::notifications::mark_all_notifications_read,
+        crate::routes::notifications::delete_notification,
+        // Sources endpoints
+        crate::routes::sources::list_sources,
+        crate::routes::sources::create_source,
+        crate::routes::sources::get_source,
+        crate::routes::sources::update_source,
+        crate::routes::sources::delete_source,
+        crate::routes::sources::trigger_sync,
+        crate::routes::sources::stop_sync,
+        crate::routes::sources::test_connection,
+        crate::routes::sources::estimate_crawl,
+        crate::routes::sources::estimate_crawl_with_config,
+        crate::routes::sources::test_connection_with_config,
+        // WebDAV endpoints
+        crate::routes::webdav::start_webdav_sync,
+        crate::routes::webdav::cancel_webdav_sync,
+        crate::routes::webdav::get_webdav_sync_status,
+        crate::routes::webdav::test_webdav_connection,
+        crate::routes::webdav::estimate_webdav_crawl,
     ),
     components(
         schemas(
             CreateUser, LoginRequest, LoginResponse, UserResponse, UpdateUser,
             DocumentResponse, SearchRequest, SearchResponse, EnhancedDocumentResponse,
             SettingsResponse, UpdateSettings, SearchMode, SearchSnippet, HighlightRange,
+            FacetItem, SearchFacetsResponse, Notification, NotificationSummary, CreateNotification,
+            Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
+            WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
+            WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
+            ProcessedImage, CreateProcessedImage,
             SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
         )
     ),
@@ -61,6 +107,9 @@ use crate::{
         (name = "users", description = "User management endpoints"),
         (name = "queue", description = "OCR queue management endpoints"),
         (name = "metrics", description = "System metrics and monitoring endpoints"),
+        (name = "notifications", description = "User notification endpoints"),
+        (name = "sources", description = "Document source management endpoints"),
+        (name = "webdav", description = "WebDAV synchronization endpoints"),
     ),
     modifiers(&SecurityAddon),
     info(

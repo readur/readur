@@ -37,6 +37,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/processed-image", get(get_processed_image))
         .route("/{id}/retry-ocr", post(retry_ocr))
         .route("/failed-ocr", get(get_failed_ocr_documents))
+        .route("/duplicates", get(get_user_duplicates))
 }
 
 #[utoipa::path(
@@ -226,7 +227,7 @@ fn calculate_file_hash(data: &[u8]) -> String {
         ("ocr_status" = Option<String>, Query, description = "Filter by OCR status (pending, processing, completed, failed)")
     ),
     responses(
-        (status = 200, description = "List of user documents", body = Vec<DocumentResponse>),
+        (status = 200, description = "Paginated list of user documents with metadata", body = String),
         (status = 401, description = "Unauthorized")
     )
 )]
@@ -809,4 +810,50 @@ async fn get_failure_statistics(
         .collect();
     
     Ok(serde_json::json!(categories))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/documents/duplicates",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("limit" = Option<i64>, Query, description = "Number of duplicate groups to return per page"),
+        ("offset" = Option<i64>, Query, description = "Number of duplicate groups to skip")
+    ),
+    responses(
+        (status = 200, description = "User's duplicate documents grouped by hash", body = String),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn get_user_duplicates(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Query(query): Query<PaginationQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let limit = query.limit.unwrap_or(25);
+    let offset = query.offset.unwrap_or(0);
+
+    let (duplicates, total_count) = state
+        .db
+        .get_user_duplicates(auth_user.user.id, auth_user.user.role, limit, offset)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let response = serde_json::json!({
+        "duplicates": duplicates,
+        "pagination": {
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + limit < total_count
+        },
+        "statistics": {
+            "total_duplicate_groups": total_count
+        }
+    });
+
+    Ok(Json(response))
 }

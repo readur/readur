@@ -938,6 +938,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             user_id: user.id,
+            file_hash: Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
         };
         
         db.create_document(document).await.unwrap();

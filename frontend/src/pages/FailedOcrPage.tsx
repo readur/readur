@@ -27,6 +27,8 @@ import {
   Collapse,
   LinearProgress,
   Snackbar,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -37,6 +39,7 @@ import {
   Schedule as ScheduleIcon,
   Visibility as VisibilityIcon,
   Download as DownloadIcon,
+  FileCopy as FileCopyIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { api, documentService } from '../services/api';
@@ -87,16 +90,54 @@ interface RetryResponse {
   estimated_wait_minutes?: number;
 }
 
+interface DuplicateDocument {
+  id: string;
+  filename: string;
+  original_filename: string;
+  file_size: number;
+  mime_type: string;
+  created_at: string;
+  user_id: string;
+}
+
+interface DuplicateGroup {
+  file_hash: string;
+  duplicate_count: number;
+  first_uploaded: string;
+  last_uploaded: string;
+  documents: DuplicateDocument[];
+}
+
+interface DuplicatesResponse {
+  duplicates: DuplicateGroup[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    has_more: boolean;
+  };
+  statistics: {
+    total_duplicate_groups: number;
+  };
+}
+
 const FailedOcrPage: React.FC = () => {
+  const [currentTab, setCurrentTab] = useState(0);
   const [documents, setDocuments] = useState<FailedDocument[]>([]);
+  const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
   const [retrying, setRetrying] = useState<string | null>(null);
   const [statistics, setStatistics] = useState<FailedOcrResponse['statistics'] | null>(null);
+  const [duplicateStatistics, setDuplicateStatistics] = useState<DuplicatesResponse['statistics'] | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 25 });
+  const [duplicatesPagination, setDuplicatesPagination] = useState({ page: 1, limit: 25 });
   const [totalPages, setTotalPages] = useState(0);
+  const [duplicatesTotalPages, setDuplicatesTotalPages] = useState(0);
   const [selectedDocument, setSelectedDocument] = useState<FailedDocument | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [expandedDuplicateGroups, setExpandedDuplicateGroups] = useState<Set<string>>(new Set());
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -124,9 +165,36 @@ const FailedOcrPage: React.FC = () => {
     }
   };
 
+  const fetchDuplicates = async () => {
+    try {
+      setDuplicatesLoading(true);
+      const offset = (duplicatesPagination.page - 1) * duplicatesPagination.limit;
+      const response = await documentService.getDuplicates(duplicatesPagination.limit, offset);
+      
+      setDuplicates(response.data.duplicates);
+      setDuplicateStatistics(response.data.statistics);
+      setDuplicatesTotalPages(Math.ceil(response.data.pagination.total / duplicatesPagination.limit));
+    } catch (error) {
+      console.error('Failed to fetch duplicates:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load duplicate documents',
+        severity: 'error'
+      });
+    } finally {
+      setDuplicatesLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchFailedDocuments();
   }, [pagination.page]);
+
+  useEffect(() => {
+    if (currentTab === 1) {
+      fetchDuplicates();
+    }
+  }, [currentTab, duplicatesPagination.page]);
 
   const handleRetryOcr = async (document: FailedDocument) => {
     try {
@@ -200,6 +268,28 @@ const FailedOcrPage: React.FC = () => {
     setDetailsOpen(true);
   };
 
+  const toggleDuplicateGroupExpansion = (groupHash: string) => {
+    const newExpanded = new Set(expandedDuplicateGroups);
+    if (newExpanded.has(groupHash)) {
+      newExpanded.delete(groupHash);
+    } else {
+      newExpanded.add(groupHash);
+    }
+    setExpandedDuplicateGroups(newExpanded);
+  };
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setCurrentTab(newValue);
+  };
+
+  const refreshCurrentTab = () => {
+    if (currentTab === 0) {
+      fetchFailedDocuments();
+    } else {
+      fetchDuplicates();
+    }
+  };
+
   if (loading && documents.length === 0) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -212,20 +302,38 @@ const FailedOcrPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
-          Failed OCR Documents
+          Failed OCR & Duplicates
         </Typography>
         <Button
           variant="outlined"
           startIcon={<RefreshIcon />}
-          onClick={fetchFailedDocuments}
-          disabled={loading}
+          onClick={refreshCurrentTab}
+          disabled={loading || duplicatesLoading}
         >
           Refresh
         </Button>
       </Box>
 
-      {/* Statistics Overview */}
-      {statistics && (
+      <Paper sx={{ mb: 3 }}>
+        <Tabs value={currentTab} onChange={handleTabChange} aria-label="failed ocr and duplicates tabs">
+          <Tab
+            icon={<ErrorIcon />}
+            label={`Failed OCR${statistics ? ` (${statistics.total_failed})` : ''}`}
+            iconPosition="start"
+          />
+          <Tab
+            icon={<FileCopyIcon />}
+            label={`Duplicates${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
+            iconPosition="start"
+          />
+        </Tabs>
+      </Paper>
+
+      {/* Failed OCR Tab Content */}
+      {currentTab === 0 && (
+        <>
+          {/* Statistics Overview */}
+          {statistics && (
         <Grid container spacing={3} mb={3}>
           <Grid item xs={12} md={4}>
             <Card>
@@ -432,6 +540,174 @@ const FailedOcrPage: React.FC = () => {
                 color="primary"
               />
             </Box>
+          )}
+        </>
+      )}
+        </>
+      )}
+
+      {/* Duplicates Tab Content */}
+      {currentTab === 1 && (
+        <>
+          {/* Duplicate Statistics Overview */}
+          {duplicateStatistics && (
+            <Grid container spacing={3} mb={3}>
+              <Grid item xs={12} md={6}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" color="warning.main">
+                      <FileCopyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Total Duplicate Groups
+                    </Typography>
+                    <Typography variant="h3" color="warning.main">
+                      {duplicateStatistics.total_duplicate_groups}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+
+          {duplicatesLoading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+              <CircularProgress />
+            </Box>
+          ) : duplicates.length === 0 ? (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              <AlertTitle>No duplicates found!</AlertTitle>
+              You don't have any duplicate documents. All your files have unique content.
+            </Alert>
+          ) : (
+            <>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <AlertTitle>Duplicate Documents</AlertTitle>
+                These documents have identical content but may have different filenames. 
+                You can click on each group to see all the documents with the same content.
+              </Alert>
+
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell />
+                      <TableCell>Content Hash</TableCell>
+                      <TableCell>Duplicate Count</TableCell>
+                      <TableCell>First Uploaded</TableCell>
+                      <TableCell>Last Uploaded</TableCell>
+                      <TableCell>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {duplicates.map((group) => (
+                      <React.Fragment key={group.file_hash}>
+                        <TableRow>
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              onClick={() => toggleDuplicateGroupExpansion(group.file_hash)}
+                            >
+                              {expandedDuplicateGroups.has(group.file_hash) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                            </IconButton>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontFamily="monospace">
+                              {group.file_hash.substring(0, 16)}...
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={`${group.duplicate_count} files`}
+                              color="warning"
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {format(new Date(group.first_uploaded), 'MMM dd, yyyy')}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {format(new Date(group.last_uploaded), 'MMM dd, yyyy')}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color="text.secondary">
+                              View files below
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell sx={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
+                            <Collapse in={expandedDuplicateGroups.has(group.file_hash)} timeout="auto" unmountOnExit>
+                              <Box sx={{ margin: 1, p: 2, bgcolor: 'grey.50' }}>
+                                <Typography variant="h6" gutterBottom>
+                                  Duplicate Files ({group.duplicate_count} total)
+                                </Typography>
+                                <Grid container spacing={2}>
+                                  {group.documents.map((doc, index) => (
+                                    <Grid item xs={12} md={6} key={doc.id}>
+                                      <Card variant="outlined">
+                                        <CardContent>
+                                          <Typography variant="body2" fontWeight="bold">
+                                            {doc.filename}
+                                          </Typography>
+                                          {doc.original_filename !== doc.filename && (
+                                            <Typography variant="caption" color="text.secondary">
+                                              Original: {doc.original_filename}
+                                            </Typography>
+                                          )}
+                                          <Typography variant="caption" display="block" color="text.secondary">
+                                            {formatFileSize(doc.file_size)} • {doc.mime_type}
+                                          </Typography>
+                                          <Typography variant="caption" display="block" color="text.secondary">
+                                            Uploaded: {format(new Date(doc.created_at), 'MMM dd, yyyy HH:mm')}
+                                          </Typography>
+                                          <Box mt={1}>
+                                            <Tooltip title="View Document">
+                                              <IconButton
+                                                size="small"
+                                                onClick={() => window.open(`/api/documents/${doc.id}/view`, '_blank')}
+                                              >
+                                                <VisibilityIcon />
+                                              </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Download Document">
+                                              <IconButton
+                                                size="small"
+                                                onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
+                                              >
+                                                <DownloadIcon />
+                                              </IconButton>
+                                            </Tooltip>
+                                          </Box>
+                                        </CardContent>
+                                      </Card>
+                                    </Grid>
+                                  ))}
+                                </Grid>
+                              </Box>
+                            </Collapse>
+                          </TableCell>
+                        </TableRow>
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Duplicates Pagination */}
+              {duplicatesTotalPages > 1 && (
+                <Box display="flex" justifyContent="center" mt={3}>
+                  <Pagination
+                    count={duplicatesTotalPages}
+                    page={duplicatesPagination.page}
+                    onChange={(_, page) => setDuplicatesPagination(prev => ({ ...prev, page }))}
+                    color="primary"
+                  />
+                </Box>
+              )}
+            </>
           )}
         </>
       )}

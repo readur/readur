@@ -25,6 +25,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             user_id,
+            file_hash: Some("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string()),
         }
     }
 
@@ -48,6 +49,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             user_id,
+            file_hash: Some("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321".to_string()),
         }
     }
 
@@ -71,6 +73,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             user_id,
+            file_hash: Some("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string()),
         }
     }
 
