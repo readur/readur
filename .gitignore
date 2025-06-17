@@ -6,3 +6,4 @@ assets/
 frontend/dist/
 .claude/
 uploads/
+test-results/

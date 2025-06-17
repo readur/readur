@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-frontend test-e2e test-all test-watch test-clean test-logs test-shell dev-up dev-down dev-logs build clean
+.PHONY: help test test-unit test-integration test-frontend test-e2e test-all test-watch test-clean test-logs test-shell test-results test-html test-results-unit test-results-integration test-results-frontend test-results-clean dev-up dev-down dev-logs build clean
 
 # Default target
 help:
@@ -15,6 +15,12 @@ help:
 	@echo "  make test-clean        - Clean up test environment"
 	@echo "  make test-logs         - View test container logs"
 	@echo "  make test-shell        - Open shell in test container"
+	@echo ""
+	@echo "Test Results Commands:"
+	@echo "  make test-results      - Show latest test summary"
+	@echo "  make test-html         - Open latest HTML test report"
+	@echo "  make test-results-unit - Show latest unit test results"
+	@echo "  make test-results-clean- Clean all saved test results"
 	@echo ""
 	@echo "Development Commands:"
 	@echo "  make dev-up            - Start development environment"
@@ -114,3 +120,22 @@ ci-test:
 quick-test:
 	@echo "Running quick test suite..."
 	@./run-tests.sh unit
+
+# Test results viewing
+test-results:
+	@./view-test-results.sh summary
+
+test-html:
+	@./view-test-results.sh html
+
+test-results-unit:
+	@./view-test-results.sh unit
+
+test-results-integration:
+	@./view-test-results.sh integration
+
+test-results-frontend:
+	@./view-test-results.sh frontend
+
+test-results-clean:
+	@./view-test-results.sh clean
