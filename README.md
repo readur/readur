@@ -22,7 +22,7 @@ The fastest way to get Readur running:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/perfectra1n/readur
 cd readur
 
 # Start all services
