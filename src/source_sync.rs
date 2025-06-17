@@ -211,7 +211,7 @@ impl SourceSyncService {
     async fn perform_sync_internal<F, D, Fut1, Fut2>(
         &self,
         user_id: Uuid,
-        _source_id: Uuid,
+        source_id: Uuid,
         watch_folders: &[String],
         file_extensions: &[String],
         enable_background_ocr: bool,
@@ -270,7 +270,7 @@ impl SourceSyncService {
                             Self::process_single_file(
                                 state_clone,
                                 user_id,
-                                _source_id,
+                                source_id,
                                 &file_info_clone,
                                 enable_background_ocr,
                                 semaphore_clone,
@@ -311,7 +311,7 @@ impl SourceSyncService {
     async fn perform_sync_internal_with_cancellation<F, D, Fut1, Fut2>(
         &self,
         user_id: Uuid,
-        _source_id: Uuid,
+        source_id: Uuid,
         watch_folders: &[String],
         file_extensions: &[String],
         enable_background_ocr: bool,
@@ -326,7 +326,54 @@ impl SourceSyncService {
         Fut2: std::future::Future<Output = Result<Vec<u8>>>,
     {
         let mut total_files_processed = 0;
+        let mut total_files_discovered = 0;
+        let mut total_size_bytes = 0i64;
 
+        // First pass: discover all files and calculate totals
+        for folder_path in watch_folders {
+            if cancellation_token.is_cancelled() {
+                info!("Sync cancelled during folder discovery");
+                return Err(anyhow!("Sync cancelled"));
+            }
+
+            match discover_files(folder_path.clone()).await {
+                Ok(files) => {
+                    let files_to_process: Vec<_> = files.into_iter()
+                        .filter(|file_info| {
+                            if file_info.is_directory {
+                                return false;
+                            }
+
+                            let file_extension = Path::new(&file_info.name)
+                                .extension()
+                                .and_then(|ext| ext.to_str())
+                                .unwrap_or("")
+                                .to_lowercase();
+
+                            file_extensions.contains(&file_extension)
+                        })
+                        .collect();
+
+                    total_files_discovered += files_to_process.len();
+                    total_size_bytes += files_to_process.iter().map(|f| f.size).sum::<i64>();
+                }
+                Err(e) => {
+                    error!("Failed to discover files in folder {}: {}", folder_path, e);
+                }
+            }
+        }
+
+        // Update initial statistics with discovered files
+        if let Err(e) = self.state.db.update_source_sync_stats(
+            source_id,
+            0, // files_synced starts at 0
+            total_files_discovered as i64,
+            total_size_bytes,
+        ).await {
+            error!("Failed to update initial sync stats: {}", e);
+        }
+
+        // Second pass: process files and update stats progressively
         for folder_path in watch_folders {
             // Check for cancellation before processing each folder
             if cancellation_token.is_cancelled() {
@@ -389,7 +436,7 @@ impl SourceSyncService {
                             Self::process_single_file_with_cancellation(
                                 state_clone,
                                 user_id,
-                                _source_id,
+                                source_id,
                                 &file_info_clone,
                                 enable_background_ocr,
                                 semaphore_clone,
@@ -401,7 +448,7 @@ impl SourceSyncService {
                         file_futures.push(future);
                     }
 
-                    // Process files concurrently
+                    // Process files concurrently and update stats periodically
                     while let Some(result) = file_futures.next().await {
                         // Check for cancellation during processing
                         if cancellation_token.is_cancelled() {
@@ -413,7 +460,22 @@ impl SourceSyncService {
                             Ok(processed) => {
                                 if processed {
                                     folder_files_processed += 1;
-                                    info!("Successfully processed file ({} completed in this folder)", folder_files_processed);
+                                    total_files_processed += 1;
+                                    
+                                    // Update statistics every 10 files processed or every file if under 10 total
+                                    if total_files_processed % 10 == 0 || total_files_discovered <= 10 {
+                                        let files_pending = total_files_discovered as i64 - total_files_processed as i64;
+                                        if let Err(e) = self.state.db.update_source_sync_stats(
+                                            source_id,
+                                            total_files_processed as i64,
+                                            files_pending.max(0),
+                                            total_size_bytes,
+                                        ).await {
+                                            error!("Failed to update sync stats: {}", e);
+                                        }
+                                    }
+                                    
+                                    info!("Successfully processed file ({} completed in this folder, {} total)", folder_files_processed, total_files_processed);
                                 }
                             }
                             Err(error) => {
@@ -421,13 +483,21 @@ impl SourceSyncService {
                             }
                         }
                     }
-
-                    total_files_processed += folder_files_processed;
                 }
                 Err(e) => {
                     error!("Failed to discover files in folder {}: {}", folder_path, e);
                 }
             }
+        }
+
+        // Final statistics update
+        if let Err(e) = self.state.db.update_source_sync_stats(
+            source_id,
+            total_files_processed as i64,
+            0, // All files are now processed
+            total_size_bytes,
+        ).await {
+            error!("Failed to update final sync stats: {}", e);
         }
 
         info!("Source sync completed: {} files processed", total_files_processed);

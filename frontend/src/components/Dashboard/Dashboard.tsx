@@ -310,7 +310,7 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
                   sx={{
                     px: 0,
                     py: 1.5,
-                    borderBottom: index < Math.min(documents.length, 5) - 1 ? 1 : 0,
+                    borderBottom: index < Math.min(safeDocuments.length, 5) - 1 ? 1 : 0,
                     borderColor: 'divider',
                   }}
                 >
@@ -361,7 +361,13 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
                       <IconButton size="small" onClick={() => navigate(`/documents/${doc.id}`)}>
                         <ViewIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => {
+                          const downloadUrl = `/api/documents/${doc.id}/download`;
+                          window.open(downloadUrl, '_blank');
+                        }}
+                      >
                         <DownloadIcon fontSize="small" />
                       </IconButton>
                     </Box>
@@ -513,17 +519,28 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchDashboardData = async (): Promise<void> => {
       try {
-        // Fetch both documents and metrics
-        const [docsResponse, metricsResponse] = await Promise.all([
-          api.get<Document[]>('/documents'),
-          api.get<any>('/metrics')
-        ]);
+        // Fetch documents with better error handling
+        let docs: Document[] = [];
+        try {
+          const docsResponse = await api.get<Document[]>('/documents');
+          docs = Array.isArray(docsResponse.data) ? docsResponse.data : [];
+        } catch (docError) {
+          console.error('Failed to fetch documents:', docError);
+          // Continue with empty documents array
+        }
         
-        const docs = docsResponse.data || [];
         setDocuments(docs);
         
-        const metricsData = metricsResponse.data;
-        setMetrics(metricsData);
+        // Fetch metrics with better error handling
+        let metricsData: any = null;
+        try {
+          const metricsResponse = await api.get<any>('/metrics');
+          metricsData = metricsResponse.data;
+          setMetrics(metricsData);
+        } catch (metricsError) {
+          console.error('Failed to fetch metrics:', metricsError);
+          // Continue with null metrics - will fall back to client calculation
+        }
         
         // Use backend metrics if available, otherwise fall back to client calculation
         if (metricsData?.documents) {
@@ -536,7 +553,7 @@ const Dashboard: React.FC = () => {
         } else {
           // Fallback to client-side calculation
           const totalSize = docs.reduce((sum, doc) => sum + (doc.file_size || 0), 0);
-          const ocrProcessed = docs.filter(doc => doc.ocr_text).length;
+          const ocrProcessed = docs.filter(doc => doc.has_ocr_text || doc.ocr_text).length;
           
           setStats({
             totalDocuments: docs.length,
@@ -546,7 +563,15 @@ const Dashboard: React.FC = () => {
           });
         }
       } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
+        console.error('Unexpected error in dashboard data fetch:', error);
+        // Set default empty state
+        setDocuments([]);
+        setStats({
+          totalDocuments: 0,
+          totalSize: 0,
+          ocrProcessed: 0,
+          searchablePages: 0,
+        });
       } finally {
         setLoading(false);
       }

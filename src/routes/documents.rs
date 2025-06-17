@@ -29,6 +29,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", post(upload_document))
         .route("/", get(list_documents))
+        .route("/{id}", get(get_document_by_id))
         .route("/{id}/download", get(download_document))
         .route("/{id}/view", get(view_document))
         .route("/{id}/thumbnail", get(get_document_thumbnail))
@@ -36,6 +37,59 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/processed-image", get(get_processed_image))
         .route("/{id}/retry-ocr", post(retry_ocr))
         .route("/failed-ocr", get(get_failed_ocr_documents))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/documents/{id}",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Document ID")
+    ),
+    responses(
+        (status = 200, description = "Document details", body = DocumentResponse),
+        (status = 404, description = "Document not found"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn get_document_by_id(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Path(document_id): Path<uuid::Uuid>,
+) -> Result<Json<DocumentResponse>, StatusCode> {
+    // Get documents for user with proper role-based access
+    let documents = state
+        .db
+        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    // Find the specific document
+    let document = documents
+        .into_iter()
+        .find(|doc| doc.id == document_id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    
+    // Convert to DocumentResponse
+    let response = DocumentResponse {
+        id: document.id,
+        filename: document.filename,
+        original_filename: document.original_filename,
+        file_size: document.file_size,
+        mime_type: document.mime_type,
+        created_at: document.created_at,
+        has_ocr_text: document.ocr_text.is_some(),
+        tags: document.tags,
+        ocr_confidence: document.ocr_confidence,
+        ocr_word_count: document.ocr_word_count,
+        ocr_processing_time_ms: document.ocr_processing_time_ms,
+        ocr_status: document.ocr_status,
+    };
+    
+    Ok(Json(response))
 }
 
 #[utoipa::path(

@@ -1,6 +1,4 @@
 use axum::{
-    http::StatusCode,
-    response::Html,
     routing::get,
     Router,
 };
@@ -284,10 +282,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api/users", readur::routes::users::router())
         .nest("/api/webdav", readur::routes::webdav::router())
         .merge(readur::swagger::create_swagger_router())
-        .fallback_service(ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")))
+        .fallback_service(
+            ServeDir::new("dist")
+                .precompressed_gzip()
+                .precompressed_br()
+                .fallback(ServeFile::new("dist/index.html"))
+        )
         .layer(CorsLayer::permissive())
         .with_state(web_state.clone());
     
+    // Debug static file serving setup
+    let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    info!("Server working directory: {}", current_dir.display());
+    
+    let dist_path = current_dir.join("dist");
+    info!("Looking for static files at: {}", dist_path.display());
+    info!("dist directory exists: {}", dist_path.exists());
+    
+    if dist_path.exists() {
+        if let Ok(entries) = std::fs::read_dir(&dist_path) {
+            info!("Contents of dist directory:");
+            for entry in entries.flatten() {
+                info!("  - {}", entry.file_name().to_string_lossy());
+            }
+        }
+        
+        let index_path = dist_path.join("index.html");
+        info!("index.html exists: {}", index_path.exists());
+        if index_path.exists() {
+            if let Ok(metadata) = std::fs::metadata(&index_path) {
+                info!("index.html size: {} bytes", metadata.len());
+            }
+        }
+    }
+
     let listener = tokio::net::TcpListener::bind(&config.server_address).await?;
     info!("Server starting on {}", config.server_address);
     
@@ -297,9 +325,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 
-async fn serve_spa() -> Result<Html<String>, StatusCode> {
-    match tokio::fs::read_to_string("frontend/dist/index.html").await {
-        Ok(html) => Ok(Html(html)),
-        Err(_) => Err(StatusCode::NOT_FOUND),
-    }
-}
