@@ -507,7 +507,7 @@ impl Default for Settings {
                 "txt".to_string(),
             ],
             auto_rotate_images: true,
-            enable_image_preprocessing: true,
+            enable_image_preprocessing: false,
             search_results_per_page: 25,
             search_snippet_length: 200,
             fuzzy_search_threshold: 0.8,

@@ -28,5 +28,5 @@ WHERE ocr_status = 'failed'
 GROUP BY ocr_failure_reason
 ORDER BY error_count DESC;
 
--- Grant appropriate permissions
-GRANT SELECT ON ocr_error_summary TO readur_user;
+-- Grant appropriate permissions (commented out - role may not exist in all environments)
+-- GRANT SELECT ON ocr_error_summary TO readur_user;
