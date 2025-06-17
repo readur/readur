@@ -1157,7 +1157,13 @@ const SourcesPage: React.FC = () => {
                     label="Server URL"
                     value={formData.server_url}
                     onChange={(e) => setFormData({ ...formData, server_url: e.target.value })}
-                    placeholder="https://nextcloud.example.com/remote.php/dav/files/username/"
+                    placeholder={
+                      formData.server_type === 'nextcloud' 
+                        ? "https://nextcloud.example.com/"
+                        : formData.server_type === 'owncloud'
+                        ? "https://owncloud.example.com/remote.php/dav/files/username/"
+                        : "https://webdav.example.com/dav/"
+                    }
                     sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                   />
 
