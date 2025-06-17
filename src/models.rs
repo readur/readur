@@ -721,7 +721,7 @@ pub struct FileInfo {
     pub is_directory: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub enum SourceType {
     #[serde(rename = "webdav")]
     WebDAV,

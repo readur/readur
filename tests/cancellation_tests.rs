@@ -612,7 +612,7 @@ fn test_cancellation_state_transitions() {
     ];
     
     for (initial_status, cancellation_state, expected_final_status) in test_cases {
-        let final_status = apply_cancellation_state_transition(initial_status, cancellation_state);
+        let final_status = apply_cancellation_state_transition(initial_status, cancellation_state.clone());
         assert_eq!(final_status, expected_final_status,
                    "Wrong final status for cancellation state: {:?}", cancellation_state);
     }

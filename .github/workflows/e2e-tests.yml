@@ -54,10 +54,6 @@ jobs:
       working-directory: ./frontend
       run: npm run build
     
-    - name: Setup test database
-      run: |
-        PGPASSWORD=postgres psql -h localhost -U postgres -d readur_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
-        
     - name: Run database migrations
       run: |
         # Set environment variables for test database
