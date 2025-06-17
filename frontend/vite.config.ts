@@ -19,5 +19,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Suppress "use client" directive warnings from MUI
+        if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
+          return
+        }
+        warn(warning)
+      }
+    }
   },
 })
