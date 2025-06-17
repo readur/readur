@@ -186,6 +186,16 @@ export const documentService = {
     })
   },
 
+  retryOcr: (id: string) => {
+    return api.post(`/documents/${id}/retry-ocr`)
+  },
+
+  getFailedOcrDocuments: (limit = 50, offset = 0) => {
+    return api.get(`/documents/failed-ocr`, {
+      params: { limit, offset },
+    })
+  },
+
   search: (searchRequest: SearchRequest) => {
     return api.get<SearchResponse>('/search', {
       params: searchRequest,

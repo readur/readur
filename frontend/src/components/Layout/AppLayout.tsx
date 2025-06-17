@@ -32,6 +32,7 @@ import {
   Logout as LogoutIcon,
   Description as DocumentIcon,
   Storage as StorageIcon,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -64,6 +65,7 @@ const navigationItems: NavigationItem[] = [
   { text: 'Search', icon: SearchIcon, path: '/search' },
   { text: 'Sources', icon: StorageIcon, path: '/sources' },
   { text: 'Watch Folder', icon: FolderIcon, path: '/watch' },
+  { text: 'Failed OCR', icon: ErrorIcon, path: '/failed-ocr' },
 ];
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {

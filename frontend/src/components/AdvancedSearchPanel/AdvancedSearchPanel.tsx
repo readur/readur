@@ -347,8 +347,8 @@ const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
                       label="Boost Recent Documents"
                     />
                   </Box>
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
             )}
 
             {/* Results Display Section */}

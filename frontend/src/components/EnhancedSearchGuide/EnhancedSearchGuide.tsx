@@ -181,6 +181,7 @@ const EnhancedSearchGuide: React.FC<EnhancedSearchGuideProps> = ({ onExampleClic
       sx={{ 
         mb: 1.5,
         transition: 'all 0.2s',
+        backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'background.paper',
         '&:hover': {
           boxShadow: 2,
           transform: 'translateY(-2px)',
@@ -200,7 +201,7 @@ const EnhancedSearchGuide: React.FC<EnhancedSearchGuideProps> = ({ onExampleClic
                 variant="body2" 
                 fontFamily="monospace" 
                 sx={{ 
-                  backgroundColor: 'grey.100',
+                  backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                   px: 1,
                   py: 0.5,
                   borderRadius: 1,
@@ -273,7 +274,11 @@ const EnhancedSearchGuide: React.FC<EnhancedSearchGuideProps> = ({ onExampleClic
 
   if (compact && !expanded) {
     return (
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+      <Paper variant="outlined" sx={{ 
+        p: 2, 
+        mb: 2, 
+        backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'background.paper' 
+      }}>
         <Box display="flex" alignItems="center" justifyContent="space-between">
           <Box display="flex" alignItems="center" gap={1}>
             <TipIcon color="primary" />
@@ -294,7 +299,7 @@ const EnhancedSearchGuide: React.FC<EnhancedSearchGuideProps> = ({ onExampleClic
   }
 
   return (
-    <Paper elevation={0} sx={{ p: 3, mb: 3, backgroundColor: 'grey.50' }}>
+    <Paper elevation={0} sx={{ p: 3, mb: 3, backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50' }}>
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
         <Typography variant="h6" display="flex" alignItems="center" gap={1}>
           <TipIcon color="primary" />
