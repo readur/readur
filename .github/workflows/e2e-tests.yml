@@ -54,17 +54,6 @@ jobs:
       working-directory: ./frontend
       run: npm run build
     
-    - name: Run database migrations
-      run: |
-        # Set environment variables for test database
-        export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/readur_test"
-        export TEST_MODE=true
-        
-        # Run migrations
-        cargo run --bin migrate
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/readur_test
-        TEST_MODE: true
     
     - name: Start backend server
       run: |

@@ -63,10 +63,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Run database migrations
-        run: |
-          cargo install sqlx-cli --no-default-features --features postgres
-          sqlx migrate run
 
       - name: Run integration tests
         run: |

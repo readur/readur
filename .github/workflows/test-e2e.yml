@@ -69,13 +69,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres
-
-      - name: Run database migrations
-        run: sqlx migrate run
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/readur_test
 
       - name: Build backend
         run: cargo build --release
