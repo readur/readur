@@ -29,6 +29,7 @@ import {
   Snackbar,
   Tabs,
   Tab,
+  useTheme,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -40,6 +41,8 @@ import {
   Visibility as VisibilityIcon,
   Download as DownloadIcon,
   FileCopy as FileCopyIcon,
+  Delete as DeleteIcon,
+  FindInPage as FindInPageIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { api, documentService } from '../services/api';
@@ -122,6 +125,7 @@ interface DuplicatesResponse {
 }
 
 const FailedOcrPage: React.FC = () => {
+  const theme = useTheme();
   const [currentTab, setCurrentTab] = useState(0);
   const [documents, setDocuments] = useState<FailedDocument[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
@@ -580,9 +584,19 @@ const FailedOcrPage: React.FC = () => {
           ) : (
             <>
               <Alert severity="info" sx={{ mb: 2 }}>
-                <AlertTitle>Duplicate Documents</AlertTitle>
+                <AlertTitle>Duplicate Documents Found</AlertTitle>
                 These documents have identical content but may have different filenames. 
-                You can click on each group to see all the documents with the same content.
+                You can expand each group to see all files with the same content and choose which ones to keep.
+              </Alert>
+
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <AlertTitle>What should you do?</AlertTitle>
+                <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
+                  <li><strong>Review each group:</strong> Click to expand and see all duplicate files</li>
+                  <li><strong>Keep the best version:</strong> Choose the file with the most descriptive name</li>
+                  <li><strong>Check content:</strong> Use View/Download to verify files are truly identical</li>
+                  <li><strong>Note for admin:</strong> Consider implementing bulk delete functionality for duplicates</li>
+                </Box>
               </Alert>
 
               <TableContainer component={Paper}>
@@ -640,45 +654,124 @@ const FailedOcrPage: React.FC = () => {
                         <TableRow>
                           <TableCell sx={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
                             <Collapse in={expandedDuplicateGroups.has(group.file_hash)} timeout="auto" unmountOnExit>
-                              <Box sx={{ margin: 1, p: 2, bgcolor: 'grey.50' }}>
-                                <Typography variant="h6" gutterBottom>
+                              <Box 
+                                sx={{ 
+                                  margin: 1, 
+                                  p: 3,
+                                  background: theme.palette.mode === 'light' 
+                                    ? 'rgba(248, 250, 252, 0.8)' 
+                                    : 'rgba(30, 30, 30, 0.8)',
+                                  backdropFilter: 'blur(10px)',
+                                  borderRadius: 2,
+                                  border: `1px solid ${theme.palette.divider}`,
+                                }}
+                              >
+                                <Typography variant="h6" gutterBottom sx={{ 
+                                  color: theme.palette.primary.main,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1
+                                }}>
+                                  <FileCopyIcon />
                                   Duplicate Files ({group.duplicate_count} total)
                                 </Typography>
+                                
+                                <Alert severity="info" sx={{ mb: 2, fontSize: '0.875rem' }}>
+                                  <strong>Storage Impact:</strong> These {group.duplicate_count} files contain identical content. 
+                                  Consider keeping only the best-named version to save space.
+                                </Alert>
+
                                 <Grid container spacing={2}>
                                   {group.documents.map((doc, index) => (
-                                    <Grid item xs={12} md={6} key={doc.id}>
-                                      <Card variant="outlined">
+                                    <Grid item xs={12} md={6} lg={4} key={doc.id}>
+                                      <Card 
+                                        variant="outlined"
+                                        sx={{
+                                          background: theme.palette.mode === 'light'
+                                            ? 'rgba(255, 255, 255, 0.9)'
+                                            : 'rgba(40, 40, 40, 0.9)',
+                                          backdropFilter: 'blur(5px)',
+                                          border: `1px solid ${theme.palette.divider}`,
+                                          transition: 'all 0.2s ease',
+                                          '&:hover': {
+                                            transform: 'translateY(-2px)',
+                                            boxShadow: theme.shadows[4],
+                                          }
+                                        }}
+                                      >
                                         <CardContent>
-                                          <Typography variant="body2" fontWeight="bold">
-                                            {doc.filename}
-                                          </Typography>
+                                          <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
+                                            <Typography variant="body2" fontWeight="bold" sx={{ 
+                                              color: theme.palette.text.primary,
+                                              wordBreak: 'break-word',
+                                              flex: 1,
+                                              mr: 1
+                                            }}>
+                                              {doc.filename}
+                                            </Typography>
+                                            {index === 0 && (
+                                              <Chip 
+                                                label="First" 
+                                                size="small" 
+                                                color="primary" 
+                                                variant="outlined"
+                                              />
+                                            )}
+                                          </Box>
+                                          
                                           {doc.original_filename !== doc.filename && (
-                                            <Typography variant="caption" color="text.secondary">
+                                            <Typography variant="caption" color="text.secondary" display="block">
                                               Original: {doc.original_filename}
                                             </Typography>
                                           )}
-                                          <Typography variant="caption" display="block" color="text.secondary">
+                                          
+                                          <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 1 }}>
                                             {formatFileSize(doc.file_size)} • {doc.mime_type}
                                           </Typography>
-                                          <Typography variant="caption" display="block" color="text.secondary">
+                                          
+                                          <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 2 }}>
                                             Uploaded: {format(new Date(doc.created_at), 'MMM dd, yyyy HH:mm')}
                                           </Typography>
-                                          <Box mt={1}>
-                                            <Tooltip title="View Document">
-                                              <IconButton
+                                          
+                                          <Box display="flex" justifyContent="space-between" alignItems="center">
+                                            <Box>
+                                              <Tooltip title="View Document">
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={() => window.open(`/api/documents/${doc.id}/view`, '_blank')}
+                                                  sx={{ color: theme.palette.primary.main }}
+                                                >
+                                                  <VisibilityIcon />
+                                                </IconButton>
+                                              </Tooltip>
+                                              <Tooltip title="Download Document">
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
+                                                  sx={{ color: theme.palette.secondary.main }}
+                                                >
+                                                  <DownloadIcon />
+                                                </IconButton>
+                                              </Tooltip>
+                                            </Box>
+                                            
+                                            <Tooltip title="Get document details and duplicate information">
+                                              <Button
                                                 size="small"
-                                                onClick={() => window.open(`/api/documents/${doc.id}/view`, '_blank')}
+                                                variant="outlined"
+                                                color="info"
+                                                startIcon={<FindInPageIcon />}
+                                                sx={{ fontSize: '0.75rem' }}
+                                                onClick={() => {
+                                                  setSnackbar({
+                                                    open: true,
+                                                    message: `Document "${doc.filename}" has ${group.duplicate_count - 1} duplicate(s). Content hash: ${group.file_hash.substring(0, 16)}...`,
+                                                    severity: 'info'
+                                                  });
+                                                }}
                                               >
-                                                <VisibilityIcon />
-                                              </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Download Document">
-                                              <IconButton
-                                                size="small"
-                                                onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
-                                              >
-                                                <DownloadIcon />
-                                              </IconButton>
+                                                Info
+                                              </Button>
                                             </Tooltip>
                                           </Box>
                                         </CardContent>
