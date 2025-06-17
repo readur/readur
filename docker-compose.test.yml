@@ -1,0 +1,112 @@
+services:
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: readur_postgres_test
+    environment:
+      POSTGRES_USER: readur_test
+      POSTGRES_PASSWORD: readur_test
+      POSTGRES_DB: readur_test
+    volumes:
+      # Using tmpfs for ephemeral test data
+      - type: tmpfs
+        target: /var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Different port to avoid conflict
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U readur_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - readur_test_network
+
+  readur_test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: readur_app_test
+    environment:
+      # Database configuration
+      DATABASE_URL: postgresql://readur_test:readur_test@postgres_test/readur_test
+      
+      # Server configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8001  # Different port from dev
+      
+      # Security
+      JWT_SECRET: test-jwt-secret-key
+      
+      # File paths (using temporary directories)
+      UPLOAD_PATH: /tmp/test_uploads
+      WATCH_FOLDER: /tmp/test_watch
+      
+      # OCR configuration
+      OCR_LANGUAGE: eng
+      CONCURRENT_OCR_JOBS: 2  # Lower for tests
+      OCR_TIMEOUT_SECONDS: 60  # Shorter timeout for tests
+      MAX_FILE_SIZE_MB: 10  # Smaller for tests
+      
+      # Performance (reduced for testing)
+      MEMORY_LIMIT_MB: 256
+      CPU_PRIORITY: normal
+      
+      # File watching
+      ALLOWED_FILE_TYPES: pdf,txt,doc,docx,png,jpg,jpeg
+      WATCH_INTERVAL_SECONDS: 5  # Faster for tests
+      FILE_STABILITY_CHECK_MS: 500
+      MAX_FILE_AGE_HOURS: 1
+      
+      # Test-specific environment variables
+      RUST_LOG: debug
+      TEST_ENV: true
+    
+    ports:
+      - "8001:8001"  # Different port from dev
+    
+    volumes:
+      # Using tmpfs for faster test execution
+      - type: tmpfs
+        target: /tmp/test_uploads
+      - type: tmpfs
+        target: /tmp/test_watch
+      # Mount migrations for SQLx
+      - ./migrations:/app/migrations:ro
+    
+    depends_on:
+      postgres_test:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    
+    networks:
+      - readur_test_network
+
+  # Frontend test runner service
+  frontend_test:
+    image: node:18-alpine
+    container_name: readur_frontend_test
+    working_dir: /app
+    environment:
+      NODE_ENV: test
+      VITE_API_BASE_URL: http://readur_test:8001
+      CI: true
+    volumes:
+      - ./frontend:/app:ro
+      - /app/node_modules  # Prevent mounting host node_modules
+    command: ["sh", "-c", "npm ci && npm test -- --run --reporter=verbose"]
+    networks:
+      - readur_test_network
+    profiles:
+      - frontend-tests
+
+networks:
+  readur_test_network:
+    name: readur_test_network
+    driver: bridge
+
+# No persistent volumes - everything is ephemeral for tests
