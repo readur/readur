@@ -104,6 +104,30 @@ services:
     profiles:
       - frontend-tests
 
+  # Frontend development server for E2E tests
+  frontend_dev:
+    image: node:18-alpine
+    container_name: readur_frontend_dev
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: http://readur_test:8001
+      VITE_HOST: 0.0.0.0
+      VITE_PORT: 5174
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0 --port 5174"]
+    ports:
+      - "5174:5174"
+    networks:
+      - readur_test_network
+    depends_on:
+      readur_test:
+        condition: service_healthy
+    profiles:
+      - e2e-tests
+
 networks:
   readur_test_network:
     name: readur_test_network

@@ -1,0 +1,11 @@
+This is a sample text document for testing.
+It contains multiple lines of text.
+
+This document is used for E2E testing of the upload functionality.
+The OCR system should be able to process this text correctly.
+
+Key words for search testing:
+- contract
+- important
+- test document
+- readur

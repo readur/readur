@@ -154,6 +154,7 @@ main() {
             run_unit_tests
             run_integration_tests
             run_frontend_tests
+            run_e2e_tests
             ;;
         *)
             print_error "Invalid test type: $TEST_TYPE"
@@ -252,10 +253,74 @@ run_frontend_tests() {
     fi
 }
 
-# Function to run E2E tests (placeholder for future implementation)
+# Function to run E2E tests
 run_e2e_tests() {
-    print_warning "E2E tests not yet implemented"
-    # TODO: Add E2E test implementation using Playwright or Cypress
+    print_status "Running E2E tests..."
+    
+    # Start frontend container for E2E tests
+    print_status "Starting frontend development server for E2E tests..."
+    docker compose -f $COMPOSE_FILE -p $COMPOSE_PROJECT_NAME --profile e2e-tests up -d frontend_dev
+    
+    # Wait for frontend to be ready
+    local max_attempts=30
+    local attempt=0
+    
+    print_status "Waiting for frontend to be ready..."
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -f http://localhost:5174 >/dev/null 2>&1; then
+            print_success "Frontend is ready"
+            break
+        fi
+        
+        attempt=$((attempt + 1))
+        sleep 2
+    done
+    
+    if [ $attempt -eq $max_attempts ]; then
+        print_error "Frontend failed to start within expected time"
+        exit 1
+    fi
+    
+    # Run E2E tests
+    local output
+    local exit_code
+    
+    # Run tests in frontend directory with proper environment variables
+    cd frontend
+    
+    # Install dependencies if not already installed
+    if [ ! -d "node_modules" ]; then
+        print_status "Installing frontend dependencies..."
+        npm ci
+    fi
+    
+    # Install Playwright browsers if not already installed
+    if [ ! -d "node_modules/@playwright" ]; then
+        print_status "Installing Playwright browsers..."
+        npx playwright install --with-deps
+    fi
+    
+    # Set environment variables for E2E tests
+    export PLAYWRIGHT_BASE_URL="http://localhost:5174"
+    export API_BASE_URL="http://localhost:8001"
+    
+    output=$(npm run test:e2e 2>&1)
+    exit_code=$?
+    
+    # Return to root directory
+    cd ..
+    
+    # Display output in terminal
+    echo "$output"
+    
+    if [ $exit_code -eq 0 ]; then
+        print_success "E2E tests passed"
+        save_output "e2e" "$output" "passed"
+    else
+        print_error "E2E tests failed"
+        save_output "e2e" "$output" "failed"
+        exit 1
+    fi
 }
 
 # Function to generate detailed test report
