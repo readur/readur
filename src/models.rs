@@ -75,6 +75,7 @@ pub struct UserResponse {
     pub id: Uuid,
     pub username: String,
     pub email: String,
+    pub role: UserRole,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -258,6 +259,7 @@ impl From<User> for UserResponse {
             id: user.id,
             username: user.username,
             email: user.email,
+            role: user.role,
         }
     }
 }

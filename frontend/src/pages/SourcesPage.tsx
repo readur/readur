@@ -63,10 +63,13 @@ import {
   Assessment as AssessmentIcon,
   Extension as ExtensionIcon,
   Storage as ServerIcon,
+  Pause as PauseIcon,
+  PlayArrow as ResumeIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { queueService } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Source {
   id: string;
@@ -94,8 +97,11 @@ interface SnackbarState {
 const SourcesPage: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ocrStatus, setOcrStatus] = useState<{ is_paused: boolean; status: string }>({ is_paused: false, status: 'running' });
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Source | null>(null);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
@@ -143,7 +149,10 @@ const SourcesPage: React.FC = () => {
 
   useEffect(() => {
     loadSources();
-  }, []);
+    if (user?.role === 'Admin') {
+      loadOcrStatus();
+    }
+  }, [user]);
 
   // Update default folders when source type changes
   useEffect(() => {
@@ -179,6 +188,47 @@ const SourcesPage: React.FC = () => {
 
   const showSnackbar = (message: string, severity: SnackbarState['severity']) => {
     setSnackbar({ open: true, message, severity });
+  };
+
+  // OCR Control Functions (Admin only)
+  const loadOcrStatus = async () => {
+    if (user?.role !== 'Admin') return;
+    try {
+      const response = await queueService.getOcrStatus();
+      setOcrStatus(response.data);
+    } catch (error) {
+      console.error('Failed to load OCR status:', error);
+    }
+  };
+
+  const handlePauseOcr = async () => {
+    if (user?.role !== 'Admin') return;
+    setOcrLoading(true);
+    try {
+      await queueService.pauseOcr();
+      await loadOcrStatus();
+      showSnackbar('OCR processing paused successfully', 'success');
+    } catch (error) {
+      console.error('Failed to pause OCR:', error);
+      showSnackbar('Failed to pause OCR processing', 'error');
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const handleResumeOcr = async () => {
+    if (user?.role !== 'Admin') return;
+    setOcrLoading(true);
+    try {
+      await queueService.resumeOcr();
+      await loadOcrStatus();
+      showSnackbar('OCR processing resumed successfully', 'success');
+    } catch (error) {
+      console.error('Failed to resume OCR:', error);
+      showSnackbar('Failed to resume OCR processing', 'error');
+    } finally {
+      setOcrLoading(false);
+    }
   };
 
   const handleCreateSource = () => {
@@ -858,6 +908,63 @@ const SourcesPage: React.FC = () => {
           >
             Refresh
           </Button>
+
+          {/* OCR Controls for Admin Users */}
+          {user?.role === 'Admin' && (
+            <>
+              {ocrLoading ? (
+                <CircularProgress size={24} />
+              ) : ocrStatus.is_paused ? (
+                <Button
+                  variant="outlined"
+                  size="large"
+                  startIcon={<ResumeIcon />}
+                  onClick={handleResumeOcr}
+                  sx={{
+                    borderRadius: 3,
+                    px: 4,
+                    py: 1.5,
+                    borderWidth: 2,
+                    borderColor: 'success.main',
+                    color: 'success.main',
+                    '&:hover': {
+                      borderWidth: 2,
+                      borderColor: 'success.dark',
+                      backgroundColor: alpha(theme.palette.success.main, 0.1),
+                      transform: 'translateY(-1px)',
+                    },
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
+                  Resume OCR
+                </Button>
+              ) : (
+                <Button
+                  variant="outlined"
+                  size="large"
+                  startIcon={<PauseIcon />}
+                  onClick={handlePauseOcr}
+                  sx={{
+                    borderRadius: 3,
+                    px: 4,
+                    py: 1.5,
+                    borderWidth: 2,
+                    borderColor: 'warning.main',
+                    color: 'warning.main',
+                    '&:hover': {
+                      borderWidth: 2,
+                      borderColor: 'warning.dark',
+                      backgroundColor: alpha(theme.palette.warning.main, 0.1),
+                      transform: 'translateY(-1px)',
+                    },
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
+                  Pause OCR
+                </Button>
+              )}
+            </>
+          )}
         </Stack>
       </Box>
 
