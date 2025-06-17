@@ -26,7 +26,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Grid,
   Card,
   CardContent,
   Divider,
@@ -36,6 +35,7 @@ import {
   LinearProgress,
   CircularProgress,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, 
          CloudSync as CloudSyncIcon, Folder as FolderIcon,
          Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon,

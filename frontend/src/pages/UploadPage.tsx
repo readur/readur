@@ -4,7 +4,6 @@ import {
   Typography,
   Container,
   Paper,
-  Grid,
   Card,
   CardContent,
   List,
@@ -12,6 +11,7 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   CloudUpload as UploadIcon,
   AutoAwesome as AutoIcon,

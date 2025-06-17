@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
-  Grid,
   Card,
   CardContent,
   TextField,
@@ -37,6 +36,7 @@ import {
   Skeleton,
   SelectChangeEvent,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   Search as SearchIcon,
   FilterList as FilterIcon,
@@ -295,14 +295,13 @@ const SearchPage: React.FC = () => {
       setSuggestions(response.data.suggestions || []);
       
       // Extract unique tags for filter options
-      const tags = [...new Set(results.flatMap(doc => doc.tags))];
+      const tags = [...new Set(results.flatMap(doc => doc.tags || []))].filter(tag => typeof tag === 'string');
       setAvailableTags(tags);
       
       // Clear progress after a brief delay
       setTimeout(() => setSearchProgress(0), 500);
       
     } catch (err) {
-      clearInterval(progressInterval);
       setSearchProgress(0);
       setError('Search failed. Please try again.');
       console.error(err);
@@ -382,10 +381,10 @@ const SearchPage: React.FC = () => {
     try {
       const response = await documentService.download(doc.id);
       const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
+      const link = window.document.createElement('a');
       link.href = url;
       link.setAttribute('download', doc.original_filename);
-      document.body.appendChild(link);
+      window.document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
@@ -456,7 +455,7 @@ const SearchPage: React.FC = () => {
 
   const handleSearchModeChange = (event: React.MouseEvent<HTMLElement>, newMode: SearchMode | null): void => {
     if (newMode) {
-      setSearchMode(newMode);
+      setAdvancedSettings(prev => ({ ...prev, searchMode: newMode }));
     }
   };
 
@@ -616,7 +615,7 @@ const SearchPage: React.FC = () => {
                   size="small" 
                   variant="outlined"
                 />
-                {useEnhancedSearch && (
+                {advancedSettings.useEnhancedSearch && (
                   <Chip 
                     icon={<SpeedIcon />}
                     label="Enhanced" 
@@ -629,7 +628,7 @@ const SearchPage: React.FC = () => {
               
               {/* Simplified Search Mode Selector */}
               <ToggleButtonGroup
-                value={searchMode}
+                value={advancedSettings.searchMode}
                 exclusive
                 onChange={handleSearchModeChange}
                 size="small"
@@ -766,7 +765,7 @@ const SearchPage: React.FC = () => {
                   <AccordionDetails>
                     <FormControl fullWidth size="small">
                       <InputLabel>Select Tags</InputLabel>
-                      <Select
+                      <Select<string[]>
                         multiple
                         value={selectedTags}
                         onChange={handleTagsChange}

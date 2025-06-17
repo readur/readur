@@ -4,7 +4,6 @@ import {
   Typography,
   Card,
   CardContent,
-  Grid,
   Button,
   Chip,
   Alert,
@@ -31,6 +30,7 @@ import {
   Tab,
   useTheme,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   Refresh as RefreshIcon,
   Error as ErrorIcon,
@@ -142,7 +142,7 @@ const FailedOcrPage: React.FC = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [expandedDuplicateGroups, setExpandedDuplicateGroups] = useState<Set<string>>(new Set());
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
     open: false,
     message: '',
     severity: 'success'

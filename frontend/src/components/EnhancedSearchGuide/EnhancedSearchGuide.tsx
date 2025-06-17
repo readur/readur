@@ -7,7 +7,6 @@ import {
   Chip,
   IconButton,
   Collapse,
-  Grid,
   Button,
   Tabs,
   Tab,
@@ -20,6 +19,7 @@ import {
   Divider,
   Alert,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   ExpandMore as ExpandMoreIcon,
   ContentCopy as CopyIcon,

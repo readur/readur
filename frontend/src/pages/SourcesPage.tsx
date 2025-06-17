@@ -5,7 +5,6 @@ import {
   Typography,
   Paper,
   Button,
-  Grid,
   Card,
   CardContent,
   Chip,
@@ -40,6 +39,7 @@ import {
   TableHead,
   TableRow,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   Add as AddIcon,
   CloudSync as CloudSyncIcon,

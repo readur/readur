@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
-  Grid,
   Card,
   CardContent,
   CardActions,
@@ -27,6 +26,7 @@ import {
   InputLabel,
   Select,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   GridView as GridViewIcon,
   ViewList as ListViewIcon,

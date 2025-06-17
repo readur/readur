@@ -6,7 +6,6 @@ import {
   Paper,
   Card,
   CardContent,
-  Grid,
   Chip,
   LinearProgress,
   Table,
@@ -20,6 +19,7 @@ import {
   IconButton,
   CircularProgress,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   Refresh as RefreshIcon,
   Folder as FolderIcon,
@@ -84,7 +84,7 @@ const WatchFolderPage: React.FC = () => {
   const requeueFailedJobs = async (): Promise<void> => {
     try {
       setRequeuingFailed(true);
-      const response = await queueService.requeueFailedItems();
+      const response = await queueService.requeueFailed();
       const requeued = response.data.requeued_count || 0;
       
       if (requeued > 0) {
