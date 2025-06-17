@@ -1,0 +1,124 @@
+name: E2E Tests
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    branches:
+      - master
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: readur_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            tesseract-ocr \
+            tesseract-ocr-eng \
+            libtesseract-dev \
+            libleptonica-dev \
+            pkg-config \
+            libclang-dev \
+            clang
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      - name: Run database migrations
+        run: sqlx migrate run
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/readur_test
+
+      - name: Build backend
+        run: cargo build --release
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start backend server
+        run: |
+          ./target/release/readur &
+          echo $! > backend.pid
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/readur_test
+          JWT_SECRET: test-secret-key
+          PORT: 8000
+          FRONTEND_PATH: ./frontend/dist
+          UPLOAD_PATH: ./uploads
+          WATCH_PATH: ./watch
+
+      - name: Wait for backend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
+              echo "Backend is ready"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run frontend E2E tests
+        working-directory: ./frontend
+        run: npm test -- SearchPage.integration.test
+        env:
+          VITE_API_URL: http://localhost:8000
+
+      - name: Stop backend server
+        if: always()
+        run: |
+          if [ -f backend.pid ]; then
+            kill $(cat backend.pid) || true
+            rm backend.pid
+          fi
