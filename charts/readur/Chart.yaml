@@ -13,7 +13,7 @@ appVersion: latest
 kubeVersion: ">= 1.19"
 dependencies:
   - name: common
-    repository: https://bjw-s.github.io/helm-charts
+    repository: https://bjw-s-labs.github.io/helm-charts
     version: 3.3.2
   - name: postgresql
     repository: https://charts.bitnami.com/bitnami
