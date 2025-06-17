@@ -989,4 +989,82 @@ impl Database {
 
         Ok(documents)
     }
+
+    pub async fn get_mime_type_facets(&self, user_id: Uuid, user_role: crate::models::UserRole) -> Result<Vec<(String, i64)>> {
+        let query = if user_role == crate::models::UserRole::Admin {
+            // Admins see facets for all documents
+            r#"
+            SELECT mime_type, COUNT(*) as count
+            FROM documents
+            GROUP BY mime_type
+            ORDER BY count DESC
+            "#
+        } else {
+            // Regular users see facets for their own documents
+            r#"
+            SELECT mime_type, COUNT(*) as count
+            FROM documents
+            WHERE user_id = $1
+            GROUP BY mime_type
+            ORDER BY count DESC
+            "#
+        };
+
+        let rows = if user_role == crate::models::UserRole::Admin {
+            sqlx::query(query)
+                .fetch_all(&self.pool)
+                .await?
+        } else {
+            sqlx::query(query)
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?
+        };
+
+        let facets = rows
+            .into_iter()
+            .map(|row| (row.get("mime_type"), row.get("count")))
+            .collect();
+
+        Ok(facets)
+    }
+
+    pub async fn get_tag_facets(&self, user_id: Uuid, user_role: crate::models::UserRole) -> Result<Vec<(String, i64)>> {
+        let query = if user_role == crate::models::UserRole::Admin {
+            // Admins see facets for all documents
+            r#"
+            SELECT UNNEST(tags) as tag, COUNT(*) as count
+            FROM documents
+            GROUP BY tag
+            ORDER BY count DESC
+            "#
+        } else {
+            // Regular users see facets for their own documents
+            r#"
+            SELECT UNNEST(tags) as tag, COUNT(*) as count
+            FROM documents
+            WHERE user_id = $1
+            GROUP BY tag
+            ORDER BY count DESC
+            "#
+        };
+
+        let rows = if user_role == crate::models::UserRole::Admin {
+            sqlx::query(query)
+                .fetch_all(&self.pool)
+                .await?
+        } else {
+            sqlx::query(query)
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?
+        };
+
+        let facets = rows
+            .into_iter()
+            .map(|row| (row.get("tag"), row.get("count")))
+            .collect();
+
+        Ok(facets)
+    }
 }

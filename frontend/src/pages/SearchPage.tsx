@@ -60,6 +60,10 @@ import {
 } from '@mui/icons-material';
 import { documentService, SearchRequest } from '../services/api';
 import SearchGuidance from '../components/SearchGuidance';
+import EnhancedSearchGuide from '../components/EnhancedSearchGuide';
+import MimeTypeFacetFilter from '../components/MimeTypeFacetFilter';
+import EnhancedSnippetViewer from '../components/EnhancedSnippetViewer';
+import AdvancedSearchPanel from '../components/AdvancedSearchPanel';
 
 interface Document {
   id: string;
@@ -108,6 +112,20 @@ type ViewMode = 'grid' | 'list';
 type SearchMode = 'simple' | 'phrase' | 'fuzzy' | 'boolean';
 type OcrStatus = 'all' | 'yes' | 'no';
 
+interface AdvancedSearchSettings {
+  useEnhancedSearch: boolean;
+  searchMode: SearchMode;
+  includeSnippets: boolean;
+  snippetLength: number;
+  fuzzyThreshold: number;
+  resultLimit: number;
+  includeOcrText: boolean;
+  includeFileContent: boolean;
+  includeFilenames: boolean;
+  boostRecentDocs: boolean;
+  enableAutoCorrect: boolean;
+}
+
 const SearchPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -130,12 +148,21 @@ const SearchPage: React.FC = () => {
     'Use wildcards: proj* for project, projects, etc.'
   ]);
   
-  // Search settings
-  const [useEnhancedSearch, setUseEnhancedSearch] = useState<boolean>(true);
-  const [searchMode, setSearchMode] = useState<SearchMode>('simple');
-  const [includeSnippets, setIncludeSnippets] = useState<boolean>(true);
-  const [snippetLength, setSnippetLength] = useState<number>(200);
+  // Search settings - consolidated into advanced settings
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const [advancedSettings, setAdvancedSettings] = useState<AdvancedSearchSettings>({
+    useEnhancedSearch: true,
+    searchMode: 'simple',
+    includeSnippets: true,
+    snippetLength: 200,
+    fuzzyThreshold: 0.8,
+    resultLimit: 100,
+    includeOcrText: true,
+    includeFileContent: true,
+    includeFilenames: true,
+    boostRecentDocs: false,
+    enableAutoCorrect: true,
+  });
   
   // Filter states
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -218,14 +245,14 @@ const SearchPage: React.FC = () => {
         query: query.trim(),
         tags: filters.tags?.length ? filters.tags : undefined,
         mime_types: filters.mimeTypes?.length ? filters.mimeTypes : undefined,
-        limit: 100,
+        limit: advancedSettings.resultLimit,
         offset: 0,
-        include_snippets: includeSnippets,
-        snippet_length: snippetLength,
-        search_mode: searchMode,
+        include_snippets: advancedSettings.includeSnippets,
+        snippet_length: advancedSettings.snippetLength,
+        search_mode: advancedSettings.searchMode,
       };
 
-      const response = useEnhancedSearch 
+      const response = advancedSettings.useEnhancedSearch 
         ? await documentService.enhancedSearch(searchRequest)
         : await documentService.search(searchRequest);
       
@@ -282,7 +309,7 @@ const SearchPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [useEnhancedSearch, includeSnippets, snippetLength, searchMode]);
+  }, [advancedSettings]);
 
   const debouncedSearch = useCallback(
     debounce((query: string, filters: SearchFilters) => performSearch(query, filters), 300),
@@ -447,9 +474,6 @@ const SearchPage: React.FC = () => {
     setHasOcr(event.target.value as OcrStatus);
   };
 
-  const handleSnippetLengthChange = (event: SelectChangeEvent<number>): void => {
-    setSnippetLength(event.target.value as number);
-  };
 
   return (
     <Box sx={{ p: 3 }}>
@@ -673,67 +697,27 @@ const SearchPage: React.FC = () => {
             </Box>
           )}
 
-          {/* Advanced Search Options */}
-          {showAdvanced && (
-            <Box sx={{ mt: 3, pt: 2, borderTop: '1px dashed', borderColor: 'divider' }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={8}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Search Options
-                  </Typography>
-                  <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={6} md={4}>
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={useEnhancedSearch}
-                            onChange={(e) => setUseEnhancedSearch(e.target.checked)}
-                            color="primary"
-                          />
-                        }
-                        label="Enhanced Search"
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={includeSnippets}
-                            onChange={(e) => setIncludeSnippets(e.target.checked)}
-                            color="primary"
-                          />
-                        }
-                        label="Show Snippets"
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                      <FormControl size="small" fullWidth>
-                        <InputLabel>Snippet Length</InputLabel>
-                        <Select
-                          value={snippetLength}
-                          onChange={handleSnippetLengthChange}
-                          label="Snippet Length"
-                        >
-                          <MenuItem value={100}>Short (100)</MenuItem>
-                          <MenuItem value={200}>Medium (200)</MenuItem>
-                          <MenuItem value={400}>Long (400)</MenuItem>
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                  </Grid>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <SearchGuidance 
-                    compact 
-                    onExampleClick={setSearchQuery}
-                    sx={{ position: 'relative' }}
-                  />
-                </Grid>
-              </Grid>
+          {/* Enhanced Search Guide when not in advanced mode */}
+          {!showAdvanced && (
+            <Box sx={{ mt: 2 }}>
+              <EnhancedSearchGuide 
+                compact 
+                onExampleClick={setSearchQuery}
+              />
             </Box>
           )}
         </Paper>
       </Box>
+
+      {/* Advanced Search Panel */}
+      <AdvancedSearchPanel
+        settings={advancedSettings}
+        onSettingsChange={(newSettings) => 
+          setAdvancedSettings(prev => ({ ...prev, ...newSettings }))
+        }
+        expanded={showAdvanced}
+        onExpandedChange={setShowAdvanced}
+      />
 
       <Grid container spacing={3}>
         {/* Mobile Filters Drawer */}
@@ -806,40 +790,14 @@ const SearchPage: React.FC = () => {
                   </AccordionDetails>
                 </Accordion>
 
-                {/* File Type Filter */}
-                <Accordion defaultExpanded>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle2">File Types</Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Select Types</InputLabel>
-                      <Select
-                        multiple
-                        value={selectedMimeTypes}
-                        onChange={handleMimeTypesChange}
-                        input={<OutlinedInput label="Select Types" />}
-                        renderValue={(selected) => (
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                            {selected.map((value) => {
-                              const option = mimeTypeOptions.find(opt => opt.value === value);
-                              return (
-                                <Chip key={value} label={option?.label || value} size="small" />
-                              );
-                            })}
-                          </Box>
-                        )}
-                      >
-                        {mimeTypeOptions.map((option) => (
-                          <MenuItem key={option.value} value={option.value}>
-                            <Checkbox checked={selectedMimeTypes.indexOf(option.value) > -1} />
-                            <ListItemText primary={option.label} />
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </AccordionDetails>
-                </Accordion>
+                {/* File Type Filter with Facets */}
+                <Box sx={{ mb: 2 }}>
+                  <MimeTypeFacetFilter
+                    selectedMimeTypes={selectedMimeTypes}
+                    onMimeTypeChange={setSelectedMimeTypes}
+                    maxItemsToShow={8}
+                  />
+                </Box>
 
                 {/* OCR Filter */}
                 <Accordion>
@@ -1176,38 +1134,18 @@ const SearchPage: React.FC = () => {
                             </Stack>
                           )}
 
-                          {/* Search Snippets */}
+                          {/* Enhanced Search Snippets */}
                           {doc.snippets && doc.snippets.length > 0 && (
                             <Box sx={{ mt: 2, mb: 1 }}>
-                              {doc.snippets.slice(0, 2).map((snippet, index) => (
-                                <Paper
-                                  key={index}
-                                  variant="outlined"
-                                  sx={{
-                                    p: 1.5,
-                                    mb: 1,
-                                    backgroundColor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : 'grey.800',
-                                    borderLeft: '3px solid',
-                                    borderLeftColor: 'primary.main',
-                                  }}
-                                >
-                                  <Typography
-                                    variant="body2"
-                                    sx={{
-                                      fontSize: '0.8rem',
-                                      lineHeight: 1.4,
-                                      color: 'text.primary',
-                                    }}
-                                  >
-                                    ...{renderHighlightedText(snippet.text, snippet.highlight_ranges)}...
-                                  </Typography>
-                                </Paper>
-                              ))}
-                              {doc.snippets.length > 2 && (
-                                <Typography variant="caption" color="text.secondary">
-                                  +{doc.snippets.length - 2} more matches
-                                </Typography>
-                              )}
+                              <EnhancedSnippetViewer
+                                snippets={doc.snippets}
+                                searchQuery={searchQuery}
+                                maxSnippetsToShow={2}
+                                onSnippetClick={(snippet, index) => {
+                                  // Could navigate to document with snippet highlighted
+                                  console.log('Snippet clicked:', snippet, index);
+                                }}
+                              />
                             </Box>
                           )}
 

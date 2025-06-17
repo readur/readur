@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::{
     auth::AuthUser,
-    models::{SearchRequest, SearchResponse, EnhancedDocumentResponse},
+    models::{SearchRequest, SearchResponse, EnhancedDocumentResponse, SearchFacetsResponse, FacetItem},
     AppState,
 };
 
@@ -17,6 +17,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(search_documents))
         .route("/enhanced", get(enhanced_search_documents))
+        .route("/facets", get(get_search_facets))
 }
 
 #[utoipa::path(
@@ -131,4 +132,51 @@ fn generate_search_suggestions(query: &str) -> Vec<String> {
     }
     
     suggestions.into_iter().take(3).collect()
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/search/facets",
+    tag = "search",
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Search facets with counts", body = SearchFacetsResponse),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn get_search_facets(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+) -> Result<Json<SearchFacetsResponse>, StatusCode> {
+    let user_id = auth_user.user.id;
+    let user_role = auth_user.user.role;
+    
+    // Get MIME type facets
+    let mime_type_facets = state
+        .db
+        .get_mime_type_facets(user_id, user_role.clone())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Get tag facets
+    let tag_facets = state
+        .db
+        .get_tag_facets(user_id, user_role)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let response = SearchFacetsResponse {
+        mime_types: mime_type_facets
+            .into_iter()
+            .map(|(value, count)| FacetItem { value, count })
+            .collect(),
+        tags: tag_facets
+            .into_iter()
+            .map(|(value, count)| FacetItem { value, count })
+            .collect(),
+    };
+
+    Ok(Json(response))
 }

@@ -234,6 +234,22 @@ pub struct SearchResponse {
     pub suggestions: Vec<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct FacetItem {
+    /// The facet value (e.g., mime type or tag)
+    pub value: String,
+    /// Number of documents with this value
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SearchFacetsResponse {
+    /// MIME type facets with counts
+    pub mime_types: Vec<FacetItem>,
+    /// Tag facets with counts
+    pub tags: Vec<FacetItem>,
+}
+
 impl From<Document> for DocumentResponse {
     fn from(doc: Document) -> Self {
         Self {

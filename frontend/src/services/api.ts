@@ -72,6 +72,26 @@ export interface SearchResponse {
   suggestions: string[]
 }
 
+export interface FacetItem {
+  value: string
+  count: number
+}
+
+export interface SearchFacetsResponse {
+  mime_types: FacetItem[]
+  tags: FacetItem[]
+}
+
+export interface PaginatedResponse<T> {
+  documents: T[]
+  pagination: {
+    total: number
+    limit: number
+    offset: number
+    has_more: boolean
+  }
+}
+
 export interface QueueStats {
   pending_count: number
   processing_count: number
@@ -181,6 +201,10 @@ export const documentService = {
         search_mode: searchRequest.search_mode ?? 'simple',
       },
     })
+  },
+
+  getFacets: () => {
+    return api.get<SearchFacetsResponse>('/search/facets')
   },
 }
 
