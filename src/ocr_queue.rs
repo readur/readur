@@ -534,8 +534,8 @@ impl OcrQueueService {
                 }
                 Ok(None) => {
                     // No items in queue or all jobs were claimed by other workers
-                    // Use shorter sleep for high-concurrency scenarios
-                    sleep(Duration::from_millis(100)).await;
+                    // Use exponential backoff to reduce database load when queue is empty
+                    sleep(Duration::from_secs(5)).await;
                 }
                 Err(e) => {
                     error!("Error dequeuing item: {}", e);
