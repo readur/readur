@@ -986,3 +986,234 @@ async fn test_concurrent_file_processing() {
     
     println!("🎉 Concurrent file processing test passed!");
 }
+
+#[tokio::test]
+async fn test_real_test_images_processing() {
+    println!("🖼️  Testing real test images processing...");
+    
+    // Check if test images are available
+    if !readur::test_utils::test_images_available() {
+        println!("⚠️  Test images not available - skipping real image processing test");
+        return;
+    }
+    
+    let mut client = FileProcessingTestClient::new();
+    client.setup_user().await
+        .expect("Failed to setup test user");
+    
+    println!("✅ User setup complete");
+    
+    let available_images = readur::test_utils::get_available_test_images();
+    
+    if available_images.is_empty() {
+        println!("⚠️  No test images found - skipping test");
+        return;
+    }
+    
+    println!("📋 Found {} test images to process", available_images.len());
+    
+    let mut processed_results = Vec::new();
+    
+    // Process each available test image
+    for test_image in available_images.iter().take(3) { // Limit to first 3 for faster testing
+        println!("📤 Processing test image: {}", test_image.filename);
+        
+        // Load the image data
+        let image_data = match test_image.load_data().await {
+            Ok(data) => data,
+            Err(e) => {
+                println!("⚠️  Failed to load {}: {}", test_image.filename, e);
+                continue;
+            }
+        };
+        
+        println!("✅ Loaded {} ({} bytes, {})", 
+            test_image.filename, image_data.len(), test_image.mime_type);
+        
+        // Upload the image
+        let upload_start = std::time::Instant::now();
+        let document = match client.upload_binary_file(
+            image_data, 
+            test_image.filename, 
+            test_image.mime_type
+        ).await {
+            Ok(doc) => doc,
+            Err(e) => {
+                println!("⚠️  Failed to upload {}: {}", test_image.filename, e);
+                continue;
+            }
+        };
+        
+        let upload_time = upload_start.elapsed();
+        println!("✅ {} uploaded in {:?}: {}", test_image.filename, upload_time, document.id);
+        
+        // Wait for OCR processing
+        let processing_start = std::time::Instant::now();
+        match client.wait_for_processing(&document.id.to_string()).await {
+            Ok(processed_doc) => {
+                let processing_time = processing_start.elapsed();
+                println!("✅ {} processed in {:?}: status = {:?}", 
+                    test_image.filename, processing_time, processed_doc.ocr_status);
+                
+                // Get OCR results and verify content
+                if let Ok(ocr_results) = client.get_ocr_results(&document.id.to_string()).await {
+                    if let Some(ocr_text) = ocr_results["ocr_text"].as_str() {
+                        let normalized_ocr = ocr_text.trim().to_lowercase();
+                        let normalized_expected = test_image.expected_content.trim().to_lowercase();
+                        
+                        println!("🔍 OCR extracted: '{}'", ocr_text);
+                        println!("🎯 Expected: '{}'", test_image.expected_content);
+                        
+                        // Check if OCR content matches expectations
+                        let test_number = test_image.filename.chars()
+                            .filter(|c| c.is_numeric())
+                            .collect::<String>();
+                        
+                        let content_matches = if !test_number.is_empty() {
+                            normalized_ocr.contains(&format!("test {}", test_number)) ||
+                            normalized_ocr.contains(&test_number)
+                        } else {
+                            false
+                        };
+                        
+                        let has_text_content = normalized_ocr.contains("text") || 
+                                             normalized_ocr.contains("some");
+                        
+                        processed_results.push((
+                            test_image.filename.to_string(),
+                            upload_time,
+                            processing_time,
+                            processed_doc.ocr_status.clone(),
+                            ocr_text.to_string(),
+                            content_matches,
+                            has_text_content,
+                        ));
+                        
+                        if content_matches && has_text_content {
+                            println!("✅ OCR content verification PASSED for {}", test_image.filename);
+                        } else {
+                            println!("⚠️  OCR content verification PARTIAL for {} (number: {}, text: {})", 
+                                test_image.filename, content_matches, has_text_content);
+                        }
+                    } else {
+                        println!("⚠️  No OCR text found for {}", test_image.filename);
+                        processed_results.push((
+                            test_image.filename.to_string(),
+                            upload_time,
+                            processing_time,
+                            processed_doc.ocr_status.clone(),
+                            "".to_string(),
+                            false,
+                            false,
+                        ));
+                    }
+                } else {
+                    println!("⚠️  Failed to get OCR results for {}", test_image.filename);
+                    processed_results.push((
+                        test_image.filename.to_string(),
+                        upload_time,
+                        processing_time,
+                        processed_doc.ocr_status.clone(),
+                        "".to_string(),
+                        false,
+                        false,
+                    ));
+                }
+            }
+            Err(e) => {
+                println!("⚠️  Processing failed for {}: {}", test_image.filename, e);
+                processed_results.push((
+                    test_image.filename.to_string(),
+                    upload_time,
+                    Duration::ZERO,
+                    Some("failed".to_string()),
+                    "".to_string(),
+                    false,
+                    false,
+                ));
+            }
+        }
+        
+        // Add small delay between uploads to avoid overwhelming the system
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    
+    // Analyze results
+    println!("📊 Real Test Images Processing Results:");
+    println!("  {:<12} {:<10} {:<12} {:<10} {:<8} {:<8} {}", 
+        "Image", "Upload", "Processing", "Status", "Number", "Text", "OCR Content");
+    println!("  {}", "-".repeat(80));
+    
+    let mut successful_ocr = 0;
+    let mut failed_ocr = 0;
+    let mut partial_matches = 0;
+    
+    for (filename, upload_time, processing_time, status, ocr_text, number_match, text_match) in &processed_results {
+        let status_str = status.as_deref().unwrap_or("unknown");
+        let ocr_preview = if ocr_text.len() > 30 {
+            format!("{}...", &ocr_text[..30])
+        } else {
+            ocr_text.clone()
+        };
+        
+        println!("  {:<12} {:<10?} {:<12?} {:<10} {:<8} {:<8} {}", 
+            filename, upload_time, processing_time, status_str, 
+            if *number_match { "✅" } else { "❌" },
+            if *text_match { "✅" } else { "❌" },
+            ocr_preview);
+        
+        if status_str == "completed" {
+            if *number_match && *text_match {
+                successful_ocr += 1;
+            } else if *number_match || *text_match {
+                partial_matches += 1;
+            } else {
+                failed_ocr += 1;
+            }
+        }
+    }
+    
+    let total_processed = processed_results.len();
+    
+    println!("\n📈 Summary:");
+    println!("  Total processed: {}", total_processed);
+    println!("  Successful OCR: {}", successful_ocr);
+    println!("  Partial matches: {}", partial_matches);
+    println!("  Failed OCR: {}", failed_ocr);
+    
+    if total_processed > 0 {
+        let success_rate = (successful_ocr + partial_matches) as f64 / total_processed as f64 * 100.0;
+        println!("  Success rate: {:.1}%", success_rate);
+        
+        // Calculate average processing time for successful cases
+        let successful_processing_times: Vec<_> = processed_results.iter()
+            .filter(|(_, _, _, status, _, number, text)| {
+                status.as_deref() == Some("completed") && (*number || *text)
+            })
+            .map(|(_, _, processing_time, _, _, _, _)| *processing_time)
+            .collect();
+        
+        if !successful_processing_times.is_empty() {
+            let avg_processing_time = successful_processing_times.iter().sum::<Duration>() 
+                / successful_processing_times.len() as u32;
+            println!("  Average processing time: {:?}", avg_processing_time);
+        }
+    }
+    
+    // Test assertions
+    assert!(!processed_results.is_empty(), "At least some test images should be processed");
+    
+    // At least 50% should have some level of OCR success (either partial or full)
+    let success_count = successful_ocr + partial_matches;
+    assert!(success_count > 0, "At least some test images should have successful OCR");
+    
+    if total_processed >= 2 {
+        let min_success_rate = 0.5; // 50% minimum success rate
+        let actual_success_rate = success_count as f64 / total_processed as f64;
+        assert!(actual_success_rate >= min_success_rate, 
+            "OCR success rate should be at least {}% but was {:.1}%", 
+            min_success_rate * 100.0, actual_success_rate * 100.0);
+    }
+    
+    println!("🎉 Real test images processing test completed!");
+}

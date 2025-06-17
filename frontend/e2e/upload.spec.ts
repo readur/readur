@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures/auth';
-import { TEST_FILES, TIMEOUTS, API_ENDPOINTS } from './utils/test-data';
+import { TEST_FILES, TIMEOUTS, API_ENDPOINTS, EXPECTED_OCR_CONTENT } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
 test.describe('Document Upload', () => {
@@ -20,8 +20,8 @@ test.describe('Document Upload', () => {
     // Find file input - try multiple selectors
     const fileInput = page.locator('input[type="file"]').first();
     
-    // Upload a test file
-    await fileInput.setInputFiles(TEST_FILES.image);
+    // Upload test1.png with known OCR content
+    await fileInput.setInputFiles(TEST_FILES.test1);
     
     // Wait for upload API call
     const uploadResponse = helpers.waitForApiCall(API_ENDPOINTS.upload, TIMEOUTS.upload);
@@ -45,25 +45,25 @@ test.describe('Document Upload', () => {
   test('should upload multiple documents', async ({ authenticatedPage: page }) => {
     const fileInput = page.locator('input[type="file"]').first();
     
-    // Upload multiple files
-    await fileInput.setInputFiles([TEST_FILES.image, TEST_FILES.multiline]);
+    // Upload multiple test images with different formats
+    await fileInput.setInputFiles([TEST_FILES.test1, TEST_FILES.test2, TEST_FILES.test3]);
     
     const uploadButton = page.locator('button:has-text("Upload"), [data-testid="upload-button"]');
     if (await uploadButton.isVisible()) {
       await uploadButton.click();
     }
     
-    // Wait for both uploads to complete
+    // Wait for all uploads to complete
     await helpers.waitForLoadingToComplete();
     
     // Should show multiple uploaded documents
     const uploadedFiles = page.locator('[data-testid="uploaded-files"] > *, .uploaded-file');
-    await expect(uploadedFiles).toHaveCount(2, { timeout: TIMEOUTS.medium });
+    await expect(uploadedFiles).toHaveCount(3, { timeout: TIMEOUTS.medium });
   });
 
   test('should show upload progress', async ({ authenticatedPage: page }) => {
     const fileInput = page.locator('input[type="file"]').first();
-    await fileInput.setInputFiles(TEST_FILES.image);
+    await fileInput.setInputFiles(TEST_FILES.test4);
     
     const uploadButton = page.locator('button:has-text("Upload"), [data-testid="upload-button"]');
     if (await uploadButton.isVisible()) {
@@ -140,7 +140,7 @@ test.describe('Document Upload', () => {
 
   test('should show OCR processing status', async ({ authenticatedPage: page }) => {
     const fileInput = page.locator('input[type="file"]').first();
-    await fileInput.setInputFiles(TEST_FILES.image);
+    await fileInput.setInputFiles(TEST_FILES.test5);
     
     const uploadButton = page.locator('button:has-text("Upload"), [data-testid="upload-button"]');
     if (await uploadButton.isVisible()) {
@@ -153,6 +153,42 @@ test.describe('Document Upload', () => {
     await expect(page.locator(':has-text("OCR"), :has-text("Processing"), [data-testid="ocr-status"]')).toBeVisible({ 
       timeout: TIMEOUTS.medium 
     });
+  });
+
+  test('should process OCR and extract correct text content', async ({ authenticatedPage: page }) => {
+    const fileInput = page.locator('input[type="file"]').first();
+    
+    // Upload test6.jpeg with known content
+    await fileInput.setInputFiles(TEST_FILES.test6);
+    
+    const uploadButton = page.locator('button:has-text("Upload"), [data-testid="upload-button"]');
+    if (await uploadButton.isVisible()) {
+      await uploadButton.click();
+    }
+    
+    await helpers.waitForLoadingToComplete();
+    
+    // Wait for OCR to complete
+    await expect(page.locator(':has-text("OCR Complete"), :has-text("Processed"), [data-testid="ocr-complete"]')).toBeVisible({ 
+      timeout: TIMEOUTS.ocr 
+    });
+    
+    // Navigate to document details to verify OCR content
+    const uploadedDocument = page.locator('[data-testid="uploaded-files"] > *, .uploaded-file').first();
+    if (await uploadedDocument.isVisible()) {
+      await uploadedDocument.click();
+      
+      // Should navigate to document details page
+      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
+      
+      // Check that OCR content is visible and contains expected text
+      const documentContent = page.locator('[data-testid="document-content"], .document-text, .ocr-content');
+      if (await documentContent.isVisible()) {
+        const content = await documentContent.textContent();
+        expect(content).toContain('Test 6');
+        expect(content).toContain('This is some text from text 6');
+      }
+    }
   });
 
   test('should allow drag and drop upload', async ({ authenticatedPage: page }) => {

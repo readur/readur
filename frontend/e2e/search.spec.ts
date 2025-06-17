@@ -19,8 +19,8 @@ test.describe('Search Functionality', () => {
   test('should perform basic search', async ({ authenticatedPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
-    // Enter search query
-    await searchInput.fill(SEARCH_QUERIES.simple);
+    // Search for known OCR content from test images
+    await searchInput.fill(SEARCH_QUERIES.simple);  // "Test 1"
     
     // Wait for search API call
     const searchResponse = helpers.waitForApiCall(API_ENDPOINTS.search);
@@ -40,8 +40,8 @@ test.describe('Search Functionality', () => {
   test('should show search suggestions', async ({ authenticatedPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
-    // Start typing to trigger suggestions
-    await searchInput.type('test', { delay: 100 });
+    // Start typing "Test" to trigger suggestions based on OCR content
+    await searchInput.type('Test', { delay: 100 });
     
     // Should show suggestion dropdown
     await expect(page.locator('[data-testid="search-suggestions"], .suggestions, .autocomplete')).toBeVisible({ 
@@ -52,8 +52,8 @@ test.describe('Search Functionality', () => {
   test('should filter search results', async ({ authenticatedPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
-    // Perform initial search
-    await searchInput.fill(SEARCH_QUERIES.simple);
+    // Search for content that should match multiple test images
+    await searchInput.fill(SEARCH_QUERIES.content);  // "some text from text"
     await searchInput.press('Enter');
     
     await helpers.waitForLoadingToComplete();
@@ -63,10 +63,10 @@ test.describe('Search Functionality', () => {
     if (await filterButton.isVisible()) {
       await filterButton.click();
       
-      // Select document type filter
-      const pdfFilter = page.locator('input[type="checkbox"][value="pdf"], label:has-text("PDF")');
-      if (await pdfFilter.isVisible()) {
-        await pdfFilter.check();
+      // Select image type filter (since our test files are images)
+      const imageFilter = page.locator('input[type="checkbox"][value="image"], input[type="checkbox"][value="png"], label:has-text("Image")');
+      if (await imageFilter.isVisible()) {
+        await imageFilter.check();
         
         // Should update search results
         await helpers.waitForApiCall(API_ENDPOINTS.search);
