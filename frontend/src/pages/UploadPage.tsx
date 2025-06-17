@@ -3,13 +3,10 @@ import {
   Box,
   Typography,
   Container,
-  Paper,
   Card,
   CardContent,
   List,
   ListItem,
-  ListItemIcon,
-  ListItemText,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -93,46 +90,6 @@ const UploadPage: React.FC = () => {
 
         {/* Features Sidebar */}
         <Grid item xs={12} lg={4}>
-          <Card elevation={0}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <UploadIcon sx={{ fontSize: 28, color: 'primary.main', mr: 1 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  Why Choose Readur?
-                </Typography>
-              </Box>
-              
-              <List sx={{ p: 0 }}>
-                {features.map((feature, index) => (
-                  <ListItem 
-                    key={feature.title}
-                    sx={{ 
-                      px: 0,
-                      py: 2,
-                      borderBottom: index < features.length - 1 ? 1 : 0,
-                      borderColor: 'divider',
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 40 }}>
-                      <feature.icon sx={{ color: 'primary.main' }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                          {feature.title}
-                        </Typography>
-                      }
-                      secondary={
-                        <Typography variant="body2" color="text.secondary">
-                          {feature.description}
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </CardContent>
-          </Card>
 
           {/* Tips Card */}
           <Card elevation={0} sx={{ mt: 3 }}>
