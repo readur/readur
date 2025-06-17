@@ -101,7 +101,7 @@ pub struct Document {
     pub file_hash: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct DocumentResponse {
     /// Unique identifier for the document
     pub id: Uuid,

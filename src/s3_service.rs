@@ -57,7 +57,8 @@ impl S3Service {
 
         let mut s3_config_builder = aws_sdk_s3::config::Builder::new()
             .region(AwsRegion::new(region))
-            .credentials_provider(credentials);
+            .credentials_provider(credentials)
+            .behavior_version_latest();
 
         // Set custom endpoint if provided (for S3-compatible services)
         if let Some(endpoint_url) = &config.endpoint_url {

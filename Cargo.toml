@@ -59,6 +59,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 default = ["ocr", "s3"]
 ocr = ["tesseract", "pdf-extract", "image", "imageproc", "raw-cpuid"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types"]
+test-utils = []
 
 [dev-dependencies]
 tempfile = "3"

@@ -30,7 +30,7 @@ pub mod webdav_xml_parser;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 
 use axum::{http::StatusCode, Json};

@@ -77,6 +77,7 @@ pub fn get_available_test_images() -> Vec<TestImage> {
 }
 
 /// Skip test macro for conditional testing based on test image availability
+#[macro_export]
 macro_rules! skip_if_no_test_images {
     () => {
         if !crate::test_utils::test_images_available() {
@@ -87,6 +88,7 @@ macro_rules! skip_if_no_test_images {
 }
 
 /// Skip test macro for specific test image
+#[macro_export]
 macro_rules! skip_if_test_image_missing {
     ($image:expr) => {
         if !$image.exists() {
@@ -95,9 +97,6 @@ macro_rules! skip_if_test_image_missing {
         }
     };
 }
-
-pub use skip_if_no_test_images;
-pub use skip_if_test_image_missing;
 
 #[cfg(test)]
 mod tests {
