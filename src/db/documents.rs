@@ -1067,4 +1067,59 @@ impl Database {
 
         Ok(facets)
     }
+
+    pub async fn get_document_by_id(&self, document_id: Uuid, user_id: Uuid, user_role: crate::models::UserRole) -> Result<Option<Document>> {
+        let query = if user_role == crate::models::UserRole::Admin {
+            // Admins can see any document
+            r#"
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+            FROM documents 
+            WHERE id = $1
+            "#
+        } else {
+            // Regular users can only see their own documents
+            r#"
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+            FROM documents 
+            WHERE id = $1 AND user_id = $2
+            "#
+        };
+
+        let row = if user_role == crate::models::UserRole::Admin {
+            sqlx::query(query)
+                .bind(document_id)
+                .fetch_optional(&self.pool)
+                .await?
+        } else {
+            sqlx::query(query)
+                .bind(document_id)
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?
+        };
+
+        match row {
+            Some(row) => Ok(Some(Document {
+                id: row.get("id"),
+                filename: row.get("filename"),
+                original_filename: row.get("original_filename"),
+                file_path: row.get("file_path"),
+                file_size: row.get("file_size"),
+                mime_type: row.get("mime_type"),
+                content: row.get("content"),
+                ocr_text: row.get("ocr_text"),
+                ocr_confidence: row.get("ocr_confidence"),
+                ocr_word_count: row.get("ocr_word_count"),
+                ocr_processing_time_ms: row.get("ocr_processing_time_ms"),
+                ocr_status: row.get("ocr_status"),
+                ocr_error: row.get("ocr_error"),
+                ocr_completed_at: row.get("ocr_completed_at"),
+                tags: row.get("tags"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                user_id: row.get("user_id"),
+            })),
+            None => Ok(None),
+        }
+    }
 }

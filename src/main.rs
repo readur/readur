@@ -283,7 +283,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api/webdav", readur::routes::webdav::router())
         .merge(readur::swagger::create_swagger_router())
         .fallback_service(
-            ServeDir::new("dist")
+            ServeDir::new("frontend/dist")
                 .precompressed_gzip()
                 .precompressed_br()
                 .fallback(ServeFile::new("dist/index.html"))
@@ -295,7 +295,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     info!("Server working directory: {}", current_dir.display());
     
-    let dist_path = current_dir.join("dist");
+    let dist_path = current_dir.join("frontend/dist");
     info!("Looking for static files at: {}", dist_path.display());
     info!("dist directory exists: {}", dist_path.exists());
     

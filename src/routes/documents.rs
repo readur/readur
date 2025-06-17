@@ -60,17 +60,12 @@ async fn get_document_by_id(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<Json<DocumentResponse>, StatusCode> {
-    // Get documents for user with proper role-based access
-    let documents = state
+    // Get specific document with proper role-based access
+    let document = state
         .db
-        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    // Find the specific document
-    let document = documents
-        .into_iter()
-        .find(|doc| doc.id == document_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
     // Convert to DocumentResponse
@@ -301,15 +296,11 @@ async fn download_document(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<Vec<u8>, StatusCode> {
-    let documents = state
+    let document = state
         .db
-        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let document = documents
-        .into_iter()
-        .find(|doc| doc.id == document_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
     let file_service = FileService::new(state.config.upload_path.clone());
@@ -342,15 +333,11 @@ async fn view_document(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<Response, StatusCode> {
-    let documents = state
+    let document = state
         .db
-        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let document = documents
-        .into_iter()
-        .find(|doc| doc.id == document_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
     let file_service = FileService::new(state.config.upload_path.clone());
@@ -394,15 +381,11 @@ async fn get_document_thumbnail(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<Response, StatusCode> {
-    let documents = state
+    let document = state
         .db
-        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let document = documents
-        .into_iter()
-        .find(|doc| doc.id == document_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
     let file_service = FileService::new(state.config.upload_path.clone());
@@ -447,15 +430,11 @@ async fn get_document_ocr(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let documents = state
+    let document = state
         .db
-        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let document = documents
-        .into_iter()
-        .find(|doc| doc.id == document_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
     // Return OCR text and metadata
@@ -495,15 +474,11 @@ async fn get_processed_image(
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<Response, StatusCode> {
     // Check if document exists and belongs to user
-    let documents = state
+    let _document = state
         .db
-        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let _document = documents
-        .into_iter()
-        .find(|doc| doc.id == document_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
     // Get processed image record
@@ -553,15 +528,11 @@ async fn retry_ocr(
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Check if document exists and belongs to user
-    let documents = state
+    let document = state
         .db
-        .get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0)
+        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let document = documents
-        .into_iter()
-        .find(|doc| doc.id == document_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
     // Check if document is eligible for OCR retry (failed or not processed)
