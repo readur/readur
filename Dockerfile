@@ -1,5 +1,5 @@
 # --- Frontend build stage ---
-FROM node:20-bookworm as frontend-builder
+FROM node:22-bookworm as frontend-builder
 
 WORKDIR /frontend
 COPY frontend/package*.json ./
