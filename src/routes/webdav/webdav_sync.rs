@@ -276,51 +276,42 @@ async fn process_single_file(
     // Calculate file hash for deduplication 
     let file_hash = calculate_file_hash(&file_data);
     
-    // Check if this exact file content already exists for this user
-    // This prevents downloading and processing duplicate files from WebDAV
+    // Check if this exact file content already exists for this user using efficient hash lookup
     info!("Checking for duplicate content for user {}: {} (hash: {}, size: {} bytes)", 
         user_id, file_info.name, &file_hash[..8], file_data.len());
     
-    // Query documents with the same file size for this user only
-    let size_filter = file_data.len() as i64;
-    if let Ok(existing_docs) = state.db.get_documents_by_user_with_role(user_id, crate::models::UserRole::User, 1000, 0).await {
-        let matching_docs: Vec<_> = existing_docs.into_iter()
-            .filter(|doc| doc.file_size == size_filter)
-            .collect();
+    // Use efficient database hash lookup instead of reading all documents
+    match state.db.get_document_by_user_and_hash(user_id, &file_hash).await {
+        Ok(Some(existing_doc)) => {
+            info!("Found duplicate content for user {}: {} matches existing document {} (hash: {})", 
+                user_id, file_info.name, existing_doc.original_filename, &file_hash[..8]);
             
-        info!("Found {} documents with same size for user {}", matching_docs.len(), user_id);
-        
-        for existing_doc in matching_docs {
-            // Read the existing file and compare hashes
-            if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
-                let existing_hash = calculate_file_hash(&existing_file_data);
-                if file_hash == existing_hash {
-                    info!("Found duplicate content for user {}: {} matches existing document {}", 
-                        user_id, file_info.name, existing_doc.original_filename);
-                    
-                    // Record this WebDAV file as a duplicate but link to existing document
-                    let webdav_file = CreateWebDAVFile {
-                        user_id,
-                        webdav_path: file_info.path.clone(),
-                        etag: file_info.etag.clone(),
-                        last_modified: file_info.last_modified,
-                        file_size: file_info.size,
-                        mime_type: file_info.mime_type.clone(),
-                        document_id: Some(existing_doc.id), // Link to existing document
-                        sync_status: "duplicate_content".to_string(),
-                        sync_error: None,
-                    };
-                    
-                    if let Err(e) = state.db.create_or_update_webdav_file(&webdav_file).await {
-                        error!("Failed to record duplicate WebDAV file: {}", e);
-                    }
-                    
-                    info!("WebDAV file marked as duplicate_content, skipping processing");
-                    return Ok(false); // Not processed (duplicate)
-                }
-            } else {
-                warn!("Could not read existing file for hash comparison: {}", existing_doc.file_path);
+            // Record this WebDAV file as a duplicate but link to existing document
+            let webdav_file = CreateWebDAVFile {
+                user_id,
+                webdav_path: file_info.path.clone(),
+                etag: file_info.etag.clone(),
+                last_modified: file_info.last_modified,
+                file_size: file_info.size,
+                mime_type: file_info.mime_type.clone(),
+                document_id: Some(existing_doc.id), // Link to existing document
+                sync_status: "duplicate_content".to_string(),
+                sync_error: None,
+            };
+            
+            if let Err(e) = state.db.create_or_update_webdav_file(&webdav_file).await {
+                error!("Failed to record duplicate WebDAV file: {}", e);
             }
+            
+            info!("WebDAV file marked as duplicate_content, skipping processing");
+            return Ok(false); // Not processed (duplicate)
+        }
+        Ok(None) => {
+            info!("No duplicate content found for hash {}, proceeding with file processing", &file_hash[..8]);
+        }
+        Err(e) => {
+            warn!("Error checking for duplicate hash {}: {}", &file_hash[..8], e);
+            // Continue processing even if duplicate check fails
         }
     }
     
@@ -330,7 +321,7 @@ async fn process_single_file(
     let saved_file_path = file_service.save_file(&file_info.name, &file_data).await
         .map_err(|e| format!("Failed to save {}: {}", file_info.name, e))?;
     
-    // Create document record
+    // Create document record with hash
     let file_service = FileService::new(state.config.upload_path.clone());
     let document = file_service.create_document(
         &file_info.name,
@@ -339,6 +330,7 @@ async fn process_single_file(
         file_data.len() as i64,
         &file_info.mime_type,
         user_id,
+        Some(file_hash.clone()), // Store the calculated hash
     );
     
     // Save document to database

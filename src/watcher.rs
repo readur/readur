@@ -362,6 +362,9 @@ async fn process_file(
     
     let saved_file_path = file_service.save_file(&filename, &file_data).await?;
     
+    // Calculate file hash for deduplication
+    let file_hash = calculate_file_hash(&file_data);
+    
     let document = file_service.create_document(
         &filename,
         &filename,
@@ -369,6 +372,7 @@ async fn process_file(
         file_size,
         &mime_type,
         admin_user_id,
+        Some(file_hash),
     );
     
     let created_doc = db.create_document(document).await?;

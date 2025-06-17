@@ -156,6 +156,7 @@ impl FileService {
         file_size: i64,
         mime_type: &str,
         user_id: Uuid,
+        file_hash: Option<String>,
     ) -> Document {
         Document {
             id: Uuid::new_v4(),
@@ -176,6 +177,7 @@ impl FileService {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             user_id,
+            file_hash,
         }
     }
 

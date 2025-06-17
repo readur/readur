@@ -9,9 +9,9 @@ impl Database {
     pub async fn create_document(&self, document: Document) -> Result<Document> {
         let row = sqlx::query(
             r#"
-            INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-            RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+            INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
             "#
         )
         .bind(document.id)
@@ -32,6 +32,7 @@ impl Database {
         .bind(document.created_at)
         .bind(document.updated_at)
         .bind(document.user_id)
+        .bind(&document.file_hash)
         .fetch_one(&self.pool)
         .await?;
 
@@ -54,6 +55,7 @@ impl Database {
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             user_id: row.get("user_id"),
+            file_hash: row.get("file_hash"),
         })
     }
 
@@ -61,7 +63,7 @@ impl Database {
         let query = if user_role == crate::models::UserRole::Admin {
             // Admins can see all documents
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
             FROM documents 
             ORDER BY created_at DESC 
             LIMIT $1 OFFSET $2
@@ -69,7 +71,7 @@ impl Database {
         } else {
             // Regular users can only see their own documents
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
             FROM documents 
             WHERE user_id = $3 
             ORDER BY created_at DESC 
@@ -113,6 +115,7 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
+                file_hash: row.get("file_hash"),
             })
             .collect();
 
@@ -211,6 +214,7 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
+                file_hash: row.get("file_hash"),
             })
             .collect();
 
@@ -297,6 +301,7 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
+                file_hash: row.get("file_hash"),
             })
             .collect();
 
@@ -337,6 +342,7 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
+                file_hash: row.get("file_hash"),
             })
             .collect();
 
@@ -407,6 +413,7 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
+                file_hash: row.get("file_hash"),
             })
             .collect();
 
@@ -1118,6 +1125,47 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
+            })),
+            None => Ok(None),
+        }
+    }
+
+    /// Check if a document with the given file hash already exists for the user
+    pub async fn get_document_by_user_and_hash(&self, user_id: Uuid, file_hash: &str) -> Result<Option<Document>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            FROM documents 
+            WHERE user_id = $1 AND file_hash = $2
+            LIMIT 1
+            "#
+        )
+        .bind(user_id)
+        .bind(file_hash)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(row) => Ok(Some(Document {
+                id: row.get("id"),
+                filename: row.get("filename"),
+                original_filename: row.get("original_filename"),
+                file_path: row.get("file_path"),
+                file_size: row.get("file_size"),
+                mime_type: row.get("mime_type"),
+                content: row.get("content"),
+                ocr_text: row.get("ocr_text"),
+                ocr_confidence: row.get("ocr_confidence"),
+                ocr_word_count: row.get("ocr_word_count"),
+                ocr_processing_time_ms: row.get("ocr_processing_time_ms"),
+                ocr_status: row.get("ocr_status"),
+                ocr_error: row.get("ocr_error"),
+                ocr_completed_at: row.get("ocr_completed_at"),
+                tags: row.get("tags"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                user_id: row.get("user_id"),
+                file_hash: row.get("file_hash"),
             })),
             None => Ok(None),
         }

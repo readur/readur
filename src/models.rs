@@ -98,6 +98,7 @@ pub struct Document {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub user_id: Uuid,
+    pub file_hash: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

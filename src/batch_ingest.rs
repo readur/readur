@@ -6,6 +6,7 @@ use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use walkdir::WalkDir;
+use sha2::{Sha256, Digest};
 
 use crate::{
     config::Config,
@@ -188,6 +189,25 @@ async fn process_single_file(
     // Read file data
     let file_data = fs::read(&path).await?;
     
+    // Calculate file hash for deduplication
+    let file_hash = calculate_file_hash(&file_data);
+    
+    // Check for duplicate content using efficient hash lookup
+    match db.get_document_by_user_and_hash(user_id, &file_hash).await {
+        Ok(Some(existing_doc)) => {
+            info!("Skipping duplicate file: {} matches existing document {} (hash: {})", 
+                filename, existing_doc.original_filename, &file_hash[..8]);
+            return Ok(None); // Skip processing duplicate
+        }
+        Ok(None) => {
+            info!("No duplicate content found for hash {}, proceeding with file processing", &file_hash[..8]);
+        }
+        Err(e) => {
+            warn!("Error checking for duplicate hash {}: {}", &file_hash[..8], e);
+            // Continue processing even if duplicate check fails
+        }
+    }
+    
     let mime_type = mime_guess::from_path(&filename)
         .first_or_octet_stream()
         .to_string();
@@ -195,7 +215,7 @@ async fn process_single_file(
     // Save file
     let file_path = file_service.save_file(&filename, &file_data).await?;
     
-    // Create document
+    // Create document with hash
     let document = file_service.create_document(
         &filename,
         &filename,
@@ -203,6 +223,7 @@ async fn process_single_file(
         file_size,
         &mime_type,
         user_id,
+        Some(file_hash),
     );
     
     // Save to database (without OCR)
@@ -224,4 +245,11 @@ fn calculate_priority(file_size: i64) -> i32 {
         ..=MB50 => 4,           // 10-50MB: low priority
         _ => 2,                 // > 50MB: lowest priority
     }
+}
+
+fn calculate_file_hash(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    format!("{:x}", result)
 }

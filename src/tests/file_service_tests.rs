@@ -72,6 +72,7 @@ mod tests {
             1024,
             "application/pdf",
             user_id,
+            Some("abcd1234hash".to_string()),
         );
         
         assert_eq!(document.filename, "saved_file.pdf");
@@ -80,6 +81,7 @@ mod tests {
         assert_eq!(document.file_size, 1024);
         assert_eq!(document.mime_type, "application/pdf");
         assert_eq!(document.user_id, user_id);
+        assert_eq!(document.file_hash, Some("abcd1234hash".to_string()));
         assert!(document.content.is_none());
         assert!(document.ocr_text.is_none());
         assert!(document.tags.is_empty());

@@ -142,21 +142,17 @@ async fn upload_document(
             // Calculate file hash for deduplication
             let file_hash = calculate_file_hash(&data);
             
-            // Check if this exact file content already exists in the system
-            // This prevents uploading and processing duplicate files
-            if let Ok(existing_docs) = state.db.get_documents_by_user_with_role(auth_user.user.id, auth_user.user.role, 1000, 0).await {
-                for existing_doc in existing_docs {
-                    // Quick size check first (much faster than hash comparison)
-                    if existing_doc.file_size == file_size {
-                        // Read the existing file and compare hashes
-                        if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
-                            let existing_hash = calculate_file_hash(&existing_file_data);
-                            if file_hash == existing_hash {
-                                // Return the existing document instead of creating a duplicate
-                                return Ok(Json(existing_doc.into()));
-                            }
-                        }
-                    }
+            // Check if this exact file content already exists using efficient hash lookup
+            match state.db.get_document_by_user_and_hash(auth_user.user.id, &file_hash).await {
+                Ok(Some(existing_doc)) => {
+                    // Return the existing document instead of creating a duplicate
+                    return Ok(Json(existing_doc.into()));
+                }
+                Ok(None) => {
+                    // No duplicate found, proceed with upload
+                }
+                Err(_) => {
+                    // Continue even if duplicate check fails
                 }
             }
             
@@ -176,6 +172,7 @@ async fn upload_document(
                 file_size,
                 &mime_type,
                 auth_user.user.id,
+                Some(file_hash),
             );
             
             let saved_document = state

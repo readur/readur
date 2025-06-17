@@ -534,25 +534,19 @@ impl SourceSyncService {
         // Calculate file hash for deduplication
         let file_hash = Self::calculate_file_hash(&file_data);
 
-        // Check for duplicate content
-        if let Ok(existing_docs) = state.db.get_documents_by_user_with_role(
-            user_id, 
-            crate::models::UserRole::User, 
-            1000, 
-            0
-        ).await {
-            let matching_docs: Vec<_> = existing_docs.into_iter()
-                .filter(|doc| doc.file_size == file_data.len() as i64)
-                .collect();
-
-            for existing_doc in matching_docs {
-                if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
-                    let existing_hash = Self::calculate_file_hash(&existing_file_data);
-                    if file_hash == existing_hash {
-                        info!("File content already exists, skipping: {}", file_info.path);
-                        return Ok(false);
-                    }
-                }
+        // Check for duplicate content using efficient hash lookup
+        match state.db.get_document_by_user_and_hash(user_id, &file_hash).await {
+            Ok(Some(existing_doc)) => {
+                info!("File content already exists for user {}: {} matches existing document {} (hash: {})", 
+                    user_id, file_info.name, existing_doc.original_filename, &file_hash[..8]);
+                return Ok(false); // Skip processing duplicate
+            }
+            Ok(None) => {
+                info!("No duplicate content found for hash {}, proceeding with file processing", &file_hash[..8]);
+            }
+            Err(e) => {
+                warn!("Error checking for duplicate hash {}: {}", &file_hash[..8], e);
+                // Continue processing even if duplicate check fails
             }
         }
 
@@ -561,7 +555,7 @@ impl SourceSyncService {
         let saved_file_path = file_service.save_file(&file_info.name, &file_data).await
             .map_err(|e| anyhow!("Failed to save {}: {}", file_info.name, e))?;
 
-        // Create document record
+        // Create document record with hash
         let document = file_service.create_document(
             &file_info.name,
             &file_info.name,
@@ -569,6 +563,7 @@ impl SourceSyncService {
             file_data.len() as i64,
             &file_info.mime_type,
             user_id,
+            Some(file_hash.clone()), // Store the calculated hash
         );
 
         let created_document = state.db.create_document(document).await
@@ -655,25 +650,19 @@ impl SourceSyncService {
         // Calculate file hash for deduplication
         let file_hash = Self::calculate_file_hash(&file_data);
 
-        // Check for duplicate content
-        if let Ok(existing_docs) = state.db.get_documents_by_user_with_role(
-            user_id, 
-            crate::models::UserRole::User, 
-            1000, 
-            0
-        ).await {
-            let matching_docs: Vec<_> = existing_docs.into_iter()
-                .filter(|doc| doc.file_size == file_data.len() as i64)
-                .collect();
-
-            for existing_doc in matching_docs {
-                if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
-                    let existing_hash = Self::calculate_file_hash(&existing_file_data);
-                    if file_hash == existing_hash {
-                        info!("File content already exists, skipping: {}", file_info.path);
-                        return Ok(false);
-                    }
-                }
+        // Check for duplicate content using efficient hash lookup
+        match state.db.get_document_by_user_and_hash(user_id, &file_hash).await {
+            Ok(Some(existing_doc)) => {
+                info!("File content already exists for user {}: {} matches existing document {} (hash: {})", 
+                    user_id, file_info.name, existing_doc.original_filename, &file_hash[..8]);
+                return Ok(false); // Skip processing duplicate
+            }
+            Ok(None) => {
+                info!("No duplicate content found for hash {}, proceeding with file processing", &file_hash[..8]);
+            }
+            Err(e) => {
+                warn!("Error checking for duplicate hash {}: {}", &file_hash[..8], e);
+                // Continue processing even if duplicate check fails
             }
         }
 
@@ -688,7 +677,7 @@ impl SourceSyncService {
         let saved_file_path = file_service.save_file(&file_info.name, &file_data).await
             .map_err(|e| anyhow!("Failed to save {}: {}", file_info.name, e))?;
 
-        // Create document record
+        // Create document record with hash
         let document = file_service.create_document(
             &file_info.name,
             &file_info.name,
@@ -696,6 +685,7 @@ impl SourceSyncService {
             file_data.len() as i64,
             &file_info.mime_type,
             user_id,
+            Some(file_hash.clone()), // Store the calculated hash
         );
 
         let created_document = state.db.create_document(document).await
