@@ -409,33 +409,49 @@ impl OcrQueueService {
                         let error_msg = format!("OCR extraction failed: {}", e);
                         let error_str = e.to_string();
                         
-                        // Detect specific PDF font encoding issues
-                        let is_pdf_font_issue = error_str.contains("font encoding") || 
-                                               error_str.contains("missing unicode map") ||
-                                               error_str.contains("corrupted internal structure");
-                        
-                        if is_pdf_font_issue {
-                            warn!("⚠️  PDF font encoding issue for '{}' | Job: {} | Document: {} | Error: {}", 
-                                  filename, item.id, item.document_id, e);
+                        // Classify error type and determine failure reason
+                        let (failure_reason, should_suppress) = if error_str.contains("font encoding") || 
+                                                                   error_str.contains("missing unicode map") {
+                            ("pdf_font_encoding", true)
+                        } else if error_str.contains("corrupted internal structure") ||
+                                  error_str.contains("corrupted") {
+                            ("pdf_corruption", true)
+                        } else if error_str.contains("timeout") || error_str.contains("timed out") {
+                            ("processing_timeout", false)
+                        } else if error_str.contains("memory") || error_str.contains("out of memory") {
+                            ("memory_limit", false)
+                        } else if error_str.contains("panic") {
+                            ("pdf_parsing_panic", true)
                         } else {
-                            warn!("❌ OCR failed for '{}' | Job: {} | Document: {} | Error: {}", 
-                                  filename, item.id, item.document_id, e);
+                            ("unknown", false)
+                        };
+                        
+                        // Use intelligent logging based on error type
+                        if should_suppress {
+                            // These are expected errors for certain PDF types - log at debug level
+                            use tracing::debug;
+                            debug!("Expected PDF processing issue for '{}' ({}): {}", 
+                                   filename, failure_reason, e);
+                        } else {
+                            // These are unexpected errors that may need attention
+                            warn!("❌ OCR failed for '{}' | Job: {} | Document: {} | Reason: {} | Error: {}", 
+                                  filename, item.id, item.document_id, failure_reason, e);
                         }
                         
-                        // Update document status with more specific error information
-                        let ocr_status = if is_pdf_font_issue { "pdf_font_error" } else { "failed" };
+                        // Always use 'failed' status with specific failure reason
                         sqlx::query(
                             r#"
                             UPDATE documents
-                            SET ocr_status = $2,
-                                ocr_error = $3,
+                            SET ocr_status = 'failed',
+                                ocr_error = $2,
+                                ocr_failure_reason = $3,
                                 updated_at = NOW()
                             WHERE id = $1
                             "#
                         )
                         .bind(item.document_id)
-                        .bind(ocr_status)
                         .bind(&error_msg)
+                        .bind(failure_reason)
                         .execute(&self.pool)
                         .await?;
                         

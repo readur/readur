@@ -4,6 +4,7 @@ pub mod config;
 pub mod db;
 pub mod db_guardrails_simple;
 pub mod enhanced_ocr;
+pub mod error_management;
 pub mod file_service;
 pub mod local_folder_service;
 pub mod models;

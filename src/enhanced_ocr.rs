@@ -840,9 +840,12 @@ impl EnhancedOcrService {
             }
             Ok(Ok(Err(_panic))) => {
                 // pdf-extract panicked (e.g., missing unicode map, corrupted font encoding)
-                warn!("PDF extraction panicked for file '{}' - likely corrupted font encoding or missing unicode map. Fallback to OCR not yet implemented.", file_path);
+                // For now, gracefully handle this common issue
+                use tracing::debug;
+                debug!("PDF text extraction failed for '{}' due to font encoding issues. This is a known limitation with certain PDF files.", file_path);
+                
                 return Err(anyhow!(
-                    "PDF extraction failed due to corrupted or unsupported font encoding in file '{}' (size: {} bytes). The PDF may have non-standard fonts or corrupted internal structure. Consider converting the PDF to images for OCR.",
+                    "PDF text extraction failed due to font encoding issues in '{}' (size: {} bytes). This PDF uses non-standard fonts or character encoding that cannot be processed. To extract text from this PDF, consider: 1) Converting it to images and uploading those instead, 2) Using a different PDF viewer to re-save the PDF with standard encoding, or 3) Using external tools to convert the PDF to a more compatible format.",
                     file_path, file_size
                 ));
             }
