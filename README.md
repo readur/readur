@@ -34,7 +34,7 @@ open http://localhost:8000
 
 **Default login credentials:**
 - Username: `admin`
-- Password: `admin123`
+- Password: `readur2024`
 
 > ⚠️ **Important**: Change the default admin password immediately after first login!
 
