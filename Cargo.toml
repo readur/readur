@@ -23,7 +23,7 @@ regex = "1.11"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 bcrypt = "0.17"
-base64ct = "=1.6.0"
+base64ct = "=1.8.0"
 jsonwebtoken = "9"
 anyhow = "1"
 tracing = "0.1"
