@@ -6,6 +6,16 @@ import { documentService } from '../../services/api'
 // Mock the document service directly
 const mockDocumentService = vi.mocked(documentService, true)
 
+// Mock the NotificationContext
+vi.mock('../../contexts/NotificationContext', () => ({
+  useNotifications: () => ({
+    addNotification: vi.fn(),
+    removeNotification: vi.fn(),
+    clearNotifications: vi.fn(),
+    notifications: [],
+  }),
+}))
+
 // Mock child components
 vi.mock('../FileUpload', () => ({
   default: ({ onUploadSuccess }: any) => (

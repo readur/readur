@@ -18,9 +18,11 @@ const mockDocument = {
 
 // Mock the document service
 const mockDocumentService = {
-  list: vi.fn(),
+  getById: vi.fn(),
   download: vi.fn(),
   getOcrText: vi.fn(),
+  getThumbnail: vi.fn(),
+  getProcessedImage: vi.fn(),
 };
 
 vi.mock('../../services/api', () => ({
@@ -38,13 +40,16 @@ const renderWithRouter = (route = '/documents/doc-123') => {
 describe('DocumentDetailsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDocumentService.list.mockReset();
+    mockDocumentService.getById.mockReset();
     mockDocumentService.download.mockReset();
     mockDocumentService.getOcrText.mockReset();
+    mockDocumentService.getThumbnail.mockReset();
+    mockDocumentService.getProcessedImage.mockReset();
   });
 
   test('renders loading state initially', () => {
-    mockDocumentService.list.mockImplementation(() => new Promise(() => {})); // Never resolves
+    mockDocumentService.getById.mockImplementation(() => new Promise(() => {})); // Never resolves
+    mockDocumentService.getThumbnail.mockRejectedValue(new Error('No thumbnail'));
     
     renderWithRouter();
     
@@ -52,9 +57,10 @@ describe('DocumentDetailsPage', () => {
   });
 
   test('renders document details when data loads', async () => {
-    mockDocumentService.list.mockResolvedValueOnce({
-      data: [mockDocument]
+    mockDocumentService.getById.mockResolvedValueOnce({
+      data: mockDocument
     });
+    mockDocumentService.getThumbnail.mockRejectedValue(new Error('No thumbnail'));
 
     renderWithRouter();
     
@@ -68,9 +74,7 @@ describe('DocumentDetailsPage', () => {
   });
 
   test('shows error when document not found', async () => {
-    mockDocumentService.list.mockResolvedValueOnce({
-      data: [] // Empty array
-    });
+    mockDocumentService.getById.mockRejectedValue(new Error('Document not found'));
 
     renderWithRouter();
     
