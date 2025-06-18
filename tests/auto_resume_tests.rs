@@ -392,11 +392,11 @@ fn test_resume_priority_ordering() {
     // Local folder should have highest priority (lowest number)
     assert_eq!(sources[0].source_type, SourceType::LocalFolder);
     
-    // WebDAV should be next
-    assert_eq!(sources[1].source_type, SourceType::WebDAV);
+    // S3 should be next (interrupted more recently than WebDAV)
+    assert_eq!(sources[1].source_type, SourceType::S3);
     
-    // S3 should have lowest priority
-    assert_eq!(sources[2].source_type, SourceType::S3);
+    // WebDAV should have lowest priority (interrupted longest ago)
+    assert_eq!(sources[2].source_type, SourceType::WebDAV);
 }
 
 fn create_interrupted_source_with_time(user_id: Uuid, source_type: SourceType, minutes_ago: i64) -> Source {
