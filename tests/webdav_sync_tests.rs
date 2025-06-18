@@ -16,8 +16,8 @@ use chrono::Utc;
 use serde_json::json;
 
 use readur::{
-    models::{WebDAVSourceConfig, SourceType},
-    webdav_service::{WebDAVService, WebDAVConfig, WebDAVFile, CrawlEstimate},
+    models::{WebDAVSourceConfig, SourceType, WebDAVFile, WebDAVCrawlEstimate, WebDAVFolderInfo},
+    webdav_service::{WebDAVService, WebDAVConfig},
 };
 
 /// Create a test WebDAV configuration
@@ -57,7 +57,7 @@ fn test_webdav_config_creation() {
     assert_eq!(config.watch_folders.len(), 2);
     assert_eq!(config.file_extensions.len(), 3);
     assert_eq!(config.timeout_seconds, 30);
-    assert_eq!(config.server_type, "nextcloud");
+    assert_eq!(config.server_type, Some("nextcloud".to_string()));
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn test_webdav_source_config_creation() {
     assert_eq!(config.username, "testuser");
     assert!(config.auto_sync);
     assert_eq!(config.sync_interval_minutes, 60);
-    assert_eq!(config.server_type, "nextcloud");
+    assert_eq!(config.server_type, Some("nextcloud".to_string()));
 }
 
 #[test]
@@ -103,20 +103,27 @@ fn test_webdav_config_validation() {
 #[test]
 fn test_webdav_file_structure() {
     let webdav_file = WebDAVFile {
-        path: "/Documents/test.pdf".to_string(),
+        id: Uuid::new_v4(),
+        user_id: Uuid::new_v4(),
+        webdav_path: "/Documents/test.pdf".to_string(),
         etag: "abc123".to_string(),
-        size: 1024,
-        last_modified: Utc::now(),
-        content_type: "application/pdf".to_string(),
+        last_modified: Some(Utc::now()),
+        file_size: 1024,
+        mime_type: "application/pdf".to_string(),
+        document_id: None,
+        sync_status: "synced".to_string(),
+        sync_error: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
     };
     
-    assert_eq!(webdav_file.path, "/Documents/test.pdf");
+    assert_eq!(webdav_file.webdav_path, "/Documents/test.pdf");
     assert_eq!(webdav_file.etag, "abc123");
-    assert_eq!(webdav_file.size, 1024);
-    assert_eq!(webdav_file.content_type, "application/pdf");
+    assert_eq!(webdav_file.file_size, 1024);
+    assert_eq!(webdav_file.mime_type, "application/pdf");
     
     // Test filename extraction
-    let filename = webdav_file.path.split('/').last().unwrap();
+    let filename = webdav_file.webdav_path.split('/').last().unwrap();
     assert_eq!(filename, "test.pdf");
     
     // Test extension detection
@@ -211,22 +218,22 @@ fn normalize_webdav_path(path: &str) -> String {
 
 #[test]
 fn test_crawl_estimate_structure() {
-    let estimate = CrawlEstimate {
+    let estimate = WebDAVCrawlEstimate {
         folders: vec![
-            json!({
-                "path": "/Documents",
-                "file_count": 10,
-                "supported_files": 8,
-                "estimated_time_hours": 0.5,
-                "size_mb": 50.0
-            }),
-            json!({
-                "path": "/Photos", 
-                "file_count": 100,
-                "supported_files": 90,
-                "estimated_time_hours": 2.0,
-                "size_mb": 500.0
-            })
+            WebDAVFolderInfo {
+                path: "/Documents".to_string(),
+                total_files: 10,
+                supported_files: 8,
+                estimated_time_hours: 0.5,
+                total_size_mb: 50.0
+            },
+            WebDAVFolderInfo {
+                path: "/Photos".to_string(),
+                total_files: 100,
+                supported_files: 90,
+                estimated_time_hours: 2.0,
+                total_size_mb: 500.0
+            }
         ],
         total_files: 110,
         total_supported_files: 98,
@@ -241,13 +248,13 @@ fn test_crawl_estimate_structure() {
     assert_eq!(estimate.total_size_mb, 550.0);
     
     // Test calculation accuracy
-    let calculated_files: i32 = estimate.folders.iter()
-        .map(|f| f["file_count"].as_i64().unwrap() as i32)
+    let calculated_files: i64 = estimate.folders.iter()
+        .map(|f| f.total_files)
         .sum();
     assert_eq!(calculated_files, estimate.total_files);
     
-    let calculated_supported: i32 = estimate.folders.iter()
-        .map(|f| f["supported_files"].as_i64().unwrap() as i32)
+    let calculated_supported: i64 = estimate.folders.iter()
+        .map(|f| f.supported_files)
         .sum();
     assert_eq!(calculated_supported, estimate.total_supported_files);
 }
@@ -291,13 +298,13 @@ fn test_server_type_detection() {
             watch_folders: vec!["/test".to_string()],
             file_extensions: vec![".pdf".to_string()],
             timeout_seconds: 30,
-            server_type: server_type.to_string(),
+            server_type: Some(server_type.to_string()),
         };
         
         if is_supported {
-            assert!(["nextcloud", "owncloud"].contains(&config.server_type.as_str()));
+            assert!(["nextcloud", "owncloud"].contains(&config.server_type.as_ref().unwrap().as_str()));
         } else {
-            assert!(!["nextcloud", "owncloud"].contains(&config.server_type.as_str()));
+            assert!(!["nextcloud", "owncloud"].contains(&config.server_type.as_ref().unwrap().as_str()));
         }
     }
 }

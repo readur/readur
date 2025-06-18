@@ -11,6 +11,8 @@
  */
 
 use std::sync::Arc;
+use std::collections::HashMap;
+use std::time::{SystemTime, Duration};
 use uuid::Uuid;
 use chrono::Utc;
 use serde_json::json;
@@ -20,7 +22,8 @@ use readur::{
     AppState,
     config::Config,
     db::Database,
-    models::{Source, SourceType, SourceStatus, WebDAVSourceConfig, AuthUser, User, UserRole},
+    models::{Source, SourceType, SourceStatus, WebDAVSourceConfig, User, UserRole},
+    auth::AuthUser,
     routes::sources,
 };
 
@@ -30,17 +33,29 @@ async fn create_test_app_state() -> Arc<AppState> {
         database_url: "sqlite::memory:".to_string(),
         server_address: "127.0.0.1:8080".to_string(),
         jwt_secret: "test_secret".to_string(),
-        upload_dir: "/tmp/test_uploads".to_string(),
-        max_file_size: 10 * 1024 * 1024,
+        upload_path: "/tmp/test_uploads".to_string(),
+        watch_folder: "/tmp/test_watch".to_string(),
+        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
+        watch_interval_seconds: Some(30),
+        file_stability_check_ms: Some(500),
+        max_file_age_hours: None,
+        ocr_language: "eng".to_string(),
+        concurrent_ocr_jobs: 2,
+        ocr_timeout_seconds: 60,
+        max_file_size_mb: 10,
+        memory_limit_mb: 256,
+        cpu_priority: "normal".to_string(),
     };
 
     let db = Database::new(&config.database_url).await.unwrap();
+    let queue_service = std::sync::Arc::new(readur::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
     
     Arc::new(AppState {
         db,
         config,
         webdav_scheduler: None,
         source_scheduler: None,
+        queue_service,
     })
 }
 
@@ -223,8 +238,6 @@ fn is_valid_source_id(id_str: &str) -> bool {
 
 #[test]
 fn test_sync_trigger_rate_limiting() {
-    use std::collections::HashMap;
-    use std::time::{SystemTime, Duration};
     
     // Test rate limiting for manual sync triggers
     let mut rate_limiter = SyncRateLimiter::new();

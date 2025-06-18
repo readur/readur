@@ -3,13 +3,52 @@
 //! This test suite uses the actual test images from tests/test_images/
 //! to verify OCR functionality with known content.
 
-use readur::test_utils::{get_test_images, get_available_test_images, get_test_image, skip_if_no_test_images};
 use readur::ocr::OcrService;
 use std::path::Path;
 
+/// Simple test image information
+#[derive(Debug, Clone)]
+struct TestImage {
+    filename: &'static str,
+    path: String,
+    mime_type: &'static str,
+    expected_content: &'static str,
+}
+
+impl TestImage {
+    fn new(filename: &'static str, mime_type: &'static str, expected_content: &'static str) -> Self {
+        Self {
+            filename,
+            path: format!("tests/test_images/{}", filename),
+            mime_type,
+            expected_content,
+        }
+    }
+    
+    fn exists(&self) -> bool {
+        Path::new(&self.path).exists()
+    }
+    
+    async fn load_data(&self) -> Result<Vec<u8>, std::io::Error> {
+        tokio::fs::read(&self.path).await
+    }
+}
+
+/// Get available test images (only those that exist)
+fn get_available_test_images() -> Vec<TestImage> {
+    let all_images = vec![
+        TestImage::new("test1.png", "image/png", "Test 1\nThis is some text from text 1"),
+        TestImage::new("test2.jpg", "image/jpeg", "Test 2\nThis is some text from text 2"),
+        TestImage::new("test3.jpeg", "image/jpeg", "Test 3\nThis is some text from text 3"),
+        TestImage::new("test4.png", "image/png", "Test 4\nThis is some text from text 4"),
+        TestImage::new("test5.jpg", "image/jpeg", "Test 5\nThis is some text from text 5"),
+    ];
+    
+    all_images.into_iter().filter(|img| img.exists()).collect()
+}
+
 #[tokio::test]
 async fn test_ocr_with_all_available_test_images() {
-    skip_if_no_test_images!();
     
     let available_images = get_available_test_images();
     
@@ -86,14 +125,14 @@ async fn test_ocr_with_all_available_test_images() {
 
 #[tokio::test]
 async fn test_ocr_with_specific_test_images() {
-    skip_if_no_test_images!();
     
     // Test specific images that should definitely work
     let test_cases = vec![1, 2, 3]; // Test with first 3 images
+    let available_images = get_available_test_images();
     
     for test_num in test_cases {
-        let test_image = match get_test_image(test_num) {
-            Some(img) => img,
+        let test_image = match available_images.get(test_num - 1) {
+            Some(img) => img.clone(),
             None => continue,
         };
         
@@ -130,8 +169,7 @@ async fn test_ocr_with_specific_test_images() {
 
 #[tokio::test]
 async fn test_ocr_error_handling_with_corrupted_image() {
-    skip_if_no_test_images!();
-    
+        
     // Create a corrupted image file
     let corrupted_data = vec![0xFF; 100]; // Invalid image data
     let temp_path = "./temp_corrupted_test.png";
@@ -160,8 +198,7 @@ async fn test_ocr_error_handling_with_corrupted_image() {
 
 #[tokio::test]
 async fn test_multiple_image_formats() {
-    skip_if_no_test_images!();
-    
+        
     let images = get_available_test_images();
     let mut png_count = 0;
     let mut jpeg_count = 0;
@@ -200,8 +237,7 @@ async fn test_multiple_image_formats() {
 #[tokio::test]
 #[ignore = "Long running test - run with: cargo test test_ocr_performance -- --ignored"]
 async fn test_ocr_performance_with_test_images() {
-    skip_if_no_test_images!();
-    
+        
     let available_images = get_available_test_images();
     
     if available_images.is_empty() {

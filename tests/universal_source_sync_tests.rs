@@ -119,7 +119,17 @@ async fn create_test_app_state() -> Arc<AppState> {
         server_address: "127.0.0.1:8080".to_string(),
         jwt_secret: "test_secret".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
-        max_file_size_mb: 10 * 1024 * 1024,
+        watch_folder: "/tmp/test_watch".to_string(),
+        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
+        watch_interval_seconds: Some(30),
+        file_stability_check_ms: Some(500),
+        max_file_age_hours: None,
+        ocr_language: "eng".to_string(),
+        concurrent_ocr_jobs: 2,
+        ocr_timeout_seconds: 60,
+        max_file_size_mb: 10,
+        memory_limit_mb: 256,
+        cpu_priority: "normal".to_string(),
     };
 
     let db = Database::new(&config.database_url).await.unwrap();
@@ -200,7 +210,7 @@ fn test_config_parsing_s3() {
     let s3_config = config.unwrap();
     assert_eq!(s3_config.bucket_name, "test-documents");
     assert_eq!(s3_config.region, "us-east-1");
-    assert_eq!(s3_config.prefix, "documents/");
+    assert_eq!(s3_config.prefix, Some("documents/".to_string()));
     assert_eq!(s3_config.sync_interval_minutes, 120);
 }
 

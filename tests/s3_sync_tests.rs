@@ -23,12 +23,13 @@ use readur::{
 /// Create a test S3 configuration for AWS
 fn create_test_aws_s3_config() -> S3SourceConfig {
     S3SourceConfig {
-        bucket: "test-documents-bucket".to_string(),
+        bucket_name: "test-documents-bucket".to_string(),
         region: "us-east-1".to_string(),
         access_key_id: "AKIAIOSFODNN7EXAMPLE".to_string(),
         secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string(),
-        prefix: "documents/".to_string(),
+        prefix: Some("documents/".to_string()),
         endpoint_url: None, // Use AWS S3
+        watch_folders: vec!["documents/".to_string()],
         auto_sync: true,
         sync_interval_minutes: 120,
         file_extensions: vec![".pdf".to_string(), ".txt".to_string(), ".docx".to_string()],
@@ -38,12 +39,13 @@ fn create_test_aws_s3_config() -> S3SourceConfig {
 /// Create a test S3 configuration for MinIO
 fn create_test_minio_config() -> S3SourceConfig {
     S3SourceConfig {
-        bucket: "minio-test-bucket".to_string(),
+        bucket_name: "minio-test-bucket".to_string(),
         region: "us-east-1".to_string(),
         access_key_id: "minioadmin".to_string(),
         secret_access_key: "minioadmin".to_string(),
-        prefix: "".to_string(),
+        prefix: Some("".to_string()),
         endpoint_url: Some("https://minio.example.com".to_string()),
+        watch_folders: vec!["".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,
         file_extensions: vec![".pdf".to_string(), ".jpg".to_string()],
@@ -54,7 +56,7 @@ fn create_test_minio_config() -> S3SourceConfig {
 fn test_s3_config_creation_aws() {
     let config = create_test_aws_s3_config();
     
-    assert_eq!(config.bucket, "test-documents-bucket");
+    assert_eq!(config.bucket_name, "test-documents-bucket");
     assert_eq!(config.region, "us-east-1");
     assert!(!config.access_key_id.is_empty());
     assert!(!config.secret_access_key.is_empty());
@@ -69,7 +71,7 @@ fn test_s3_config_creation_aws() {
 fn test_s3_config_creation_minio() {
     let config = create_test_minio_config();
     
-    assert_eq!(config.bucket, "minio-test-bucket");
+    assert_eq!(config.bucket_name, "minio-test-bucket");
     assert_eq!(config.region, "us-east-1");
     assert_eq!(config.access_key_id, "minioadmin");
     assert_eq!(config.secret_access_key, "minioadmin");
@@ -84,11 +86,11 @@ fn test_s3_config_validation() {
     let config = create_test_aws_s3_config();
     
     // Test bucket name validation
-    assert!(!config.bucket.is_empty());
-    assert!(config.bucket.len() >= 3 && config.bucket.len() <= 63);
-    assert!(!config.bucket.contains(' '));
-    assert!(!config.bucket.contains('_'));
-    assert!(config.bucket.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'));
+    assert!(!config.bucket_name.is_empty());
+    assert!(config.bucket_name.len() >= 3 && config.bucket_name.len() <= 63);
+    assert!(!config.bucket_name.contains(' '));
+    assert!(!config.bucket_name.contains('_'));
+    assert!(config.bucket_name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'));
     
     // Test region validation
     assert!(!config.region.is_empty());
@@ -243,7 +245,7 @@ struct S3ObjectMetadata {
 #[test]
 fn test_prefix_filtering() {
     let config = create_test_aws_s3_config();
-    let prefix = &config.prefix;
+    let prefix = config.prefix.as_ref();
     
     let test_objects = vec![
         "documents/file1.pdf",
@@ -356,28 +358,30 @@ fn test_s3_error_handling_scenarios() {
     
     // Invalid bucket name
     let invalid_bucket_config = S3SourceConfig {
-        bucket: "Invalid_Bucket_Name!".to_string(), // Invalid characters
+        bucket_name: "Invalid_Bucket_Name!".to_string(), // Invalid characters
         region: "us-east-1".to_string(),
         access_key_id: "test".to_string(),
         secret_access_key: "test".to_string(),
-        prefix: "".to_string(),
+        prefix: Some("".to_string()),
         endpoint_url: None,
+        watch_folders: vec!["".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,
         file_extensions: vec![".pdf".to_string()],
     };
     
-    assert!(invalid_bucket_config.bucket.contains('_'));
-    assert!(invalid_bucket_config.bucket.contains('!'));
+    assert!(invalid_bucket_config.bucket_name.contains('_'));
+    assert!(invalid_bucket_config.bucket_name.contains('!'));
     
     // Empty credentials
     let empty_creds_config = S3SourceConfig {
-        bucket: "test-bucket".to_string(),
+        bucket_name: "test-bucket".to_string(),
         region: "us-east-1".to_string(),
         access_key_id: "".to_string(), // Empty
         secret_access_key: "".to_string(), // Empty
-        prefix: "".to_string(),
+        prefix: Some("".to_string()),
         endpoint_url: None,
+        watch_folders: vec!["".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,
         file_extensions: vec![".pdf".to_string()],
@@ -388,12 +392,13 @@ fn test_s3_error_handling_scenarios() {
     
     // Invalid region
     let invalid_region_config = S3SourceConfig {
-        bucket: "test-bucket".to_string(),
+        bucket_name: "test-bucket".to_string(),
         region: "invalid-region".to_string(),
         access_key_id: "test".to_string(),
         secret_access_key: "test".to_string(),
-        prefix: "".to_string(),
+        prefix: Some("".to_string()),
         endpoint_url: None,
+        watch_folders: vec!["".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,
         file_extensions: vec![".pdf".to_string()],
