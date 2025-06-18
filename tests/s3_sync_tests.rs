@@ -60,7 +60,7 @@ fn test_s3_config_creation_aws() {
     assert_eq!(config.region, "us-east-1");
     assert!(!config.access_key_id.is_empty());
     assert!(!config.secret_access_key.is_empty());
-    assert_eq!(config.prefix, "documents/");
+    assert_eq!(config.prefix, Some("documents/".to_string()));
     assert!(config.endpoint_url.is_none()); // AWS S3
     assert!(config.auto_sync);
     assert_eq!(config.sync_interval_minutes, 120);
@@ -75,7 +75,7 @@ fn test_s3_config_creation_minio() {
     assert_eq!(config.region, "us-east-1");
     assert_eq!(config.access_key_id, "minioadmin");
     assert_eq!(config.secret_access_key, "minioadmin");
-    assert_eq!(config.prefix, "");
+    assert_eq!(config.prefix, Some("".to_string()));
     assert!(config.endpoint_url.is_some());
     assert_eq!(config.endpoint_url.unwrap(), "https://minio.example.com");
     assert_eq!(config.sync_interval_minutes, 60);
@@ -256,7 +256,7 @@ fn test_prefix_filtering() {
     ];
     
     let filtered_objects: Vec<_> = test_objects.iter()
-        .filter(|obj| obj.starts_with(prefix))
+        .filter(|obj| prefix.map_or(true, |p| obj.starts_with(p)))
         .collect();
     
     assert_eq!(filtered_objects.len(), 3); // Only documents/* objects

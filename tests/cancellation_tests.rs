@@ -34,7 +34,17 @@ async fn create_test_app_state() -> Arc<AppState> {
         server_address: "127.0.0.1:8080".to_string(),
         jwt_secret: "test_secret".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
-        max_file_size_mb: 10 * 1024 * 1024,
+        watch_folder: "/tmp/test_watch".to_string(),
+        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
+        watch_interval_seconds: Some(30),
+        file_stability_check_ms: Some(500),
+        max_file_age_hours: None,
+        ocr_language: "eng".to_string(),
+        concurrent_ocr_jobs: 2,
+        ocr_timeout_seconds: 60,
+        max_file_size_mb: 10,
+        memory_limit_mb: 256,
+        cpu_priority: "normal".to_string(),
     };
 
     let db = Database::new(&config.database_url).await.unwrap();
@@ -130,10 +140,10 @@ async fn simulate_download_with_cancellation(
     cancellation_token: Arc<AtomicBool>,
     progress: Arc<Mutex<DownloadProgress>>,
 ) -> DownloadResult {
-    let total_files = 10;
-    let file_size = 1024 * 1024; // 1MB per file
-    let mut bytes_downloaded = 0;
-    let mut files_downloaded = 0;
+    let total_files: u32 = 10;
+    let file_size: u64 = 1024 * 1024; // 1MB per file
+    let mut bytes_downloaded: u64 = 0;
+    let mut files_downloaded: u32 = 0;
     
     for i in 0..total_files {
         // Check cancellation before each file
@@ -141,7 +151,7 @@ async fn simulate_download_with_cancellation(
             return DownloadResult {
                 was_cancelled: true,
                 bytes_downloaded,
-                total_bytes: total_files * file_size,
+                total_bytes: total_files as u64 * file_size,
                 files_downloaded,
                 total_files,
             };
@@ -163,7 +173,7 @@ async fn simulate_download_with_cancellation(
     DownloadResult {
         was_cancelled: false,
         bytes_downloaded,
-        total_bytes: total_files * file_size,
+        total_bytes: total_files as u64 * file_size,
         files_downloaded,
         total_files,
     }
@@ -330,8 +340,8 @@ async fn simulate_download_with_temp_files(
     cancellation_token: Arc<AtomicBool>,
     temp_files: Arc<Mutex<Vec<TempFile>>>,
 ) -> DownloadResult {
-    let total_files = 5;
-    let mut files_downloaded = 0;
+    let total_files: u32 = 5;
+    let mut files_downloaded: u32 = 0;
     
     for i in 0..total_files {
         if cancellation_token.load(Ordering::Relaxed) {
@@ -340,8 +350,8 @@ async fn simulate_download_with_temp_files(
             
             return DownloadResult {
                 was_cancelled: true,
-                bytes_downloaded: files_downloaded * 1024,
-                total_bytes: total_files * 1024,
+                bytes_downloaded: files_downloaded as u64 * 1024,
+                total_bytes: total_files as u64 * 1024,
                 files_downloaded,
                 total_files,
             };
@@ -362,8 +372,8 @@ async fn simulate_download_with_temp_files(
     
     DownloadResult {
         was_cancelled: false,
-        bytes_downloaded: files_downloaded * 1024,
-        total_bytes: total_files * 1024,
+        bytes_downloaded: files_downloaded as u64 * 1024,
+        total_bytes: total_files as u64 * 1024,
         files_downloaded,
         total_files,
     }
