@@ -182,7 +182,11 @@ const WebDAVTabTestComponent: React.FC = () => {
               min="15"
               max="1440"
               value={settings.webdavSyncIntervalMinutes}
-              onChange={(e) => handleSettingsChange('webdavSyncIntervalMinutes', parseInt(e.target.value))}
+              onChange={(e) => {
+                const value = e.target.value;
+                const numValue = value === '' ? 0 : parseInt(value);
+                handleSettingsChange('webdavSyncIntervalMinutes', numValue);
+              }}
               data-testid="sync-interval"
             />
 

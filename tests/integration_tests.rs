@@ -129,15 +129,21 @@ impl TestClient {
                 .await?;
             
             if response.status().is_success() {
-                let documents: Vec<DocumentResponse> = response.json().await?;
+                let response_json: serde_json::Value = response.json().await?;
+                let documents = response_json.get("documents")
+                    .and_then(|docs| docs.as_array())
+                    .ok_or("Invalid response format: missing documents array")?;
                 
-                if let Some(doc) = documents.iter().find(|d| d.id.to_string() == document_id) {
-                    match doc.ocr_status.as_deref() {
-                        Some("completed") => return Ok(true),
-                        Some("failed") => return Err("OCR processing failed".into()),
-                        _ => {
-                            sleep(Duration::from_millis(500)).await;
-                            continue;
+                for doc_value in documents {
+                    let doc: DocumentResponse = serde_json::from_value(doc_value.clone())?;
+                    if doc.id.to_string() == document_id {
+                        match doc.ocr_status.as_deref() {
+                            Some("completed") => return Ok(true),
+                            Some("failed") => return Err("OCR processing failed".into()),
+                            _ => {
+                                sleep(Duration::from_millis(500)).await;
+                                continue;
+                            }
                         }
                     }
                 }
@@ -330,7 +336,16 @@ async fn test_document_list_structure() {
     assert!(response.status().is_success());
     
     // Parse as our DocumentResponse type to ensure structure compatibility
-    let documents: Vec<DocumentResponse> = response.json().await
+    let response_json: serde_json::Value = response.json().await
+        .expect("Failed to parse response JSON");
+    
+    let documents_array = response_json.get("documents")
+        .and_then(|docs| docs.as_array())
+        .expect("Failed to find documents array in response");
+    
+    let documents: Vec<DocumentResponse> = documents_array.iter()
+        .map(|doc_value| serde_json::from_value(doc_value.clone()))
+        .collect::<Result<Vec<_>, _>>()
         .expect("Failed to parse documents as DocumentResponse");
     
     // Find our uploaded document
