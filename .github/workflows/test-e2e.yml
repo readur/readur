@@ -104,7 +104,7 @@ jobs:
 
       - name: Run frontend E2E tests
         working-directory: ./frontend
-        run: npm test -- SearchPage.integration.test
+        run: npm test -- SearchPage.e2e.test
         env:
           VITE_API_URL: http://localhost:8000
 
