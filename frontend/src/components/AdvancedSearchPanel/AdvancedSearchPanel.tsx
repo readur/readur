@@ -252,8 +252,9 @@ const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
                 <Box display="flex" flexDirection={{ xs: 'column', md: 'row' }} gap={3} mb={3}>
                   <Box flex={1}>
                     <FormControl fullWidth>
-                    <InputLabel>Search Mode</InputLabel>
+                    <InputLabel id="search-mode-label">Search Mode</InputLabel>
                     <Select
+                      labelId="search-mode-label"
                       value={settings.searchMode}
                       onChange={(e) => handleSettingChange('searchMode', e.target.value as SearchMode)}
                       label="Search Mode"
@@ -377,8 +378,9 @@ const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
 
                 <Grid size={{ xs: 12, md: 4 }}>
                   <FormControl fullWidth disabled={!settings.includeSnippets}>
-                    <InputLabel>Snippet Length</InputLabel>
+                    <InputLabel id="snippet-length-label">Snippet Length</InputLabel>
                     <Select
+                      labelId="snippet-length-label"
                       value={settings.snippetLength}
                       onChange={(e) => handleSettingChange('snippetLength', e.target.value as number)}
                       label="Snippet Length"
@@ -393,8 +395,9 @@ const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
 
                 <Grid size={{ xs: 12, md: 4 }}>
                   <FormControl fullWidth>
-                    <InputLabel>Results Per Page</InputLabel>
+                    <InputLabel id="results-per-page-label">Results Per Page</InputLabel>
                     <Select
+                      labelId="results-per-page-label"
                       value={settings.resultLimit}
                       onChange={(e) => handleSettingChange('resultLimit', e.target.value as number)}
                       label="Results Per Page"
@@ -518,8 +521,9 @@ const AdvancedSearchPanel: React.FC<AdvancedSearchPanelProps> = ({
 
               {availablePresets.length > 0 && (
                 <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <InputLabel>Load Preset</InputLabel>
+                  <InputLabel id="load-preset-label">Load Preset</InputLabel>
                   <Select
+                    labelId="load-preset-label"
                     label="Load Preset"
                     onChange={(e) => {
                       const preset = availablePresets.find(p => p.name === e.target.value);
