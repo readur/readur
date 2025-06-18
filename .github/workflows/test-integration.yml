@@ -63,6 +63,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: Build readur binary
+        run: cargo build --release
+
+      - name: Start readur server
+        run: |
+          ./target/release/readur &
+          echo $! > readur.pid
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: test-secret-key
+          PORT: 8000
+          UPLOAD_PATH: ./uploads
+          WATCH_PATH: ./watch
+
+      - name: Wait for server to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
+              echo "Readur server is ready"
+              break
+            fi
+            echo "Waiting for readur server... ($i/30)"
+            sleep 2
+          done
 
       - name: Run integration tests
         run: |
@@ -70,3 +94,11 @@ jobs:
         env:
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           RUST_LOG: debug
+
+      - name: Stop readur server
+        if: always()
+        run: |
+          if [ -f readur.pid ]; then
+            kill $(cat readur.pid) || true
+            rm readur.pid
+          fi
