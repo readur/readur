@@ -33,6 +33,7 @@ import {
   Description as DocumentIcon,
   Storage as StorageIcon,
   Error as ErrorIcon,
+  Label as LabelIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -63,6 +64,7 @@ const navigationItems: NavigationItem[] = [
   { text: 'Upload', icon: UploadIcon, path: '/upload' },
   { text: 'Documents', icon: DocumentIcon, path: '/documents' },
   { text: 'Search', icon: SearchIcon, path: '/search' },
+  { text: 'Labels', icon: LabelIcon, path: '/labels' },
   { text: 'Sources', icon: StorageIcon, path: '/sources' },
   { text: 'Watch Folder', icon: FolderIcon, path: '/watch' },
   { text: 'Failed OCR', icon: ErrorIcon, path: '/failed-ocr' },

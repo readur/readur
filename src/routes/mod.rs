@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod documents;
+pub mod labels;
 pub mod metrics;
 pub mod notifications;
 pub mod prometheus_metrics;

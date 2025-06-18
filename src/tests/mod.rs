@@ -3,6 +3,7 @@ mod auth_tests;
 mod db_tests;
 mod documents_tests;
 mod file_service_tests;
+mod labels_tests;
 mod ocr_tests;
 mod enhanced_search_tests;
 mod settings_tests;
