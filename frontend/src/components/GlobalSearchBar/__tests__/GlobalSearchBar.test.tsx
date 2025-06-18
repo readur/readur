@@ -117,7 +117,7 @@ describe('GlobalSearchBar', () => {
     });
 
     await waitFor(() => {
-      expect(documentService.enhancedSearch).toHaveBeenCalledWith({
+      expect(mockDocumentService.enhancedSearch).toHaveBeenCalledWith({
         query: 'test',
         limit: 5,
         include_snippets: false,
@@ -336,7 +336,7 @@ describe('GlobalSearchBar', () => {
   });
 
   test('handles search errors gracefully', async () => {
-    documentService.enhancedSearch.mockRejectedValue(new Error('Search failed'));
+    mockDocumentService.enhancedSearch.mockRejectedValue(new Error('Search failed'));
 
     const user = userEvent.setup();
     renderWithRouter(<GlobalSearchBar />);
@@ -357,7 +357,7 @@ describe('GlobalSearchBar', () => {
     const user = userEvent.setup();
     
     // Mock a delayed response
-    documentService.enhancedSearch.mockImplementation(() => 
+    mockDocumentService.enhancedSearch.mockImplementation(() => 
       new Promise(resolve => setTimeout(() => resolve(mockSearchResponse), 100))
     );
     

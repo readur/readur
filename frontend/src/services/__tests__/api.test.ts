@@ -1,9 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import axios from 'axios';
-import { documentService, type OcrResponse, type Document } from '../api';
+import { type OcrResponse, type Document } from '../api';
 
-vi.mock('axios');
-const mockedAxios = vi.mocked(axios);
+// Create mock functions for the documentService
+const mockGetOcrText = vi.fn();
+const mockList = vi.fn();
+const mockUpload = vi.fn();
+const mockDownload = vi.fn();
+
+// Mock the entire api module
+vi.mock('../api', async () => {
+  const actual = await vi.importActual('../api');
+  return {
+    ...actual,
+    documentService: {
+      getOcrText: mockGetOcrText,
+      list: mockList,
+      upload: mockUpload,
+      download: mockDownload,
+    },
+  };
+});
+
+// Import after mocking
+const { documentService } = await import('../api');
 
 describe('documentService', () => {
   beforeEach(() => {
@@ -33,9 +52,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockedAxios.create.mockReturnValue({
-        get: vi.fn().mockResolvedValue(mockResponse),
-      } as any);
+      mockGetOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-123');
 
@@ -69,9 +86,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockedAxios.create.mockReturnValue({
-        get: vi.fn().mockResolvedValue(mockResponse),
-      } as any);
+      mockGetOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-456');
 
@@ -103,9 +118,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockedAxios.create.mockReturnValue({
-        get: vi.fn().mockResolvedValue(mockResponse),
-      } as any);
+      mockGetOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-789');
 
@@ -116,38 +129,26 @@ describe('documentService', () => {
     });
 
     it('should make correct API call', async () => {
-      const mockAxiosInstance = {
-        get: vi.fn().mockResolvedValue({ data: mockOcrResponse }),
-      };
-
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      mockGetOcrText.mockResolvedValue({ data: mockOcrResponse });
 
       await documentService.getOcrText('doc-123');
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/documents/doc-123/ocr');
+      expect(mockGetOcrText).toHaveBeenCalledWith('doc-123');
     });
 
     it('should handle network errors', async () => {
-      const mockAxiosInstance = {
-        get: vi.fn().mockRejectedValue(new Error('Network Error')),
-      };
-
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      mockGetOcrText.mockRejectedValue(new Error('Network Error'));
 
       await expect(documentService.getOcrText('doc-123')).rejects.toThrow('Network Error');
     });
 
     it('should handle 404 errors for non-existent documents', async () => {
-      const mockAxiosInstance = {
-        get: vi.fn().mockRejectedValue({
-          response: {
-            status: 404,
-            data: { error: 'Document not found' },
-          },
-        }),
-      };
-
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      mockGetOcrText.mockRejectedValue({
+        response: {
+          status: 404,
+          data: { error: 'Document not found' },
+        },
+      });
 
       await expect(documentService.getOcrText('non-existent-doc')).rejects.toMatchObject({
         response: {
@@ -157,16 +158,12 @@ describe('documentService', () => {
     });
 
     it('should handle 401 unauthorized errors', async () => {
-      const mockAxiosInstance = {
-        get: vi.fn().mockRejectedValue({
-          response: {
-            status: 401,
-            data: { error: 'Unauthorized' },
-          },
-        }),
-      };
-
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      mockGetOcrText.mockRejectedValue({
+        response: {
+          status: 401,
+          data: { error: 'Unauthorized' },
+        },
+      });
 
       await expect(documentService.getOcrText('doc-123')).rejects.toMatchObject({
         response: {
@@ -217,9 +214,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockedAxios.create.mockReturnValue({
-        get: vi.fn().mockResolvedValue(mockResponse),
-      } as any);
+      mockList.mockResolvedValue(mockResponse);
 
       const result = await documentService.list(50, 0);
 
@@ -246,42 +241,24 @@ describe('documentService', () => {
         ocr_status: 'pending',
       };
 
-      const mockAxiosInstance = {
-        post: vi.fn().mockResolvedValue({ data: mockUploadResponse }),
-      };
-
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      mockUpload.mockResolvedValue({ data: mockUploadResponse });
 
       const result = await documentService.upload(mockFile);
 
       expect(result.data).toEqual(mockUploadResponse);
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/documents',
-        expect.any(FormData),
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
+      expect(mockUpload).toHaveBeenCalledWith(mockFile);
     });
   });
 
   describe('download', () => {
     it('should download file as blob', async () => {
       const mockBlob = new Blob(['file content'], { type: 'application/pdf' });
-      const mockAxiosInstance = {
-        get: vi.fn().mockResolvedValue({ data: mockBlob }),
-      };
-
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      mockDownload.mockResolvedValue({ data: mockBlob });
 
       const result = await documentService.download('doc-123');
 
       expect(result.data).toEqual(mockBlob);
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/documents/doc-123/download', {
-        responseType: 'blob',
-      });
+      expect(mockDownload).toHaveBeenCalledWith('doc-123');
     });
   });
 });

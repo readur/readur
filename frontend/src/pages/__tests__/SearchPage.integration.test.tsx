@@ -114,7 +114,7 @@ describe('SearchPage Integration Tests', () => {
     });
 
     // Verify search was called
-    expect(documentService.enhancedSearch).toHaveBeenCalledWith(
+    expect(mockDocumentService.enhancedSearch).toHaveBeenCalledWith(
       expect.objectContaining({
         query: 'invoice',
         limit: 100,
@@ -153,7 +153,7 @@ describe('SearchPage Integration Tests', () => {
 
     // Verify search is called again with MIME type filter
     await waitFor(() => {
-      expect(documentService.enhancedSearch).toHaveBeenCalledWith(
+      expect(mockDocumentService.enhancedSearch).toHaveBeenCalledWith(
         expect.objectContaining({
           query: 'invoice',
           mime_types: ['application/pdf'],
@@ -194,7 +194,7 @@ describe('SearchPage Integration Tests', () => {
 
     // Verify advanced settings are applied
     await waitFor(() => {
-      expect(documentService.enhancedSearch).toHaveBeenCalledWith(
+      expect(mockDocumentService.enhancedSearch).toHaveBeenCalledWith(
         expect.objectContaining({
           query: 'invoice',
           search_mode: 'fuzzy',
@@ -252,7 +252,7 @@ describe('SearchPage Integration Tests', () => {
 
     // Verify search is triggered
     await waitFor(() => {
-      expect(documentService.enhancedSearch).toHaveBeenCalledWith(
+      expect(mockDocumentService.enhancedSearch).toHaveBeenCalledWith(
         expect.objectContaining({
           query: 'invoice',
         })
@@ -262,7 +262,7 @@ describe('SearchPage Integration Tests', () => {
 
   test('handles search errors gracefully', async () => {
     const user = userEvent.setup();
-    (documentService.enhancedSearch as any).mockRejectedValue(new Error('Search failed'));
+    mockDocumentService.enhancedSearch.mockRejectedValue(new Error('Search failed'));
     
     renderSearchPage();
 
@@ -349,7 +349,7 @@ describe('SearchPage Integration Tests', () => {
 
     // Verify search is called with all filters
     await waitFor(() => {
-      expect(documentService.enhancedSearch).toHaveBeenCalledWith(
+      expect(mockDocumentService.enhancedSearch).toHaveBeenCalledWith(
         expect.objectContaining({
           query: 'invoice',
           mime_types: ['application/pdf'],
@@ -433,11 +433,11 @@ describe('SearchPage Performance Tests', () => {
 
     // Wait for debounce
     await waitFor(() => {
-      expect(documentService.enhancedSearch).toHaveBeenCalledTimes(1);
+      expect(mockDocumentService.enhancedSearch).toHaveBeenCalledTimes(1);
     });
 
     // Should only be called once due to debouncing
-    expect(documentService.enhancedSearch).toHaveBeenCalledWith(
+    expect(mockDocumentService.enhancedSearch).toHaveBeenCalledWith(
       expect.objectContaining({
         query: 'invoice',
       })
@@ -448,7 +448,7 @@ describe('SearchPage Performance Tests', () => {
     const user = userEvent.setup();
     
     // Make the API call take longer to see loading state
-    (documentService.enhancedSearch as any).mockImplementation(
+    mockDocumentService.enhancedSearch.mockImplementation(
       () => new Promise(resolve => setTimeout(() => resolve(mockSearchResponse), 1000))
     );
 

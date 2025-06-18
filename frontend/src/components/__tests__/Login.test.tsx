@@ -4,20 +4,25 @@ import Login from '../Login'
 
 const mockLogin = vi.fn()
 
-const MockAuthProvider = ({ children }: { children: React.ReactNode }) => {
-  return (
-    <div>
-      {children}
-    </div>
-  )
-}
+// Mock the useAuth hook
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    login: mockLogin,
+    user: null,
+    loading: false,
+    logout: vi.fn(),
+  }),
+}))
 
-const renderWithMockAuth = (component: React.ReactNode, authContext = {}) => {
-  return render(
-    <MockAuthProvider>
-      {component}
-    </MockAuthProvider>
-  )
+// Mock react-router-dom
+vi.mock('react-router-dom', () => ({
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
+}))
+
+const renderLogin = () => {
+  return render(<Login />)
 }
 
 describe('Login', () => {
@@ -26,7 +31,7 @@ describe('Login', () => {
   })
 
   test('renders login form', () => {
-    renderWithMockAuth(<Login />, { login: mockLogin })
+    renderLogin()
 
     expect(screen.getByText('Sign in to Readur')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Username')).toBeInTheDocument()
@@ -38,7 +43,7 @@ describe('Login', () => {
   test('handles form submission with valid credentials', async () => {
     mockLogin.mockResolvedValue(undefined)
 
-    renderWithMockAuth(<Login />, { login: mockLogin })
+    renderLogin()
 
     const usernameInput = screen.getByPlaceholderText('Username')
     const passwordInput = screen.getByPlaceholderText('Password')
@@ -59,7 +64,7 @@ describe('Login', () => {
       response: { data: { message: errorMessage } },
     })
 
-    renderWithMockAuth(<Login />, { login: mockLogin })
+    renderLogin()
 
     const usernameInput = screen.getByPlaceholderText('Username')
     const passwordInput = screen.getByPlaceholderText('Password')
@@ -77,7 +82,7 @@ describe('Login', () => {
   test('shows loading state during submission', async () => {
     mockLogin.mockImplementation(() => new Promise(() => {})) // Never resolves
 
-    renderWithMockAuth(<Login />, { login: mockLogin })
+    renderLogin()
 
     const usernameInput = screen.getByPlaceholderText('Username')
     const passwordInput = screen.getByPlaceholderText('Password')
@@ -94,7 +99,7 @@ describe('Login', () => {
   })
 
   test('requires username and password', () => {
-    renderWithMockAuth(<Login />, { login: mockLogin })
+    renderLogin()
 
     const usernameInput = screen.getByPlaceholderText('Username')
     const passwordInput = screen.getByPlaceholderText('Password')
