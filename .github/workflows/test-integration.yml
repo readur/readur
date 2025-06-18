@@ -92,6 +92,7 @@ jobs:
         run: |
           cargo test --test '*' -- --test-threads=1
         env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           RUST_LOG: debug
 
