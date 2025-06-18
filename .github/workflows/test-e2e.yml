@@ -102,16 +102,43 @@ jobs:
             sleep 2
           done
 
-      - name: Run frontend E2E tests
+      - name: Install Playwright browsers
         working-directory: ./frontend
-        run: npm test -- SearchPage.e2e.test
+        run: npx playwright install --with-deps
+
+      - name: Start frontend dev server
+        working-directory: ./frontend
+        run: |
+          npm run dev &
+          echo $! > frontend.pid
         env:
           VITE_API_URL: http://localhost:8000
 
-      - name: Stop backend server
+      - name: Wait for frontend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:5173 > /dev/null 2>&1; then
+              echo "Frontend is ready"
+              break
+            fi
+            echo "Waiting for frontend... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run frontend E2E tests
+        working-directory: ./frontend
+        run: npm run test:e2e
+        env:
+          VITE_API_URL: http://localhost:8000
+
+      - name: Stop servers
         if: always()
         run: |
           if [ -f backend.pid ]; then
             kill $(cat backend.pid) || true
             rm backend.pid
+          fi
+          if [ -f frontend.pid ]; then
+            kill $(cat frontend.pid) || true
+            rm frontend.pid
           fi
