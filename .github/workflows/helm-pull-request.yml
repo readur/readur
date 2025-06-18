@@ -23,12 +23,12 @@ jobs:
         run: helm dependency build charts/readur
 
       - name: lint helm chart
-        run: helm lint charts/readur --set persistence.data.existingClaim=test-pvc
+        run: helm lint charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true
 
       - name: prepare
         run: mkdir -p charts/readur/build
       - name: create full manifest from pr head
-        run: helm template readur charts/readur --set persistence.data.existingClaim=test-pvc > charts/readur/build/manifest.yaml
+        run: helm template readur charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true > charts/readur/build/manifest.yaml
 
       - name: checkout main
         uses: actions/checkout@v4
@@ -43,7 +43,7 @@ jobs:
       - name: prepare
         run: mkdir -p main/charts/readur/build
       - name: create full manifest from main
-        run: helm template readur main/charts/readur --set persistence.data.existingClaim=test-pvc > main/charts/readur/build/manifest.yaml
+        run: helm template readur main/charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true > main/charts/readur/build/manifest.yaml
 
       - name: create diff comment
         uses: int128/diff-action@v1
