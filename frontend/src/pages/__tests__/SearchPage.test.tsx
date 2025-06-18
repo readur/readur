@@ -5,21 +5,13 @@ import SearchPage from '../SearchPage';
 
 // Mock API functions
 vi.mock('../../services/api', () => ({
-  searchDocuments: vi.fn(),
-  getSettings: vi.fn(),
-}));
-
-// Mock components with complex state management
-vi.mock('../../components/GlobalSearchBar/GlobalSearchBar', () => ({
-  default: ({ onSearch }: { onSearch: (query: string) => void }) => (
-    <div data-testid="global-search-bar">
-      <input placeholder="Search..." onChange={(e) => onSearch(e.target.value)} />
-    </div>
-  ),
-}));
-
-vi.mock('../../components/MimeTypeFacetFilter/MimeTypeFacetFilter', () => ({
-  default: () => <div data-testid="mime-type-filter">Mime Type Filter</div>,
+  searchDocuments: vi.fn(() => Promise.resolve({ 
+    results: [], 
+    total: 0, 
+    page: 1, 
+    page_size: 20 
+  })),
+  getSettings: vi.fn(() => Promise.resolve({})),
 }));
 
 const SearchPageWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -38,8 +30,11 @@ describe('SearchPage', () => {
       </SearchPageWrapper>
     );
 
-    expect(screen.getByTestId('global-search-bar')).toBeInTheDocument();
-    expect(screen.getByTestId('mime-type-filter')).toBeInTheDocument();
+    // Check for page title
+    expect(screen.getByText('Search Documents')).toBeInTheDocument();
+    
+    // Check for search input
+    expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
   });
 
   test('renders search input', () => {
@@ -49,7 +44,9 @@ describe('SearchPage', () => {
       </SearchPageWrapper>
     );
 
-    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    const searchInput = screen.getByPlaceholderText(/search/i);
+    expect(searchInput).toBeInTheDocument();
+    expect(searchInput).toHaveAttribute('type', 'text');
   });
 
   // DISABLED - Complex search functionality with API mocking issues

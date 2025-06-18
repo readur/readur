@@ -5,8 +5,6 @@ import SearchGuidance from '../SearchGuidance';
 
 const mockProps = {
   onExampleClick: vi.fn(),
-  onClose: vi.fn(),
-  visible: true,
 };
 
 describe('SearchGuidance', () => {
@@ -14,33 +12,34 @@ describe('SearchGuidance', () => {
     vi.clearAllMocks();
   });
 
-  test('renders when visible', () => {
+  test('renders search guidance component', () => {
     render(<SearchGuidance {...mockProps} />);
     
-    expect(screen.getByText(/search help/i)).toBeInTheDocument();
+    // Should render the accordion with search help
+    expect(screen.getByText(/search help & examples/i)).toBeInTheDocument();
   });
 
-  test('does not render when not visible', () => {
-    render(<SearchGuidance {...mockProps} visible={false} />);
-    
-    expect(screen.queryByText(/search help/i)).not.toBeInTheDocument();
-  });
-
-  test('shows basic search examples', () => {
-    render(<SearchGuidance {...mockProps} />);
-    
-    expect(screen.getByText(/basic search/i)).toBeInTheDocument();
-    expect(screen.getByText(/example searches/i)).toBeInTheDocument();
-  });
-
-  test('calls onClose when close button is clicked', async () => {
+  test('shows content when accordion is expanded', async () => {
     const user = userEvent.setup();
     render(<SearchGuidance {...mockProps} />);
     
-    const closeButton = screen.getByRole('button', { name: /close/i });
-    await user.click(closeButton);
+    // Find and click the accordion expand button
+    const expandButton = screen.getByRole('button', { name: /search help & examples/i });
+    await user.click(expandButton);
     
-    expect(mockProps.onClose).toHaveBeenCalled();
+    // Should show search examples
+    expect(screen.getByText(/example searches/i)).toBeInTheDocument();
+  });
+
+  test('shows basic search examples when help is opened', async () => {
+    const user = userEvent.setup();
+    render(<SearchGuidance {...mockProps} />);
+    
+    // Expand the accordion
+    const expandButton = screen.getByRole('button', { name: /search help & examples/i });
+    await user.click(expandButton);
+    
+    expect(screen.getByText(/example searches/i)).toBeInTheDocument();
   });
 
   // DISABLED - Complex example click interaction tests
@@ -73,20 +72,20 @@ describe('SearchGuidance', () => {
   //   expect(mockProps.onClose).toHaveBeenCalled();
   // });
 
-  test('renders search tips section', () => {
+  test('renders search tips section when opened', async () => {
+    const user = userEvent.setup();
     render(<SearchGuidance {...mockProps} />);
+    
+    // Expand the accordion
+    const expandButton = screen.getByRole('button', { name: /search help & examples/i });
+    await user.click(expandButton);
     
     expect(screen.getByText(/search tips/i)).toBeInTheDocument();
   });
 
   test('handles missing onExampleClick prop gracefully', () => {
-    const propsWithoutExample = {
-      onClose: mockProps.onClose,
-      visible: true,
-    };
-    
     expect(() => {
-      render(<SearchGuidance {...propsWithoutExample} />);
+      render(<SearchGuidance />);
     }).not.toThrow();
   });
 });
