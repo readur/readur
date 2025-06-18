@@ -46,7 +46,7 @@ describe('AdvancedSearchPanel', () => {
     vi.clearAllMocks();
   });
 
-  test('renders collapsed state by default', () => {
+  test('renders collapsed state by default', async () => {
     render(
       <AdvancedSearchPanel
         settings={mockSettings}
@@ -59,7 +59,16 @@ describe('AdvancedSearchPanel', () => {
     expect(screen.getByText('Advanced Search Options')).toBeInTheDocument();
     expect(screen.getByText('Customize search behavior and result display')).toBeInTheDocument();
     expect(screen.getByText('SIMPLE')).toBeInTheDocument();
-    expect(screen.queryByText('Search Behavior')).not.toBeInTheDocument();
+    
+    // Wait for MUI Collapse animation to complete
+    await waitFor(() => {
+      // The section buttons should not be visible when collapsed
+      expect(screen.queryByRole('button', { name: 'Search Behavior' })).not.toBeInTheDocument();
+    });
+    
+    expect(screen.queryByRole('button', { name: 'Results Display' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Performance' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Content Sources' })).not.toBeInTheDocument();
   });
 
   test('expands when expanded prop is true', () => {
@@ -139,8 +148,14 @@ describe('AdvancedSearchPanel', () => {
       />
     );
 
-    const searchModeSelect = screen.getByDisplayValue('simple');
+    // Find the Select component by its label
+    const searchModeSelect = screen.getByRole('combobox');
     await user.click(searchModeSelect);
+    
+    // Wait for the options to appear and click on fuzzy
+    await waitFor(() => {
+      expect(screen.getByText('Fuzzy Search')).toBeInTheDocument();
+    });
     
     const fuzzyOption = screen.getByText('Fuzzy Search');
     await user.click(fuzzyOption);
@@ -178,7 +193,11 @@ describe('AdvancedSearchPanel', () => {
       />
     );
 
-    const fuzzySlider = screen.getByRole('slider', { name: /fuzzy match threshold/i });
+    // Check that fuzzy threshold text is displayed
+    expect(screen.getByText(/Fuzzy Match Threshold: 0.8/)).toBeInTheDocument();
+    
+    // Find the slider by role - it should not be disabled in fuzzy mode
+    const fuzzySlider = screen.getByRole('slider');
     expect(fuzzySlider).not.toHaveAttribute('disabled');
   });
 
@@ -192,7 +211,8 @@ describe('AdvancedSearchPanel', () => {
       />
     );
 
-    const fuzzySlider = screen.getByRole('slider', { name: /fuzzy match threshold/i });
+    // Find the slider by role - it should be disabled when not in fuzzy mode
+    const fuzzySlider = screen.getByRole('slider');
     expect(fuzzySlider).toHaveAttribute('disabled');
   });
 

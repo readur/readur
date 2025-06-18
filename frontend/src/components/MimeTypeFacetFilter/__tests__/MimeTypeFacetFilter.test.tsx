@@ -2,13 +2,14 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MimeTypeFacetFilter from '../MimeTypeFacetFilter';
-import { documentService } from '../../../services/api';
 
 // Mock the document service
+const mockDocumentService = {
+  getFacets: vi.fn(),
+};
+
 vi.mock('../../../services/api', () => ({
-  documentService: {
-    getFacets: vi.fn(),
-  },
+  documentService: mockDocumentService,
 }));
 
 const mockFacetsResponse = {
@@ -30,7 +31,7 @@ describe('MimeTypeFacetFilter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (documentService.getFacets as any).mockResolvedValue(mockFacetsResponse);
+    mockDocumentService.getFacets.mockResolvedValue(mockFacetsResponse);
   });
 
   test('renders loading state initially', () => {
@@ -261,7 +262,7 @@ describe('MimeTypeFacetFilter', () => {
       },
     };
     
-    (documentService.getFacets as any).mockResolvedValue(customResponse);
+    mockDocumentService.getFacets.mockResolvedValue(customResponse);
 
     render(
       <MimeTypeFacetFilter

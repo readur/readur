@@ -76,7 +76,7 @@ describe('GlobalSearchBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorageMock.getItem.mockReturnValue(null);
-    documentService.enhancedSearch.mockResolvedValue(mockSearchResponse);
+    (documentService.enhancedSearch as any).mockResolvedValue(mockSearchResponse);
   });
 
   test('renders search input with placeholder', () => {
@@ -265,7 +265,7 @@ describe('GlobalSearchBar', () => {
 
   test('shows "View all results" link when there are many results', async () => {
     // Mock response with 5 or more results to trigger the link
-    documentService.enhancedSearch.mockResolvedValue({
+    (documentService.enhancedSearch as any).mockResolvedValue({
       data: {
         documents: Array.from({ length: 5 }, (_, i) => ({
           id: `${i + 1}`,
