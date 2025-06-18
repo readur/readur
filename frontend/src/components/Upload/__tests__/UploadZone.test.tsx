@@ -2,12 +2,22 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UploadZone from '../UploadZone';
+import { NotificationProvider } from '../../../contexts/NotificationContext';
 
 // Mock API functions
 vi.mock('../../../services/api', () => ({
   uploadDocument: vi.fn(),
   getUploadProgress: vi.fn(),
 }));
+
+// Helper function to render with NotificationProvider
+const renderWithProvider = (component: React.ReactElement) => {
+  return render(
+    <NotificationProvider>
+      {component}
+    </NotificationProvider>
+  );
+};
 
 const mockProps = {
   onUploadSuccess: vi.fn(),
@@ -24,28 +34,28 @@ describe('UploadZone', () => {
   });
 
   test('renders upload zone with default text', () => {
-    render(<UploadZone {...mockProps} />);
+    renderWithProvider(<UploadZone {...mockProps} />);
     
     expect(screen.getByText(/drag and drop files here/i)).toBeInTheDocument();
     expect(screen.getByText(/or click to select files/i)).toBeInTheDocument();
   });
 
   test('shows accepted file types in UI', () => {
-    render(<UploadZone {...mockProps} />);
+    renderWithProvider(<UploadZone {...mockProps} />);
     
     expect(screen.getByText(/accepted file types/i)).toBeInTheDocument();
     expect(screen.getByText(/pdf, doc, docx/i)).toBeInTheDocument();
   });
 
   test('displays max file size limit', () => {
-    render(<UploadZone {...mockProps} />);
+    renderWithProvider(<UploadZone {...mockProps} />);
     
     expect(screen.getByText(/maximum file size/i)).toBeInTheDocument();
     expect(screen.getByText(/10 MB/i)).toBeInTheDocument();
   });
 
   test('shows browse files button', () => {
-    render(<UploadZone {...mockProps} />);
+    renderWithProvider(<UploadZone {...mockProps} />);
     
     const browseButton = screen.getByRole('button', { name: /browse files/i });
     expect(browseButton).toBeInTheDocument();
@@ -115,7 +125,7 @@ describe('UploadZone', () => {
 
   test('handles click to browse files', async () => {
     const user = userEvent.setup();
-    render(<UploadZone {...mockProps} />);
+    renderWithProvider(<UploadZone {...mockProps} />);
     
     const browseButton = screen.getByRole('button', { name: /browse files/i });
     
@@ -127,7 +137,7 @@ describe('UploadZone', () => {
   });
 
   test('renders with custom className', () => {
-    const { container } = render(
+    const { container } = renderWithProvider(
       <UploadZone {...mockProps} className="custom-upload-zone" />
     );
     
