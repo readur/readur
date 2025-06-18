@@ -23,7 +23,7 @@ interface LabelSelectorProps {
   selectedLabels: LabelData[];
   availableLabels: LabelData[];
   onLabelsChange: (labels: LabelData[]) => void;
-  onCreateLabel?: (labelData: Omit<LabelData, 'id' | 'is_system'>) => Promise<LabelData>;
+  onCreateLabel?: (labelData: Omit<LabelData, 'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'>) => Promise<LabelData>;
   placeholder?: string;
   size?: 'small' | 'medium';
   disabled?: boolean;
@@ -86,7 +86,7 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
     setCreateDialogOpen(true);
   };
 
-  const handleCreateLabel = async (labelData: Omit<LabelData, 'id' | 'is_system'>) => {
+  const handleCreateLabel = async (labelData: Omit<LabelData, 'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'>) => {
     if (onCreateLabel) {
       try {
         const newLabel = await onCreateLabel(labelData);
@@ -109,16 +109,16 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
 
   return (
     <>
-      <Autocomplete
+      <Autocomplete<LabelData, boolean, false, false>
         multiple={multiple}
         value={multiple ? selectedLabels : selectedLabels[0] || null}
         onChange={handleLabelChange}
         inputValue={inputValue}
         onInputChange={(event, newInputValue) => setInputValue(newInputValue)}
         options={filteredOptions}
-        groupBy={(option) => option.is_system ? 'System Labels' : 'My Labels'}
-        getOptionLabel={(option) => option.name}
-        isOptionEqualToValue={(option, value) => option.id === value.id}
+        groupBy={(option: LabelData) => option.is_system ? 'System Labels' : 'My Labels'}
+        getOptionLabel={(option: LabelData) => option.name}
+        isOptionEqualToValue={(option: LabelData, value: LabelData) => option.id === value.id}
         disabled={disabled}
         size={size}
         renderInput={(params) => (
@@ -187,7 +187,7 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
               {params.group}
             </Typography>
             <Box>{params.children}</Box>
-            {params.key === 'System Labels' && <Divider sx={{ my: 1 }} />}
+            {params.group === 'System Labels' && <Divider sx={{ my: 1 }} />}
           </Box>
         )}
         PaperComponent={({ children, ...paperProps }) => (

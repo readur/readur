@@ -7,12 +7,12 @@ import {
   Button,
   TextField,
   Box,
-  Grid,
   Typography,
   IconButton,
   Paper,
   Tooltip,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   Star as StarIcon,
   Archive as ArchiveIcon,
@@ -36,7 +36,7 @@ import Label, { type LabelData } from './Label';
 interface LabelCreateDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (labelData: Omit<LabelData, 'id' | 'is_system'>) => Promise<void>;
+  onSubmit: (labelData: Omit<LabelData, 'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'>) => Promise<void>;
   prefilledName?: string;
   editingLabel?: LabelData;
 }
@@ -127,8 +127,6 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
         color: formData.color,
         background_color: formData.background_color || undefined,
         icon: formData.icon || undefined,
-        document_count: 0,
-        source_count: 0,
       });
       handleClose();
     } catch (error) {

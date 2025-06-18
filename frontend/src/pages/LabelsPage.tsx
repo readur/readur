@@ -5,7 +5,6 @@ import {
   Button,
   Box,
   Paper,
-  Grid,
   IconButton,
   Tooltip,
   Dialog,
@@ -21,6 +20,7 @@ import {
   CardContent,
   CardActions,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   Add as AddIcon,
   Edit as EditIcon,

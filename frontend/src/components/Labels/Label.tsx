@@ -25,6 +25,8 @@ export interface LabelData {
   background_color?: string;
   icon?: string;
   is_system: boolean;
+  created_at: string;
+  updated_at: string;
   document_count?: number;
   source_count?: number;
 }
