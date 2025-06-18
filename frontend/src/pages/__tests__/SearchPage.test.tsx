@@ -6,12 +6,14 @@ import SearchPage from '../SearchPage';
 import { documentService } from '../../services/api';
 
 // Mock the API service
+const mockDocumentService = {
+  enhancedSearch: vi.fn(),
+  search: vi.fn(),
+  download: vi.fn(),
+};
+
 vi.mock('../../services/api', () => ({
-  documentService: {
-    enhancedSearch: vi.fn(),
-    search: vi.fn(),
-    download: vi.fn(),
-  }
+  documentService: mockDocumentService,
 }));
 
 // Mock SearchGuidance component
@@ -79,8 +81,8 @@ const renderWithRouter = (component) => {
 describe('SearchPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (documentService.enhancedSearch as any).mockResolvedValue(mockSearchResponse);
-    (documentService.search as any).mockResolvedValue(mockSearchResponse);
+    mockDocumentService.enhancedSearch.mockResolvedValue(mockSearchResponse);
+    mockDocumentService.search.mockResolvedValue(mockSearchResponse);
   });
 
   test('renders search page with prominent search bar', () => {
@@ -387,7 +389,7 @@ describe('SearchPage', () => {
   test('handles document download', async () => {
     const user = userEvent.setup();
     const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
-    (documentService.download as any).mockResolvedValue({ data: mockBlob });
+    mockDocumentService.download.mockResolvedValue({ data: mockBlob });
     
     // Mock URL.createObjectURL
     global.URL.createObjectURL = vi.fn(() => 'mock-url');
@@ -516,7 +518,7 @@ describe('Enhanced Search Features', () => {
     const user = userEvent.setup();
     
     // Mock empty response
-    (documentService.enhancedSearch as any).mockResolvedValue({
+    mockDocumentService.enhancedSearch.mockResolvedValue({
       data: {
         documents: [],
         total: 0,

@@ -7,10 +7,12 @@ import GlobalSearchBar from '../GlobalSearchBar';
 import { documentService } from '../../../services/api';
 
 // Mock the API service
+const mockDocumentService = {
+  enhancedSearch: vi.fn(),
+};
+
 vi.mock('../../../services/api', () => ({
-  documentService: {
-    enhancedSearch: vi.fn(),
-  }
+  documentService: mockDocumentService,
 }));
 
 // Mock useNavigate
@@ -76,7 +78,7 @@ describe('GlobalSearchBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorageMock.getItem.mockReturnValue(null);
-    (documentService.enhancedSearch as any).mockResolvedValue(mockSearchResponse);
+    mockDocumentService.enhancedSearch.mockResolvedValue(mockSearchResponse);
   });
 
   test('renders search input with placeholder', () => {
@@ -265,7 +267,7 @@ describe('GlobalSearchBar', () => {
 
   test('shows "View all results" link when there are many results', async () => {
     // Mock response with 5 or more results to trigger the link
-    (documentService.enhancedSearch as any).mockResolvedValue({
+    mockDocumentService.enhancedSearch.mockResolvedValue({
       data: {
         documents: Array.from({ length: 5 }, (_, i) => ({
           id: `${i + 1}`,

@@ -104,9 +104,10 @@ const MimeTypeFacetFilter: React.FC<MimeTypeFacetFilterProps> = ({
     try {
       setLoading(true);
       const response = await documentService.getFacets();
-      setFacets(response.data.mime_types);
+      setFacets(response.data.mime_types || []);
     } catch (error) {
       console.error('Failed to load facets:', error);
+      setFacets([]);
     } finally {
       setLoading(false);
     }
@@ -170,7 +171,7 @@ const MimeTypeFacetFilter: React.FC<MimeTypeFacetFilterProps> = ({
     }
   };
 
-  const filteredFacets = facets.filter(facet =>
+  const filteredFacets = (facets || []).filter(facet =>
     searchTerm === '' || 
     facet.value.toLowerCase().includes(searchTerm.toLowerCase()) ||
     getMimeTypeLabel(facet.value).toLowerCase().includes(searchTerm.toLowerCase())

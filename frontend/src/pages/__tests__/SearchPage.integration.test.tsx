@@ -6,13 +6,15 @@ import SearchPage from '../SearchPage';
 import { documentService } from '../../services/api';
 
 // Mock the document service
+const mockDocumentService = {
+  search: vi.fn(),
+  enhancedSearch: vi.fn(),
+  getFacets: vi.fn(),
+  download: vi.fn(),
+};
+
 vi.mock('../../services/api', () => ({
-  documentService: {
-    search: vi.fn(),
-    enhancedSearch: vi.fn(),
-    getFacets: vi.fn(),
-    download: vi.fn(),
-  },
+  documentService: mockDocumentService,
 }));
 
 const mockSearchResponse = {
@@ -87,9 +89,9 @@ const renderSearchPage = () => {
 describe('SearchPage Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (documentService.enhancedSearch as any).mockResolvedValue(mockSearchResponse);
-    (documentService.search as any).mockResolvedValue(mockSearchResponse);
-    (documentService.getFacets as any).mockResolvedValue(mockFacetsResponse);
+    mockDocumentService.enhancedSearch.mockResolvedValue(mockSearchResponse);
+    mockDocumentService.search.mockResolvedValue(mockSearchResponse);
+    mockDocumentService.getFacets.mockResolvedValue(mockFacetsResponse);
   });
 
   test('performs complete search workflow', async () => {
@@ -102,7 +104,7 @@ describe('SearchPage Integration Tests', () => {
     });
 
     // Enter search query
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Wait for search results
@@ -137,7 +139,7 @@ describe('SearchPage Integration Tests', () => {
     });
 
     // Enter search query first
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Wait for initial results
@@ -187,7 +189,7 @@ describe('SearchPage Integration Tests', () => {
     await user.click(screen.getByText('Long (400 chars)'));
 
     // Perform search
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Verify advanced settings are applied
@@ -207,7 +209,7 @@ describe('SearchPage Integration Tests', () => {
     renderSearchPage();
 
     // Perform search
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Wait for results with snippets
@@ -245,7 +247,7 @@ describe('SearchPage Integration Tests', () => {
     await user.click(exampleButtons[0]);
 
     // Verify search input is populated
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     expect(searchInput).toHaveValue('invoice');
 
     // Verify search is triggered
@@ -264,7 +266,7 @@ describe('SearchPage Integration Tests', () => {
     
     renderSearchPage();
 
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Should show error message
@@ -278,7 +280,7 @@ describe('SearchPage Integration Tests', () => {
     renderSearchPage();
 
     // Perform search first
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Wait for results
@@ -299,7 +301,7 @@ describe('SearchPage Integration Tests', () => {
     const user = userEvent.setup();
     renderSearchPage();
 
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Wait for suggestions to appear
@@ -327,7 +329,7 @@ describe('SearchPage Integration Tests', () => {
     });
 
     // Enter search query
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Apply PDF filter
@@ -388,10 +390,10 @@ describe('SearchPage Integration Tests', () => {
       },
     };
     
-    (documentService.enhancedSearch as any).mockResolvedValue(emptyResponse);
+    mockDocumentService.enhancedSearch.mockResolvedValue(emptyResponse);
     renderSearchPage();
 
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'nonexistent');
 
     await waitFor(() => {
@@ -403,7 +405,7 @@ describe('SearchPage Integration Tests', () => {
     const user = userEvent.setup();
     renderSearchPage();
 
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Verify URL is updated (this would require checking window.location or using a memory router)
@@ -416,15 +418,15 @@ describe('SearchPage Integration Tests', () => {
 describe('SearchPage Performance Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (documentService.enhancedSearch as any).mockResolvedValue(mockSearchResponse);
-    (documentService.getFacets as any).mockResolvedValue(mockFacetsResponse);
+    mockDocumentService.enhancedSearch.mockResolvedValue(mockSearchResponse);
+    mockDocumentService.getFacets.mockResolvedValue(mockFacetsResponse);
   });
 
   test('debounces search input to avoid excessive API calls', async () => {
     const user = userEvent.setup();
     renderSearchPage();
 
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     
     // Type quickly
     await user.type(searchInput, 'invoice', { delay: 50 });
@@ -452,7 +454,7 @@ describe('SearchPage Performance Tests', () => {
 
     renderSearchPage();
 
-    const searchInput = screen.getByPlaceholderText(/search your documents/i);
+    const searchInput = screen.getByPlaceholderText(/search documents/i);
     await user.type(searchInput, 'invoice');
 
     // Should show loading indicator
