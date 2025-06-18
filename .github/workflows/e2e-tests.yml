@@ -28,6 +28,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          tesseract-ocr \
+          tesseract-ocr-eng \
+          libtesseract-dev \
+          libleptonica-dev \
+          pkg-config \
+          libclang-dev \
+          clang
+    
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:

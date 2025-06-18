@@ -34,7 +34,14 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y tesseract-ocr tesseract-ocr-eng libtesseract-dev libleptonica-dev pkg-config
+        sudo apt-get install -y \
+          tesseract-ocr \
+          tesseract-ocr-eng \
+          libtesseract-dev \
+          libleptonica-dev \
+          pkg-config \
+          libclang-dev \
+          clang
     
     - name: Cache Rust dependencies
       uses: actions/cache@v3
