@@ -10,10 +10,10 @@ import {
   Scale as ScaleIcon,
   LocalHospital as MedicalIcon,
   AttachMoney as DollarIcon,
-  Briefcase as BriefcaseIcon,
+  BusinessCenter as BriefcaseIcon,
   Description as DocumentIcon,
   Label as LabelIcon,
-  Bug as BugIcon,
+  BugReport as BugIcon,
   Build as BuildIcon
 } from '@mui/icons-material';
 

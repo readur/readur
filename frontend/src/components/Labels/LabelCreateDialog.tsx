@@ -13,7 +13,6 @@ import {
   Paper,
   Tooltip,
 } from '@mui/material';
-import { ColorPicker } from '@mui/x-date-pickers/internals';
 import {
   Star as StarIcon,
   Archive as ArchiveIcon,
@@ -23,10 +22,10 @@ import {
   Scale as ScaleIcon,
   LocalHospital as MedicalIcon,
   AttachMoney as DollarIcon,
-  Briefcase as BriefcaseIcon,
+  BusinessCenter as BriefcaseIcon,
   Description as DocumentIcon,
   Label as LabelIcon,
-  Bug as BugIcon,
+  BugReport as BugIcon,
   Build as BuildIcon,
   Folder as FolderIcon,
   Assignment as AssignmentIcon,
