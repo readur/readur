@@ -5,5 +5,6 @@ node_modules/
 assets/
 frontend/dist/
 .claude/
-uploads/
+readur_uploads/
+watch/
 test-results/
