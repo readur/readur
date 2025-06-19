@@ -12,6 +12,42 @@ use readur::{config::Config, db::Database, AppState, *};
 #[cfg(test)]
 mod tests;
 
+/// Determines the correct path for static files based on the environment
+/// Checks multiple possible locations in order of preference
+fn determine_static_files_path() -> std::path::PathBuf {
+    use std::path::PathBuf;
+    
+    let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    
+    // List of possible static file locations in order of preference
+    let possible_paths = vec![
+        // Docker/production environment - frontend build copied to /app/frontend/dist
+        current_dir.join("frontend/dist"),
+        // Development environment - frontend build in local frontend/dist
+        PathBuf::from("frontend/dist"),
+        // Alternative development setup
+        current_dir.join("../frontend/dist"),
+        // Fallback to current directory if somehow the build is there
+        current_dir.join("dist"),
+        // Last resort fallback
+        PathBuf::from("dist"),
+    ];
+    
+    for path in possible_paths {
+        let index_path = path.join("index.html");
+        if index_path.exists() && index_path.is_file() {
+            info!("Found static files at: {}", path.display());
+            return path;
+        } else {
+            info!("Static files not found at: {} (index.html exists: {})", 
+                path.display(), index_path.exists());
+        }
+    }
+    
+    // If no valid path found, default to frontend/dist and let it fail gracefully
+    warn!("No valid static files directory found, defaulting to 'frontend/dist'");
+    PathBuf::from("frontend/dist")
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -264,6 +300,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         scheduler_for_background.start().await;
     });
     
+    // Determine the correct static files path for SPA serving
+    let static_dir = determine_static_files_path();
+    let index_file = static_dir.join("index.html");
+    
+    info!("Using static files directory: {}", static_dir.display());
+    info!("Using index.html file: {}", index_file.display());
+    
     // Create the router with the updated state
     let app = Router::new()
         .route("/api/health", get(readur::health_check))
@@ -281,38 +324,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api/webdav", readur::routes::webdav::router())
         .merge(readur::swagger::create_swagger_router())
         .fallback_service(
-            ServeDir::new("frontend/dist")
+            ServeDir::new(&static_dir)
                 .precompressed_gzip()
                 .precompressed_br()
-                .fallback(ServeFile::new("dist/index.html"))
+                .fallback(ServeFile::new(&index_file))
         )
         .layer(CorsLayer::permissive())
         .with_state(web_state.clone());
-    
-    // Debug static file serving setup
-    let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    info!("Server working directory: {}", current_dir.display());
-    
-    let dist_path = current_dir.join("frontend/dist");
-    info!("Looking for static files at: {}", dist_path.display());
-    info!("dist directory exists: {}", dist_path.exists());
-    
-    if dist_path.exists() {
-        if let Ok(entries) = std::fs::read_dir(&dist_path) {
-            info!("Contents of dist directory:");
-            for entry in entries.flatten() {
-                info!("  - {}", entry.file_name().to_string_lossy());
-            }
-        }
-        
-        let index_path = dist_path.join("index.html");
-        info!("index.html exists: {}", index_path.exists());
-        if index_path.exists() {
-            if let Ok(metadata) = std::fs::metadata(&index_path) {
-                info!("index.html size: {} bytes", metadata.len());
-            }
-        }
-    }
 
     let listener = tokio::net::TcpListener::bind(&config.server_address).await?;
     info!("Server starting on {}", config.server_address);
