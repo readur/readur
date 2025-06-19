@@ -7,7 +7,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use utoipa::ToSchema;
+use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use sqlx::FromRow;
@@ -60,7 +60,7 @@ pub struct LabelAssignment {
     pub label_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct LabelQuery {
     #[serde(default)]
     pub include_counts: bool,
@@ -105,7 +105,7 @@ pub async fn get_labels(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<Vec<Label>>, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     let labels = if query.include_counts {
         sqlx::query_as!(
@@ -141,7 +141,7 @@ pub async fn get_labels(
             user_id
         )
     }
-    .fetch_all(&state.db)
+    .fetch_all(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to fetch labels: {}", e);
@@ -167,7 +167,7 @@ pub async fn create_label(
     auth_user: AuthUser,
     Json(payload): Json<CreateLabel>,
 ) -> Result<Json<Label>, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     // Validate color format
     if !payload.color.starts_with('#') || payload.color.len() != 7 {
@@ -197,7 +197,7 @@ pub async fn create_label(
         payload.background_color,
         payload.icon
     )
-    .fetch_one(&state.db)
+    .fetch_one(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to create label: {}", e);
@@ -229,7 +229,7 @@ pub async fn get_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<Label>, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     let label = sqlx::query_as!(
         Label,
@@ -249,7 +249,7 @@ pub async fn get_label(
         label_id,
         user_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to fetch label: {}", e);
@@ -283,7 +283,7 @@ pub async fn update_label(
     auth_user: AuthUser,
     Json(payload): Json<UpdateLabel>,
 ) -> Result<Json<Label>, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     // Validate color formats if provided
     if let Some(ref color) = payload.color {
@@ -292,7 +292,7 @@ pub async fn update_label(
         }
     }
 
-    if let Some(Some(ref bg_color)) = payload.background_color.as_ref() {
+    if let Some(ref bg_color) = payload.background_color.as_ref() {
         if !bg_color.starts_with('#') || bg_color.len() != 7 {
             return Err(StatusCode::BAD_REQUEST);
         }
@@ -304,7 +304,7 @@ pub async fn update_label(
         label_id,
         user_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to check label existence: {}", e);
@@ -378,7 +378,7 @@ pub async fn update_label(
         payload.background_color,
         payload.icon
     )
-    .fetch_one(&state.db)
+    .fetch_one(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to update label: {}", e);
@@ -410,14 +410,14 @@ pub async fn delete_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     let result = sqlx::query!(
         "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE",
         label_id,
         user_id
     )
-    .execute(&state.db)
+    .execute(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to delete label: {}", e);
@@ -449,7 +449,7 @@ pub async fn get_document_labels(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<Vec<Label>>, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     // Verify document ownership
     let doc = sqlx::query!(
@@ -457,7 +457,7 @@ pub async fn get_document_labels(
         document_id,
         user_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to verify document ownership: {}", e);
@@ -482,7 +482,7 @@ pub async fn get_document_labels(
         "#,
         document_id
     )
-    .fetch_all(&state.db)
+    .fetch_all(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to fetch document labels: {}", e);
@@ -513,7 +513,7 @@ pub async fn update_document_labels(
     auth_user: AuthUser,
     Json(payload): Json<LabelAssignment>,
 ) -> Result<Json<Vec<Label>>, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     // Verify document ownership
     let doc = sqlx::query!(
@@ -521,7 +521,7 @@ pub async fn update_document_labels(
         document_id,
         user_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to verify document ownership: {}", e);
@@ -539,7 +539,7 @@ pub async fn update_document_labels(
             &payload.label_ids,
             user_id
         )
-        .fetch_one(&state.db)
+        .fetch_one(state.db.get_pool())
         .await
         .map_err(|e| {
             tracing::error!("Failed to verify labels: {}", e);
@@ -552,7 +552,7 @@ pub async fn update_document_labels(
     }
 
     // Begin transaction
-    let mut tx = state.db.begin().await.map_err(|e| {
+    let mut tx = state.db.get_pool().begin().await.map_err(|e| {
         tracing::error!("Failed to begin transaction: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -614,7 +614,7 @@ pub async fn add_document_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     // Verify document ownership
     let doc = sqlx::query!(
@@ -622,7 +622,7 @@ pub async fn add_document_label(
         document_id,
         user_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to verify document ownership: {}", e);
@@ -639,7 +639,7 @@ pub async fn add_document_label(
         label_id,
         user_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to verify label: {}", e);
@@ -656,7 +656,7 @@ pub async fn add_document_label(
         label_id,
         user_id
     )
-    .execute(&state.db)
+    .execute(state.db.get_pool())
     .await;
 
     match result {
@@ -688,7 +688,7 @@ pub async fn remove_document_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user_id = auth_user.id;
+    let user_id = auth_user.user.id;
 
     // Verify document ownership
     let doc = sqlx::query!(
@@ -696,7 +696,7 @@ pub async fn remove_document_label(
         document_id,
         user_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to verify document ownership: {}", e);
@@ -712,7 +712,7 @@ pub async fn remove_document_label(
         document_id,
         label_id
     )
-    .execute(&state.db)
+    .execute(state.db.get_pool())
     .await
     .map_err(|e| {
         tracing::error!("Failed to remove document label: {}", e);
@@ -742,9 +742,9 @@ pub async fn remove_document_label(
 )]
 pub async fn bulk_update_document_labels(
     Query(mode_query): Query<BulkUpdateMode>,
-    State(state): State<Arc<AppState>>,
-    auth_user: AuthUser,
-    Json(payload): Json<BulkUpdateMode>, // This should actually be a combined payload
+    State(_state): State<Arc<AppState>>,
+    _auth_user: AuthUser,
+    Json(_payload): Json<BulkUpdateMode>, // This should actually be a combined payload
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Note: This is a simplified implementation. In a real scenario, you'd want
     // a more complex payload structure that includes both document_ids and label_ids
