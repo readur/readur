@@ -61,10 +61,10 @@ services:
     
     volumes:
       # Persistent storage for uploads
-      - readur_uploads:/app/uploads
+      - ./readur_uploads:/app/uploads
       
       # Watch folder - can be mapped to a host directory
-      - ./watch:/app/watch
+      - ./readur_watch:/app/watch
       
       # Or use a named volume for watch folder
       # - readur_watch:/app/watch
