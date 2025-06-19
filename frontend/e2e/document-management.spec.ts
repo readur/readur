@@ -9,6 +9,7 @@ test.describe('Document Management', () => {
     helpers = new TestHelpers(authenticatedPage);
     await helpers.navigateToPage('/documents');
     // Ensure we have test documents for tests that need them
+    await helpers.ensureTestDocumentsExist();
   });
 
   test('should display document list', async ({ authenticatedPage: page }) => {

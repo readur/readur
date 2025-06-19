@@ -8,6 +8,8 @@ test.describe('Search Functionality', () => {
   test.beforeEach(async ({ authenticatedPage }) => {
     helpers = new TestHelpers(authenticatedPage);
     await helpers.navigateToPage('/search');
+    // Ensure we have test documents for search functionality
+    await helpers.ensureTestDocumentsExist();
   });
 
   test('should display search interface', async ({ authenticatedPage: page }) => {
