@@ -73,7 +73,9 @@ async fn create_source(
     Json(source_data): Json<CreateSource>,
 ) -> Result<Json<SourceResponse>, StatusCode> {
     // Validate source configuration based on type
-    if let Err(_) = validate_source_config(&source_data) {
+    if let Err(validation_error) = validate_source_config(&source_data) {
+        error!("Source validation failed: {}", validation_error);
+        error!("Invalid source data received: {:?}", source_data);
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -81,7 +83,10 @@ async fn create_source(
         .db
         .create_source(auth_user.user.id, &source_data)
         .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|e| {
+            error!("Failed to create source in database: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(source.into()))
 }
