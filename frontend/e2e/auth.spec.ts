@@ -64,15 +64,13 @@ test.describe('Authentication', () => {
     
     await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.medium });
     
-    // Find and click logout button
-    const logoutButton = page.locator('button:has-text("Logout"), [data-testid="logout"]');
-    if (await logoutButton.isVisible()) {
-      await logoutButton.click();
-    } else {
-      // Try menu-based logout
-      await page.click('[data-testid="user-menu"], .user-menu, button:has([data-testid="user-avatar"])');
-      await page.click('button:has-text("Logout"), [data-testid="logout"]');
-    }
+    // Find and click profile/account button in the top app bar (has AccountIcon)
+    const profileButton = page.locator('button:has([data-testid="AccountCircleIcon"])');
+    await profileButton.click();
+    
+    // Wait for profile menu to open and click logout
+    const logoutMenuItem = page.locator('li[role="menuitem"]:has-text("Logout")');
+    await logoutMenuItem.click();
     
     // Should redirect back to login
     await page.waitForURL(/\/login|\//, { timeout: TIMEOUTS.medium });
@@ -91,7 +89,11 @@ test.describe('Authentication', () => {
     // Reload the page
     await page.reload();
     
-    // Should still be logged in
+    // Wait for page to load after reload
+    await page.waitForLoadState('networkidle');
+    
+    // Should still be logged in (either on dashboard or main page, but not login)
+    await page.waitForURL(/\/dashboard|\/(?!login)/, { timeout: TIMEOUTS.medium });
     await expect(page.locator('input[name="username"]')).not.toBeVisible();
   });
 
