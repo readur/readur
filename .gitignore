@@ -6,5 +6,5 @@ assets/
 frontend/dist/
 .claude/
 readur_uploads/
-watch/
+readur_watch/
 test-results/
