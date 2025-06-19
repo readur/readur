@@ -10,14 +10,16 @@ export default defineConfig({
     mockReset: true,
     clearMocks: true,
     restoreMocks: true,
+    include: [
+      '**/*.e2e.test.{js,jsx,ts,tsx}',
+      '**/*.integration.test.{js,jsx,ts,tsx}'
+    ],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
       '**/cypress/**',
       '**/.{idea,git,cache,output,temp}/**',
-      '**/e2e/**',
-      '**/*.e2e.test.{js,jsx,ts,tsx}',
-      '**/*.integration.test.{js,jsx,ts,tsx}'
+      '**/e2e/**'
     ],
   },
 })

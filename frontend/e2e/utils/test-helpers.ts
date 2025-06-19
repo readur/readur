@@ -51,4 +51,39 @@ export class TestHelpers {
       fullPage: true 
     });
   }
+
+  async uploadTestDocument(fileName: string) {
+    // Navigate to upload page
+    await this.page.goto('/upload');
+    
+    // Look for file input
+    const fileInput = this.page.locator('input[type="file"]');
+    await expect(fileInput).toBeVisible();
+    
+    // Upload the test file
+    await fileInput.setInputFiles(`../tests/test_images/${fileName}`);
+    
+    // Wait for upload button and click it
+    const uploadButton = this.page.locator('button:has-text("Upload"), [data-testid="upload-button"]');
+    if (await uploadButton.isVisible()) {
+      await uploadButton.click();
+    }
+    
+    // Wait for upload to complete
+    await this.page.waitForTimeout(2000);
+    
+    // Return to documents page
+    await this.page.goto('/documents');
+    await this.waitForLoadingToComplete();
+  }
+
+  async ensureTestDocumentsExist() {
+    // Check if there are any documents
+    const documentCount = await this.page.locator('[data-testid="document-item"], .document-item, .document-card').count();
+    
+    if (documentCount === 0) {
+      // Upload a test document
+      await this.uploadTestDocument('test1.png');
+    }
+  }
 }

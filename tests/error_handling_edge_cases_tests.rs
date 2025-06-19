@@ -21,7 +21,9 @@ use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 
 /// Test client for error handling scenarios
 struct ErrorHandlingTestClient {
@@ -72,7 +74,7 @@ impl ErrorHandlingTestClient {
             };
             
             match self.client
-                .post(&format!("{}/api/auth/register", BASE_URL))
+                .post(&format!("{}/api/auth/register", get_base_url()))
                 .json(&user_data)
                 .send()
                 .await
@@ -107,7 +109,7 @@ impl ErrorHandlingTestClient {
         attempts = 0;
         while attempts < max_attempts {
             match self.client
-                .post(&format!("{}/api/auth/login", BASE_URL))
+                .post(&format!("{}/api/auth/login", get_base_url()))
                 .json(&login_data)
                 .send()
                 .await
@@ -152,7 +154,7 @@ async fn test_invalid_authentication_scenarios() {
     });
     
     let response = client
-        .post(&format!("{}/api/auth/login", BASE_URL))
+        .post(&format!("{}/api/auth/login", get_base_url()))
         .json(&empty_login)
         .send()
         .await
@@ -168,7 +170,7 @@ async fn test_invalid_authentication_scenarios() {
     });
     
     let response = client
-        .post(&format!("{}/api/auth/login", BASE_URL))
+        .post(&format!("{}/api/auth/login", get_base_url()))
         .json(&invalid_username)
         .send()
         .await
@@ -184,7 +186,7 @@ async fn test_invalid_authentication_scenarios() {
     });
     
     let response = client
-        .post(&format!("{}/api/auth/login", BASE_URL))
+        .post(&format!("{}/api/auth/login", get_base_url()))
         .json(&sql_injection)
         .send()
         .await
@@ -202,7 +204,7 @@ async fn test_invalid_authentication_scenarios() {
     });
     
     let response = client
-        .post(&format!("{}/api/auth/login", BASE_URL))
+        .post(&format!("{}/api/auth/login", get_base_url()))
         .json(&long_creds)
         .send()
         .await
@@ -213,7 +215,7 @@ async fn test_invalid_authentication_scenarios() {
     
     // Test 5: Invalid JWT token format
     let invalid_token_response = client
-        .get(&format!("{}/api/auth/me", BASE_URL))
+        .get(&format!("{}/api/auth/me", get_base_url()))
         .header("Authorization", "Bearer invalid-jwt-token-format")
         .send()
         .await
@@ -224,7 +226,7 @@ async fn test_invalid_authentication_scenarios() {
     
     // Test 6: Malformed Authorization header
     let malformed_auth_response = client
-        .get(&format!("{}/api/auth/me", BASE_URL))
+        .get(&format!("{}/api/auth/me", get_base_url()))
         .header("Authorization", "InvalidFormat token")
         .send()
         .await
@@ -250,7 +252,7 @@ async fn test_malformed_request_handling() {
     
     // Test 1: Invalid JSON in request body
     let invalid_json_response = client.client
-        .post(&format!("{}/api/sources", BASE_URL))
+        .post(&format!("{}/api/sources", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body("{invalid json syntax")
@@ -268,7 +270,7 @@ async fn test_malformed_request_handling() {
     });
     
     let response = client.client
-        .post(&format!("{}/api/sources", BASE_URL))
+        .post(&format!("{}/api/sources", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .json(&missing_fields)
         .send()
@@ -286,7 +288,7 @@ async fn test_malformed_request_handling() {
     });
     
     let response = client.client
-        .post(&format!("{}/api/sources", BASE_URL))
+        .post(&format!("{}/api/sources", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .json(&invalid_enum)
         .send()
@@ -309,7 +311,7 @@ async fn test_malformed_request_handling() {
     });
     
     let response = client.client
-        .post(&format!("{}/api/sources", BASE_URL))
+        .post(&format!("{}/api/sources", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .json(&invalid_nested)
         .send()
@@ -337,7 +339,7 @@ async fn test_malformed_request_handling() {
     });
     
     let response = client.client
-        .post(&format!("{}/api/sources", BASE_URL))
+        .post(&format!("{}/api/sources", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .json(&extra_fields)
         .send()
@@ -370,7 +372,7 @@ async fn test_file_upload_edge_cases() {
         .part("file", empty_part);
     
     let response = client.client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .multipart(empty_form)
         .send()
@@ -390,7 +392,7 @@ async fn test_file_upload_edge_cases() {
         .part("file", long_filename_part);
     
     let response = client.client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .multipart(long_filename_form)
         .send()
@@ -409,7 +411,7 @@ async fn test_file_upload_edge_cases() {
         .part("file", special_filename_part);
     
     let response = client.client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .multipart(special_filename_form)
         .send()
@@ -423,7 +425,7 @@ async fn test_file_upload_edge_cases() {
         .text("not_file", "some text");
     
     let response = client.client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .multipart(no_file_form)
         .send()
@@ -447,7 +449,7 @@ async fn test_file_upload_edge_cases() {
         .part("file2", file2);
     
     let response = client.client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .multipart(multi_file_form)
         .send()
@@ -466,7 +468,7 @@ async fn test_file_upload_edge_cases() {
             .part("file", part);
         
         let response = client.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .multipart(invalid_mime_form)
             .send()
@@ -520,7 +522,7 @@ async fn test_concurrent_operation_conflicts() {
             });
             
             let response = client_clone
-                .post(&format!("{}/api/sources", BASE_URL))
+                .post(&format!("{}/api/sources", get_base_url()))
                 .header("Authorization", format!("Bearer {}", token))
                 .json(&source_data)
                 .send()
@@ -570,7 +572,7 @@ async fn test_concurrent_operation_conflicts() {
                 .part("file", part);
             
             let response = client_clone
-                .post(&format!("{}/api/documents", BASE_URL))
+                .post(&format!("{}/api/documents", get_base_url()))
                 .header("Authorization", format!("Bearer {}", token))
                 .multipart(form)
                 .send()
@@ -607,7 +609,7 @@ async fn test_network_timeout_scenarios() {
     
     // Test 1: Registration with timeout
     let timeout_result = short_timeout_client.client
-        .post(&format!("{}/api/auth/register", BASE_URL))
+        .post(&format!("{}/api/auth/register", get_base_url()))
         .json(&json!({
             "username": "timeout_test",
             "email": "timeout@example.com",
@@ -645,7 +647,7 @@ async fn test_network_timeout_scenarios() {
     
     // This should complete within normal timeout
     let upload_result = normal_client.client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .multipart(form)
         .send()
         .await;
@@ -691,7 +693,7 @@ async fn test_resource_exhaustion_simulation() {
         let handle = tokio::spawn(async move {
             let start = Instant::now();
             let response = client_clone
-                .get(&format!("{}/api/documents", BASE_URL))
+                .get(&format!("{}/api/documents", get_base_url()))
                 .header("Authorization", format!("Bearer {}", token_clone))
                 .send()
                 .await;
@@ -738,7 +740,7 @@ async fn test_resource_exhaustion_simulation() {
     
     let large_upload_start = Instant::now();
     let large_upload_result = client.client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .multipart(large_form)
         .send()
@@ -777,7 +779,7 @@ async fn test_database_constraint_violations() {
     });
     
     let register_response = client.client
-        .post(&format!("{}/api/auth/register", BASE_URL))
+        .post(&format!("{}/api/auth/register", get_base_url()))
         .json(&original_user)
         .send()
         .await
@@ -794,7 +796,7 @@ async fn test_database_constraint_violations() {
     });
     
     let duplicate_response = client.client
-        .post(&format!("{}/api/auth/register", BASE_URL))
+        .post(&format!("{}/api/auth/register", get_base_url()))
         .json(&duplicate_email_user)
         .send()
         .await
@@ -821,7 +823,7 @@ async fn test_database_constraint_violations() {
     });
     
     let long_name_response = client.client
-        .post(&format!("{}/api/sources", BASE_URL))
+        .post(&format!("{}/api/sources", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .json(&long_name_source)
         .send()
@@ -837,7 +839,7 @@ async fn test_database_constraint_violations() {
     // that don't exist or belong to other users
     let fake_source_id = Uuid::new_v4().to_string();
     let fake_source_response = client.client
-        .get(&format!("{}/api/sources/{}", BASE_URL, fake_source_id))
+        .get(&format!("{}/api/sources/{}", get_base_url(), fake_source_id))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await

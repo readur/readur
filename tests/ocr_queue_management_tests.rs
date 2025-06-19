@@ -18,7 +18,9 @@ use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Test client for OCR queue operations
@@ -56,7 +58,7 @@ impl OCRQueueTestClient {
         };
         
         let register_response = self.client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await?;
@@ -72,7 +74,7 @@ impl OCRQueueTestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -86,7 +88,7 @@ impl OCRQueueTestClient {
         
         // Get user info
         let me_response = self.client
-            .get(&format!("{}/api/auth/me", BASE_URL))
+            .get(&format!("{}/api/auth/me", get_base_url()))
             .header("Authorization", format!("Bearer {}", login_result.token))
             .send()
             .await?;
@@ -104,7 +106,7 @@ impl OCRQueueTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/queue/stats", BASE_URL))
+            .get(&format!("{}/api/queue/stats", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -122,7 +124,7 @@ impl OCRQueueTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .post(&format!("{}/api/queue/requeue-failed", BASE_URL))
+            .post(&format!("{}/api/queue/requeue-failed", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -146,7 +148,7 @@ impl OCRQueueTestClient {
             .part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .multipart(form)
             .send()
@@ -196,7 +198,7 @@ impl OCRQueueTestClient {
             let token = self.token.as_ref().ok_or("Not authenticated")?;
             
             let response = self.client
-                .get(&format!("{}/api/documents", BASE_URL))
+                .get(&format!("{}/api/documents", get_base_url()))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await?;
@@ -228,7 +230,7 @@ impl OCRQueueTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents", BASE_URL))
+            .get(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -536,7 +538,7 @@ async fn test_queue_error_handling() {
     // Test unauthorized access to queue stats
     let unauth_client = Client::new();
     let unauth_response = unauth_client
-        .get(&format!("{}/api/queue/stats", BASE_URL))
+        .get(&format!("{}/api/queue/stats", get_base_url()))
         .send()
         .await
         .expect("Request should complete");
@@ -546,7 +548,7 @@ async fn test_queue_error_handling() {
     
     // Test unauthorized requeue attempt
     let unauth_requeue_response = unauth_client
-        .post(&format!("{}/api/queue/requeue-failed", BASE_URL))
+        .post(&format!("{}/api/queue/requeue-failed", get_base_url()))
         .send()
         .await
         .expect("Request should complete");

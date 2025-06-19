@@ -10,7 +10,9 @@ use uuid::Uuid;
 
 use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 #[tokio::test]
@@ -21,7 +23,7 @@ async fn debug_ocr_content() {
     
     // Check server health
     let response = client
-        .get(&format!("{}/api/health", BASE_URL))
+        .get(&format!("{}/api/health", get_base_url()))
         .timeout(Duration::from_secs(5))
         .send()
         .await
@@ -48,7 +50,7 @@ async fn debug_ocr_content() {
     };
     
     let register_response = client
-        .post(&format!("{}/api/auth/register", BASE_URL))
+        .post(&format!("{}/api/auth/register", get_base_url()))
         .json(&user_data)
         .send()
         .await
@@ -65,7 +67,7 @@ async fn debug_ocr_content() {
     };
     
     let login_response = client
-        .post(&format!("{}/api/auth/login", BASE_URL))
+        .post(&format!("{}/api/auth/login", get_base_url()))
         .json(&login_data)
         .send()
         .await
@@ -100,7 +102,7 @@ async fn debug_ocr_content() {
     
     // Upload documents
     let doc1_response = client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .multipart(form1)
         .send()
@@ -108,7 +110,7 @@ async fn debug_ocr_content() {
         .expect("Upload should work");
     
     let doc2_response = client
-        .post(&format!("{}/api/documents", BASE_URL))
+        .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .multipart(form2)
         .send()
@@ -130,7 +132,7 @@ async fn debug_ocr_content() {
         // Check document 1
         if !doc1_completed {
             let response = client
-                .get(&format!("{}/api/documents/{}/ocr", BASE_URL, doc1.id))
+                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.id))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await
@@ -148,7 +150,7 @@ async fn debug_ocr_content() {
         // Check document 2
         if !doc2_completed {
             let response = client
-                .get(&format!("{}/api/documents/{}/ocr", BASE_URL, doc2.id))
+                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.id))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await
@@ -172,14 +174,14 @@ async fn debug_ocr_content() {
     
     // Now get the actual OCR content and analyze it
     let doc1_ocr_response = client
-        .get(&format!("{}/api/documents/{}/ocr", BASE_URL, doc1.id))
+        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.id))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
         .expect("OCR endpoint should work");
     
     let doc2_ocr_response = client
-        .get(&format!("{}/api/documents/{}/ocr", BASE_URL, doc2.id))
+        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.id))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await

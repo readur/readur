@@ -22,7 +22,10 @@ use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
+
 const LOAD_TEST_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes for load tests
 
 /// Performance metrics tracker
@@ -144,7 +147,7 @@ impl LoadTestClient {
         };
         
         let register_response = self.client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await?;
@@ -160,7 +163,7 @@ impl LoadTestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -174,7 +177,7 @@ impl LoadTestClient {
         
         // Get user info
         let me_response = self.client
-            .get(&format!("{}/api/auth/me", BASE_URL))
+            .get(&format!("{}/api/auth/me", get_base_url()))
             .header("Authorization", format!("Bearer {}", login_result.token))
             .send()
             .await?;
@@ -199,7 +202,7 @@ impl LoadTestClient {
             .part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .multipart(form)
             .send()
@@ -221,7 +224,7 @@ impl LoadTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents", BASE_URL))
+            .get(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -242,7 +245,7 @@ impl LoadTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/search", BASE_URL))
+            .get(&format!("{}/api/search", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .query(&[("q", query)])
             .send()

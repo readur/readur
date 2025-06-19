@@ -1,0 +1,53 @@
+name: pull-request-validation
+
+on:
+  pull_request:
+    branches:
+      - main
+      - feature/pr-action
+
+jobs:
+  build_lint_validate_diff:
+    name: lint, validate and diff from main
+    permissions: write-all
+    runs-on: ubuntu-latest
+    container:
+      image: alpine/helm:3.14.3
+    steps:
+      - name: checkout pr head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: install chart dependencies
+        run: helm dependency build charts/readur
+
+      - name: lint helm chart
+        run: helm lint charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true
+
+      - name: prepare
+        run: mkdir -p charts/readur/build
+      - name: create full manifest from pr head
+        run: helm template readur charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true > charts/readur/build/manifest.yaml
+
+      - name: checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          path: main
+
+      - name: install chart dependencies
+        run: helm dependency build main/charts/readur
+
+      - name: prepare
+        run: mkdir -p main/charts/readur/build
+      - name: create full manifest from main
+        run: helm template readur main/charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true > main/charts/readur/build/manifest.yaml
+
+      - name: create diff comment
+        uses: int128/diff-action@v1
+        with:
+          base: main/charts/readur/build
+          head: charts/readur/build
+          comment-header: "## Changes in Final Manifest"

@@ -130,9 +130,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Seed admin user  
     seed::seed_admin_user(&background_db).await?;
     
-    // Seed system user for watcher
-    seed::seed_system_user(&background_db).await?;
-    
     // Reset any running WebDAV syncs from previous server instance using background DB
     match background_db.reset_running_webdav_syncs().await {
         Ok(count) => {

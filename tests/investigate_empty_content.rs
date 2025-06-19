@@ -11,7 +11,9 @@ use futures;
 
 use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 
 struct Investigator {
     client: Client,
@@ -37,7 +39,7 @@ impl Investigator {
             role: Some(readur::models::UserRole::User),
         };
         
-        client.post(&format!("{}/api/auth/register", BASE_URL))
+        client.post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await
@@ -49,7 +51,7 @@ impl Investigator {
         };
         
         let login_response = client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await
@@ -69,7 +71,7 @@ impl Investigator {
         let form = reqwest::multipart::Form::new().part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", self.token))
             .multipart(form)
             .send()
@@ -81,7 +83,7 @@ impl Investigator {
     
     async fn get_document_details(&self, doc_id: &str) -> Value {
         let response = self.client
-            .get(&format!("{}/api/documents/{}/ocr", BASE_URL, doc_id))
+            .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc_id))
             .header("Authorization", format!("Bearer {}", self.token))
             .send()
             .await
@@ -92,7 +94,7 @@ impl Investigator {
     
     async fn get_queue_stats(&self) -> Value {
         let response = self.client
-            .get(&format!("{}/api/queue/stats", BASE_URL))
+            .get(&format!("{}/api/queue/stats", get_base_url()))
             .header("Authorization", format!("Bearer {}", self.token))
             .send()
             .await;

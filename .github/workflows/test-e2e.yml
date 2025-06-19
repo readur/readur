@@ -72,6 +72,8 @@ jobs:
 
       - name: Build backend
         run: cargo build --release
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/readur_test
 
       - name: Build frontend
         working-directory: ./frontend
@@ -102,9 +104,13 @@ jobs:
             sleep 2
           done
 
+      - name: Install Playwright browsers
+        working-directory: ./frontend
+        run: npx playwright install --with-deps
+
       - name: Run frontend E2E tests
         working-directory: ./frontend
-        run: npm test -- SearchPage.integration.test
+        run: npm run test:e2e
         env:
           VITE_API_URL: http://localhost:8000
 

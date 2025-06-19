@@ -13,7 +13,9 @@ use uuid::Uuid;
 
 use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Test client for OCR corruption scenarios
@@ -34,7 +36,7 @@ impl OcrTestClient {
     
     async fn check_server_health(&self) -> Result<(), Box<dyn std::error::Error>> {
         let response = self.client
-            .get(&format!("{}/api/health", BASE_URL))
+            .get(&format!("{}/api/health", get_base_url()))
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
@@ -55,7 +57,7 @@ impl OcrTestClient {
         };
         
         let register_response = self.client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await?;
@@ -70,7 +72,7 @@ impl OcrTestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -96,7 +98,7 @@ impl OcrTestClient {
             .part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .multipart(form)
             .send()
@@ -115,7 +117,7 @@ impl OcrTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/ocr", BASE_URL, doc_id))
+            .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -214,7 +216,7 @@ async fn test_concurrent_ocr_corruption() {
     
     // Check server health
     if let Err(e) = client.check_server_health().await {
-        panic!("Server not running at {}: {}", BASE_URL, e);
+        panic!("Server not running at {}: {}", get_base_url(), e);
     }
     
     // Create test user
@@ -365,7 +367,7 @@ async fn test_high_volume_concurrent_ocr() {
     let mut client = OcrTestClient::new();
     
     if let Err(e) = client.check_server_health().await {
-        panic!("Server not running at {}: {}", BASE_URL, e);
+        panic!("Server not running at {}: {}", get_base_url(), e);
     }
     
     let timestamp = std::time::SystemTime::now()
@@ -468,7 +470,7 @@ async fn test_rapid_sequential_uploads() {
     let mut client = OcrTestClient::new();
     
     if let Err(e) = client.check_server_health().await {
-        panic!("Server not running at {}: {}", BASE_URL, e);
+        panic!("Server not running at {}: {}", get_base_url(), e);
     }
     
     let timestamp = std::time::SystemTime::now()

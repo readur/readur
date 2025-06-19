@@ -11,7 +11,9 @@ use futures;
 
 use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 const TIMEOUT: Duration = Duration::from_secs(180);
 
 struct SimpleStressTester {
@@ -25,7 +27,7 @@ impl SimpleStressTester {
         
         // Check server health
         let response = client
-            .get(&format!("{}/api/health", BASE_URL))
+            .get(&format!("{}/api/health", get_base_url()))
             .timeout(Duration::from_secs(5))
             .send()
             .await
@@ -52,7 +54,7 @@ impl SimpleStressTester {
         };
         
         let register_response = client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await
@@ -69,7 +71,7 @@ impl SimpleStressTester {
         };
         
         let login_response = client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await
@@ -95,7 +97,7 @@ impl SimpleStressTester {
         let form = reqwest::multipart::Form::new().part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", self.token))
             .multipart(form)
             .send()
@@ -149,7 +151,7 @@ impl SimpleStressTester {
     
     async fn get_all_documents(&self) -> Vec<Value> {
         let response = self.client
-            .get(&format!("{}/api/documents", BASE_URL))
+            .get(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", self.token))
             .send()
             .await

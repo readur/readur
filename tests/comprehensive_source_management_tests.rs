@@ -22,7 +22,9 @@ use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, SourceType};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Test client for source management operations
@@ -60,7 +62,7 @@ impl SourceTestClient {
         };
         
         let register_response = self.client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await?;
@@ -76,7 +78,7 @@ impl SourceTestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -90,7 +92,7 @@ impl SourceTestClient {
         
         // Get user info to store user_id
         let me_response = self.client
-            .get(&format!("{}/api/auth/me", BASE_URL))
+            .get(&format!("{}/api/auth/me", get_base_url()))
             .header("Authorization", format!("Bearer {}", login_result.token))
             .send()
             .await?;
@@ -123,7 +125,7 @@ impl SourceTestClient {
         });
         
         let response = self.client
-            .post(&format!("{}/api/sources", BASE_URL))
+            .post(&format!("{}/api/sources", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .json(&source_data)
             .send()
@@ -158,7 +160,7 @@ impl SourceTestClient {
         });
         
         let response = self.client
-            .post(&format!("{}/api/sources", BASE_URL))
+            .post(&format!("{}/api/sources", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .json(&source_data)
             .send()
@@ -189,7 +191,7 @@ impl SourceTestClient {
         });
         
         let response = self.client
-            .post(&format!("{}/api/sources", BASE_URL))
+            .post(&format!("{}/api/sources", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .json(&source_data)
             .send()
@@ -208,7 +210,7 @@ impl SourceTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/sources", BASE_URL))
+            .get(&format!("{}/api/sources", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -226,7 +228,7 @@ impl SourceTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/sources/{}", BASE_URL, source_id))
+            .get(&format!("{}/api/sources/{}", get_base_url(), source_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -244,7 +246,7 @@ impl SourceTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .put(&format!("{}/api/sources/{}", BASE_URL, source_id))
+            .put(&format!("{}/api/sources/{}", get_base_url(), source_id))
             .header("Authorization", format!("Bearer {}", token))
             .json(&updates)
             .send()
@@ -263,7 +265,7 @@ impl SourceTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .delete(&format!("{}/api/sources/{}", BASE_URL, source_id))
+            .delete(&format!("{}/api/sources/{}", get_base_url(), source_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -280,7 +282,7 @@ impl SourceTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .post(&format!("{}/api/sources/{}/test", BASE_URL, source_id))
+            .post(&format!("{}/api/sources/{}/test", get_base_url(), source_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -298,7 +300,7 @@ impl SourceTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .post(&format!("{}/api/sources/{}/sync", BASE_URL, source_id))
+            .post(&format!("{}/api/sources/{}/sync", get_base_url(), source_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -316,7 +318,7 @@ impl SourceTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .post(&format!("{}/api/sources/{}/sync/stop", BASE_URL, source_id))
+            .post(&format!("{}/api/sources/{}/sync/stop", get_base_url(), source_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -334,7 +336,7 @@ impl SourceTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .post(&format!("{}/api/sources/{}/estimate", BASE_URL, source_id))
+            .post(&format!("{}/api/sources/{}/estimate", get_base_url(), source_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -659,7 +661,7 @@ async fn test_source_error_handling() {
     
     let token = client.token.as_ref().unwrap();
     let invalid_response = client.client
-        .post(&format!("{}/api/sources", BASE_URL))
+        .post(&format!("{}/api/sources", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .json(&invalid_source_data)
         .send()
@@ -679,7 +681,7 @@ async fn test_source_error_handling() {
     // Test operations without authentication
     let unauth_client = Client::new();
     let unauth_response = unauth_client
-        .get(&format!("{}/api/sources", BASE_URL))
+        .get(&format!("{}/api/sources", get_base_url()))
         .send()
         .await
         .expect("Request should complete");

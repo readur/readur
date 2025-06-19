@@ -27,8 +27,12 @@ use readur::{
 
 /// Create a test app state
 async fn create_test_app_state() -> Arc<AppState> {
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/readur_test".to_string());
+    
     let config = Config {
-        database_url: "sqlite::memory:".to_string(),
+        database_url,
         server_address: "127.0.0.1:8080".to_string(),
         jwt_secret: "test_secret".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
@@ -392,11 +396,11 @@ fn test_resume_priority_ordering() {
     // Local folder should have highest priority (lowest number)
     assert_eq!(sources[0].source_type, SourceType::LocalFolder);
     
-    // WebDAV should be next
-    assert_eq!(sources[1].source_type, SourceType::WebDAV);
+    // S3 should be next (interrupted more recently than WebDAV)
+    assert_eq!(sources[1].source_type, SourceType::S3);
     
-    // S3 should have lowest priority
-    assert_eq!(sources[2].source_type, SourceType::S3);
+    // WebDAV should have lowest priority (interrupted longest ago)
+    assert_eq!(sources[2].source_type, SourceType::WebDAV);
 }
 
 fn create_interrupted_source_with_time(user_id: Uuid, source_type: SourceType, minutes_ago: i64) -> Source {
