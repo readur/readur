@@ -10,14 +10,14 @@ use std::sync::Arc;
 use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
-use sqlx::FromRow;
+use sqlx::{FromRow, Row};
 
 use crate::{auth::AuthUser, AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Label {
     pub id: Uuid,
-    pub user_id: Uuid,
+    pub user_id: Option<Uuid>, // nullable for system labels
     pub name: String,
     pub description: Option<String>,
     pub color: String,
@@ -80,13 +80,13 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(get_labels))
         .route("/", post(create_label))
-        .route("/:id", get(get_label))
-        .route("/:id", put(update_label))
-        .route("/:id", delete(delete_label))
-        .route("/documents/:document_id", get(get_document_labels))
-        .route("/documents/:document_id", put(update_document_labels))
-        .route("/documents/:document_id/labels/:label_id", post(add_document_label))
-        .route("/documents/:document_id/labels/:label_id", delete(remove_document_label))
+        .route("/{id}", get(get_label))
+        .route("/{id}", put(update_label))
+        .route("/{id}", delete(delete_label))
+        .route("/documents/{document_id}", get(get_document_labels))
+        .route("/documents/{document_id}", put(update_document_labels))
+        .route("/documents/{document_id}/labels/{label_id}", post(add_document_label))
+        .route("/documents/{document_id}/labels/{label_id}", delete(remove_document_label))
         .route("/bulk/documents", post(bulk_update_document_labels))
 }
 
@@ -108,8 +108,7 @@ pub async fn get_labels(
     let user_id = auth_user.user.id;
 
     let labels = if query.include_counts {
-        sqlx::query_as!(
-            Label,
+        sqlx::query_as::<_, Label>(
             r#"
             SELECT 
                 l.id, l.user_id, l.name, l.description, l.color, 
@@ -119,27 +118,26 @@ pub async fn get_labels(
             FROM labels l
             LEFT JOIN document_labels dl ON l.id = dl.label_id
             LEFT JOIN source_labels sl ON l.id = sl.label_id
-            WHERE l.user_id = $1 OR l.is_system = TRUE
+            WHERE (l.user_id = $1 OR l.is_system = TRUE)
             GROUP BY l.id, l.user_id, l.name, l.description, l.color, 
                      l.background_color, l.icon, l.is_system, l.created_at, l.updated_at
             ORDER BY l.name
-            "#,
-            user_id
+            "#
         )
+        .bind(user_id)
     } else {
-        sqlx::query_as!(
-            Label,
+        sqlx::query_as::<_, Label>(
             r#"
             SELECT 
                 id, user_id, name, description, color, 
                 background_color, icon, is_system, created_at, updated_at,
                 0::bigint as document_count, 0::bigint as source_count
             FROM labels
-            WHERE user_id = $1 OR is_system = TRUE
+            WHERE (user_id = $1 OR is_system = TRUE)
             ORDER BY name
-            "#,
-            user_id
+            "#
         )
+        .bind(user_id)
     }
     .fetch_all(state.db.get_pool())
     .await
@@ -180,8 +178,7 @@ pub async fn create_label(
         }
     }
 
-    let label = sqlx::query_as!(
-        Label,
+    let label = sqlx::query_as::<_, Label>(
         r#"
         INSERT INTO labels (user_id, name, description, color, background_color, icon)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -189,14 +186,14 @@ pub async fn create_label(
             id, user_id, name, description, color, background_color, icon, 
             is_system, created_at, updated_at,
             0::bigint as document_count, 0::bigint as source_count
-        "#,
-        user_id,
-        payload.name,
-        payload.description,
-        payload.color,
-        payload.background_color,
-        payload.icon
+        "#
     )
+    .bind(user_id)
+    .bind(payload.name)
+    .bind(payload.description)
+    .bind(payload.color)
+    .bind(payload.background_color)
+    .bind(payload.icon)
     .fetch_one(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -231,8 +228,7 @@ pub async fn get_label(
 ) -> Result<Json<Label>, StatusCode> {
     let user_id = auth_user.user.id;
 
-    let label = sqlx::query_as!(
-        Label,
+    let label = sqlx::query_as::<_, Label>(
         r#"
         SELECT 
             l.id, l.user_id, l.name, l.description, l.color, 
@@ -245,10 +241,10 @@ pub async fn get_label(
         WHERE l.id = $1 AND (l.user_id = $2 OR l.is_system = TRUE)
         GROUP BY l.id, l.user_id, l.name, l.description, l.color, 
                  l.background_color, l.icon, l.is_system, l.created_at, l.updated_at
-        "#,
-        label_id,
-        user_id
+        "#
     )
+    .bind(label_id)
+    .bind(user_id)
     .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -299,11 +295,11 @@ pub async fn update_label(
     }
 
     // Check if label exists and user has permission
-    let existing = sqlx::query!(
-        "SELECT id FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE",
-        label_id,
-        user_id
+    let existing = sqlx::query(
+        "SELECT id FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE"
     )
+    .bind(label_id)
+    .bind(user_id)
     .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -315,47 +311,8 @@ pub async fn update_label(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    // Build update query dynamically
-    let mut query = "UPDATE labels SET updated_at = CURRENT_TIMESTAMP".to_string();
-    let mut values: Vec<Box<dyn sqlx::Encode<'_, sqlx::Postgres> + Send + Sync>> = Vec::new();
-    let mut param_index = 1;
-
-    if let Some(name) = payload.name {
-        query.push_str(&format!(", name = ${}", param_index));
-        values.push(Box::new(name));
-        param_index += 1;
-    }
-
-    if let Some(description) = payload.description {
-        query.push_str(&format!(", description = ${}", param_index));
-        values.push(Box::new(description));
-        param_index += 1;
-    }
-
-    if let Some(color) = payload.color {
-        query.push_str(&format!(", color = ${}", param_index));
-        values.push(Box::new(color));
-        param_index += 1;
-    }
-
-    if let Some(background_color) = payload.background_color {
-        query.push_str(&format!(", background_color = ${}", param_index));
-        values.push(Box::new(background_color));
-        param_index += 1;
-    }
-
-    if let Some(icon) = payload.icon {
-        query.push_str(&format!(", icon = ${}", param_index));
-        values.push(Box::new(icon));
-        param_index += 1;
-    }
-
-    query.push_str(&format!(" WHERE id = ${} RETURNING *", param_index));
-    values.push(Box::new(label_id));
-
-    // For simplicity, let's rebuild the query using individual fields
-    let label = sqlx::query_as!(
-        Label,
+    // Use COALESCE to update only provided fields
+    let label = sqlx::query_as::<_, Label>(
         r#"
         UPDATE labels 
         SET 
@@ -370,14 +327,14 @@ pub async fn update_label(
             id, user_id, name, description, color, background_color, icon, 
             is_system, created_at, updated_at,
             0::bigint as document_count, 0::bigint as source_count
-        "#,
-        label_id,
-        payload.name,
-        payload.description,
-        payload.color,
-        payload.background_color,
-        payload.icon
+        "#
     )
+    .bind(label_id)
+    .bind(payload.name)
+    .bind(payload.description)
+    .bind(payload.color)
+    .bind(payload.background_color)
+    .bind(payload.icon)
     .fetch_one(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -412,11 +369,11 @@ pub async fn delete_label(
 ) -> Result<StatusCode, StatusCode> {
     let user_id = auth_user.user.id;
 
-    let result = sqlx::query!(
-        "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE",
-        label_id,
-        user_id
+    let result = sqlx::query(
+        "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE"
     )
+    .bind(label_id)
+    .bind(user_id)
     .execute(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -452,11 +409,11 @@ pub async fn get_document_labels(
     let user_id = auth_user.user.id;
 
     // Verify document ownership
-    let doc = sqlx::query!(
-        "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
-        document_id,
-        user_id
+    let doc = sqlx::query(
+        "SELECT id FROM documents WHERE id = $1 AND user_id = $2"
     )
+    .bind(document_id)
+    .bind(user_id)
     .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -468,8 +425,7 @@ pub async fn get_document_labels(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let labels = sqlx::query_as!(
-        Label,
+    let labels = sqlx::query_as::<_, Label>(
         r#"
         SELECT 
             l.id, l.user_id, l.name, l.description, l.color, 
@@ -479,9 +435,9 @@ pub async fn get_document_labels(
         INNER JOIN document_labels dl ON l.id = dl.label_id
         WHERE dl.document_id = $1
         ORDER BY l.name
-        "#,
-        document_id
+        "#
     )
+    .bind(document_id)
     .fetch_all(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -516,11 +472,11 @@ pub async fn update_document_labels(
     let user_id = auth_user.user.id;
 
     // Verify document ownership
-    let doc = sqlx::query!(
-        "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
-        document_id,
-        user_id
+    let doc = sqlx::query(
+        "SELECT id FROM documents WHERE id = $1 AND user_id = $2"
     )
+    .bind(document_id)
+    .bind(user_id)
     .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -534,11 +490,11 @@ pub async fn update_document_labels(
 
     // Verify all labels exist and are accessible
     if !payload.label_ids.is_empty() {
-        let label_count = sqlx::query!(
-            "SELECT COUNT(*) as count FROM labels WHERE id = ANY($1) AND (user_id = $2 OR is_system = TRUE)",
-            &payload.label_ids,
-            user_id
+        let label_count = sqlx::query(
+            "SELECT COUNT(*) as count FROM labels WHERE id = ANY($1) AND (user_id = $2 OR is_system = TRUE)"
         )
+        .bind(&payload.label_ids)
+        .bind(user_id)
         .fetch_one(state.db.get_pool())
         .await
         .map_err(|e| {
@@ -546,7 +502,8 @@ pub async fn update_document_labels(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-        if label_count.count.unwrap_or(0) as usize != payload.label_ids.len() {
+        let count: i64 = label_count.try_get("count").unwrap_or(0);
+        if count as usize != payload.label_ids.len() {
             return Err(StatusCode::BAD_REQUEST);
         }
     }
@@ -558,10 +515,10 @@ pub async fn update_document_labels(
     })?;
 
     // Remove existing labels
-    sqlx::query!(
-        "DELETE FROM document_labels WHERE document_id = $1",
-        document_id
+    sqlx::query(
+        "DELETE FROM document_labels WHERE document_id = $1"
     )
+    .bind(document_id)
     .execute(&mut *tx)
     .await
     .map_err(|e| {
@@ -571,12 +528,12 @@ pub async fn update_document_labels(
 
     // Add new labels
     for label_id in &payload.label_ids {
-        sqlx::query!(
-            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3)",
-            document_id,
-            label_id,
-            user_id
+        sqlx::query(
+            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3)"
         )
+        .bind(document_id)
+        .bind(label_id)
+        .bind(user_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| {
@@ -617,11 +574,11 @@ pub async fn add_document_label(
     let user_id = auth_user.user.id;
 
     // Verify document ownership
-    let doc = sqlx::query!(
-        "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
-        document_id,
-        user_id
+    let doc = sqlx::query(
+        "SELECT id FROM documents WHERE id = $1 AND user_id = $2"
     )
+    .bind(document_id)
+    .bind(user_id)
     .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -634,11 +591,11 @@ pub async fn add_document_label(
     }
 
     // Verify label exists and is accessible
-    let label = sqlx::query!(
-        "SELECT id FROM labels WHERE id = $1 AND (user_id = $2 OR is_system = TRUE)",
-        label_id,
-        user_id
+    let label = sqlx::query(
+        "SELECT id FROM labels WHERE id = $1 AND (user_id = $2 OR is_system = TRUE)"
     )
+    .bind(label_id)
+    .bind(user_id)
     .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -650,12 +607,12 @@ pub async fn add_document_label(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let result = sqlx::query!(
-        "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3)",
-        document_id,
-        label_id,
-        user_id
+    let result = sqlx::query(
+        "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3)"
     )
+    .bind(document_id)
+    .bind(label_id)
+    .bind(user_id)
     .execute(state.db.get_pool())
     .await;
 
@@ -691,11 +648,11 @@ pub async fn remove_document_label(
     let user_id = auth_user.user.id;
 
     // Verify document ownership
-    let doc = sqlx::query!(
-        "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
-        document_id,
-        user_id
+    let doc = sqlx::query(
+        "SELECT id FROM documents WHERE id = $1 AND user_id = $2"
     )
+    .bind(document_id)
+    .bind(user_id)
     .fetch_optional(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -707,11 +664,11 @@ pub async fn remove_document_label(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let result = sqlx::query!(
-        "DELETE FROM document_labels WHERE document_id = $1 AND label_id = $2",
-        document_id,
-        label_id
+    let result = sqlx::query(
+        "DELETE FROM document_labels WHERE document_id = $1 AND label_id = $2"
     )
+    .bind(document_id)
+    .bind(label_id)
     .execute(state.db.get_pool())
     .await
     .map_err(|e| {
