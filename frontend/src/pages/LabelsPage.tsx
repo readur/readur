@@ -51,12 +51,32 @@ const LabelsPage: React.FC = () => {
   const fetchLabels = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/labels?include_counts=true');
-      setLabels(response.data);
-      setError(null);
-    } catch (error) {
+      const response = await api.get('/labels?include_counts=true');
+      
+      // Validate response status and data format
+      if (response.status === 200 && Array.isArray(response.data)) {
+        setLabels(response.data);
+        setError(null);
+      } else {
+        console.error('Invalid response - Status:', response.status, 'Data:', response.data);
+        setError(`Server returned unexpected response (${response.status})`);
+        setLabels([]); // Reset to empty array to prevent filter errors
+      }
+    } catch (error: any) {
       console.error('Failed to fetch labels:', error);
-      setError('Failed to load labels');
+      
+      // Handle different types of errors more specifically
+      if (error?.response?.status === 401) {
+        setError('Authentication required. Please log in again.');
+      } else if (error?.response?.status === 403) {
+        setError('Access denied. You do not have permission to view labels.');
+      } else if (error?.response?.status >= 500) {
+        setError('Server error. Please try again later.');
+      } else {
+        setError('Failed to load labels. Please check your connection.');
+      }
+      
+      setLabels([]); // Reset to empty array to prevent filter errors
     } finally {
       setLoading(false);
     }
@@ -67,12 +87,12 @@ const LabelsPage: React.FC = () => {
   }, []);
 
   // Filter labels based on search and system label preference
-  const filteredLabels = labels.filter(label => {
+  const filteredLabels = Array.isArray(labels) ? labels.filter(label => {
     const matchesSearch = label.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (label.description || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = showSystemLabels || !label.is_system;
     return matchesSearch && matchesFilter;
-  });
+  }) : [];
 
   // Group labels
   const systemLabels = filteredLabels.filter(label => label.is_system);
@@ -80,7 +100,7 @@ const LabelsPage: React.FC = () => {
 
   const handleCreateLabel = async (labelData: Omit<LabelData, 'id' | 'is_system'>) => {
     try {
-      const response = await api.post('/api/labels', labelData);
+      const response = await api.post('/labels', labelData);
       await fetchLabels(); // Refresh the list
     } catch (error) {
       console.error('Failed to create label:', error);
@@ -92,7 +112,7 @@ const LabelsPage: React.FC = () => {
     if (!editingLabel) return;
     
     try {
-      await api.put(`/api/labels/${editingLabel.id}`, labelData);
+      await api.put(`/labels/${editingLabel.id}`, labelData);
       await fetchLabels(); // Refresh the list
       setEditingLabel(null);
     } catch (error) {
@@ -103,7 +123,7 @@ const LabelsPage: React.FC = () => {
 
   const handleDeleteLabel = async (labelId: string) => {
     try {
-      await api.delete(`/api/labels/${labelId}`);
+      await api.delete(`/labels/${labelId}`);
       await fetchLabels(); // Refresh the list
       setDeleteDialogOpen(false);
       setLabelToDelete(null);

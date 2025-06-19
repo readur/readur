@@ -144,7 +144,7 @@ describe('LabelsPage Component', () => {
       renderLabelsPage();
       
       await waitFor(() => {
-        expect(screen.getByText('Failed to load labels')).toBeInTheDocument();
+        expect(screen.getByText(/Failed to load labels/)).toBeInTheDocument();
       });
     });
 
@@ -154,13 +154,113 @@ describe('LabelsPage Component', () => {
       renderLabelsPage();
       
       await waitFor(() => {
-        expect(screen.getByText('Failed to load labels')).toBeInTheDocument();
+        expect(screen.getByText(/Failed to load labels/)).toBeInTheDocument();
       });
       
       const closeButton = screen.getByLabelText('Close');
       await user.click(closeButton);
       
-      expect(screen.queryByText('Failed to load labels')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Failed to load labels/)).not.toBeInTheDocument();
+    });
+
+    test('should handle 401 authentication errors', async () => {
+      mockApi.get.mockRejectedValue({
+        response: { status: 401 },
+        message: 'Unauthorized'
+      });
+      
+      renderLabelsPage();
+      
+      await waitFor(() => {
+        expect(screen.getByText('Authentication required. Please log in again.')).toBeInTheDocument();
+      });
+    });
+
+    test('should handle 403 access denied errors', async () => {
+      mockApi.get.mockRejectedValue({
+        response: { status: 403 },
+        message: 'Forbidden'
+      });
+      
+      renderLabelsPage();
+      
+      await waitFor(() => {
+        expect(screen.getByText('Access denied. You do not have permission to view labels.')).toBeInTheDocument();
+      });
+    });
+
+    test('should handle 500 server errors', async () => {
+      mockApi.get.mockRejectedValue({
+        response: { status: 500 },
+        message: 'Internal Server Error'
+      });
+      
+      renderLabelsPage();
+      
+      await waitFor(() => {
+        expect(screen.getByText('Server error. Please try again later.')).toBeInTheDocument();
+      });
+    });
+
+    test('should handle non-array response data', async () => {
+      // This is the main fix - when API returns non-array data
+      mockApi.get.mockResolvedValue({ 
+        status: 200,
+        data: { error: 'Something went wrong' } // Not an array!
+      });
+      
+      renderLabelsPage();
+      
+      await waitFor(() => {
+        expect(screen.getByText('Received invalid data format from server')).toBeInTheDocument();
+      });
+      
+      // Should not crash - labels should be empty array
+      expect(screen.getByText('No labels found')).toBeInTheDocument();
+    });
+
+    test('should handle unexpected response status with valid array', async () => {
+      mockApi.get.mockResolvedValue({ 
+        status: 202, // Unexpected status
+        data: mockLabels
+      });
+      
+      renderLabelsPage();
+      
+      await waitFor(() => {
+        expect(screen.getByText('Server returned unexpected response (202)')).toBeInTheDocument();
+      });
+    });
+
+    test('should ensure labels state is always an array', async () => {
+      // Mock a scenario where data is not an array
+      mockApi.get.mockResolvedValue({ 
+        status: 200,
+        data: null
+      });
+      
+      renderLabelsPage();
+      
+      await waitFor(() => {
+        expect(screen.getByText('Received invalid data format from server')).toBeInTheDocument();
+      });
+      
+      // Should not crash when trying to filter
+      expect(screen.getByText('No labels found')).toBeInTheDocument();
+    });
+
+    test('should handle string response data', async () => {
+      // Another scenario where response.data is not an array
+      mockApi.get.mockResolvedValue({ 
+        status: 200,
+        data: 'Server maintenance in progress'
+      });
+      
+      renderLabelsPage();
+      
+      await waitFor(() => {
+        expect(screen.getByText('Received invalid data format from server')).toBeInTheDocument();
+      });
     });
   });
 
