@@ -21,7 +21,9 @@ use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 const PROCESSING_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Test image structure for pipeline tests
@@ -74,7 +76,7 @@ impl FileProcessingTestClient {
         };
         
         let register_response = self.client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await?;
@@ -90,7 +92,7 @@ impl FileProcessingTestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -104,7 +106,7 @@ impl FileProcessingTestClient {
         
         // Get user info
         let me_response = self.client
-            .get(&format!("{}/api/auth/me", BASE_URL))
+            .get(&format!("{}/api/auth/me", get_base_url()))
             .header("Authorization", format!("Bearer {}", login_result.token))
             .send()
             .await?;
@@ -128,7 +130,7 @@ impl FileProcessingTestClient {
             .part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .multipart(form)
             .send()
@@ -153,7 +155,7 @@ impl FileProcessingTestClient {
             .part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .multipart(form)
             .send()
@@ -174,7 +176,7 @@ impl FileProcessingTestClient {
         
         while start.elapsed() < PROCESSING_TIMEOUT {
             let response = self.client
-                .get(&format!("{}/api/documents", BASE_URL))
+                .get(&format!("{}/api/documents", get_base_url()))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await?;
@@ -222,7 +224,7 @@ impl FileProcessingTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/thumbnail", BASE_URL, document_id))
+            .get(&format!("{}/api/documents/{}/thumbnail", get_base_url(), document_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -238,7 +240,7 @@ impl FileProcessingTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/processed-image", BASE_URL, document_id))
+            .get(&format!("{}/api/documents/{}/processed-image", get_base_url(), document_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -254,7 +256,7 @@ impl FileProcessingTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/ocr", BASE_URL, document_id))
+            .get(&format!("{}/api/documents/{}/ocr", get_base_url(), document_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -272,7 +274,7 @@ impl FileProcessingTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/download", BASE_URL, document_id))
+            .get(&format!("{}/api/documents/{}/download", get_base_url(), document_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -288,7 +290,7 @@ impl FileProcessingTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/view", BASE_URL, document_id))
+            .get(&format!("{}/api/documents/{}/view", get_base_url(), document_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -628,7 +630,7 @@ async fn test_processing_error_recovery() {
             
             while start.elapsed() < extended_timeout {
                 let response = client.client
-                    .get(&format!("{}/api/documents", BASE_URL))
+                    .get(&format!("{}/api/documents", get_base_url()))
                     .header("Authorization", format!("Bearer {}", client.token.as_ref().unwrap()))
                     .send()
                     .await;
@@ -864,7 +866,7 @@ async fn test_concurrent_file_processing() {
             
             let start = Instant::now();
             let response = client_clone
-                .post(&format!("{}/api/documents", BASE_URL))
+                .post(&format!("{}/api/documents", get_base_url()))
                 .header("Authorization", format!("Bearer {}", token))
                 .multipart(form)
                 .send()
@@ -916,7 +918,7 @@ async fn test_concurrent_file_processing() {
             // Wait for processing with timeout
             while start.elapsed() < PROCESSING_TIMEOUT {
                 let response = client_clone
-                    .get(&format!("{}/api/documents", BASE_URL))
+                    .get(&format!("{}/api/documents", get_base_url()))
                     .header("Authorization", format!("Bearer {}", token))
                     .send()
                     .await

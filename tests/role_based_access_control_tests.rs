@@ -18,7 +18,9 @@ use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 
 /// Test client for RBAC scenarios with multiple user contexts
 struct RBACTestClient {
@@ -88,7 +90,7 @@ impl RBACTestClient {
         };
         
         let register_response = self.client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await?;
@@ -104,7 +106,7 @@ impl RBACTestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -117,7 +119,7 @@ impl RBACTestClient {
         
         // Get user info to extract user ID
         let me_response = self.client
-            .get(&format!("{}/api/auth/me", BASE_URL))
+            .get(&format!("{}/api/auth/me", get_base_url()))
             .header("Authorization", format!("Bearer {}", login_result.token))
             .send()
             .await?;
@@ -147,7 +149,7 @@ impl RBACTestClient {
             .part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .multipart(form)
             .send()
@@ -170,7 +172,7 @@ impl RBACTestClient {
         }.ok_or("User not set up")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents", BASE_URL))
+            .get(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -192,7 +194,7 @@ impl RBACTestClient {
         }.ok_or("User not set up")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/ocr", BASE_URL, document_id))
+            .get(&format!("{}/api/documents/{}/ocr", get_base_url(), document_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -223,7 +225,7 @@ impl RBACTestClient {
         });
         
         let response = self.client
-            .post(&format!("{}/api/sources", BASE_URL))
+            .post(&format!("{}/api/sources", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .json(&source_data)
             .send()
@@ -246,7 +248,7 @@ impl RBACTestClient {
         }.ok_or("User not set up")?;
         
         let response = self.client
-            .get(&format!("{}/api/sources/{}", BASE_URL, source_id))
+            .get(&format!("{}/api/sources/{}", get_base_url(), source_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -265,14 +267,14 @@ impl RBACTestClient {
         let response = match operation {
             AdminOperation::ListUsers => {
                 self.client
-                    .get(&format!("{}/api/users", BASE_URL))
+                    .get(&format!("{}/api/users", get_base_url()))
                     .header("Authorization", format!("Bearer {}", token))
                     .send()
                     .await?
             }
             AdminOperation::CreateUser => {
                 self.client
-                    .post(&format!("{}/api/users", BASE_URL))
+                    .post(&format!("{}/api/users", get_base_url()))
                     .header("Authorization", format!("Bearer {}", token))
                     .json(&json!({
                         "username": "test_admin_created",
@@ -285,21 +287,21 @@ impl RBACTestClient {
             }
             AdminOperation::GetMetrics => {
                 self.client
-                    .get(&format!("{}/api/metrics", BASE_URL))
+                    .get(&format!("{}/api/metrics", get_base_url()))
                     .header("Authorization", format!("Bearer {}", token))
                     .send()
                     .await?
             }
             AdminOperation::GetQueueStats => {
                 self.client
-                    .get(&format!("{}/api/queue/stats", BASE_URL))
+                    .get(&format!("{}/api/queue/stats", get_base_url()))
                     .header("Authorization", format!("Bearer {}", token))
                     .send()
                     .await?
             }
             AdminOperation::RequeueFailedJobs => {
                 self.client
-                    .post(&format!("{}/api/queue/requeue-failed", BASE_URL))
+                    .post(&format!("{}/api/queue/requeue-failed", get_base_url()))
                     .header("Authorization", format!("Bearer {}", token))
                     .send()
                     .await?
@@ -318,7 +320,7 @@ impl RBACTestClient {
         }.ok_or("User not set up")?;
         
         let response = self.client
-            .put(&format!("{}/api/users/{}", BASE_URL, target_user_id))
+            .put(&format!("{}/api/users/{}", get_base_url(), target_user_id))
             .header("Authorization", format!("Bearer {}", token))
             .json(&json!({
                 "username": "modified_user",
@@ -625,7 +627,7 @@ async fn test_privilege_escalation_prevention() {
     
     let user1_token = client.user1_token.as_ref().unwrap();
     let create_admin_attempt = client.client
-        .post(&format!("{}/api/users", BASE_URL))
+        .post(&format!("{}/api/users", get_base_url()))
         .header("Authorization", format!("Bearer {}", user1_token))
         .json(&json!({
             "username": "malicious_admin",
@@ -650,7 +652,7 @@ async fn test_privilege_escalation_prevention() {
     // This would typically be done through updating own user profile
     // The exact endpoint depends on the API design
     let self_promotion_attempt = client.client
-        .put(&format!("{}/api/users/{}", BASE_URL, user1_id))
+        .put(&format!("{}/api/users/{}", get_base_url(), user1_id))
         .header("Authorization", format!("Bearer {}", user1_token))
         .json(&json!({
             "username": "user1_promoted",
@@ -732,7 +734,7 @@ async fn test_data_visibility_boundaries() {
     
     // Test search isolation (if available)
     let search_response = client.client
-        .get(&format!("{}/api/search", BASE_URL))
+        .get(&format!("{}/api/search", get_base_url()))
         .header("Authorization", format!("Bearer {}", client.user1_token.as_ref().unwrap()))
         .query(&[("q", "confidential")])
         .send()
@@ -802,7 +804,7 @@ async fn test_token_and_session_security() {
     
     for invalid_token in invalid_tokens {
         let response = client.client
-            .get(&format!("{}/api/documents", BASE_URL))
+            .get(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", invalid_token))
             .send()
             .await
@@ -831,7 +833,7 @@ async fn test_token_and_session_security() {
     
     // Try to access User1's document with User2's token
     let cross_token_access = client.client
-        .get(&format!("{}/api/documents/{}/ocr", BASE_URL, user1_doc_id))
+        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), user1_doc_id))
         .header("Authorization", format!("Bearer {}", user2_token))
         .send()
         .await
@@ -850,7 +852,7 @@ async fn test_token_and_session_security() {
     let malformed_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.malformed_signature";
     
     let malformed_response = client.client
-        .get(&format!("{}/api/documents", BASE_URL))
+        .get(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", malformed_jwt))
         .send()
         .await
@@ -865,7 +867,7 @@ async fn test_token_and_session_security() {
     println!("🔍 Testing missing authorization...");
     
     let no_auth_response = client.client
-        .get(&format!("{}/api/documents", BASE_URL))
+        .get(&format!("{}/api/documents", get_base_url()))
         .send()
         .await
         .expect("No auth request should complete");

@@ -15,7 +15,9 @@ use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
 
-const BASE_URL: &str = "http://localhost:8001";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
 
 /// Test client with admin capabilities
 struct AdminTestClient {
@@ -49,7 +51,7 @@ impl AdminTestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -63,7 +65,7 @@ impl AdminTestClient {
         
         // Get admin user info
         let me_response = self.client
-            .get(&format!("{}/api/auth/me", BASE_URL))
+            .get(&format!("{}/api/auth/me", get_base_url()))
             .header("Authorization", format!("Bearer {}", login_result.token))
             .send()
             .await?;
@@ -95,7 +97,7 @@ impl AdminTestClient {
         };
         
         let register_response = self.client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await?;
@@ -111,7 +113,7 @@ impl AdminTestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -125,7 +127,7 @@ impl AdminTestClient {
         
         // Get user info
         let me_response = self.client
-            .get(&format!("{}/api/auth/me", BASE_URL))
+            .get(&format!("{}/api/auth/me", get_base_url()))
             .header("Authorization", format!("Bearer {}", login_result.token))
             .send()
             .await?;
@@ -147,7 +149,7 @@ impl AdminTestClient {
         };
         
         let response = self.client
-            .get(&format!("{}/api/users", BASE_URL))
+            .get(&format!("{}/api/users", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -172,7 +174,7 @@ impl AdminTestClient {
         };
         
         let response = self.client
-            .post(&format!("{}/api/users", BASE_URL))
+            .post(&format!("{}/api/users", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .json(&user_data)
             .send()
@@ -199,7 +201,7 @@ impl AdminTestClient {
         };
         
         let response = self.client
-            .get(&format!("{}/api/users/{}", BASE_URL, user_id))
+            .get(&format!("{}/api/users/{}", get_base_url(), user_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -217,7 +219,7 @@ impl AdminTestClient {
         let token = self.admin_token.as_ref().ok_or("Admin not logged in")?;
         
         let response = self.client
-            .put(&format!("{}/api/users/{}", BASE_URL, user_id))
+            .put(&format!("{}/api/users/{}", get_base_url(), user_id))
             .header("Authorization", format!("Bearer {}", token))
             .json(&updates)
             .send()
@@ -236,7 +238,7 @@ impl AdminTestClient {
         let token = self.admin_token.as_ref().ok_or("Admin not logged in")?;
         
         let response = self.client
-            .delete(&format!("{}/api/users/{}", BASE_URL, user_id))
+            .delete(&format!("{}/api/users/{}", get_base_url(), user_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -257,7 +259,7 @@ impl AdminTestClient {
         };
         
         let response = self.client
-            .get(&format!("{}/api/metrics", BASE_URL))
+            .get(&format!("{}/api/metrics", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -273,7 +275,7 @@ impl AdminTestClient {
     /// Get Prometheus metrics (usually public)
     async fn get_prometheus_metrics(&self) -> Result<String, Box<dyn std::error::Error>> {
         let response = self.client
-            .get(&format!("{}/metrics", BASE_URL))
+            .get(&format!("{}/metrics", get_base_url()))
             .send()
             .await?;
         
@@ -616,7 +618,7 @@ async fn test_admin_error_handling() {
     
     let token = client.admin_token.as_ref().unwrap();
     let invalid_create_response = client.client
-        .post(&format!("{}/api/users", BASE_URL))
+        .post(&format!("{}/api/users", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .json(&invalid_user_data)
         .send()

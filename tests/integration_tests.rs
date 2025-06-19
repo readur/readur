@@ -12,7 +12,10 @@ use tokio::time::sleep;
 
 use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
 
-const BASE_URL: &str = "http://localhost:8000";
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
+
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Integration test client that handles authentication and common operations
@@ -32,7 +35,7 @@ impl TestClient {
     /// Check if server is running and healthy
     async fn check_server_health(&self) -> Result<(), Box<dyn std::error::Error>> {
         let response = self.client
-            .get(&format!("{}/api/health", BASE_URL))
+            .get(&format!("{}/api/health", get_base_url()))
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
@@ -60,7 +63,7 @@ impl TestClient {
         };
         
         let register_response = self.client
-            .post(&format!("{}/api/auth/register", BASE_URL))
+            .post(&format!("{}/api/auth/register", get_base_url()))
             .json(&user_data)
             .send()
             .await?;
@@ -76,7 +79,7 @@ impl TestClient {
         };
         
         let login_response = self.client
-            .post(&format!("{}/api/auth/login", BASE_URL))
+            .post(&format!("{}/api/auth/login", get_base_url()))
             .json(&login_data)
             .send()
             .await?;
@@ -102,7 +105,7 @@ impl TestClient {
             .part("file", part);
         
         let response = self.client
-            .post(&format!("{}/api/documents", BASE_URL))
+            .post(&format!("{}/api/documents", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .multipart(form)
             .send()
@@ -123,7 +126,7 @@ impl TestClient {
         
         while start.elapsed() < TIMEOUT {
             let response = self.client
-                .get(&format!("{}/api/documents", BASE_URL))
+                .get(&format!("{}/api/documents", get_base_url()))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await?;
@@ -160,7 +163,7 @@ impl TestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/ocr", BASE_URL, document_id))
+            .get(&format!("{}/api/documents/{}/ocr", get_base_url(), document_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
@@ -180,7 +183,7 @@ async fn test_complete_ocr_workflow() {
     
     // Check server health
     if let Err(e) = client.check_server_health().await {
-        panic!("Server not running at {}: {}", BASE_URL, e);
+        panic!("Server not running at {}: {}", get_base_url(), e);
     }
     
     // Create test user with unique timestamp
@@ -266,7 +269,7 @@ async fn test_ocr_error_handling() {
     
     // Test unauthorized access
     let response = client.client
-        .get(&format!("{}/api/documents/test-id/ocr", BASE_URL))
+        .get(&format!("{}/api/documents/test-id/ocr", get_base_url()))
         .send()
         .await
         .expect("Failed to make request");
@@ -285,7 +288,7 @@ async fn test_ocr_error_handling() {
     ).await.expect("Failed to register and login");
     
     let response = client.client
-        .get(&format!("{}/api/documents/00000000-0000-0000-0000-000000000000/ocr", BASE_URL))
+        .get(&format!("{}/api/documents/00000000-0000-0000-0000-000000000000/ocr", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
@@ -327,7 +330,7 @@ async fn test_document_list_structure() {
     
     // Get document list
     let response = client.client
-        .get(&format!("{}/api/documents", BASE_URL))
+        .get(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", client.token.as_ref().unwrap()))
         .send()
         .await
