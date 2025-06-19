@@ -205,18 +205,27 @@ run_unit_tests() {
 run_integration_tests() {
     print_status "Running integration tests..."
     
-    # Run integration tests locally with test database URL and API URL
-    local output
+    # Create a temporary file for output
+    local output_file=$(mktemp)
     local exit_code
     
-    output=$(DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
-        TEST_DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
-        API_URL="http://localhost:8001" \
-        cargo test --test '*' --no-fail-fast 2>&1)
-    exit_code=$?
+    # Run integration tests with real-time output
+    print_status "Starting cargo test... (streaming output)"
+    echo ""
     
-    # Display output in terminal
-    echo "$output"
+    # Run tests and show output in real-time while also saving to file
+    DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
+    TEST_DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
+    API_URL="http://localhost:8001" \
+    cargo test --test '*' --no-fail-fast 2>&1 | tee "$output_file"
+    
+    exit_code=${PIPESTATUS[0]}
+    
+    # Read the full output for saving
+    local output=$(cat "$output_file")
+    rm -f "$output_file"
+    
+    echo ""
     
     if [ $exit_code -eq 0 ]; then
         print_success "Integration tests passed"
