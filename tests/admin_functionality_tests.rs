@@ -11,12 +11,11 @@
 
 use reqwest::Client;
 use serde_json::{json, Value};
-use std::time::Duration;
 use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
 
-const BASE_URL: &str = "http://localhost:8000";
+const BASE_URL: &str = "http://localhost:8001";
 
 /// Test client with admin capabilities
 struct AdminTestClient {
