@@ -109,6 +109,7 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           RUST_LOG: debug
+          RUST_BACKTRACE: 1
 
       - name: Stop readur server
         if: always()

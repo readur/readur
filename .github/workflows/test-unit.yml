@@ -53,6 +53,8 @@ jobs:
         run: |
           cargo test --lib
           cargo test --tests unit_tests
+        env:
+          RUST_BACKTRACE: 1
 
   frontend-unit-tests:
     runs-on: ubuntu-latest

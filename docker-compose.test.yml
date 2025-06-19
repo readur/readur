@@ -58,6 +58,7 @@ services:
       
       # Test-specific environment variables
       RUST_LOG: debug
+      RUST_BACKTRACE: 1
       TEST_ENV: true
     
     ports:
