@@ -432,68 +432,63 @@ impl FileService {
 
     pub async fn delete_document_files(&self, document: &Document) -> Result<()> {
         let mut deleted_files = Vec::new();
-        let mut errors = Vec::new();
+        let mut serious_errors = Vec::new();
+
+        // Helper function to safely delete a file, handling concurrent deletion scenarios
+        async fn safe_delete(path: &Path, serious_errors: &mut Vec<String>) -> Option<String> {
+            match fs::remove_file(path).await {
+                Ok(_) => {
+                    info!("Deleted file: {}", path.display());
+                    Some(path.to_string_lossy().to_string())
+                }
+                Err(e) => {
+                    match e.kind() {
+                        std::io::ErrorKind::NotFound => {
+                            // File already deleted (possibly by concurrent request) - this is fine
+                            info!("File already deleted: {}", path.display());
+                            None
+                        }
+                        _ => {
+                            // Other errors (permissions, I/O errors, etc.) are serious
+                            warn!("Failed to delete file {}: {}", path.display(), e);
+                            serious_errors.push(format!("Failed to delete file {}: {}", path.display(), e));
+                            None
+                        }
+                    }
+                }
+            }
+        }
 
         // Delete main document file
         let main_file = Path::new(&document.file_path);
-        if main_file.exists() {
-            match fs::remove_file(&main_file).await {
-                Ok(_) => {
-                    deleted_files.push(main_file.to_string_lossy().to_string());
-                    info!("Deleted document file: {}", document.file_path);
-                }
-                Err(e) => {
-                    errors.push(format!("Failed to delete document file {}: {}", document.file_path, e));
-                    warn!("Failed to delete document file {}: {}", document.file_path, e);
-                }
-            }
+        if let Some(deleted_path) = safe_delete(&main_file, &mut serious_errors).await {
+            deleted_files.push(deleted_path);
         }
 
         // Delete thumbnail if it exists
         let thumbnail_filename = format!("{}_thumb.jpg", document.id);
         let thumbnail_path = self.get_thumbnails_path().join(&thumbnail_filename);
-        if thumbnail_path.exists() {
-            match fs::remove_file(&thumbnail_path).await {
-                Ok(_) => {
-                    deleted_files.push(thumbnail_path.to_string_lossy().to_string());
-                    info!("Deleted thumbnail: {}", thumbnail_path.display());
-                }
-                Err(e) => {
-                    errors.push(format!("Failed to delete thumbnail {}: {}", thumbnail_path.display(), e));
-                    warn!("Failed to delete thumbnail {}: {}", thumbnail_path.display(), e);
-                }
-            }
+        if let Some(deleted_path) = safe_delete(&thumbnail_path, &mut serious_errors).await {
+            deleted_files.push(deleted_path);
         }
 
         // Delete processed image if it exists
         let processed_image_filename = format!("{}_processed.png", document.id);
         let processed_image_path = self.get_processed_images_path().join(&processed_image_filename);
-        if processed_image_path.exists() {
-            match fs::remove_file(&processed_image_path).await {
-                Ok(_) => {
-                    deleted_files.push(processed_image_path.to_string_lossy().to_string());
-                    info!("Deleted processed image: {}", processed_image_path.display());
-                }
-                Err(e) => {
-                    errors.push(format!("Failed to delete processed image {}: {}", processed_image_path.display(), e));
-                    warn!("Failed to delete processed image {}: {}", processed_image_path.display(), e);
-                }
-            }
+        if let Some(deleted_path) = safe_delete(&processed_image_path, &mut serious_errors).await {
+            deleted_files.push(deleted_path);
         }
 
-        if !errors.is_empty() {
-            // Log all deletion results
-            if !deleted_files.is_empty() {
-                info!("Successfully deleted {} files for document {}", deleted_files.len(), document.id);
-            }
-            error!("Failed to delete some files for document {}: {}", document.id, errors.join("; "));
-            return Err(anyhow::anyhow!("Partial file deletion failure: {}", errors.join("; ")));
+        // Only fail if there were serious errors (not "file not found")
+        if !serious_errors.is_empty() {
+            error!("Serious errors occurred while deleting files for document {}: {}", document.id, serious_errors.join("; "));
+            return Err(anyhow::anyhow!("File deletion errors: {}", serious_errors.join("; ")));
         }
 
         if deleted_files.is_empty() {
-            warn!("No files found to delete for document {}", document.id);
+            info!("No files needed deletion for document {} (all files already removed)", document.id);
         } else {
-            info!("Successfully deleted all {} files for document {}", deleted_files.len(), document.id);
+            info!("Successfully deleted {} files for document {}", deleted_files.len(), document.id);
         }
 
         Ok(())

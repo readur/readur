@@ -514,20 +514,14 @@ mod file_deletion_tests {
             service_clone.delete_document_files(&document_clone).await
         });
         
-        // Both calls should complete, but only one will successfully delete files
-        // The other will fail because files are already deleted
+        // Both calls should complete successfully now that FileService handles concurrent deletions
         let result1 = task1.await.expect("Task 1 should complete");
         let result2 = task2.await.expect("Task 2 should complete");
         
-        // In concurrent scenarios, both tasks may partially fail because they
-        // delete different files and then can't find the files the other task deleted.
-        // What matters is that all files get deleted by the end.
-        if !result1.is_ok() && !result2.is_ok() {
-            println!("Both deletion attempts failed (expected in concurrent scenario):");
-            println!("Result 1: {:?}", result1);
-            println!("Result 2: {:?}", result2);
-            // This is okay as long as all files are actually deleted
-        }
+        // Both deletion attempts should succeed - the improved FileService handles 
+        // "file not found" errors gracefully as they indicate successful deletion by another task
+        assert!(result1.is_ok(), "First deletion task should succeed: {:?}", result1);
+        assert!(result2.is_ok(), "Second deletion task should succeed: {:?}", result2);
         
         // Verify files are deleted
         assert!(!Path::new(&main_path).exists());
