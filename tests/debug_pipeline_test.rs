@@ -25,16 +25,40 @@ impl PipelineDebugger {
     async fn new() -> Self {
         let client = Client::new();
         
-        // Check server health
-        let response = client
-            .get(&format!("{}/api/health", get_base_url()))
+        // Debug: Print the base URL we're trying to connect to
+        let base_url = get_base_url();
+        println!("🔍 DEBUG: Attempting to connect to server at: {}", base_url);
+        
+        // Check server health with better error handling
+        println!("🔍 DEBUG: Checking server health at: {}/api/health", base_url);
+        
+        let health_check_result = client
+            .get(&format!("{}/api/health", base_url))
             .timeout(Duration::from_secs(5))
             .send()
-            .await
-            .expect("Server should be running");
+            .await;
         
-        if !response.status().is_success() {
-            panic!("Server not healthy");
+        match health_check_result {
+            Ok(response) => {
+                println!("🔍 DEBUG: Health check response status: {}", response.status());
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_else(|_| "Unable to read response body".to_string());
+                    panic!("Server not healthy. Status: {}, Body: {}", status, body);
+                }
+                println!("✅ DEBUG: Server health check passed");
+            }
+            Err(e) => {
+                println!("❌ DEBUG: Failed to connect to server health endpoint");
+                println!("❌ DEBUG: Error type: {:?}", e);
+                if e.is_timeout() {
+                    panic!("Health check timed out after 5 seconds");
+                } else if e.is_connect() {
+                    panic!("Could not connect to server at {}. Is the server running?", base_url);
+                } else {
+                    panic!("Health check failed with error: {}", e);
+                }
+            }
         }
         
         // Create test user
@@ -101,18 +125,50 @@ impl PipelineDebugger {
         let form = reqwest::multipart::Form::new().part("file", part);
         
         let upload_start = Instant::now();
-        let response = self.client
-            .post(&format!("{}/api/documents", get_base_url()))
+        let upload_url = format!("{}/api/documents", get_base_url());
+        println!("  🔍 DEBUG: Uploading to URL: {}", upload_url);
+        println!("  🔍 DEBUG: Using token (first 10 chars): {}...", &self.token[..10.min(self.token.len())]);
+        
+        let response_result = self.client
+            .post(&upload_url)
             .header("Authorization", format!("Bearer {}", self.token))
             .multipart(form)
             .send()
-            .await
-            .expect("Upload should work");
+            .await;
+        
+        let response = match response_result {
+            Ok(resp) => {
+                println!("  🔍 DEBUG: Upload request sent successfully");
+                resp
+            }
+            Err(e) => {
+                println!("  ❌ DEBUG: Upload request failed");
+                println!("  ❌ DEBUG: Error type: {:?}", e);
+                if e.is_timeout() {
+                    panic!("Upload request timed out");
+                } else if e.is_connect() {
+                    panic!("Could not connect to server for upload. Error: {}", e);
+                } else if e.is_request() {
+                    panic!("Request building failed: {}", e);
+                } else {
+                    panic!("Upload failed with network error: {}", e);
+                }
+            }
+        };
         
         let upload_duration = upload_start.elapsed();
+        println!("  🔍 DEBUG: Upload response received. Status: {}", response.status());
         
         if !response.status().is_success() {
-            panic!("Upload failed: {}", response.text().await.unwrap_or_default());
+            let status = response.status();
+            let headers = response.headers().clone();
+            let body = response.text().await.unwrap_or_else(|_| "Unable to read response body".to_string());
+            
+            println!("  ❌ DEBUG: Upload failed with status: {}", status);
+            println!("  ❌ DEBUG: Response headers: {:?}", headers);
+            println!("  ❌ DEBUG: Response body: {}", body);
+            
+            panic!("Upload failed with status {}: {}", status, body);
         }
         
         let document: DocumentResponse = response.json().await.expect("Valid JSON");
@@ -535,6 +591,24 @@ async fn debug_extreme_high_concurrency_pipeline() {
 async fn debug_document_upload_race_conditions() {
     println!("🔍 DEBUGGING DOCUMENT UPLOAD PROCESS");
     println!("====================================");
+    
+    // First, let's do a basic connectivity test
+    println!("🔍 DEBUG: Testing basic network connectivity...");
+    let test_client = reqwest::Client::new();
+    let base_url = get_base_url();
+    println!("🔍 DEBUG: Base URL from environment: {}", base_url);
+    
+    // Try a simple GET request first
+    match test_client.get(&base_url).send().await {
+        Ok(resp) => {
+            println!("✅ DEBUG: Basic connectivity test passed. Status: {}", resp.status());
+        }
+        Err(e) => {
+            println!("❌ DEBUG: Basic connectivity test failed");
+            println!("❌ DEBUG: Error: {:?}", e);
+            panic!("Cannot connect to server at {}. Error: {}", base_url, e);
+        }
+    }
     
     let debugger = PipelineDebugger::new().await;
     
