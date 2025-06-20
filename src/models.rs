@@ -115,6 +115,9 @@ pub struct DocumentResponse {
     pub mime_type: String,
     /// Tags associated with the document
     pub tags: Vec<String>,
+    /// Labels associated with the document
+    #[serde(default)]
+    pub labels: Vec<crate::routes::labels::Label>,
     /// When the document was created
     pub created_at: DateTime<Utc>,
     /// Whether OCR text has been extracted
@@ -260,6 +263,7 @@ impl From<Document> for DocumentResponse {
             file_size: doc.file_size,
             mime_type: doc.mime_type,
             tags: doc.tags,
+            labels: Vec::new(), // Labels will be populated separately where needed
             created_at: doc.created_at,
             has_ocr_text: doc.ocr_text.is_some(),
             ocr_confidence: doc.ocr_confidence,

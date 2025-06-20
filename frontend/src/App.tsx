@@ -15,6 +15,7 @@ import SettingsPage from './pages/SettingsPage';
 import SourcesPage from './pages/SourcesPage';
 import WatchFolderPage from './pages/WatchFolderPage';
 import FailedOcrPage from './pages/FailedOcrPage';
+import LabelsPage from './pages/LabelsPage';
 
 function App(): JSX.Element {
   const { user, loading } = useAuth();
@@ -67,6 +68,7 @@ function App(): JSX.Element {
                     <Route path="/documents" element={<DocumentsPage />} />
                     <Route path="/documents/:id" element={<DocumentDetailsPage />} />
                     <Route path="/search" element={<SearchPage />} />
+                    <Route path="/labels" element={<LabelsPage />} />
                     <Route path="/sources" element={<SourcesPage />} />
                     <Route path="/watch" element={<WatchFolderPage />} />
                     <Route path="/settings" element={<SettingsPage />} />

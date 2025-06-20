@@ -25,6 +25,10 @@ import {
   FormControl,
   InputLabel,
   Select,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -44,9 +48,13 @@ import {
   Visibility as ViewIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import { documentService } from '../services/api';
 import DocumentThumbnail from '../components/DocumentThumbnail';
+import Label, { type LabelData } from '../components/Labels/Label';
+import LabelSelector from '../components/Labels/LabelSelector';
+import { useApi } from '../hooks/useApi';
 
 interface Document {
   id: string;
@@ -59,6 +67,7 @@ interface Document {
   ocr_status?: string;
   ocr_confidence?: number;
   tags: string[];
+  labels?: LabelData[];
 }
 
 interface PaginationInfo {
@@ -79,6 +88,7 @@ type SortOrder = 'asc' | 'desc';
 
 const DocumentsPage: React.FC = () => {
   const navigate = useNavigate();
+  const api = useApi();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({ total: 0, limit: 20, offset: 0, has_more: false });
   const [loading, setLoading] = useState<boolean>(true);
@@ -89,6 +99,13 @@ const DocumentsPage: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [ocrFilter, setOcrFilter] = useState<string>('');
   
+  // Labels state
+  const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
+  const [labelsLoading, setLabelsLoading] = useState<boolean>(false);
+  const [labelEditDialogOpen, setLabelEditDialogOpen] = useState<boolean>(false);
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
+  const [editingDocumentLabels, setEditingDocumentLabels] = useState<LabelData[]>([]);
+  
   // Menu states
   const [sortMenuAnchor, setSortMenuAnchor] = useState<null | HTMLElement>(null);
   const [docMenuAnchor, setDocMenuAnchor] = useState<null | HTMLElement>(null);
@@ -96,6 +113,7 @@ const DocumentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchDocuments();
+    fetchLabels();
   }, [pagination.limit, pagination.offset, ocrFilter]);
 
   const fetchDocuments = async (): Promise<void> => {
@@ -113,6 +131,63 @@ const DocumentsPage: React.FC = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLabels = async (): Promise<void> => {
+    try {
+      setLabelsLoading(true);
+      const response = await api.get('/labels?include_counts=false');
+      
+      if (response.status === 200 && Array.isArray(response.data)) {
+        setAvailableLabels(response.data);
+      } else {
+        console.error('Failed to fetch labels:', response);
+      }
+    } catch (error) {
+      console.error('Failed to fetch labels:', error);
+    } finally {
+      setLabelsLoading(false);
+    }
+  };
+
+  const handleCreateLabel = async (labelData: Omit<LabelData, 'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'>) => {
+    try {
+      const response = await api.post('/labels', labelData);
+      const newLabel = response.data;
+      setAvailableLabels(prev => [...prev, newLabel]);
+      return newLabel;
+    } catch (error) {
+      console.error('Failed to create label:', error);
+      throw error;
+    }
+  };
+
+  const handleEditDocumentLabels = (doc: Document) => {
+    setEditingDocumentId(doc.id);
+    setEditingDocumentLabels(doc.labels || []);
+    setLabelEditDialogOpen(true);
+  };
+
+  const handleSaveDocumentLabels = async () => {
+    if (!editingDocumentId) return;
+
+    try {
+      const labelIds = editingDocumentLabels.map(label => label.id);
+      await api.put(`/labels/documents/${editingDocumentId}`, { label_ids: labelIds });
+      
+      // Update the document in the local state
+      setDocuments(prev => prev.map(doc => 
+        doc.id === editingDocumentId 
+          ? { ...doc, labels: editingDocumentLabels }
+          : doc
+      ));
+      
+      setLabelEditDialogOpen(false);
+      setEditingDocumentId(null);
+      setEditingDocumentLabels([]);
+    } catch (error) {
+      console.error('Failed to update document labels:', error);
     }
   };
 
@@ -396,6 +471,13 @@ const DocumentsPage: React.FC = () => {
           <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
           <ListItemText>View Details</ListItemText>
         </MenuItem>
+        <MenuItem onClick={() => { 
+          if (selectedDoc) handleEditDocumentLabels(selectedDoc); 
+          handleDocMenuClose(); 
+        }}>
+          <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Edit Labels</ListItemText>
+        </MenuItem>
       </Menu>
 
       {/* Documents Grid/List */}
@@ -520,6 +602,27 @@ const DocumentsPage: React.FC = () => {
                         </Stack>
                       )}
                       
+                      {doc.labels && doc.labels.length > 0 && (
+                        <Stack direction="row" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                          {doc.labels.slice(0, 3).map((label) => (
+                            <Label
+                              key={label.id}
+                              label={label}
+                              size="small"
+                              variant="filled"
+                            />
+                          ))}
+                          {doc.labels.length > 3 && (
+                            <Chip 
+                              label={`+${doc.labels.length - 3}`}
+                              size="small" 
+                              variant="outlined"
+                              sx={{ fontSize: '0.7rem', height: '20px' }}
+                            />
+                          )}
+                        </Stack>
+                      )}
+                      
                       <Typography variant="caption" color="text.secondary">
                         {formatDate(doc.created_at)}
                       </Typography>
@@ -557,6 +660,28 @@ const DocumentsPage: React.FC = () => {
           ))}
         </Grid>
       )}
+
+      {/* Label Edit Dialog */}
+      <Dialog open={labelEditDialogOpen} onClose={() => setLabelEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Document Labels</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <LabelSelector
+              selectedLabels={editingDocumentLabels}
+              availableLabels={availableLabels}
+              onLabelsChange={setEditingDocumentLabels}
+              onCreateLabel={handleCreateLabel}
+              placeholder="Select labels for this document..."
+              size="medium"
+              disabled={labelsLoading}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLabelEditDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSaveDocumentLabels} variant="contained">Save</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Results count and pagination */}
       <Box sx={{ mt: 3 }}>
