@@ -180,17 +180,6 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
           : f
       ));
 
-      // Assign labels to the uploaded document if any are selected
-      if (selectedLabels.length > 0) {
-        try {
-          const labelIds = selectedLabels.map(label => label.id);
-          await api.put(`/labels/documents/${response.data.id}`, { label_ids: labelIds });
-        } catch (error) {
-          console.warn('Failed to assign labels to document:', error);
-          // Don't fail the upload if label assignment fails
-        }
-      }
-
       if (onUploadComplete) {
         onUploadComplete(response.data);
       }

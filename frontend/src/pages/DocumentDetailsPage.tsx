@@ -30,6 +30,7 @@ import {
   CalendarToday as DateIcon,
   Storage as SizeIcon,
   Tag as TagIcon,
+  Label as LabelIcon,
   Visibility as ViewIcon,
   Search as SearchIcon,
   Edit as EditIcon,
@@ -37,6 +38,9 @@ import {
 } from '@mui/icons-material';
 import { documentService, OcrResponse } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
+import LabelSelector from '../components/Labels/LabelSelector';
+import { type LabelData } from '../components/Labels/Label';
+import api from '../services/api';
 
 interface Document {
   id: string;
@@ -64,6 +68,10 @@ const DocumentDetailsPage: React.FC = () => {
   const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
   const [processedImageLoading, setProcessedImageLoading] = useState<boolean>(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [documentLabels, setDocumentLabels] = useState<LabelData[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
+  const [showLabelDialog, setShowLabelDialog] = useState<boolean>(false);
+  const [labelsLoading, setLabelsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (id) {
@@ -80,8 +88,13 @@ const DocumentDetailsPage: React.FC = () => {
   useEffect(() => {
     if (document) {
       loadThumbnail();
+      fetchDocumentLabels();
     }
   }, [document]);
+
+  useEffect(() => {
+    fetchAvailableLabels();
+  }, []);
 
   const fetchDocumentDetails = async (): Promise<void> => {
     if (!id) {
@@ -202,6 +215,58 @@ const DocumentDetailsPage: React.FC = () => {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const fetchDocumentLabels = async (): Promise<void> => {
+    if (!id) return;
+    
+    try {
+      const response = await api.get(`/labels/documents/${id}`);
+      if (response.status === 200 && Array.isArray(response.data)) {
+        setDocumentLabels(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch document labels:', error);
+    }
+  };
+
+  const fetchAvailableLabels = async (): Promise<void> => {
+    try {
+      setLabelsLoading(true);
+      const response = await api.get('/labels?include_counts=false');
+      if (response.status === 200 && Array.isArray(response.data)) {
+        setAvailableLabels(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch available labels:', error);
+    } finally {
+      setLabelsLoading(false);
+    }
+  };
+
+  const handleCreateLabel = async (labelData: Omit<LabelData, 'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'>) => {
+    try {
+      const response = await api.post('/labels', labelData);
+      const newLabel = response.data;
+      setAvailableLabels(prev => [...prev, newLabel]);
+      return newLabel;
+    } catch (error) {
+      console.error('Failed to create label:', error);
+      throw error;
+    }
+  };
+
+  const handleSaveLabels = async (selectedLabels: LabelData[]): Promise<void> => {
+    if (!id) return;
+    
+    try {
+      const labelIds = selectedLabels.map(label => label.id);
+      await api.put(`/labels/documents/${id}`, { label_ids: labelIds });
+      setDocumentLabels(selectedLabels);
+      setShowLabelDialog(false);
+    } catch (error) {
+      console.error('Failed to save labels:', error);
+    }
   };
 
   if (loading) {
@@ -435,6 +500,48 @@ const DocumentDetailsPage: React.FC = () => {
                     </Paper>
                   </Grid>
                 )}
+
+                {/* Labels Section */}
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <LabelIcon color="primary" sx={{ mr: 1 }} />
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Labels
+                        </Typography>
+                      </Box>
+                      <Button
+                        size="small"
+                        startIcon={<EditIcon />}
+                        onClick={() => setShowLabelDialog(true)}
+                        sx={{ borderRadius: 2 }}
+                      >
+                        Edit Labels
+                      </Button>
+                    </Box>
+                    {documentLabels.length > 0 ? (
+                      <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+                        {documentLabels.map((label) => (
+                          <Chip
+                            key={label.id}
+                            label={label.name}
+                            sx={{
+                              backgroundColor: label.background_color || label.color + '20',
+                              color: label.color,
+                              borderColor: label.color,
+                              border: '1px solid',
+                            }}
+                          />
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        No labels assigned to this document
+                      </Typography>
+                    )}
+                  </Paper>
+                </Grid>
               </Grid>
 
               <Divider sx={{ my: 3 }} />
@@ -751,6 +858,46 @@ const DocumentDetailsPage: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setShowProcessedImageDialog(false)}>
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Label Edit Dialog */}
+      <Dialog
+        open={showLabelDialog}
+        onClose={() => setShowLabelDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Edit Document Labels
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Select labels to assign to this document
+            </Typography>
+            <LabelSelector
+              selectedLabels={documentLabels}
+              availableLabels={availableLabels}
+              onLabelsChange={setDocumentLabels}
+              onCreateLabel={handleCreateLabel}
+              placeholder="Choose labels for this document..."
+              size="medium"
+              disabled={labelsLoading}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowLabelDialog(false)}>
+            Cancel
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={() => handleSaveLabels(documentLabels)}
+            sx={{ borderRadius: 2 }}
+          >
+            Save Labels
           </Button>
         </DialogActions>
       </Dialog>

@@ -7,9 +7,11 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 use sha2::{Sha256, Digest};
 use sqlx::Row;
+use axum::body::Bytes;
 
 use crate::{
     auth::AuthUser,
@@ -69,6 +71,13 @@ async fn get_document_by_id(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
+    // Get labels for this document
+    let labels = state
+        .db
+        .get_document_labels(document_id)
+        .await
+        .unwrap_or_else(|_| Vec::new());
+    
     // Convert to DocumentResponse
     let response = DocumentResponse {
         id: document.id,
@@ -79,6 +88,7 @@ async fn get_document_by_id(
         created_at: document.created_at,
         has_ocr_text: document.ocr_text.is_some(),
         tags: document.tags,
+        labels,
         ocr_confidence: document.ocr_confidence,
         ocr_word_count: document.ocr_word_count,
         ocr_processing_time_ms: document.ocr_processing_time_ms,
@@ -118,90 +128,188 @@ async fn upload_document(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .unwrap_or_else(|| crate::models::Settings::default());
     
+    let mut label_ids: Option<Vec<uuid::Uuid>> = None;
+    let mut file_data: Option<(String, Bytes)> = None;
+    
+    // First pass: collect all multipart fields
     while let Some(field) = multipart.next_field().await.map_err(|_| StatusCode::BAD_REQUEST)? {
         let name = field.name().unwrap_or("").to_string();
         
-        if name == "file" {
+        tracing::info!("Processing multipart field: {}", name);
+        
+        if name == "label_ids" {
+            let label_ids_text = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            tracing::info!("Received label_ids field: {}", label_ids_text);
+            
+            match serde_json::from_str::<Vec<uuid::Uuid>>(&label_ids_text) {
+                Ok(ids) => {
+                    tracing::info!("Successfully parsed {} label IDs: {:?}", ids.len(), ids);
+                    label_ids = Some(ids);
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to parse label_ids from upload: {} - Error: {}", label_ids_text, e);
+                }
+            }
+        } else if name == "file" {
             let filename = field
                 .file_name()
                 .ok_or(StatusCode::BAD_REQUEST)?
                 .to_string();
             
-            if !file_service.is_allowed_file_type(&filename, &settings.allowed_file_types) {
-                return Err(StatusCode::BAD_REQUEST);
-            }
-            
             let data = field.bytes().await.map_err(|_| StatusCode::BAD_REQUEST)?;
-            let file_size = data.len() as i64;
-            
-            // Check file size limit
-            let max_size_bytes = (settings.max_file_size_mb as i64) * 1024 * 1024;
-            if file_size > max_size_bytes {
-                return Err(StatusCode::PAYLOAD_TOO_LARGE);
-            }
-            
-            // Calculate file hash for deduplication
-            let file_hash = calculate_file_hash(&data);
-            
-            // Check if this exact file content already exists using efficient hash lookup
-            match state.db.get_document_by_user_and_hash(auth_user.user.id, &file_hash).await {
-                Ok(Some(existing_doc)) => {
-                    // Return the existing document instead of creating a duplicate
-                    return Ok(Json(existing_doc.into()));
-                }
-                Ok(None) => {
-                    // No duplicate found, proceed with upload
-                }
-                Err(_) => {
-                    // Continue even if duplicate check fails
-                }
-            }
-            
-            let mime_type = mime_guess::from_path(&filename)
-                .first_or_octet_stream()
-                .to_string();
-            
-            let file_path = file_service
-                .save_file(&filename, &data)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            
-            let document = file_service.create_document(
-                &filename,
-                &filename,
-                &file_path,
-                file_size,
-                &mime_type,
-                auth_user.user.id,
-                Some(file_hash),
-            );
-            
-            let saved_document = state
-                .db
-                .create_document(document)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            
-            let document_id = saved_document.id;
-            let enable_background_ocr = settings.enable_background_ocr;
-            
-            if enable_background_ocr {
-                // Use the shared queue service from AppState instead of creating a new one
-                // Calculate priority based on file size
-                let priority = match file_size {
-                    0..=1048576 => 10,          // <= 1MB: highest priority
-                    ..=5242880 => 8,            // 1-5MB: high priority
-                    ..=10485760 => 6,           // 5-10MB: medium priority  
-                    ..=52428800 => 4,           // 10-50MB: low priority
-                    _ => 2,                     // > 50MB: lowest priority
-                };
-                
-                state.queue_service.enqueue_document(document_id, priority, file_size).await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            }
-            
-            return Ok(Json(saved_document.into()));
+            let data_len = data.len();
+            file_data = Some((filename.clone(), data));
+            tracing::info!("Received file: {}, size: {} bytes", filename, data_len);
         }
+    }
+    
+    // Process the file after collecting all fields
+    if let Some((filename, data)) = file_data {
+        if !file_service.is_allowed_file_type(&filename, &settings.allowed_file_types) {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        
+        let file_size = data.len() as i64;
+        
+        // Check file size limit
+        let max_size_bytes = (settings.max_file_size_mb as i64) * 1024 * 1024;
+        if file_size > max_size_bytes {
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+        
+        // Calculate file hash for deduplication
+        let file_hash = calculate_file_hash(&data);
+        
+        // Check if this exact file content already exists using efficient hash lookup
+        match state.db.get_document_by_user_and_hash(auth_user.user.id, &file_hash).await {
+            Ok(Some(existing_doc)) => {
+                // Return the existing document instead of creating a duplicate
+                let labels = state
+                    .db
+                    .get_document_labels(existing_doc.id)
+                    .await
+                    .unwrap_or_else(|_| Vec::new());
+                
+                let mut response: DocumentResponse = existing_doc.into();
+                response.labels = labels;
+                
+                return Ok(Json(response));
+            }
+            Ok(None) => {
+                // No duplicate found, proceed with upload
+            }
+            Err(_) => {
+                // Continue even if duplicate check fails
+            }
+        }
+        
+        let mime_type = mime_guess::from_path(&filename)
+            .first_or_octet_stream()
+            .to_string();
+        
+        let file_path = file_service
+            .save_file(&filename, &data)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        let document = file_service.create_document(
+            &filename,
+            &filename,
+            &file_path,
+            file_size,
+            &mime_type,
+            auth_user.user.id,
+            Some(file_hash),
+        );
+        
+        let saved_document = state
+            .db
+            .create_document(document)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        let document_id = saved_document.id;
+        let enable_background_ocr = settings.enable_background_ocr;
+        
+        // Assign labels if provided
+        tracing::info!("Processing label assignment for document {}, label_ids: {:?}", document_id, label_ids);
+        
+        if let Some(ref label_ids_vec) = label_ids {
+            if !label_ids_vec.is_empty() {
+                tracing::info!("Attempting to assign {} labels to document {}", label_ids_vec.len(), document_id);
+                
+                // Verify all labels exist and are accessible to the user
+                let label_count = sqlx::query(
+                    "SELECT COUNT(*) as count FROM labels WHERE id = ANY($1) AND (user_id = $2 OR is_system = TRUE)"
+                )
+                .bind(label_ids_vec)
+                .bind(auth_user.user.id)
+                .fetch_one(state.db.get_pool())
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to verify labels during upload: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+                let count: i64 = label_count.try_get("count").unwrap_or(0);
+                tracing::info!("Label verification: found {} valid labels out of {} requested", count, label_ids_vec.len());
+                
+                if count as usize == label_ids_vec.len() {
+                    // All labels are valid, assign them
+                    for label_id in label_ids_vec {
+                        match sqlx::query(
+                            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
+                        )
+                        .bind(document_id)
+                        .bind(label_id)
+                        .bind(auth_user.user.id)
+                        .execute(state.db.get_pool())
+                        .await
+                        {
+                            Ok(result) => {
+                                tracing::info!("Successfully assigned label {} to document {}, rows affected: {}", label_id, document_id, result.rows_affected());
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to assign label {} to document {}: {}", label_id, document_id, e);
+                            }
+                        }
+                    }
+                } else {
+                    tracing::warn!("Label verification failed: Some labels were not accessible to user {} during upload (found {}/{} labels)", auth_user.user.id, count, label_ids_vec.len());
+                }
+            } else {
+                tracing::info!("No labels to assign (empty label_ids vector)");
+            }
+        } else {
+            tracing::info!("No labels to assign (label_ids is None)");
+        }
+        
+        if enable_background_ocr {
+            // Use the shared queue service from AppState instead of creating a new one
+            // Calculate priority based on file size
+            let priority = match file_size {
+                0..=1048576 => 10,          // <= 1MB: highest priority
+                ..=5242880 => 8,            // 1-5MB: high priority
+                ..=10485760 => 6,           // 5-10MB: medium priority  
+                ..=52428800 => 4,           // 10-50MB: low priority
+                _ => 2,                     // > 50MB: lowest priority
+            };
+            
+            state.queue_service.enqueue_document(document_id, priority, file_size).await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+        
+        // Get labels for this document (if any were assigned)
+        let labels = state
+            .db
+            .get_document_labels(document_id)
+            .await
+            .unwrap_or_else(|_| Vec::new());
+        
+        let mut response: DocumentResponse = saved_document.into();
+        response.labels = labels;
+        
+        return Ok(Json(response));
     }
     
     Err(StatusCode::BAD_REQUEST)
@@ -258,7 +366,19 @@ async fn list_documents(
         )
     ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    let documents_response: Vec<DocumentResponse> = documents.into_iter().map(|doc| doc.into()).collect();
+    // Get labels for all documents efficiently
+    let document_ids: Vec<uuid::Uuid> = documents.iter().map(|doc| doc.id).collect();
+    let labels_map = state
+        .db
+        .get_labels_for_documents(&document_ids)
+        .await
+        .unwrap_or_else(|_| std::collections::HashMap::new());
+    
+    let documents_response: Vec<DocumentResponse> = documents.into_iter().map(|doc| {
+        let mut response: DocumentResponse = doc.into();
+        response.labels = labels_map.get(&response.id).cloned().unwrap_or_else(Vec::new);
+        response
+    }).collect();
     
     let response = serde_json::json!({
         "documents": documents_response,
