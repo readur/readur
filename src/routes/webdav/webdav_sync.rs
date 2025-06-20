@@ -4,12 +4,12 @@ use tracing::{error, info, warn};
 use chrono::Utc;
 use tokio::sync::Semaphore;
 use futures::stream::{FuturesUnordered, StreamExt};
-use sha2::{Sha256, Digest};
 
 use crate::{
     AppState,
     models::{CreateWebDAVFile, UpdateWebDAVSyncState},
     file_service::FileService,
+    document_ingestion::{DocumentIngestionService, IngestionResult},
     webdav_service::{WebDAVConfig, WebDAVService},
 };
 
@@ -19,6 +19,7 @@ pub async fn perform_webdav_sync_with_tracking(
     webdav_service: WebDAVService,
     config: WebDAVConfig,
     enable_background_ocr: bool,
+    webdav_source_id: Option<uuid::Uuid>,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     info!("Performing WebDAV sync for user {} on {} folders", user_id, config.watch_folders.len());
     
@@ -59,7 +60,7 @@ pub async fn perform_webdav_sync_with_tracking(
     };
 
     // Perform sync with proper cleanup
-    let sync_result = perform_sync_internal(state.clone(), user_id, webdav_service, config, enable_background_ocr).await;
+    let sync_result = perform_sync_internal(state.clone(), user_id, webdav_service, config, enable_background_ocr, webdav_source_id).await;
     
     match &sync_result {
         Ok(files_processed) => {
@@ -80,6 +81,7 @@ async fn perform_sync_internal(
     webdav_service: WebDAVService,
     config: WebDAVConfig,
     enable_background_ocr: bool,
+    webdav_source_id: Option<uuid::Uuid>,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     
     let mut total_files_processed = 0;
@@ -161,6 +163,7 @@ async fn perform_sync_internal(
                             &file_info_clone,
                             enable_background_ocr,
                             semaphore_clone,
+                            webdav_source_id,
                         ).await
                     };
                     
@@ -230,6 +233,7 @@ async fn process_single_file(
     file_info: &crate::models::FileInfo,
     enable_background_ocr: bool,
     semaphore: Arc<Semaphore>,
+    webdav_source_id: Option<uuid::Uuid>,
 ) -> Result<bool, String> {
     // Acquire semaphore permit to limit concurrent downloads
     let _permit = semaphore.acquire().await.map_err(|e| format!("Semaphore error: {}", e))?;
@@ -273,74 +277,68 @@ async fn process_single_file(
     
     info!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
     
-    // Calculate file hash for deduplication 
-    let file_hash = calculate_file_hash(&file_data);
+    // Use the unified ingestion service for consistent deduplication
+    let file_service = FileService::new(state.config.upload_path.clone());
+    let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
     
-    // Check if this exact file content already exists for this user using efficient hash lookup
-    info!("Checking for duplicate content for user {}: {} (hash: {}, size: {} bytes)", 
-        user_id, file_info.name, &file_hash[..8], file_data.len());
-    
-    // Use efficient database hash lookup instead of reading all documents
-    match state.db.get_document_by_user_and_hash(user_id, &file_hash).await {
-        Ok(Some(existing_doc)) => {
-            info!("Found duplicate content for user {}: {} matches existing document {} (hash: {})", 
-                user_id, file_info.name, existing_doc.original_filename, &file_hash[..8]);
-            
-            // Record this WebDAV file as a duplicate but link to existing document
-            let webdav_file = CreateWebDAVFile {
+    let result = if let Some(source_id) = webdav_source_id {
+        ingestion_service
+            .ingest_from_webdav(
+                &file_info.name,
+                file_data,
+                &file_info.mime_type,
                 user_id,
-                webdav_path: file_info.path.clone(),
-                etag: file_info.etag.clone(),
-                last_modified: file_info.last_modified,
-                file_size: file_info.size,
-                mime_type: file_info.mime_type.clone(),
-                document_id: Some(existing_doc.id), // Link to existing document
-                sync_status: "duplicate_content".to_string(),
-                sync_error: None,
-            };
+                source_id,
+            )
+            .await
+    } else {
+        // Fallback for backward compatibility - treat as generic WebDAV sync
+        ingestion_service
+            .ingest_from_source(
+                &file_info.name,
+                file_data,
+                &file_info.mime_type,
+                user_id,
+                uuid::Uuid::new_v4(), // Generate a temporary ID for tracking
+                "webdav_sync",
+            )
+            .await
+    };
+
+    let result = result.map_err(|e| format!("Document ingestion failed for {}: {}", file_info.name, e))?;
+
+    let (document, should_queue_ocr, webdav_sync_status) = match result {
+        IngestionResult::Created(doc) => {
+            info!("Created new document for {}: {}", file_info.name, doc.id);
+            (doc, true, "synced") // New document - queue for OCR
+        }
+        IngestionResult::ExistingDocument(doc) => {
+            info!("Found existing document for {}: {}", file_info.name, doc.id);
+            (doc, false, "duplicate_content") // Existing document - don't re-queue OCR
+        }
+        IngestionResult::TrackedAsDuplicate { existing_document_id } => {
+            info!("Tracked {} as duplicate of existing document: {}", file_info.name, existing_document_id);
             
-            if let Err(e) = state.db.create_or_update_webdav_file(&webdav_file).await {
-                error!("Failed to record duplicate WebDAV file: {}", e);
-            }
+            // For duplicates, we still need to get the document info for WebDAV tracking
+            let existing_doc = state.db.get_document_by_id(existing_document_id, user_id, crate::models::UserRole::User).await
+                .map_err(|e| format!("Failed to get existing document: {}", e))?
+                .ok_or_else(|| "Document not found".to_string())?;
             
-            info!("WebDAV file marked as duplicate_content, skipping processing");
-            return Ok(false); // Not processed (duplicate)
+            (existing_doc, false, "duplicate_content") // Track as duplicate
         }
-        Ok(None) => {
-            info!("No duplicate content found for hash {}, proceeding with file processing", &file_hash[..8]);
+        IngestionResult::Skipped { existing_document_id, reason: _ } => {
+            info!("Skipped duplicate file {}: existing document {}", file_info.name, existing_document_id);
+            
+            // For skipped files, we still need to get the document info for WebDAV tracking
+            let existing_doc = state.db.get_document_by_id(existing_document_id, user_id, crate::models::UserRole::User).await
+                .map_err(|e| format!("Failed to get existing document: {}", e))?
+                .ok_or_else(|| "Document not found".to_string())?;
+            
+            (existing_doc, false, "duplicate_content") // Track as duplicate
         }
-        Err(e) => {
-            warn!("Error checking for duplicate hash {}: {}", &file_hash[..8], e);
-            // Continue processing even if duplicate check fails
-        }
-    }
-    
-    // Create file service and save file to disk
-    let file_service = FileService::new(state.config.upload_path.clone());
-    
-    let saved_file_path = file_service.save_file(&file_info.name, &file_data).await
-        .map_err(|e| format!("Failed to save {}: {}", file_info.name, e))?;
-    
-    // Create document record with hash
-    let file_service = FileService::new(state.config.upload_path.clone());
-    let document = file_service.create_document(
-        &file_info.name,
-        &file_info.name, // original filename same as name
-        &saved_file_path,
-        file_data.len() as i64,
-        &file_info.mime_type,
-        user_id,
-        Some(file_hash.clone()), // Store the calculated hash
-    );
-    
-    // Save document to database
-    let created_document = state.db.create_document(document)
-        .await
-        .map_err(|e| format!("Failed to create document {}: {}", file_info.name, e))?;
-    
-    info!("Created document record for {}: {}", file_info.name, created_document.id);
-    
-    // Record successful file in WebDAV files table
+    };
+
+    // Record WebDAV file in tracking table
     let webdav_file = CreateWebDAVFile {
         user_id,
         webdav_path: file_info.path.clone(),
@@ -348,8 +346,8 @@ async fn process_single_file(
         last_modified: file_info.last_modified,
         file_size: file_info.size,
         mime_type: file_info.mime_type.clone(),
-        document_id: Some(created_document.id),
-        sync_status: "synced".to_string(),
+        document_id: Some(document.id),
+        sync_status: webdav_sync_status.to_string(),
         sync_error: None,
     };
     
@@ -357,45 +355,26 @@ async fn process_single_file(
         error!("Failed to record WebDAV file: {}", e);
     }
     
-    // Queue for OCR processing if enabled
-    if enable_background_ocr {
-        info!("Background OCR is enabled, queueing document {} for processing", created_document.id);
+    // Queue for OCR processing if enabled and this is a new document
+    if enable_background_ocr && should_queue_ocr {
+        info!("Background OCR is enabled, queueing document {} for processing", document.id);
         
-        match state.db.pool.acquire().await {
-            Ok(_conn) => {
-                let queue_service = crate::ocr_queue::OcrQueueService::new(
-                    state.db.clone(), 
-                    state.db.pool.clone(), 
-                    4
-                );
-                
-                // Determine priority based on file size
-                let priority = if file_info.size <= 1024 * 1024 { 10 } // ≤ 1MB: High priority
-                else if file_info.size <= 5 * 1024 * 1024 { 8 } // ≤ 5MB: Medium priority  
-                else if file_info.size <= 10 * 1024 * 1024 { 6 } // ≤ 10MB: Normal priority
-                else if file_info.size <= 50 * 1024 * 1024 { 4 } // ≤ 50MB: Low priority
-                else { 2 }; // > 50MB: Lowest priority
-                
-                if let Err(e) = queue_service.enqueue_document(created_document.id, priority, file_info.size).await {
-                    error!("Failed to enqueue document for OCR: {}", e);
-                } else {
-                    info!("Enqueued document {} for OCR processing", created_document.id);
-                }
-            }
-            Err(e) => {
-                error!("Failed to connect to database for OCR queueing: {}", e);
-            }
+        // Determine priority based on file size
+        let priority = if file_info.size <= 1024 * 1024 { 10 } // ≤ 1MB: High priority
+        else if file_info.size <= 5 * 1024 * 1024 { 8 } // ≤ 5MB: Medium priority  
+        else if file_info.size <= 10 * 1024 * 1024 { 6 } // ≤ 10MB: Normal priority
+        else if file_info.size <= 50 * 1024 * 1024 { 4 } // ≤ 50MB: Low priority
+        else { 2 }; // > 50MB: Lowest priority
+        
+        if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
+            error!("Failed to enqueue document for OCR: {}", e);
+        } else {
+            info!("Enqueued document {} for OCR processing", document.id);
         }
     } else {
-        info!("Background OCR is disabled, skipping OCR queue for document {}", created_document.id);
+        info!("Background OCR is disabled or document already processed, skipping OCR queue for document {}", document.id);
     }
     
     Ok(true) // Successfully processed
 }
 
-fn calculate_file_hash(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    format!("{:x}", result)
-}
