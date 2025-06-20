@@ -4,7 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use utoipa::{ToSchema, IntoParams};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
 pub enum UserRole {
     #[serde(rename = "admin")]
     Admin,

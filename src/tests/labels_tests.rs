@@ -2,37 +2,44 @@
 mod tests {
     use super::*;
     use crate::models::UserRole;
-    use crate::routes::labels::{CreateLabel, UpdateLabel, LabelAssignment};
+    use crate::routes::labels::{CreateLabel, UpdateLabel, LabelAssignment, Label};
     use axum::http::StatusCode;
     use chrono::Utc;
     use serde_json::json;
-    use sqlx::PgPool;
+    use sqlx::{PgPool, Row};
     use std::collections::HashMap;
-    use testcontainers::{clients::Cli, images::postgres::Postgres, Container};
+    use testcontainers::{runners::AsyncRunner, ContainerAsync};
+    use testcontainers_modules::postgres::Postgres;
     use uuid::Uuid;
 
     struct TestContext {
         db: PgPool,
-        _container: Container<'static, Postgres>,
+        _container: ContainerAsync<Postgres>,
         user_id: Uuid,
         admin_user_id: Uuid,
     }
 
     async fn setup_test_db() -> TestContext {
         // Start PostgreSQL container
-        let docker = Cli::default();
         let postgres_image = Postgres::default();
-        let container = docker.run(postgres_image);
+        let container = postgres_image.start().await.expect("Failed to start postgres container");
+        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
         
         let connection_string = format!(
             "postgres://postgres:postgres@127.0.0.1:{}/postgres",
-            container.get_host_port_ipv4(5432)
+            port
         );
 
         // Connect to database
         let db = PgPool::connect(&connection_string)
             .await
             .expect("Failed to connect to test database");
+
+        // Enable required extensions
+        sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+            .execute(&db)
+            .await
+            .expect("Failed to create pgcrypto extension");
 
         // Run migrations
         sqlx::migrate!("./migrations")
@@ -44,16 +51,16 @@ mod tests {
         let user_id = Uuid::new_v4();
         let admin_user_id = Uuid::new_v4();
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at)
             VALUES 
                 ($1, 'testuser', 'test@example.com', 'hashed_password', 'user', NOW(), NOW()),
                 ($2, 'admin', 'admin@example.com', 'hashed_password', 'admin', NOW(), NOW())
             "#,
-            user_id,
-            admin_user_id
         )
+        .bind(user_id)
+        .bind(admin_user_id)
         .execute(&db)
         .await
         .expect("Failed to create test users");
@@ -78,38 +85,38 @@ mod tests {
             icon: Some("star".to_string()),
         };
 
-        let result = sqlx::query!(
+        let result = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, description, color, icon)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             "#,
-            ctx.user_id,
-            label_data.name,
-            label_data.description,
-            label_data.color,
-            label_data.icon
         )
+        .bind(ctx.user_id)
+        .bind(&label_data.name)
+        .bind(&label_data.description)
+        .bind(&label_data.color)
+        .bind(&label_data.icon)
         .fetch_one(&ctx.db)
         .await;
 
         assert!(result.is_ok());
-        let label_id = result.unwrap().id;
+        let label_id = result.unwrap();
 
         // Verify label was created
-        let created_label = sqlx::query!(
-            "SELECT * FROM labels WHERE id = $1",
-            label_id
+        let created_label = sqlx::query_as::<_, Label>(
+            "SELECT id, user_id, name, description, color, background_color, icon, is_system, created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count FROM labels WHERE id = $1"
         )
+        .bind(label_id)
         .fetch_one(&ctx.db)
         .await
         .expect("Failed to fetch created label");
 
         assert_eq!(created_label.name, "Test Label");
-        assert_eq!(created_label.description.unwrap(), "A test label");
+        assert_eq!(created_label.description.as_ref().unwrap(), "A test label");
         assert_eq!(created_label.color, "#ff0000");
-        assert_eq!(created_label.icon.unwrap(), "star");
-        assert_eq!(created_label.user_id, ctx.user_id);
+        assert_eq!(created_label.icon.as_ref().unwrap(), "star");
+        assert_eq!(created_label.user_id, Some(ctx.user_id));
         assert!(!created_label.is_system);
     }
 
@@ -118,25 +125,29 @@ mod tests {
         let ctx = setup_test_db().await;
 
         // Create first label
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO labels (user_id, name, color)
-            VALUES ($1, 'Duplicate Name', '#ff0000')
+            VALUES ($1, $2, $3)
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
+        .bind("Duplicate Name")
+        .bind("#ff0000")
         .execute(&ctx.db)
         .await
         .expect("Failed to create first label");
 
         // Try to create duplicate
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             INSERT INTO labels (user_id, name, color)
-            VALUES ($1, 'Duplicate Name', '#00ff00')
+            VALUES ($1, $2, $3)
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
+        .bind("Duplicate Name")
+        .bind("#00ff00")
         .execute(&ctx.db)
         .await;
 
@@ -149,18 +160,19 @@ mod tests {
         let ctx = setup_test_db().await;
 
         // Create label
-        let label_id = sqlx::query!(
+        let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, color)
-            VALUES ($1, 'Original Name', '#ff0000')
+            VALUES ($1, $2, $3)
             RETURNING id
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
+        .bind("Original Name")
+        .bind("#ff0000")
         .fetch_one(&ctx.db)
         .await
-        .unwrap()
-        .id;
+        .unwrap();
 
         // Update label
         let update_data = UpdateLabel {
@@ -171,7 +183,7 @@ mod tests {
             icon: Some("edit".to_string()),
         };
 
-        let result = sqlx::query!(
+        let result = sqlx::query_as::<_, Label>(
             r#"
             UPDATE labels 
             SET 
@@ -181,15 +193,15 @@ mod tests {
                 icon = COALESCE($5, icon),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = $1 AND user_id = $6
-            RETURNING *
+            RETURNING id, user_id, name, description, color, background_color, icon, is_system, created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count
             "#,
-            label_id,
-            update_data.name,
-            update_data.description,
-            update_data.color,
-            update_data.icon,
-            ctx.user_id
         )
+        .bind(label_id)
+        .bind(&update_data.name)
+        .bind(&update_data.description)
+        .bind(&update_data.color)
+        .bind(&update_data.icon)
+        .bind(ctx.user_id)
         .fetch_one(&ctx.db)
         .await;
 
@@ -197,9 +209,9 @@ mod tests {
         let updated_label = result.unwrap();
 
         assert_eq!(updated_label.name, "Updated Name");
-        assert_eq!(updated_label.description.unwrap(), "Updated description");
+        assert_eq!(updated_label.description.as_ref().unwrap(), "Updated description");
         assert_eq!(updated_label.color, "#00ff00");
-        assert_eq!(updated_label.icon.unwrap(), "edit");
+        assert_eq!(updated_label.icon.as_ref().unwrap(), "edit");
     }
 
     #[tokio::test]
@@ -207,25 +219,26 @@ mod tests {
         let ctx = setup_test_db().await;
 
         // Create label
-        let label_id = sqlx::query!(
+        let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, color)
-            VALUES ($1, 'To Delete', '#ff0000')
+            VALUES ($1, $2, $3)
             RETURNING id
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
+        .bind("To Delete")
+        .bind("#ff0000")
         .fetch_one(&ctx.db)
         .await
-        .unwrap()
-        .id;
+        .unwrap();
 
         // Delete label
-        let result = sqlx::query!(
-            "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE",
-            label_id,
-            ctx.user_id
+        let result = sqlx::query(
+            "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE"
         )
+        .bind(label_id)
+        .bind(ctx.user_id)
         .execute(&ctx.db)
         .await;
 
@@ -233,10 +246,10 @@ mod tests {
         assert_eq!(result.unwrap().rows_affected(), 1);
 
         // Verify deletion
-        let deleted_label = sqlx::query!(
-            "SELECT id FROM labels WHERE id = $1",
-            label_id
+        let deleted_label = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM labels WHERE id = $1"
         )
+        .bind(label_id)
         .fetch_optional(&ctx.db)
         .await
         .expect("Query failed");
@@ -249,25 +262,27 @@ mod tests {
         let ctx = setup_test_db().await;
 
         // Create system label
-        let label_id = sqlx::query!(
+        let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, color, is_system)
-            VALUES ($1, 'System Label', '#ff0000', TRUE)
+            VALUES ($1, $2, $3, $4)
             RETURNING id
             "#,
-            Uuid::nil() // System labels use nil UUID
         )
+        .bind(None::<Uuid>) // System labels have NULL user_id
+        .bind("System Label")
+        .bind("#ff0000")
+        .bind(true)
         .fetch_one(&ctx.db)
         .await
-        .unwrap()
-        .id;
+        .unwrap();
 
         // Try to delete system label
-        let result = sqlx::query!(
-            "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE",
-            label_id,
-            ctx.user_id
+        let result = sqlx::query(
+            "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE"
         )
+        .bind(label_id)
+        .bind(ctx.user_id)
         .execute(&ctx.db)
         .await;
 
@@ -275,10 +290,10 @@ mod tests {
         assert_eq!(result.unwrap().rows_affected(), 0); // No rows affected
 
         // Verify system label still exists
-        let system_label = sqlx::query!(
-            "SELECT id FROM labels WHERE id = $1",
-            label_id
+        let system_label = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM labels WHERE id = $1"
         )
+        .bind(label_id)
         .fetch_one(&ctx.db)
         .await;
 
@@ -291,68 +306,76 @@ mod tests {
 
         // Create document
         let document_id = Uuid::new_v4();
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO documents (
                 id, user_id, filename, original_filename, file_path, 
                 file_size, mime_type, created_at, updated_at
             )
-            VALUES ($1, $2, 'test.txt', 'test.txt', '/test/test.txt', 1024, 'text/plain', NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
             "#,
-            document_id,
-            ctx.user_id
         )
+        .bind(document_id)
+        .bind(ctx.user_id)
+        .bind("test.txt")
+        .bind("test.txt")
+        .bind("/test/test.txt")
+        .bind(1024)
+        .bind("text/plain")
         .execute(&ctx.db)
         .await
         .expect("Failed to create test document");
 
         // Create label
-        let label_id = sqlx::query!(
+        let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, color)
-            VALUES ($1, 'Document Label', '#ff0000')
+            VALUES ($1, $2, $3)
             RETURNING id
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
+        .bind("Document Label")
+        .bind("#ff0000")
         .fetch_one(&ctx.db)
         .await
-        .unwrap()
-        .id;
+        .unwrap();
 
         // Assign label to document
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             INSERT INTO document_labels (document_id, label_id, assigned_by)
             VALUES ($1, $2, $3)
             "#,
-            document_id,
-            label_id,
-            ctx.user_id
         )
+        .bind(document_id)
+        .bind(label_id)
+        .bind(ctx.user_id)
         .execute(&ctx.db)
         .await;
 
         assert!(result.is_ok());
 
         // Verify assignment
-        let assignment = sqlx::query!(
+        let assignment = sqlx::query(
             r#"
-            SELECT dl.*, l.name as label_name
+            SELECT dl.document_id, dl.label_id, dl.assigned_by, dl.created_at, l.name as label_name
             FROM document_labels dl
             JOIN labels l ON dl.label_id = l.id
             WHERE dl.document_id = $1 AND dl.label_id = $2
             "#,
-            document_id,
-            label_id
         )
+        .bind(document_id)
+        .bind(label_id)
         .fetch_one(&ctx.db)
         .await;
 
         assert!(assignment.is_ok());
         let assignment = assignment.unwrap();
-        assert_eq!(assignment.label_name, "Document Label");
-        assert_eq!(assignment.assigned_by.unwrap(), ctx.user_id);
+        let label_name: String = assignment.get("label_name");
+        let assigned_by: Option<uuid::Uuid> = assignment.get("assigned_by");
+        assert_eq!(label_name, "Document Label");
+        assert_eq!(assigned_by.unwrap(), ctx.user_id);
     }
 
     #[tokio::test]
@@ -361,54 +384,60 @@ mod tests {
 
         // Create document and label
         let document_id = Uuid::new_v4();
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO documents (
                 id, user_id, filename, original_filename, file_path, 
                 file_size, mime_type, created_at, updated_at
             )
-            VALUES ($1, $2, 'test.txt', 'test.txt', '/test/test.txt', 1024, 'text/plain', NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
             "#,
-            document_id,
-            ctx.user_id
         )
+        .bind(document_id)
+        .bind(ctx.user_id)
+        .bind("test.txt")
+        .bind("test.txt")
+        .bind("/test/test.txt")
+        .bind(1024)
+        .bind("text/plain")
         .execute(&ctx.db)
         .await
         .expect("Failed to create test document");
 
-        let label_id = sqlx::query!(
+        let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, color)
-            VALUES ($1, 'Document Label', '#ff0000')
+            VALUES ($1, $2, $3)
             RETURNING id
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
+        .bind("Document Label")
+        .bind("#ff0000")
         .fetch_one(&ctx.db)
         .await
-        .unwrap()
-        .id;
+        .unwrap();
 
         // Assign label
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO document_labels (document_id, label_id, assigned_by)
             VALUES ($1, $2, $3)
             "#,
-            document_id,
-            label_id,
-            ctx.user_id
         )
+        .bind(document_id)
+        .bind(label_id)
+        .bind(ctx.user_id)
         .execute(&ctx.db)
         .await
         .expect("Failed to assign label");
 
         // Remove label
-        let result = sqlx::query!(
-            "DELETE FROM document_labels WHERE document_id = $1 AND label_id = $2",
-            document_id,
-            label_id
+        let result = sqlx::query(
+            "DELETE FROM document_labels WHERE document_id = $1 AND label_id = $2"
         )
+        .bind(document_id)
+        .bind(label_id)
         .execute(&ctx.db)
         .await;
 
@@ -416,11 +445,11 @@ mod tests {
         assert_eq!(result.unwrap().rows_affected(), 1);
 
         // Verify removal
-        let assignment = sqlx::query!(
-            "SELECT * FROM document_labels WHERE document_id = $1 AND label_id = $2",
-            document_id,
-            label_id
+        let assignment = sqlx::query(
+            "SELECT document_id FROM document_labels WHERE document_id = $1 AND label_id = $2"
         )
+        .bind(document_id)
+        .bind(label_id)
         .fetch_optional(&ctx.db)
         .await
         .expect("Query failed");
@@ -434,63 +463,63 @@ mod tests {
 
         // Create document
         let document_id = Uuid::new_v4();
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO documents (
                 id, user_id, filename, original_filename, file_path, 
                 file_size, mime_type, created_at, updated_at
             )
-            VALUES ($1, $2, 'test.txt', 'test.txt', '/test/test.txt', 1024, 'text/plain', NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
             "#,
-            document_id,
-            ctx.user_id
         )
+        .bind(document_id)
+        .bind(ctx.user_id)
+        .bind("test.txt")
+        .bind("test.txt")
+        .bind("/test/test.txt")
+        .bind(1024)
+        .bind("text/plain")
         .execute(&ctx.db)
         .await
         .expect("Failed to create test document");
 
         // Create multiple labels
-        let label_ids: Vec<Uuid> = vec!["Label 1", "Label 2", "Label 3"]
-            .into_iter()
-            .enumerate()
-            .map(|(i, name)| async {
-                sqlx::query!(
-                    r#"
-                    INSERT INTO labels (user_id, name, color)
-                    VALUES ($1, $2, $3)
-                    RETURNING id
-                    "#,
-                    ctx.user_id,
-                    name,
-                    format!("#ff{:02x}00", i * 50)
-                )
-                .fetch_one(&ctx.db)
-                .await
-                .unwrap()
-                .id
-            })
-            .collect::<futures::stream::FuturesUnordered<_>>()
-            .collect::<Vec<_>>()
-            .await;
+        let mut label_ids = Vec::new();
+        for (i, name) in vec!["Label 1", "Label 2", "Label 3"].iter().enumerate() {
+            let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
+                r#"
+                INSERT INTO labels (user_id, name, color)
+                VALUES ($1, $2, $3)
+                RETURNING id
+                "#,
+            )
+            .bind(ctx.user_id)
+            .bind(name)
+            .bind(format!("#ff{:02x}00", i * 50))
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+            label_ids.push(label_id);
+        }
 
         // Assign labels to document
         for label_id in &label_ids {
-            sqlx::query!(
+            sqlx::query(
                 r#"
                 INSERT INTO document_labels (document_id, label_id, assigned_by)
                 VALUES ($1, $2, $3)
                 "#,
-                document_id,
-                label_id,
-                ctx.user_id
             )
+            .bind(document_id)
+            .bind(label_id)
+            .bind(ctx.user_id)
             .execute(&ctx.db)
             .await
             .expect("Failed to assign label");
         }
 
         // Get document labels
-        let document_labels = sqlx::query!(
+        let document_labels = sqlx::query(
             r#"
             SELECT l.id, l.name, l.color, l.icon, l.description, l.is_system
             FROM labels l
@@ -498,16 +527,19 @@ mod tests {
             WHERE dl.document_id = $1
             ORDER BY l.name
             "#,
-            document_id
         )
+        .bind(document_id)
         .fetch_all(&ctx.db)
         .await
         .expect("Failed to fetch document labels");
 
         assert_eq!(document_labels.len(), 3);
-        assert_eq!(document_labels[0].name, "Label 1");
-        assert_eq!(document_labels[1].name, "Label 2");
-        assert_eq!(document_labels[2].name, "Label 3");
+        let name1: String = document_labels[0].get("name");
+        let name2: String = document_labels[1].get("name");
+        let name3: String = document_labels[2].get("name");
+        assert_eq!(name1, "Label 1");
+        assert_eq!(name2, "Label 2");
+        assert_eq!(name3, "Label 3");
     }
 
     #[tokio::test]
@@ -515,24 +547,23 @@ mod tests {
         let ctx = setup_test_db().await;
 
         // Create label
-        let label_id = sqlx::query!(
+        let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, color)
             VALUES ($1, 'Usage Test', '#ff0000')
             RETURNING id
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
         .fetch_one(&ctx.db)
         .await
-        .unwrap()
-        .id;
+        .unwrap();
 
         // Create multiple documents
         let mut document_ids = Vec::new();
         for i in 0..3 {
             let doc_id = Uuid::new_v4();
-            sqlx::query!(
+            sqlx::query(
                 r#"
                 INSERT INTO documents (
                     id, user_id, filename, original_filename, file_path, 
@@ -540,11 +571,11 @@ mod tests {
                 )
                 VALUES ($1, $2, $3, $3, $4, 1024, 'text/plain', NOW(), NOW())
                 "#,
-                doc_id,
-                ctx.user_id,
-                format!("test{}.txt", i),
-                format!("/test/test{}.txt", i)
             )
+            .bind(doc_id)
+            .bind(ctx.user_id)
+            .bind(format!("test{}.txt", i))
+            .bind(format!("/test/test{}.txt", i))
             .execute(&ctx.db)
             .await
             .expect("Failed to create test document");
@@ -553,22 +584,22 @@ mod tests {
 
         // Assign label to documents
         for doc_id in &document_ids {
-            sqlx::query!(
+            sqlx::query(
                 r#"
                 INSERT INTO document_labels (document_id, label_id, assigned_by)
                 VALUES ($1, $2, $3)
                 "#,
-                doc_id,
-                label_id,
-                ctx.user_id
             )
+            .bind(doc_id)
+            .bind(label_id)
+            .bind(ctx.user_id)
             .execute(&ctx.db)
             .await
             .expect("Failed to assign label");
         }
 
         // Get usage count
-        let usage_count = sqlx::query!(
+        let usage_count = sqlx::query(
             r#"
             SELECT 
                 l.id,
@@ -579,13 +610,14 @@ mod tests {
             WHERE l.id = $1
             GROUP BY l.id, l.name
             "#,
-            label_id
         )
+        .bind(label_id)
         .fetch_one(&ctx.db)
         .await
         .expect("Failed to get usage count");
 
-        assert_eq!(usage_count.document_count.unwrap(), 3);
+        let document_count: i64 = usage_count.get("document_count");
+        assert_eq!(document_count, 3);
     }
 
     #[tokio::test]
@@ -593,14 +625,14 @@ mod tests {
         let ctx = setup_test_db().await;
 
         // Test valid color
-        let valid_result = sqlx::query!(
+        let valid_result = sqlx::query(
             r#"
             INSERT INTO labels (user_id, name, color)
             VALUES ($1, 'Valid Color', '#ff0000')
             RETURNING id
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
         .execute(&ctx.db)
         .await;
 
@@ -615,8 +647,8 @@ mod tests {
         let ctx = setup_test_db().await;
 
         // Check that system labels were created by migration
-        let system_labels = sqlx::query!(
-            "SELECT * FROM labels WHERE is_system = TRUE ORDER BY name"
+        let system_labels = sqlx::query(
+            "SELECT name FROM labels WHERE is_system = TRUE ORDER BY name"
         )
         .fetch_all(&ctx.db)
         .await
@@ -624,15 +656,17 @@ mod tests {
 
         // Verify expected system labels exist
         let expected_labels = vec![
-            "Archive", "Financial", "Important", "Legal", 
-            "Medical", "Personal", "Receipt", "Work"
+            "Important", "To Review", "Archive", "Work", "Personal"
         ];
 
         assert!(system_labels.len() >= expected_labels.len());
 
         for expected_label in expected_labels {
             assert!(
-                system_labels.iter().any(|label| label.name == expected_label),
+                system_labels.iter().any(|label| {
+                    let name: String = label.get("name");
+                    name == expected_label
+                }),
                 "System label '{}' not found",
                 expected_label
             );
@@ -645,7 +679,7 @@ mod tests {
 
         // Create document and label
         let document_id = Uuid::new_v4();
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO documents (
                 id, user_id, filename, original_filename, file_path, 
@@ -653,54 +687,53 @@ mod tests {
             )
             VALUES ($1, $2, 'test.txt', 'test.txt', '/test/test.txt', 1024, 'text/plain', NOW(), NOW())
             "#,
-            document_id,
-            ctx.user_id
         )
+        .bind(document_id)
+        .bind(ctx.user_id)
         .execute(&ctx.db)
         .await
         .expect("Failed to create test document");
 
-        let label_id = sqlx::query!(
+        let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, color)
             VALUES ($1, 'Test Label', '#ff0000')
             RETURNING id
             "#,
-            ctx.user_id
         )
+        .bind(ctx.user_id)
         .fetch_one(&ctx.db)
         .await
-        .unwrap()
-        .id;
+        .unwrap();
 
         // Assign label to document
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO document_labels (document_id, label_id, assigned_by)
             VALUES ($1, $2, $3)
             "#,
-            document_id,
-            label_id,
-            ctx.user_id
         )
+        .bind(document_id)
+        .bind(label_id)
+        .bind(ctx.user_id)
         .execute(&ctx.db)
         .await
         .expect("Failed to assign label");
 
         // Delete document
-        sqlx::query!(
-            "DELETE FROM documents WHERE id = $1",
-            document_id
+        sqlx::query(
+            "DELETE FROM documents WHERE id = $1"
         )
+        .bind(document_id)
         .execute(&ctx.db)
         .await
         .expect("Failed to delete document");
 
         // Verify document_labels entry was cascade deleted
-        let assignments = sqlx::query!(
-            "SELECT * FROM document_labels WHERE document_id = $1",
-            document_id
+        let assignments = sqlx::query(
+            "SELECT document_id FROM document_labels WHERE document_id = $1"
         )
+        .bind(document_id)
         .fetch_all(&ctx.db)
         .await
         .expect("Query failed");
@@ -708,10 +741,10 @@ mod tests {
         assert!(assignments.is_empty());
 
         // Verify label still exists
-        let label = sqlx::query!(
-            "SELECT * FROM labels WHERE id = $1",
-            label_id
+        let label = sqlx::query(
+            "SELECT id FROM labels WHERE id = $1"
         )
+        .bind(label_id)
         .fetch_one(&ctx.db)
         .await;
 
