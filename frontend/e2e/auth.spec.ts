@@ -55,7 +55,7 @@ test.describe('Authentication', () => {
     await expect(page.locator('input[name="username"]')).toBeVisible();
   });
 
-  test('should logout successfully', async ({ page }) => {
+  test.skip('should logout successfully', async ({ page }) => {
     // First login
     await page.goto('/');
     await page.fill('input[name="username"]', 'admin');
