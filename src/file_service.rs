@@ -429,4 +429,73 @@ impl FileService {
     pub async fn get_or_generate_thumbnail(&self, _file_path: &str, _filename: &str) -> Result<Vec<u8>> {
         anyhow::bail!("Thumbnail generation requires OCR feature")
     }
+
+    pub async fn delete_document_files(&self, document: &Document) -> Result<()> {
+        let mut deleted_files = Vec::new();
+        let mut errors = Vec::new();
+
+        // Delete main document file
+        let main_file = Path::new(&document.file_path);
+        if main_file.exists() {
+            match fs::remove_file(&main_file).await {
+                Ok(_) => {
+                    deleted_files.push(main_file.to_string_lossy().to_string());
+                    info!("Deleted document file: {}", document.file_path);
+                }
+                Err(e) => {
+                    errors.push(format!("Failed to delete document file {}: {}", document.file_path, e));
+                    warn!("Failed to delete document file {}: {}", document.file_path, e);
+                }
+            }
+        }
+
+        // Delete thumbnail if it exists
+        let thumbnail_filename = format!("{}_thumb.jpg", document.id);
+        let thumbnail_path = self.get_thumbnails_path().join(&thumbnail_filename);
+        if thumbnail_path.exists() {
+            match fs::remove_file(&thumbnail_path).await {
+                Ok(_) => {
+                    deleted_files.push(thumbnail_path.to_string_lossy().to_string());
+                    info!("Deleted thumbnail: {}", thumbnail_path.display());
+                }
+                Err(e) => {
+                    errors.push(format!("Failed to delete thumbnail {}: {}", thumbnail_path.display(), e));
+                    warn!("Failed to delete thumbnail {}: {}", thumbnail_path.display(), e);
+                }
+            }
+        }
+
+        // Delete processed image if it exists
+        let processed_image_filename = format!("{}_processed.png", document.id);
+        let processed_image_path = self.get_processed_images_path().join(&processed_image_filename);
+        if processed_image_path.exists() {
+            match fs::remove_file(&processed_image_path).await {
+                Ok(_) => {
+                    deleted_files.push(processed_image_path.to_string_lossy().to_string());
+                    info!("Deleted processed image: {}", processed_image_path.display());
+                }
+                Err(e) => {
+                    errors.push(format!("Failed to delete processed image {}: {}", processed_image_path.display(), e));
+                    warn!("Failed to delete processed image {}: {}", processed_image_path.display(), e);
+                }
+            }
+        }
+
+        if !errors.is_empty() {
+            // Log all deletion results
+            if !deleted_files.is_empty() {
+                info!("Successfully deleted {} files for document {}", deleted_files.len(), document.id);
+            }
+            error!("Failed to delete some files for document {}: {}", document.id, errors.join("; "));
+            return Err(anyhow::anyhow!("Partial file deletion failure: {}", errors.join("; ")));
+        }
+
+        if deleted_files.is_empty() {
+            warn!("No files found to delete for document {}", document.id);
+        } else {
+            info!("Successfully deleted all {} files for document {}", deleted_files.len(), document.id);
+        }
+
+        Ok(())
+    }
 }

@@ -29,6 +29,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Checkbox,
+  Fab,
+  Tooltip,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -49,6 +52,11 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   Edit as EditIcon,
+  Delete as DeleteIcon,
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
+  CheckBox as CheckBoxIcon,
+  SelectAll as SelectAllIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { documentService } from '../services/api';
 import DocumentThumbnail from '../components/DocumentThumbnail';
@@ -110,6 +118,17 @@ const DocumentsPage: React.FC = () => {
   const [sortMenuAnchor, setSortMenuAnchor] = useState<null | HTMLElement>(null);
   const [docMenuAnchor, setDocMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
+
+  // Mass selection state
+  const [selectionMode, setSelectionMode] = useState<boolean>(false);
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set());
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState<boolean>(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState<boolean>(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -281,6 +300,37 @@ const DocumentsPage: React.FC = () => {
     handleSortMenuClose();
   };
 
+  const handleDeleteClick = (doc: Document): void => {
+    setDocumentToDelete(doc);
+    setDeleteDialogOpen(true);
+    handleDocMenuClose();
+  };
+
+  const handleDeleteConfirm = async (): Promise<void> => {
+    if (!documentToDelete) return;
+
+    try {
+      setDeleteLoading(true);
+      await documentService.delete(documentToDelete.id);
+      
+      setDocuments(prev => prev.filter(doc => doc.id !== documentToDelete.id));
+      setPagination(prev => ({ ...prev, total: prev.total - 1 }));
+      
+      setDeleteDialogOpen(false);
+      setDocumentToDelete(null);
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      setError('Failed to delete document');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleDeleteCancel = (): void => {
+    setDeleteDialogOpen(false);
+    setDocumentToDelete(null);
+  };
+
   const handlePageChange = (event: React.ChangeEvent<unknown>, page: number): void => {
     const newOffset = (page - 1) * pagination.limit;
     setPagination(prev => ({ ...prev, offset: newOffset }));
@@ -289,6 +339,61 @@ const DocumentsPage: React.FC = () => {
   const handleOcrFilterChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     setOcrFilter(event.target.value);
     setPagination(prev => ({ ...prev, offset: 0 })); // Reset to first page when filtering
+  };
+
+  // Mass selection handlers
+  const handleToggleSelectionMode = (): void => {
+    setSelectionMode(!selectionMode);
+    setSelectedDocuments(new Set());
+  };
+
+  const handleDocumentSelect = (documentId: string, isSelected: boolean): void => {
+    const newSelection = new Set(selectedDocuments);
+    if (isSelected) {
+      newSelection.add(documentId);
+    } else {
+      newSelection.delete(documentId);
+    }
+    setSelectedDocuments(newSelection);
+  };
+
+  const handleSelectAll = (): void => {
+    if (selectedDocuments.size === sortedDocuments.length) {
+      setSelectedDocuments(new Set());
+    } else {
+      setSelectedDocuments(new Set(sortedDocuments.map(doc => doc.id)));
+    }
+  };
+
+  const handleBulkDelete = (): void => {
+    if (selectedDocuments.size === 0) return;
+    setBulkDeleteDialogOpen(true);
+  };
+
+  const handleBulkDeleteConfirm = async (): Promise<void> => {
+    if (selectedDocuments.size === 0) return;
+
+    try {
+      setBulkDeleteLoading(true);
+      const documentIds = Array.from(selectedDocuments);
+      await documentService.bulkDelete(documentIds);
+      
+      setDocuments(prev => prev.filter(doc => !selectedDocuments.has(doc.id)));
+      setPagination(prev => ({ ...prev, total: prev.total - selectedDocuments.size }));
+      
+      setSelectedDocuments(new Set());
+      setSelectionMode(false);
+      setBulkDeleteDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to delete documents:', error);
+      setError('Failed to delete selected documents');
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
+  const handleBulkDeleteCancel = (): void => {
+    setBulkDeleteDialogOpen(false);
   };
 
   const getOcrStatusChip = (doc: Document) => {
@@ -392,6 +497,17 @@ const DocumentsPage: React.FC = () => {
           </ToggleButton>
         </ToggleButtonGroup>
 
+        {/* Selection Mode Toggle */}
+        <Button
+          variant={selectionMode ? "contained" : "outlined"}
+          startIcon={selectionMode ? <CloseIcon /> : <CheckBoxOutlineBlankIcon />}
+          onClick={handleToggleSelectionMode}
+          size="small"
+          color={selectionMode ? "secondary" : "primary"}
+        >
+          {selectionMode ? 'Cancel' : 'Select'}
+        </Button>
+
         {/* OCR Filter */}
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel>OCR Status</InputLabel>
@@ -418,6 +534,43 @@ const DocumentsPage: React.FC = () => {
           Sort
         </Button>
       </Box>
+
+      {/* Selection Toolbar */}
+      {selectionMode && (
+        <Box sx={{ 
+          mb: 2, 
+          p: 2, 
+          bgcolor: 'primary.light',
+          borderRadius: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          color: 'primary.contrastText'
+        }}>
+          <Typography variant="body2" sx={{ flexGrow: 1 }}>
+            {selectedDocuments.size} of {sortedDocuments.length} documents selected
+          </Typography>
+          <Button
+            variant="text"
+            startIcon={selectedDocuments.size === sortedDocuments.length ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
+            onClick={handleSelectAll}
+            size="small"
+            sx={{ color: 'primary.contrastText' }}
+          >
+            {selectedDocuments.size === sortedDocuments.length ? 'Deselect All' : 'Select All'}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<DeleteIcon />}
+            onClick={handleBulkDelete}
+            disabled={selectedDocuments.size === 0}
+            size="small"
+            color="error"
+          >
+            Delete Selected ({selectedDocuments.size})
+          </Button>
+        </Box>
+      )}
 
       {/* Sort Menu */}
       <Menu
@@ -478,6 +631,13 @@ const DocumentsPage: React.FC = () => {
           <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Edit Labels</ListItemText>
         </MenuItem>
+        <Divider />
+        <MenuItem onClick={() => { 
+          if (selectedDoc) handleDeleteClick(selectedDoc); 
+        }}>
+          <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText>Delete</ListItemText>
+        </MenuItem>
       </Menu>
 
       {/* Documents Grid/List */}
@@ -517,13 +677,50 @@ const DocumentsPage: React.FC = () => {
                   flexDirection: viewMode === 'list' ? 'row' : 'column',
                   transition: 'all 0.2s ease-in-out',
                   cursor: 'pointer',
+                  position: 'relative',
                   '&:hover': {
                     transform: 'translateY(-4px)',
                     boxShadow: (theme) => theme.shadows[4],
                   },
+                  ...(selectionMode && selectedDocuments.has(doc.id) && {
+                    boxShadow: (theme) => `0 0 0 2px ${theme.palette.primary.main}`,
+                    bgcolor: 'primary.light',
+                  }),
                 }}
-                onClick={() => navigate(`/documents/${doc.id}`)}
+                onClick={(e) => {
+                  if (selectionMode) {
+                    e.stopPropagation();
+                    handleDocumentSelect(doc.id, !selectedDocuments.has(doc.id));
+                  } else {
+                    navigate(`/documents/${doc.id}`);
+                  }
+                }}
               >
+                {/* Selection checkbox */}
+                {selectionMode && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      zIndex: 1,
+                      bgcolor: 'background.paper',
+                      borderRadius: '50%',
+                      boxShadow: 1,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDocumentSelect(doc.id, !selectedDocuments.has(doc.id));
+                    }}
+                  >
+                    <Checkbox
+                      checked={selectedDocuments.has(doc.id)}
+                      size="small"
+                      color="primary"
+                    />
+                  </Box>
+                )}
+
                 {viewMode === 'grid' && (
                   <Box
                     sx={{
@@ -628,15 +825,17 @@ const DocumentsPage: React.FC = () => {
                       </Typography>
                     </Box>
                     
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDocMenuClick(e, doc);
-                      }}
-                    >
-                      <MoreIcon />
-                    </IconButton>
+                    {!selectionMode && (
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDocMenuClick(e, doc);
+                        }}
+                      >
+                        <MoreIcon />
+                      </IconButton>
+                    )}
                   </Box>
                 </CardContent>
                 
@@ -680,6 +879,80 @@ const DocumentsPage: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setLabelEditDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleSaveDocumentLabels} variant="contained">Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel} maxWidth="sm">
+        <DialogTitle>Delete Document</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete "{documentToDelete?.original_filename}"?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This action cannot be undone. The document file and all associated data will be permanently removed.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={deleteLoading}
+            startIcon={deleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteDialogOpen} onClose={handleBulkDeleteCancel} maxWidth="sm">
+        <DialogTitle>Delete Multiple Documents</DialogTitle>
+        <DialogContent>
+          <Typography gutterBottom>
+            Are you sure you want to delete {selectedDocuments.size} selected document{selectedDocuments.size !== 1 ? 's' : ''}?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This action cannot be undone. All selected documents and their associated data will be permanently removed.
+          </Typography>
+          {selectedDocuments.size > 0 && (
+            <Box sx={{ mt: 2, maxHeight: 200, overflow: 'auto' }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Documents to be deleted:
+              </Typography>
+              {Array.from(selectedDocuments).slice(0, 10).map(docId => {
+                const doc = documents.find(d => d.id === docId);
+                return doc ? (
+                  <Typography key={docId} variant="body2" sx={{ pl: 1 }}>
+                    • {doc.original_filename}
+                  </Typography>
+                ) : null;
+              })}
+              {selectedDocuments.size > 10 && (
+                <Typography variant="body2" sx={{ pl: 1, fontStyle: 'italic' }}>
+                  ... and {selectedDocuments.size - 10} more
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleBulkDeleteCancel} disabled={bulkDeleteLoading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleBulkDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={bulkDeleteLoading}
+            startIcon={bulkDeleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
+          >
+            {bulkDeleteLoading ? 'Deleting...' : `Delete ${selectedDocuments.size} Document${selectedDocuments.size !== 1 ? 's' : ''}`}
+          </Button>
         </DialogActions>
       </Dialog>
 

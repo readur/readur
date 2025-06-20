@@ -209,6 +209,16 @@ export const documentService = {
   getFacets: () => {
     return api.get<SearchFacetsResponse>('/search/facets')
   },
+
+  delete: (id: string) => {
+    return api.delete(`/documents/${id}`)
+  },
+
+  bulkDelete: (documentIds: string[]) => {
+    return api.delete('/documents', {
+      data: { document_ids: documentIds }
+    })
+  },
 }
 
 export interface OcrStatusResponse {
