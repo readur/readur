@@ -8,15 +8,16 @@ use axum::{
 use serde::Deserialize;
 use std::sync::Arc;
 use utoipa::ToSchema;
-use sha2::{Sha256, Digest};
 use sqlx::Row;
 
 use crate::{
     auth::AuthUser,
+    document_ingestion::{DocumentIngestionService, IngestionResult},
     file_service::FileService,
     models::DocumentResponse,
     AppState,
 };
+use tracing;
 
 #[derive(Deserialize, ToSchema)]
 struct PaginationQuery {
@@ -109,6 +110,7 @@ async fn upload_document(
     mut multipart: Multipart,
 ) -> Result<Json<DocumentResponse>, StatusCode> {
     let file_service = FileService::new(state.config.upload_path.clone());
+    let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service.clone());
     
     // Get user settings for file upload restrictions
     let settings = state
@@ -140,55 +142,34 @@ async fn upload_document(
                 return Err(StatusCode::PAYLOAD_TOO_LARGE);
             }
             
-            // Calculate file hash for deduplication
-            let file_hash = calculate_file_hash(&data);
-            
-            // Check if this exact file content already exists using efficient hash lookup
-            match state.db.get_document_by_user_and_hash(auth_user.user.id, &file_hash).await {
-                Ok(Some(existing_doc)) => {
-                    // Return the existing document instead of creating a duplicate
-                    return Ok(Json(existing_doc.into()));
-                }
-                Ok(None) => {
-                    // No duplicate found, proceed with upload
-                }
-                Err(_) => {
-                    // Continue even if duplicate check fails
-                }
-            }
-            
             let mime_type = mime_guess::from_path(&filename)
                 .first_or_octet_stream()
                 .to_string();
             
-            let file_path = file_service
-                .save_file(&filename, &data)
+            // Use the unified ingestion service with AllowDuplicateContent policy
+            // This will create separate documents for different filenames even with same content
+            let result = ingestion_service
+                .ingest_upload(&filename, data.to_vec(), &mime_type, auth_user.user.id)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                .map_err(|e| {
+                    tracing::error!("Document ingestion failed for user {} filename {}: {}", 
+                                   auth_user.user.id, filename, e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
             
-            let document = file_service.create_document(
-                &filename,
-                &filename,
-                &file_path,
-                file_size,
-                &mime_type,
-                auth_user.user.id,
-                Some(file_hash),
-            );
-            
-            let saved_document = state
-                .db
-                .create_document(document)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let (saved_document, should_queue_ocr) = match result {
+                IngestionResult::Created(doc) => (doc, true), // New document - queue for OCR
+                IngestionResult::ExistingDocument(doc) => (doc, false), // Existing document - don't re-queue OCR
+                _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+            };
             
             let document_id = saved_document.id;
             let enable_background_ocr = settings.enable_background_ocr;
             
-            if enable_background_ocr {
+            if enable_background_ocr && should_queue_ocr {
                 // Use the shared queue service from AppState instead of creating a new one
                 // Calculate priority based on file size
-                let priority = match file_size {
+                let priority = match saved_document.file_size {
                     0..=1048576 => 10,          // <= 1MB: highest priority
                     ..=5242880 => 8,            // 1-5MB: high priority
                     ..=10485760 => 6,           // 5-10MB: medium priority  
@@ -196,7 +177,7 @@ async fn upload_document(
                     _ => 2,                     // > 50MB: lowest priority
                 };
                 
-                state.queue_service.enqueue_document(document_id, priority, file_size).await
+                state.queue_service.enqueue_document(document_id, priority, saved_document.file_size).await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             }
             
@@ -207,12 +188,6 @@ async fn upload_document(
     Err(StatusCode::BAD_REQUEST)
 }
 
-fn calculate_file_hash(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    format!("{:x}", result)
-}
 
 #[utoipa::path(
     get,

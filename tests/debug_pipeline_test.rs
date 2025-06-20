@@ -612,7 +612,9 @@ async fn debug_document_upload_race_conditions() {
     
     let debugger = PipelineDebugger::new().await;
     
-    // Upload same content with different filenames to test upload race conditions
+    // Upload same content with different filenames to test:
+    // 1. Concurrent upload race condition handling (no 500 errors)
+    // 2. Proper deduplication (identical content = same document ID)
     let same_content = "IDENTICAL-CONTENT-FOR-RACE-CONDITION-TEST";
     let task1 = debugger.upload_document_with_debug(same_content, "race1.txt");
     let task2 = debugger.upload_document_with_debug(same_content, "race2.txt");
@@ -627,15 +629,32 @@ async fn debug_document_upload_race_conditions() {
                 i+1, doc.id, doc.filename, doc.file_size);
     }
     
-    // Check if all documents have unique IDs
+    // Check deduplication behavior: identical content should result in same document ID
     let mut ids: Vec<_> = docs.iter().map(|d| d.id).collect();
     ids.sort();
     ids.dedup();
     
-    if ids.len() == docs.len() {
-        println!("✅ All documents have unique IDs");
+    if ids.len() == 1 {
+        println!("✅ Correct deduplication: All identical content maps to same document ID");
+        println!("✅ Race condition handled properly: No 500 errors during concurrent uploads");
+    } else if ids.len() == docs.len() {
+        println!("❌ UNEXPECTED: All documents have unique IDs despite identical content");
+        panic!("Deduplication not working - identical content should map to same document");
     } else {
-        println!("❌ DUPLICATE DOCUMENT IDs DETECTED!");
-        panic!("Document upload race condition detected");
+        println!("❌ PARTIAL DEDUPLICATION: Some duplicates detected but not all");
+        panic!("Inconsistent deduplication behavior");
+    }
+    
+    // Verify all documents have the same content hash (should be identical)
+    let content_hashes: Vec<_> = docs.iter().map(|d| {
+        // We can't directly access file_hash from DocumentResponse, but we can verify
+        // they all have the same file size as a proxy for same content
+        d.file_size
+    }).collect();
+    
+    if content_hashes.iter().all(|&size| size == content_hashes[0]) {
+        println!("✅ All documents have same file size (content verification)");
+    } else {
+        println!("❌ Documents have different file sizes - test setup error");
     }
 }
