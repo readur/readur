@@ -3,6 +3,7 @@ use sqlx::{Row, QueryBuilder};
 use uuid::Uuid;
 
 use crate::models::{Document, SearchRequest, SearchMode, SearchSnippet, HighlightRange, EnhancedDocumentResponse};
+use crate::routes::labels::Label;
 use super::Database;
 
 impl Database {
@@ -1291,5 +1292,221 @@ impl Database {
         };
 
         Ok((duplicates, total))
+    }
+
+    pub async fn get_document_labels(&self, document_id: Uuid) -> Result<Vec<Label>> {
+        let labels = sqlx::query_as::<_, Label>(
+            r#"
+            SELECT 
+                l.id, l.user_id, l.name, l.description, l.color, 
+                l.background_color, l.icon, l.is_system, l.created_at, l.updated_at,
+                0::bigint as document_count, 0::bigint as source_count
+            FROM labels l
+            INNER JOIN document_labels dl ON l.id = dl.label_id
+            WHERE dl.document_id = $1
+            ORDER BY l.name
+            "#
+        )
+        .bind(document_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(labels)
+    }
+
+    pub async fn get_labels_for_documents(&self, document_ids: &[Uuid]) -> Result<std::collections::HashMap<Uuid, Vec<Label>>> {
+        if document_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let rows = sqlx::query(
+            r#"
+            SELECT 
+                dl.document_id,
+                l.id, l.user_id, l.name, l.description, l.color, 
+                l.background_color, l.icon, l.is_system, l.created_at, l.updated_at
+            FROM labels l
+            INNER JOIN document_labels dl ON l.id = dl.label_id
+            WHERE dl.document_id = ANY($1)
+            ORDER BY dl.document_id, l.name
+            "#
+        )
+        .bind(document_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut labels_map: std::collections::HashMap<Uuid, Vec<Label>> = std::collections::HashMap::new();
+        
+        for row in rows {
+            let document_id: Uuid = row.get("document_id");
+            let label = Label {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                name: row.get("name"),
+                description: row.get("description"),
+                color: row.get("color"),
+                background_color: row.get("background_color"),
+                icon: row.get("icon"),
+                is_system: row.get("is_system"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                document_count: 0,
+                source_count: 0,
+            };
+            
+            labels_map.entry(document_id).or_insert_with(Vec::new).push(label);
+        }
+
+        Ok(labels_map)
+    }
+
+    pub async fn delete_document(&self, document_id: Uuid, user_id: Uuid, user_role: crate::models::UserRole) -> Result<Option<Document>> {
+        let document = if user_role == crate::models::UserRole::Admin {
+            let row = sqlx::query(
+                r#"
+                DELETE FROM documents 
+                WHERE id = $1
+                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                "#,
+            )
+            .bind(document_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            row.map(|r| Document {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                original_filename: r.get("original_filename"),
+                file_path: r.get("file_path"),
+                file_size: r.get("file_size"),
+                mime_type: r.get("mime_type"),
+                content: r.get("content"),
+                ocr_text: r.get("ocr_text"),
+                ocr_confidence: r.get("ocr_confidence"),
+                ocr_word_count: r.get("ocr_word_count"),
+                ocr_processing_time_ms: r.get("ocr_processing_time_ms"),
+                ocr_status: r.get("ocr_status"),
+                ocr_error: r.get("ocr_error"),
+                ocr_completed_at: r.get("ocr_completed_at"),
+                tags: r.get("tags"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+                user_id: r.get("user_id"),
+                file_hash: r.get("file_hash"),
+            })
+        } else {
+            let row = sqlx::query(
+                r#"
+                DELETE FROM documents 
+                WHERE id = $1 AND user_id = $2
+                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                "#,
+            )
+            .bind(document_id)
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            row.map(|r| Document {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                original_filename: r.get("original_filename"),
+                file_path: r.get("file_path"),
+                file_size: r.get("file_size"),
+                mime_type: r.get("mime_type"),
+                content: r.get("content"),
+                ocr_text: r.get("ocr_text"),
+                ocr_confidence: r.get("ocr_confidence"),
+                ocr_word_count: r.get("ocr_word_count"),
+                ocr_processing_time_ms: r.get("ocr_processing_time_ms"),
+                ocr_status: r.get("ocr_status"),
+                ocr_error: r.get("ocr_error"),
+                ocr_completed_at: r.get("ocr_completed_at"),
+                tags: r.get("tags"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+                user_id: r.get("user_id"),
+                file_hash: r.get("file_hash"),
+            })
+        };
+
+        Ok(document)
+    }
+
+    pub async fn bulk_delete_documents(&self, document_ids: &[uuid::Uuid], user_id: uuid::Uuid, user_role: crate::models::UserRole) -> Result<Vec<Document>> {
+        if document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let deleted_documents = if user_role == crate::models::UserRole::Admin {
+            let rows = sqlx::query(
+                r#"
+                DELETE FROM documents 
+                WHERE id = ANY($1)
+                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                "#,
+            )
+            .bind(document_ids)
+            .fetch_all(&self.pool)
+            .await?;
+
+            rows.into_iter().map(|r| Document {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                original_filename: r.get("original_filename"),
+                file_path: r.get("file_path"),
+                file_size: r.get("file_size"),
+                mime_type: r.get("mime_type"),
+                content: r.get("content"),
+                ocr_text: r.get("ocr_text"),
+                ocr_confidence: r.get("ocr_confidence"),
+                ocr_word_count: r.get("ocr_word_count"),
+                ocr_processing_time_ms: r.get("ocr_processing_time_ms"),
+                ocr_status: r.get("ocr_status"),
+                ocr_error: r.get("ocr_error"),
+                ocr_completed_at: r.get("ocr_completed_at"),
+                tags: r.get("tags"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+                user_id: r.get("user_id"),
+                file_hash: r.get("file_hash"),
+            }).collect()
+        } else {
+            let rows = sqlx::query(
+                r#"
+                DELETE FROM documents 
+                WHERE id = ANY($1) AND user_id = $2
+                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                "#,
+            )
+            .bind(document_ids)
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+            rows.into_iter().map(|r| Document {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                original_filename: r.get("original_filename"),
+                file_path: r.get("file_path"),
+                file_size: r.get("file_size"),
+                mime_type: r.get("mime_type"),
+                content: r.get("content"),
+                ocr_text: r.get("ocr_text"),
+                ocr_confidence: r.get("ocr_confidence"),
+                ocr_word_count: r.get("ocr_word_count"),
+                ocr_processing_time_ms: r.get("ocr_processing_time_ms"),
+                ocr_status: r.get("ocr_status"),
+                ocr_error: r.get("ocr_error"),
+                ocr_completed_at: r.get("ocr_completed_at"),
+                tags: r.get("tags"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+                user_id: r.get("user_id"),
+                file_hash: r.get("file_hash"),
+            }).collect()
+        };
+
+        Ok(deleted_documents)
     }
 }

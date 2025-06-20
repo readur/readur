@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -17,6 +17,7 @@ import {
   Paper,
   alpha,
   useTheme,
+  Divider,
 } from '@mui/material';
 import {
   CloudUpload as UploadIcon,
@@ -29,6 +30,8 @@ import {
 import { useDropzone, FileRejection, DropzoneOptions } from 'react-dropzone';
 import api from '../../services/api';
 import { useNotifications } from '../../contexts/NotificationContext';
+import LabelSelector from '../Labels/LabelSelector';
+import { type LabelData } from '../Labels/Label';
 
 interface UploadedDocument {
   id: string;
@@ -59,6 +62,42 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [selectedLabels, setSelectedLabels] = useState<LabelData[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
+  const [labelsLoading, setLabelsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetchLabels();
+  }, []);
+
+  const fetchLabels = async () => {
+    try {
+      setLabelsLoading(true);
+      const response = await api.get('/labels?include_counts=false');
+      
+      if (response.status === 200 && Array.isArray(response.data)) {
+        setAvailableLabels(response.data);
+      } else {
+        console.error('Failed to fetch labels:', response);
+      }
+    } catch (error) {
+      console.error('Failed to fetch labels:', error);
+    } finally {
+      setLabelsLoading(false);
+    }
+  };
+
+  const handleCreateLabel = async (labelData: Omit<LabelData, 'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'>) => {
+    try {
+      const response = await api.post('/labels', labelData);
+      const newLabel = response.data;
+      setAvailableLabels(prev => [...prev, newLabel]);
+      return newLabel;
+    } catch (error) {
+      console.error('Failed to create label:', error);
+      throw error;
+    }
+  };
 
   const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
     setError('');
@@ -105,6 +144,12 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const uploadFile = async (fileItem: FileItem): Promise<void> => {
     const formData = new FormData();
     formData.append('file', fileItem.file);
+    
+    // Add selected labels to the form data
+    if (selectedLabels.length > 0) {
+      const labelIds = selectedLabels.map(label => label.id);
+      formData.append('label_ids', JSON.stringify(labelIds));
+    }
 
     try {
       setFiles(prev => prev.map(f => 
@@ -292,6 +337,32 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
           {error}
         </Alert>
       )}
+
+      {/* Label Selection */}
+      <Card elevation={0} sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            📋 Label Assignment
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select labels to automatically assign to all uploaded documents
+          </Typography>
+          <LabelSelector
+            selectedLabels={selectedLabels}
+            availableLabels={availableLabels}
+            onLabelsChange={setSelectedLabels}
+            onCreateLabel={handleCreateLabel}
+            placeholder="Choose labels for your documents..."
+            size="medium"
+            disabled={labelsLoading}
+          />
+          {selectedLabels.length > 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              These labels will be applied to all uploaded documents
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
 
       {/* File List */}
       {files.length > 0 && (

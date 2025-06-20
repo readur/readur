@@ -142,8 +142,7 @@ impl DocumentTransactionManager {
         let mut tx = self.pool.begin().await?;
 
         // 1. Find and lock next available job
-        let job = sqlx::query_as!(
-            OcrJob,
+        let job = sqlx::query_as::<_, OcrJob>(
             r#"
             UPDATE ocr_queue
             SET status = 'processing',
@@ -171,9 +170,9 @@ impl DocumentTransactionManager {
                 started_at,
                 completed_at,
                 error_message
-            "#,
-            worker_id
+            "#
         )
+        .bind(worker_id)
         .fetch_optional(&mut *tx)
         .await?;
 

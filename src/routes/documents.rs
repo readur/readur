@@ -2,10 +2,10 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     http::{StatusCode, header::CONTENT_TYPE},
     response::{Json, Response},
-    routing::{get, post},
+    routing::{get, post, delete},
     Router,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
 use sqlx::Row;
@@ -26,11 +26,18 @@ struct PaginationQuery {
     ocr_status: Option<String>,
 }
 
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct BulkDeleteRequest {
+    pub document_ids: Vec<uuid::Uuid>,
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", post(upload_document))
         .route("/", get(list_documents))
+        .route("/", delete(bulk_delete_documents))
         .route("/{id}", get(get_document_by_id))
+        .route("/{id}", delete(delete_document))
         .route("/{id}/download", get(download_document))
         .route("/{id}/view", get(view_document))
         .route("/{id}/thumbnail", get(get_document_thumbnail))
@@ -70,6 +77,13 @@ async fn get_document_by_id(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     
+    // Get labels for this document
+    let labels = state
+        .db
+        .get_document_labels(document_id)
+        .await
+        .unwrap_or_else(|_| Vec::new());
+    
     // Convert to DocumentResponse
     let response = DocumentResponse {
         id: document.id,
@@ -80,6 +94,7 @@ async fn get_document_by_id(
         created_at: document.created_at,
         has_ocr_text: document.ocr_text.is_some(),
         tags: document.tags,
+        labels,
         ocr_confidence: document.ocr_confidence,
         ocr_word_count: document.ocr_word_count,
         ocr_processing_time_ms: document.ocr_processing_time_ms,
@@ -120,21 +135,37 @@ async fn upload_document(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .unwrap_or_else(|| crate::models::Settings::default());
     
+    let mut label_ids: Option<Vec<uuid::Uuid>> = None;
+    
+    // First pass: collect all multipart fields
     while let Some(field) = multipart.next_field().await.map_err(|_| StatusCode::BAD_REQUEST)? {
         let name = field.name().unwrap_or("").to_string();
         
-        if name == "file" {
+        tracing::info!("Processing multipart field: {}", name);
+        
+        if name == "label_ids" {
+            let label_ids_text = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            tracing::info!("Received label_ids field: {}", label_ids_text);
+            
+            match serde_json::from_str::<Vec<uuid::Uuid>>(&label_ids_text) {
+                Ok(ids) => {
+                    tracing::info!("Successfully parsed {} label IDs: {:?}", ids.len(), ids);
+                    label_ids = Some(ids);
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to parse label_ids from upload: {} - Error: {}", label_ids_text, e);
+                }
+            }
+        } else if name == "file" {
             let filename = field
                 .file_name()
                 .ok_or(StatusCode::BAD_REQUEST)?
                 .to_string();
             
-            if !file_service.is_allowed_file_type(&filename, &settings.allowed_file_types) {
-                return Err(StatusCode::BAD_REQUEST);
-            }
-            
             let data = field.bytes().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            let data_len = data.len();
             let file_size = data.len() as i64;
+            tracing::info!("Received file: {}, size: {} bytes", filename, data_len);
             
             // Check file size limit
             let max_size_bytes = (settings.max_file_size_mb as i64) * 1024 * 1024;
@@ -185,6 +216,9 @@ async fn upload_document(
         }
     }
     
+    // This should not be reached as file processing is handled above
+    // If we get here, no file was provided
+    
     Err(StatusCode::BAD_REQUEST)
 }
 
@@ -233,7 +267,19 @@ async fn list_documents(
         )
     ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
-    let documents_response: Vec<DocumentResponse> = documents.into_iter().map(|doc| doc.into()).collect();
+    // Get labels for all documents efficiently
+    let document_ids: Vec<uuid::Uuid> = documents.iter().map(|doc| doc.id).collect();
+    let labels_map = state
+        .db
+        .get_labels_for_documents(&document_ids)
+        .await
+        .unwrap_or_else(|_| std::collections::HashMap::new());
+    
+    let documents_response: Vec<DocumentResponse> = documents.into_iter().map(|doc| {
+        let mut response: DocumentResponse = doc.into();
+        response.labels = labels_map.get(&response.id).cloned().unwrap_or_else(Vec::new);
+        response
+    }).collect();
     
     let response = serde_json::json!({
         "documents": documents_response,
@@ -831,4 +877,113 @@ async fn get_user_duplicates(
     });
 
     Ok(Json(response))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/documents/{id}",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Document ID")
+    ),
+    responses(
+        (status = 200, description = "Document deleted successfully", body = String),
+        (status = 404, description = "Document not found"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+pub async fn delete_document(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Path(document_id): Path<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let deleted_document = state
+        .db
+        .delete_document(document_id, auth_user.user.id, auth_user.user.role)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let file_service = FileService::new(state.config.upload_path.clone());
+    
+    if let Err(e) = file_service.delete_document_files(&deleted_document).await {
+        tracing::warn!("Failed to delete some files for document {}: {}", document_id, e);
+    }
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": "Document deleted successfully",
+        "document_id": document_id,
+        "filename": deleted_document.filename
+    })))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/documents",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    request_body(content = BulkDeleteRequest, description = "List of document IDs to delete"),
+    responses(
+        (status = 200, description = "Documents deleted successfully", body = String),
+        (status = 400, description = "Bad request - no document IDs provided"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+pub async fn bulk_delete_documents(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(request): Json<BulkDeleteRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if request.document_ids.is_empty() {
+        return Ok(Json(serde_json::json!({
+            "success": false,
+            "message": "No document IDs provided",
+            "deleted_count": 0
+        })));
+    }
+
+    let deleted_documents = state
+        .db
+        .bulk_delete_documents(&request.document_ids, auth_user.user.id, auth_user.user.role)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let file_service = FileService::new(state.config.upload_path.clone());
+    let mut successful_file_deletions = 0;
+    let mut failed_file_deletions = 0;
+
+    for document in &deleted_documents {
+        match file_service.delete_document_files(document).await {
+            Ok(_) => successful_file_deletions += 1,
+            Err(e) => {
+                failed_file_deletions += 1;
+                tracing::warn!("Failed to delete files for document {}: {}", document.id, e);
+            }
+        }
+    }
+
+    let deleted_count = deleted_documents.len();
+    let requested_count = request.document_ids.len();
+
+    let message = if deleted_count == requested_count {
+        format!("Successfully deleted {} documents", deleted_count)
+    } else {
+        format!("Deleted {} of {} requested documents (some may not exist or belong to other users)", deleted_count, requested_count)
+    };
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": message,
+        "deleted_count": deleted_count,
+        "requested_count": requested_count,
+        "successful_file_deletions": successful_file_deletions,
+        "failed_file_deletions": failed_file_deletions,
+        "deleted_document_ids": deleted_documents.iter().map(|d| d.id).collect::<Vec<_>>()
+    })))
 }

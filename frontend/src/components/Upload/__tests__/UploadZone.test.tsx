@@ -1,66 +1,114 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UploadZone from '../UploadZone';
 import { NotificationProvider } from '../../../contexts/NotificationContext';
 
-// Mock API functions
-vi.mock('../../../services/api', () => ({
-  uploadDocument: vi.fn(),
-  getUploadProgress: vi.fn(),
+// Mock axios directly
+vi.mock('axios', () => ({
+  default: {
+    create: vi.fn(() => ({
+      get: vi.fn().mockResolvedValue({ 
+        status: 200, 
+        data: [
+          {
+            id: 'mock-label-1',
+            name: 'Test Label',
+            description: 'A test label',
+            color: '#0969da',
+            icon: undefined,
+            is_system: false,
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-01T00:00:00Z',
+            document_count: 0,
+            source_count: 0,
+          }
+        ] 
+      }),
+      post: vi.fn().mockResolvedValue({ status: 201, data: {} }),
+      put: vi.fn().mockResolvedValue({ status: 200, data: {} }),
+      delete: vi.fn().mockResolvedValue({ status: 204 }),
+    })),
+  },
 }));
 
 // Helper function to render with NotificationProvider
-const renderWithProvider = (component: React.ReactElement) => {
-  return render(
-    <NotificationProvider>
-      {component}
-    </NotificationProvider>
-  );
+const renderWithProvider = async (component: React.ReactElement) => {
+  let renderResult;
+  await act(async () => {
+    renderResult = render(
+      <NotificationProvider>
+        {component}
+      </NotificationProvider>
+    );
+  });
+  return renderResult;
 };
 
 const mockProps = {
-  onUploadSuccess: vi.fn(),
-  onUploadError: vi.fn(),
-  onUploadProgress: vi.fn(),
-  accept: '.pdf,.doc,.docx',
-  maxFiles: 5,
-  maxSize: 10 * 1024 * 1024, // 10MB
+  onUploadComplete: vi.fn(),
 };
 
 describe('UploadZone', () => {
+  let originalConsoleError: typeof console.error;
+  
   beforeEach(() => {
     vi.clearAllMocks();
+    // Suppress console.error for "Failed to fetch labels" during tests
+    originalConsoleError = console.error;
+    console.error = vi.fn().mockImplementation((message, ...args) => {
+      if (typeof message === 'string' && message.includes('Failed to fetch labels')) {
+        return; // Suppress this specific error
+      }
+      originalConsoleError(message, ...args);
+    });
   });
 
-  test('renders upload zone with default text', () => {
-    renderWithProvider(<UploadZone {...mockProps} />);
+  afterEach(() => {
+    // Restore console.error
+    console.error = originalConsoleError;
+  });
+
+  test('renders upload zone with default text', async () => {
+    await renderWithProvider(<UploadZone {...mockProps} />);
     
-    expect(screen.getByText(/drag & drop files here/i)).toBeInTheDocument();
+    // Wait for async operations to complete
+    await waitFor(() => {
+      expect(screen.getByText(/drag & drop files here/i)).toBeInTheDocument();
+    });
+    
     expect(screen.getByText(/or click to browse your computer/i)).toBeInTheDocument();
   });
 
-  test('shows accepted file types in UI', () => {
-    renderWithProvider(<UploadZone {...mockProps} />);
+  test('shows accepted file types in UI', async () => {
+    await renderWithProvider(<UploadZone {...mockProps} />);
     
-    // Check for file type chips
-    expect(screen.getByText('PDF')).toBeInTheDocument();
+    // Wait for component to load
+    await waitFor(() => {
+      expect(screen.getByText('PDF')).toBeInTheDocument();
+    });
+    
     expect(screen.getByText('Images')).toBeInTheDocument();
     expect(screen.getByText('Text')).toBeInTheDocument();
   });
 
-  test('displays max file size limit', () => {
-    renderWithProvider(<UploadZone {...mockProps} />);
+  test('displays max file size limit', async () => {
+    await renderWithProvider(<UploadZone {...mockProps} />);
     
-    expect(screen.getByText(/maximum file size/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/maximum file size/i)).toBeInTheDocument();
+    });
+    
     expect(screen.getByText(/50MB per file/i)).toBeInTheDocument();
   });
 
-  test('shows browse files button', () => {
-    renderWithProvider(<UploadZone {...mockProps} />);
+  test('shows browse files button', async () => {
+    await renderWithProvider(<UploadZone {...mockProps} />);
     
-    const browseButton = screen.getByRole('button', { name: /choose files/i });
-    expect(browseButton).toBeInTheDocument();
+    await waitFor(() => {
+      const browseButton = screen.getByRole('button', { name: /choose files/i });
+      expect(browseButton).toBeInTheDocument();
+    });
   });
 
   // DISABLED - Complex file upload simulation with API mocking issues
@@ -127,7 +175,12 @@ describe('UploadZone', () => {
 
   test('handles click to browse files', async () => {
     const user = userEvent.setup();
-    renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProvider(<UploadZone {...mockProps} />);
+    
+    await waitFor(() => {
+      const browseButton = screen.getByRole('button', { name: /choose files/i });
+      expect(browseButton).toBeInTheDocument();
+    });
     
     const browseButton = screen.getByRole('button', { name: /choose files/i });
     
@@ -138,12 +191,17 @@ describe('UploadZone', () => {
     expect(browseButton).toBeEnabled();
   });
 
-  test('renders upload zone structure correctly', () => {
-    renderWithProvider(<UploadZone {...mockProps} />);
+  test('renders upload zone structure correctly', async () => {
+    await renderWithProvider(<UploadZone {...mockProps} />);
+    
+    // Wait for component to load
+    await waitFor(() => {
+      const uploadText = screen.getByText(/drag & drop files here/i);
+      expect(uploadText).toBeInTheDocument();
+    });
     
     // Should render the main upload card structure
     const uploadText = screen.getByText(/drag & drop files here/i);
-    expect(uploadText).toBeInTheDocument();
     
     // Should be inside a card container
     const cardContainer = uploadText.closest('[class*="MuiCard-root"]');
