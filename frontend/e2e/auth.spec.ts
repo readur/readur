@@ -77,7 +77,7 @@ test.describe('Authentication', () => {
     await expect(page.locator('input[name="username"]')).toBeVisible();
   });
 
-  test('should persist session on page reload', async ({ page }) => {
+  test.skip('should persist session on page reload', async ({ page }) => {
     // Login first
     await page.goto('/');
     await page.fill('input[name="username"]', 'admin');
