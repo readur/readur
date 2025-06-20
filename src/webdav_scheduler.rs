@@ -96,7 +96,7 @@ impl WebDAVScheduler {
                             info!("Resuming interrupted WebDAV sync for user {}", user_id);
                             
                             tokio::spawn(async move {
-                                match perform_webdav_sync_with_tracking(state_clone.clone(), user_id, webdav_service, webdav_config, enable_background_ocr).await {
+                                match perform_webdav_sync_with_tracking(state_clone.clone(), user_id, webdav_service, webdav_config, enable_background_ocr, None).await {
                                     Ok(files_processed) => {
                                         info!("Resumed WebDAV sync completed for user {}: {} files processed", user_id, files_processed);
                                         
@@ -156,7 +156,7 @@ impl WebDAVScheduler {
                         let enable_background_ocr = user_settings.enable_background_ocr;
                         
                         tokio::spawn(async move {
-                            match perform_webdav_sync_with_tracking(state_clone.clone(), user_id, webdav_service, webdav_config, enable_background_ocr).await {
+                            match perform_webdav_sync_with_tracking(state_clone.clone(), user_id, webdav_service, webdav_config, enable_background_ocr, None).await {
                                 Ok(files_processed) => {
                                     info!("Background WebDAV sync completed for user {}: {} files processed", user_id, files_processed);
                                     

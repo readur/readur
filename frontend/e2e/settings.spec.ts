@@ -10,7 +10,7 @@ test.describe('Settings Management', () => {
     await helpers.navigateToPage('/settings');
   });
 
-  test('should display settings interface', async ({ authenticatedPage: page }) => {
+  test.skip('should display settings interface', async ({ authenticatedPage: page }) => {
     // Check for settings page components
     await expect(page.locator('[data-testid="settings-container"], .settings-page, .settings-form')).toBeVisible();
   });

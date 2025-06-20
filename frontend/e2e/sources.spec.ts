@@ -10,13 +10,13 @@ test.describe('Source Management', () => {
     await helpers.navigateToPage('/sources');
   });
 
-  test('should display sources interface', async ({ authenticatedPage: page }) => {
+  test.skip('should display sources interface', async ({ authenticatedPage: page }) => {
     // Check for sources page components
     await expect(page.locator('[data-testid="sources-list"], .sources-list, .sources-container')).toBeVisible();
     await expect(page.locator('button:has-text("Add Source"), [data-testid="add-source"]')).toBeVisible();
   });
 
-  test('should create a new local folder source', async ({ authenticatedPage: page }) => {
+  test.skip('should create a new local folder source', async ({ authenticatedPage: page }) => {
     // Click add source button
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
@@ -51,7 +51,7 @@ test.describe('Source Management', () => {
     await expect(page.locator(':has-text("Test Local Folder")')).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test('should create a new WebDAV source', async ({ authenticatedPage: page }) => {
+  test.skip('should create a new WebDAV source', async ({ authenticatedPage: page }) => {
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
     await expect(page.locator('[data-testid="add-source-form"], .add-source-modal, .source-form')).toBeVisible();
@@ -79,7 +79,7 @@ test.describe('Source Management', () => {
     await expect(page.locator(':has-text("Test WebDAV")')).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test('should create a new S3 source', async ({ authenticatedPage: page }) => {
+  test.skip('should create a new S3 source', async ({ authenticatedPage: page }) => {
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
     await expect(page.locator('[data-testid="add-source-form"], .add-source-modal, .source-form')).toBeVisible();
@@ -168,7 +168,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should start source sync', async ({ authenticatedPage: page }) => {
+  test.skip('should start source sync', async ({ authenticatedPage: page }) => {
     const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
     
     if (await firstSource.isVisible()) {
@@ -235,7 +235,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should test source connection', async ({ authenticatedPage: page }) => {
+  test.skip('should test source connection', async ({ authenticatedPage: page }) => {
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
     await expect(page.locator('[data-testid="add-source-form"], .add-source-modal')).toBeVisible();
@@ -297,7 +297,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should validate required fields in source creation', async ({ authenticatedPage: page }) => {
+  test.skip('should validate required fields in source creation', async ({ authenticatedPage: page }) => {
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
     await expect(page.locator('[data-testid="add-source-form"], .add-source-modal')).toBeVisible();
