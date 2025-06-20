@@ -160,7 +160,7 @@ async fn test_invalid_authentication_scenarios() {
         .await
         .expect("Request should complete");
     
-    assert_eq!(response.status(), 400);
+    assert_eq!(response.status(), 401);
     println!("✅ Empty credentials properly rejected");
     
     // Test 2: Invalid username format
