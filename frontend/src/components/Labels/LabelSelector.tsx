@@ -147,30 +147,37 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
           />
         )}
         renderTags={(tagValue, getTagProps) =>
-          tagValue.map((option, index) => (
-            <Label
-              key={option.id}
-              label={option}
-              size="small"
-              deletable={!disabled}
-              onDelete={() => {
-                const newLabels = tagValue.filter((_, i) => i !== index);
-                onLabelsChange(newLabels);
-              }}
-              {...getTagProps({ index })}
-            />
-          ))
+          tagValue.map((option, index) => {
+            const tagProps = getTagProps({ index });
+            const { key, ...restTagProps } = tagProps;
+            return (
+              <Label
+                key={option.id}
+                label={option}
+                size="small"
+                deletable={!disabled}
+                onDelete={() => {
+                  const newLabels = tagValue.filter((_, i) => i !== index);
+                  onLabelsChange(newLabels);
+                }}
+                {...restTagProps}
+              />
+            );
+          })
         }
-        renderOption={(props, option, { selected }) => (
-          <Box component="li" {...props}>
-            <Label
-              label={option}
-              size="small"
-              showCount
-              variant={selected ? 'filled' : 'outlined'}
-            />
-          </Box>
-        )}
+        renderOption={(props, option, { selected }) => {
+          const { key, ...restProps } = props;
+          return (
+            <Box component="li" key={option.id} {...restProps}>
+              <Label
+                label={option}
+                size="small"
+                showCount
+                variant={selected ? 'filled' : 'outlined'}
+              />
+            </Box>
+          );
+        }}
         renderGroup={(params) => (
           <Box key={params.key}>
             <Typography

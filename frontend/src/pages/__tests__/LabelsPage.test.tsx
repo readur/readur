@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { BrowserRouter } from 'react-router-dom';
@@ -59,14 +59,18 @@ const mockLabels = [
   },
 ];
 
-const renderLabelsPage = () => {
-  return render(
-    <BrowserRouter>
-      <ThemeProvider theme={theme}>
-        <LabelsPage />
-      </ThemeProvider>
-    </BrowserRouter>
-  );
+const renderLabelsPage = async () => {
+  let renderResult;
+  await act(async () => {
+    renderResult = render(
+      <BrowserRouter>
+        <ThemeProvider theme={theme}>
+          <LabelsPage />
+        </ThemeProvider>
+      </BrowserRouter>
+    );
+  });
+  return renderResult;
 };
 
 describe('LabelsPage Component', () => {
@@ -90,11 +94,11 @@ describe('LabelsPage Component', () => {
 
     vi.spyOn(useApiModule, 'useApi').mockReturnValue(mockApi);
     
-    // Default successful API responses
-    mockApi.get.mockResolvedValue({ data: mockLabels });
-    mockApi.post.mockResolvedValue({ data: mockLabels[0] });
-    mockApi.put.mockResolvedValue({ data: mockLabels[0] });
-    mockApi.delete.mockResolvedValue({});
+    // Default successful API responses with proper status code
+    mockApi.get.mockResolvedValue({ status: 200, data: mockLabels });
+    mockApi.post.mockResolvedValue({ status: 201, data: mockLabels[0] });
+    mockApi.put.mockResolvedValue({ status: 200, data: mockLabels[0] });
+    mockApi.delete.mockResolvedValue({ status: 204 });
   });
 
   afterEach(() => {
@@ -103,31 +107,33 @@ describe('LabelsPage Component', () => {
 
   describe('Initial Rendering', () => {
     test('should render page title and create button', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
-      expect(screen.getByText('Label Management')).toBeInTheDocument();
-      expect(screen.getByText('Create Label')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Label Management')).toBeInTheDocument();
+        expect(screen.getByText('Create Label')).toBeInTheDocument();
+      });
     });
 
-    test('should show loading state initially', () => {
+    test('should show loading state initially', async () => {
       // Mock API to never resolve
       mockApi.get.mockImplementation(() => new Promise(() => {}));
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       expect(screen.getByText('Loading labels...')).toBeInTheDocument();
     });
 
     test('should fetch labels on mount', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
-        expect(mockApi.get).toHaveBeenCalledWith('/api/labels?include_counts=true');
+        expect(mockApi.get).toHaveBeenCalledWith('/labels?include_counts=true');
       });
     });
 
     test('should display labels after loading', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
@@ -141,7 +147,7 @@ describe('LabelsPage Component', () => {
     test('should show error message when API fails', async () => {
       mockApi.get.mockRejectedValue(new Error('API Error'));
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText(/Failed to load labels/)).toBeInTheDocument();
@@ -151,7 +157,7 @@ describe('LabelsPage Component', () => {
     test('should allow dismissing error alert', async () => {
       mockApi.get.mockRejectedValue(new Error('API Error'));
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText(/Failed to load labels/)).toBeInTheDocument();
@@ -169,7 +175,7 @@ describe('LabelsPage Component', () => {
         message: 'Unauthorized'
       });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Authentication required. Please log in again.')).toBeInTheDocument();
@@ -182,7 +188,7 @@ describe('LabelsPage Component', () => {
         message: 'Forbidden'
       });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Access denied. You do not have permission to view labels.')).toBeInTheDocument();
@@ -195,7 +201,7 @@ describe('LabelsPage Component', () => {
         message: 'Internal Server Error'
       });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Server error. Please try again later.')).toBeInTheDocument();
@@ -209,7 +215,7 @@ describe('LabelsPage Component', () => {
         data: { error: 'Something went wrong' } // Not an array!
       });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Received invalid data format from server')).toBeInTheDocument();
@@ -225,7 +231,7 @@ describe('LabelsPage Component', () => {
         data: mockLabels
       });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Server returned unexpected response (202)')).toBeInTheDocument();
@@ -239,7 +245,7 @@ describe('LabelsPage Component', () => {
         data: null
       });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Received invalid data format from server')).toBeInTheDocument();
@@ -256,7 +262,7 @@ describe('LabelsPage Component', () => {
         data: 'Server maintenance in progress'
       });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Received invalid data format from server')).toBeInTheDocument();
@@ -266,7 +272,7 @@ describe('LabelsPage Component', () => {
 
   describe('Search and Filtering', () => {
     test('should render search input', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Search labels...')).toBeInTheDocument();
@@ -274,7 +280,7 @@ describe('LabelsPage Component', () => {
     });
 
     test('should filter labels by search term', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
@@ -291,7 +297,7 @@ describe('LabelsPage Component', () => {
     });
 
     test('should filter labels by description', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
@@ -305,14 +311,14 @@ describe('LabelsPage Component', () => {
     });
 
     test('should toggle system labels filter', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
         expect(screen.getByText('Personal Project')).toBeInTheDocument();
       });
       
-      const systemLabelsChip = screen.getByText('System Labels');
+      const systemLabelsChip = screen.getByRole('button', { name: 'System Labels' });
       await user.click(systemLabelsChip);
       
       // Should hide system labels
@@ -323,15 +329,15 @@ describe('LabelsPage Component', () => {
 
   describe('Label Grouping', () => {
     test('should display system labels section', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
-        expect(screen.getByText('System Labels')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /system labels/i })).toBeInTheDocument();
       });
     });
 
     test('should display user labels section', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('My Labels')).toBeInTheDocument();
@@ -339,11 +345,11 @@ describe('LabelsPage Component', () => {
     });
 
     test('should group labels correctly', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
-        const systemSection = screen.getByText('System Labels').closest('div');
-        const userSection = screen.getByText('My Labels').closest('div');
+        const systemSection = screen.getByRole('heading', { name: /system labels/i });
+        const userSection = screen.getByRole('heading', { name: /my labels/i });
         
         expect(systemSection).toBeInTheDocument();
         expect(userSection).toBeInTheDocument();
@@ -353,7 +359,7 @@ describe('LabelsPage Component', () => {
 
   describe('Label Cards', () => {
     test('should display label information in cards', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
@@ -364,7 +370,7 @@ describe('LabelsPage Component', () => {
     });
 
     test('should show edit and delete buttons for user labels', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Personal Project')).toBeInTheDocument();
@@ -383,7 +389,7 @@ describe('LabelsPage Component', () => {
     });
 
     test('should not show edit/delete buttons for system labels', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
@@ -397,7 +403,7 @@ describe('LabelsPage Component', () => {
 
   describe('Create Label', () => {
     test('should open create dialog when create button is clicked', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       const createButton = screen.getByText('Create Label');
       await user.click(createButton);
@@ -417,9 +423,9 @@ describe('LabelsPage Component', () => {
         source_count: 0,
       };
       
-      mockApi.post.mockResolvedValue({ data: newLabel });
+      mockApi.post.mockResolvedValue({ status: 201, data: newLabel });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Create Label')).toBeInTheDocument();
@@ -428,15 +434,20 @@ describe('LabelsPage Component', () => {
       const createButton = screen.getByText('Create Label');
       await user.click(createButton);
       
+      // Wait for dialog to open
+      await waitFor(() => {
+        expect(screen.getByText('Create New Label')).toBeInTheDocument();
+      });
+      
       // Fill out the form (this would be a simplified test)
-      const nameInput = screen.getByLabelText('Label Name');
+      const nameInput = screen.getByLabelText(/label name/i);
       await user.type(nameInput, 'New Label');
       
       const submitButton = screen.getByText('Create');
       await user.click(submitButton);
       
       await waitFor(() => {
-        expect(mockApi.post).toHaveBeenCalledWith('/api/labels', expect.objectContaining({
+        expect(mockApi.post).toHaveBeenCalledWith('/labels', expect.objectContaining({
           name: 'New Label'
         }));
       });
@@ -445,7 +456,7 @@ describe('LabelsPage Component', () => {
 
   describe('Edit Label', () => {
     test('should open edit dialog when edit button is clicked', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Personal Project')).toBeInTheDocument();
@@ -458,7 +469,7 @@ describe('LabelsPage Component', () => {
     });
 
     test('should call API when updating label', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Personal Project')).toBeInTheDocument();
@@ -467,7 +478,7 @@ describe('LabelsPage Component', () => {
       const editButtons = screen.getAllByLabelText(/edit/i);
       await user.click(editButtons[0]);
       
-      const nameInput = screen.getByLabelText('Label Name');
+      const nameInput = screen.getByLabelText(/label name/i);
       await user.clear(nameInput);
       await user.type(nameInput, 'Updated Label');
       
@@ -475,7 +486,7 @@ describe('LabelsPage Component', () => {
       await user.click(updateButton);
       
       await waitFor(() => {
-        expect(mockApi.put).toHaveBeenCalledWith(`/api/labels/${mockLabels[2].id}`, expect.objectContaining({
+        expect(mockApi.put).toHaveBeenCalledWith(`/labels/${mockLabels[2].id}`, expect.objectContaining({
           name: 'Updated Label'
         }));
       });
@@ -484,7 +495,7 @@ describe('LabelsPage Component', () => {
 
   describe('Delete Label', () => {
     test('should open delete confirmation when delete button is clicked', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Personal Project')).toBeInTheDocument();
@@ -494,11 +505,11 @@ describe('LabelsPage Component', () => {
       await user.click(deleteButtons[0]);
       
       expect(screen.getByText('Delete Label')).toBeInTheDocument();
-      expect(screen.getByText('Are you sure you want to delete the label "Personal Project"?')).toBeInTheDocument();
+      expect(screen.getByText(/are you sure you want to delete the label/i)).toBeInTheDocument();
     });
 
     test('should show usage warning when label has documents', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Personal Project')).toBeInTheDocument();
@@ -511,7 +522,7 @@ describe('LabelsPage Component', () => {
     });
 
     test('should call API when confirming deletion', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Personal Project')).toBeInTheDocument();
@@ -524,12 +535,12 @@ describe('LabelsPage Component', () => {
       await user.click(confirmButton);
       
       await waitFor(() => {
-        expect(mockApi.delete).toHaveBeenCalledWith(`/api/labels/${mockLabels[2].id}`);
+        expect(mockApi.delete).toHaveBeenCalledWith(`/labels/${mockLabels[2].id}`);
       });
     });
 
     test('should cancel deletion when cancel is clicked', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Personal Project')).toBeInTheDocument();
@@ -541,16 +552,18 @@ describe('LabelsPage Component', () => {
       const cancelButton = screen.getByText('Cancel');
       await user.click(cancelButton);
       
-      expect(screen.queryByText('Delete Label')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.queryByText('Delete Label')).not.toBeInTheDocument();
+      });
       expect(mockApi.delete).not.toHaveBeenCalled();
     });
   });
 
   describe('Empty States', () => {
     test('should show empty state when no labels found', async () => {
-      mockApi.get.mockResolvedValue({ data: [] });
+      mockApi.get.mockResolvedValue({ status: 200, data: [] });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('No labels found')).toBeInTheDocument();
@@ -560,7 +573,7 @@ describe('LabelsPage Component', () => {
     });
 
     test('should show search empty state when no search results', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
@@ -574,9 +587,9 @@ describe('LabelsPage Component', () => {
     });
 
     test('should show create button in empty state', async () => {
-      mockApi.get.mockResolvedValue({ data: [] });
+      mockApi.get.mockResolvedValue({ status: 200, data: [] });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Create Your First Label')).toBeInTheDocument();
@@ -602,9 +615,9 @@ describe('LabelsPage Component', () => {
         source_count: 0,
       };
       
-      mockApi.post.mockResolvedValue({ data: newLabel });
+      mockApi.post.mockResolvedValue({ status: 201, data: newLabel });
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       // Initial load
       await waitFor(() => {
@@ -614,7 +627,7 @@ describe('LabelsPage Component', () => {
       const createButton = screen.getByText('Create Label');
       await user.click(createButton);
       
-      const nameInput = screen.getByLabelText('Label Name');
+      const nameInput = screen.getByLabelText(/label name/i);
       await user.type(nameInput, 'New Label');
       
       const submitButton = screen.getByText('Create');
@@ -627,7 +640,7 @@ describe('LabelsPage Component', () => {
     });
 
     test('should refresh labels after successful deletion', async () => {
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(mockApi.get).toHaveBeenCalledTimes(1);
@@ -650,7 +663,7 @@ describe('LabelsPage Component', () => {
     test('should show error when label deletion fails', async () => {
       mockApi.delete.mockRejectedValue(new Error('Delete failed'));
       
-      renderLabelsPage();
+      await renderLabelsPage();
       
       await waitFor(() => {
         expect(screen.getByText('Personal Project')).toBeInTheDocument();

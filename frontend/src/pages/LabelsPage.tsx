@@ -59,7 +59,11 @@ const LabelsPage: React.FC = () => {
         setError(null);
       } else {
         console.error('Invalid response - Status:', response.status, 'Data:', response.data);
-        setError(`Server returned unexpected response (${response.status})`);
+        if (!Array.isArray(response.data)) {
+          setError('Received invalid data format from server');
+        } else {
+          setError(`Server returned unexpected response (${response.status})`);
+        }
         setLabels([]); // Reset to empty array to prevent filter errors
       }
     } catch (error: any) {
