@@ -8,4 +8,4 @@ mod labels_tests;
 mod ocr_tests;
 mod enhanced_search_tests;
 mod settings_tests;
-mod users_tests;
+mod users_tests; 

@@ -5,12 +5,10 @@ use axum::{
     routing::{get, post, delete},
     Router,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::collections::HashMap;
 use utoipa::ToSchema;
 use sqlx::Row;
-use axum::body::Bytes;
 
 use crate::{
     auth::AuthUser,
@@ -28,9 +26,9 @@ struct PaginationQuery {
     ocr_status: Option<String>,
 }
 
-#[derive(Deserialize, ToSchema)]
-struct BulkDeleteRequest {
-    document_ids: Vec<uuid::Uuid>,
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct BulkDeleteRequest {
+    pub document_ids: Vec<uuid::Uuid>,
 }
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -897,7 +895,7 @@ async fn get_user_duplicates(
         (status = 401, description = "Unauthorized")
     )
 )]
-async fn delete_document(
+pub async fn delete_document(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
@@ -937,7 +935,7 @@ async fn delete_document(
         (status = 401, description = "Unauthorized")
     )
 )]
-async fn bulk_delete_documents(
+pub async fn bulk_delete_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(request): Json<BulkDeleteRequest>,

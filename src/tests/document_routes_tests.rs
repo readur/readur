@@ -1,17 +1,10 @@
 #[cfg(test)]
 mod document_routes_deletion_tests {
-    use crate::models::{UserRole, User, Document, BulkDeleteRequest};
-    use crate::routes::documents::{delete_document, bulk_delete_documents};
-    use crate::auth::AuthUser;
-    use crate::AppState;
-    use axum::{
-        extract::{Path, State},
-        http::StatusCode,
-        Json,
-    };
+    use crate::models::{UserRole, User, Document};
+    use crate::routes::documents::{BulkDeleteRequest};
+    use axum::http::StatusCode;
     use chrono::Utc;
     use serde_json::json;
-    use std::sync::Arc;
     use uuid::Uuid;
 
     // Mock implementations for testing
@@ -269,7 +262,7 @@ mod document_routes_deletion_tests {
     #[test]
     fn test_path_parameter_parsing() {
         let document_id = Uuid::new_v4();
-        let path_str = format!("/documents/{}", document_id);
+        let _path_str = format!("/documents/{}", document_id);
 
         // Test that UUID can be parsed from path
         let parsed_id = document_id.to_string();

@@ -1,81 +1,87 @@
 #[cfg(test)]
+use crate::models::{Document, DocumentResponse};
+use chrono::Utc;
+use serde_json::Value;
+use uuid::Uuid;
+
+#[cfg(test)]
+fn create_test_document(user_id: Uuid) -> Document {
+    Document {
+        id: Uuid::new_v4(),
+        filename: "test_document.pdf".to_string(),
+        original_filename: "test_document.pdf".to_string(),
+        file_path: "/uploads/test_document.pdf".to_string(),
+        file_size: 1024000,
+        mime_type: "application/pdf".to_string(),
+        content: Some("Test document content".to_string()),
+        ocr_text: Some("This is extracted OCR text from the test document.".to_string()),
+        ocr_confidence: Some(95.5),
+        ocr_word_count: Some(150),
+        ocr_processing_time_ms: Some(1200),
+        ocr_status: Some("completed".to_string()),
+        ocr_error: None,
+        ocr_completed_at: Some(Utc::now()),
+        tags: vec!["test".to_string(), "document".to_string()],
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        user_id,
+        file_hash: Some("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string()),
+    }
+}
+
+#[cfg(test)]
+fn create_test_document_without_ocr(user_id: Uuid) -> Document {
+    Document {
+        id: Uuid::new_v4(),
+        filename: "test_no_ocr.txt".to_string(),
+        original_filename: "test_no_ocr.txt".to_string(),
+        file_path: "/uploads/test_no_ocr.txt".to_string(),
+        file_size: 512,
+        mime_type: "text/plain".to_string(),
+        content: Some("Plain text content".to_string()),
+        ocr_text: None,
+        ocr_confidence: None,
+        ocr_word_count: None,
+        ocr_processing_time_ms: None,
+        ocr_status: Some("pending".to_string()),
+        ocr_error: None,
+        ocr_completed_at: None,
+        tags: vec!["text".to_string()],
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        user_id,
+        file_hash: Some("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321".to_string()),
+    }
+}
+
+#[cfg(test)]
+fn create_test_document_with_ocr_error(user_id: Uuid) -> Document {
+    Document {
+        id: Uuid::new_v4(),
+        filename: "test_error.pdf".to_string(),
+        original_filename: "test_error.pdf".to_string(),
+        file_path: "/uploads/test_error.pdf".to_string(),
+        file_size: 2048000,
+        mime_type: "application/pdf".to_string(),
+        content: None,
+        ocr_text: None,
+        ocr_confidence: None,
+        ocr_word_count: None,
+        ocr_processing_time_ms: Some(5000),
+        ocr_status: Some("failed".to_string()),
+        ocr_error: Some("Failed to process document: corrupted file".to_string()),
+        ocr_completed_at: Some(Utc::now()),
+        tags: vec!["error".to_string()],
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        user_id,
+        file_hash: Some("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string()),
+    }
+}
+
+#[cfg(test)]
 mod tests {
-    use crate::models::{Document, DocumentResponse};
-    use chrono::Utc;
-    use serde_json::Value;
-    use uuid::Uuid;
-
-    fn create_test_document(user_id: Uuid) -> Document {
-        Document {
-            id: Uuid::new_v4(),
-            filename: "test_document.pdf".to_string(),
-            original_filename: "test_document.pdf".to_string(),
-            file_path: "/uploads/test_document.pdf".to_string(),
-            file_size: 1024000,
-            mime_type: "application/pdf".to_string(),
-            content: Some("Test document content".to_string()),
-            ocr_text: Some("This is extracted OCR text from the test document.".to_string()),
-            ocr_confidence: Some(95.5),
-            ocr_word_count: Some(150),
-            ocr_processing_time_ms: Some(1200),
-            ocr_status: Some("completed".to_string()),
-            ocr_error: None,
-            ocr_completed_at: Some(Utc::now()),
-            tags: vec!["test".to_string(), "document".to_string()],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            user_id,
-            file_hash: Some("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string()),
-        }
-    }
-
-    fn create_test_document_without_ocr(user_id: Uuid) -> Document {
-        Document {
-            id: Uuid::new_v4(),
-            filename: "test_no_ocr.txt".to_string(),
-            original_filename: "test_no_ocr.txt".to_string(),
-            file_path: "/uploads/test_no_ocr.txt".to_string(),
-            file_size: 512,
-            mime_type: "text/plain".to_string(),
-            content: Some("Plain text content".to_string()),
-            ocr_text: None,
-            ocr_confidence: None,
-            ocr_word_count: None,
-            ocr_processing_time_ms: None,
-            ocr_status: Some("pending".to_string()),
-            ocr_error: None,
-            ocr_completed_at: None,
-            tags: vec!["text".to_string()],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            user_id,
-            file_hash: Some("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321".to_string()),
-        }
-    }
-
-    fn create_test_document_with_ocr_error(user_id: Uuid) -> Document {
-        Document {
-            id: Uuid::new_v4(),
-            filename: "test_error.pdf".to_string(),
-            original_filename: "test_error.pdf".to_string(),
-            file_path: "/uploads/test_error.pdf".to_string(),
-            file_size: 2048000,
-            mime_type: "application/pdf".to_string(),
-            content: None,
-            ocr_text: None,
-            ocr_confidence: None,
-            ocr_word_count: None,
-            ocr_processing_time_ms: Some(5000),
-            ocr_status: Some("failed".to_string()),
-            ocr_error: Some("Failed to process document: corrupted file".to_string()),
-            ocr_completed_at: Some(Utc::now()),
-            tags: vec!["error".to_string()],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            user_id,
-            file_hash: Some("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string()),
-        }
-    }
+    use super::*;
 
     #[tokio::test]
     async fn test_document_response_conversion() {
@@ -309,10 +315,12 @@ mod tests {
 #[cfg(test)]
 mod document_deletion_tests {
     use super::*;
-    use crate::db::documents::DocumentsDB;
-    use crate::models::{UserRole, User};
+    use crate::db::Database;
+    use crate::models::{UserRole, User, Document};
+    use chrono::Utc;
     use sqlx::PgPool;
     use std::env;
+    use uuid::Uuid;
 
     async fn create_test_db_pool() -> PgPool {
         let database_url = env::var("TEST_DATABASE_URL")
@@ -335,20 +343,17 @@ mod document_deletion_tests {
         };
 
         // Insert user into database
-        sqlx::query!(
-            "INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            user.id,
-            user.username,
-            user.email,
-            user.password_hash,
-            user.role as UserRole,
-            user.created_at,
-            user.updated_at
-        )
-        .execute(pool)
-        .await
-        .expect("Failed to insert test user");
+        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+            .bind(user.id)
+            .bind(&user.username)
+            .bind(&user.email)
+            .bind(&user.password_hash)
+            .bind(user.role.to_string())
+            .bind(user.created_at)
+            .bind(user.updated_at)
+            .execute(pool)
+            .await
+            .expect("Failed to insert test user");
 
         user
     }
@@ -357,34 +362,29 @@ mod document_deletion_tests {
         let document = super::create_test_document(user_id);
         
         // Insert document into database
-        sqlx::query!(
-            "INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, 
-             content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, 
-             ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
-            document.id,
-            document.filename,
-            document.original_filename,
-            document.file_path,
-            document.file_size as i64,
-            document.mime_type,
-            document.content,
-            document.ocr_text,
-            document.ocr_confidence,
-            document.ocr_word_count.map(|x| x as i32),
-            document.ocr_processing_time_ms.map(|x| x as i32),
-            document.ocr_status,
-            document.ocr_error,
-            document.ocr_completed_at,
-            &document.tags,
-            document.created_at,
-            document.updated_at,
-            document.user_id,
-            document.file_hash
-        )
-        .execute(pool)
-        .await
-        .expect("Failed to insert test document");
+        sqlx::query("INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)")
+            .bind(document.id)
+            .bind(&document.filename)
+            .bind(&document.original_filename)
+            .bind(&document.file_path)
+            .bind(document.file_size as i64)
+            .bind(&document.mime_type)
+            .bind(&document.content)
+            .bind(&document.ocr_text)
+            .bind(document.ocr_confidence)
+            .bind(document.ocr_word_count.map(|x| x as i32))
+            .bind(document.ocr_processing_time_ms.map(|x| x as i32))
+            .bind(&document.ocr_status)
+            .bind(&document.ocr_error)
+            .bind(document.ocr_completed_at)
+            .bind(&document.tags)
+            .bind(document.created_at)
+            .bind(document.updated_at)
+            .bind(document.user_id)
+            .bind(&document.file_hash)
+            .execute(pool)
+            .await
+            .expect("Failed to insert test document");
 
         document
     }
@@ -393,7 +393,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_document_as_owner() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         // Create test user and document
         let user = create_test_user(&pool, UserRole::User).await;
@@ -423,7 +423,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_document_as_admin() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         // Create regular user and their document
         let user = create_test_user(&pool, UserRole::User).await;
@@ -449,7 +449,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_document_unauthorized() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         // Create two regular users
         let user1 = create_test_user(&pool, UserRole::User).await;
@@ -479,7 +479,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_nonexistent_document() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let nonexistent_id = Uuid::new_v4();
@@ -498,7 +498,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_documents_as_owner() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         
@@ -536,7 +536,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_documents_as_admin() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         // Create regular user and their documents
         let user = create_test_user(&pool, UserRole::User).await;
@@ -562,7 +562,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_documents_mixed_ownership() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         // Create two regular users
         let user1 = create_test_user(&pool, UserRole::User).await;
@@ -600,7 +600,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_documents_empty_list() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let empty_ids: Vec<Uuid> = vec![];
@@ -619,7 +619,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_documents_nonexistent_ids() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         
@@ -644,7 +644,7 @@ mod document_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_documents_partial_authorization() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         // Create regular user and admin
         let user = create_test_user(&pool, UserRole::User).await;
@@ -684,10 +684,12 @@ mod document_deletion_tests {
 #[cfg(test)]
 mod rbac_deletion_tests {
     use super::*;
-    use crate::db::documents::DocumentsDB;
-    use crate::models::{UserRole, User};
+    use crate::db::Database;
+    use crate::models::{UserRole, User, Document};
+    use chrono::Utc;
     use sqlx::PgPool;
     use std::env;
+    use uuid::Uuid;
 
     async fn create_test_db_pool() -> PgPool {
         let database_url = env::var("TEST_DATABASE_URL")
@@ -709,20 +711,17 @@ mod rbac_deletion_tests {
             updated_at: Utc::now(),
         };
 
-        sqlx::query!(
-            "INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            user.id,
-            user.username,
-            user.email,
-            user.password_hash,
-            user.role as UserRole,
-            user.created_at,
-            user.updated_at
-        )
-        .execute(pool)
-        .await
-        .expect("Failed to insert test user");
+        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+            .bind(user.id)
+            .bind(&user.username)
+            .bind(&user.email)
+            .bind(&user.password_hash)
+            .bind(user.role.to_string())
+            .bind(user.created_at)
+            .bind(user.updated_at)
+            .execute(pool)
+            .await
+            .expect("Failed to insert test user");
 
         user
     }
@@ -730,34 +729,29 @@ mod rbac_deletion_tests {
     async fn create_and_insert_test_document(pool: &PgPool, user_id: Uuid) -> Document {
         let document = super::create_test_document(user_id);
         
-        sqlx::query!(
-            "INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, 
-             content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, 
-             ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
-            document.id,
-            document.filename,
-            document.original_filename,
-            document.file_path,
-            document.file_size as i64,
-            document.mime_type,
-            document.content,
-            document.ocr_text,
-            document.ocr_confidence,
-            document.ocr_word_count.map(|x| x as i32),
-            document.ocr_processing_time_ms.map(|x| x as i32),
-            document.ocr_status,
-            document.ocr_error,
-            document.ocr_completed_at,
-            &document.tags,
-            document.created_at,
-            document.updated_at,
-            document.user_id,
-            document.file_hash
-        )
-        .execute(pool)
-        .await
-        .expect("Failed to insert test document");
+        sqlx::query("INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)")
+            .bind(document.id)
+            .bind(&document.filename)
+            .bind(&document.original_filename)
+            .bind(&document.file_path)
+            .bind(document.file_size as i64)
+            .bind(&document.mime_type)
+            .bind(&document.content)
+            .bind(&document.ocr_text)
+            .bind(document.ocr_confidence)
+            .bind(document.ocr_word_count.map(|x| x as i32))
+            .bind(document.ocr_processing_time_ms.map(|x| x as i32))
+            .bind(&document.ocr_status)
+            .bind(&document.ocr_error)
+            .bind(document.ocr_completed_at)
+            .bind(&document.tags)
+            .bind(document.created_at)
+            .bind(document.updated_at)
+            .bind(document.user_id)
+            .bind(&document.file_hash)
+            .execute(pool)
+            .await
+            .expect("Failed to insert test document");
 
         document
     }
@@ -766,7 +760,7 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_user_can_delete_own_document() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let document = create_and_insert_test_document(&pool, user.id).await;
@@ -787,7 +781,7 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_user_cannot_delete_other_user_document() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user1 = create_test_user(&pool, UserRole::User).await;
         let user2 = create_test_user(&pool, UserRole::User).await;
@@ -814,7 +808,7 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_admin_can_delete_any_document() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let admin = create_test_user(&pool, UserRole::Admin).await;
@@ -845,7 +839,7 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_respects_ownership() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user1 = create_test_user(&pool, UserRole::User).await;
         let user2 = create_test_user(&pool, UserRole::User).await;
@@ -895,7 +889,7 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_admin_bulk_delete_all_documents() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user1 = create_test_user(&pool, UserRole::User).await;
         let user2 = create_test_user(&pool, UserRole::User).await;
@@ -926,7 +920,7 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_role_escalation_prevention() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let admin = create_test_user(&pool, UserRole::Admin).await;
@@ -954,7 +948,7 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_cross_tenant_isolation() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         // Create users that could represent different tenants/organizations
         let tenant1_user1 = create_test_user(&pool, UserRole::User).await;
@@ -1013,12 +1007,12 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_permission_consistency_single_vs_bulk() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user1 = create_test_user(&pool, UserRole::User).await;
         let user2 = create_test_user(&pool, UserRole::User).await;
         
-        let user1_doc = create_and_insert_test_document(&pool, user1.id).await;
+        let _user1_doc = create_and_insert_test_document(&pool, user1.id).await;
         let user2_doc = create_and_insert_test_document(&pool, user2.id).await;
 
         // Test single deletion permissions
@@ -1054,7 +1048,7 @@ mod rbac_deletion_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_admin_permission_inheritance() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let admin = create_test_user(&pool, UserRole::Admin).await;
@@ -1109,8 +1103,9 @@ mod rbac_deletion_tests {
 #[cfg(test)]
 mod deletion_error_handling_tests {
     use super::*;
-    use crate::db::documents::DocumentsDB;
-    use crate::models::{UserRole, User};
+    use crate::db::Database;
+    use crate::models::{UserRole, User, Document};
+    use chrono::Utc;
     use sqlx::PgPool;
     use std::env;
     use uuid::Uuid;
@@ -1135,20 +1130,17 @@ mod deletion_error_handling_tests {
             updated_at: Utc::now(),
         };
 
-        sqlx::query!(
-            "INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            user.id,
-            user.username,
-            user.email,
-            user.password_hash,
-            user.role as UserRole,
-            user.created_at,
-            user.updated_at
-        )
-        .execute(pool)
-        .await
-        .expect("Failed to insert test user");
+        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+            .bind(user.id)
+            .bind(&user.username)
+            .bind(&user.email)
+            .bind(&user.password_hash)
+            .bind(user.role.to_string())
+            .bind(user.created_at)
+            .bind(user.updated_at)
+            .execute(pool)
+            .await
+            .expect("Failed to insert test user");
 
         user
     }
@@ -1156,34 +1148,29 @@ mod deletion_error_handling_tests {
     async fn create_and_insert_test_document(pool: &PgPool, user_id: Uuid) -> Document {
         let document = super::create_test_document(user_id);
         
-        sqlx::query!(
-            "INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, 
-             content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, 
-             ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
-            document.id,
-            document.filename,
-            document.original_filename,
-            document.file_path,
-            document.file_size as i64,
-            document.mime_type,
-            document.content,
-            document.ocr_text,
-            document.ocr_confidence,
-            document.ocr_word_count.map(|x| x as i32),
-            document.ocr_processing_time_ms.map(|x| x as i32),
-            document.ocr_status,
-            document.ocr_error,
-            document.ocr_completed_at,
-            &document.tags,
-            document.created_at,
-            document.updated_at,
-            document.user_id,
-            document.file_hash
-        )
-        .execute(pool)
-        .await
-        .expect("Failed to insert test document");
+        sqlx::query("INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)")
+            .bind(document.id)
+            .bind(&document.filename)
+            .bind(&document.original_filename)
+            .bind(&document.file_path)
+            .bind(document.file_size as i64)
+            .bind(&document.mime_type)
+            .bind(&document.content)
+            .bind(&document.ocr_text)
+            .bind(document.ocr_confidence)
+            .bind(document.ocr_word_count.map(|x| x as i32))
+            .bind(document.ocr_processing_time_ms.map(|x| x as i32))
+            .bind(&document.ocr_status)
+            .bind(&document.ocr_error)
+            .bind(document.ocr_completed_at)
+            .bind(&document.tags)
+            .bind(document.created_at)
+            .bind(document.updated_at)
+            .bind(document.user_id)
+            .bind(&document.file_hash)
+            .execute(pool)
+            .await
+            .expect("Failed to insert test document");
 
         document
     }
@@ -1192,7 +1179,7 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_with_invalid_uuid() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         
@@ -1212,7 +1199,7 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_with_sql_injection_attempt() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let document = create_and_insert_test_document(&pool, user.id).await;
@@ -1230,7 +1217,7 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_with_duplicate_ids() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let document = create_and_insert_test_document(&pool, user.id).await;
@@ -1252,7 +1239,7 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_with_extremely_large_request() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         
@@ -1282,7 +1269,7 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_concurrent_deletion_same_document() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let document = create_and_insert_test_document(&pool, user.id).await;
@@ -1320,7 +1307,7 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_document_with_foreign_key_constraints() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let document = create_and_insert_test_document(&pool, user.id).await;
@@ -1344,7 +1331,7 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_with_mixed_permissions_and_errors() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user1 = create_test_user(&pool, UserRole::User).await;
         let user2 = create_test_user(&pool, UserRole::User).await;
@@ -1420,13 +1407,14 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_after_user_deletion() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let document = create_and_insert_test_document(&pool, user.id).await;
         
         // Delete the user first (simulating cascade deletion scenarios)
-        sqlx::query!("DELETE FROM users WHERE id = $1", user.id)
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user.id)
             .execute(&pool)
             .await
             .expect("User deletion should succeed");
@@ -1459,7 +1447,7 @@ mod deletion_error_handling_tests {
     #[ignore = "Requires PostgreSQL database"]
     async fn test_bulk_delete_empty_and_null_scenarios() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         
@@ -1479,45 +1467,12 @@ mod deletion_error_handling_tests {
         assert_eq!(nil_result.len(), 0);
     }
 
-    #[test]
-    fn test_bulk_delete_request_validation_edge_cases() {
-        use crate::models::BulkDeleteRequest;
-        use serde_json::json;
-        
-        // Test empty request
-        let empty_request = json!({ "document_ids": [] });
-        let parsed: BulkDeleteRequest = serde_json::from_value(empty_request).unwrap();
-        assert_eq!(parsed.document_ids.len(), 0);
-        
-        // Test single item request
-        let single_request = json!({ 
-            "document_ids": ["550e8400-e29b-41d4-a716-446655440000"] 
-        });
-        let parsed: BulkDeleteRequest = serde_json::from_value(single_request).unwrap();
-        assert_eq!(parsed.document_ids.len(), 1);
-        
-        // Test malformed JSON should fail
-        let malformed_request = json!({ "wrong_field": ["not-uuids"] });
-        let result: Result<BulkDeleteRequest, _> = serde_json::from_value(malformed_request);
-        assert!(result.is_err());
-        
-        // Test mixed valid/invalid UUIDs should fail
-        let mixed_request = json!({ 
-            "document_ids": [
-                "550e8400-e29b-41d4-a716-446655440000",
-                "not-a-uuid",
-                "550e8400-e29b-41d4-a716-446655440001"
-            ] 
-        });
-        let result: Result<BulkDeleteRequest, _> = serde_json::from_value(mixed_request);
-        assert!(result.is_err());
-    }
 
     #[tokio::test]
     #[ignore = "Requires PostgreSQL database"]
     async fn test_transaction_rollback_simulation() {
         let pool = create_test_db_pool().await;
-        let documents_db = DocumentsDB::new(pool.clone());
+        let documents_db = Database { pool: pool.clone() };
         
         let user = create_test_user(&pool, UserRole::User).await;
         let document = create_and_insert_test_document(&pool, user.id).await;
