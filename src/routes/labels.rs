@@ -67,7 +67,9 @@ pub struct LabelQuery {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct BulkUpdateMode {
+pub struct BulkUpdateRequest {
+    pub document_ids: Vec<Uuid>,
+    pub label_ids: Vec<Uuid>,
     #[serde(default = "default_bulk_mode")]
     pub mode: String, // "replace", "add", or "remove"
 }
@@ -688,26 +690,147 @@ pub async fn remove_document_label(
     path = "/api/labels/bulk/documents",
     tag = "labels",
     security(("bearer_auth" = [])),
-    request_body = LabelAssignment,
-    params(
-        ("mode" = String, Query, description = "Operation mode: replace, add, or remove")
-    ),
+    request_body = BulkUpdateRequest,
     responses(
         (status = 200, description = "Bulk operation completed"),
         (status = 400, description = "Invalid input"),
     )
 )]
 pub async fn bulk_update_document_labels(
-    Query(mode_query): Query<BulkUpdateMode>,
-    State(_state): State<Arc<AppState>>,
-    _auth_user: AuthUser,
-    Json(_payload): Json<BulkUpdateMode>, // This should actually be a combined payload
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(payload): Json<BulkUpdateRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // Note: This is a simplified implementation. In a real scenario, you'd want
-    // a more complex payload structure that includes both document_ids and label_ids
-    // For now, returning a placeholder response
+    let user_id = auth_user.user.id;
+
+    // Validate mode
+    if !["replace", "add", "remove"].contains(&payload.mode.as_str()) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Verify document ownership
+    let doc_count = sqlx::query(
+        "SELECT COUNT(*) as count FROM documents WHERE id = ANY($1) AND user_id = $2"
+    )
+    .bind(&payload.document_ids)
+    .bind(user_id)
+    .fetch_one(state.db.get_pool())
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to verify document ownership: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let count: i64 = doc_count.try_get("count").unwrap_or(0);
+    if count as usize != payload.document_ids.len() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Verify labels exist and are accessible (if any labels provided)
+    if !payload.label_ids.is_empty() {
+        let label_count = sqlx::query(
+            "SELECT COUNT(*) as count FROM labels WHERE id = ANY($1) AND (user_id = $2 OR is_system = TRUE)"
+        )
+        .bind(&payload.label_ids)
+        .bind(user_id)
+        .fetch_one(state.db.get_pool())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to verify labels: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        let count: i64 = label_count.try_get("count").unwrap_or(0);
+        if count as usize != payload.label_ids.len() {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    // Begin transaction
+    let mut tx = state.db.get_pool().begin().await.map_err(|e| {
+        tracing::error!("Failed to begin transaction: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    match payload.mode.as_str() {
+        "replace" => {
+            // Remove all existing labels for these documents
+            sqlx::query(
+                "DELETE FROM document_labels WHERE document_id = ANY($1)"
+            )
+            .bind(&payload.document_ids)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to remove existing labels: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            // Add new labels
+            if !payload.label_ids.is_empty() {
+                for document_id in &payload.document_ids {
+                    for label_id in &payload.label_ids {
+                        sqlx::query(
+                            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
+                        )
+                        .bind(document_id)
+                        .bind(label_id)
+                        .bind(user_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!("Failed to add label: {}", e);
+                            StatusCode::INTERNAL_SERVER_ERROR
+                        })?;
+                    }
+                }
+            }
+        },
+        "add" => {
+            if !payload.label_ids.is_empty() {
+                for document_id in &payload.document_ids {
+                    for label_id in &payload.label_ids {
+                        sqlx::query(
+                            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
+                        )
+                        .bind(document_id)
+                        .bind(label_id)
+                        .bind(user_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!("Failed to add label: {}", e);
+                            StatusCode::INTERNAL_SERVER_ERROR
+                        })?;
+                    }
+                }
+            }
+        },
+        "remove" => {
+            if !payload.label_ids.is_empty() {
+                sqlx::query(
+                    "DELETE FROM document_labels WHERE document_id = ANY($1) AND label_id = ANY($2)"
+                )
+                .bind(&payload.document_ids)
+                .bind(&payload.label_ids)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to remove labels: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            }
+        },
+        _ => return Err(StatusCode::BAD_REQUEST)
+    }
+
+    tx.commit().await.map_err(|e| {
+        tracing::error!("Failed to commit transaction: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
     Ok(Json(serde_json::json!({
-        "message": "Bulk update functionality placeholder",
-        "mode": mode_query.mode
+        "message": format!("Labels {}d successfully", payload.mode),
+        "documents_updated": payload.document_ids.len()
     })))
 }
