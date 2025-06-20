@@ -19,7 +19,11 @@ use readur::{
 };
 
 // Use the same database URL as the running server
-const DB_URL: &str = "postgresql://readur:readur@localhost:5432/readur";
+fn get_test_db_url() -> String {
+    std::env::var("DATABASE_URL")
+        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
+        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string())
+}
 
 struct SimpleThrottleTest {
     pool: PgPool,
@@ -28,13 +32,14 @@ struct SimpleThrottleTest {
 
 impl SimpleThrottleTest {
     async fn new() -> Result<Self> {
+        let db_url = get_test_db_url();
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(20)
             .acquire_timeout(Duration::from_secs(10))
-            .connect(DB_URL)
+            .connect(&db_url)
             .await?;
         
-        let db = Database::new(DB_URL).await?;
+        let db = Database::new(&db_url).await?;
         
         // Create queue service with throttling (max 15 concurrent jobs)
         let queue_service = Arc::new(OcrQueueService::new(

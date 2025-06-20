@@ -24,7 +24,11 @@ use readur::{
     request_throttler::RequestThrottler,
 };
 
-const TEST_DB_URL: &str = "postgresql://readur:readur@localhost:5432/readur";
+fn get_test_db_url() -> String {
+    std::env::var("DATABASE_URL")
+        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
+        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string())
+}
 
 struct ThrottledTestHarness {
     db: Database,
@@ -40,10 +44,10 @@ impl ThrottledTestHarness {
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(30)  // Higher limit for stress testing
             .acquire_timeout(std::time::Duration::from_secs(15))
-            .connect(TEST_DB_URL)
+            .connect(&get_test_db_url())
             .await?;
         
-        let db = Database::new(TEST_DB_URL).await?;
+        let db = Database::new(&get_test_db_url()).await?;
         
         // Initialize services
         let file_service = FileService::new("./test_uploads".to_string());

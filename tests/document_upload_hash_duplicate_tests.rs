@@ -56,9 +56,12 @@ fn create_test_user_with_suffix(suffix: &str) -> CreateUser {
 
 async fn create_test_app_state() -> Result<Arc<AppState>> {
     let config = Config::from_env().unwrap_or_else(|_| {
-        // Create a test config if env fails
+        // Create a test config if env fails - use DATABASE_URL env var or fallback
+        let database_url = std::env::var("DATABASE_URL")
+            .or_else(|_| std::env::var("TEST_DATABASE_URL"))
+            .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string());
         Config {
-            database_url: "postgresql://readur:readur@localhost:5432/readur".to_string(),
+            database_url,
             server_address: "127.0.0.1:8000".to_string(),
             jwt_secret: "test-secret".to_string(),
             upload_path: "./test-uploads".to_string(),
@@ -75,7 +78,7 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
             cpu_priority: "normal".to_string(),
         }
     });
-    let db = Database::new("postgresql://readur:readur@localhost:5432/readur").await?;
+    let db = Database::new(&config.database_url).await?;
     let queue_service = std::sync::Arc::new(
         readur::ocr_queue::OcrQueueService::new(db.clone(), db.get_pool().clone(), 1)
     );

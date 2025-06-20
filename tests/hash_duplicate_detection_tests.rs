@@ -10,7 +10,11 @@ use readur::{
     models::{Document, CreateUser, UserRole},
 };
 
-const TEST_DB_URL: &str = "postgresql://readur:readur@localhost:5432/readur";
+fn get_test_db_url() -> String {
+    std::env::var("DATABASE_URL")
+        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
+        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string())
+}
 
 // Helper function to create a test user with unique identifier
 async fn create_test_user(db: &Database, username: &str) -> Result<Uuid> {
@@ -60,7 +64,7 @@ fn create_test_document(user_id: Uuid, filename: &str, file_hash: Option<String>
 
 #[tokio::test]
 async fn test_get_document_by_user_and_hash_found() -> Result<()> {
-    let db = Database::new(TEST_DB_URL).await?;
+    let db = Database::new(&get_test_db_url()).await?;
     let user_id = create_test_user(&db, "testuser1").await?;
     let file_hash = "abcd1234567890";
 
@@ -82,7 +86,7 @@ async fn test_get_document_by_user_and_hash_found() -> Result<()> {
 
 #[tokio::test]
 async fn test_get_document_by_user_and_hash_not_found() -> Result<()> {
-    let db = Database::new(TEST_DB_URL).await?;
+    let db = Database::new(&get_test_db_url()).await?;
     let user_id = Uuid::new_v4();
     let non_existent_hash = "nonexistent1234567890";
 
@@ -96,7 +100,7 @@ async fn test_get_document_by_user_and_hash_not_found() -> Result<()> {
 
 #[tokio::test]
 async fn test_get_document_by_user_and_hash_different_user() -> Result<()> {
-    let db = Database::new(TEST_DB_URL).await?;
+    let db = Database::new(&get_test_db_url()).await?;
     let user1_id = create_test_user(&db, "testuser2").await?;
     let user2_id = create_test_user(&db, "testuser3").await?;
     let file_hash = "shared_hash_1234567890";
@@ -115,7 +119,7 @@ async fn test_get_document_by_user_and_hash_different_user() -> Result<()> {
 
 #[tokio::test]
 async fn test_duplicate_hash_prevention_same_user() -> Result<()> {
-    let db = Database::new(TEST_DB_URL).await?;
+    let db = Database::new(&get_test_db_url()).await?;
     let user_id = create_test_user(&db, "testuser4").await?;
     let file_hash = "duplicate_hash_1234567890";
 
@@ -136,7 +140,7 @@ async fn test_duplicate_hash_prevention_same_user() -> Result<()> {
 
 #[tokio::test]
 async fn test_same_hash_different_users_allowed() -> Result<()> {
-    let db = Database::new(TEST_DB_URL).await?;
+    let db = Database::new(&get_test_db_url()).await?;
     let user1_id = create_test_user(&db, "testuser5").await?;
     let user2_id = create_test_user(&db, "testuser6").await?;
     let file_hash = "shared_content_hash_1234567890";
@@ -164,7 +168,7 @@ async fn test_same_hash_different_users_allowed() -> Result<()> {
 
 #[tokio::test]
 async fn test_null_hash_allowed_multiple() -> Result<()> {
-    let db = Database::new(TEST_DB_URL).await?;
+    let db = Database::new(&get_test_db_url()).await?;
     let user_id = create_test_user(&db, "testuser7").await?;
 
     // Create multiple documents with null hash (should be allowed)

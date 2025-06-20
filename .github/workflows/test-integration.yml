@@ -37,6 +37,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Remove local env files to prevent conflicts
+        run: |
+          # Remove or rename env files so they don't override CI environment variables
+          [ -f .env ] && mv .env .env.backup || true
+          [ -f .env.test ] && mv .env.test .env.test.backup || true
+          echo "Removed local env files to ensure CI env vars take precedence"
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -68,6 +75,7 @@ jobs:
 
       - name: Start readur server
         run: |
+          echo "Starting server with DATABASE_URL: $DATABASE_URL"
           ./target/release/readur > server.log 2>&1 &
           echo $! > readur.pid
           sleep 2
@@ -75,9 +83,9 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           JWT_SECRET: test-secret-key
-          PORT: 8000
+          SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
-          WATCH_PATH: ./watch
+          WATCH_FOLDER: ./watch
 
       - name: Wait for server to be ready
         run: |
@@ -116,6 +124,9 @@ jobs:
 
       - name: Run integration tests
         run: |
+          echo "Running tests with DATABASE_URL: $DATABASE_URL"
+          echo "Environment check:"
+          env | grep -E "(DATABASE_URL|JWT_SECRET|API_URL)" | sort
           cargo test --test '*' -- --test-threads=1
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
