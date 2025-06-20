@@ -195,6 +195,7 @@ impl FileProcessingTestClient {
                                 file_size: doc.file_size,
                                 mime_type: doc.mime_type.clone(),
                                 tags: doc.tags.clone(),
+                                labels: doc.labels.clone(),
                                 created_at: doc.created_at,
                                 has_ocr_text: doc.has_ocr_text,
                                 ocr_confidence: doc.ocr_confidence,
