@@ -12,7 +12,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  DATABASE_URL: postgres://postgres:postgres@localhost:5432/readur_test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/readur_test
 
 jobs:
   integration-tests:
@@ -121,6 +121,10 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           API_URL: http://localhost:8000
+          JWT_SECRET: test-secret-key
+          SERVER_ADDRESS: 0.0.0.0:8000
+          UPLOAD_PATH: ./uploads
+          WATCH_FOLDER: ./watch
           RUST_LOG: debug
           RUST_BACKTRACE: 1
 
