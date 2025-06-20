@@ -173,6 +173,25 @@ impl DocumentDeletionTestClient {
         Ok(result)
     }
     
+    /// Delete document without authentication (for testing unauthorized access)
+    async fn delete_document_without_auth(&self, document_id: &str) -> Result<Value, Box<dyn std::error::Error>> {
+        let response = self.client
+            .delete(&format!("{}/api/documents/{}", get_base_url(), document_id))
+            .timeout(TIMEOUT)
+            .send()
+            .await?;
+        
+        let status = response.status();
+        let text = response.text().await?;
+        
+        if !status.is_success() {
+            return Err(format!("Document deletion failed ({}): {}", status, text).into());
+        }
+        
+        let result: Value = serde_json::from_str(&text)?;
+        Ok(result)
+    }
+    
     /// Get document by ID
     async fn get_document(&self, document_id: &str) -> Result<Option<DocumentResponse>, Box<dyn std::error::Error>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
@@ -436,7 +455,7 @@ async fn test_unauthorized_deletion() {
     
     // Try to delete without authentication
     let fake_id = Uuid::new_v4().to_string();
-    let delete_result = client.delete_document(&fake_id).await;
+    let delete_result = client.delete_document_without_auth(&fake_id).await;
     
     // Should return 401 error
     assert!(delete_result.is_err(), "Unauthenticated deletion should fail");
