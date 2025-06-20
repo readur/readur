@@ -11,6 +11,17 @@ use readur::{
     models::{Document, CreateUser, UserRole},
 };
 
+// Initialize test environment
+fn init_test_env() {
+    use std::env;
+    
+    // Load test environment variables
+    dotenvy::from_filename(".env.test").ok();
+    
+    // Ensure we're using the test database
+    env::set_var("DATABASE_URL", "postgresql://readur_test:readur_test@localhost:5433/readur_test");
+}
+
 // Helper function to calculate file hash
 fn calculate_file_hash(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
@@ -119,6 +130,7 @@ async fn test_document_upload_duplicate_detection_returns_existing() -> Result<(
 
 #[tokio::test]
 async fn test_document_upload_unique_content_processed() -> Result<()> {
+    init_test_env();
     let state = create_test_app_state().await?;
     let user = create_test_user_with_suffix(&format!("upload_{}", uuid::Uuid::new_v4().simple()));
     

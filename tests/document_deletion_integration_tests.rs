@@ -12,6 +12,17 @@ use uuid::Uuid;
 
 use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse, UserRole};
 
+// Initialize test environment
+fn init_test_env() {
+    use std::env;
+    
+    // Load test environment variables
+    dotenvy::from_filename(".env.test").ok();
+    
+    // Ensure we're using the test database
+    env::set_var("DATABASE_URL", "postgresql://readur_test:readur_test@localhost:5433/readur_test");
+}
+
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
 }
@@ -450,6 +461,7 @@ async fn test_bulk_delete_mixed_existing_nonexistent() {
 
 #[tokio::test]
 async fn test_unauthorized_deletion() {
+    init_test_env();
     let client = DocumentDeletionTestClient::new();
     skip_if_server_down!(client);
     
