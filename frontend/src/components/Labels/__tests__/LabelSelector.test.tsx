@@ -302,7 +302,8 @@ describe('LabelSelector Component', () => {
       await user.type(input, 'New Label');
       
       await waitFor(() => {
-        expect(screen.getByTitle('Create label "New Label"')).toBeInTheDocument();
+        // Look for the create buttons - there should be multiple
+        expect(screen.getAllByText('Create "New Label"').length).toBeGreaterThan(0);
       });
     });
 
@@ -313,7 +314,7 @@ describe('LabelSelector Component', () => {
       await user.type(input, 'New Label');
       
       await waitFor(() => {
-        expect(screen.queryByTitle('Create label "New Label"')).not.toBeInTheDocument();
+        expect(screen.queryByText('Create "New Label"')).not.toBeInTheDocument();
       });
     });
 
@@ -344,7 +345,7 @@ describe('LabelSelector Component', () => {
       await user.type(input, 'Important'); // Existing label name
       
       // Should not show create button for existing names
-      expect(screen.queryByTitle('Create label "Important"')).not.toBeInTheDocument();
+      expect(screen.queryByText('Create "Important"')).not.toBeInTheDocument();
     });
 
     test('should call onCreateLabel when create button is clicked', async () => {
@@ -371,22 +372,29 @@ describe('LabelSelector Component', () => {
       await user.type(input, 'New Label');
       
       await waitFor(() => {
-        expect(screen.getByTitle('Create label "New Label"')).toBeInTheDocument();
+        expect(screen.getAllByText('Create "New Label"').length).toBeGreaterThan(0);
       });
       
-      const createButton = screen.getByTitle('Create label "New Label"');
+      const createButtons = screen.getAllByText('Create "New Label"');
+      await user.click(createButtons[0]);
+      
+      // Wait for dialog to open
+      await waitFor(() => {
+        expect(screen.getByText('Create New Label')).toBeInTheDocument();
+      });
+      
+      // Submit the form (the name is already pre-filled)
+      const createButton = screen.getByRole('button', { name: 'Create' });
       await user.click(createButton);
       
       await waitFor(() => {
-        expect(onCreateLabel).toHaveBeenCalledWith({
+        expect(onCreateLabel).toHaveBeenCalledWith(expect.objectContaining({
           name: 'New Label',
           description: undefined,
           color: '#0969da',
           background_color: undefined,
           icon: undefined,
-          document_count: 0,
-          source_count: 0,
-        });
+        }));
       });
     });
   });
@@ -467,7 +475,9 @@ describe('LabelSelector Component', () => {
       renderLabelSelector({ size: 'small' });
       
       const input = screen.getByRole('combobox');
-      expect(input.parentElement?.parentElement).toHaveClass('MuiInputBase-sizeSmall');
+      // The size class is applied to the OutlinedInput root element
+      const inputContainer = input.closest('.MuiOutlinedInput-root');
+      expect(inputContainer).toHaveClass('MuiInputBase-sizeSmall');
     });
 
     test('should render with medium size by default', () => {
@@ -512,10 +522,19 @@ describe('LabelSelector Component', () => {
       await user.type(input, 'New Label');
       
       await waitFor(() => {
-        expect(screen.getByTitle('Create label "New Label"')).toBeInTheDocument();
+        expect(screen.getAllByText('Create "New Label"').length).toBeGreaterThan(0);
       });
       
-      const createButton = screen.getByTitle('Create label "New Label"');
+      const createButtons = screen.getAllByText('Create "New Label"');
+      await user.click(createButtons[0]);
+      
+      // Wait for dialog to open
+      await waitFor(() => {
+        expect(screen.getByText('Create New Label')).toBeInTheDocument();
+      });
+      
+      // Submit the form to trigger the error
+      const createButton = screen.getByRole('button', { name: 'Create' });
       await user.click(createButton);
       
       await waitFor(() => {
