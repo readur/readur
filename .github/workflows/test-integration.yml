@@ -68,8 +68,10 @@ jobs:
 
       - name: Start readur server
         run: |
-          ./target/release/readur &
+          ./target/release/readur > server.log 2>&1 &
           echo $! > readur.pid
+          sleep 2
+          echo "Server started with PID: $(cat readur.pid)"
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           JWT_SECRET: test-secret-key
@@ -87,6 +89,16 @@ jobs:
             echo "Waiting for readur server... ($i/30)"
             sleep 2
           done
+          
+          # Verify the server is actually running
+          if ! curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
+            echo "ERROR: Server failed to start properly!"
+            if [ -f readur.pid ]; then
+              echo "Server PID: $(cat readur.pid)"
+              ps aux | grep $(cat readur.pid) || echo "Process not found"
+            fi
+            exit 1
+          fi
 
       - name: Wait for PostgreSQL to be ready
         run: |
@@ -108,8 +120,16 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+          API_URL: http://localhost:8000
           RUST_LOG: debug
           RUST_BACKTRACE: 1
+
+      - name: Print server logs on failure
+        if: failure()
+        run: |
+          echo "=== Server logs ==="
+          cat server.log || echo "No server logs found"
+          echo "=== End of server logs ==="
 
       - name: Stop readur server
         if: always()

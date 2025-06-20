@@ -3,6 +3,7 @@ pub mod batch_ingest;
 pub mod config;
 pub mod db;
 pub mod db_guardrails_simple;
+pub mod document_ingestion;
 pub mod enhanced_ocr;
 pub mod error_management;
 pub mod file_service;

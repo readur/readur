@@ -7,9 +7,14 @@ use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
 use walkdir::WalkDir;
-use sha2::{Sha256, Digest};
 
-use crate::{config::Config, db::Database, file_service::FileService, ocr_queue::OcrQueueService};
+use crate::{
+    config::Config, 
+    db::Database, 
+    file_service::FileService, 
+    document_ingestion::{DocumentIngestionService, IngestionResult},
+    ocr_queue::OcrQueueService
+};
 
 pub async fn start_folder_watcher(config: Config, db: Database) -> Result<()> {
     info!("Starting hybrid folder watcher on: {}", config.watch_folder);
@@ -315,36 +320,6 @@ async fn process_file(
         .ok_or_else(|| anyhow::anyhow!("Admin user not found. Please ensure the admin user is created."))?;
     let admin_user_id = admin_user.id;
     
-    // Calculate file hash for deduplication
-    let file_hash = calculate_file_hash(&file_data);
-    
-    // Check if this exact file content already exists for the admin user
-    debug!("Checking for duplicate content for admin user: {} (hash: {}, size: {} bytes)", 
-        filename, &file_hash[..8], file_size);
-    
-    // Query documents with the same file size for the admin user only
-    if let Ok(existing_docs) = db.get_documents_by_user_with_role(admin_user_id, crate::models::UserRole::Admin, 1000, 0).await {
-        let matching_docs: Vec<_> = existing_docs.into_iter()
-            .filter(|doc| doc.file_size == file_size)
-            .collect();
-            
-        debug!("Found {} documents with same size for admin user", matching_docs.len());
-        
-        for existing_doc in matching_docs {
-            // Read the existing file and compare hashes
-            if let Ok(existing_file_data) = tokio::fs::read(&existing_doc.file_path).await {
-                let existing_hash = calculate_file_hash(&existing_file_data);
-                if file_hash == existing_hash {
-                    info!("Skipping duplicate file content: {} (hash: {}, already exists as: {})", 
-                        filename, &file_hash[..8], existing_doc.original_filename);
-                    return Ok(());
-                }
-            }
-        }
-    }
-    
-    debug!("File content is unique: {} (hash: {})", filename, &file_hash[..8]);
-    
     // Validate PDF files before processing
     if mime_type == "application/pdf" {
         if !is_valid_pdf(&file_data) {
@@ -360,28 +335,34 @@ async fn process_file(
         }
     }
     
-    let saved_file_path = file_service.save_file(&filename, &file_data).await?;
+    // Use the unified ingestion service for consistent deduplication
+    let ingestion_service = DocumentIngestionService::new(db.clone(), file_service.clone());
     
-    // Calculate file hash for deduplication
-    let file_hash = calculate_file_hash(&file_data);
-    
-    let document = file_service.create_document(
-        &filename,
-        &filename,
-        &saved_file_path,
-        file_size,
-        &mime_type,
-        admin_user_id,
-        Some(file_hash),
-    );
-    
-    let created_doc = db.create_document(document).await?;
-    
-    // Enqueue for OCR processing with priority based on file size and type
-    let priority = calculate_priority(file_size, &mime_type);
-    queue_service.enqueue_document(created_doc.id, priority, file_size).await?;
-    
-    info!("Successfully queued file for OCR: {} (size: {} bytes)", filename, file_size);
+    let result = ingestion_service
+        .ingest_batch_file(&filename, file_data, &mime_type, admin_user_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    match result {
+        IngestionResult::Created(doc) => {
+            info!("Created new document for watch folder file {}: {}", filename, doc.id);
+            
+            // Enqueue for OCR processing with priority based on file size and type
+            let priority = calculate_priority(file_size, &mime_type);
+            queue_service.enqueue_document(doc.id, priority, file_size).await?;
+            
+            info!("Successfully queued file for OCR: {} (size: {} bytes)", filename, file_size);
+        }
+        IngestionResult::Skipped { existing_document_id, reason } => {
+            info!("Skipped duplicate watch folder file {}: {} (existing: {})", filename, reason, existing_document_id);
+        }
+        IngestionResult::ExistingDocument(doc) => {
+            info!("Found existing document for watch folder file {}: {} (not re-queuing for OCR)", filename, doc.id);
+        }
+        IngestionResult::TrackedAsDuplicate { existing_document_id } => {
+            info!("Tracked watch folder file {} as duplicate of existing document: {}", filename, existing_document_id);
+        }
+    }
     
     Ok(())
 }
@@ -463,9 +444,3 @@ fn clean_pdf_data(data: &[u8]) -> &[u8] {
     data
 }
 
-fn calculate_file_hash(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    format!("{:x}", result)
-}

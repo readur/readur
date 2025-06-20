@@ -9,16 +9,17 @@ use serde::Deserialize;
 use std::sync::Arc;
 use std::collections::HashMap;
 use utoipa::ToSchema;
-use sha2::{Sha256, Digest};
 use sqlx::Row;
 use axum::body::Bytes;
 
 use crate::{
     auth::AuthUser,
+    document_ingestion::{DocumentIngestionService, IngestionResult},
     file_service::FileService,
     models::DocumentResponse,
     AppState,
 };
+use tracing;
 
 #[derive(Deserialize, ToSchema)]
 struct PaginationQuery {
@@ -119,6 +120,7 @@ async fn upload_document(
     mut multipart: Multipart,
 ) -> Result<Json<DocumentResponse>, StatusCode> {
     let file_service = FileService::new(state.config.upload_path.clone());
+    let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service.clone());
     
     // Get user settings for file upload restrictions
     let settings = state
@@ -160,6 +162,54 @@ async fn upload_document(
             let data_len = data.len();
             file_data = Some((filename.clone(), data));
             tracing::info!("Received file: {}, size: {} bytes", filename, data_len);
+            let file_size = data.len() as i64;
+            
+            // Check file size limit
+            let max_size_bytes = (settings.max_file_size_mb as i64) * 1024 * 1024;
+            if file_size > max_size_bytes {
+                return Err(StatusCode::PAYLOAD_TOO_LARGE);
+            }
+            
+            let mime_type = mime_guess::from_path(&filename)
+                .first_or_octet_stream()
+                .to_string();
+            
+            // Use the unified ingestion service with AllowDuplicateContent policy
+            // This will create separate documents for different filenames even with same content
+            let result = ingestion_service
+                .ingest_upload(&filename, data.to_vec(), &mime_type, auth_user.user.id)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Document ingestion failed for user {} filename {}: {}", 
+                                   auth_user.user.id, filename, e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            
+            let (saved_document, should_queue_ocr) = match result {
+                IngestionResult::Created(doc) => (doc, true), // New document - queue for OCR
+                IngestionResult::ExistingDocument(doc) => (doc, false), // Existing document - don't re-queue OCR
+                _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+            };
+            
+            let document_id = saved_document.id;
+            let enable_background_ocr = settings.enable_background_ocr;
+            
+            if enable_background_ocr && should_queue_ocr {
+                // Use the shared queue service from AppState instead of creating a new one
+                // Calculate priority based on file size
+                let priority = match saved_document.file_size {
+                    0..=1048576 => 10,          // <= 1MB: highest priority
+                    ..=5242880 => 8,            // 1-5MB: high priority
+                    ..=10485760 => 6,           // 5-10MB: medium priority  
+                    ..=52428800 => 4,           // 10-50MB: low priority
+                    _ => 2,                     // > 50MB: lowest priority
+                };
+                
+                state.queue_service.enqueue_document(document_id, priority, saved_document.file_size).await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+            
+            return Ok(Json(saved_document.into()));
         }
     }
     
@@ -315,12 +365,6 @@ async fn upload_document(
     Err(StatusCode::BAD_REQUEST)
 }
 
-fn calculate_file_hash(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    format!("{:x}", result)
-}
 
 #[utoipa::path(
     get,

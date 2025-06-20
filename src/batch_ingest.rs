@@ -6,12 +6,12 @@ use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use walkdir::WalkDir;
-use sha2::{Sha256, Digest};
 
 use crate::{
     config::Config,
     db::Database,
     file_service::FileService,
+    document_ingestion::{DocumentIngestionService, IngestionResult},
     ocr_queue::OcrQueueService,
 };
 
@@ -189,47 +189,36 @@ async fn process_single_file(
     // Read file data
     let file_data = fs::read(&path).await?;
     
-    // Calculate file hash for deduplication
-    let file_hash = calculate_file_hash(&file_data);
-    
-    // Check for duplicate content using efficient hash lookup
-    match db.get_document_by_user_and_hash(user_id, &file_hash).await {
-        Ok(Some(existing_doc)) => {
-            info!("Skipping duplicate file: {} matches existing document {} (hash: {})", 
-                filename, existing_doc.original_filename, &file_hash[..8]);
-            return Ok(None); // Skip processing duplicate
-        }
-        Ok(None) => {
-            info!("No duplicate content found for hash {}, proceeding with file processing", &file_hash[..8]);
-        }
-        Err(e) => {
-            warn!("Error checking for duplicate hash {}: {}", &file_hash[..8], e);
-            // Continue processing even if duplicate check fails
-        }
-    }
-    
     let mime_type = mime_guess::from_path(&filename)
         .first_or_octet_stream()
         .to_string();
     
-    // Save file
-    let file_path = file_service.save_file(&filename, &file_data).await?;
+    // Use the unified ingestion service for consistent deduplication
+    let ingestion_service = DocumentIngestionService::new(db, file_service);
     
-    // Create document with hash
-    let document = file_service.create_document(
-        &filename,
-        &filename,
-        &file_path,
-        file_size,
-        &mime_type,
-        user_id,
-        Some(file_hash),
-    );
-    
-    // Save to database (without OCR)
-    let created_doc = db.create_document(document).await?;
-    
-    Ok(Some((created_doc.id, file_size)))
+    let result = ingestion_service
+        .ingest_batch_file(&filename, file_data, &mime_type, user_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    match result {
+        IngestionResult::Created(doc) => {
+            info!("Created new document for batch file {}: {}", filename, doc.id);
+            Ok(Some((doc.id, file_size)))
+        }
+        IngestionResult::Skipped { existing_document_id, reason } => {
+            info!("Skipped duplicate batch file {}: {} (existing: {})", filename, reason, existing_document_id);
+            Ok(None) // File was skipped due to deduplication
+        }
+        IngestionResult::ExistingDocument(doc) => {
+            info!("Found existing document for batch file {}: {}", filename, doc.id);
+            Ok(None) // Don't re-queue for OCR
+        }
+        IngestionResult::TrackedAsDuplicate { existing_document_id } => {
+            info!("Tracked batch file {} as duplicate of existing document: {}", filename, existing_document_id);
+            Ok(None) // File was tracked as duplicate
+        }
+    }
 }
 
 fn calculate_priority(file_size: i64) -> i32 {
@@ -247,9 +236,3 @@ fn calculate_priority(file_size: i64) -> i32 {
     }
 }
 
-fn calculate_file_hash(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    format!("{:x}", result)
-}

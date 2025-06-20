@@ -346,7 +346,7 @@ async fn start_webdav_sync(
     let enable_background_ocr = user_settings.enable_background_ocr;
     
     tokio::spawn(async move {
-        match perform_webdav_sync_with_tracking(state_clone.clone(), user_id, webdav_service, webdav_config, enable_background_ocr).await {
+        match perform_webdav_sync_with_tracking(state_clone.clone(), user_id, webdav_service, webdav_config, enable_background_ocr, None).await {
             Ok(files_processed) => {
                 info!("WebDAV sync completed successfully for user {}: {} files processed", user_id, files_processed);
                 

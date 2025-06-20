@@ -5,7 +5,6 @@ use chrono::Utc;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use futures::stream::{FuturesUnordered, StreamExt};
-use sha2::{Sha256, Digest};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -13,6 +12,7 @@ use crate::{
     AppState,
     models::{FileInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
     file_service::FileService,
+    document_ingestion::{DocumentIngestionService, IngestionResult},
     local_folder_service::LocalFolderService,
     s3_service::S3Service,
     webdav_service::{WebDAVService, WebDAVConfig},
@@ -507,7 +507,7 @@ impl SourceSyncService {
     async fn process_single_file<D, Fut>(
         state: Arc<AppState>,
         user_id: Uuid,
-        _source_id: Uuid,
+        source_id: Uuid,
         file_info: &FileInfo,
         enable_background_ocr: bool,
         semaphore: Arc<Semaphore>,
@@ -521,9 +521,6 @@ impl SourceSyncService {
             .map_err(|e| anyhow!("Semaphore error: {}", e))?;
 
         info!("Processing file: {}", file_info.path);
-
-        // Check if we've already processed this file by looking for documents with same source
-        // This is a simplified version - you might want to implement source-specific tracking tables
         
         // Download the file
         let file_data = download_file(file_info.path.clone()).await
@@ -531,73 +528,55 @@ impl SourceSyncService {
 
         info!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
 
-        // Calculate file hash for deduplication
-        let file_hash = Self::calculate_file_hash(&file_data);
-
-        // Check for duplicate content using efficient hash lookup
-        match state.db.get_document_by_user_and_hash(user_id, &file_hash).await {
-            Ok(Some(existing_doc)) => {
-                info!("File content already exists for user {}: {} matches existing document {} (hash: {})", 
-                    user_id, file_info.name, existing_doc.original_filename, &file_hash[..8]);
-                return Ok(false); // Skip processing duplicate
-            }
-            Ok(None) => {
-                info!("No duplicate content found for hash {}, proceeding with file processing", &file_hash[..8]);
-            }
-            Err(e) => {
-                warn!("Error checking for duplicate hash {}: {}", &file_hash[..8], e);
-                // Continue processing even if duplicate check fails
-            }
-        }
-
-        // Save file to disk
+        // Use the unified ingestion service for consistent deduplication
         let file_service = FileService::new(state.config.upload_path.clone());
-        let saved_file_path = file_service.save_file(&file_info.name, &file_data).await
-            .map_err(|e| anyhow!("Failed to save {}: {}", file_info.name, e))?;
+        let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
+        
+        let result = ingestion_service
+            .ingest_from_source(
+                &file_info.name,
+                file_data,
+                &file_info.mime_type,
+                user_id,
+                source_id,
+                "source_sync",
+            )
+            .await
+            .map_err(|e| anyhow!("Document ingestion failed for {}: {}", file_info.name, e))?;
 
-        // Create document record with hash
-        let document = file_service.create_document(
-            &file_info.name,
-            &file_info.name,
-            &saved_file_path,
-            file_data.len() as i64,
-            &file_info.mime_type,
-            user_id,
-            Some(file_hash.clone()), // Store the calculated hash
-        );
+        let (document, should_queue_ocr) = match result {
+            IngestionResult::Created(doc) => {
+                info!("Created new document for {}: {}", file_info.name, doc.id);
+                (doc, true) // New document - queue for OCR
+            }
+            IngestionResult::Skipped { existing_document_id, reason } => {
+                info!("Skipped duplicate file {}: {} (existing: {})", file_info.name, reason, existing_document_id);
+                return Ok(false); // File was skipped due to deduplication
+            }
+            IngestionResult::ExistingDocument(doc) => {
+                info!("Found existing document for {}: {}", file_info.name, doc.id);
+                (doc, false) // Existing document - don't re-queue OCR
+            }
+            IngestionResult::TrackedAsDuplicate { existing_document_id } => {
+                info!("Tracked {} as duplicate of existing document: {}", file_info.name, existing_document_id);
+                return Ok(false); // File was tracked as duplicate
+            }
+        };
 
-        let created_document = state.db.create_document(document).await
-            .map_err(|e| anyhow!("Failed to create document {}: {}", file_info.name, e))?;
+        // Queue for OCR if enabled and this is a new document
+        if enable_background_ocr && should_queue_ocr {
+            info!("Background OCR enabled, queueing document {} for processing", document.id);
 
-        info!("Created document record for {}: {}", file_info.name, created_document.id);
+            let priority = if file_info.size <= 1024 * 1024 { 10 }
+            else if file_info.size <= 5 * 1024 * 1024 { 8 }
+            else if file_info.size <= 10 * 1024 * 1024 { 6 }
+            else if file_info.size <= 50 * 1024 * 1024 { 4 }
+            else { 2 };
 
-        // Queue for OCR if enabled
-        if enable_background_ocr {
-            info!("Background OCR enabled, queueing document {} for processing", created_document.id);
-
-            match state.db.pool.acquire().await {
-                Ok(_conn) => {
-                    let queue_service = crate::ocr_queue::OcrQueueService::new(
-                        state.db.clone(),
-                        state.db.pool.clone(),
-                        4
-                    );
-
-                    let priority = if file_info.size <= 1024 * 1024 { 10 }
-                    else if file_info.size <= 5 * 1024 * 1024 { 8 }
-                    else if file_info.size <= 10 * 1024 * 1024 { 6 }
-                    else if file_info.size <= 50 * 1024 * 1024 { 4 }
-                    else { 2 };
-
-                    if let Err(e) = queue_service.enqueue_document(created_document.id, priority, file_info.size).await {
-                        error!("Failed to enqueue document for OCR: {}", e);
-                    } else {
-                        info!("Enqueued document {} for OCR processing", created_document.id);
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to connect to database for OCR queueing: {}", e);
-                }
+            if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
+                error!("Failed to enqueue document for OCR: {}", e);
+            } else {
+                info!("Enqueued document {} for OCR processing", document.id);
             }
         }
 
@@ -607,7 +586,7 @@ impl SourceSyncService {
     async fn process_single_file_with_cancellation<D, Fut>(
         state: Arc<AppState>,
         user_id: Uuid,
-        _source_id: Uuid,
+        source_id: Uuid,
         file_info: &FileInfo,
         enable_background_ocr: bool,
         semaphore: Arc<Semaphore>,
@@ -647,79 +626,61 @@ impl SourceSyncService {
 
         info!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
 
-        // Calculate file hash for deduplication
-        let file_hash = Self::calculate_file_hash(&file_data);
-
-        // Check for duplicate content using efficient hash lookup
-        match state.db.get_document_by_user_and_hash(user_id, &file_hash).await {
-            Ok(Some(existing_doc)) => {
-                info!("File content already exists for user {}: {} matches existing document {} (hash: {})", 
-                    user_id, file_info.name, existing_doc.original_filename, &file_hash[..8]);
-                return Ok(false); // Skip processing duplicate
-            }
-            Ok(None) => {
-                info!("No duplicate content found for hash {}, proceeding with file processing", &file_hash[..8]);
-            }
-            Err(e) => {
-                warn!("Error checking for duplicate hash {}: {}", &file_hash[..8], e);
-                // Continue processing even if duplicate check fails
-            }
-        }
-
-        // Check for cancellation before saving
+        // Check for cancellation before processing
         if cancellation_token.is_cancelled() {
-            info!("File processing cancelled before saving: {}", file_info.path);
+            info!("File processing cancelled before ingestion: {}", file_info.path);
             return Err(anyhow!("Processing cancelled"));
         }
 
-        // Save file to disk
+        // Use the unified ingestion service for consistent deduplication
         let file_service = FileService::new(state.config.upload_path.clone());
-        let saved_file_path = file_service.save_file(&file_info.name, &file_data).await
-            .map_err(|e| anyhow!("Failed to save {}: {}", file_info.name, e))?;
+        let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
+        
+        let result = ingestion_service
+            .ingest_from_source(
+                &file_info.name,
+                file_data,
+                &file_info.mime_type,
+                user_id,
+                source_id,
+                "source_sync",
+            )
+            .await
+            .map_err(|e| anyhow!("Document ingestion failed for {}: {}", file_info.name, e))?;
 
-        // Create document record with hash
-        let document = file_service.create_document(
-            &file_info.name,
-            &file_info.name,
-            &saved_file_path,
-            file_data.len() as i64,
-            &file_info.mime_type,
-            user_id,
-            Some(file_hash.clone()), // Store the calculated hash
-        );
+        let (document, should_queue_ocr) = match result {
+            IngestionResult::Created(doc) => {
+                info!("Created new document for {}: {}", file_info.name, doc.id);
+                (doc, true) // New document - queue for OCR
+            }
+            IngestionResult::Skipped { existing_document_id, reason } => {
+                info!("Skipped duplicate file {}: {} (existing: {})", file_info.name, reason, existing_document_id);
+                return Ok(false); // File was skipped due to deduplication
+            }
+            IngestionResult::ExistingDocument(doc) => {
+                info!("Found existing document for {}: {}", file_info.name, doc.id);
+                (doc, false) // Existing document - don't re-queue OCR
+            }
+            IngestionResult::TrackedAsDuplicate { existing_document_id } => {
+                info!("Tracked {} as duplicate of existing document: {}", file_info.name, existing_document_id);
+                return Ok(false); // File was tracked as duplicate
+            }
+        };
 
-        let created_document = state.db.create_document(document).await
-            .map_err(|e| anyhow!("Failed to create document {}: {}", file_info.name, e))?;
+        // Queue for OCR if enabled and this is a new document (OCR continues even if sync is cancelled)
+        if enable_background_ocr && should_queue_ocr {
+            info!("Background OCR enabled, queueing document {} for processing", document.id);
 
-        info!("Created document record for {}: {}", file_info.name, created_document.id);
+            let priority = if file_info.size <= 1024 * 1024 { 10 }
+            else if file_info.size <= 5 * 1024 * 1024 { 8 }
+            else if file_info.size <= 10 * 1024 * 1024 { 6 }
+            else if file_info.size <= 50 * 1024 * 1024 { 4 }
+            else { 2 };
 
-        // Queue for OCR if enabled (OCR continues even if sync is cancelled)
-        if enable_background_ocr {
-            info!("Background OCR enabled, queueing document {} for processing", created_document.id);
-
-            match state.db.pool.acquire().await {
-                Ok(_conn) => {
-                    let queue_service = crate::ocr_queue::OcrQueueService::new(
-                        state.db.clone(),
-                        state.db.pool.clone(),
-                        4
-                    );
-
-                    let priority = if file_info.size <= 1024 * 1024 { 10 }
-                    else if file_info.size <= 5 * 1024 * 1024 { 8 }
-                    else if file_info.size <= 10 * 1024 * 1024 { 6 }
-                    else if file_info.size <= 50 * 1024 * 1024 { 4 }
-                    else { 2 };
-
-                    if let Err(e) = queue_service.enqueue_document(created_document.id, priority, file_info.size).await {
-                        error!("Failed to enqueue document for OCR: {}", e);
-                    } else {
-                        info!("Enqueued document {} for OCR processing", created_document.id);
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to connect to database for OCR queueing: {}", e);
-                }
+            if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
+                error!("Failed to enqueue document for OCR: {}", e);
+            } else {
+                info!("Enqueued document {} for OCR processing", document.id);
             }
         }
 
@@ -752,10 +713,4 @@ impl SourceSyncService {
         Ok(())
     }
 
-    fn calculate_file_hash(data: &[u8]) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(data);
-        let result = hasher.finalize();
-        format!("{:x}", result)
-    }
 }
