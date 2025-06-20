@@ -74,6 +74,7 @@ jobs:
         run: cargo build --release
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/readur_test
+          RUST_BACKTRACE: 1
 
       - name: Build frontend
         working-directory: ./frontend
@@ -92,6 +93,7 @@ jobs:
           FRONTEND_PATH: ./frontend/dist
           UPLOAD_PATH: ./uploads
           WATCH_PATH: ./watch
+          RUST_BACKTRACE: 1
 
       - name: Wait for backend to be ready
         run: |
@@ -104,6 +106,7 @@ jobs:
             sleep 2
           done
 
+
       - name: Install Playwright browsers
         working-directory: ./frontend
         run: npx playwright install --with-deps
@@ -113,6 +116,7 @@ jobs:
         run: npm run test:e2e
         env:
           VITE_API_URL: http://localhost:8000
+          PLAYWRIGHT_BASE_URL: http://localhost:8000
 
       - name: Stop backend server
         if: always()

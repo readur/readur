@@ -185,6 +185,7 @@ run_unit_tests() {
     local exit_code
     
     output=$(DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
+        RUST_BACKTRACE=1 \
         cargo test --lib --no-fail-fast 2>&1)
     exit_code=$?
     
@@ -217,6 +218,7 @@ run_integration_tests() {
     DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
     TEST_DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
     API_URL="http://localhost:8001" \
+    RUST_BACKTRACE=1 \
     cargo test --test '*' --no-fail-fast 2>&1 | tee "$output_file"
     
     exit_code=${PIPESTATUS[0]}
