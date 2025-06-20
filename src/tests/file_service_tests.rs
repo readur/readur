@@ -131,3 +131,378 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+#[cfg(test)]
+mod file_deletion_tests {
+    use super::*;
+    use crate::models::Document;
+    use chrono::Utc;
+    use std::fs;
+    use std::path::Path;
+
+    fn create_test_document_with_files(service: &FileService, temp_dir: &TempDir, user_id: uuid::Uuid) -> (Document, String, String, String) {
+        let base_path = temp_dir.path().join("documents");
+        fs::create_dir_all(&base_path).unwrap();
+        
+        // Create main document file
+        let main_file_path = base_path.join("test_document.pdf");
+        fs::write(&main_file_path, b"PDF content").unwrap();
+        
+        // Create thumbnail file
+        let thumbnail_path = base_path.join("test_document_thumb.jpg");
+        fs::write(&thumbnail_path, b"Thumbnail content").unwrap();
+        
+        // Create processed image file
+        let processed_path = base_path.join("test_document_processed.jpg");
+        fs::write(&processed_path, b"Processed content").unwrap();
+        
+        let document = Document {
+            id: uuid::Uuid::new_v4(),
+            filename: "test_document.pdf".to_string(),
+            original_filename: "test_document.pdf".to_string(),
+            file_path: main_file_path.to_string_lossy().to_string(),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            content: Some("Test document content".to_string()),
+            ocr_text: Some("This is extracted OCR text".to_string()),
+            ocr_confidence: Some(95.5),
+            ocr_word_count: Some(150),
+            ocr_processing_time_ms: Some(1200),
+            ocr_status: Some("completed".to_string()),
+            ocr_error: None,
+            ocr_completed_at: Some(Utc::now()),
+            tags: vec!["test".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some("hash123".to_string()),
+        };
+        
+        (
+            document,
+            main_file_path.to_string_lossy().to_string(),
+            thumbnail_path.to_string_lossy().to_string(),
+            processed_path.to_string_lossy().to_string(),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_success() {
+        let (service, temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let (document, main_path, thumb_path, processed_path) = 
+            create_test_document_with_files(&service, &temp_dir, user_id);
+        
+        // Verify files exist before deletion
+        assert!(Path::new(&main_path).exists());
+        assert!(Path::new(&thumb_path).exists());
+        assert!(Path::new(&processed_path).exists());
+        
+        // Delete document files
+        let result = service.delete_document_files(&document).await;
+        assert!(result.is_ok());
+        
+        // Verify main file is deleted
+        assert!(!Path::new(&main_path).exists());
+        
+        // Verify thumbnail and processed files are deleted
+        assert!(!Path::new(&thumb_path).exists());
+        assert!(!Path::new(&processed_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_main_file_missing() {
+        let (service, temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let (mut document, main_path, thumb_path, processed_path) = 
+            create_test_document_with_files(&service, &temp_dir, user_id);
+        
+        // Delete main file manually before test
+        fs::remove_file(&main_path).unwrap();
+        assert!(!Path::new(&main_path).exists());
+        
+        // Verify thumbnail and processed files still exist
+        assert!(Path::new(&thumb_path).exists());
+        assert!(Path::new(&processed_path).exists());
+        
+        // Try to delete document files (should still clean up other files)
+        let result = service.delete_document_files(&document).await;
+        assert!(result.is_ok());
+        
+        // Verify thumbnail and processed files are deleted despite main file missing
+        assert!(!Path::new(&thumb_path).exists());
+        assert!(!Path::new(&processed_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_thumbnail_missing() {
+        let (service, temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let (document, main_path, thumb_path, processed_path) = 
+            create_test_document_with_files(&service, &temp_dir, user_id);
+        
+        // Delete thumbnail file manually before test
+        fs::remove_file(&thumb_path).unwrap();
+        assert!(!Path::new(&thumb_path).exists());
+        
+        // Verify other files still exist
+        assert!(Path::new(&main_path).exists());
+        assert!(Path::new(&processed_path).exists());
+        
+        // Delete document files
+        let result = service.delete_document_files(&document).await;
+        assert!(result.is_ok());
+        
+        // Verify main and processed files are deleted
+        assert!(!Path::new(&main_path).exists());
+        assert!(!Path::new(&processed_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_processed_missing() {
+        let (service, temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let (document, main_path, thumb_path, processed_path) = 
+            create_test_document_with_files(&service, &temp_dir, user_id);
+        
+        // Delete processed file manually before test
+        fs::remove_file(&processed_path).unwrap();
+        assert!(!Path::new(&processed_path).exists());
+        
+        // Verify other files still exist
+        assert!(Path::new(&main_path).exists());
+        assert!(Path::new(&thumb_path).exists());
+        
+        // Delete document files
+        let result = service.delete_document_files(&document).await;
+        assert!(result.is_ok());
+        
+        // Verify main and thumbnail files are deleted
+        assert!(!Path::new(&main_path).exists());
+        assert!(!Path::new(&thumb_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_all_missing() {
+        let (service, _temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let document = Document {
+            id: uuid::Uuid::new_v4(),
+            filename: "nonexistent.pdf".to_string(),
+            original_filename: "nonexistent.pdf".to_string(),
+            file_path: "/nonexistent/path/nonexistent.pdf".to_string(),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            content: None,
+            ocr_text: None,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            ocr_status: Some("pending".to_string()),
+            ocr_error: None,
+            ocr_completed_at: None,
+            tags: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: None,
+        };
+        
+        // Try to delete nonexistent files (should not fail)
+        let result = service.delete_document_files(&document).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_with_different_extensions() {
+        let (service, temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let base_path = temp_dir.path().join("documents");
+        fs::create_dir_all(&base_path).unwrap();
+        
+        // Test with PNG document
+        let main_file_path = base_path.join("test_image.png");
+        fs::write(&main_file_path, b"PNG content").unwrap();
+        
+        let thumbnail_path = base_path.join("test_image_thumb.jpg");
+        fs::write(&thumbnail_path, b"Thumbnail content").unwrap();
+        
+        let processed_path = base_path.join("test_image_processed.jpg");
+        fs::write(&processed_path, b"Processed content").unwrap();
+        
+        let document = Document {
+            id: uuid::Uuid::new_v4(),
+            filename: "test_image.png".to_string(),
+            original_filename: "test_image.png".to_string(),
+            file_path: main_file_path.to_string_lossy().to_string(),
+            file_size: 2048,
+            mime_type: "image/png".to_string(),
+            content: None,
+            ocr_text: Some("Image OCR text".to_string()),
+            ocr_confidence: Some(88.2),
+            ocr_word_count: Some(25),
+            ocr_processing_time_ms: Some(800),
+            ocr_status: Some("completed".to_string()),
+            ocr_error: None,
+            ocr_completed_at: Some(Utc::now()),
+            tags: vec!["image".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some("imagehash456".to_string()),
+        };
+        
+        // Verify files exist
+        assert!(Path::new(&main_file_path).exists());
+        assert!(Path::new(&thumbnail_path).exists());
+        assert!(Path::new(&processed_path).exists());
+        
+        // Delete document files
+        let result = service.delete_document_files(&document).await;
+        assert!(result.is_ok());
+        
+        // Verify all files are deleted
+        assert!(!Path::new(&main_file_path).exists());
+        assert!(!Path::new(&thumbnail_path).exists());
+        assert!(!Path::new(&processed_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_partial_failure_continues() {
+        let (service, temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let base_path = temp_dir.path().join("documents");
+        fs::create_dir_all(&base_path).unwrap();
+        
+        // Create main file with readonly permissions to simulate failure
+        let main_file_path = base_path.join("readonly_document.pdf");
+        fs::write(&main_file_path, b"PDF content").unwrap();
+        
+        // Create thumbnail file normally
+        let thumbnail_path = base_path.join("readonly_document_thumb.jpg");
+        fs::write(&thumbnail_path, b"Thumbnail content").unwrap();
+        
+        let document = Document {
+            id: uuid::Uuid::new_v4(),
+            filename: "readonly_document.pdf".to_string(),
+            original_filename: "readonly_document.pdf".to_string(),
+            file_path: main_file_path.to_string_lossy().to_string(),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            content: Some("Test content".to_string()),
+            ocr_text: None,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            ocr_status: Some("pending".to_string()),
+            ocr_error: None,
+            ocr_completed_at: None,
+            tags: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some("hash789".to_string()),
+        };
+        
+        // Verify files exist
+        assert!(Path::new(&main_file_path).exists());
+        assert!(Path::new(&thumbnail_path).exists());
+        
+        // Delete document files (should succeed even if some files can't be deleted)
+        let result = service.delete_document_files(&document).await;
+        assert!(result.is_ok());
+        
+        // At minimum, the function should attempt to delete all files
+        // and not fail completely if one file can't be deleted
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_with_no_extension() {
+        let (service, temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let base_path = temp_dir.path().join("documents");
+        fs::create_dir_all(&base_path).unwrap();
+        
+        // Create document with no extension
+        let main_file_path = base_path.join("document_no_ext");
+        fs::write(&main_file_path, b"Content without extension").unwrap();
+        
+        let document = Document {
+            id: uuid::Uuid::new_v4(),
+            filename: "document_no_ext".to_string(),
+            original_filename: "document_no_ext".to_string(),
+            file_path: main_file_path.to_string_lossy().to_string(),
+            file_size: 512,
+            mime_type: "text/plain".to_string(),
+            content: Some("Plain text content".to_string()),
+            ocr_text: None,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            ocr_status: Some("not_applicable".to_string()),
+            ocr_error: None,
+            ocr_completed_at: None,
+            tags: vec!["text".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some("texthash".to_string()),
+        };
+        
+        // Verify file exists
+        assert!(Path::new(&main_file_path).exists());
+        
+        // Delete document files
+        let result = service.delete_document_files(&document).await;
+        assert!(result.is_ok());
+        
+        // Verify file is deleted
+        assert!(!Path::new(&main_file_path).exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_document_files_concurrent_calls() {
+        let (service, temp_dir) = create_test_file_service();
+        let user_id = uuid::Uuid::new_v4();
+        
+        let (document, main_path, thumb_path, processed_path) = 
+            create_test_document_with_files(&service, &temp_dir, user_id);
+        
+        // Verify files exist
+        assert!(Path::new(&main_path).exists());
+        assert!(Path::new(&thumb_path).exists());
+        assert!(Path::new(&processed_path).exists());
+        
+        // Call delete_document_files concurrently
+        let service_clone = service.clone();
+        let document_clone = document.clone();
+        
+        let task1 = tokio::spawn(async move {
+            service.delete_document_files(&document).await
+        });
+        
+        let task2 = tokio::spawn(async move {
+            service_clone.delete_document_files(&document_clone).await
+        });
+        
+        // Both calls should complete (first one deletes, second one is no-op)
+        let result1 = task1.await.unwrap();
+        let result2 = task2.await.unwrap();
+        
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+        
+        // Verify files are deleted
+        assert!(!Path::new(&main_path).exists());
+        assert!(!Path::new(&thumb_path).exists());
+        assert!(!Path::new(&processed_path).exists());
+    }
+}

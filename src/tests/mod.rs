@@ -2,6 +2,7 @@ mod helpers;
 mod auth_tests;
 mod db_tests;
 mod documents_tests;
+mod document_routes_tests;
 mod file_service_tests;
 mod labels_tests;
 mod ocr_tests;
