@@ -169,6 +169,11 @@ pub async fn create_label(
 ) -> Result<Json<Label>, StatusCode> {
     let user_id = auth_user.user.id;
 
+    // Validate name is not empty
+    if payload.name.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
     // Validate color format
     if !payload.color.starts_with('#') || payload.color.len() != 7 {
         return Err(StatusCode::BAD_REQUEST);

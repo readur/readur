@@ -437,6 +437,10 @@ fn test_concurrent_access_safety() {
     let base_path = Arc::new(temp_dir.path().to_path_buf());
     let file_count = Arc::new(Mutex::new(0));
     
+    // Verify the directory has files before testing concurrent access
+    let initial_count = fs::read_dir(&*base_path).unwrap().count();
+    assert!(initial_count > 0, "Test directory should contain files");
+    
     let mut handles = vec![];
     
     // Spawn multiple threads to read the same directory
@@ -446,15 +450,24 @@ fn test_concurrent_access_safety() {
         
         let handle = thread::spawn(move || {
             let mut local_count = 0;
-            if let Ok(entries) = fs::read_dir(&*base_path) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        if entry.file_type().unwrap().is_file() {
-                            local_count += 1;
+            
+            // Recursively count files
+            fn count_files_in_dir(path: &std::path::Path, count: &mut usize) {
+                if let Ok(entries) = fs::read_dir(path) {
+                    for entry in entries {
+                        if let Ok(entry) = entry {
+                            let path = entry.path();
+                            if path.is_file() {
+                                *count += 1;
+                            } else if path.is_dir() {
+                                count_files_in_dir(&path, count);
+                            }
                         }
                     }
                 }
             }
+            
+            count_files_in_dir(&*base_path, &mut local_count);
             
             let mut count = file_count.lock().unwrap();
             *count += local_count;
