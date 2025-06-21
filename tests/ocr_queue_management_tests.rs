@@ -204,7 +204,10 @@ impl OCRQueueTestClient {
                 .await?;
             
             if response.status().is_success() {
-                let documents: Vec<DocumentResponse> = response.json().await?;
+                let response_json: serde_json::Value = response.json().await?;
+                let documents: Vec<DocumentResponse> = serde_json::from_value(
+                    response_json["documents"].clone()
+                )?;
                 
                 for (i, doc_id) in document_ids.iter().enumerate() {
                     if !completed_status[i] {
@@ -239,7 +242,10 @@ impl OCRQueueTestClient {
             return Err(format!("Get documents failed: {}", response.text().await?).into());
         }
         
-        let documents: Vec<DocumentResponse> = response.json().await?;
+        let response_json: serde_json::Value = response.json().await?;
+        let documents: Vec<DocumentResponse> = serde_json::from_value(
+            response_json["documents"].clone()
+        )?;
         Ok(documents)
     }
 }

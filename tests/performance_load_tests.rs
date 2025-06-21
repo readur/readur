@@ -235,7 +235,10 @@ impl LoadTestClient {
             return Err(format!("List documents failed: {}", response.text().await?).into());
         }
         
-        let documents: Vec<DocumentResponse> = response.json().await?;
+        let response_json: serde_json::Value = response.json().await?;
+        let documents: Vec<DocumentResponse> = serde_json::from_value(
+            response_json["documents"].clone()
+        )?;
         Ok((documents, elapsed))
     }
     
