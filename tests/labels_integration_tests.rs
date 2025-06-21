@@ -15,7 +15,7 @@ impl TestClient {
     fn new() -> Self {
         Self {
             client: Client::new(),
-            base_url: "http://localhost:3001".to_string(),
+            base_url: "http://localhost:8000".to_string(),
             auth_token: None,
         }
     }
