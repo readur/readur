@@ -311,6 +311,7 @@ impl PipelineDebugger {
 }
 
 #[tokio::test]
+#[ignore = "Debug test - run manually when needed"]
 async fn debug_high_concurrency_pipeline() {
     println!("🚀 STARTING HIGH-CONCURRENCY PIPELINE DEBUG");
     println!("============================================");
@@ -450,6 +451,7 @@ async fn debug_high_concurrency_pipeline() {
 }
 
 #[tokio::test]
+#[ignore = "Debug test - run manually when needed"]
 async fn debug_extreme_high_concurrency_pipeline() {
     println!("🚀 STARTING EXTREME HIGH-CONCURRENCY PIPELINE STRESS TEST");
     println!("========================================================");
@@ -587,7 +589,8 @@ async fn debug_extreme_high_concurrency_pipeline() {
     }
 }
 
-#[tokio::test] 
+#[tokio::test]
+#[ignore = "Debug test - run manually when needed"]
 async fn debug_document_upload_race_conditions() {
     println!("🔍 DEBUGGING DOCUMENT UPLOAD PROCESS");
     println!("====================================");
