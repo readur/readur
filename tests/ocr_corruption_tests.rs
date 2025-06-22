@@ -163,45 +163,110 @@ impl OcrTestClient {
     
     /// Upload multiple documents simultaneously and track their OCR results
     async fn upload_documents_simultaneously(&self, documents: Vec<(&str, &str)>) -> Result<Vec<(Uuid, String, Value)>, Box<dyn std::error::Error>> {
-        let mut upload_tasks = Vec::new();
+        use futures::future::join_all;
         
-        // Upload all documents simultaneously
-        for (content, filename) in documents {
-            let content_owned = content.to_string();
-            let filename_owned = filename.to_string();
-            let client_ref = self;
-            
-            let task = async move {
-                client_ref.upload_document(&content_owned, &filename_owned).await
-            };
-            
-            upload_tasks.push(task);
-        }
+        let token = self.token.as_ref().ok_or("Not authenticated")?.clone();
         
-        // Wait for all uploads to complete
+        // Create upload futures
+        let upload_futures: Vec<_> = documents.into_iter()
+            .map(|(content, filename)| {
+                let content_owned = content.to_string();
+                let filename_owned = filename.to_string();
+                let client = self.client.clone();
+                let token = token.clone();
+                let base_url = get_base_url();
+                
+                async move {
+                    // Create multipart form
+                    let form = reqwest::multipart::Form::new()
+                        .text("file", content_owned.clone())
+                        .text("filename", filename_owned);
+                    
+                    let response = client
+                        .post(&format!("{}/api/documents", base_url))
+                        .header("Authorization", format!("Bearer {}", token))
+                        .multipart(form)
+                        .send()
+                        .await?;
+                    
+                    if !response.status().is_success() {
+                        return Err(format!("Upload failed: {}", response.text().await?).into());
+                    }
+                    
+                    let document: DocumentResponse = response.json().await?;
+                    Ok::<(Uuid, String), Box<dyn std::error::Error>>((document.id, content_owned))
+                }
+            })
+            .collect();
+        
+        // Execute all uploads concurrently
+        let upload_results = join_all(upload_futures).await;
+        
+        // Collect successfully uploaded documents
         let mut uploaded_docs = Vec::new();
-        for task in upload_tasks {
-            let (doc_id, expected_content) = task.await?;
-            uploaded_docs.push((doc_id, expected_content));
+        for result in upload_results {
+            let (doc_id, expected_content) = result?;
             println!("📄 Uploaded document: {}", doc_id);
+            uploaded_docs.push((doc_id, expected_content));
         }
         
-        // Now wait for OCR processing on all documents
-        let mut ocr_tasks = Vec::new();
-        for (doc_id, expected_content) in uploaded_docs {
-            let client_ref = self;
-            let task = async move {
-                let ocr_result = client_ref.wait_for_ocr(doc_id).await?;
-                Ok::<(Uuid, String, Value), Box<dyn std::error::Error>>((doc_id, expected_content, ocr_result))
-            };
-            ocr_tasks.push(task);
-        }
+        // Create OCR waiting futures
+        let ocr_futures: Vec<_> = uploaded_docs.into_iter()
+            .map(|(doc_id, expected_content)| {
+                let client = self.client.clone();
+                let token = token.clone();
+                let base_url = get_base_url();
+                
+                async move {
+                    // Wait for OCR with polling
+                    let start = Instant::now();
+                    
+                    while start.elapsed() < TIMEOUT {
+                        let response = client
+                            .get(&format!("{}/api/documents/{}/ocr", base_url, doc_id))
+                            .header("Authorization", format!("Bearer {}", token))
+                            .send()
+                            .await?;
+                        
+                        if !response.status().is_success() {
+                            return Err(format!("Failed to get document details: {}", response.text().await?).into());
+                        }
+                        
+                        let doc_data: Value = response.json().await?;
+                        
+                        match doc_data["ocr_status"].as_str() {
+                            Some("completed") => {
+                                println!("✅ OCR completed for document {}", doc_id);
+                                return Ok::<(Uuid, String, Value), Box<dyn std::error::Error>>((doc_id, expected_content, doc_data));
+                            },
+                            Some("failed") => {
+                                return Err(format!("OCR failed for document {}: {}", 
+                                                 doc_id, 
+                                                 doc_data["ocr_error"].as_str().unwrap_or("unknown error")).into());
+                            },
+                            Some("processing") => {
+                                println!("⏳ OCR still processing for document {}", doc_id);
+                            },
+                            _ => {
+                                println!("📋 Document {} queued for OCR", doc_id);
+                            }
+                        }
+                        
+                        sleep(Duration::from_millis(200)).await;
+                    }
+                    
+                    Err(format!("OCR did not complete within {} seconds for document {}", TIMEOUT.as_secs(), doc_id).into())
+                }
+            })
+            .collect();
         
-        // Wait for all OCR to complete
+        // Execute all OCR waiting concurrently
+        let ocr_results = join_all(ocr_futures).await;
+        
+        // Collect results
         let mut results = Vec::new();
-        for task in ocr_tasks {
-            let result = task.await?;
-            results.push(result);
+        for result in ocr_results {
+            results.push(result?);
         }
         
         Ok(results)
