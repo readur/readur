@@ -64,7 +64,7 @@ fn create_test_local_source() -> Source {
         source_type: SourceType::LocalFolder,
         enabled: true,
         config: json!({
-            "paths": ["/home/user/documents"],
+            "watch_folders": ["/home/user/documents"],
             "recursive": true,
             "follow_symlinks": false,
             "auto_sync": true,
@@ -92,11 +92,12 @@ fn create_test_s3_source() -> Source {
         source_type: SourceType::S3,
         enabled: true,
         config: json!({
-            "bucket": "test-documents",
+            "bucket_name": "test-documents",
             "region": "us-east-1",
             "access_key_id": "AKIATEST",
             "secret_access_key": "secrettest",
             "prefix": "documents/",
+            "watch_folders": ["documents/"],
             "auto_sync": true,
             "sync_interval_minutes": 120,
             "file_extensions": [".pdf", ".docx"]
@@ -114,8 +115,12 @@ fn create_test_s3_source() -> Source {
 }
 
 async fn create_test_app_state() -> Arc<AppState> {
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+    
     let config = Config {
-        database_url: "sqlite::memory:".to_string(),
+        database_url,
         server_address: "127.0.0.1:8080".to_string(),
         jwt_secret: "test_secret".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
@@ -212,6 +217,8 @@ fn test_config_parsing_s3() {
     assert_eq!(s3_config.region, "us-east-1");
     assert_eq!(s3_config.prefix, Some("documents/".to_string()));
     assert_eq!(s3_config.sync_interval_minutes, 120);
+    assert_eq!(s3_config.watch_folders.len(), 1);
+    assert_eq!(s3_config.watch_folders[0], "documents/");
 }
 
 #[test]

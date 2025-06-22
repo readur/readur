@@ -156,8 +156,12 @@ impl MockDatabase {
 }
 
 async fn create_test_app_state() -> Arc<AppState> {
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+    
     let config = Config {
-        database_url: "sqlite::memory:".to_string(),
+        database_url,
         server_address: "127.0.0.1:8080".to_string(),
         jwt_secret: "test_secret".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
@@ -250,7 +254,8 @@ async fn test_interrupted_sync_detection_local_folder() {
         source_type: SourceType::LocalFolder,
         enabled: true,
         config: json!({
-            "paths": ["/test/folder"],
+            "watch_folders": ["/test/folder"],
+            "file_extensions": [".pdf", ".txt"],
             "recursive": true,
             "follow_symlinks": false,
             "auto_sync": true,
@@ -287,11 +292,13 @@ async fn test_interrupted_sync_detection_s3() {
         source_type: SourceType::S3,
         enabled: true,
         config: json!({
-            "bucket": "test-bucket",
+            "bucket_name": "test-bucket",
             "region": "us-east-1",
             "access_key_id": "test",
             "secret_access_key": "test",
             "prefix": "",
+            "watch_folders": ["/test/prefix"],
+            "file_extensions": [".pdf", ".txt"],
             "auto_sync": true,
             "sync_interval_minutes": 120
         }),
