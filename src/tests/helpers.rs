@@ -88,6 +88,33 @@ pub async fn create_test_user(app: &Router) -> UserResponse {
     serde_json::from_slice(&body).unwrap()
 }
 
+pub async fn create_admin_user(app: &Router) -> UserResponse {
+    let admin_data = json!({
+        "username": "adminuser",
+        "email": "admin@example.com",
+        "password": "adminpass123",
+        "role": "admin"
+    });
+    
+    let response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/auth/register")
+                .header("Content-Type", "application/json")
+                .body(axum::body::Body::from(serde_json::to_vec(&admin_data).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    serde_json::from_slice(&body).unwrap()
+}
+
 pub async fn login_user(app: &Router, username: &str, password: &str) -> String {
     let login_data = json!({
         "username": username,

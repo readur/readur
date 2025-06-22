@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::models::{CreateUser, UpdateUser, UserResponse};
-    use super::super::helpers::{create_test_app, create_test_user, login_user};
+    use super::super::helpers::{create_test_app, create_test_user, create_admin_user, login_user};
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
@@ -9,8 +9,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_users() {
         let (app, _container) = create_test_app().await;
-        let user = create_test_user(&app).await;
-        let token = login_user(&app, &user.username, "password123").await;
+        let admin = create_admin_user(&app).await;
+        let token = login_user(&app, &admin.username, "adminpass123").await;
 
         // Create another user
         let user2_data = json!({
@@ -51,21 +51,21 @@ mod tests {
         let users: Vec<UserResponse> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(users.len(), 2);
-        assert!(users.iter().any(|u| u.username == "testuser"));
+        assert!(users.iter().any(|u| u.username == "adminuser"));
         assert!(users.iter().any(|u| u.username == "testuser2"));
     }
 
     #[tokio::test]
     async fn test_get_user_by_id() {
         let (app, _container) = create_test_app().await;
-        let user = create_test_user(&app).await;
-        let token = login_user(&app, &user.username, "password123").await;
+        let admin = create_admin_user(&app).await;
+        let token = login_user(&app, &admin.username, "adminpass123").await;
 
         let response = app
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
-                    .uri(format!("/api/users/{}", user.id))
+                    .uri(format!("/api/users/{}", admin.id))
                     .header("Authorization", format!("Bearer {}", token))
                     .body(axum::body::Body::empty())
                     .unwrap(),
@@ -80,16 +80,16 @@ mod tests {
             .unwrap();
         let fetched_user: UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(fetched_user.id, user.id);
-        assert_eq!(fetched_user.username, user.username);
-        assert_eq!(fetched_user.email, user.email);
+        assert_eq!(fetched_user.id, admin.id);
+        assert_eq!(fetched_user.username, admin.username);
+        assert_eq!(fetched_user.email, admin.email);
     }
 
     #[tokio::test]
     async fn test_create_user_via_api() {
         let (app, _container) = create_test_app().await;
-        let admin = create_test_user(&app).await;
-        let token = login_user(&app, &admin.username, "password123").await;
+        let admin = create_admin_user(&app).await;
+        let token = login_user(&app, &admin.username, "adminpass123").await;
 
         let new_user_data = CreateUser {
             username: "newuser".to_string(),
@@ -125,8 +125,11 @@ mod tests {
     #[tokio::test]
     async fn test_update_user() {
         let (app, _container) = create_test_app().await;
+        let admin = create_admin_user(&app).await;
+        let token = login_user(&app, &admin.username, "adminpass123").await;
+        
+        // Create a regular user to update
         let user = create_test_user(&app).await;
-        let token = login_user(&app, &user.username, "password123").await;
 
         let update_data = UpdateUser {
             username: Some("updateduser".to_string()),
@@ -161,8 +164,11 @@ mod tests {
     #[tokio::test]
     async fn test_update_user_password() {
         let (app, _container) = create_test_app().await;
+        let admin = create_admin_user(&app).await;
+        let token = login_user(&app, &admin.username, "adminpass123").await;
+        
+        // Create a regular user to update
         let user = create_test_user(&app).await;
-        let token = login_user(&app, &user.username, "password123").await;
 
         let update_data = UpdateUser {
             username: None,
@@ -187,15 +193,15 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Verify new password works
-        let new_token = login_user(&app, &user.username, "newpassword456").await;
+        let new_token = login_user(&app, "testuser", "newpassword456").await;
         assert!(!new_token.is_empty());
     }
 
     #[tokio::test]
     async fn test_delete_user() {
         let (app, _container) = create_test_app().await;
-        let admin = create_test_user(&app).await;
-        let token = login_user(&app, &admin.username, "password123").await;
+        let admin = create_admin_user(&app).await;
+        let token = login_user(&app, &admin.username, "adminpass123").await;
 
         // Create another user to delete
         let user2_data = json!({
@@ -257,14 +263,14 @@ mod tests {
     #[tokio::test]
     async fn test_cannot_delete_self() {
         let (app, _container) = create_test_app().await;
-        let user = create_test_user(&app).await;
-        let token = login_user(&app, &user.username, "password123").await;
+        let admin = create_admin_user(&app).await;
+        let token = login_user(&app, &admin.username, "adminpass123").await;
 
         let response = app
             .oneshot(
                 axum::http::Request::builder()
                     .method("DELETE")
-                    .uri(format!("/api/users/{}", user.id))
+                    .uri(format!("/api/users/{}", admin.id))
                     .header("Authorization", format!("Bearer {}", token))
                     .body(axum::body::Body::empty())
                     .unwrap(),
