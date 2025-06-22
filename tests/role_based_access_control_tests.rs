@@ -736,7 +736,7 @@ async fn test_data_visibility_boundaries() {
     let search_response = client.client
         .get(&format!("{}/api/search", get_base_url()))
         .header("Authorization", format!("Bearer {}", client.user1_token.as_ref().unwrap()))
-        .query(&[("q", "confidential")])
+        .query(&[("query", "confidential")])
         .send()
         .await;
     

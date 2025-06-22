@@ -250,7 +250,7 @@ impl LoadTestClient {
         let response = self.client
             .get(&format!("{}/api/search", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
-            .query(&[("q", query)])
+            .query(&[("query", query)])
             .send()
             .await?;
         
