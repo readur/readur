@@ -16,8 +16,7 @@ use readur::{
     AppState,
 };
 
-// Test database URL - in real tests you'd use a separate test database
-const TEST_DATABASE_URL: &str = "postgres://postgres:password@localhost:5432/readur_test";
+// Removed constant - will use environment variables instead
 
 fn create_empty_update_settings() -> UpdateSettings {
     UpdateSettings {
@@ -74,8 +73,12 @@ fn create_empty_update_settings() -> UpdateSettings {
 }
 
 async fn setup_test_app() -> (Router, Arc<AppState>) {
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string());
+    
     let config = Config {
-        database_url: TEST_DATABASE_URL.to_string(),
+        database_url: database_url.clone(),
         server_address: "127.0.0.1:0".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
         watch_folder: "/tmp/test_watch".to_string(),
@@ -92,13 +95,8 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         ocr_timeout_seconds: 300,
     };
 
-    // Try to connect to test database, fall back to regular database if not available
-    let db_url = if Database::new(TEST_DATABASE_URL).await.is_ok() {
-        TEST_DATABASE_URL.to_string()
-    } else {
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| 
-            "postgres://postgres:password@localhost:5432/readur".to_string())
-    };
+    // Use the environment-based database URL
+    let db_url = database_url;
 
     let db = Database::new(&db_url).await.expect("Failed to connect to test database");
     let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));

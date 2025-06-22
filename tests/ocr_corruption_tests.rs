@@ -178,9 +178,11 @@ impl OcrTestClient {
                 
                 async move {
                     // Create multipart form
+                    let part = reqwest::multipart::Part::text(content_owned.clone())
+                        .file_name(filename_owned.clone())
+                        .mime_str("text/plain")?;
                     let form = reqwest::multipart::Form::new()
-                        .text("file", content_owned.clone())
-                        .text("filename", filename_owned);
+                        .part("file", part);
                     
                     let response = client
                         .post(&format!("{}/api/documents", base_url))
@@ -457,7 +459,7 @@ Every document should retain its own unique signature and number.
 Any mixing of content between documents indicates corruption.
 Random data: {}
 End of Document {}
-"#, i, i, timestamp, i*7, i, timestamp * i, i, i);
+"#, i, i, i, timestamp, i*7, timestamp * i, i, i);
         
         documents.push((content, format!("doc_{}.txt", i)));
     }
@@ -485,6 +487,8 @@ End of Document {}
     for (doc_id, expected_content, ocr_result) in results {
         let actual_ocr_text = ocr_result["ocr_text"].as_str().unwrap_or("");
         let filename = ocr_result["filename"].as_str().unwrap_or("unknown");
+        
+        println!("📝 OCR Text for {}: {}", filename, actual_ocr_text);
         
         // Determine which document this should be based on filename
         if let Some(doc_num_str) = filename.strip_prefix("doc_").and_then(|s| s.strip_suffix(".txt")) {

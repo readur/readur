@@ -22,8 +22,6 @@ use readur::{
     db_guardrails_simple::DocumentTransactionManager,
 };
 
-const TEST_DB_URL: &str = "postgresql://readur_user:readur_password@localhost:5432/readur";
-
 struct OCRPipelineTestHarness {
     db: Database,
     pool: PgPool,
@@ -35,14 +33,18 @@ struct OCRPipelineTestHarness {
 
 impl OCRPipelineTestHarness {
     async fn new() -> Result<Self> {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string());
+        
         // Initialize database connection with higher limits for stress testing
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(50)  // Increased to support high concurrency tests
             .acquire_timeout(std::time::Duration::from_secs(10))
-            .connect(TEST_DB_URL)
+            .connect(&database_url)
             .await?;
         
-        let db = Database::new(TEST_DB_URL).await?;
+        let db = Database::new(&database_url).await?;
         
         // Initialize services
         let file_service = FileService::new("./test_uploads".to_string());
@@ -516,9 +518,9 @@ struct DocumentDetails {
     file_path: String,
     ocr_status: Option<String>,
     ocr_text: Option<String>,
-    ocr_confidence: Option<f64>,
+    ocr_confidence: Option<f32>,
     ocr_word_count: Option<i32>,
-    ocr_processing_time_ms: Option<i64>,
+    ocr_processing_time_ms: Option<i32>,
     ocr_error: Option<String>,
     original_content: Option<String>,
 }

@@ -41,6 +41,17 @@ impl OCRQueueTestClient {
     
     /// Register and login a test user
     async fn register_and_login(&mut self, role: UserRole) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        // First check if server is running
+        let health_check = self.client
+            .get(&format!("{}/api/health", get_base_url()))
+            .send()
+            .await;
+        
+        if let Err(e) = health_check {
+            eprintln!("Health check failed: {}. Is the server running at {}?", e, get_base_url());
+            return Err(format!("Server not running: {}", e).into());
+        }
+        
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -64,7 +75,11 @@ impl OCRQueueTestClient {
             .await?;
         
         if !register_response.status().is_success() {
-            return Err(format!("Registration failed: {}", register_response.text().await?).into());
+            let status = register_response.status();
+            let text = register_response.text().await?;
+            eprintln!("Registration failed with status {}: {}", status, text);
+            eprintln!("Attempted to register user: {} with email: {}", username, email);
+            return Err(format!("Registration failed: {}", text).into());
         }
         
         // Login to get token
