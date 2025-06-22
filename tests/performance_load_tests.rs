@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 use uuid::Uuid;
+use chrono;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
 
@@ -130,12 +131,14 @@ impl LoadTestClient {
     
     /// Setup a test user for load testing
     async fn setup_user(&mut self, user_index: usize) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let timestamp = std::time::SystemTime::now()
+        // Use UUID for guaranteed uniqueness across concurrent test execution
+        let test_id = Uuid::new_v4().simple().to_string();
+        let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_millis();
-        let username = format!("load_test_user_{}_{}", user_index, timestamp);
-        let email = format!("load_test_{}@example.com", timestamp);
+            .as_nanos();
+        let username = format!("load_test_user_{}_{}_{}_{}_{}", user_index, test_id, nanos, Uuid::new_v4().simple(), chrono::Utc::now().timestamp_millis());
+        let email = format!("load_test_{}_{}@{}.example.com", user_index, test_id, nanos);
         let password = "loadtestpassword123";
         
         // Register user

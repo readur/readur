@@ -52,12 +52,14 @@ impl OCRQueueTestClient {
             return Err(format!("Server not running: {}", e).into());
         }
         
-        let timestamp = std::time::SystemTime::now()
+        // Use UUID for guaranteed uniqueness across concurrent test execution
+        let test_id = Uuid::new_v4().simple().to_string();
+        let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_millis();
-        let username = format!("ocr_queue_test_{}_{}", role.to_string(), timestamp);
-        let email = format!("ocr_queue_test_{}@example.com", timestamp);
+            .as_nanos();
+        let username = format!("ocr_queue_{}_{}_{}_{}", role.to_string(), test_id, nanos, Uuid::new_v4().simple());
+        let email = format!("ocr_queue_{}_{}@{}.example.com", test_id, nanos, Uuid::new_v4().simple());
         let password = "testpassword123";
         
         // Register user
@@ -297,8 +299,8 @@ impl Clone for OCRQueueTestClient {
 async fn test_queue_stats_monitoring() {
     let mut client = OCRQueueTestClient::new();
     
-    // Register and login
-    client.register_and_login(UserRole::User).await
+    // Register and login as admin (queue stats require admin access)
+    client.register_and_login(UserRole::Admin).await
         .expect("Failed to register and login");
     
     println!("✅ User registered and logged in");
@@ -353,7 +355,7 @@ async fn test_queue_stats_monitoring() {
 async fn test_failed_job_requeue_functionality() {
     let mut client = OCRQueueTestClient::new();
     
-    client.register_and_login(UserRole::User).await
+    client.register_and_login(UserRole::Admin).await
         .expect("Failed to register and login");
     
     println!("✅ User registered and logged in");
@@ -403,7 +405,7 @@ async fn test_failed_job_requeue_functionality() {
 async fn test_concurrent_ocr_processing() {
     let mut client = OCRQueueTestClient::new();
     
-    client.register_and_login(UserRole::User).await
+    client.register_and_login(UserRole::Admin).await
         .expect("Failed to register and login");
     
     println!("✅ User registered and logged in");
@@ -521,7 +523,7 @@ async fn test_concurrent_ocr_processing() {
 async fn test_queue_performance_monitoring() {
     let mut client = OCRQueueTestClient::new();
     
-    client.register_and_login(UserRole::User).await
+    client.register_and_login(UserRole::Admin).await
         .expect("Failed to register and login");
     
     println!("✅ User registered and logged in");
@@ -598,7 +600,7 @@ async fn test_queue_performance_monitoring() {
 async fn test_queue_error_handling() {
     let mut client = OCRQueueTestClient::new();
     
-    client.register_and_login(UserRole::User).await
+    client.register_and_login(UserRole::Admin).await
         .expect("Failed to register and login");
     
     println!("✅ User registered and logged in");
@@ -641,7 +643,7 @@ async fn test_queue_error_handling() {
 async fn test_queue_stats_consistency() {
     let mut client = OCRQueueTestClient::new();
     
-    client.register_and_login(UserRole::User).await
+    client.register_and_login(UserRole::Admin).await
         .expect("Failed to register and login");
     
     println!("✅ User registered and logged in");

@@ -22,7 +22,7 @@ use readur::{
 fn get_test_db_url() -> String {
     std::env::var("DATABASE_URL")
         .or_else(|_| std::env::var("TEST_DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string())
+        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string())
 }
 
 struct SimpleThrottleTest {
@@ -56,10 +56,14 @@ impl SimpleThrottleTest {
     
     async fn create_test_user(&self) -> Result<Uuid> {
         let user_id = Uuid::new_v4();
-        let timestamp = std::time::SystemTime::now()
+        // Use UUID for guaranteed uniqueness across concurrent test execution
+        let test_id = Uuid::new_v4().simple().to_string();
+        let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_millis();
+            .as_nanos();
+        let username = format!("throttle_test_{}_{}_{}", test_id, nanos, Uuid::new_v4().simple());
+        let email = format!("throttle_{}_{}@{}.example.com", test_id, nanos, Uuid::new_v4().simple());
         
         sqlx::query(
             r#"
@@ -68,8 +72,8 @@ impl SimpleThrottleTest {
             "#
         )
         .bind(user_id)
-        .bind(format!("throttle_test_{}", timestamp))
-        .bind(format!("throttle_{}@example.com", timestamp))
+        .bind(&username)
+        .bind(&email)
         .bind("test_hash")
         .execute(&self.pool)
         .await?;
