@@ -302,7 +302,7 @@ run_e2e_tests() {
     # Install dependencies if not already installed
     if [ ! -d "node_modules" ]; then
         print_status "Installing frontend dependencies..."
-        npm ci
+        npm install
     fi
     
     # Install Playwright browsers if not already installed

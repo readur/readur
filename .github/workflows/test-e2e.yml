@@ -16,7 +16,7 @@ env:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:16
@@ -54,8 +54,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
       - name: Cache cargo registry
@@ -69,7 +69,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-
       - name: Build backend
         run: cargo build --release
         env:
@@ -79,7 +78,7 @@ jobs:
       - name: Build frontend
         working-directory: ./frontend
         run: |
-          npm ci
+          npm install
           npm run build
 
       - name: Start backend server
@@ -105,7 +104,6 @@ jobs:
             echo "Waiting for backend... ($i/30)"
             sleep 2
           done
-
 
       - name: Install Playwright browsers
         working-directory: ./frontend

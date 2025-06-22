@@ -162,7 +162,7 @@ main() {
     # Install frontend dependencies
     print_status "Installing frontend dependencies..."
     cd frontend
-    npm ci
+    npm install
     
     # Install Playwright browsers
     print_status "Installing Playwright browsers..."
