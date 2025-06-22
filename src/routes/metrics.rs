@@ -9,7 +9,15 @@ use std::sync::Arc;
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use crate::{auth::AuthUser, AppState};
+use crate::{auth::AuthUser, AppState, models::UserRole};
+
+fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
+    if auth_user.user.role != UserRole::Admin {
+        Err(StatusCode::FORBIDDEN)
+    } else {
+        Ok(())
+    }
+}
 
 #[derive(Serialize, ToSchema)]
 pub struct SystemMetrics {
@@ -83,8 +91,9 @@ pub fn router() -> Router<Arc<AppState>> {
 )]
 pub async fn get_system_metrics(
     State(state): State<Arc<AppState>>,
-    _auth_user: AuthUser, // Require authentication
+    auth_user: AuthUser,
 ) -> Result<Json<SystemMetrics>, StatusCode> {
+    require_admin(&auth_user)?;
     let timestamp = chrono::Utc::now().timestamp();
     
     // Collect all metrics concurrently for better performance

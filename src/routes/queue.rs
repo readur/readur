@@ -41,8 +41,9 @@ pub fn router() -> Router<Arc<AppState>> {
 )]
 async fn get_queue_stats(
     State(state): State<Arc<AppState>>,
-    _auth_user: AuthUser, // Require authentication
+    auth_user: AuthUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    require_admin(&auth_user)?;
     let queue_service = OcrQueueService::new(state.db.clone(), state.db.get_pool().clone(), 1);
     
     let stats = queue_service
@@ -74,8 +75,9 @@ async fn get_queue_stats(
 )]
 async fn requeue_failed(
     State(state): State<Arc<AppState>>,
-    _auth_user: AuthUser, // Require authentication
+    auth_user: AuthUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    require_admin(&auth_user)?;
     let queue_service = OcrQueueService::new(state.db.clone(), state.db.get_pool().clone(), 1);
     
     let count = queue_service

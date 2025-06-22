@@ -48,28 +48,30 @@ impl RBACTestClient {
     
     /// Setup all test users (admin, user1, user2)
     async fn setup_all_users(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let timestamp = std::time::SystemTime::now()
+        // Use UUID for guaranteed uniqueness across concurrent test execution
+        let test_id = Uuid::new_v4().simple().to_string();
+        let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_millis();
+            .as_nanos();
         
         // Setup admin user
-        let admin_username = format!("rbac_admin_{}", timestamp);
-        let admin_email = format!("rbac_admin_{}@example.com", timestamp);
+        let admin_username = format!("rbac_admin_{}_{}", test_id, nanos);
+        let admin_email = format!("rbac_admin_{}@{}.example.com", test_id, nanos);
         let (admin_token, admin_id) = self.register_and_login_user(&admin_username, &admin_email, UserRole::Admin).await?;
         self.admin_token = Some(admin_token);
         self.admin_user_id = admin_id;
         
         // Setup first regular user
-        let user1_username = format!("rbac_user1_{}", timestamp);
-        let user1_email = format!("rbac_user1_{}@example.com", timestamp);
+        let user1_username = format!("rbac_user1_{}_{}", test_id, nanos);
+        let user1_email = format!("rbac_user1_{}@{}.example.com", test_id, nanos);
         let (user1_token, user1_id) = self.register_and_login_user(&user1_username, &user1_email, UserRole::User).await?;
         self.user1_token = Some(user1_token);
         self.user1_user_id = user1_id;
         
         // Setup second regular user
-        let user2_username = format!("rbac_user2_{}", timestamp);
-        let user2_email = format!("rbac_user2_{}@example.com", timestamp);
+        let user2_username = format!("rbac_user2_{}_{}", test_id, nanos);
+        let user2_email = format!("rbac_user2_{}@{}.example.com", test_id, nanos);
         let (user2_token, user2_id) = self.register_and_login_user(&user2_username, &user2_email, UserRole::User).await?;
         self.user2_token = Some(user2_token);
         self.user2_user_id = user2_id;
@@ -79,25 +81,56 @@ impl RBACTestClient {
     
     /// Helper to register and login a single user
     async fn register_and_login_user(&self, username: &str, email: &str, role: UserRole) -> Result<(String, Option<String>), Box<dyn std::error::Error>> {
-        let password = "rbacpassword123";
-        
-        // Register user
-        let user_data = CreateUser {
-            username: username.to_string(),
-            email: email.to_string(),
-            password: password.to_string(),
-            role: Some(role),
-        };
-        
-        let register_response = self.client
-            .post(&format!("{}/api/auth/register", get_base_url()))
-            .json(&user_data)
-            .send()
-            .await?;
-        
-        if !register_response.status().is_success() {
-            return Err(format!("Registration failed for {}: {}", username, register_response.text().await?).into());
+        // Try up to 3 times with different unique identifiers if we get conflicts
+        for attempt in 0..3 {
+            let (actual_username, actual_email) = if attempt == 0 {
+                (username.to_string(), email.to_string())
+            } else {
+                let retry_id = Uuid::new_v4().simple().to_string();
+                (format!("{}_{}", username, retry_id), format!("retry_{}_{}", retry_id, email))
+            };
+            
+            let password = "rbacpassword123";
+            
+            // Register user
+            let user_data = CreateUser {
+                username: actual_username.clone(),
+                email: actual_email.clone(),
+                password: password.to_string(),
+                role: Some(role),
+            };
+            
+            let register_response = self.client
+                .post(&format!("{}/api/auth/register", get_base_url()))
+                .json(&user_data)
+                .send()
+                .await?;
+            
+            if register_response.status().is_success() {
+                // Registration successful, now login
+                return self.login_user(&actual_username, password).await;
+            }
+            
+            let error_text = register_response.text().await?;
+            
+            // If it's not a duplicate key error, fail immediately
+            if !error_text.contains("duplicate key") && !error_text.contains("already exists") {
+                return Err(format!("Registration failed for {}: {}", actual_username, error_text).into());
+            }
+            
+            // If it's a duplicate key error and this was our last attempt, fail
+            if attempt == 2 {
+                return Err(format!("Registration failed after 3 attempts for {}: {}", username, error_text).into());
+            }
+            
+            // Otherwise, try again with a different unique identifier
         }
+        
+        Err("Unexpected error in register_and_login_user".into())
+    }
+    
+    /// Helper to login a user and return token and user ID
+    async fn login_user(&self, username: &str, password: &str) -> Result<(String, Option<String>), Box<dyn std::error::Error>> {
         
         // Login to get token
         let login_data = LoginRequest {
@@ -142,7 +175,16 @@ impl RBACTestClient {
             UserType::User2 => self.user2_token.as_ref(),
         }.ok_or("User not set up")?;
         
-        let part = reqwest::multipart::Part::text(content.to_string())
+        // Generate unique content to prevent file hash collisions
+        let unique_id = Uuid::new_v4();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let unique_content = format!("{}\n\nUnique ID: {}\nTimestamp: {}\nRandom: {}", 
+            content, unique_id, nanos, Uuid::new_v4());
+        
+        let part = reqwest::multipart::Part::text(unique_content)
             .file_name(filename.to_string())
             .mime_str("text/plain")?;
         let form = reqwest::multipart::Form::new()
@@ -181,7 +223,10 @@ impl RBACTestClient {
             return Err(format!("Get documents failed: {}", response.text().await?).into());
         }
         
-        let documents: Vec<Value> = response.json().await?;
+        let response_json: Value = response.json().await?;
+        let documents: Vec<Value> = serde_json::from_value(
+            response_json["documents"].clone()
+        )?;
         Ok(documents)
     }
     

@@ -10,9 +10,17 @@ use uuid::Uuid;
 
 use crate::{
     auth::AuthUser,
-    models::{CreateUser, UpdateUser, UserResponse},
+    models::{CreateUser, UpdateUser, UserResponse, UserRole},
     AppState,
 };
+
+fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
+    if auth_user.user.role != UserRole::Admin {
+        Err(StatusCode::FORBIDDEN)
+    } else {
+        Ok(())
+    }
+}
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -33,9 +41,10 @@ pub fn router() -> Router<Arc<AppState>> {
     )
 )]
 async fn list_users(
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<UserResponse>>, StatusCode> {
+    require_admin(&auth_user)?;
     let users = state
         .db
         .get_all_users()
@@ -63,10 +72,11 @@ async fn list_users(
     )
 )]
 async fn get_user(
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<UserResponse>, StatusCode> {
+    require_admin(&auth_user)?;
     let user = state
         .db
         .get_user_by_id(id)
@@ -92,10 +102,11 @@ async fn get_user(
     )
 )]
 async fn create_user(
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Json(user_data): Json<CreateUser>,
 ) -> Result<Json<UserResponse>, StatusCode> {
+    require_admin(&auth_user)?;
     let user = state
         .db
         .create_user(user_data)
@@ -123,11 +134,12 @@ async fn create_user(
     )
 )]
 async fn update_user(
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(update_data): Json<UpdateUser>,
 ) -> Result<Json<UserResponse>, StatusCode> {
+    require_admin(&auth_user)?;
     let user = state
         .db
         .update_user(id, update_data.username, update_data.email, update_data.password)
@@ -158,6 +170,8 @@ async fn delete_user(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
+    require_admin(&auth_user)?;
+    
     // Prevent users from deleting themselves
     if auth_user.user.id == id {
         return Err(StatusCode::FORBIDDEN);
