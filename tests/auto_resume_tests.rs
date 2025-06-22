@@ -29,7 +29,7 @@ use readur::{
 async fn create_test_app_state() -> Arc<AppState> {
     let database_url = std::env::var("TEST_DATABASE_URL")
         .or_else(|_| std::env::var("DATABASE_URL"))
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/readur_test".to_string());
+        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
     
     let config = Config {
         database_url,

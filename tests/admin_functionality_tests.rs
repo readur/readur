@@ -163,8 +163,12 @@ impl AdminTestClient {
     }
     
     /// Create a new user 
-    async fn create_user(&self, username: &str, email: &str, role: UserRole) -> Result<Value, Box<dyn std::error::Error>> {
-        let token = self.admin_token.as_ref().or(self.user_token.as_ref()).ok_or("No user logged in")?;
+    async fn create_user(&self, username: &str, email: &str, role: UserRole, as_admin: bool) -> Result<Value, Box<dyn std::error::Error>> {
+        let token = if as_admin {
+            self.admin_token.as_ref().ok_or("Admin not logged in")?
+        } else {
+            self.user_token.as_ref().ok_or("User not logged in")?
+        };
         
         let user_data = CreateUser {
             username: username.to_string(),
@@ -312,7 +316,7 @@ async fn test_admin_user_management_crud() {
     println!("✅ Admin can list all users");
     
     // Create a new user via admin API
-    let created_user = client.create_user("test_managed_user", "managed@example.com", UserRole::User).await
+    let created_user = client.create_user("test_managed_user", "managed@example.com", UserRole::User, true).await
         .expect("Failed to create user as admin");
     
     let created_user_id = created_user["id"].as_str().expect("User should have ID");
@@ -378,31 +382,24 @@ async fn test_role_based_access_control() {
     
     println!("✅ Both admin and regular user setup complete");
     
-    // Test that regular user CAN access user viewing endpoints (current implementation)
+    // Test that regular user CANNOT access user management endpoints (secured implementation)
     
-    // Regular user should be able to list all users
+    // Regular user should NOT be able to list all users
     let user_list_attempt = client.get_all_users(false).await;
-    assert!(user_list_attempt.is_ok());
-    println!("✅ Regular user can list all users (current implementation)");
+    assert!(user_list_attempt.is_err());
+    println!("✅ Regular user cannot list all users (properly secured)");
     
-    // Regular user should be able to get specific user details
+    // Regular user should NOT be able to get specific user details
     let admin_user_id = client.admin_user_id.as_ref().unwrap();
     let user_details_attempt = client.get_user(admin_user_id, false).await;
-    assert!(user_details_attempt.is_ok());
-    println!("✅ Regular user can access other user details (current implementation)");
+    assert!(user_details_attempt.is_err());
+    println!("✅ Regular user cannot access other user details (properly secured)");
     
-    // Test that regular user CAN create users (current implementation)
-    let test_user = client.create_user("regular_created_user", "regular@example.com", UserRole::User).await;
-    // Current implementation allows any authenticated user to create users
-    if test_user.is_ok() {
-        println!("✅ Regular user can create users (current implementation)");
-        // Clean up the test user
-        let created_user = test_user.unwrap();
-        let user_id = created_user["id"].as_str().unwrap();
-        let _ = client.delete_user(user_id).await; // Best effort cleanup
-    } else {
-        println!("✅ Regular user cannot create users");
-    }
+    // Test that regular user CANNOT create users (secured implementation)
+    let test_user = client.create_user("regular_created_user", "regular@example.com", UserRole::User, false).await;
+    // Secured implementation denies user creation to non-admins
+    assert!(test_user.is_err());
+    println!("✅ Regular user cannot create users (properly secured)");
     
     // Test that admin CAN access all user management endpoints
     let admin_users_list = client.get_all_users(true).await
@@ -484,7 +481,7 @@ async fn test_admin_user_management_without_roles() {
     let username = format!("role_test_user_{}", timestamp);
     let email = format!("roletest_{}@example.com", timestamp);
     
-    let regular_user = client.create_user(&username, &email, UserRole::User).await
+    let regular_user = client.create_user(&username, &email, UserRole::User, true).await
         .expect("Failed to create regular user");
     
     let user_id = regular_user["id"].as_str().unwrap();
@@ -529,7 +526,8 @@ async fn test_admin_bulk_operations() {
         let user = client.create_user(
             &format!("bulk_user_{}", i),
             &format!("bulk_user_{}@example.com", i),
-            UserRole::User
+            UserRole::User,
+            true
         ).await.expect("Failed to create bulk user");
         
         created_user_ids.push(user["id"].as_str().unwrap().to_string());
@@ -656,10 +654,10 @@ async fn test_admin_error_handling() {
     println!("✅ Non-existent user deletion returns success (current behavior)");
     
     // Test creating duplicate username
-    let user1 = client.create_user("duplicate_test", "test1@example.com", UserRole::User).await
+    let user1 = client.create_user("duplicate_test", "test1@example.com", UserRole::User, true).await
         .expect("Failed to create first user");
     
-    let duplicate_result = client.create_user("duplicate_test", "test2@example.com", UserRole::User).await;
+    let duplicate_result = client.create_user("duplicate_test", "test2@example.com", UserRole::User, true).await;
     // Should fail due to duplicate username
     assert!(duplicate_result.is_err());
     println!("✅ Duplicate username creation properly rejected");
