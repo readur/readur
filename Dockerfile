@@ -8,7 +8,7 @@ COPY frontend ./
 RUN npm run build
 
 # --- Backend build stage ---
-FROM rust:1.85-bookworm as backend-builder
+FROM rust:1.87-bookworm as backend-builder
 
 # Install system dependencies for OCR
 RUN apt-get update && apt-get install -y \
