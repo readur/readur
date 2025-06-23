@@ -237,7 +237,7 @@ mod tests {
         assert_eq!(file.name, "test.pdf");
         assert_eq!(file.size, 1024);
         assert_eq!(file.mime_type, "application/pdf");
-        assert_eq!(file.etag, "\"abc123\"");
+        assert_eq!(file.etag, "abc123");
         assert!(!file.is_directory);
     }
 
@@ -306,6 +306,7 @@ mod tests {
         assert_eq!(file.name, "report.pdf");
         assert_eq!(file.path, "/remote.php/dav/files/admin/Documents/report.pdf");
         assert_eq!(file.size, 2048000);
+        assert_eq!(file.etag, "pdf123"); // ETag should be normalized (quotes removed)
         assert!(file.last_modified.is_some());
     }
 
