@@ -126,7 +126,7 @@ const WatchFolderPage: React.FC = () => {
     }
   };
 
-  const getStatusIcon = (status: string): JSX.Element => {
+  const getStatusIcon = (status: string): React.ReactElement => {
     switch (status) {
       case 'active': return <CheckCircleIcon />;
       case 'error': return <ErrorIcon />;

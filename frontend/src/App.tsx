@@ -17,7 +17,7 @@ import WatchFolderPage from './pages/WatchFolderPage';
 import FailedOcrPage from './pages/FailedOcrPage';
 import LabelsPage from './pages/LabelsPage';
 
-function App(): JSX.Element {
+function App(): React.ReactElement {
   const { user, loading } = useAuth();
 
   if (loading) {
