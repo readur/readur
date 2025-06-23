@@ -201,21 +201,21 @@ fn test_webdav_response_parsing_comprehensive() {
     let pdf_file = files.iter().find(|f| f.name == "report.pdf").unwrap();
     assert_eq!(pdf_file.size, 2048000);
     assert_eq!(pdf_file.mime_type, "application/pdf");
-    assert_eq!(pdf_file.etag, "\"pdf123\"");
+    assert_eq!(pdf_file.etag, "pdf123"); // ETag should be normalized (quotes removed)
     assert!(!pdf_file.is_directory);
 
     // Verify second file (photo.png)
     let png_file = files.iter().find(|f| f.name == "photo.png").unwrap();
     assert_eq!(png_file.size, 768000);
     assert_eq!(png_file.mime_type, "image/png");
-    assert_eq!(png_file.etag, "\"png456\"");
+    assert_eq!(png_file.etag, "png456"); // ETag should be normalized (quotes removed)
     assert!(!png_file.is_directory);
 
     // Verify third file (unsupported.docx)
     let docx_file = files.iter().find(|f| f.name == "unsupported.docx").unwrap();
     assert_eq!(docx_file.size, 102400);
     assert_eq!(docx_file.mime_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    assert_eq!(docx_file.etag, "\"docx789\"");
+    assert_eq!(docx_file.etag, "docx789"); // ETag should be normalized (quotes removed)
     assert!(!docx_file.is_directory);
 }
 

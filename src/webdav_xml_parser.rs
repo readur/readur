@@ -83,13 +83,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                                 resp.content_type = Some(text.trim().to_string());
                             }
                             "getetag" => {
-                                // Normalize ETag by removing quotes and weak ETag prefix
-                                let etag = text.trim();
-                                let normalized = etag
-                                    .trim_start_matches("W/")
-                                    .trim_matches('"')
-                                    .to_string();
-                                resp.etag = Some(normalized);
+                                resp.etag = Some(normalize_etag(&text));
                             }
                             "status" if in_propstat => {
                                 // Check if status is 200 OK
@@ -204,6 +198,20 @@ fn parse_http_date(date_str: &str) -> Option<DateTime<Utc>> {
                 .ok()
                 .map(|ndt| DateTime::from_naive_utc_and_offset(ndt, Utc))
         })
+}
+
+/// Normalize ETag by removing quotes and weak ETag prefix
+/// This ensures consistent ETag comparison across different WebDAV servers
+/// 
+/// Examples:
+/// - `"abc123"` → `abc123`
+/// - `W/"abc123"` → `abc123`
+/// - `abc123` → `abc123`
+fn normalize_etag(etag: &str) -> String {
+    etag.trim()
+        .trim_start_matches("W/")
+        .trim_matches('"')
+        .to_string()
 }
 
 #[cfg(test)]
@@ -343,5 +351,18 @@ mod tests {
 
         let files = parse_propfind_response(xml).unwrap();
         assert_eq!(files.len(), 0);
+    }
+
+    #[test]
+    fn test_normalize_etag() {
+        // Test various ETag formats that WebDAV servers might return
+        assert_eq!(normalize_etag("abc123"), "abc123");
+        assert_eq!(normalize_etag("\"abc123\""), "abc123");
+        assert_eq!(normalize_etag("W/\"abc123\""), "abc123");
+        assert_eq!(normalize_etag("  \"abc123\"  "), "abc123");
+        assert_eq!(normalize_etag("W/\"abc-123-def\""), "abc-123-def");
+        assert_eq!(normalize_etag(""), "");
+        assert_eq!(normalize_etag("\"\""), "");
+        assert_eq!(normalize_etag("W/\"\""), "");
     }
 }
