@@ -8,4 +8,4 @@ SET etag = TRIM(BOTH '"' FROM TRIM(LEADING 'W/' FROM etag))
 WHERE etag LIKE '"%"' OR etag LIKE 'W/%';
 
 -- Add a comment to document this normalization
-COMMENT ON COLUMN webdav_files.etag IS 'Normalized ETag without quotes or W/ prefix (since migration 20250623000001)';
+COMMENT ON COLUMN webdav_files.etag IS 'Normalized ETag without quotes or W/ prefix (since migration 20250620100020)';
