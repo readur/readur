@@ -183,6 +183,26 @@ fn test_etag_change_detection() {
 }
 
 #[test]
+fn test_etag_normalization() {
+    // Test various ETag formats that WebDAV servers might return
+    let test_cases = vec![
+        ("abc123", "abc123"),                    // Plain ETag
+        ("\"abc123\"", "abc123"),                // Quoted ETag
+        ("W/\"abc123\"", "abc123"),              // Weak ETag
+        ("\"abc-123-def\"", "abc-123-def"),      // Quoted with dashes
+        ("W/\"abc-123-def\"", "abc-123-def"),    // Weak ETag with dashes
+    ];
+    
+    for (input, expected) in test_cases {
+        let normalized = input
+            .trim_start_matches("W/")
+            .trim_matches('"');
+        assert_eq!(normalized, expected, 
+            "Failed to normalize ETag: {} -> expected {}", input, expected);
+    }
+}
+
+#[test]
 fn test_path_normalization() {
     let test_paths = vec![
         ("/Documents/test.pdf", "/Documents/test.pdf"),

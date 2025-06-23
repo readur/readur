@@ -83,7 +83,13 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                                 resp.content_type = Some(text.trim().to_string());
                             }
                             "getetag" => {
-                                resp.etag = Some(text.trim().to_string());
+                                // Normalize ETag by removing quotes and weak ETag prefix
+                                let etag = text.trim();
+                                let normalized = etag
+                                    .trim_start_matches("W/")
+                                    .trim_matches('"')
+                                    .to_string();
+                                resp.etag = Some(normalized);
                             }
                             "status" if in_propstat => {
                                 // Check if status is 200 OK
