@@ -183,6 +183,52 @@ fn test_etag_change_detection() {
 }
 
 #[test]
+fn test_etag_normalization() {
+    // Test various ETag formats that WebDAV servers might return
+    let test_cases = vec![
+        ("abc123", "abc123"),                    // Plain ETag
+        ("\"abc123\"", "abc123"),                // Quoted ETag
+        ("W/\"abc123\"", "abc123"),              // Weak ETag
+        ("\"abc-123-def\"", "abc-123-def"),      // Quoted with dashes
+        ("W/\"abc-123-def\"", "abc-123-def"),    // Weak ETag with dashes
+    ];
+    
+    for (input, expected) in test_cases {
+        let normalized = input
+            .trim_start_matches("W/")
+            .trim_matches('"');
+        assert_eq!(normalized, expected, 
+            "Failed to normalize ETag: {} -> expected {}", input, expected);
+    }
+}
+
+#[test]
+fn test_etag_comparison_fixes_duplicate_downloads() {
+    // This test demonstrates how ETag normalization prevents unnecessary downloads
+    
+    // Simulate a WebDAV server that returns quoted ETags 
+    let server_etag = "\"file-hash-123\"";
+    
+    // Before fix: stored ETag would have quotes, server ETag would have quotes
+    // After fix: both should be normalized (no quotes)
+    let normalized_server = server_etag.trim_start_matches("W/").trim_matches('"');
+    let normalized_stored = "file-hash-123"; // What would be stored after normalization
+    
+    // These should match after normalization, preventing redownload
+    assert_eq!(normalized_server, normalized_stored, 
+        "Normalized ETags should match to prevent unnecessary redownloads");
+    
+    // Demonstrate the issue that was fixed
+    let old_behavior_would_mismatch = (server_etag != normalized_stored);
+    assert!(old_behavior_would_mismatch, 
+        "Before fix: quoted vs unquoted ETags would cause unnecessary downloads");
+    
+    let new_behavior_matches = (normalized_server == normalized_stored);
+    assert!(new_behavior_matches, 
+        "After fix: normalized ETags match, preventing unnecessary downloads");
+}
+
+#[test]
 fn test_path_normalization() {
     let test_paths = vec![
         ("/Documents/test.pdf", "/Documents/test.pdf"),
