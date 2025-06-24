@@ -8,7 +8,7 @@ description: |-
   Readur is a document management and OCR processing service that automatically processes uploaded documents, extracts text using OCR, and makes content searchable.
 annotations:
   category: Document Management
-version: 0.1.0
+version: 0.1.3
 appVersion: latest
 kubeVersion: ">= 1.19"
 dependencies:
