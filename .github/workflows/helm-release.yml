@@ -2,8 +2,8 @@ name: helm-release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "chart-v*"
 
 jobs:
   release:
@@ -20,15 +20,18 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
-      - name: get latest release
+      - name: validate chart version
         id: version
         run: |
-          tag=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq '.tag_name' -r)
+          tag_version="${GITHUB_REF#refs/tags/chart-v}"
           chart_version=$(yq '.version' charts/readur/Chart.yaml)
-          if [[ "$chart_version" != "${tag#readur-}" ]] || [[ "$tag" == "null" ]]; then
+          if [[ "$chart_version" == "$tag_version" ]]; then
             echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "Chart version $chart_version matches tag chart-v$tag_version"
           else
             echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "Error: Chart version ($chart_version) does not match tag version ($tag_version)"
+            exit 1
           fi
 
       - name: run chart-releaser
