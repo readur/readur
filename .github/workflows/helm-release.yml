@@ -1,9 +1,9 @@
-name: release
+name: helm-release
 
 on:
   push:
-    tags:
-      - "chart-v*"
+    branches:
+      - main
 
 jobs:
   release:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
 
@@ -20,7 +20,34 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
+      - name: get latest release
+        id: version
+        run: |
+          tag=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq '.tag_name' -r)
+          chart_version=$(yq '.version' charts/readur/Chart.yaml)
+          if [[ "$chart_version" != "${tag#readur-}" ]] || [[ "$tag" == "null" ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
+        id: cr
+        if: ${{ steps.version.outputs.should_release == 'true' }}
+        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f # v1.7.0
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_GENERATE_RELEASE_NOTES: true
+          CR_SKIP_EXISTING: true
+
+      - name: Login to GitHub Container Registry
+        if: ${{ steps.version.outputs.should_release == 'true' }}
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - if: ${{ steps.version.outputs.should_release == 'true' }}
+        name: Push Chart
+        run: helm push .cr-release-packages/readur-*.tgz oci://ghcr.io/${{ github.repository }}
