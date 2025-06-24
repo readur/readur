@@ -669,7 +669,7 @@ async fn get_failed_ocr_documents(
             GROUP BY document_id
         ) q ON d.id = q.document_id
         WHERE d.ocr_status = 'failed'
-          AND ($1 = $1 OR d.user_id = $1)  -- Admin can see all, users see only their own
+          AND ($1::uuid IS NULL OR d.user_id = $1)  -- Admin can see all, users see only their own
         ORDER BY d.updated_at DESC
         LIMIT $2 OFFSET $3
         "#
