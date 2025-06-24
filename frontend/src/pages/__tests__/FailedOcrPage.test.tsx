@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import FailedOcrPage from '../FailedOcrPage';
 
@@ -46,37 +46,43 @@ describe('FailedOcrPage', () => {
     expect(document.body).toBeInTheDocument();
   });
 
-  test('renders page title', () => {
+  test('renders page title', async () => {
     render(
       <FailedOcrPageWrapper>
         <FailedOcrPage />
       </FailedOcrPageWrapper>
     );
 
-    // Check for page title
-    expect(screen.getByText('Failed OCR & Duplicates')).toBeInTheDocument();
+    // Wait for the page to load and show the title
+    await waitFor(() => {
+      expect(screen.getByText('Failed OCR & Duplicates')).toBeInTheDocument();
+    });
   });
 
-  test('renders refresh button', () => {
+  test('renders refresh button', async () => {
     render(
       <FailedOcrPageWrapper>
         <FailedOcrPage />
       </FailedOcrPageWrapper>
     );
 
-    expect(screen.getByText('Refresh')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Refresh')).toBeInTheDocument();
+    });
   });
 
-  test('renders tabs structure', () => {
+  test('renders tabs structure', async () => {
     render(
       <FailedOcrPageWrapper>
         <FailedOcrPage />
       </FailedOcrPageWrapper>
     );
 
-    // Check for tab structure
-    const tabs = screen.getByRole('tablist');
-    expect(tabs).toBeInTheDocument();
+    // Wait for tabs to appear
+    await waitFor(() => {
+      const tabs = screen.getByRole('tablist');
+      expect(tabs).toBeInTheDocument();
+    });
   });
 
   // DISABLED - Complex async behavior tests that require more sophisticated mocking
