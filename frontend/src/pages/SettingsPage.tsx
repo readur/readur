@@ -175,7 +175,7 @@ const SettingsPage: React.FC = () => {
     maxFileSizeMb: 50,
     allowedFileTypes: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
     autoRotateImages: true,
-    enableImagePreprocessing: true,
+    enableImagePreprocessing: false,
     searchResultsPerPage: 25,
     searchSnippetLength: 200,
     fuzzySearchThreshold: 0.8,
@@ -267,7 +267,7 @@ const SettingsPage: React.FC = () => {
         maxFileSizeMb: response.data.max_file_size_mb || 50,
         allowedFileTypes: response.data.allowed_file_types || ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
         autoRotateImages: response.data.auto_rotate_images !== undefined ? response.data.auto_rotate_images : true,
-        enableImagePreprocessing: response.data.enable_image_preprocessing !== undefined ? response.data.enable_image_preprocessing : true,
+        enableImagePreprocessing: response.data.enable_image_preprocessing !== undefined ? response.data.enable_image_preprocessing : false,
         searchResultsPerPage: response.data.search_results_per_page || 25,
         searchSnippetLength: response.data.search_snippet_length || 200,
         fuzzySearchThreshold: response.data.fuzzy_search_threshold || 0.8,
@@ -685,6 +685,9 @@ const SettingsPage: React.FC = () => {
                         />
                         <Typography variant="body2" color="text.secondary">
                           Enhance images for better OCR accuracy (deskew, denoise, contrast)
+                        </Typography>
+                        <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
+                          ⚠️ Warning: Enabling preprocessing can significantly alter OCR text results and may reduce accuracy for some documents
                         </Typography>
                       </FormControl>
                     </Grid>
