@@ -691,7 +691,7 @@ async fn get_failed_ocr_documents(
         SELECT COUNT(*)
         FROM documents 
         WHERE ocr_status = 'failed'
-          AND ($1 = $1 OR user_id = $1)
+          AND ($1::uuid IS NULL OR user_id = $1)
         "#
     )
     .bind(if auth_user.user.role == crate::models::UserRole::Admin { 
@@ -802,7 +802,7 @@ async fn get_failure_statistics(
             COUNT(*) as count
         FROM documents 
         WHERE ocr_status = 'failed'
-          AND ($1 = $1 OR user_id = $1)
+          AND ($1::uuid IS NULL OR user_id = $1)
         GROUP BY ocr_failure_reason
         ORDER BY count DESC
         "#
