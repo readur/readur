@@ -4,6 +4,7 @@ mod db_tests;
 mod documents_tests;
 mod document_routes_tests;
 mod file_service_tests;
+mod ignored_files_tests;
 mod labels_tests;
 mod ocr_tests;
 mod enhanced_search_tests;

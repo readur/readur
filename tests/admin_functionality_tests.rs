@@ -84,8 +84,9 @@ impl AdminTestClient {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        let username = format!("user_test_{}", timestamp);
-        let email = format!("user_test_{}@example.com", timestamp);
+        let random_suffix = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
+        let username = format!("user_test_{}_{}", timestamp, random_suffix);
+        let email = format!("user_test_{}@example.com", random_suffix);
         let password = "userpassword123";
         
         // Register regular user
@@ -103,7 +104,9 @@ impl AdminTestClient {
             .await?;
         
         if !register_response.status().is_success() {
-            return Err(format!("User registration failed: {}", register_response.text().await?).into());
+            let status = register_response.status();
+            let error_text = register_response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("User registration failed with status {}: {}", status, error_text).into());
         }
         
         // Login user
@@ -478,8 +481,9 @@ async fn test_admin_user_management_without_roles() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    let username = format!("role_test_user_{}", timestamp);
-    let email = format!("roletest_{}@example.com", timestamp);
+    let random_suffix = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
+    let username = format!("role_test_user_{}_{}", timestamp, random_suffix);
+    let email = format!("roletest_{}@example.com", random_suffix);
     
     let regular_user = client.create_user(&username, &email, UserRole::User, true).await
         .expect("Failed to create regular user");

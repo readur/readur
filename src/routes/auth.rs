@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    response::Json,
+    response::{IntoResponse, Json, Response},
     routing::{get, post},
     Router,
 };
@@ -33,14 +33,35 @@ pub fn router() -> Router<Arc<AppState>> {
 async fn register(
     State(state): State<Arc<AppState>>,
     Json(user_data): Json<CreateUser>,
-) -> Result<Json<UserResponse>, StatusCode> {
-    let user = state
-        .db
-        .create_user(user_data)
-        .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
-
-    Ok(Json(user.into()))
+) -> Response {
+    match state.db.create_user(user_data).await {
+        Ok(user) => {
+            let user_response: UserResponse = user.into();
+            (StatusCode::OK, Json(user_response)).into_response()
+        }
+        Err(e) => {
+            tracing::error!("User registration failed: {}", e);
+            
+            // Check for specific database constraint violations
+            let error_message = if e.to_string().contains("users_username_key") {
+                "Username already exists"
+            } else if e.to_string().contains("users_email_key") {
+                "Email already exists"
+            } else if e.to_string().contains("duplicate key") {
+                "User with this username or email already exists"
+            } else {
+                "Registration failed due to invalid data"
+            };
+            
+            (
+                StatusCode::BAD_REQUEST, 
+                Json(serde_json::json!({
+                    "error": error_message,
+                    "details": e.to_string()
+                }))
+            ).into_response()
+        }
+    }
 }
 
 #[utoipa::path(

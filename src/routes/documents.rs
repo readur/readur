@@ -669,7 +669,7 @@ async fn get_failed_ocr_documents(
             GROUP BY document_id
         ) q ON d.id = q.document_id
         WHERE d.ocr_status = 'failed'
-          AND ($1 = $1 OR d.user_id = $1)  -- Admin can see all, users see only their own
+          AND ($1::uuid IS NULL OR d.user_id = $1)  -- Admin can see all, users see only their own
         ORDER BY d.updated_at DESC
         LIMIT $2 OFFSET $3
         "#
@@ -691,7 +691,7 @@ async fn get_failed_ocr_documents(
         SELECT COUNT(*)
         FROM documents 
         WHERE ocr_status = 'failed'
-          AND ($1 = $1 OR user_id = $1)
+          AND ($1::uuid IS NULL OR user_id = $1)
         "#
     )
     .bind(if auth_user.user.role == crate::models::UserRole::Admin { 
@@ -802,7 +802,7 @@ async fn get_failure_statistics(
             COUNT(*) as count
         FROM documents 
         WHERE ocr_status = 'failed'
-          AND ($1 = $1 OR user_id = $1)
+          AND ($1::uuid IS NULL OR user_id = $1)
         GROUP BY ocr_failure_reason
         ORDER BY count DESC
         "#
@@ -907,6 +907,19 @@ pub async fn delete_document(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
+    // Create ignored file record for future source sync prevention
+    if let Err(e) = crate::db::ignored_files::create_ignored_file_from_document(
+        state.db.get_pool(),
+        document_id,
+        auth_user.user.id,
+        Some("deleted by user".to_string()),
+        None, // source_type will be determined by sync processes
+        None, // source_path will be determined by sync processes
+        None, // source_identifier will be determined by sync processes
+    ).await {
+        tracing::warn!("Failed to create ignored file record for document {}: {}", document_id, e);
+    }
+
     let file_service = FileService::new(state.config.upload_path.clone());
     
     if let Err(e) = file_service.delete_document_files(&deleted_document).await {
@@ -954,6 +967,23 @@ pub async fn bulk_delete_documents(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Create ignored file records for all successfully deleted documents
+    let mut ignored_file_creation_failures = 0;
+    for document in &deleted_documents {
+        if let Err(e) = crate::db::ignored_files::create_ignored_file_from_document(
+            state.db.get_pool(),
+            document.id,
+            auth_user.user.id,
+            Some("bulk deleted by user".to_string()),
+            None, // source_type will be determined by sync processes
+            None, // source_path will be determined by sync processes
+            None, // source_identifier will be determined by sync processes
+        ).await {
+            ignored_file_creation_failures += 1;
+            tracing::warn!("Failed to create ignored file record for document {}: {}", document.id, e);
+        }
+    }
+
     let file_service = FileService::new(state.config.upload_path.clone());
     let mut successful_file_deletions = 0;
     let mut failed_file_deletions = 0;
@@ -984,6 +1014,7 @@ pub async fn bulk_delete_documents(
         "requested_count": requested_count,
         "successful_file_deletions": successful_file_deletions,
         "failed_file_deletions": failed_file_deletions,
+        "ignored_file_creation_failures": ignored_file_creation_failures,
         "deleted_document_ids": deleted_documents.iter().map(|d| d.id).collect::<Vec<_>>()
     })))
 }

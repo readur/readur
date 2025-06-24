@@ -34,6 +34,7 @@ import {
   Storage as StorageIcon,
   Error as ErrorIcon,
   Label as LabelIcon,
+  Block as BlockIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -68,6 +69,7 @@ const navigationItems: NavigationItem[] = [
   { text: 'Sources', icon: StorageIcon, path: '/sources' },
   { text: 'Watch Folder', icon: FolderIcon, path: '/watch' },
   { text: 'Failed OCR', icon: ErrorIcon, path: '/failed-ocr' },
+  { text: 'Ignored Files', icon: BlockIcon, path: '/ignored-files' },
 ];
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {

@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod documents;
+pub mod ignored_files;
 pub mod labels;
 pub mod metrics;
 pub mod notifications;

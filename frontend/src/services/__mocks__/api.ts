@@ -19,6 +19,9 @@ export const documentService = {
   enhancedSearch: vi.fn(),
   download: vi.fn(),
   updateTags: vi.fn(),
+  getFailedOcrDocuments: vi.fn(),
+  getDuplicates: vi.fn(),
+  retryOcr: vi.fn(),
 }
 
 // Re-export types that components might need
