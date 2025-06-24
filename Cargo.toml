@@ -67,3 +67,7 @@ test-utils = ["testcontainers", "testcontainers-modules"]
 tempfile = "3"
 testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
+
+[profile.test]
+incremental = false
+debug = false
