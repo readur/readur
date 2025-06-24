@@ -443,7 +443,7 @@ async fn test_failed_ocr_empty_response_structure() {
         }
     };
     
-    // Get failed OCR documents
+    // Get failed OCR documents - should only see user's own documents
     let failed_docs = client.get_failed_ocr_documents(None, None).await.unwrap();
     
     // Structure should be consistent regardless of document count
@@ -451,14 +451,19 @@ async fn test_failed_ocr_empty_response_structure() {
     assert!(failed_docs["statistics"]["total_failed"].is_number());
     assert!(failed_docs["statistics"]["failure_categories"].is_array());
     
-    // The key test is structure consistency, not exact counts
+    // The key test is structure consistency
     let documents = failed_docs["documents"].as_array().unwrap();
     let total_failed = failed_docs["statistics"]["total_failed"].as_i64().unwrap();
     
-    // Document count should match the total_failed statistic
-    assert_eq!(documents.len() as i64, total_failed);
+    // For a new user, both should be 0
+    assert_eq!(documents.len(), 0, "New user should have no failed documents");
+    assert_eq!(total_failed, 0, "New user should have total_failed = 0");
     
-    println!("✅ Failed OCR endpoint returns consistent structure with {} documents", total_failed);
+    // Also test pagination values for empty result
+    assert_eq!(failed_docs["pagination"]["total"], 0);
+    assert_eq!(failed_docs["pagination"]["has_more"], false);
+    
+    println!("✅ Failed OCR endpoint returns consistent empty structure for new user");
 }
 
 #[tokio::test]

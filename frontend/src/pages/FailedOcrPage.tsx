@@ -154,9 +154,13 @@ const FailedOcrPage: React.FC = () => {
       const offset = (pagination.page - 1) * pagination.limit;
       const response = await documentService.getFailedOcrDocuments(pagination.limit, offset);
       
-      setDocuments(response.data.documents);
-      setStatistics(response.data.statistics);
-      setTotalPages(Math.ceil(response.data.pagination.total / pagination.limit));
+      if (response?.data) {
+        setDocuments(response.data.documents || []);
+        setStatistics(response.data.statistics || null);
+        if (response.data.pagination) {
+          setTotalPages(Math.ceil(response.data.pagination.total / pagination.limit));
+        }
+      }
     } catch (error) {
       console.error('Failed to fetch failed OCR documents:', error);
       setSnackbar({
@@ -175,9 +179,13 @@ const FailedOcrPage: React.FC = () => {
       const offset = (duplicatesPagination.page - 1) * duplicatesPagination.limit;
       const response = await documentService.getDuplicates(duplicatesPagination.limit, offset);
       
-      setDuplicates(response.data.duplicates);
-      setDuplicateStatistics(response.data.statistics);
-      setDuplicatesTotalPages(Math.ceil(response.data.pagination.total / duplicatesPagination.limit));
+      if (response?.data) {
+        setDuplicates(response.data.duplicates || []);
+        setDuplicateStatistics(response.data.statistics || null);
+        if (response.data.pagination) {
+          setDuplicatesTotalPages(Math.ceil(response.data.pagination.total / duplicatesPagination.limit));
+        }
+      }
     } catch (error) {
       console.error('Failed to fetch duplicates:', error);
       setSnackbar({
@@ -294,7 +302,7 @@ const FailedOcrPage: React.FC = () => {
     }
   };
 
-  if (loading && documents.length === 0) {
+  if (loading && (!documents || documents.length === 0)) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
         <CircularProgress />
@@ -375,7 +383,7 @@ const FailedOcrPage: React.FC = () => {
         </Grid>
       )}
 
-      {documents.length === 0 ? (
+      {(!documents || documents.length === 0) ? (
         <Alert severity="success" sx={{ mt: 2 }}>
           <AlertTitle>Great news!</AlertTitle>
           No documents have failed OCR processing. All your documents are processing successfully.
@@ -401,7 +409,7 @@ const FailedOcrPage: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {documents.map((document) => (
+                {(documents || []).map((document) => (
                   <React.Fragment key={document.id}>
                     <TableRow>
                       <TableCell>
