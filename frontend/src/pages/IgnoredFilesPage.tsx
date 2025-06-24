@@ -87,7 +87,7 @@ const IgnoredFilesPage: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
   const [deletingFiles, setDeletingFiles] = useState(false);
-  const { showNotification } = useNotifications();
+  const { addNotification } = useNotifications();
 
   const pageSize = 25;
 
@@ -216,13 +216,21 @@ const IgnoredFilesPage: React.FC = () => {
       }
 
       const data = await response.json();
-      showNotification('success', data.message);
+      addNotification({
+        type: 'success',
+        title: 'Files Deleted',
+        message: data.message
+      });
       setSelectedFiles(new Set());
       setBulkDeleteDialog(false);
       fetchIgnoredFiles();
       fetchStats();
     } catch (err) {
-      showNotification('error', err instanceof Error ? err.message : 'Failed to delete ignored files');
+      addNotification({
+        type: 'error',
+        title: 'Delete Failed',
+        message: err instanceof Error ? err.message : 'Failed to delete ignored files'
+      });
     } finally {
       setDeletingFiles(false);
     }
@@ -248,11 +256,19 @@ const IgnoredFilesPage: React.FC = () => {
       }
 
       const data = await response.json();
-      showNotification('success', data.message);
+      addNotification({
+        type: 'success',
+        title: 'Files Deleted',
+        message: data.message
+      });
       fetchIgnoredFiles();
       fetchStats();
     } catch (err) {
-      showNotification('error', err instanceof Error ? err.message : 'Failed to delete ignored file');
+      addNotification({
+        type: 'error',
+        title: 'Delete Failed',
+        message: err instanceof Error ? err.message : 'Failed to delete ignored file'
+      });
     }
   };
 
