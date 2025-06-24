@@ -10,6 +10,7 @@ pub mod notifications;
 pub mod webdav;
 pub mod sources;
 pub mod images;
+pub mod ignored_files;
 
 #[derive(Clone)]
 pub struct Database {

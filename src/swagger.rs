@@ -13,7 +13,7 @@ use crate::{
         Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
         WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
         WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
-        ProcessedImage, CreateProcessedImage
+        ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery
     },
     routes::metrics::{
         SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
@@ -85,6 +85,12 @@ use crate::{
         crate::routes::webdav::get_webdav_sync_status,
         crate::routes::webdav::test_webdav_connection,
         crate::routes::webdav::estimate_webdav_crawl,
+        // Ignored files endpoints
+        crate::routes::ignored_files::list_ignored_files,
+        crate::routes::ignored_files::get_ignored_file,
+        crate::routes::ignored_files::delete_ignored_file,
+        crate::routes::ignored_files::bulk_delete_ignored_files,
+        crate::routes::ignored_files::get_ignored_files_stats,
     ),
     components(
         schemas(
@@ -95,7 +101,10 @@ use crate::{
             Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
             WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
             WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
-            ProcessedImage, CreateProcessedImage,
+            ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery,
+            crate::routes::ignored_files::BulkDeleteIgnoredFilesRequest,
+            crate::routes::ignored_files::IgnoredFilesStats,
+            crate::routes::ignored_files::SourceTypeCount,
             SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
         )
     ),
@@ -110,6 +119,7 @@ use crate::{
         (name = "notifications", description = "User notification endpoints"),
         (name = "sources", description = "Document source management endpoints"),
         (name = "webdav", description = "WebDAV synchronization endpoints"),
+        (name = "ignored_files", description = "Ignored files management endpoints"),
     ),
     modifiers(&SecurityAddon),
     info(

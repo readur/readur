@@ -54,12 +54,14 @@ aws-credential-types = { version = "1.2", optional = true }
 aws-types = { version = "1.3", optional = true }
 sha2 = "0.10"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
+testcontainers = { version = "0.24", optional = true }
+testcontainers-modules = { version = "0.12", features = ["postgres"], optional = true }
 
 [features]
 default = ["ocr", "s3"]
 ocr = ["tesseract", "pdf-extract", "image", "imageproc", "raw-cpuid"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types"]
-test-utils = []
+test-utils = ["testcontainers", "testcontainers-modules"]
 
 [dev-dependencies]
 tempfile = "3"

@@ -936,3 +936,91 @@ pub struct CreateProcessedImage {
     pub image_height: i32,
     pub file_size: i64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+pub struct IgnoredFile {
+    pub id: Uuid,
+    pub file_hash: String,
+    pub filename: String,
+    pub original_filename: String,
+    pub file_path: String,
+    pub file_size: i64,
+    pub mime_type: String,
+    pub source_type: Option<String>,
+    pub source_path: Option<String>,
+    pub source_identifier: Option<String>,
+    pub ignored_at: DateTime<Utc>,
+    pub ignored_by: Uuid,
+    pub reason: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct IgnoredFileResponse {
+    pub id: Uuid,
+    pub file_hash: String,
+    pub filename: String,
+    pub original_filename: String,
+    pub file_path: String,
+    pub file_size: i64,
+    pub mime_type: String,
+    pub source_type: Option<String>,
+    pub source_path: Option<String>,
+    pub source_identifier: Option<String>,
+    pub ignored_at: DateTime<Utc>,
+    pub ignored_by: Uuid,
+    pub ignored_by_username: Option<String>,
+    pub reason: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CreateIgnoredFile {
+    pub file_hash: String,
+    pub filename: String,
+    pub original_filename: String,
+    pub file_path: String,
+    pub file_size: i64,
+    pub mime_type: String,
+    pub source_type: Option<String>,
+    pub source_path: Option<String>,
+    pub source_identifier: Option<String>,
+    pub ignored_by: Uuid,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
+pub struct IgnoredFilesQuery {
+    /// Maximum number of results to return (default: 25)
+    pub limit: Option<i64>,
+    /// Number of results to skip for pagination (default: 0)
+    pub offset: Option<i64>,
+    /// Filter by source type
+    pub source_type: Option<String>,
+    /// Filter by user who ignored the files
+    pub ignored_by: Option<Uuid>,
+    /// Search by filename
+    pub filename: Option<String>,
+}
+
+impl From<IgnoredFile> for IgnoredFileResponse {
+    fn from(ignored_file: IgnoredFile) -> Self {
+        Self {
+            id: ignored_file.id,
+            file_hash: ignored_file.file_hash,
+            filename: ignored_file.filename,
+            original_filename: ignored_file.original_filename,
+            file_path: ignored_file.file_path,
+            file_size: ignored_file.file_size,
+            mime_type: ignored_file.mime_type,
+            source_type: ignored_file.source_type,
+            source_path: ignored_file.source_path,
+            source_identifier: ignored_file.source_identifier,
+            ignored_at: ignored_file.ignored_at,
+            ignored_by: ignored_file.ignored_by,
+            ignored_by_username: None, // Will be populated separately where needed
+            reason: ignored_file.reason,
+            created_at: ignored_file.created_at,
+        }
+    }
+}
