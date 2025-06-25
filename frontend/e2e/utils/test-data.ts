@@ -59,7 +59,10 @@ export const API_ENDPOINTS = {
   upload: '/api/documents/upload',
   search: '/api/search',
   documents: '/api/documents',
-  settings: '/api/settings'
+  settings: '/api/settings',
+  failedOcr: '/api/documents/failed-ocr',
+  duplicates: '/api/documents/duplicates',
+  download: '/api/documents/*/download'
 };
 
 export const TIMEOUTS = {
@@ -68,4 +71,27 @@ export const TIMEOUTS = {
   long: 30000,
   upload: 60000,
   ocr: 120000
+};
+
+export const FAILED_OCR_TEST_DATA = {
+  expectedFailureReasons: [
+    'image_quality',
+    'no_text_detected',
+    'unsupported_format',
+    'processing_timeout',
+    'file_corrupted'
+  ],
+  sampleErrorMessages: [
+    'OCR processing failed due to low image quality',
+    'Text detection failed',
+    'File format not supported for OCR',
+    'OCR processing timeout',
+    'Corrupted file detected'
+  ]
+};
+
+export const DOWNLOAD_TEST_DATA = {
+  expectedFileExtensions: ['.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx', '.txt'],
+  downloadTimeoutMs: 15000,
+  maxDownloadSizeMB: 100
 };
