@@ -64,17 +64,56 @@ impl WebDAVService {
             .timeout(Duration::from_secs(config.timeout_seconds))
             .build()?;
 
+        // Validate server URL before constructing WebDAV URLs
+        if config.server_url.trim().is_empty() {
+            return Err(anyhow!("❌ WebDAV Configuration Error: server_url is empty"));
+        }
+        
+        if !config.server_url.starts_with("http://") && !config.server_url.starts_with("https://") {
+            return Err(anyhow!(
+                "❌ WebDAV Configuration Error: server_url must start with 'http://' or 'https://'. \
+                 Current value: '{}'. \
+                 Examples: \
+                 - https://cloud.example.com \
+                 - http://192.168.1.100:8080 \
+                 - https://nextcloud.mydomain.com", 
+                config.server_url
+            ));
+        }
+        
+        // Validate that server_url can be parsed as a proper URL
+        if let Err(e) = reqwest::Url::parse(&config.server_url) {
+            return Err(anyhow!(
+                "❌ WebDAV Configuration Error: server_url is not a valid URL: {}. \
+                 Current value: '{}'. \
+                 The URL must be absolute and include the full domain. \
+                 Examples: \
+                 - https://cloud.example.com \
+                 - http://192.168.1.100:8080/webdav \
+                 - https://nextcloud.mydomain.com", 
+                e, config.server_url
+            ));
+        }
+
         // Construct WebDAV URL based on server type
         let base_webdav_url = match config.server_type.as_deref() {
-            Some("nextcloud") | Some("owncloud") => format!(
-                "{}/remote.php/dav/files/{}",
-                config.server_url.trim_end_matches('/'),
-                config.username
-            ),
-            _ => format!(
-                "{}/webdav",
-                config.server_url.trim_end_matches('/')
-            ),
+            Some("nextcloud") | Some("owncloud") => {
+                let url = format!(
+                    "{}/remote.php/dav/files/{}",
+                    config.server_url.trim_end_matches('/'),
+                    config.username
+                );
+                info!("🔗 Constructed Nextcloud/ownCloud WebDAV URL: {}", url);
+                url
+            },
+            _ => {
+                let url = format!(
+                    "{}/webdav",
+                    config.server_url.trim_end_matches('/')
+                );
+                info!("🔗 Constructed generic WebDAV URL: {}", url);
+                url
+            },
         };
 
         Ok(Self {
@@ -153,6 +192,45 @@ impl WebDAVService {
             test_config.server_url, 
             test_config.server_type.as_deref().unwrap_or("generic"));
         
+        // Validate server URL before constructing test URL
+        if test_config.server_url.trim().is_empty() {
+            return Ok(WebDAVConnectionResult {
+                success: false,
+                message: "❌ WebDAV server_url is empty".to_string(),
+                server_version: None,
+                server_type: None,
+            });
+        }
+        
+        if !test_config.server_url.starts_with("http://") && !test_config.server_url.starts_with("https://") {
+            return Ok(WebDAVConnectionResult {
+                success: false,
+                message: format!(
+                    "❌ WebDAV server_url must start with 'http://' or 'https://'. \
+                     Current value: '{}'. \
+                     Examples: https://cloud.example.com, http://192.168.1.100:8080", 
+                    test_config.server_url
+                ),
+                server_version: None,
+                server_type: None,
+            });
+        }
+        
+        // Validate URL can be parsed
+        if let Err(e) = reqwest::Url::parse(&test_config.server_url) {
+            return Ok(WebDAVConnectionResult {
+                success: false,
+                message: format!(
+                    "❌ WebDAV server_url is not a valid URL: {}. \
+                     Current value: '{}'. \
+                     Must be absolute URL like: https://cloud.example.com", 
+                    e, test_config.server_url
+                ),
+                server_version: None,
+                server_type: None,
+            });
+        }
+        
         let test_url = match test_config.server_type.as_deref() {
             Some("nextcloud") | Some("owncloud") => format!(
                 "{}/remote.php/dav/files/{}/",
@@ -164,8 +242,10 @@ impl WebDAVService {
                 test_config.server_url.trim_end_matches('/')
             ),
         };
+        
+        info!("🔗 Constructed test URL: {}", test_url);
 
-        let response = self.client
+        let resp = self.client
             .request(Method::from_bytes(b"PROPFIND").unwrap(), &test_url)
             .basic_auth(&test_config.username, Some(&test_config.password))
             .header("Depth", "0")
@@ -176,42 +256,35 @@ impl WebDAVService {
                     </d:prop>
                 </d:propfind>"#)
             .send()
-            .await;
+            .await
+            .map_err(|e| {
+                error!("❌ WebDAV HTTP request failed for URL '{}': {}", test_url, e);
+                anyhow!("WebDAV HTTP request failed for URL '{}': {}. \
+                         This often indicates a URL configuration issue. \
+                         Verify the server_url is correct and accessible.", test_url, e)
+            })?;
 
-        match response {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    info!("✅ WebDAV connection successful");
-                    
-                    // Try to get server info
-                    let (version, server_type) = self.get_server_info(&test_config).await;
-                    
-                    Ok(WebDAVConnectionResult {
-                        success: true,
-                        message: format!("Successfully connected to WebDAV server ({})", 
-                            server_type.as_deref().unwrap_or("Generic WebDAV")),
-                        server_version: version,
-                        server_type,
-                    })
-                } else {
-                    error!("❌ WebDAV connection failed with status: {}", resp.status());
-                    Ok(WebDAVConnectionResult {
-                        success: false,
-                        message: format!("Connection failed: HTTP {}", resp.status()),
-                        server_version: None,
-                        server_type: None,
-                    })
-                }
-            }
-            Err(e) => {
-                error!("❌ WebDAV connection error: {}", e);
-                Ok(WebDAVConnectionResult {
-                    success: false,
-                    message: format!("Connection error: {}", e),
-                    server_version: None,
-                    server_type: None,
-                })
-            }
+        if resp.status().is_success() {
+            info!("✅ WebDAV connection successful");
+            
+            // Try to get server info
+            let (version, server_type) = self.get_server_info(&test_config).await;
+            
+            Ok(WebDAVConnectionResult {
+                success: true,
+                message: format!("Successfully connected to WebDAV server ({})", 
+                    server_type.as_deref().unwrap_or("Generic WebDAV")),
+                server_version: version,
+                server_type,
+            })
+        } else {
+            error!("❌ WebDAV connection failed with status: {} for URL: {}", resp.status(), test_url);
+            Ok(WebDAVConnectionResult {
+                success: false,
+                message: format!("Connection failed: HTTP {} for URL: {}", resp.status(), test_url),
+                server_version: None,
+                server_type: None,
+            })
         }
     }
 
