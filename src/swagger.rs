@@ -13,7 +13,9 @@ use crate::{
         Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
         WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
         WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
-        ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery
+        ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery,
+        DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
+        BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse
     },
     routes::{
         metrics::{
@@ -130,7 +132,8 @@ use crate::{
             // Labels schemas
             Label, CreateLabel, UpdateLabel, LabelAssignment, LabelQuery, LabelBulkUpdateRequest,
             // Document schemas
-            BulkDeleteRequest
+            BulkDeleteRequest, DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
+            BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse
         )
     ),
     tags(

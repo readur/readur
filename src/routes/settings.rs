@@ -27,7 +27,8 @@ pub fn router() -> Router<Arc<AppState>> {
     ),
     responses(
         (status = 200, description = "User settings", body = SettingsResponse),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn get_settings(
@@ -112,7 +113,8 @@ async fn get_settings(
     responses(
         (status = 200, description = "Settings updated successfully", body = SettingsResponse),
         (status = 400, description = "Bad request - invalid settings data"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn update_settings(

@@ -86,6 +86,7 @@ pub fn router() -> Router<Arc<AppState>> {
     responses(
         (status = 200, description = "System metrics and monitoring data", body = SystemMetrics),
         (status = 401, description = "Unauthorized - valid authentication required"),
+        (status = 403, description = "Forbidden - Admin access required"),
         (status = 500, description = "Internal server error")
     )
 )]

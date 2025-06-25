@@ -83,7 +83,8 @@ pub fn ignored_files_routes() -> Router<Arc<AppState>> {
     params(IgnoredFilesQuery),
     responses(
         (status = 200, description = "List of ignored files", body = Vec<IgnoredFileResponse>),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 pub async fn list_ignored_files(
@@ -133,8 +134,9 @@ pub async fn list_ignored_files(
     ),
     responses(
         (status = 200, description = "Ignored file details", body = IgnoredFileResponse),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Ignored file not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 pub async fn get_ignored_file(
@@ -169,8 +171,9 @@ pub async fn get_ignored_file(
     ),
     responses(
         (status = 200, description = "Ignored file deleted successfully"),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Ignored file not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 pub async fn delete_ignored_file(
@@ -211,7 +214,8 @@ pub async fn delete_ignored_file(
     responses(
         (status = 200, description = "Ignored files deleted successfully"),
         (status = 400, description = "Bad request - no ignored file IDs provided"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 pub async fn bulk_delete_ignored_files(
@@ -262,7 +266,8 @@ pub async fn bulk_delete_ignored_files(
     ),
     responses(
         (status = 200, description = "Ignored files statistics", body = IgnoredFilesStats),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 pub async fn get_ignored_files_stats(

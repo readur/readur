@@ -37,7 +37,9 @@ pub fn router() -> Router<Arc<AppState>> {
     ),
     responses(
         (status = 200, description = "List of all users", body = Vec<UserResponse>),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn list_users(
@@ -67,8 +69,10 @@ async fn list_users(
     ),
     responses(
         (status = 200, description = "User information", body = UserResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
         (status = 404, description = "User not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn get_user(
@@ -98,7 +102,9 @@ async fn get_user(
     responses(
         (status = 200, description = "User created successfully", body = UserResponse),
         (status = 400, description = "Bad request - invalid user data"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn create_user(
@@ -130,7 +136,9 @@ async fn create_user(
     responses(
         (status = 200, description = "User updated successfully", body = UserResponse),
         (status = 400, description = "Bad request - invalid user data"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn update_user(
@@ -161,8 +169,10 @@ async fn update_user(
     ),
     responses(
         (status = 204, description = "User deleted successfully"),
-        (status = 403, description = "Forbidden - cannot delete yourself"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required or cannot delete yourself"),
+        (status = 404, description = "User not found"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn delete_user(

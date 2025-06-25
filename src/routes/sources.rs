@@ -36,7 +36,8 @@ pub fn router() -> Router<Arc<AppState>> {
     ),
     responses(
         (status = 200, description = "List of user sources", body = Vec<SourceResponse>),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn list_sources(
@@ -64,7 +65,8 @@ async fn list_sources(
     responses(
         (status = 201, description = "Source created successfully", body = SourceResponse),
         (status = 400, description = "Bad request - invalid source data"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn create_source(
@@ -103,8 +105,9 @@ async fn create_source(
     ),
     responses(
         (status = 200, description = "Source details with stats", body = SourceWithStats),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn get_source(
@@ -159,9 +162,10 @@ async fn get_source(
     request_body = UpdateSource,
     responses(
         (status = 200, description = "Source updated successfully", body = SourceResponse),
-        (status = 404, description = "Source not found"),
         (status = 400, description = "Bad request - invalid update data"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Source not found"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn update_source(
@@ -214,8 +218,9 @@ async fn update_source(
     ),
     responses(
         (status = 204, description = "Source deleted successfully"),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn delete_source(
@@ -248,9 +253,11 @@ async fn delete_source(
     ),
     responses(
         (status = 200, description = "Sync triggered successfully"),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
         (status = 409, description = "Source is already syncing"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error"),
+        (status = 501, description = "Not implemented - Source type not supported")
     )
 )]
 async fn trigger_sync(
@@ -341,9 +348,10 @@ async fn trigger_sync(
     ),
     responses(
         (status = 200, description = "Sync stopped successfully"),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
         (status = 409, description = "Source is not currently syncing"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn stop_sync(
@@ -411,8 +419,9 @@ async fn stop_sync(
     ),
     responses(
         (status = 200, description = "Connection test result", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn test_connection(
@@ -540,8 +549,9 @@ fn validate_config_for_type(
     ),
     responses(
         (status = 200, description = "Crawl estimate result", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn estimate_crawl(
@@ -580,7 +590,8 @@ async fn estimate_crawl(
     responses(
         (status = 200, description = "Crawl estimate result", body = serde_json::Value),
         (status = 400, description = "Bad request - invalid configuration"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn estimate_crawl_with_config(
@@ -652,7 +663,8 @@ struct TestConnectionRequest {
     responses(
         (status = 200, description = "Connection test result", body = serde_json::Value),
         (status = 400, description = "Bad request - invalid configuration"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn test_connection_with_config(

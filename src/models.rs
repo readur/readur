@@ -1024,3 +1024,101 @@ impl From<IgnoredFile> for IgnoredFileResponse {
         }
     }
 }
+
+// Additional response schemas for better API documentation
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct DocumentListResponse {
+    /// List of documents
+    pub documents: Vec<DocumentResponse>,
+    /// Total number of documents (without pagination)
+    pub total: i64,
+    /// Number of documents returned in this response
+    pub count: i64,
+    /// Pagination offset used
+    pub offset: i64,
+    /// Pagination limit used
+    pub limit: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct DocumentOcrResponse {
+    /// Document ID
+    pub document_id: Uuid,
+    /// Original filename
+    pub filename: String,
+    /// Whether the document has OCR text available
+    pub has_ocr_text: bool,
+    /// OCR text content (if available)
+    pub ocr_text: Option<String>,
+    /// OCR processing confidence score (0-100)
+    pub ocr_confidence: Option<f32>,
+    /// Current OCR processing status
+    pub ocr_status: Option<String>,
+    /// Time taken for OCR processing in milliseconds
+    pub ocr_processing_time_ms: Option<i32>,
+    /// Language detected in the document
+    pub detected_language: Option<String>,
+    /// Number of pages processed (for multi-page documents)
+    pub pages_processed: Option<i32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct DocumentOperationResponse {
+    /// Whether the operation was successful
+    pub success: bool,
+    /// Human-readable message describing the result
+    pub message: String,
+    /// Document ID(s) affected by the operation
+    pub document_ids: Vec<Uuid>,
+    /// Number of documents processed
+    pub count: i64,
+    /// Any warnings or additional information
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BulkDeleteResponse {
+    /// Whether the operation was successful
+    pub success: bool,
+    /// Number of documents successfully deleted
+    pub deleted_count: i64,
+    /// Number of documents that failed to delete
+    pub failed_count: i64,
+    /// List of document IDs that were successfully deleted
+    pub deleted_documents: Vec<Uuid>,
+    /// List of document IDs that failed to delete
+    pub failed_documents: Vec<Uuid>,
+    /// Number of files successfully deleted from storage
+    pub files_deleted: i64,
+    /// Number of files that failed to delete from storage
+    pub files_failed: i64,
+    /// Any warnings or additional information
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct PaginationInfo {
+    /// Total number of items available
+    pub total: i64,
+    /// Number of items returned in current response
+    pub count: i64,
+    /// Current offset
+    pub offset: i64,
+    /// Current limit
+    pub limit: i64,
+    /// Whether there are more items available
+    pub has_more: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct DocumentDuplicatesResponse {
+    /// List of document groups that are duplicates of each other
+    pub duplicate_groups: Vec<Vec<DocumentResponse>>,
+    /// Total number of duplicate documents found
+    pub total_duplicates: i64,
+    /// Number of duplicate groups
+    pub group_count: i64,
+    /// Pagination information
+    pub pagination: PaginationInfo,
+}

@@ -36,6 +36,7 @@ pub fn router() -> Router<Arc<AppState>> {
     responses(
         (status = 200, description = "OCR queue statistics including pending jobs, processing status, and performance metrics"),
         (status = 401, description = "Unauthorized - valid authentication required"),
+        (status = 403, description = "Forbidden - Admin access required"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -70,7 +71,9 @@ async fn get_queue_stats(
     ),
     responses(
         (status = 200, description = "Failed items requeued successfully"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn requeue_failed(

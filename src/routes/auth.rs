@@ -27,7 +27,8 @@ pub fn router() -> Router<Arc<AppState>> {
     request_body = CreateUser,
     responses(
         (status = 200, description = "User registered successfully", body = UserResponse),
-        (status = 400, description = "Bad request - invalid user data")
+        (status = 400, description = "Bad request - username/email already exists or invalid data"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn register(
@@ -71,7 +72,8 @@ async fn register(
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Login successful", body = LoginResponse),
-        (status = 401, description = "Unauthorized - invalid credentials")
+        (status = 401, description = "Unauthorized - invalid credentials"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn login(
@@ -110,7 +112,8 @@ async fn login(
     ),
     responses(
         (status = 200, description = "Current user information", body = UserResponse),
-        (status = 401, description = "Unauthorized - invalid or missing token")
+        (status = 401, description = "Unauthorized - invalid or missing token"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn me(auth_user: AuthUser) -> Json<UserResponse> {

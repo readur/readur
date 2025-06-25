@@ -42,7 +42,8 @@ pub fn router() -> Router<Arc<AppState>> {
     ),
     responses(
         (status = 200, description = "List of user notifications", body = Vec<Notification>),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn get_notifications(
@@ -71,7 +72,8 @@ async fn get_notifications(
     ),
     responses(
         (status = 200, description = "Notification summary with unread count and recent notifications", body = NotificationSummary),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn get_notification_summary(
@@ -99,8 +101,9 @@ async fn get_notification_summary(
     ),
     responses(
         (status = 200, description = "Notification marked as read"),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Notification not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn mark_notification_read(
@@ -126,7 +129,8 @@ async fn mark_notification_read(
     ),
     responses(
         (status = 200, description = "All notifications marked as read"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn mark_all_notifications_read(
@@ -154,8 +158,9 @@ async fn mark_all_notifications_read(
     ),
     responses(
         (status = 200, description = "Notification deleted"),
+        (status = 401, description = "Unauthorized"),
         (status = 404, description = "Notification not found"),
-        (status = 401, description = "Unauthorized")
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn delete_notification(

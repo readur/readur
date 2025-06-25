@@ -24,6 +24,7 @@ pub fn router() -> Router<Arc<AppState>> {
     get,
     path = "/api/search",
     tag = "search",
+    description = "Search documents with basic relevance ranking and OCR text matching",
     security(
         ("bearer_auth" = [])
     ),
@@ -76,6 +77,7 @@ async fn search_documents(
     get,
     path = "/api/search/enhanced",
     tag = "search",
+    description = "Enhanced search with improved ranking, text snippets, and query suggestions",
     security(
         ("bearer_auth" = [])
     ),
@@ -84,7 +86,8 @@ async fn search_documents(
     ),
     responses(
         (status = 200, description = "Enhanced search results with snippets and suggestions", body = SearchResponse),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn enhanced_search_documents(
@@ -138,12 +141,14 @@ fn generate_search_suggestions(query: &str) -> Vec<String> {
     get,
     path = "/api/search/facets",
     tag = "search",
+    description = "Get available search facets (MIME types, tags) with document counts for filtering",
     security(
         ("bearer_auth" = [])
     ),
     responses(
         (status = 200, description = "Search facets with counts", body = SearchFacetsResponse),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
     )
 )]
 async fn get_search_facets(
