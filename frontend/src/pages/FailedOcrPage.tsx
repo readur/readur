@@ -473,7 +473,13 @@ const FailedOcrPage: React.FC = () => {
                           <Tooltip title="Download Document">
                             <IconButton
                               size="small"
-                              onClick={() => window.open(`/api/documents/${document.id}/download`, '_blank')}
+                              onClick={async () => {
+                                try {
+                                  await documentService.downloadFile(document.id, document.original_filename || document.filename);
+                                } catch (error) {
+                                  console.error('Download failed:', error);
+                                }
+                              }}
                             >
                               <DownloadIcon />
                             </IconButton>
@@ -760,7 +766,13 @@ const FailedOcrPage: React.FC = () => {
                                               <Tooltip title="Download Document">
                                                 <IconButton
                                                   size="small"
-                                                  onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
+                                                  onClick={async () => {
+                                                    try {
+                                                      await documentService.downloadFile(doc.id, doc.original_filename || doc.filename);
+                                                    } catch (error) {
+                                                      console.error('Download failed:', error);
+                                                    }
+                                                  }}
                                                   sx={{ color: theme.palette.secondary.main }}
                                                 >
                                                   <DownloadIcon />

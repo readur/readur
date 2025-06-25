@@ -38,7 +38,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import api from '../../services/api';
+import api, { documentService } from '../../services/api';
 
 interface Document {
   id: string;
@@ -377,9 +377,12 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
                       </IconButton>
                       <IconButton 
                         size="small" 
-                        onClick={() => {
-                          const downloadUrl = `/api/documents/${doc.id}/download`;
-                          window.open(downloadUrl, '_blank');
+                        onClick={async () => {
+                          try {
+                            await documentService.downloadFile(doc.id, doc.original_filename || doc.filename);
+                          } catch (error) {
+                            console.error('Download failed:', error);
+                          }
                         }}
                       >
                         <DownloadIcon fontSize="small" />
