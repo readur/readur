@@ -1,6 +1,29 @@
 {{- define "readur.hardcodedValues" -}}
 controllers:
   main:
+    initContainers:
+      fixperms:
+        image:
+          repository: busybox
+          tag: latest
+        command:
+          - sh
+          - -c
+          - |
+            echo "Fixing permissions for Readur directories, this may take some time..."
+            chown -R 1000:1000 /app/uploads /app/watch
+            chmod -R 755 /app/uploads /app/watch
+            echo "Permissions fixed successfully"
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          runAsNonRoot: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+              - CHOWN
+              - FOWNER
     containers:
       readur:
         image:
