@@ -151,6 +151,28 @@ export const documentService = {
     })
   },
 
+  downloadFile: async (id: string, filename?: string) => {
+    try {
+      const response = await api.get(`/documents/${id}/download`, {
+        responseType: 'blob',
+      });
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || `document-${id}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download failed:', error);
+      throw error;
+    }
+  },
+
   getOcrText: (id: string) => {
     return api.get<OcrResponse>(`/documents/${id}/ocr`)
   },

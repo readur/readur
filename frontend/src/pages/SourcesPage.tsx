@@ -576,16 +576,19 @@ const SourcesPage: React.FC = () => {
     icon: React.ReactNode; 
     label: string; 
     value: string | number; 
-    color?: 'primary' | 'success' | 'warning' | 'error' 
+    color?: 'primary' | 'success' | 'warning' | 'error' | 'info' 
   }) => (
     <Box 
       sx={{ 
-        p: 3, 
+        p: 2.5, 
         borderRadius: 3,
         background: `linear-gradient(135deg, ${alpha(theme.palette[color].main, 0.1)} 0%, ${alpha(theme.palette[color].main, 0.05)} 100%)`,
         border: `1px solid ${alpha(theme.palette[color].main, 0.2)}`,
         position: 'relative',
         overflow: 'hidden',
+        height: '100px',
+        display: 'flex',
+        alignItems: 'center',
         '&::before': {
           content: '""',
           position: 'absolute',
@@ -597,22 +600,41 @@ const SourcesPage: React.FC = () => {
         }
       }}
     >
-      <Stack direction="row" alignItems="center" spacing={2}>
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ width: '100%', overflow: 'hidden' }}>
         <Avatar 
           sx={{ 
             bgcolor: alpha(theme.palette[color].main, 0.15),
             color: theme.palette[color].main,
-            width: 48,
-            height: 48,
+            width: 40,
+            height: 40,
+            flexShrink: 0
           }}
         >
           {icon}
         </Avatar>
-        <Box>
-          <Typography variant="h4" fontWeight="bold" color={theme.palette[color].main}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography 
+            variant="h5" 
+            fontWeight="bold" 
+            color={theme.palette[color].main}
+            sx={{ 
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
             {typeof value === 'number' ? value.toLocaleString() : value}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography 
+            variant="body2" 
+            color="text.secondary"
+            sx={{ 
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: '0.75rem'
+            }}
+          >
             {label}
           </Typography>
         </Box>
@@ -782,8 +804,8 @@ const SourcesPage: React.FC = () => {
           </Stack>
 
           {/* Stats Grid */}
-          <Grid container spacing={3} mb={3}>
-            <Grid item xs={6} sm={3}>
+          <Grid container spacing={2} mb={3}>
+            <Grid item xs={6} sm={4} md={3}>
               <StatCard
                 icon={<TrendingUpIcon />}
                 label="Files Synced"
@@ -791,7 +813,7 @@ const SourcesPage: React.FC = () => {
                 color="success"
               />
             </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid item xs={6} sm={4} md={3}>
               <StatCard
                 icon={<SpeedIcon />}
                 label="Files Pending"
@@ -799,15 +821,23 @@ const SourcesPage: React.FC = () => {
                 color="warning"
               />
             </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid item xs={6} sm={4} md={3}>
+              <StatCard
+                icon={<AssessmentIcon />}
+                label="OCR Processed"
+                value={source.total_files_synced}
+                color="info"
+              />
+            </Grid>
+            <Grid item xs={6} sm={4} md={3}>
               <StatCard
                 icon={<StorageIcon />}
-                label="Total Size"
+                label="Total Size (Downloaded)"
                 value={formatBytes(source.total_size_bytes)}
                 color="primary"
               />
             </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid item xs={6} sm={4} md={3}>
               <StatCard
                 icon={<TimelineIcon />}
                 label="Last Sync"

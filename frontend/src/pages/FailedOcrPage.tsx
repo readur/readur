@@ -473,7 +473,13 @@ const FailedOcrPage: React.FC = () => {
                           <Tooltip title="Download Document">
                             <IconButton
                               size="small"
-                              onClick={() => window.open(`/api/documents/${document.id}/download`, '_blank')}
+                              onClick={async () => {
+                                try {
+                                  await documentService.downloadFile(document.id, document.original_filename || document.filename);
+                                } catch (error) {
+                                  console.error('Download failed:', error);
+                                }
+                              }}
                             >
                               <DownloadIcon />
                             </IconButton>
@@ -484,7 +490,12 @@ const FailedOcrPage: React.FC = () => {
                     <TableRow>
                       <TableCell sx={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
                         <Collapse in={expandedRows.has(document.id)} timeout="auto" unmountOnExit>
-                          <Box sx={{ margin: 1, p: 2, bgcolor: 'grey.50' }}>
+                          <Box sx={{ 
+                            margin: 1, 
+                            p: 2, 
+                            bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
+                            borderRadius: 1
+                          }}>
                             <Typography variant="h6" gutterBottom>
                               Error Details
                             </Typography>
@@ -504,7 +515,7 @@ const FailedOcrPage: React.FC = () => {
                                   variant="body2"
                                   sx={{
                                     fontFamily: 'monospace',
-                                    bgcolor: 'grey.100',
+                                    bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                                     p: 1,
                                     borderRadius: 1,
                                     fontSize: '0.75rem',
@@ -755,7 +766,13 @@ const FailedOcrPage: React.FC = () => {
                                               <Tooltip title="Download Document">
                                                 <IconButton
                                                   size="small"
-                                                  onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
+                                                  onClick={async () => {
+                                                    try {
+                                                      await documentService.downloadFile(doc.id, doc.original_filename || doc.filename);
+                                                    } catch (error) {
+                                                      console.error('Download failed:', error);
+                                                    }
+                                                  }}
                                                   sx={{ color: theme.palette.secondary.main }}
                                                 >
                                                   <DownloadIcon />

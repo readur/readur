@@ -547,8 +547,8 @@ const DocumentsPage: React.FC = () => {
           gap: 2,
           color: 'primary.contrastText'
         }}>
-          <Typography variant="body2" sx={{ flexGrow: 1 }}>
-            {selectedDocuments.size} of {sortedDocuments.length} documents selected
+          <Typography variant="body2" sx={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {selectedDocuments.size > 999 ? `${Math.floor(selectedDocuments.size/1000)}K` : selectedDocuments.size} of {sortedDocuments.length > 999 ? `${Math.floor(sortedDocuments.length/1000)}K` : sortedDocuments.length} documents selected
           </Typography>
           <Button
             variant="text"
@@ -567,7 +567,7 @@ const DocumentsPage: React.FC = () => {
             size="small"
             color="error"
           >
-            Delete Selected ({selectedDocuments.size})
+            Delete Selected ({selectedDocuments.size > 999 ? `${Math.floor(selectedDocuments.size/1000)}K` : selectedDocuments.size})
           </Button>
         </Box>
       )}
@@ -785,7 +785,16 @@ const DocumentsPage: React.FC = () => {
                               size="small" 
                               color="primary"
                               variant="outlined"
-                              sx={{ fontSize: '0.7rem', height: '20px' }}
+                              sx={{ 
+                                fontSize: '0.7rem', 
+                                height: '20px',
+                                maxWidth: '120px',
+                                '& .MuiChip-label': { 
+                                  overflow: 'hidden', 
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }
+                              }}
                             />
                           ))}
                           {doc.tags.length > 3 && (

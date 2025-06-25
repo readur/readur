@@ -38,7 +38,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import api from '../../services/api';
+import api, { documentService } from '../../services/api';
 
 interface Document {
   id: string;
@@ -82,19 +82,24 @@ interface QuickAction {
 // Stats Card Component
 const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Icon, color, trend }) => {
   const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
   
   return (
     <Card
       elevation={0}
       sx={{
-        background: `linear-gradient(135deg, ${color} 0%, ${alpha(color, 0.85)} 100%)`,
-        color: 'white',
+        background: isDarkMode 
+          ? `linear-gradient(135deg, ${alpha(color, 0.15)} 0%, ${alpha(color, 0.08)} 100%)`
+          : `linear-gradient(135deg, ${color} 0%, ${alpha(color, 0.85)} 100%)`,
+        color: isDarkMode ? theme.palette.text.primary : 'white',
         position: 'relative',
         overflow: 'hidden',
         borderRadius: 3,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
-        border: '1px solid rgba(255,255,255,0.1)',
+        border: isDarkMode 
+          ? `1px solid ${alpha(color, 0.3)}`
+          : '1px solid rgba(255,255,255,0.1)',
         backdropFilter: 'blur(20px)',
         '&:hover': {
           transform: 'translateY(-4px)',
@@ -107,7 +112,9 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Ico
           right: 0,
           width: '120px',
           height: '120px',
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%)',
+          background: isDarkMode
+            ? `linear-gradient(135deg, ${alpha(color, 0.15)} 0%, ${alpha(color, 0.05)} 100%)`
+            : 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%)',
           borderRadius: '50%',
           transform: 'translate(40px, -40px)',
         },
@@ -118,7 +125,9 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Ico
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
+          background: isDarkMode
+            ? `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, ${alpha(color, 0.03)} 100%)`
+            : 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
           backdropFilter: 'blur(10px)',
         },
       }}
@@ -177,16 +186,21 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Ico
             width: 64,
             height: 64,
             borderRadius: 3,
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+            background: isDarkMode
+              ? `linear-gradient(135deg, ${alpha(color, 0.25)} 0%, ${alpha(color, 0.15)} 100%)`
+              : 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
             backdropFilter: 'blur(20px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            border: '1px solid rgba(255,255,255,0.2)',
+            border: isDarkMode
+              ? `1px solid ${alpha(color, 0.4)}`
+              : '1px solid rgba(255,255,255,0.2)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
           }}>
             <Icon sx={{ 
               fontSize: 32,
+              color: isDarkMode ? color : 'inherit',
               filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
             }} />
           </Box>
@@ -363,9 +377,12 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
                       </IconButton>
                       <IconButton 
                         size="small" 
-                        onClick={() => {
-                          const downloadUrl = `/api/documents/${doc.id}/download`;
-                          window.open(downloadUrl, '_blank');
+                        onClick={async () => {
+                          try {
+                            await documentService.downloadFile(doc.id, doc.original_filename || doc.filename);
+                          } catch (error) {
+                            console.error('Download failed:', error);
+                          }
                         }}
                       >
                         <DownloadIcon fontSize="small" />
@@ -522,8 +539,20 @@ const Dashboard: React.FC = () => {
         // Fetch documents with better error handling
         let docs: Document[] = [];
         try {
-          const docsResponse = await api.get<Document[]>('/documents');
-          docs = Array.isArray(docsResponse.data) ? docsResponse.data : [];
+          const docsResponse = await api.get('/documents', {
+            params: {
+              limit: 10,
+              offset: 0,
+            }
+          });
+          // Handle both direct array response and paginated response
+          if (Array.isArray(docsResponse.data)) {
+            docs = docsResponse.data;
+          } else if (docsResponse.data?.documents) {
+            docs = docsResponse.data.documents;
+          } else {
+            docs = [];
+          }
         } catch (docError) {
           console.error('Failed to fetch documents:', docError);
           // Continue with empty documents array
@@ -623,7 +652,7 @@ const Dashboard: React.FC = () => {
             subtitle="Files in your library"
             icon={DocumentIcon}
             color="#6366f1"
-            trend="+12% this month"
+            trend={stats.totalDocuments > 0 ? `${stats.totalDocuments} total` : 'No documents yet'}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -633,7 +662,7 @@ const Dashboard: React.FC = () => {
             subtitle="Total file size"
             icon={StorageIcon}
             color="#10b981"
-            trend="+2.4 GB this week"
+            trend={stats.totalSize > 0 ? `${formatBytes(stats.totalSize)} used` : 'No storage used'}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -653,7 +682,7 @@ const Dashboard: React.FC = () => {
             subtitle="Ready for search"
             icon={SearchableIcon}
             color="#8b5cf6"
-            trend="100% indexed"
+            trend={stats.searchablePages > 0 ? `${stats.searchablePages} indexed` : 'Nothing indexed yet'}
           />
         </Grid>
       </Grid>
