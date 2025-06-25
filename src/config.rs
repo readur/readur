@@ -34,7 +34,7 @@ impl Config {
         
         // Log all environment variable loading with detailed information
         println!("\n📋 CONFIGURATION LOADING:");
-        println!("=".repeat(50));
+        println!("{}", "=".repeat(50));
         
         // Database Configuration
         let database_url = match env::var("DATABASE_URL") {
@@ -338,7 +338,7 @@ impl Config {
         };
         
         println!("\n🔍 CONFIGURATION VALIDATION:");
-        println!("=".repeat(50));
+        println!("{}", "=".repeat(50));
         
         // Validate server address format
         if !config.server_address.contains(':') {
@@ -362,7 +362,7 @@ impl Config {
         config.validate_paths()?;
         
         println!("\n📊 CONFIGURATION SUMMARY:");
-        println!("=".repeat(50));
+        println!("{}", "=".repeat(50));
         println!("🌐 Server will bind to: {}", config.server_address);
         println!("📁 Upload directory: {}", config.upload_path);
         println!("👁️  Watch directory: {}", config.watch_folder);
@@ -375,7 +375,7 @@ impl Config {
         
         // Warning checks
         println!("\n⚠️  CONFIGURATION WARNINGS:");
-        println!("=".repeat(50));
+        println!("{}", "=".repeat(50));
         if config.jwt_secret == "your-secret-key" {
             println!("🚨 SECURITY WARNING: Using default JWT secret! Set JWT_SECRET environment variable in production!");
         }

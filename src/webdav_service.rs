@@ -245,7 +245,7 @@ impl WebDAVService {
         
         info!("🔗 Constructed test URL: {}", test_url);
 
-        let response = self.client
+        let resp = self.client
             .request(Method::from_bytes(b"PROPFIND").unwrap(), &test_url)
             .basic_auth(&test_config.username, Some(&test_config.password))
             .header("Depth", "0")

@@ -2,6 +2,7 @@ use anyhow::Result;
 use chrono::Utc;
 use sqlx::Row;
 use uuid::Uuid;
+use tracing::{info, warn, error};
 
 use super::Database;
 
@@ -312,13 +313,16 @@ impl Database {
             let source = crate::models::Source {
                 id: source_id,
                 user_id: row.get("user_id"),
-                name: source_name,
-                source_type: source_type_str.try_into()
-                    .map_err(|e| anyhow::anyhow!("Invalid source type '{}' for source '{}': {}", source_type_str, row.get::<String, _>("name"), e))?,
+                name: source_name.clone(),
+                source_type: source_type_str.clone().try_into()
+                    .map_err(|e| anyhow::anyhow!("Invalid source type '{}' for source '{}': {}", source_type_str, source_name, e))?,
                 enabled: row.get("enabled"),
                 config: config_json,
-                status: row.get::<String, _>("status").try_into()
-                    .map_err(|e| anyhow::anyhow!("Invalid source status '{}' for source '{}': {}", row.get::<String, _>("status"), row.get::<String, _>("name"), e))?,
+                status: {
+                    let status_str: String = row.get("status");
+                    status_str.clone().try_into()
+                        .map_err(|e| anyhow::anyhow!("Invalid source status '{}' for source '{}': {}", status_str, source_name, e))?
+                },
                 last_sync_at: row.get("last_sync_at"),
                 last_error: row.get("last_error"),
                 last_error_at: row.get("last_error_at"),

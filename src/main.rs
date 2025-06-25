@@ -6,6 +6,7 @@ use sqlx::Row;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
 use tracing::{info, error, warn};
+use anyhow;
 
 use readur::{config::Config, db::Database, AppState, *};
 
@@ -50,11 +51,11 @@ fn determine_static_files_path() -> std::path::PathBuf {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     
     println!("\n🚀 READUR APPLICATION STARTUP");
-    println!("=".repeat(60));
+    println!("{}", "=".repeat(60));
     
     // Load and validate configuration with comprehensive logging
     let config = match Config::from_env() {
@@ -72,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Log critical configuration values that affect startup
     println!("\n🔗 STARTUP CONFIGURATION:");
-    println!("=".repeat(50));
+    println!("{}", "=".repeat(50));
     println!("🌐 Server will start on: {}", config.server_address);
     // Parse database URL safely without exposing credentials
     let db_info = if let Some(at_pos) = config.database_url.find('@') {
@@ -119,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Create separate database pools for different workloads
     println!("\n🗄️  DATABASE CONNECTION:");
-    println!("=".repeat(50));
+    println!("{}", "=".repeat(50));
     
     let web_db = match Database::new_with_pool_config(&config.database_url, 20, 2).await {
         Ok(db) => {
@@ -352,7 +353,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Create universal source scheduler with background state (handles WebDAV, Local, S3)
     println!("\n📅 SCHEDULER INITIALIZATION:");
-    println!("=".repeat(50));
+    println!("{}", "=".repeat(50));
     
     let source_scheduler = Arc::new(readur::source_scheduler::SourceScheduler::new(background_state.clone()));
     println!("✅ Universal source scheduler created (handles WebDAV, Local, S3)");
@@ -416,7 +417,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(web_state.clone());
 
     println!("\n🌐 STARTING HTTP SERVER:");
-    println!("=".repeat(50));
+    println!("{}", "=".repeat(50));
     
     let listener = match tokio::net::TcpListener::bind(&config.server_address).await {
         Ok(listener) => {
@@ -435,13 +436,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     
     println!("\n🎉 READUR APPLICATION READY!");
-    println!("=".repeat(60));
+    println!("{}", "=".repeat(60));
     println!("🌐 Server: http://{}", config.server_address);
     println!("📁 Upload Directory: {}", config.upload_path);
     println!("👁️  Watch Directory: {}", config.watch_folder);
     println!("🔄 Source Scheduler: Will start in 30 seconds");
     println!("📋 Check logs above for any configuration warnings");
-    println!("=".repeat(60));
+    println!("{}", "=".repeat(60));
     
     info!("🚀 Readur server is now running and accepting connections");
     
