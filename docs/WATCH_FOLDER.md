@@ -1,31 +1,68 @@
-# Watch Folder Documentation
+# Watch Folder Guide
 
-The watch folder feature automatically monitors a directory for new OCR-able files and processes them without deleting the original files. This is perfect for scenarios where files are mounted from various filesystem types including NFS, SMB, S3, and local storage.
+The watch folder feature automatically monitors a directory for new files and processes them with OCR, making them searchable in Readur. Your original files are never modified or deleted - Readur simply copies and processes them while leaving the originals untouched.
 
-## Features
+## What is Watch Folder?
 
-### 🔄 Cross-Filesystem Compatibility
-- **Automatic Detection**: Detects filesystem type and chooses optimal watching strategy
-- **Local Filesystems**: Uses efficient inotify-based watching for ext4, NTFS, APFS, etc.
-- **Network Filesystems**: Uses polling-based watching for NFS, SMB/CIFS, S3 mounts
-- **Hybrid Fallback**: Gracefully falls back to polling if inotify fails
+Watch folder allows you to:
+- **Drop files anywhere** - Point Readur to any folder (local, network drive, cloud mount)
+- **Automatic processing** - New files are automatically detected and processed
+- **Non-destructive** - Original files remain exactly where you put them
+- **Background operation** - Processing happens in the background while you continue working
 
-### 📁 Smart File Processing
-- **OCR-able File Detection**: Only processes supported file types (PDF, images, text, Word docs)
-- **Duplicate Prevention**: Checks for existing files with same name and size
-- **File Stability**: Waits for files to finish being written before processing
-- **System File Exclusion**: Skips hidden files, temporary files, and system directories
+Perfect for scenarios where you want to automatically process files from:
+- Network drives (NFS, SMB shares)
+- Cloud storage mounts (Google Drive, Dropbox, OneDrive)
+- Local folders where you save scanned documents
+- Shared team folders
 
-### ⚙️ Configuration Options
+## How It Works
 
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `WATCH_FOLDER` | `./watch` | Path to the folder to monitor |
-| `WATCH_INTERVAL_SECONDS` | `30` | Polling interval for network filesystems |
-| `FILE_STABILITY_CHECK_MS` | `500` | Time to wait for file stability |
-| `MAX_FILE_AGE_HOURS` | `none` | Skip files older than specified hours |
-| `ALLOWED_FILE_TYPES` | `pdf,png,jpg,jpeg,tiff,bmp,txt,doc,docx` | Allowed file extensions |
-| `FORCE_POLLING_WATCH` | `unset` | Force polling mode even for local filesystems |
+1. **Point Readur to your folder** - Set the `WATCH_FOLDER` path to any directory you want monitored
+2. **Drop files** - Add documents to that folder (PDFs, images, text files, Word docs)
+3. **Automatic detection** - Readur notices new files within seconds (local) or minutes (network)
+4. **OCR processing** - Files are automatically processed to extract searchable text
+5. **Search and find** - Your documents become searchable in the Readur web interface
+
+## Key Features
+
+✅ **Works with any storage type** - Local drives, network shares, cloud mounts  
+✅ **Smart processing** - Only processes supported file types  
+✅ **Duplicate prevention** - Won't process the same file twice  
+✅ **Safe operation** - Never modifies or deletes your original files  
+✅ **Background processing** - Doesn't interrupt your workflow
+
+## Quick Setup
+
+### Basic Setup (Docker Compose)
+
+1. **Edit your docker-compose.yml**:
+```yaml
+services:
+  readur:
+    image: readur:latest
+    volumes:
+      # Mount your folder to the watch directory
+      - /path/to/your/documents:/app/watch
+    environment:
+      - WATCH_FOLDER=/app/watch
+```
+
+2. **Start Readur**:
+```bash
+docker compose up -d
+```
+
+3. **Start dropping files** into `/path/to/your/documents` - they'll be automatically processed!
+
+### Configuration Options
+
+| Setting | Default | What it does |
+|---------|---------|-------------|
+| `WATCH_FOLDER` | `./watch` | Which folder to monitor |
+| `WATCH_INTERVAL_SECONDS` | `30` | How often to check for new files (network drives) |
+| `MAX_FILE_AGE_HOURS` | _(none)_ | Ignore files older than this |
+| `ALLOWED_FILE_TYPES` | `pdf,png,jpg,jpeg,tiff,bmp,txt,doc,docx` | Which file types to process |
 
 ## Usage
 
