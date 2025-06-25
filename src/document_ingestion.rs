@@ -8,7 +8,7 @@
 
 use uuid::Uuid;
 use sha2::{Digest, Sha256};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::models::Document;
 use crate::db::Database;
@@ -66,7 +66,7 @@ impl DocumentIngestionService {
         let file_hash = self.calculate_file_hash(&request.file_data);
         let file_size = request.file_data.len() as i64;
 
-        info!(
+        debug!(
             "Ingesting document: {} for user {} (hash: {}, size: {} bytes, policy: {:?})",
             request.filename, request.user_id, &file_hash[..8], file_size, request.deduplication_policy
         );
@@ -101,7 +101,7 @@ impl DocumentIngestionService {
                 }
             }
             Ok(None) => {
-                info!("No duplicate content found, proceeding with new document creation");
+                debug!("No duplicate content found, proceeding with new document creation");
             }
             Err(e) => {
                 warn!("Error checking for duplicate content (hash: {}): {}", &file_hash[..8], e);
@@ -163,7 +163,7 @@ impl DocumentIngestionService {
             }
         };
 
-        info!(
+        debug!(
             "Successfully ingested document: {} (ID: {}) for user {}",
             saved_document.original_filename, saved_document.id, request.user_id
         );
