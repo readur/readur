@@ -82,19 +82,24 @@ interface QuickAction {
 // Stats Card Component
 const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Icon, color, trend }) => {
   const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
   
   return (
     <Card
       elevation={0}
       sx={{
-        background: `linear-gradient(135deg, ${color} 0%, ${alpha(color, 0.85)} 100%)`,
-        color: 'white',
+        background: isDarkMode 
+          ? `linear-gradient(135deg, ${alpha(color, 0.15)} 0%, ${alpha(color, 0.08)} 100%)`
+          : `linear-gradient(135deg, ${color} 0%, ${alpha(color, 0.85)} 100%)`,
+        color: isDarkMode ? theme.palette.text.primary : 'white',
         position: 'relative',
         overflow: 'hidden',
         borderRadius: 3,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
-        border: '1px solid rgba(255,255,255,0.1)',
+        border: isDarkMode 
+          ? `1px solid ${alpha(color, 0.3)}`
+          : '1px solid rgba(255,255,255,0.1)',
         backdropFilter: 'blur(20px)',
         '&:hover': {
           transform: 'translateY(-4px)',
@@ -107,7 +112,9 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Ico
           right: 0,
           width: '120px',
           height: '120px',
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%)',
+          background: isDarkMode
+            ? `linear-gradient(135deg, ${alpha(color, 0.15)} 0%, ${alpha(color, 0.05)} 100%)`
+            : 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%)',
           borderRadius: '50%',
           transform: 'translate(40px, -40px)',
         },
@@ -118,7 +125,9 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Ico
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
+          background: isDarkMode
+            ? `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, ${alpha(color, 0.03)} 100%)`
+            : 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
           backdropFilter: 'blur(10px)',
         },
       }}
@@ -177,16 +186,21 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Ico
             width: 64,
             height: 64,
             borderRadius: 3,
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+            background: isDarkMode
+              ? `linear-gradient(135deg, ${alpha(color, 0.25)} 0%, ${alpha(color, 0.15)} 100%)`
+              : 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
             backdropFilter: 'blur(20px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            border: '1px solid rgba(255,255,255,0.2)',
+            border: isDarkMode
+              ? `1px solid ${alpha(color, 0.4)}`
+              : '1px solid rgba(255,255,255,0.2)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
           }}>
             <Icon sx={{ 
               fontSize: 32,
+              color: isDarkMode ? color : 'inherit',
               filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
             }} />
           </Box>
