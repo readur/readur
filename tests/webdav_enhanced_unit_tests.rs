@@ -117,7 +117,7 @@ fn test_webdav_config_validation() {
 
     assert!(WebDAVService::new(valid_config).is_ok());
 
-    // Test config with empty server URL
+    // Test config with empty server URL - should fail with our enhanced validation
     let invalid_config = WebDAVConfig {
         server_url: "".to_string(),
         username: "testuser".to_string(),
@@ -128,8 +128,34 @@ fn test_webdav_config_validation() {
         server_type: Some("nextcloud".to_string()),
     };
 
-    // Should still create service, validation happens during actual requests
-    assert!(WebDAVService::new(invalid_config).is_ok());
+    // Should fail early with enhanced validation
+    assert!(WebDAVService::new(invalid_config).is_err());
+    
+    // Test config with invalid URL scheme - should also fail
+    let invalid_scheme_config = WebDAVConfig {
+        server_url: "ftp://cloud.example.com".to_string(),
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+
+    assert!(WebDAVService::new(invalid_scheme_config).is_err());
+    
+    // Test config with relative URL - should also fail
+    let relative_url_config = WebDAVConfig {
+        server_url: "/webdav".to_string(),
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+
+    assert!(WebDAVService::new(relative_url_config).is_err());
 }
 
 #[test]
