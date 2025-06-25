@@ -52,7 +52,22 @@ fn determine_static_files_path() -> std::path::PathBuf {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+    // Initialize logging with custom filters to reduce spam from pdf_extract crate
+    // Users can override with RUST_LOG environment variable, e.g.:
+    // RUST_LOG=debug cargo run                    (enable debug for all)
+    // RUST_LOG=readur=debug,pdf_extract=error     (debug for readur, suppress pdf_extract)
+    // RUST_LOG=pdf_extract=off                    (completely silence pdf_extract)
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| {
+            // Default filter when RUST_LOG is not set
+            tracing_subscriber::EnvFilter::new("info")
+                .add_directive("pdf_extract=error".parse().unwrap()) // Suppress pdf_extract WARN spam
+                .add_directive("readur=info".parse().unwrap())       // Keep our app logs at info
+        });
+    
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .init();
     
     println!("\n🚀 READUR APPLICATION STARTUP");
     println!("{}", "=".repeat(60));

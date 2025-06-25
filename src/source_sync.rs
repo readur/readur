@@ -5,7 +5,7 @@ use chrono::Utc;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use futures::stream::{FuturesUnordered, StreamExt};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -126,10 +126,10 @@ impl SourceSyncService {
             |folder_path| {
                 let service = webdav_service.clone();
                 async move { 
-                    info!("WebDAV discover_files_in_folder called for: {}", folder_path);
+                    debug!("WebDAV discover_files_in_folder called for: {}", folder_path);
                     let result = service.discover_files_in_folder(&folder_path).await;
                     match &result {
-                        Ok(files) => info!("WebDAV discovered {} files in folder: {}", files.len(), folder_path),
+                        Ok(files) => debug!("WebDAV discovered {} files in folder: {}", files.len(), folder_path),
                         Err(e) => error!("WebDAV discovery failed for folder {}: {}", folder_path, e),
                     }
                     result
@@ -138,10 +138,10 @@ impl SourceSyncService {
             |file_path| {
                 let service = webdav_service.clone();
                 async move { 
-                    info!("WebDAV download_file called for: {}", file_path);
+                    debug!("WebDAV download_file called for: {}", file_path);
                     let result = service.download_file(&file_path).await;
                     match &result {
-                        Ok(data) => info!("WebDAV downloaded {} bytes for file: {}", data.len(), file_path),
+                        Ok(data) => debug!("WebDAV downloaded {} bytes for file: {}", data.len(), file_path),
                         Err(e) => error!("WebDAV download failed for file {}: {}", file_path, e),
                     }
                     result
@@ -287,7 +287,7 @@ impl SourceSyncService {
                             Ok(processed) => {
                                 if processed {
                                     folder_files_processed += 1;
-                                    info!("Successfully processed file ({} completed in this folder)", folder_files_processed);
+                                    debug!("Successfully processed file ({} completed in this folder)", folder_files_processed);
                                 }
                             }
                             Err(error) => {
@@ -475,7 +475,7 @@ impl SourceSyncService {
                                         }
                                     }
                                     
-                                    info!("Successfully processed file ({} completed in this folder, {} total)", folder_files_processed, total_files_processed);
+                                    debug!("Successfully processed file ({} completed in this folder, {} total)", folder_files_processed, total_files_processed);
                                 }
                             }
                             Err(error) => {
@@ -520,13 +520,13 @@ impl SourceSyncService {
         let _permit = semaphore.acquire().await
             .map_err(|e| anyhow!("Semaphore error: {}", e))?;
 
-        info!("Processing file: {}", file_info.path);
+        debug!("Processing file: {}", file_info.path);
         
         // Download the file
         let file_data = download_file(file_info.path.clone()).await
             .map_err(|e| anyhow!("Failed to download {}: {}", file_info.path, e))?;
 
-        info!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
+        debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
 
         // Use the unified ingestion service for consistent deduplication
         let file_service = FileService::new(state.config.upload_path.clone());
@@ -546,7 +546,7 @@ impl SourceSyncService {
 
         let (document, should_queue_ocr) = match result {
             IngestionResult::Created(doc) => {
-                info!("Created new document for {}: {}", file_info.name, doc.id);
+                debug!("Created new document for {}: {}", file_info.name, doc.id);
                 (doc, true) // New document - queue for OCR
             }
             IngestionResult::Skipped { existing_document_id, reason } => {
@@ -554,7 +554,7 @@ impl SourceSyncService {
                 return Ok(false); // File was skipped due to deduplication
             }
             IngestionResult::ExistingDocument(doc) => {
-                info!("Found existing document for {}: {}", file_info.name, doc.id);
+                debug!("Found existing document for {}: {}", file_info.name, doc.id);
                 (doc, false) // Existing document - don't re-queue OCR
             }
             IngestionResult::TrackedAsDuplicate { existing_document_id } => {
@@ -565,7 +565,7 @@ impl SourceSyncService {
 
         // Queue for OCR if enabled and this is a new document
         if enable_background_ocr && should_queue_ocr {
-            info!("Background OCR enabled, queueing document {} for processing", document.id);
+            debug!("Background OCR enabled, queueing document {} for processing", document.id);
 
             let priority = if file_info.size <= 1024 * 1024 { 10 }
             else if file_info.size <= 5 * 1024 * 1024 { 8 }
@@ -576,7 +576,7 @@ impl SourceSyncService {
             if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
                 error!("Failed to enqueue document for OCR: {}", e);
             } else {
-                info!("Enqueued document {} for OCR processing", document.id);
+                debug!("Enqueued document {} for OCR processing", document.id);
             }
         }
 
@@ -606,7 +606,7 @@ impl SourceSyncService {
         let _permit = semaphore.acquire().await
             .map_err(|e| anyhow!("Semaphore error: {}", e))?;
 
-        info!("Processing file: {}", file_info.path);
+        debug!("Processing file: {}", file_info.path);
 
         // Check for cancellation again after acquiring semaphore
         if cancellation_token.is_cancelled() {
@@ -624,7 +624,7 @@ impl SourceSyncService {
             return Err(anyhow!("Processing cancelled"));
         }
 
-        info!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
+        debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
 
         // Check for cancellation before processing
         if cancellation_token.is_cancelled() {
@@ -650,7 +650,7 @@ impl SourceSyncService {
 
         let (document, should_queue_ocr) = match result {
             IngestionResult::Created(doc) => {
-                info!("Created new document for {}: {}", file_info.name, doc.id);
+                debug!("Created new document for {}: {}", file_info.name, doc.id);
                 (doc, true) // New document - queue for OCR
             }
             IngestionResult::Skipped { existing_document_id, reason } => {
@@ -658,7 +658,7 @@ impl SourceSyncService {
                 return Ok(false); // File was skipped due to deduplication
             }
             IngestionResult::ExistingDocument(doc) => {
-                info!("Found existing document for {}: {}", file_info.name, doc.id);
+                debug!("Found existing document for {}: {}", file_info.name, doc.id);
                 (doc, false) // Existing document - don't re-queue OCR
             }
             IngestionResult::TrackedAsDuplicate { existing_document_id } => {
@@ -669,7 +669,7 @@ impl SourceSyncService {
 
         // Queue for OCR if enabled and this is a new document (OCR continues even if sync is cancelled)
         if enable_background_ocr && should_queue_ocr {
-            info!("Background OCR enabled, queueing document {} for processing", document.id);
+            debug!("Background OCR enabled, queueing document {} for processing", document.id);
 
             let priority = if file_info.size <= 1024 * 1024 { 10 }
             else if file_info.size <= 5 * 1024 * 1024 { 8 }
@@ -680,7 +680,7 @@ impl SourceSyncService {
             if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
                 error!("Failed to enqueue document for OCR: {}", e);
             } else {
-                info!("Enqueued document {} for OCR processing", document.id);
+                debug!("Enqueued document {} for OCR processing", document.id);
             }
         }
 

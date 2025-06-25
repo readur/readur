@@ -27,7 +27,7 @@ base64ct = "=1.8.0"
 jsonwebtoken = "9"
 anyhow = "1"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = "0.3"
 futures = "0.3"

@@ -13,7 +13,17 @@ use readur::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    // Initialize logging with custom filters to reduce spam from pdf_extract crate
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| {
+            tracing_subscriber::EnvFilter::new("info")
+                .add_directive("pdf_extract=error".parse().unwrap()) // Suppress pdf_extract WARN spam
+                .add_directive("readur=info".parse().unwrap())       // Keep our app logs at info
+        });
+    
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .init();
     
     let matches = Command::new("batch_ingest")
         .about("Batch ingest files for OCR processing")
