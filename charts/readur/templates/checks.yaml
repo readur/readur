@@ -3,9 +3,3 @@
     {{- $name := .Values.persistence.uploads.existingClaim | required "You need to specify an existing PVC for uploads storage at persistence.uploads.existingClaim or let the chart create one" -}}
   {{- end -}}
 {{- end -}}
-
-{{- if .Values.persistence.watch.enabled -}}
-  {{- if and (eq .Values.persistence.watch.type "persistentVolumeClaim") (not .Values.persistence.watch.existingClaim) -}}
-    {{- $name := .Values.persistence.watch.existingClaim | required "You need to specify an existing PVC for watch folder at persistence.watch.existingClaim or let the chart create one" -}}
-  {{- end -}}
-{{- end -}}
