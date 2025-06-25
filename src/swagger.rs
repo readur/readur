@@ -15,8 +15,14 @@ use crate::{
         WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
         ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery
     },
-    routes::metrics::{
-        SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
+    routes::{
+        metrics::{
+            SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
+        },
+        labels::{
+            Label, CreateLabel, UpdateLabel, LabelAssignment, LabelQuery, BulkUpdateRequest as LabelBulkUpdateRequest
+        },
+        documents::BulkDeleteRequest
     },
     AppState,
 };
@@ -32,6 +38,8 @@ use crate::{
         crate::routes::documents::upload_document,
         crate::routes::documents::list_documents,
         crate::routes::documents::get_document_by_id,
+        crate::routes::documents::delete_document,
+        crate::routes::documents::bulk_delete_documents,
         crate::routes::documents::download_document,
         crate::routes::documents::view_document,
         crate::routes::documents::get_document_thumbnail,
@@ -40,6 +48,17 @@ use crate::{
         crate::routes::documents::retry_ocr,
         crate::routes::documents::get_failed_ocr_documents,
         crate::routes::documents::get_user_duplicates,
+        // Labels endpoints
+        crate::routes::labels::get_labels,
+        crate::routes::labels::create_label,
+        crate::routes::labels::get_label,
+        crate::routes::labels::update_label,
+        crate::routes::labels::delete_label,
+        crate::routes::labels::get_document_labels,
+        crate::routes::labels::update_document_labels,
+        crate::routes::labels::add_document_label,
+        crate::routes::labels::remove_document_label,
+        crate::routes::labels::bulk_update_document_labels,
         // Search endpoints
         crate::routes::search::search_documents,
         crate::routes::search::enhanced_search_documents,
@@ -91,6 +110,8 @@ use crate::{
         crate::routes::ignored_files::delete_ignored_file,
         crate::routes::ignored_files::bulk_delete_ignored_files,
         crate::routes::ignored_files::get_ignored_files_stats,
+        // Health check
+        crate::health_check,
     ),
     components(
         schemas(
@@ -105,12 +126,17 @@ use crate::{
             crate::routes::ignored_files::BulkDeleteIgnoredFilesRequest,
             crate::routes::ignored_files::IgnoredFilesStats,
             crate::routes::ignored_files::SourceTypeCount,
-            SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
+            SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics,
+            // Labels schemas
+            Label, CreateLabel, UpdateLabel, LabelAssignment, LabelQuery, LabelBulkUpdateRequest,
+            // Document schemas
+            BulkDeleteRequest
         )
     ),
     tags(
         (name = "auth", description = "Authentication endpoints"),
         (name = "documents", description = "Document management endpoints"),
+        (name = "labels", description = "Document labeling and categorization endpoints"),
         (name = "search", description = "Document search endpoints"),
         (name = "settings", description = "User settings endpoints"),
         (name = "users", description = "User management endpoints"),
@@ -120,6 +146,7 @@ use crate::{
         (name = "sources", description = "Document source management endpoints"),
         (name = "webdav", description = "WebDAV synchronization endpoints"),
         (name = "ignored_files", description = "Ignored files management endpoints"),
+        (name = "health", description = "Health check endpoint"),
     ),
     modifiers(&SecurityAddon),
     info(

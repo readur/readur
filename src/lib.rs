@@ -35,6 +35,7 @@ mod tests;
 pub mod test_utils;
 
 use axum::{http::StatusCode, Json};
+use utoipa;
 use config::Config;
 use db::Database;
 
@@ -48,6 +49,14 @@ pub struct AppState {
 }
 
 /// Health check endpoint for monitoring
+#[utoipa::path(
+    get,
+    path = "/api/health",
+    tag = "health",
+    responses(
+        (status = 200, description = "Service is healthy", body = serde_json::Value),
+    )
+)]
 pub async fn health_check() -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(Json(serde_json::json!({"status": "ok"})))
 }
