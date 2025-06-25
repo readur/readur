@@ -58,19 +58,12 @@ controllers:
             enabled: true
             custom: true
             spec:
-              initialDelaySeconds: 5
-              periodSeconds: 10
-              timeoutSeconds: 10
-              failureThreshold: 3
+              initialDelaySeconds: 10
+              periodSeconds: 20
+              timeoutSeconds: 20
+              failureThreshold: 5
               httpGet: *probesPath
           liveness: *probes
-
-        resources:
-          limits:
-            memory: 1Gi
-          requests:
-            cpu: 100m
-            memory: 512Mi
 
 persistence:
   uploads:
