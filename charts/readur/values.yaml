@@ -36,9 +36,6 @@ controllers:
           WATCH_INTERVAL_SECONDS: "30"
           FILE_STABILITY_CHECK_MS: "1000"
 
-          # Database URL
-          DATABASE_URL: ""
-
 persistence:
   uploads:
     enabled: true
