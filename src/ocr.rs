@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::path::Path;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use crate::ocr_error::OcrError;
 use crate::ocr_health::OcrHealthChecker;
 
@@ -54,8 +55,13 @@ impl OcrService {
         #[cfg(feature = "ocr")]
         {
             let bytes = std::fs::read(file_path)?;
-            let text = pdf_extract::extract_text_from_mem(&bytes)
-                .map_err(|e| anyhow!("Failed to extract text from PDF: {}", e))?;
+            let text = match catch_unwind(AssertUnwindSafe(|| {
+                pdf_extract::extract_text_from_mem(&bytes)
+            })) {
+                Ok(Ok(text)) => text,
+                Ok(Err(e)) => return Err(anyhow!("Failed to extract text from PDF: {}", e)),
+                Err(_) => return Err(anyhow!("PDF extraction panicked due to invalid content stream in file: {}", file_path)),
+            };
             
             Ok(text.trim().to_string())
         }

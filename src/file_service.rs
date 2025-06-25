@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use tokio::fs;
 use uuid::Uuid;
 use tracing::{info, warn, error};
@@ -321,14 +322,16 @@ impl FileService {
     async fn generate_pdf_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
         use image::Rgb;
         
-        // Try to extract first page as image using pdf-extract
-        match pdf_extract::extract_text_from_mem(file_data) {
-            Ok(text) => {
+        // Try to extract first page as image using pdf-extract with panic protection
+        match catch_unwind(AssertUnwindSafe(|| {
+            pdf_extract::extract_text_from_mem(file_data)
+        })) {
+            Ok(Ok(text)) => {
                 // If we can extract text, create a text-based thumbnail
                 self.generate_text_based_thumbnail(&text, "PDF", Rgb([220, 38, 27])).await
             }
-            Err(_) => {
-                // Fall back to placeholder if PDF extraction fails
+            Ok(Err(_)) | Err(_) => {
+                // Fall back to placeholder if PDF extraction fails or panics
                 self.generate_placeholder_thumbnail("PDF").await
             }
         }
