@@ -74,11 +74,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🔗 STARTUP CONFIGURATION:");
     println!("=".repeat(50));
     println!("🌐 Server will start on: {}", config.server_address);
-    println!("🗄️  Database connection: {}://{}@{}", 
-        if config.database_url.starts_with("postgresql://") { "postgresql" } else { "postgres" },
-        config.database_url.split('@').next().and_then(|s| s.split("://").nth(1)).and_then(|s| s.split(':').next()).unwrap_or("unknown"),
-        config.database_url.split('@').nth(1).unwrap_or("unknown")
-    );
+    // Parse database URL safely without exposing credentials
+    let db_info = if let Some(at_pos) = config.database_url.find('@') {
+        let host_part = &config.database_url[at_pos + 1..];
+        let protocol = if config.database_url.starts_with("postgresql://") { "postgresql" } else { "postgres" };
+        
+        // Extract just username from credentials part (before @)
+        let creds_part = &config.database_url[..at_pos];
+        let username = if let Some(proto_end) = creds_part.find("://") {
+            let after_proto = &creds_part[proto_end + 3..];
+            if let Some(colon_pos) = after_proto.find(':') {
+                &after_proto[..colon_pos]
+            } else {
+                after_proto
+            }
+        } else {
+            "unknown"
+        };
+        
+        format!("{}://{}:***@{}", protocol, username, host_part)
+    } else {
+        "Invalid database URL format".to_string()
+    };
+    
+    println!("🗄️  Database connection: {}", db_info);
     println!("📁 Upload directory: {}", config.upload_path);
     println!("👁️  Watch directory: {}", config.watch_folder);
     
@@ -109,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             println!("❌ CRITICAL: Failed to connect to database for web operations!");
-            println!("Database URL: {}", config.database_url.split('@').next().unwrap_or("invalid").to_string() + "@" + config.database_url.split('@').nth(1).unwrap_or("unknown"));
+            println!("Database URL: {}", db_info);  // Use the already-masked URL
             println!("Error: {}", e);
             println!("\n🔧 Please verify:");
             println!("   - Database server is running");
