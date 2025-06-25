@@ -15,36 +15,29 @@ controllers:
           # Server Configuration
           SERVER_HOST: "0.0.0.0"
           SERVER_PORT: "8000"
-          
-          # Security
-          JWT_SECRET: "changeme-in-production"
-          
+
           # File Management
           UPLOAD_PATH: "/app/uploads"
           WATCH_FOLDER: "/app/watch"
           ALLOWED_FILE_TYPES: "pdf,txt,doc,docx,png,jpg,jpeg"
           MAX_FILE_SIZE_MB: "50"
           MAX_FILE_AGE_HOURS: "24"
-          
+
           # OCR Settings
           OCR_LANGUAGE: "eng"
           CONCURRENT_OCR_JOBS: "4"
           OCR_TIMEOUT_SECONDS: "300"
-          
+
           # Performance
           MEMORY_LIMIT_MB: "512"
           CPU_PRIORITY: "normal"
-          
+
           # File Watching
           WATCH_INTERVAL_SECONDS: "30"
           FILE_STABILITY_CHECK_MS: "1000"
-          
-          # Database URL will be set automatically when PostgreSQL is enabled
-          DATABASE_URL:
-            valueFrom:
-              secretKeyRef:
-                name: readur-db-secret
-                key: database-url
+
+          # Database URL
+          DATABASE_URL: ""
 
 persistence:
   uploads:
@@ -55,7 +48,7 @@ persistence:
     size: 10Gi
     globalMounts:
       - path: /app/uploads
-  
+
   watch:
     enabled: true
     type: persistentVolumeClaim
@@ -90,33 +83,3 @@ ingress:
               identifier: main
               port: http
     tls: []
-
-# PostgreSQL subchart configuration
-postgresql:
-  enabled: true
-  auth:
-    username: readur
-    password: readur
-    database: readur
-  primary:
-    persistence:
-      enabled: true
-      size: 10Gi
-    resources:
-      limits:
-        memory: 256Mi
-      requests:
-        cpu: 250m
-        memory: 256Mi
-
-# Optional: External PostgreSQL configuration
-# Use this if you want to connect to an existing PostgreSQL instance
-externalDatabase:
-  enabled: false
-  host: ""
-  port: 5432
-  username: readur
-  password: ""
-  database: readur
-  # existingSecret: ""
-  # existingSecretPasswordKey: ""

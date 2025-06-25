@@ -1,11 +1,3 @@
-{{- if and (not .Values.postgresql.enabled) (not .Values.externalDatabase.enabled) -}}
-  {{- fail "Either postgresql.enabled or externalDatabase.enabled must be set to true" -}}
-{{- end -}}
-
-{{- if and .Values.postgresql.enabled .Values.externalDatabase.enabled -}}
-  {{- fail "Only one of postgresql.enabled or externalDatabase.enabled can be set to true" -}}
-{{- end -}}
-
 {{- if .Values.persistence.uploads.enabled -}}
   {{- if and (eq .Values.persistence.uploads.type "persistentVolumeClaim") (not .Values.persistence.uploads.existingClaim) -}}
     {{- $name := .Values.persistence.uploads.existingClaim | required "You need to specify an existing PVC for uploads storage at persistence.uploads.existingClaim or let the chart create one" -}}
