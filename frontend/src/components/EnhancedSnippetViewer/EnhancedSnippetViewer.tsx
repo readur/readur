@@ -273,10 +273,11 @@ const EnhancedSnippetViewer: React.FC<EnhancedSnippetViewerProps> = ({
           </Typography>
           {snippets.length > 0 && (
             <Chip 
-              label={`${snippets.length} matches`} 
+              label={`${snippets.length > 999 ? `${Math.floor(snippets.length/1000)}K` : snippets.length} matches`} 
               size="small" 
               color="primary"
               variant="outlined"
+              sx={{ maxWidth: '100px', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
             />
           )}
         </Box>

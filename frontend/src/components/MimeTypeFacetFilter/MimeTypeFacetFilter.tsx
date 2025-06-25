@@ -230,10 +230,11 @@ const MimeTypeFacetFilter: React.FC<MimeTypeFacetFilterProps> = ({
                     {group.label}
                   </Typography>
                   <Chip 
-                    label={totalCount} 
+                    label={totalCount > 999 ? `${Math.floor(totalCount/1000)}K` : totalCount} 
                     size="small" 
                     variant={selectedCount > 0 ? "filled" : "outlined"}
                     color={selectedCount > 0 ? "primary" : "default"}
+                    sx={{ maxWidth: '60px', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
                   />
                 </Box>
               </Box>
@@ -254,7 +255,12 @@ const MimeTypeFacetFilter: React.FC<MimeTypeFacetFilterProps> = ({
                         <Typography variant="body2">
                           {getMimeTypeLabel(facet.value)}
                         </Typography>
-                        <Chip label={facet.count} size="small" variant="outlined" />
+                        <Chip 
+                          label={facet.count > 999 ? `${Math.floor(facet.count/1000)}K` : facet.count} 
+                          size="small" 
+                          variant="outlined" 
+                          sx={{ maxWidth: '50px', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+                        />
                       </Box>
                     }
                     sx={{ display: 'flex', width: '100%', mb: 0.5 }}
@@ -285,7 +291,12 @@ const MimeTypeFacetFilter: React.FC<MimeTypeFacetFilterProps> = ({
                     <Typography variant="body2">
                       {getMimeTypeLabel(facet.value)}
                     </Typography>
-                    <Chip label={facet.count} size="small" variant="outlined" />
+                    <Chip 
+                      label={facet.count > 999 ? `${Math.floor(facet.count/1000)}K` : facet.count} 
+                      size="small" 
+                      variant="outlined" 
+                      sx={{ maxWidth: '50px', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+                    />
                   </Box>
                 }
                 sx={{ display: 'flex', width: '100%', mb: 0.5 }}

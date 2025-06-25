@@ -522,8 +522,20 @@ const Dashboard: React.FC = () => {
         // Fetch documents with better error handling
         let docs: Document[] = [];
         try {
-          const docsResponse = await api.get<Document[]>('/documents');
-          docs = Array.isArray(docsResponse.data) ? docsResponse.data : [];
+          const docsResponse = await api.get('/documents', {
+            params: {
+              limit: 10,
+              offset: 0,
+            }
+          });
+          // Handle both direct array response and paginated response
+          if (Array.isArray(docsResponse.data)) {
+            docs = docsResponse.data;
+          } else if (docsResponse.data?.documents) {
+            docs = docsResponse.data.documents;
+          } else {
+            docs = [];
+          }
         } catch (docError) {
           console.error('Failed to fetch documents:', docError);
           // Continue with empty documents array
@@ -623,7 +635,7 @@ const Dashboard: React.FC = () => {
             subtitle="Files in your library"
             icon={DocumentIcon}
             color="#6366f1"
-            trend="+12% this month"
+            trend={stats.totalDocuments > 0 ? `${stats.totalDocuments} total` : 'No documents yet'}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -633,7 +645,7 @@ const Dashboard: React.FC = () => {
             subtitle="Total file size"
             icon={StorageIcon}
             color="#10b981"
-            trend="+2.4 GB this week"
+            trend={stats.totalSize > 0 ? `${formatBytes(stats.totalSize)} used` : 'No storage used'}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -653,7 +665,7 @@ const Dashboard: React.FC = () => {
             subtitle="Ready for search"
             icon={SearchableIcon}
             color="#8b5cf6"
-            trend="100% indexed"
+            trend={stats.searchablePages > 0 ? `${stats.searchablePages} indexed` : 'Nothing indexed yet'}
           />
         </Grid>
       </Grid>
