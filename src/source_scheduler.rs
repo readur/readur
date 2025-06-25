@@ -57,9 +57,29 @@ impl SourceScheduler {
         info!("Checking for interrupted source syncs to resume");
         
         // Get all enabled sources that might have been interrupted
-        let sources = self.state.db.get_sources_for_sync().await?;
+        let sources = match self.state.db.get_sources_for_sync().await {
+            Ok(sources) => {
+                info!("Successfully loaded {} sources from database for sync check", sources.len());
+                sources
+            }
+            Err(e) => {
+                error!("Failed to load sources from database during startup: {}", e);
+                return Err(e.into());
+            }
+        };
         
         for source in sources {
+            info!("Processing source during startup check: ID={}, Name='{}', Type={}, Status={}", 
+                  source.id, source.name, source.source_type.to_string(), source.status.to_string());
+            
+            // Validate source configuration before attempting any operations
+            if let Err(e) = self.validate_source_config(&source) {
+                error!("❌ CONFIGURATION ERROR for source '{}' (ID: {}): {}", 
+                       source.name, source.id, e);
+                error!("Source config JSON: {}", serde_json::to_string_pretty(&source.config).unwrap_or_else(|_| "Invalid JSON".to_string()));
+                continue;
+            }
+            
             // Check if this source was likely interrupted during sync
             // This is a simplified check - you might want to add specific interrupted tracking
             if source.status.to_string() == "syncing" {
@@ -132,6 +152,26 @@ impl SourceScheduler {
         let sources = self.state.db.get_sources_for_sync().await?;
         
         for source in sources {
+            // Validate source configuration before checking if sync is due
+            if let Err(e) = self.validate_source_config(&source) {
+                error!("❌ CONFIGURATION ERROR during background sync check for source '{}' (ID: {}): {}", 
+                       source.name, source.id, e);
+                error!("Source config JSON: {}", serde_json::to_string_pretty(&source.config).unwrap_or_else(|_| "Invalid JSON".to_string()));
+                
+                // Update source with error status
+                if let Err(update_err) = sqlx::query(
+                    r#"UPDATE sources SET status = 'error', last_error = $1, last_error_at = NOW(), updated_at = NOW() WHERE id = $2"#
+                )
+                .bind(format!("Configuration error: {}", e))
+                .bind(source.id)
+                .execute(self.state.db.get_pool())
+                .await {
+                    error!("Failed to update source error status: {}", update_err);
+                }
+                
+                continue;
+            }
+            
             // Check if sync is due for this source
             if self.is_sync_due(&source).await? {
                 info!("Starting background sync for source: {} ({})", source.name, source.source_type);
@@ -376,6 +416,104 @@ impl SourceScheduler {
             Ok(())
         } else {
             Err("No running sync found for this source".into())
+        }
+    }
+
+    /// Validates a source configuration and provides detailed error messages for debugging
+    fn validate_source_config(&self, source: &crate::models::Source) -> Result<(), String> {
+        use crate::models::{SourceType, WebDAVSourceConfig, S3SourceConfig, LocalFolderSourceConfig};
+        
+        match source.source_type {
+            SourceType::WebDAV => {
+                // Attempt to deserialize WebDAV config
+                let config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())
+                    .map_err(|e| format!("Failed to parse WebDAV configuration JSON: {}", e))?;
+                
+                // Validate server URL format
+                self.validate_webdav_url(&config.server_url, &source.name)?;
+                
+                // Additional WebDAV validations
+                if config.username.trim().is_empty() {
+                    return Err(format!("WebDAV username cannot be empty"));
+                }
+                
+                if config.password.trim().is_empty() {
+                    return Err(format!("WebDAV password cannot be empty"));
+                }
+                
+                if config.watch_folders.is_empty() {
+                    return Err(format!("WebDAV watch_folders cannot be empty"));
+                }
+                
+                Ok(())
+            }
+            SourceType::S3 => {
+                let _config: S3SourceConfig = serde_json::from_value(source.config.clone())
+                    .map_err(|e| format!("Failed to parse S3 configuration JSON: {}", e))?;
+                Ok(())
+            }
+            SourceType::LocalFolder => {
+                let _config: LocalFolderSourceConfig = serde_json::from_value(source.config.clone())
+                    .map_err(|e| format!("Failed to parse Local Folder configuration JSON: {}", e))?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Validates WebDAV server URL and provides specific error messages
+    fn validate_webdav_url(&self, server_url: &str, source_name: &str) -> Result<(), String> {
+        if server_url.trim().is_empty() {
+            return Err(format!("WebDAV server_url is empty"));
+        }
+        
+        // Check if URL starts with a valid scheme
+        if !server_url.starts_with("http://") && !server_url.starts_with("https://") {
+            return Err(format!(
+                "WebDAV server_url must start with 'http://' or 'https://'. \
+                 Current value: '{}'. \
+                 Examples of valid URLs: \
+                 - https://cloud.example.com \
+                 - http://192.168.1.100:8080 \
+                 - https://nextcloud.mydomain.com:443", 
+                server_url
+            ));
+        }
+        
+        // Try to parse as URL to catch other issues
+        match reqwest::Url::parse(server_url) {
+            Ok(url) => {
+                if url.scheme() != "http" && url.scheme() != "https" {
+                    return Err(format!(
+                        "WebDAV server_url has invalid scheme '{}'. Only 'http' and 'https' are supported. \
+                         Current URL: '{}'", 
+                        url.scheme(), server_url
+                    ));
+                }
+                
+                if url.host_str().is_none() {
+                    return Err(format!(
+                        "WebDAV server_url is missing hostname. \
+                         Current URL: '{}'. \
+                         Example: https://cloud.example.com", 
+                        server_url
+                    ));
+                }
+                
+                info!("✅ WebDAV URL validation passed for source '{}': {}", source_name, server_url);
+                Ok(())
+            }
+            Err(e) => {
+                Err(format!(
+                    "WebDAV server_url is not a valid URL: {}. \
+                     Current value: '{}'. \
+                     The URL must be absolute and include the full domain. \
+                     Examples: \
+                     - https://cloud.example.com \
+                     - http://192.168.1.100:8080/webdav \
+                     - https://nextcloud.mydomain.com", 
+                    e, server_url
+                ))
+            }
         }
     }
 }

@@ -260,6 +260,8 @@ impl Database {
     }
 
     pub async fn get_sources_for_sync(&self) -> Result<Vec<crate::models::Source>> {
+        info!("🔍 Loading sources from database for sync check...");
+        
         let rows = sqlx::query(
             r#"SELECT id, user_id, name, source_type, enabled, config, status, 
                last_sync_at, last_error, last_error_at, total_files_synced, 
@@ -269,20 +271,54 @@ impl Database {
                ORDER BY last_sync_at ASC NULLS FIRST"#
         )
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            error!("❌ Failed to load sources from database: {}", e);
+            e
+        })?;
+        
+        info!("📊 Database query returned {} sources for sync processing", rows.len());
 
         let mut sources = Vec::new();
-        for row in rows {
-            sources.push(crate::models::Source {
-                id: row.get("id"),
+        for (index, row) in rows.iter().enumerate() {
+            let source_id: uuid::Uuid = row.get("id");
+            let source_name: String = row.get("name");
+            let source_type_str: String = row.get("source_type");
+            let config_json: serde_json::Value = row.get("config");
+            
+            info!("📋 Processing source {}: ID={}, Name='{}', Type={}", 
+                  index + 1, source_id, source_name, source_type_str);
+            
+            // Log config structure for debugging
+            if source_type_str == "WebDAV" {
+                if let Some(config_obj) = config_json.as_object() {
+                    if let Some(server_url) = config_obj.get("server_url").and_then(|v| v.as_str()) {
+                        info!("  🔗 WebDAV server_url: '{}'", server_url);
+                    } else {
+                        warn!("  ⚠️  WebDAV config missing server_url field");
+                    }
+                } else {
+                    warn!("  ⚠️  WebDAV config is not a JSON object");
+                }
+                
+                // Pretty print the config for debugging
+                if let Ok(pretty_config) = serde_json::to_string_pretty(&config_json) {
+                    info!("  📄 Full config:\n{}", pretty_config);
+                } else {
+                    warn!("  ⚠️  Unable to serialize config JSON");
+                }
+            }
+            
+            let source = crate::models::Source {
+                id: source_id,
                 user_id: row.get("user_id"),
-                name: row.get("name"),
-                source_type: row.get::<String, _>("source_type").try_into()
-                    .map_err(|e| anyhow::anyhow!("Invalid source type: {}", e))?,
+                name: source_name,
+                source_type: source_type_str.try_into()
+                    .map_err(|e| anyhow::anyhow!("Invalid source type '{}' for source '{}': {}", source_type_str, row.get::<String, _>("name"), e))?,
                 enabled: row.get("enabled"),
-                config: row.get("config"),
+                config: config_json,
                 status: row.get::<String, _>("status").try_into()
-                    .map_err(|e| anyhow::anyhow!("Invalid source status: {}", e))?,
+                    .map_err(|e| anyhow::anyhow!("Invalid source status '{}' for source '{}': {}", row.get::<String, _>("status"), row.get::<String, _>("name"), e))?,
                 last_sync_at: row.get("last_sync_at"),
                 last_error: row.get("last_error"),
                 last_error_at: row.get("last_error_at"),
@@ -291,7 +327,9 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
-            });
+            };
+            
+            sources.push(source);
         }
 
         Ok(sources)

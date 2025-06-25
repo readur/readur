@@ -53,7 +53,34 @@ fn determine_static_files_path() -> std::path::PathBuf {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     
-    let config = Config::from_env()?;
+    println!("\n🚀 READUR APPLICATION STARTUP");
+    println!("=".repeat(60));
+    
+    // Load and validate configuration with comprehensive logging
+    let config = match Config::from_env() {
+        Ok(cfg) => {
+            println!("✅ Configuration loaded and validated successfully");
+            cfg
+        }
+        Err(e) => {
+            println!("❌ CRITICAL: Configuration loading failed!");
+            println!("Error: {}", e);
+            println!("\n🔧 Please check your environment variables and fix the configuration issues above.");
+            return Err(e);
+        }
+    };
+    
+    // Log critical configuration values that affect startup
+    println!("\n🔗 STARTUP CONFIGURATION:");
+    println!("=".repeat(50));
+    println!("🌐 Server will start on: {}", config.server_address);
+    println!("🗄️  Database connection: {}://{}@{}", 
+        if config.database_url.starts_with("postgresql://") { "postgresql" } else { "postgres" },
+        config.database_url.split('@').next().and_then(|s| s.split("://").nth(1)).and_then(|s| s.split(':').next()).unwrap_or("unknown"),
+        config.database_url.split('@').nth(1).unwrap_or("unknown")
+    );
+    println!("📁 Upload directory: {}", config.upload_path);
+    println!("👁️  Watch directory: {}", config.watch_folder);
     
     // Initialize upload directory structure
     info!("Initializing upload directory structure...");
@@ -72,8 +99,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     // Create separate database pools for different workloads
-    let web_db = Database::new_with_pool_config(&config.database_url, 20, 2).await?;  // Web UI pool
-    let background_db = Database::new_with_pool_config(&config.database_url, 30, 3).await?;  // Background operations pool
+    println!("\n🗄️  DATABASE CONNECTION:");
+    println!("=".repeat(50));
+    
+    let web_db = match Database::new_with_pool_config(&config.database_url, 20, 2).await {
+        Ok(db) => {
+            println!("✅ Web database pool created (max: 20 connections, min idle: 2)");
+            db
+        }
+        Err(e) => {
+            println!("❌ CRITICAL: Failed to connect to database for web operations!");
+            println!("Database URL: {}", config.database_url.split('@').next().unwrap_or("invalid").to_string() + "@" + config.database_url.split('@').nth(1).unwrap_or("unknown"));
+            println!("Error: {}", e);
+            println!("\n🔧 Please verify:");
+            println!("   - Database server is running");
+            println!("   - DATABASE_URL is correct");
+            println!("   - Database credentials are valid");
+            println!("   - Network connectivity to database");
+            return Err(e.into());
+        }
+    };
+    
+    let background_db = match Database::new_with_pool_config(&config.database_url, 30, 3).await {
+        Ok(db) => {
+            println!("✅ Background database pool created (max: 30 connections, min idle: 3)");
+            db
+        }
+        Err(e) => {
+            println!("❌ CRITICAL: Failed to connect to database for background operations!");
+            println!("Error: {}", e);
+            return Err(e.into());
+        }
+    };
     
     // Don't run the old migration system - let SQLx handle everything
     // db.migrate().await?;
@@ -275,10 +332,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     // Create universal source scheduler with background state (handles WebDAV, Local, S3)
+    println!("\n📅 SCHEDULER INITIALIZATION:");
+    println!("=".repeat(50));
+    
     let source_scheduler = Arc::new(readur::source_scheduler::SourceScheduler::new(background_state.clone()));
+    println!("✅ Universal source scheduler created (handles WebDAV, Local, S3)");
     
     // Keep WebDAV scheduler for backward compatibility with existing WebDAV endpoints
     let webdav_scheduler = Arc::new(readur::webdav_scheduler::WebDAVScheduler::new(background_state.clone()));
+    println!("✅ Legacy WebDAV scheduler created (backward compatibility)");
     
     // Update the web state to include scheduler references
     let updated_web_state = AppState {
@@ -291,12 +353,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let web_state = Arc::new(updated_web_state);
     
     // Start universal source scheduler on background runtime
+    println!("⏰ Scheduling background source sync to start in 30 seconds");
     let scheduler_for_background = source_scheduler.clone();
     background_runtime.spawn(async move {
         info!("Starting universal source sync scheduler with 30-second startup delay");
         // Wait 30 seconds before starting scheduler to allow server to fully initialize
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-        info!("Universal source sync scheduler starting after startup delay");
+        info!("🔄 Universal source sync scheduler starting after startup delay - this will check for WebDAV sources!");
         scheduler_for_background.start().await;
     });
     
@@ -333,8 +396,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(CorsLayer::permissive())
         .with_state(web_state.clone());
 
-    let listener = tokio::net::TcpListener::bind(&config.server_address).await?;
-    info!("Server starting on {}", config.server_address);
+    println!("\n🌐 STARTING HTTP SERVER:");
+    println!("=".repeat(50));
+    
+    let listener = match tokio::net::TcpListener::bind(&config.server_address).await {
+        Ok(listener) => {
+            println!("✅ HTTP server bound to: {}", config.server_address);
+            listener
+        }
+        Err(e) => {
+            println!("❌ CRITICAL: Failed to bind to address: {}", config.server_address);
+            println!("Error: {}", e);
+            println!("\n🔧 Please check:");
+            println!("   - Address {} is not already in use", config.server_address);
+            println!("   - SERVER_HOST and SERVER_PORT environment variables are correct");
+            println!("   - You have permission to bind to this address");
+            return Err(e.into());
+        }
+    };
+    
+    println!("\n🎉 READUR APPLICATION READY!");
+    println!("=".repeat(60));
+    println!("🌐 Server: http://{}", config.server_address);
+    println!("📁 Upload Directory: {}", config.upload_path);
+    println!("👁️  Watch Directory: {}", config.watch_folder);
+    println!("🔄 Source Scheduler: Will start in 30 seconds");
+    println!("📋 Check logs above for any configuration warnings");
+    println!("=".repeat(60));
+    
+    info!("🚀 Readur server is now running and accepting connections");
     
     axum::serve(listener, app).await?;
     
