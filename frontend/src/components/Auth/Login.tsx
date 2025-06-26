@@ -19,12 +19,14 @@ import {
   Email as EmailIcon,
   Lock as LockIcon,
   CloudUpload as LogoIcon,
+  Security as SecurityIcon,
 } from '@mui/icons-material';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
+import { api } from '../../services/api';
 
 interface LoginFormData {
   username: string;
@@ -35,6 +37,7 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [oidcLoading, setOidcLoading] = useState<boolean>(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const { mode } = useTheme();
@@ -61,6 +64,18 @@ const Login: React.FC = () => {
 
   const handleClickShowPassword = (): void => {
     setShowPassword(!showPassword);
+  };
+
+  const handleOidcLogin = async (): Promise<void> => {
+    try {
+      setError('');
+      setOidcLoading(true);
+      // Redirect to OIDC login endpoint
+      window.location.href = '/api/auth/oidc/login';
+    } catch (err) {
+      setError('Failed to initiate OIDC login. Please try again.');
+      setOidcLoading(false);
+    }
   };
 
   return (
@@ -221,7 +236,7 @@ const Login: React.FC = () => {
                       fullWidth
                       variant="contained"
                       size="large"
-                      disabled={loading}
+                      disabled={loading || oidcLoading}
                       sx={{
                         py: 1.5,
                         mb: 2,
@@ -241,6 +256,66 @@ const Login: React.FC = () => {
                       }}
                     >
                       {loading ? 'Signing in...' : 'Sign in'}
+                    </Button>
+
+                    <Box 
+                      sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        my: 2,
+                        '&::before': {
+                          content: '""',
+                          flex: 1,
+                          height: '1px',
+                          backgroundColor: 'divider',
+                        },
+                        '&::after': {
+                          content: '""',
+                          flex: 1,
+                          height: '1px',
+                          backgroundColor: 'divider',
+                        },
+                      }}
+                    >
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          px: 2, 
+                          color: 'text.secondary',
+                        }}
+                      >
+                        or
+                      </Typography>
+                    </Box>
+
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      size="large"
+                      disabled={loading || oidcLoading}
+                      onClick={handleOidcLogin}
+                      startIcon={<SecurityIcon />}
+                      sx={{
+                        py: 1.5,
+                        mb: 2,
+                        borderRadius: 2,
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        borderColor: 'primary.main',
+                        color: 'primary.main',
+                        '&:hover': {
+                          backgroundColor: 'primary.main',
+                          color: 'white',
+                          borderColor: 'primary.main',
+                        },
+                        '&:disabled': {
+                          borderColor: 'rgba(0, 0, 0, 0.12)',
+                          color: 'rgba(0, 0, 0, 0.26)',
+                        },
+                      }}
+                    >
+                      {oidcLoading ? 'Redirecting...' : 'Sign in with OIDC'}
                     </Button>
 
                     <Box sx={{ textAlign: 'center', mt: 2 }}>

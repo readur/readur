@@ -290,6 +290,24 @@ async fn main() -> anyhow::Result<()> {
         concurrent_jobs
     ));
     
+    // Initialize OIDC client if enabled
+    let oidc_client = if config.oidc_enabled {
+        match readur::oidc::OidcClient::new(&config).await {
+            Ok(client) => {
+                println!("✅ OIDC client initialized successfully");
+                Some(Arc::new(client))
+            }
+            Err(e) => {
+                error!("❌ Failed to initialize OIDC client: {}", e);
+                println!("❌ OIDC authentication will be disabled");
+                None
+            }
+        }
+    } else {
+        println!("ℹ️  OIDC authentication is disabled");
+        None
+    };
+    
     // Create web-facing state with shared queue service
     let web_state = AppState { 
         db: web_db, 
@@ -297,6 +315,7 @@ async fn main() -> anyhow::Result<()> {
         webdav_scheduler: None, // Will be set after creating scheduler
         source_scheduler: None, // Will be set after creating scheduler
         queue_service: shared_queue_service.clone(),
+        oidc_client: oidc_client.clone(),
     };
     let web_state = Arc::new(web_state);
     
@@ -307,6 +326,7 @@ async fn main() -> anyhow::Result<()> {
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service: shared_queue_service.clone(),
+        oidc_client: oidc_client.clone(),
     };
     let background_state = Arc::new(background_state);
     
@@ -384,6 +404,7 @@ async fn main() -> anyhow::Result<()> {
         webdav_scheduler: Some(webdav_scheduler.clone()),
         source_scheduler: Some(source_scheduler.clone()),
         queue_service: shared_queue_service.clone(),
+        oidc_client: oidc_client.clone(),
     };
     let web_state = Arc::new(updated_web_state);
     

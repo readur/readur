@@ -5,7 +5,7 @@ mod tests {
         is_file_ignored, count_ignored_files, bulk_delete_ignored_files,
         create_ignored_file_from_document
     };
-    use crate::models::{CreateIgnoredFile, IgnoredFilesQuery, User, UserRole, Document};
+    use crate::models::{CreateIgnoredFile, IgnoredFilesQuery, User, UserRole, Document, AuthProvider};
     use uuid::Uuid;
     use chrono::Utc;
     use sqlx::PgPool;
@@ -30,13 +30,17 @@ mod tests {
             id: user_id,
             username: format!("testuser_{}", user_id),
             email: format!("test_{}@example.com", user_id),
-            password_hash: "hashed_password".to_string(),
+            password_hash: Some("hashed_password".to_string()),
             role: UserRole::User,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            oidc_subject: None,
+            oidc_issuer: None,
+            oidc_email: None,
+            auth_provider: AuthProvider::Local,
         };
 
-        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at, oidc_subject, oidc_issuer, oidc_email, auth_provider) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
             .bind(user.id)
             .bind(&user.username)
             .bind(&user.email)
@@ -44,6 +48,10 @@ mod tests {
             .bind(user.role.to_string())
             .bind(user.created_at)
             .bind(user.updated_at)
+            .bind(&user.oidc_subject)
+            .bind(&user.oidc_issuer)
+            .bind(&user.oidc_email)
+            .bind(user.auth_provider.to_string())
             .execute(pool)
             .await
             .expect("Failed to insert test user");

@@ -10,6 +10,7 @@ pub mod file_service;
 pub mod local_folder_service;
 pub mod models;
 pub mod ocr;
+pub mod oidc;
 pub mod ocr_api;
 pub mod ocr_enhanced;
 pub mod ocr_error;
@@ -38,6 +39,7 @@ use axum::{http::StatusCode, Json};
 use utoipa;
 use config::Config;
 use db::Database;
+use oidc::OidcClient;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -46,6 +48,7 @@ pub struct AppState {
     pub webdav_scheduler: Option<std::sync::Arc<webdav_scheduler::WebDAVScheduler>>,
     pub source_scheduler: Option<std::sync::Arc<source_scheduler::SourceScheduler>>,
     pub queue_service: std::sync::Arc<ocr_queue::OcrQueueService>,
+    pub oidc_client: Option<std::sync::Arc<OidcClient>>,
 }
 
 /// Health check endpoint for monitoring

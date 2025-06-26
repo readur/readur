@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod document_routes_deletion_tests {
-    use crate::models::{UserRole, User, Document};
+    use crate::models::{UserRole, User, Document, AuthProvider};
     use crate::routes::documents::{BulkDeleteRequest};
     use axum::http::StatusCode;
     use chrono::Utc;
@@ -28,10 +28,14 @@ mod document_routes_deletion_tests {
             id: Uuid::new_v4(),
             username: "testuser".to_string(),
             email: "test@example.com".to_string(),
-            password_hash: "hashed_password".to_string(),
+            password_hash: Some("hashed_password".to_string()),
             role,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            oidc_subject: None,
+            oidc_issuer: None,
+            oidc_email: None,
+            auth_provider: AuthProvider::Local,
         }
     }
 

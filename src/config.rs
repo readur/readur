@@ -22,6 +22,13 @@ pub struct Config {
     // Performance
     pub memory_limit_mb: usize,
     pub cpu_priority: String,
+    
+    // OIDC Configuration
+    pub oidc_enabled: bool,
+    pub oidc_client_id: Option<String>,
+    pub oidc_client_secret: Option<String>,
+    pub oidc_issuer_url: Option<String>,
+    pub oidc_redirect_uri: Option<String>,
 }
 
 impl Config {
@@ -335,6 +342,64 @@ impl Config {
                     default_priority
                 }
             },
+            
+            // OIDC Configuration
+            oidc_enabled: match env::var("OIDC_ENABLED") {
+                Ok(val) => match val.to_lowercase().as_str() {
+                    "true" | "1" | "yes" | "on" => {
+                        println!("✅ OIDC_ENABLED: true (loaded from env)");
+                        true
+                    }
+                    _ => {
+                        println!("✅ OIDC_ENABLED: false (loaded from env)");
+                        false
+                    }
+                },
+                Err(_) => {
+                    println!("⚠️  OIDC_ENABLED: false (using default - env var not set)");
+                    false
+                }
+            },
+            oidc_client_id: match env::var("OIDC_CLIENT_ID") {
+                Ok(client_id) => {
+                    println!("✅ OIDC_CLIENT_ID: {} (loaded from env)", client_id);
+                    Some(client_id)
+                }
+                Err(_) => {
+                    println!("⚠️  OIDC_CLIENT_ID: Not set");
+                    None
+                }
+            },
+            oidc_client_secret: match env::var("OIDC_CLIENT_SECRET") {
+                Ok(secret) => {
+                    println!("✅ OIDC_CLIENT_SECRET: ***hidden*** (loaded from env, {} chars)", secret.len());
+                    Some(secret)
+                }
+                Err(_) => {
+                    println!("⚠️  OIDC_CLIENT_SECRET: Not set");
+                    None
+                }
+            },
+            oidc_issuer_url: match env::var("OIDC_ISSUER_URL") {
+                Ok(url) => {
+                    println!("✅ OIDC_ISSUER_URL: {} (loaded from env)", url);
+                    Some(url)
+                }
+                Err(_) => {
+                    println!("⚠️  OIDC_ISSUER_URL: Not set");
+                    None
+                }
+            },
+            oidc_redirect_uri: match env::var("OIDC_REDIRECT_URI") {
+                Ok(uri) => {
+                    println!("✅ OIDC_REDIRECT_URI: {} (loaded from env)", uri);
+                    Some(uri)
+                }
+                Err(_) => {
+                    println!("⚠️  OIDC_REDIRECT_URI: Not set");
+                    None
+                }
+            },
         };
         
         println!("\n🔍 CONFIGURATION VALIDATION:");
@@ -387,6 +452,25 @@ impl Config {
         }
         if config.concurrent_ocr_jobs > 8 {
             println!("⚙️  INFO: High OCR concurrency ({}) may use significant CPU/memory", config.concurrent_ocr_jobs);
+        }
+        
+        // OIDC validation
+        if config.oidc_enabled {
+            println!("🔐 OIDC is enabled");
+            if config.oidc_client_id.is_none() {
+                println!("❌ OIDC_CLIENT_ID is required when OIDC is enabled");
+            }
+            if config.oidc_client_secret.is_none() {
+                println!("❌ OIDC_CLIENT_SECRET is required when OIDC is enabled");
+            }
+            if config.oidc_issuer_url.is_none() {
+                println!("❌ OIDC_ISSUER_URL is required when OIDC is enabled");
+            }
+            if config.oidc_redirect_uri.is_none() {
+                println!("❌ OIDC_REDIRECT_URI is required when OIDC is enabled");
+            }
+        } else {
+            println!("🔐 OIDC is disabled");
         }
         
         println!("✅ Configuration validation completed successfully!\n");

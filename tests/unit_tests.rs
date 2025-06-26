@@ -101,10 +101,14 @@ fn test_user_response_conversion() {
         id: Uuid::new_v4(),
         username: "testuser".to_string(),
         email: "test@example.com".to_string(),
-        password_hash: "hashed".to_string(),
+        password_hash: Some("hashed".to_string()),
         role: readur::models::UserRole::User,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        oidc_subject: None,
+        oidc_issuer: None,
+        oidc_email: None,
+        auth_provider: readur::models::AuthProvider::Local,
     };
     
     let response: UserResponse = user.clone().into();

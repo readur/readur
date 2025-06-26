@@ -39,6 +39,13 @@ pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
         // Performance
         memory_limit_mb: 256, // Lower for tests
         cpu_priority: "normal".to_string(),
+        
+        // OIDC Configuration (disabled for tests)
+        oidc_enabled: false,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_issuer_url: None,
+        oidc_redirect_uri: None,
     };
     
     let queue_service = Arc::new(crate::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
@@ -49,6 +56,7 @@ pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
+        oidc_client: None,
     });
     
     let app = Router::new()
