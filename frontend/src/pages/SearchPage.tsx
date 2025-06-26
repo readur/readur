@@ -601,19 +601,21 @@ const SearchPage: React.FC = () => {
               flexWrap: 'wrap',
               gap: 2,
             }}>
-              <Stack direction="row" spacing={2} alignItems="center">
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                 <Chip 
                   icon={<TrendingIcon />}
                   label={`${totalResults} results`} 
                   size="small" 
                   color="primary"
                   variant="outlined"
+                  sx={{ flexShrink: 0 }}
                 />
                 <Chip 
                   icon={<TimeIcon />}
                   label={`${queryTime}ms`} 
                   size="small" 
                   variant="outlined"
+                  sx={{ flexShrink: 0 }}
                 />
                 {advancedSettings.useEnhancedSearch && (
                   <Chip 
@@ -622,9 +624,10 @@ const SearchPage: React.FC = () => {
                     size="small" 
                     color="success"
                     variant="outlined"
+                    sx={{ flexShrink: 0 }}
                   />
                 )}
-              </Stack>
+              </Box>
               
               {/* Simplified Search Mode Selector */}
               <ToggleButtonGroup
@@ -647,7 +650,7 @@ const SearchPage: React.FC = () => {
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 Quick suggestions:
               </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 {quickSuggestions.map((suggestion, index) => (
                   <Chip
                     key={index}
@@ -658,6 +661,7 @@ const SearchPage: React.FC = () => {
                     variant="outlined"
                     color="primary"
                     sx={{ 
+                      flexShrink: 0,
                       '&:hover': { 
                         backgroundColor: 'primary.main',
                         color: 'primary.contrastText',
@@ -665,7 +669,7 @@ const SearchPage: React.FC = () => {
                     }}
                   />
                 ))}
-              </Stack>
+              </Box>
             </Box>
           )}
 
@@ -675,7 +679,7 @@ const SearchPage: React.FC = () => {
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 Related searches:
               </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 {suggestions.map((suggestion, index) => (
                   <Chip
                     key={index}
@@ -685,6 +689,7 @@ const SearchPage: React.FC = () => {
                     clickable
                     variant="outlined"
                     sx={{ 
+                      flexShrink: 0,
                       '&:hover': { 
                         backgroundColor: 'primary.light',
                         color: 'primary.contrastText',
@@ -692,7 +697,7 @@ const SearchPage: React.FC = () => {
                     }}
                   />
                 ))}
-              </Stack>
+              </Box>
             </Box>
           )}
 
@@ -771,9 +776,22 @@ const SearchPage: React.FC = () => {
                         onChange={handleTagsChange}
                         input={<OutlinedInput label="Select Tags" />}
                         renderValue={(selected) => (
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden' }}>
                             {selected.map((value) => (
-                              <Chip key={value} label={value} size="small" />
+                              <Chip 
+                                key={value} 
+                                label={value} 
+                                size="small" 
+                                sx={{ 
+                                  flexShrink: 0,
+                                  maxWidth: '100px',
+                                  '& .MuiChip-label': {
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }
+                                }}
+                              />
                             ))}
                           </Box>
                         )}
@@ -1060,15 +1078,15 @@ const SearchPage: React.FC = () => {
                       </Box>
                     )}
                     
-                    <CardContent className="search-card" sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                    <CardContent className="search-card" sx={{ flexGrow: 1, overflow: 'hidden' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, width: '100%' }}>
                         {viewMode === 'list' && (
                           <Box sx={{ mr: 1, mt: 0.5 }}>
                             {getFileIcon(doc.mime_type)}
                           </Box>
                         )}
                         
-                        <Box sx={{ flexGrow: 1, minWidth: 0, pr: 1 }}>
+                        <Box sx={{ flexGrow: 1, minWidth: 0, overflow: 'hidden' }}>
                           <Typography 
                             variant="h6" 
                             sx={{ 
@@ -1078,24 +1096,28 @@ const SearchPage: React.FC = () => {
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
+                              display: 'block',
+                              width: '100%',
                             }}
                             title={doc.original_filename}
                           >
                             {doc.original_filename}
                           </Typography>
                           
-                          <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap', gap: 0.5 }}>
+                          <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden' }}>
                             <Chip 
                               className="search-chip"
                               label={formatFileSize(doc.file_size)} 
                               size="small" 
                               variant="outlined"
+                              sx={{ flexShrink: 0 }}
                             />
                             <Chip 
                               className="search-chip"
                               label={formatDate(doc.created_at)} 
                               size="small" 
                               variant="outlined"
+                              sx={{ flexShrink: 0 }}
                             />
                             {doc.has_ocr_text && (
                               <Chip 
@@ -1104,12 +1126,13 @@ const SearchPage: React.FC = () => {
                                 size="small" 
                                 color="success"
                                 variant="outlined"
+                                sx={{ flexShrink: 0 }}
                               />
                             )}
-                          </Stack>
+                          </Box>
                           
                           {doc.tags.length > 0 && (
-                            <Stack direction="row" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                            <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden' }}>
                               {doc.tags.slice(0, 2).map((tag, index) => (
                                 <Chip 
                                   key={index}
@@ -1118,7 +1141,17 @@ const SearchPage: React.FC = () => {
                                   size="small" 
                                   color="primary"
                                   variant="outlined"
-                                  sx={{ fontSize: '0.7rem', height: '18px' }}
+                                  sx={{ 
+                                    fontSize: '0.7rem', 
+                                    height: '18px',
+                                    flexShrink: 0,
+                                    maxWidth: '120px',
+                                    '& .MuiChip-label': {
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }
+                                  }}
                                 />
                               ))}
                               {doc.tags.length > 2 && (
@@ -1127,10 +1160,10 @@ const SearchPage: React.FC = () => {
                                   label={`+${doc.tags.length - 2}`}
                                   size="small" 
                                   variant="outlined"
-                                  sx={{ fontSize: '0.7rem', height: '18px' }}
+                                  sx={{ fontSize: '0.7rem', height: '18px', flexShrink: 0 }}
                                 />
                               )}
-                            </Stack>
+                            </Box>
                           )}
 
                           {/* Enhanced Search Snippets */}
@@ -1150,37 +1183,49 @@ const SearchPage: React.FC = () => {
 
                           {/* Search Rank */}
                           {doc.search_rank && (
-                            <Box sx={{ mt: 1 }}>
+                            <Box sx={{ mt: 1, overflow: 'hidden' }}>
                               <Chip 
                                 className="search-chip"
                                 label={`Relevance: ${(doc.search_rank * 100).toFixed(1)}%`}
                                 size="small" 
                                 color="info"
                                 variant="outlined"
-                                sx={{ fontSize: '0.7rem', height: '18px' }}
+                                sx={{ 
+                                  fontSize: '0.7rem', 
+                                  height: '18px',
+                                  flexShrink: 0,
+                                  maxWidth: '150px',
+                                  '& .MuiChip-label': {
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }
+                                }}
                               />
                             </Box>
                           )}
                         </Box>
                         
-                        <Tooltip title="View Details">
-                          <IconButton
-                            className="search-filter-button search-focusable"
-                            size="small"
-                            onClick={() => navigate(`/documents/${doc.id}`)}
-                          >
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Download">
-                          <IconButton
-                            className="search-filter-button search-focusable"
-                            size="small"
-                            onClick={() => handleDownload(doc)}
-                          >
-                            <DownloadIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Box sx={{ display: 'flex', flexShrink: 0, ml: 'auto' }}>
+                          <Tooltip title="View Details">
+                            <IconButton
+                              className="search-filter-button search-focusable"
+                              size="small"
+                              onClick={() => navigate(`/documents/${doc.id}`)}
+                            >
+                              <ViewIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Download">
+                            <IconButton
+                              className="search-filter-button search-focusable"
+                              size="small"
+                              onClick={() => handleDownload(doc)}
+                            >
+                              <DownloadIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </Box>
                     </CardContent>
                   </Card>

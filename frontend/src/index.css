@@ -24,6 +24,68 @@
   .search-chip {
     font-size: 0.7rem !important;
     height: 18px !important;
+    max-width: 100px;
+  }
+}
+
+/* Prevent text overflow in search components */
+.search-result-card {
+  overflow: hidden;
+}
+
+.search-result-card .MuiCardContent-root {
+  overflow: hidden;
+}
+
+/* Ensure proper flex behavior for narrow windows */
+@media (max-width: 1024px) {
+  /* Prevent horizontal overflow in search results */
+  .search-result-card {
+    min-width: 0;
+  }
+  
+  /* Ensure chips wrap properly */
+  .MuiChip-root {
+    flex-shrink: 0;
+    margin: 2px;
+  }
+  
+  /* Prevent button groups from overflowing */
+  .MuiToggleButtonGroup-root {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  
+  /* Ensure search stats wrap on narrow screens */
+  .search-stats-container {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+  /* Stack search mode buttons vertically */
+  .MuiToggleButtonGroup-root {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .MuiToggleButtonGroup-root .MuiToggleButton-root {
+    width: 100%;
+  }
+  
+  /* Reduce chip sizes further */
+  .search-chip {
+    font-size: 0.65rem !important;
+    height: 16px !important;
+    padding: 0 6px !important;
+  }
+  
+  /* Stack action buttons vertically in cards */
+  .search-card-actions {
+    flex-direction: column;
+    gap: 4px;
   }
 }
 

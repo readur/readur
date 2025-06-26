@@ -572,75 +572,84 @@ const SourcesPage: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const StatCard = ({ icon, label, value, color = 'primary' }: { 
+  const StatCard = ({ icon, label, value, color = 'primary', tooltip }: { 
     icon: React.ReactNode; 
     label: string; 
     value: string | number; 
-    color?: 'primary' | 'success' | 'warning' | 'error' | 'info' 
-  }) => (
-    <Box 
-      sx={{ 
-        p: 2.5, 
-        borderRadius: 3,
-        background: `linear-gradient(135deg, ${alpha(theme.palette[color].main, 0.1)} 0%, ${alpha(theme.palette[color].main, 0.05)} 100%)`,
-        border: `1px solid ${alpha(theme.palette[color].main, 0.2)}`,
-        position: 'relative',
-        overflow: 'hidden',
-        height: '100px',
-        display: 'flex',
-        alignItems: 'center',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '3px',
-          background: `linear-gradient(90deg, ${theme.palette[color].main}, ${theme.palette[color].light})`,
-        }
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ width: '100%', overflow: 'hidden' }}>
-        <Avatar 
-          sx={{ 
-            bgcolor: alpha(theme.palette[color].main, 0.15),
-            color: theme.palette[color].main,
-            width: 40,
-            height: 40,
-            flexShrink: 0
-          }}
-        >
-          {icon}
-        </Avatar>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography 
-            variant="h5" 
-            fontWeight="bold" 
-            color={theme.palette[color].main}
+    color?: 'primary' | 'success' | 'warning' | 'error' | 'info';
+    tooltip?: string;
+  }) => {
+    const card = (
+      <Box 
+        sx={{ 
+          p: 2.5, 
+          borderRadius: 3,
+          background: `linear-gradient(135deg, ${alpha(theme.palette[color].main, 0.1)} 0%, ${alpha(theme.palette[color].main, 0.05)} 100%)`,
+          border: `1px solid ${alpha(theme.palette[color].main, 0.2)}`,
+          position: 'relative',
+          overflow: 'hidden',
+          height: '100px',
+          display: 'flex',
+          alignItems: 'center',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '3px',
+            background: `linear-gradient(90deg, ${theme.palette[color].main}, ${theme.palette[color].light})`,
+          }
+        }}
+      >
+        <Stack direction="row" alignItems="center" spacing={2} sx={{ width: '100%', overflow: 'hidden' }}>
+          <Avatar 
             sx={{ 
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
+              bgcolor: alpha(theme.palette[color].main, 0.15),
+              color: theme.palette[color].main,
+              width: 40,
+              height: 40,
+              flexShrink: 0
             }}
           >
-            {typeof value === 'number' ? value.toLocaleString() : value}
-          </Typography>
-          <Typography 
-            variant="body2" 
-            color="text.secondary"
-            sx={{ 
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: '0.75rem'
-            }}
-          >
-            {label}
-          </Typography>
-        </Box>
-      </Stack>
-    </Box>
-  );
+            {icon}
+          </Avatar>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography 
+              variant="h5" 
+              fontWeight="bold" 
+              color={theme.palette[color].main}
+              sx={{ 
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {typeof value === 'number' ? value.toLocaleString() : value}
+            </Typography>
+            <Typography 
+              variant="body2" 
+              color="text.secondary"
+              sx={{ 
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: '0.75rem'
+              }}
+            >
+              {label}
+            </Typography>
+          </Box>
+        </Stack>
+      </Box>
+    );
+
+    return tooltip ? (
+      <Tooltip title={tooltip} arrow>
+        {card}
+      </Tooltip>
+    ) : card;
+  };
 
   const renderSourceCard = (source: Source) => (
     <Fade in={true} key={source.id}>
@@ -808,9 +817,10 @@ const SourcesPage: React.FC = () => {
             <Grid item xs={6} sm={4} md={3}>
               <StatCard
                 icon={<TrendingUpIcon />}
-                label="Files Synced"
+                label="Files Processed"
                 value={source.total_files_synced}
                 color="success"
+                tooltip="Files attempted to be synced, including duplicates and skipped files"
               />
             </Grid>
             <Grid item xs={6} sm={4} md={3}>
@@ -819,14 +829,7 @@ const SourcesPage: React.FC = () => {
                 label="Files Pending"
                 value={source.total_files_pending}
                 color="warning"
-              />
-            </Grid>
-            <Grid item xs={6} sm={4} md={3}>
-              <StatCard
-                icon={<AssessmentIcon />}
-                label="OCR Processed"
-                value={source.total_files_synced}
-                color="info"
+                tooltip="Files discovered but not yet processed during sync"
               />
             </Grid>
             <Grid item xs={6} sm={4} md={3}>
@@ -835,6 +838,7 @@ const SourcesPage: React.FC = () => {
                 label="Total Size (Downloaded)"
                 value={formatBytes(source.total_size_bytes)}
                 color="primary"
+                tooltip="Total size of files successfully downloaded from this source"
               />
             </Grid>
             <Grid item xs={6} sm={4} md={3}>
@@ -845,6 +849,7 @@ const SourcesPage: React.FC = () => {
                   ? formatDistanceToNow(new Date(source.last_sync_at), { addSuffix: true })
                   : 'Never'}
                 color="primary"
+                tooltip="When this source was last synchronized"
               />
             </Grid>
           </Grid>
