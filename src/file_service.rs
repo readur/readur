@@ -321,14 +321,21 @@ impl FileService {
     async fn generate_pdf_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
         use image::Rgb;
         
-        // Try to extract first page as image using pdf-extract
-        match pdf_extract::extract_text_from_mem(file_data) {
-            Ok(text) => {
+        // Try to extract first page as image using pdf-extract with panic protection
+        let file_data = file_data.to_vec();
+        let extraction_result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                pdf_extract::extract_text_from_mem(&file_data)
+            }))
+        }).await;
+        
+        match extraction_result {
+            Ok(Ok(Ok(text))) => {
                 // If we can extract text, create a text-based thumbnail
-                self.generate_text_based_thumbnail(&text, "PDF", Rgb([220, 38, 27])).await
+                self.generate_text_based_thumbnail(text.as_str(), "PDF", Rgb([220, 38, 27])).await
             }
-            Err(_) => {
-                // Fall back to placeholder if PDF extraction fails
+            Ok(Ok(Err(_))) | Ok(Err(_)) | Err(_) => {
+                // Fall back to placeholder if PDF extraction fails or panics
                 self.generate_placeholder_thumbnail("PDF").await
             }
         }

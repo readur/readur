@@ -54,8 +54,16 @@ impl OcrService {
         #[cfg(feature = "ocr")]
         {
             let bytes = std::fs::read(file_path)?;
-            let text = pdf_extract::extract_text_from_mem(&bytes)
-                .map_err(|e| anyhow!("Failed to extract text from PDF: {}", e))?;
+            let file_path = file_path.to_string();
+            
+            let text = tokio::task::spawn_blocking(move || {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    pdf_extract::extract_text_from_mem(&bytes)
+                }))
+            }).await
+            .map_err(|e| anyhow!("PDF extraction task failed: {}", e))?
+            .map_err(|_| anyhow!("PDF extraction panicked due to invalid content in file: {}", file_path))?
+            .map_err(|e| anyhow!("Failed to extract text from PDF: {}", e))?;
             
             Ok(text.trim().to_string())
         }
