@@ -320,18 +320,61 @@ impl FileService {
 
     #[cfg(feature = "ocr")]
     async fn generate_pdf_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
-        use image::Rgb;
+        use pdfium_render::prelude::*;
         
-        // Try to extract first page as image using pdf-extract with panic protection
+        // Try to render first page as image using pdfium-render with panic protection
         match catch_unwind(AssertUnwindSafe(|| {
-            pdf_extract::extract_text_from_mem(file_data)
-        })) {
-            Ok(Ok(text)) => {
-                // If we can extract text, create a text-based thumbnail
-                self.generate_text_based_thumbnail(&text, "PDF", Rgb([220, 38, 27])).await
+            // Initialize pdfium
+            let pdfium = Pdfium::new(
+                Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"))
+                    .or_else(|_| Pdfium::bind_to_system_library())
+                    .unwrap_or_else(|_| Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name()).unwrap())
+            );
+            
+            // Load PDF document from memory
+            let document = pdfium.load_pdf_from_byte_vec(file_data.to_vec(), None)?;
+            
+            // Get first page
+            let page = document.pages().first()?;
+            
+            // Render page to bitmap (200x200 thumbnail size)
+            let bitmap = page.render_with_config(
+                &PdfRenderConfig::new()
+                    .set_target_width(200)
+                    .set_maximum_height(200)
+            )?;
+            
+            // Convert to image format
+            let width = bitmap.width() as u32;
+            let height = bitmap.height() as u32;
+            let buffer = bitmap.as_raw_bytes();
+            
+            // Create RGB image from BGRA buffer
+            let mut rgb_buffer = Vec::with_capacity((width * height * 3) as usize);
+            for chunk in buffer.chunks(4) {
+                if chunk.len() >= 4 {
+                    // Convert BGRA to RGB
+                    rgb_buffer.push(chunk[2]); // R
+                    rgb_buffer.push(chunk[1]); // G  
+                    rgb_buffer.push(chunk[0]); // B
+                }
             }
+            
+            let img = image::ImageBuffer::from_raw(width, height, rgb_buffer)
+                .ok_or_else(|| anyhow::anyhow!("Failed to create image from buffer"))?;
+            
+            let dynamic_img = image::DynamicImage::ImageRgb8(img);
+            
+            // Convert to JPEG
+            let mut buffer = Vec::new();
+            let mut cursor = std::io::Cursor::new(&mut buffer);
+            dynamic_img.write_to(&mut cursor, image::ImageFormat::Jpeg)?;
+            
+            Ok(buffer) as anyhow::Result<Vec<u8>>
+        })) {
+            Ok(Ok(thumbnail)) => Ok(thumbnail),
             Ok(Err(_)) | Err(_) => {
-                // Fall back to placeholder if PDF extraction fails or panics
+                // Fall back to placeholder if PDF rendering fails or panics
                 self.generate_placeholder_thumbnail("PDF").await
             }
         }
