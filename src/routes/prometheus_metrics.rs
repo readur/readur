@@ -326,7 +326,7 @@ async fn collect_ocr_metrics(state: &Arc<AppState>) -> Result<OcrMetrics, Status
     })?;
     
     let oldest_pending = sqlx::query_scalar::<_, Option<f64>>(
-        "SELECT EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))/60 FROM documents WHERE ocr_status = 'pending'"
+        "SELECT CAST(EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))/60 AS DOUBLE PRECISION) FROM documents WHERE ocr_status = 'pending'"
     )
     .fetch_one(&state.db.pool)
     .await
@@ -475,11 +475,11 @@ async fn collect_storage_metrics(state: &Arc<AppState>) -> Result<StorageMetrics
         r#"
         SELECT 
             CASE 
-                WHEN file_name ILIKE '%.pdf' THEN 'pdf'
-                WHEN file_name ILIKE '%.jpg' OR file_name ILIKE '%.jpeg' THEN 'jpeg'
-                WHEN file_name ILIKE '%.png' THEN 'png'
-                WHEN file_name ILIKE '%.gif' THEN 'gif'
-                WHEN file_name ILIKE '%.tiff' OR file_name ILIKE '%.tif' THEN 'tiff'
+                WHEN filename ILIKE '%.pdf' THEN 'pdf'
+                WHEN filename ILIKE '%.jpg' OR filename ILIKE '%.jpeg' THEN 'jpeg'
+                WHEN filename ILIKE '%.png' THEN 'png'
+                WHEN filename ILIKE '%.gif' THEN 'gif'
+                WHEN filename ILIKE '%.tiff' OR filename ILIKE '%.tif' THEN 'tiff'
                 ELSE 'other'
             END as doc_type,
             COUNT(*) as count
@@ -511,7 +511,7 @@ async fn collect_storage_metrics(state: &Arc<AppState>) -> Result<StorageMetrics
     }
     
     let storage_stats = sqlx::query_as::<_, StorageStats>(
-        "SELECT COUNT(*) as total_docs, COALESCE(SUM(file_size), 0) as total_size, COALESCE(AVG(file_size), 0) as avg_size FROM documents"
+        "SELECT COUNT(*) as total_docs, CAST(COALESCE(SUM(file_size), 0) AS BIGINT) as total_size, CAST(COALESCE(AVG(file_size), 0) AS DOUBLE PRECISION) as avg_size FROM documents"
     )
     .fetch_one(&state.db.pool)
     .await
