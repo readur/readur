@@ -35,6 +35,10 @@ import {
   Paper,
   Skeleton,
   SelectChangeEvent,
+  Menu,
+  RadioGroup,
+  Radio,
+  Pagination,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -42,8 +46,6 @@ import {
   FilterList as FilterIcon,
   Clear as ClearIcon,
   ExpandMore as ExpandMoreIcon,
-  GridView as GridViewIcon,
-  ViewList as ListViewIcon,
   Download as DownloadIcon,
   PictureAsPdf as PdfIcon,
   Image as ImageIcon,
@@ -57,6 +59,7 @@ import {
   Speed as SpeedIcon,
   AccessTime as TimeIcon,
   TrendingUp as TrendingIcon,
+  TextFormat as TextFormatIcon,
 } from '@mui/icons-material';
 import { documentService, SearchRequest } from '../services/api';
 import SearchGuidance from '../components/SearchGuidance';
@@ -108,7 +111,6 @@ interface SearchFilters {
   hasOcr?: string;
 }
 
-type ViewMode = 'grid' | 'list';
 type SearchMode = 'simple' | 'phrase' | 'fuzzy' | 'boolean';
 type OcrStatus = 'all' | 'yes' | 'no';
 
@@ -126,6 +128,17 @@ interface AdvancedSearchSettings {
   enableAutoCorrect: boolean;
 }
 
+type SnippetViewMode = 'compact' | 'detailed' | 'context';
+type SnippetHighlightStyle = 'background' | 'underline' | 'bold';
+
+interface SnippetSettings {
+  viewMode: SnippetViewMode;
+  highlightStyle: SnippetHighlightStyle;
+  fontSize: number;
+  contextLength: number;
+  maxSnippetsToShow: number;
+}
+
 const SearchPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -133,7 +146,6 @@ const SearchPage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Document[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [queryTime, setQueryTime] = useState<number>(0);
   const [totalResults, setTotalResults] = useState<number>(0);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -163,6 +175,20 @@ const SearchPage: React.FC = () => {
     boostRecentDocs: false,
     enableAutoCorrect: true,
   });
+  
+  // Global snippet settings
+  const [snippetSettings, setSnippetSettings] = useState<SnippetSettings>({
+    viewMode: 'detailed',
+    highlightStyle: 'background',
+    fontSize: 15,
+    contextLength: 50,
+    maxSnippetsToShow: 3,
+  });
+  const [snippetSettingsAnchor, setSnippetSettingsAnchor] = useState<null | HTMLElement>(null);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [resultsPerPage] = useState<number>(20);
   
   // Filter states
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -221,7 +247,7 @@ const SearchPage: React.FC = () => {
     setQuickSuggestions(suggestions.slice(0, 3));
   }, []);
 
-  const performSearch = useCallback(async (query: string, filters: SearchFilters = {}): Promise<void> => {
+  const performSearch = useCallback(async (query: string, filters: SearchFilters = {}, page: number = 1): Promise<void> => {
     if (!query.trim()) {
       setSearchResults([]);
       setTotalResults(0);
@@ -245,8 +271,8 @@ const SearchPage: React.FC = () => {
         query: query.trim(),
         tags: filters.tags?.length ? filters.tags : undefined,
         mime_types: filters.mimeTypes?.length ? filters.mimeTypes : undefined,
-        limit: advancedSettings.resultLimit,
-        offset: 0,
+        limit: resultsPerPage,
+        offset: (page - 1) * resultsPerPage,
         include_snippets: advancedSettings.includeSnippets,
         snippet_length: advancedSettings.snippetLength,
         search_mode: advancedSettings.searchMode,
@@ -311,7 +337,15 @@ const SearchPage: React.FC = () => {
   }, [advancedSettings]);
 
   const debouncedSearch = useCallback(
-    debounce((query: string, filters: SearchFilters) => performSearch(query, filters), 300),
+    debounce((query: string, filters: SearchFilters, page: number = 1, resetPage: boolean = false) => {
+      if (resetPage) {
+        setCurrentPage(1);
+        performSearch(query, filters, 1);
+      } else {
+        setCurrentPage(page);
+        performSearch(query, filters, page);
+      }
+    }, 300),
     [performSearch]
   );
   
@@ -336,8 +370,22 @@ const SearchPage: React.FC = () => {
       fileSizeRange: fileSizeRange,
       hasOcr: hasOcr,
     };
-    debouncedSearch(searchQuery, filters);
+    // Reset to page 1 when search query or filters change
+    const shouldResetPage = searchQuery !== searchParams.get('q') || 
+                           JSON.stringify(filters) !== JSON.stringify({
+                             tags: selectedTags,
+                             mimeTypes: selectedMimeTypes,
+                             dateRange: dateRange,
+                             fileSizeRange: fileSizeRange,
+                             hasOcr: hasOcr,
+                           });
+    
+    debouncedSearch(searchQuery, filters, 1, shouldResetPage);
     quickSuggestionsDebounced(searchQuery);
+    
+    if (shouldResetPage) {
+      setCurrentPage(1);
+    }
     
     // Update URL params when search query changes
     if (searchQuery) {
@@ -353,13 +401,14 @@ const SearchPage: React.FC = () => {
     setDateRange([0, 365]);
     setFileSizeRange([0, 100]);
     setHasOcr('all');
+    setCurrentPage(1);
   };
 
   const getFileIcon = (mimeType: string): React.ReactElement => {
-    if (mimeType.includes('pdf')) return <PdfIcon color="error" />;
-    if (mimeType.includes('image')) return <ImageIcon color="primary" />;
-    if (mimeType.includes('text')) return <TextIcon color="info" />;
-    return <DocIcon color="secondary" />;
+    if (mimeType.includes('pdf')) return <PdfIcon color="error" sx={{ fontSize: '1.2rem' }} />;
+    if (mimeType.includes('image')) return <ImageIcon color="primary" sx={{ fontSize: '1.2rem' }} />;
+    if (mimeType.includes('text')) return <TextIcon color="info" sx={{ fontSize: '1.2rem' }} />;
+    return <DocIcon color="secondary" sx={{ fontSize: '1.2rem' }} />;
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -447,11 +496,6 @@ const SearchPage: React.FC = () => {
     setSearchQuery(suggestion);
   };
 
-  const handleViewModeChange = (event: React.MouseEvent<HTMLElement>, newView: ViewMode | null): void => {
-    if (newView) {
-      setViewMode(newView);
-    }
-  };
 
   const handleSearchModeChange = (event: React.MouseEvent<HTMLElement>, newMode: SearchMode | null): void => {
     if (newMode) {
@@ -471,6 +515,24 @@ const SearchPage: React.FC = () => {
 
   const handleOcrChange = (event: SelectChangeEvent<OcrStatus>): void => {
     setHasOcr(event.target.value as OcrStatus);
+  };
+
+  const handlePageChange = (event: React.ChangeEvent<unknown>, page: number): void => {
+    setCurrentPage(page);
+    const filters: SearchFilters = {
+      tags: selectedTags,
+      mimeTypes: selectedMimeTypes,
+      dateRange: dateRange,
+      fileSizeRange: fileSizeRange,
+      hasOcr: hasOcr,
+    };
+    performSearch(searchQuery, filters, page);
+    
+    // Scroll to top of results
+    const resultsElement = document.querySelector('.search-results-container');
+    if (resultsElement) {
+      resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
 
@@ -535,13 +597,15 @@ const SearchPage: React.FC = () => {
                           <ClearIcon />
                         </IconButton>
                       )}
-                      <IconButton
-                        size="small"
-                        onClick={() => setShowAdvanced(!showAdvanced)}
-                        color={showAdvanced ? 'primary' : 'default'}
-                      >
-                        <SettingsIcon />
-                      </IconButton>
+                      <Tooltip title="Search Settings">
+                        <IconButton
+                          size="small"
+                          onClick={() => setShowAdvanced(!showAdvanced)}
+                          color={showAdvanced ? 'primary' : 'default'}
+                        >
+                          <SettingsIcon />
+                        </IconButton>
+                      </Tooltip>
                       <IconButton
                         size="small"
                         onClick={() => setShowFilters(!showFilters)}
@@ -630,17 +694,19 @@ const SearchPage: React.FC = () => {
               </Box>
               
               {/* Simplified Search Mode Selector */}
-              <ToggleButtonGroup
-                value={advancedSettings.searchMode}
-                exclusive
-                onChange={handleSearchModeChange}
-                size="small"
-              >
-                <ToggleButton value="simple">Smart</ToggleButton>
-                <ToggleButton value="phrase">Exact phrase</ToggleButton>
-                <ToggleButton value="fuzzy">Similar words</ToggleButton>
-                <ToggleButton value="boolean">Advanced</ToggleButton>
-              </ToggleButtonGroup>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <ToggleButtonGroup
+                  value={advancedSettings.searchMode}
+                  exclusive
+                  onChange={handleSearchModeChange}
+                  size="small"
+                >
+                  <ToggleButton value="simple">Smart</ToggleButton>
+                  <ToggleButton value="phrase">Exact phrase</ToggleButton>
+                  <ToggleButton value="fuzzy">Similar words</ToggleButton>
+                  <ToggleButton value="boolean">Advanced</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
             </Box>
           )}
 
@@ -892,33 +958,74 @@ const SearchPage: React.FC = () => {
         </Grid>
 
         {/* Search Results */}
-        <Grid item xs={12} md={9}>
+        <Grid item xs={12} md={9} className="search-results-container">
 
-          {/* Toolbar */}
+          {/* Results Header */}
           {searchQuery && (
-            <Box sx={{ 
-              mb: 3, 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
-              <Typography variant="body2" color="text.secondary">
-                {loading ? 'Searching...' : `${searchResults.length} results found`}
-              </Typography>
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {loading ? 'Searching...' : `${searchResults.length} results found`}
+                </Typography>
+                
+                {/* Snippet Settings Button */}
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<TextFormatIcon />}
+                  onClick={(e) => setSnippetSettingsAnchor(e.currentTarget)}
+                  sx={{ 
+                    flexShrink: 0,
+                    position: 'relative',
+                  }}
+                >
+                  Display Settings
+                  {/* Show indicator if settings are customized */}
+                  {(snippetSettings.viewMode !== 'detailed' || 
+                    snippetSettings.highlightStyle !== 'background' || 
+                    snippetSettings.fontSize !== 15 || 
+                    snippetSettings.maxSnippetsToShow !== 3) && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        bgcolor: 'primary.main',
+                      }}
+                    />
+                  )}
+                </Button>
+              </Box>
               
-              <ToggleButtonGroup
-                value={viewMode}
-                exclusive
-                onChange={handleViewModeChange}
-                size="small"
-              >
-                <ToggleButton value="grid">
-                  <GridViewIcon />
-                </ToggleButton>
-                <ToggleButton value="list">
-                  <ListViewIcon />
-                </ToggleButton>
-              </ToggleButtonGroup>
+              {/* Current Settings Preview */}
+              {!loading && searchResults.length > 0 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Showing:
+                  </Typography>
+                  <Chip 
+                    label={`${snippetSettings.maxSnippetsToShow} snippets`} 
+                    size="small" 
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem' }}
+                  />
+                  <Chip 
+                    label={`${snippetSettings.fontSize}px font`} 
+                    size="small" 
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem' }}
+                  />
+                  <Chip 
+                    label={snippetSettings.viewMode} 
+                    size="small" 
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem', textTransform: 'capitalize' }}
+                  />
+                </Box>
+              )}
             </Box>
           )}
 
@@ -1023,35 +1130,42 @@ const SearchPage: React.FC = () => {
                   size="small" 
                   variant="outlined" 
                   clickable
-                  onClick={() => setSearchQuery('invoice')}
+                  onClick={() => {
+                    setSearchQuery('invoice');
+                    setCurrentPage(1);
+                  }}
                 />
                 <Chip 
                   label="Try: contract" 
                   size="small" 
                   variant="outlined" 
                   clickable
-                  onClick={() => setSearchQuery('contract')}
+                  onClick={() => {
+                    setSearchQuery('contract');
+                    setCurrentPage(1);
+                  }}
                 />
                 <Chip 
                   label="Try: tag:important" 
                   size="small" 
                   variant="outlined" 
                   clickable
-                  onClick={() => setSearchQuery('tag:important')}
+                  onClick={() => {
+                    setSearchQuery('tag:important');
+                    setCurrentPage(1);
+                  }}
                 />
               </Stack>
             </Box>
           )}
 
           {!loading && !error && searchResults.length > 0 && (
-            <Grid container spacing={viewMode === 'grid' ? 3 : 1}>
-              {searchResults.map((doc) => (
+            <>
+              <Grid container spacing={1}>
+                {searchResults.map((doc) => (
                 <Grid 
                   item 
                   xs={12} 
-                  sm={viewMode === 'grid' ? 6 : 12} 
-                  md={viewMode === 'grid' ? 6 : 12} 
-                  lg={viewMode === 'grid' ? 4 : 12}
                   key={doc.id}
                 >
                   <Card 
@@ -1059,38 +1173,37 @@ const SearchPage: React.FC = () => {
                     sx={{ 
                       height: '100%',
                       display: 'flex',
-                      flexDirection: viewMode === 'list' ? 'row' : 'column',
+                      flexDirection: 'row',
                     }}
                   >
-                    {viewMode === 'grid' && (
-                      <Box
-                        sx={{
-                          height: 100,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
-                        }}
-                      >
-                        <Box sx={{ fontSize: '2.5rem' }}>
+                    
+                    <CardContent 
+                      className="search-card" 
+                      sx={{ 
+                        flexGrow: 1, 
+                        overflow: 'hidden',
+                        py: 1.5,
+                        px: 2,
+                        '&:last-child': {
+                          pb: 1.5
+                        }
+                      }}
+                    >
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 1, 
+                        width: '100%'
+                      }}>
+                        <Box sx={{ mr: 1.5, mt: 0.5, flexShrink: 0 }}>
                           {getFileIcon(doc.mime_type)}
                         </Box>
-                      </Box>
-                    )}
-                    
-                    <CardContent className="search-card" sx={{ flexGrow: 1, overflow: 'hidden' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, width: '100%' }}>
-                        {viewMode === 'list' && (
-                          <Box sx={{ mr: 1, mt: 0.5 }}>
-                            {getFileIcon(doc.mime_type)}
-                          </Box>
-                        )}
                         
                         <Box sx={{ flexGrow: 1, minWidth: 0, overflow: 'hidden' }}>
                           <Typography 
                             variant="h6" 
                             sx={{ 
-                              fontSize: '0.95rem',
+                              fontSize: '1.05rem',
                               fontWeight: 600,
                               mb: 1,
                               overflow: 'hidden',
@@ -1098,42 +1211,40 @@ const SearchPage: React.FC = () => {
                               whiteSpace: 'nowrap',
                               display: 'block',
                               width: '100%',
+                              color: 'text.primary',
                             }}
                             title={doc.original_filename}
                           >
                             {doc.original_filename}
                           </Typography>
                           
-                          <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden' }}>
-                            <Chip 
-                              className="search-chip"
-                              label={formatFileSize(doc.file_size)} 
-                              size="small" 
-                              variant="outlined"
-                              sx={{ flexShrink: 0 }}
-                            />
-                            <Chip 
-                              className="search-chip"
-                              label={formatDate(doc.created_at)} 
-                              size="small" 
-                              variant="outlined"
-                              sx={{ flexShrink: 0 }}
-                            />
-                            {doc.has_ocr_text && (
-                              <Chip 
-                                className="search-chip"
-                                label="OCR" 
-                                size="small" 
-                                color="success"
-                                variant="outlined"
-                                sx={{ flexShrink: 0 }}
-                              />
-                            )}
+                          <Box sx={{ 
+                            mb: 0.5, 
+                            display: 'flex', 
+                            flexWrap: 'wrap', 
+                            gap: 0.75, 
+                            overflow: 'hidden',
+                            alignItems: 'center',
+                          }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
+                              {formatFileSize(doc.file_size)} • {formatDate(doc.created_at)}
+                              {doc.has_ocr_text && ' • OCR'}
+                            </Typography>
                           </Box>
                           
                           {doc.tags.length > 0 && (
-                            <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden' }}>
-                              {doc.tags.slice(0, 2).map((tag, index) => (
+                            <Box sx={{ 
+                              mb: 1, 
+                              display: 'flex', 
+                              flexWrap: 'wrap', 
+                              gap: 0.5, 
+                              overflow: 'hidden',
+                              alignItems: 'center',
+                            }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+                                Tags:
+                              </Typography>
+                              {doc.tags.slice(0, 3).map((tag, index) => (
                                 <Chip 
                                   key={index}
                                   className="search-chip"
@@ -1154,75 +1265,83 @@ const SearchPage: React.FC = () => {
                                   }}
                                 />
                               ))}
-                              {doc.tags.length > 2 && (
-                                <Chip 
-                                  className="search-chip"
-                                  label={`+${doc.tags.length - 2}`}
-                                  size="small" 
-                                  variant="outlined"
-                                  sx={{ fontSize: '0.7rem', height: '18px', flexShrink: 0 }}
-                                />
+                              {doc.tags.length > 3 && (
+                                <Typography variant="caption" color="text.secondary">
+                                  +{doc.tags.length - 3} more
+                                </Typography>
                               )}
                             </Box>
                           )}
 
                           {/* Enhanced Search Snippets */}
                           {doc.snippets && doc.snippets.length > 0 && (
-                            <Box sx={{ mt: 2, mb: 1 }}>
+                            <Box sx={{ 
+                              mt: 0.5, 
+                              mb: 1 
+                            }}>
                               <EnhancedSnippetViewer
                                 snippets={doc.snippets}
                                 searchQuery={searchQuery}
-                                maxSnippetsToShow={2}
+                                maxSnippetsToShow={snippetSettings.maxSnippetsToShow}
+                                viewMode={snippetSettings.viewMode}
+                                highlightStyle={snippetSettings.highlightStyle}
+                                fontSize={snippetSettings.fontSize}
+                                contextLength={snippetSettings.contextLength}
+                                showSettings={false}
                                 onSnippetClick={(snippet, index) => {
-                                  // Could navigate to document with snippet highlighted
                                   console.log('Snippet clicked:', snippet, index);
                                 }}
                               />
                             </Box>
                           )}
 
-                          {/* Search Rank */}
-                          {doc.search_rank && (
-                            <Box sx={{ mt: 1, overflow: 'hidden' }}>
-                              <Chip 
-                                className="search-chip"
-                                label={`Relevance: ${(doc.search_rank * 100).toFixed(1)}%`}
-                                size="small" 
-                                color="info"
-                                variant="outlined"
-                                sx={{ 
-                                  fontSize: '0.7rem', 
-                                  height: '18px',
-                                  flexShrink: 0,
-                                  maxWidth: '150px',
-                                  '& .MuiChip-label': {
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }
-                                }}
-                              />
-                            </Box>
-                          )}
                         </Box>
                         
-                        <Box sx={{ display: 'flex', flexShrink: 0, ml: 'auto' }}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          flexDirection: 'column',
+                          flexShrink: 0, 
+                          ml: 2,
+                          gap: 0.5,
+                          alignItems: 'center',
+                          justifyContent: 'flex-start',
+                          pt: 0.5,
+                        }}>
                           <Tooltip title="View Details">
                             <IconButton
                               className="search-filter-button search-focusable"
                               size="small"
+                              sx={{
+                                p: 0.75,
+                                minWidth: 32,
+                                minHeight: 32,
+                                bgcolor: 'primary.main',
+                                color: 'primary.contrastText',
+                                '&:hover': {
+                                  bgcolor: 'primary.dark',
+                                }
+                              }}
                               onClick={() => navigate(`/documents/${doc.id}`)}
                             >
-                              <ViewIcon />
+                              <ViewIcon sx={{ fontSize: '1.1rem' }} />
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Download">
                             <IconButton
                               className="search-filter-button search-focusable"
                               size="small"
+                              sx={{
+                                p: 0.75,
+                                minWidth: 32,
+                                minHeight: 32,
+                                bgcolor: 'action.hover',
+                                '&:hover': {
+                                  bgcolor: 'action.selected',
+                                }
+                              }}
                               onClick={() => handleDownload(doc)}
                             >
-                              <DownloadIcon />
+                              <DownloadIcon sx={{ fontSize: '1.1rem' }} />
                             </IconButton>
                           </Tooltip>
                         </Box>
@@ -1230,11 +1349,160 @@ const SearchPage: React.FC = () => {
                     </CardContent>
                   </Card>
                 </Grid>
-              ))}
-            </Grid>
+                ))}
+              </Grid>
+              
+              {/* Pagination */}
+              {totalResults > resultsPerPage && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
+                  <Pagination
+                    count={Math.ceil(totalResults / resultsPerPage)}
+                    page={currentPage}
+                    onChange={handlePageChange}
+                    color="primary"
+                    size="large"
+                    showFirstButton
+                    showLastButton
+                    siblingCount={1}
+                    boundaryCount={1}
+                    sx={{
+                      '& .MuiPagination-ul': {
+                        flexWrap: 'wrap',
+                        justifyContent: 'center',
+                      },
+                    }}
+                  />
+                </Box>
+              )}
+              
+              {/* Results Summary */}
+              <Box sx={{ textAlign: 'center', mt: 2, mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Showing {((currentPage - 1) * resultsPerPage) + 1}-{Math.min(currentPage * resultsPerPage, totalResults)} of {totalResults} results
+                </Typography>
+              </Box>
+            </>
           )}
         </Grid>
       </Grid>
+      
+      {/* Global Snippet Settings Menu */}
+      <Menu
+        anchorEl={snippetSettingsAnchor}
+        open={Boolean(snippetSettingsAnchor)}
+        onClose={() => setSnippetSettingsAnchor(null)}
+        PaperProps={{ sx: { width: 320, p: 2 } }}
+      >
+        <Typography variant="subtitle2" sx={{ mb: 2 }}>
+          Text Display Settings
+        </Typography>
+        
+        <Box mb={2}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            View Mode
+          </Typography>
+          <RadioGroup
+            value={snippetSettings.viewMode}
+            onChange={(e) => setSnippetSettings(prev => ({ ...prev, viewMode: e.target.value as SnippetViewMode }))}
+          >
+            <FormControlLabel
+              value="compact"
+              control={<Radio size="small" />}
+              label="Compact"
+            />
+            <FormControlLabel
+              value="detailed"
+              control={<Radio size="small" />}
+              label="Detailed"
+            />
+            <FormControlLabel
+              value="context"
+              control={<Radio size="small" />}
+              label="Context Focus"
+            />
+          </RadioGroup>
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Box mb={2}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            Highlight Style
+          </Typography>
+          <RadioGroup
+            value={snippetSettings.highlightStyle}
+            onChange={(e) => setSnippetSettings(prev => ({ ...prev, highlightStyle: e.target.value as SnippetHighlightStyle }))}
+          >
+            <FormControlLabel
+              value="background"
+              control={<Radio size="small" />}
+              label="Background Color"
+            />
+            <FormControlLabel
+              value="underline"
+              control={<Radio size="small" />}
+              label="Underline"
+            />
+            <FormControlLabel
+              value="bold"
+              control={<Radio size="small" />}
+              label="Bold Text"
+            />
+          </RadioGroup>
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Box mb={2}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            Font Size: {snippetSettings.fontSize}px
+          </Typography>
+          <Slider
+            value={snippetSettings.fontSize}
+            onChange={(_, value) => setSnippetSettings(prev => ({ ...prev, fontSize: value as number }))}
+            min={12}
+            max={20}
+            marks
+            valueLabelDisplay="auto"
+          />
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Box mb={2}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            Snippets per result: {snippetSettings.maxSnippetsToShow}
+          </Typography>
+          <Slider
+            value={snippetSettings.maxSnippetsToShow}
+            onChange={(_, value) => setSnippetSettings(prev => ({ ...prev, maxSnippetsToShow: value as number }))}
+            min={1}
+            max={5}
+            marks
+            valueLabelDisplay="auto"
+          />
+        </Box>
+
+        {snippetSettings.viewMode === 'context' && (
+          <>
+            <Divider sx={{ my: 2 }} />
+            <Box>
+              <Typography variant="caption" color="text.secondary" gutterBottom>
+                Context Length: {snippetSettings.contextLength} characters
+              </Typography>
+              <Slider
+                value={snippetSettings.contextLength}
+                onChange={(_, value) => setSnippetSettings(prev => ({ ...prev, contextLength: value as number }))}
+                min={20}
+                max={200}
+                step={10}
+                marks
+                valueLabelDisplay="auto"
+              />
+            </Box>
+          </>
+        )}
+      </Menu>
     </Box>
   );
 };

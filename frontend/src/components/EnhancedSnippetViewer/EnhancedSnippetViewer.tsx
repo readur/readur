@@ -49,6 +49,11 @@ interface EnhancedSnippetViewerProps {
   searchQuery?: string;
   maxSnippetsToShow?: number;
   onSnippetClick?: (snippet: Snippet, index: number) => void;
+  viewMode?: ViewMode;
+  highlightStyle?: HighlightStyle;
+  fontSize?: number;
+  contextLength?: number;
+  showSettings?: boolean;
 }
 
 type ViewMode = 'compact' | 'detailed' | 'context';
@@ -59,14 +64,27 @@ const EnhancedSnippetViewer: React.FC<EnhancedSnippetViewerProps> = ({
   searchQuery,
   maxSnippetsToShow = 3,
   onSnippetClick,
+  viewMode: propViewMode,
+  highlightStyle: propHighlightStyle,
+  fontSize: propFontSize,
+  contextLength: propContextLength,
+  showSettings = true,
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('detailed');
-  const [highlightStyle, setHighlightStyle] = useState<HighlightStyle>('background');
-  const [fontSize, setFontSize] = useState<number>(14);
-  const [contextLength, setContextLength] = useState<number>(50);
+  const [viewMode, setViewMode] = useState<ViewMode>(propViewMode || 'detailed');
+  const [highlightStyle, setHighlightStyle] = useState<HighlightStyle>(propHighlightStyle || 'background');
+  const [fontSize, setFontSize] = useState<number>(propFontSize || 15);
+  const [contextLength, setContextLength] = useState<number>(propContextLength || 50);
   const [settingsAnchor, setSettingsAnchor] = useState<null | HTMLElement>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  // Update local state when props change
+  React.useEffect(() => {
+    if (propViewMode) setViewMode(propViewMode);
+    if (propHighlightStyle) setHighlightStyle(propHighlightStyle);
+    if (propFontSize) setFontSize(propFontSize);
+    if (propContextLength) setContextLength(propContextLength);
+  }, [propViewMode, propHighlightStyle, propFontSize, propContextLength]);
 
   const visibleSnippets = expanded ? snippets : snippets.slice(0, maxSnippetsToShow);
 
@@ -187,16 +205,16 @@ const EnhancedSnippetViewer: React.FC<EnhancedSnippetViewerProps> = ({
         key={index}
         variant="outlined"
         sx={{
-          p: isCompact ? 1 : 2,
-          mb: 1.5,
+          p: isCompact ? 1 : 1.5,
+          mb: 0.75,
           backgroundColor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : 'grey.900',
-          borderLeft: '3px solid',
+          borderLeft: '2px solid',
           borderLeftColor: snippet.source === 'ocr_text' ? 'warning.main' : 'primary.main',
           cursor: onSnippetClick ? 'pointer' : 'default',
           transition: 'all 0.2s',
           '&:hover': onSnippetClick ? {
             backgroundColor: (theme) => theme.palette.mode === 'light' ? 'grey.100' : 'grey.800',
-            transform: 'translateX(4px)',
+            transform: 'translateX(2px)',
           } : {},
         }}
         onClick={() => onSnippetClick?.(snippet, index)}
@@ -204,28 +222,12 @@ const EnhancedSnippetViewer: React.FC<EnhancedSnippetViewerProps> = ({
         <Box display="flex" alignItems="flex-start" justifyContent="space-between">
           <Box flex={1}>
             {!isCompact && (
-              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                <Chip
-                  icon={getSourceIcon(snippet.source)}
-                  label={getSourceLabel(snippet.source)}
-                  size="small"
-                  variant="outlined"
-                />
-                {snippet.page_number && (
-                  <Chip
-                    label={`Page ${snippet.page_number}`}
-                    size="small"
-                    variant="outlined"
-                  />
-                )}
-                {snippet.confidence && snippet.confidence < 0.8 && (
-                  <Chip
-                    label={`${(snippet.confidence * 100).toFixed(0)}% confidence`}
-                    size="small"
-                    color="warning"
-                    variant="outlined"
-                  />
-                )}
+              <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                  {getSourceLabel(snippet.source)}
+                  {snippet.page_number && ` • Page ${snippet.page_number}`}
+                  {snippet.confidence && snippet.confidence < 0.8 && ` • ${(snippet.confidence * 100).toFixed(0)}% confidence`}
+                </Typography>
               </Box>
             )}
             
@@ -237,74 +239,94 @@ const EnhancedSnippetViewer: React.FC<EnhancedSnippetViewerProps> = ({
                 color: 'text.primary',
                 wordWrap: 'break-word',
                 fontFamily: viewMode === 'context' ? 'monospace' : 'inherit',
+                mt: 0,
               }}
             >
               {renderHighlightedText(snippet.text, snippet.highlight_ranges)}
             </Typography>
           </Box>
           
-          <Box display="flex" gap={0.5} ml={2}>
-            <Tooltip title="Copy snippet">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopySnippet(snippet.text, index);
-                }}
-                sx={{ 
-                  color: copiedIndex === index ? 'success.main' : 'text.secondary' 
-                }}
-              >
-                <CopyIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
+          {!isCompact && (
+            <Box display="flex" gap={0.5} ml={2}>
+              <Tooltip title="Copy snippet">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCopySnippet(snippet.text, index);
+                  }}
+                  sx={{ 
+                    color: copiedIndex === index ? 'success.main' : 'text.secondary',
+                    p: 0.5,
+                  }}
+                >
+                  <CopyIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
         </Box>
       </Paper>
     );
   };
 
   return (
-    <Box>
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-        <Box display="flex" alignItems="center" gap={1}>
-          <Typography variant="subtitle2" fontWeight="bold">
-            Search Results
-          </Typography>
-          {snippets.length > 0 && (
-            <Chip 
-              label={`${snippets.length > 999 ? `${Math.floor(snippets.length/1000)}K` : snippets.length} matches`} 
-              size="small" 
-              color="primary"
-              variant="outlined"
-              sx={{ maxWidth: '100px', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
-            />
-          )}
-        </Box>
-        
-        <Box display="flex" alignItems="center" gap={1}>
-          <Tooltip title="Snippet settings">
-            <IconButton
-              size="small"
-              onClick={(e) => setSettingsAnchor(e.currentTarget)}
-            >
-              <SettingsIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+    <Box sx={{ mt: 0.5 }}>
+      {showSettings && (
+        <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Typography variant="subtitle2" fontWeight="bold">
+              Search Results
+            </Typography>
+            {snippets.length > 0 && (
+              <Chip 
+                label={`${snippets.length > 999 ? `${Math.floor(snippets.length/1000)}K` : snippets.length} matches`} 
+                size="small" 
+                color="primary"
+                variant="outlined"
+                sx={{ maxWidth: '100px', '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+              />
+            )}
+          </Box>
           
-          {snippets.length > maxSnippetsToShow && (
-            <Button
-              size="small"
-              onClick={() => setExpanded(!expanded)}
-              endIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            >
-              {expanded ? 'Show Less' : `Show All (${snippets.length})`}
-            </Button>
-          )}
+          <Box display="flex" alignItems="center" gap={1}>
+            <Tooltip title="Snippet settings">
+              <IconButton
+                size="small"
+                onClick={(e) => setSettingsAnchor(e.currentTarget)}
+              >
+                <SettingsIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            
+            {snippets.length > maxSnippetsToShow && (
+              <Button
+                size="small"
+                onClick={() => setExpanded(!expanded)}
+                endIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              >
+                {expanded ? 'Show Less' : `Show All (${snippets.length})`}
+              </Button>
+            )}
+          </Box>
         </Box>
-      </Box>
+      )}
+      
+      {!showSettings && snippets.length > maxSnippetsToShow && (
+        <Box display="flex" alignItems="center" justifyContent="flex-end" mb={0.5}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => setExpanded(!expanded)}
+            endIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            sx={{ fontSize: '0.75rem', minHeight: 'auto', py: 0.25 }}
+          >
+            {expanded ? 'Show Less' : `Show All (${snippets.length})`}
+          </Button>
+        </Box>
+      )}
 
-      {searchQuery && (
+      {showSettings && searchQuery && (
         <Box mb={2}>
           <Typography variant="caption" color="text.secondary">
             Showing matches for: <strong>{searchQuery}</strong>
@@ -323,12 +345,13 @@ const EnhancedSnippetViewer: React.FC<EnhancedSnippetViewerProps> = ({
       )}
 
       {/* Settings Menu */}
-      <Menu
-        anchorEl={settingsAnchor}
-        open={Boolean(settingsAnchor)}
-        onClose={() => setSettingsAnchor(null)}
-        PaperProps={{ sx: { width: 320, p: 2 } }}
-      >
+      {showSettings && (
+        <Menu
+          anchorEl={settingsAnchor}
+          open={Boolean(settingsAnchor)}
+          onClose={() => setSettingsAnchor(null)}
+          PaperProps={{ sx: { width: 320, p: 2 } }}
+        >
         <Typography variant="subtitle2" sx={{ mb: 2 }}>
           Snippet Display Settings
         </Typography>
@@ -422,7 +445,8 @@ const EnhancedSnippetViewer: React.FC<EnhancedSnippetViewerProps> = ({
             </Box>
           </>
         )}
-      </Menu>
+        </Menu>
+      )}
     </Box>
   );
 };
