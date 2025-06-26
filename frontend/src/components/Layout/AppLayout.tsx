@@ -160,7 +160,23 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               },
             }}
           >
-            <Box sx={{ position: 'relative', zIndex: 1 }}>R</Box>
+            <Box sx={{ position: 'relative', zIndex: 1 }}>
+              <img 
+                src="/readur-32.png" 
+                srcSet="/readur-32.png 1x, /readur-64.png 2x"
+                alt="Readur Logo" 
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  objectFit: 'contain',
+                }}
+                onError={(e) => {
+                  // Fallback to "R" if image fails to load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.parentElement!.innerHTML = 'R';
+                }}
+              />
+            </Box>
           </Box>
           <Box>
             <Typography variant="h6" sx={{ 
