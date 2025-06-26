@@ -42,8 +42,6 @@ import {
   FilterList as FilterIcon,
   Clear as ClearIcon,
   ExpandMore as ExpandMoreIcon,
-  GridView as GridViewIcon,
-  ViewList as ListViewIcon,
   Download as DownloadIcon,
   PictureAsPdf as PdfIcon,
   Image as ImageIcon,
@@ -108,7 +106,6 @@ interface SearchFilters {
   hasOcr?: string;
 }
 
-type ViewMode = 'grid' | 'list';
 type SearchMode = 'simple' | 'phrase' | 'fuzzy' | 'boolean';
 type OcrStatus = 'all' | 'yes' | 'no';
 
@@ -133,7 +130,6 @@ const SearchPage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Document[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [queryTime, setQueryTime] = useState<number>(0);
   const [totalResults, setTotalResults] = useState<number>(0);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -447,11 +443,6 @@ const SearchPage: React.FC = () => {
     setSearchQuery(suggestion);
   };
 
-  const handleViewModeChange = (event: React.MouseEvent<HTMLElement>, newView: ViewMode | null): void => {
-    if (newView) {
-      setViewMode(newView);
-    }
-  };
 
   const handleSearchModeChange = (event: React.MouseEvent<HTMLElement>, newMode: SearchMode | null): void => {
     if (newMode) {
@@ -894,31 +885,12 @@ const SearchPage: React.FC = () => {
         {/* Search Results */}
         <Grid item xs={12} md={9}>
 
-          {/* Toolbar */}
+          {/* Results Header */}
           {searchQuery && (
-            <Box sx={{ 
-              mb: 3, 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
+            <Box sx={{ mb: 3 }}>
               <Typography variant="body2" color="text.secondary">
                 {loading ? 'Searching...' : `${searchResults.length} results found`}
               </Typography>
-              
-              <ToggleButtonGroup
-                value={viewMode}
-                exclusive
-                onChange={handleViewModeChange}
-                size="small"
-              >
-                <ToggleButton value="grid">
-                  <GridViewIcon />
-                </ToggleButton>
-                <ToggleButton value="list">
-                  <ListViewIcon />
-                </ToggleButton>
-              </ToggleButtonGroup>
             </Box>
           )}
 
@@ -1044,14 +1016,11 @@ const SearchPage: React.FC = () => {
           )}
 
           {!loading && !error && searchResults.length > 0 && (
-            <Grid container spacing={viewMode === 'grid' ? 3 : 1}>
+            <Grid container spacing={1}>
               {searchResults.map((doc) => (
                 <Grid 
                   item 
                   xs={12} 
-                  sm={viewMode === 'grid' ? 6 : 12} 
-                  md={viewMode === 'grid' ? 6 : 12} 
-                  lg={viewMode === 'grid' ? 4 : 12}
                   key={doc.id}
                 >
                   <Card 
@@ -1059,32 +1028,31 @@ const SearchPage: React.FC = () => {
                     sx={{ 
                       height: '100%',
                       display: 'flex',
-                      flexDirection: viewMode === 'list' ? 'row' : 'column',
+                      flexDirection: 'row',
                     }}
                   >
-                    {viewMode === 'grid' && (
-                      <Box
-                        sx={{
-                          height: 100,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
-                        }}
-                      >
-                        <Box sx={{ fontSize: '2.5rem' }}>
+                    
+                    <CardContent 
+                      className="search-card" 
+                      sx={{ 
+                        flexGrow: 1, 
+                        overflow: 'hidden',
+                        py: 1.5,
+                        px: 2,
+                        '&:last-child': {
+                          pb: 1.5
+                        }
+                      }}
+                    >
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 1, 
+                        width: '100%'
+                      }}>
+                        <Box sx={{ mr: 1, mt: 0.5 }}>
                           {getFileIcon(doc.mime_type)}
                         </Box>
-                      </Box>
-                    )}
-                    
-                    <CardContent className="search-card" sx={{ flexGrow: 1, overflow: 'hidden' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, width: '100%' }}>
-                        {viewMode === 'list' && (
-                          <Box sx={{ mr: 1, mt: 0.5 }}>
-                            {getFileIcon(doc.mime_type)}
-                          </Box>
-                        )}
                         
                         <Box sx={{ flexGrow: 1, minWidth: 0, overflow: 'hidden' }}>
                           <Typography 
@@ -1092,7 +1060,7 @@ const SearchPage: React.FC = () => {
                             sx={{ 
                               fontSize: '0.95rem',
                               fontWeight: 600,
-                              mb: 1,
+                              mb: 0.5,
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
@@ -1104,7 +1072,13 @@ const SearchPage: React.FC = () => {
                             {doc.original_filename}
                           </Typography>
                           
-                          <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden' }}>
+                          <Box sx={{ 
+                            mb: 0.5, 
+                            display: 'flex', 
+                            flexWrap: 'wrap', 
+                            gap: 0.5, 
+                            overflow: 'hidden' 
+                          }}>
                             <Chip 
                               className="search-chip"
                               label={formatFileSize(doc.file_size)} 
@@ -1132,7 +1106,13 @@ const SearchPage: React.FC = () => {
                           </Box>
                           
                           {doc.tags.length > 0 && (
-                            <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden' }}>
+                            <Box sx={{ 
+                              mb: 0.5, 
+                              display: 'flex', 
+                              flexWrap: 'wrap', 
+                              gap: 0.5, 
+                              overflow: 'hidden' 
+                            }}>
                               {doc.tags.slice(0, 2).map((tag, index) => (
                                 <Chip 
                                   key={index}
@@ -1168,7 +1148,10 @@ const SearchPage: React.FC = () => {
 
                           {/* Enhanced Search Snippets */}
                           {doc.snippets && doc.snippets.length > 0 && (
-                            <Box sx={{ mt: 2, mb: 1 }}>
+                            <Box sx={{ 
+                              mt: 1, 
+                              mb: 0.5 
+                            }}>
                               <EnhancedSnippetViewer
                                 snippets={doc.snippets}
                                 searchQuery={searchQuery}
@@ -1183,7 +1166,10 @@ const SearchPage: React.FC = () => {
 
                           {/* Search Rank */}
                           {doc.search_rank && (
-                            <Box sx={{ mt: 1, overflow: 'hidden' }}>
+                            <Box sx={{ 
+                              mt: 0.5, 
+                              overflow: 'hidden' 
+                            }}>
                               <Chip 
                                 className="search-chip"
                                 label={`Relevance: ${(doc.search_rank * 100).toFixed(1)}%`}
@@ -1206,23 +1192,39 @@ const SearchPage: React.FC = () => {
                           )}
                         </Box>
                         
-                        <Box sx={{ display: 'flex', flexShrink: 0, ml: 'auto' }}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          flexShrink: 0, 
+                          ml: 'auto',
+                          gap: 0.5,
+                          alignItems: 'center'
+                        }}>
                           <Tooltip title="View Details">
                             <IconButton
                               className="search-filter-button search-focusable"
                               size="small"
+                              sx={{
+                                p: 0.5,
+                                minWidth: 28,
+                                minHeight: 28
+                              }}
                               onClick={() => navigate(`/documents/${doc.id}`)}
                             >
-                              <ViewIcon />
+                              <ViewIcon sx={{ fontSize: '1rem' }} />
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Download">
                             <IconButton
                               className="search-filter-button search-focusable"
                               size="small"
+                              sx={{
+                                p: 0.5,
+                                minWidth: 28,
+                                minHeight: 28
+                              }}
                               onClick={() => handleDownload(doc)}
                             >
-                              <DownloadIcon />
+                              <DownloadIcon sx={{ fontSize: '1rem' }} />
                             </IconButton>
                           </Tooltip>
                         </Box>
