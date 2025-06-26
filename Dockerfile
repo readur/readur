@@ -10,7 +10,7 @@ RUN npm run build
 # --- Backend build stage ---
 FROM rust:1.87-bookworm as backend-builder
 
-# Install system dependencies for OCR
+# Install system dependencies for OCR and PDF processing
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libclang-dev \
     clang \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -35,6 +36,7 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
     ca-certificates \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
