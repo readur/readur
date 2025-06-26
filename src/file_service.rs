@@ -320,18 +320,73 @@ impl FileService {
 
     #[cfg(feature = "ocr")]
     async fn generate_pdf_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
-        use image::Rgb;
+        use std::process::Command;
+        use tokio::fs;
+        use uuid::Uuid;
         
-        // Try to extract first page as image using pdf-extract with panic protection
-        match catch_unwind(AssertUnwindSafe(|| {
-            pdf_extract::extract_text_from_mem(file_data)
-        })) {
-            Ok(Ok(text)) => {
-                // If we can extract text, create a text-based thumbnail
-                self.generate_text_based_thumbnail(&text, "PDF", Rgb([220, 38, 27])).await
+        // Create a temporary file for the PDF
+        let temp_id = Uuid::new_v4();
+        let temp_pdf_path = format!("/tmp/pdf_thumb_{}.pdf", temp_id);
+        let temp_png_path = format!("/tmp/pdf_thumb_{}.png", temp_id);
+        
+        // Write PDF data to temporary file
+        if let Err(e) = fs::write(&temp_pdf_path, file_data).await {
+            error!("Failed to write temporary PDF file: {}", e);
+            return self.generate_placeholder_thumbnail("PDF").await;
+        }
+        
+        // Use pdftoppm to convert first page to PNG
+        let output = Command::new("pdftoppm")
+            .arg("-f").arg("1")          // First page only
+            .arg("-l").arg("1")          // Last page (same as first)
+            .arg("-scale-to").arg("200") // Scale to 200px width
+            .arg("-png")                 // Output as PNG
+            .arg(&temp_pdf_path)
+            .arg(&format!("/tmp/pdf_thumb_{}", temp_id)) // Output prefix
+            .output();
+        
+        // Clean up temporary PDF file
+        let _ = fs::remove_file(&temp_pdf_path).await;
+        
+        match output {
+            Ok(result) if result.status.success() => {
+                // pdftoppm adds "-1" to the filename for the first page
+                let actual_png_path = format!("/tmp/pdf_thumb_{}-1.png", temp_id);
+                
+                // Read the generated PNG file
+                match fs::read(&actual_png_path).await {
+                    Ok(png_data) => {
+                        // Clean up temporary PNG file
+                        let _ = fs::remove_file(&actual_png_path).await;
+                        
+                        // Convert PNG to JPEG thumbnail
+                        match image::load_from_memory(&png_data) {
+                            Ok(img) => {
+                                // Resize to 200x200 maintaining aspect ratio
+                                let thumbnail = img.resize(200, 200, image::imageops::FilterType::Lanczos3);
+                                
+                                // Convert to JPEG
+                                let mut buffer = Vec::new();
+                                let mut cursor = std::io::Cursor::new(&mut buffer);
+                                if thumbnail.write_to(&mut cursor, ImageFormat::Jpeg).is_ok() {
+                                    Ok(buffer)
+                                } else {
+                                    self.generate_placeholder_thumbnail("PDF").await
+                                }
+                            }
+                            Err(_) => self.generate_placeholder_thumbnail("PDF").await,
+                        }
+                    }
+                    Err(_) => {
+                        let _ = fs::remove_file(&actual_png_path).await;
+                        self.generate_placeholder_thumbnail("PDF").await
+                    }
+                }
             }
-            Ok(Err(_)) | Err(_) => {
-                // Fall back to placeholder if PDF extraction fails or panics
+            _ => {
+                // Clean up any potential PNG files
+                let _ = fs::remove_file(&temp_png_path).await;
+                let _ = fs::remove_file(&format!("/tmp/pdf_thumb_{}-1.png", temp_id)).await;
                 self.generate_placeholder_thumbnail("PDF").await
             }
         }
