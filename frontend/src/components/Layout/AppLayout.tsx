@@ -35,6 +35,7 @@ import {
   Error as ErrorIcon,
   Label as LabelIcon,
   Block as BlockIcon,
+  Api as ApiIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -528,6 +529,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             </MenuItem>
             <MenuItem onClick={() => navigate('/settings')}>
               <SettingsIcon sx={{ mr: 2 }} /> Settings
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={() => window.open('/swagger-ui', '_blank')}>
+              <ApiIcon sx={{ mr: 2 }} /> API Documentation
             </MenuItem>
             <Divider />
             <MenuItem onClick={handleLogout}>
