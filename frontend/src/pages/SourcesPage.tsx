@@ -65,6 +65,8 @@ import {
   Storage as ServerIcon,
   Pause as PauseIcon,
   PlayArrow as ResumeIcon,
+  TextSnippet as DocumentIcon,
+  Visibility as OcrIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api, { queueService } from '../services/api';
@@ -84,6 +86,8 @@ interface Source {
   total_files_synced: number;
   total_files_pending: number;
   total_size_bytes: number;
+  total_documents: number;
+  total_documents_ocr: number;
   created_at: string;
   updated_at: string;
 }
@@ -699,7 +703,7 @@ const SourcesPage: React.FC = () => {
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
                   {source.name}
                 </Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                   <Chip
                     label={source.source_type.toUpperCase()}
                     size="small"
@@ -719,6 +723,32 @@ const SourcesPage: React.FC = () => {
                       bgcolor: alpha(getStatusColor(source.status), 0.1),
                       color: getStatusColor(source.status),
                       border: `1px solid ${alpha(getStatusColor(source.status), 0.3)}`,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                    }}
+                  />
+                  <Chip
+                    icon={<DocumentIcon sx={{ fontSize: '0.9rem !important' }} />}
+                    label={`${source.total_documents} docs`}
+                    size="small"
+                    sx={{ 
+                      borderRadius: 2,
+                      bgcolor: alpha(theme.palette.info.main, 0.1),
+                      color: theme.palette.info.main,
+                      border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                    }}
+                  />
+                  <Chip
+                    icon={<OcrIcon sx={{ fontSize: '0.9rem !important' }} />}
+                    label={`${source.total_documents_ocr} OCR'd`}
+                    size="small"
+                    sx={{ 
+                      borderRadius: 2,
+                      bgcolor: alpha(theme.palette.success.main, 0.1),
+                      color: theme.palette.success.main,
+                      border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
                       fontSize: '0.75rem',
                       fontWeight: 600,
                     }}
@@ -814,34 +844,25 @@ const SourcesPage: React.FC = () => {
 
           {/* Stats Grid */}
           <Grid container spacing={2} mb={3}>
-            <Grid item xs={6} sm={4} md={3}>
+            <Grid item xs={6} sm={4} md={2.4}>
               <StatCard
-                icon={<TrendingUpIcon />}
-                label="Files Processed"
-                value={source.total_files_synced}
+                icon={<DocumentIcon />}
+                label="Documents Stored"
+                value={source.total_documents}
+                color="info"
+                tooltip="Total number of documents currently stored from this source"
+              />
+            </Grid>
+            <Grid item xs={6} sm={4} md={2.4}>
+              <StatCard
+                icon={<OcrIcon />}
+                label="OCR Processed"
+                value={source.total_documents_ocr}
                 color="success"
-                tooltip="Files attempted to be synced, including duplicates and skipped files"
+                tooltip="Number of documents that have been successfully OCR'd"
               />
             </Grid>
-            <Grid item xs={6} sm={4} md={3}>
-              <StatCard
-                icon={<SpeedIcon />}
-                label="Files Pending"
-                value={source.total_files_pending}
-                color="warning"
-                tooltip="Files discovered but not yet processed during sync"
-              />
-            </Grid>
-            <Grid item xs={6} sm={4} md={3}>
-              <StatCard
-                icon={<StorageIcon />}
-                label="Total Size (Downloaded)"
-                value={formatBytes(source.total_size_bytes)}
-                color="primary"
-                tooltip="Total size of files successfully downloaded from this source"
-              />
-            </Grid>
-            <Grid item xs={6} sm={4} md={3}>
+            <Grid item xs={6} sm={4} md={2.4}>
               <StatCard
                 icon={<TimelineIcon />}
                 label="Last Sync"
@@ -850,6 +871,24 @@ const SourcesPage: React.FC = () => {
                   : 'Never'}
                 color="primary"
                 tooltip="When this source was last synchronized"
+              />
+            </Grid>
+            <Grid item xs={6} sm={4} md={2.4}>
+              <StatCard
+                icon={<SpeedIcon />}
+                label="Files Pending"
+                value={source.total_files_pending}
+                color="warning"
+                tooltip="Files discovered but not yet processed during sync"
+              />
+            </Grid>
+            <Grid item xs={6} sm={4} md={2.4}>
+              <StatCard
+                icon={<StorageIcon />}
+                label="Total Size"
+                value={formatBytes(source.total_size_bytes)}
+                color="primary"
+                tooltip="Total size of files successfully downloaded from this source"
               />
             </Grid>
           </Grid>
