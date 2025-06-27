@@ -1509,4 +1509,59 @@ impl Database {
 
         Ok(deleted_documents)
     }
+
+    pub async fn count_documents_for_source(&self, source_id: Uuid) -> Result<(i64, i64)> {
+        let row = sqlx::query(
+            r#"
+            SELECT 
+                COUNT(*) as total_documents,
+                COUNT(CASE WHEN ocr_status = 'completed' AND ocr_text IS NOT NULL THEN 1 END) as total_documents_ocr
+            FROM documents 
+            WHERE source_id = $1
+            "#
+        )
+        .bind(source_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let total_documents: i64 = row.get("total_documents");
+        let total_documents_ocr: i64 = row.get("total_documents_ocr");
+
+        Ok((total_documents, total_documents_ocr))
+    }
+
+    pub async fn count_documents_for_sources(&self, source_ids: &[Uuid]) -> Result<Vec<(Uuid, i64, i64)>> {
+        if source_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let query = format!(
+            r#"
+            SELECT 
+                source_id,
+                COUNT(*) as total_documents,
+                COUNT(CASE WHEN ocr_status = 'completed' AND ocr_text IS NOT NULL THEN 1 END) as total_documents_ocr
+            FROM documents 
+            WHERE source_id = ANY($1)
+            GROUP BY source_id
+            "#
+        );
+
+        let rows = sqlx::query(&query)
+            .bind(source_ids)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let results = rows
+            .into_iter()
+            .map(|row| {
+                let source_id: Uuid = row.get("source_id");
+                let total_documents: i64 = row.get("total_documents");
+                let total_documents_ocr: i64 = row.get("total_documents_ocr");
+                (source_id, total_documents, total_documents_ocr)
+            })
+            .collect();
+
+        Ok(results)
+    }
 }
