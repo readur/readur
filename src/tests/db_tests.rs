@@ -64,8 +64,8 @@ mod tests {
         let user = result.unwrap();
         assert_eq!(user.username, "testuser_1");
         assert_eq!(user.email, "test@example.com");
-        assert!(!user.password_hash.is_empty());
-        assert_ne!(user.password_hash, "password123"); // Should be hashed
+        assert!(user.password_hash.is_some());
+        assert_ne!(user.password_hash.as_ref().unwrap(), "password123"); // Should be hashed
     }
 
     #[tokio::test]

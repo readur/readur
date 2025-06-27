@@ -10,10 +10,14 @@ mod tests {
             id: Uuid::new_v4(),
             username: "testuser".to_string(),
             email: "test@example.com".to_string(),
-            password_hash: "hashed_password".to_string(),
+            password_hash: Some("hashed_password".to_string()),
             role: crate::models::UserRole::User,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            oidc_subject: None,
+            oidc_issuer: None,
+            oidc_email: None,
+            auth_provider: crate::models::AuthProvider::Local,
         }
     }
 

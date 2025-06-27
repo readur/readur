@@ -19,6 +19,8 @@ use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 #[cfg(any(test, feature = "test-utils"))]
 use tower::util::ServiceExt;
+#[cfg(any(test, feature = "test-utils"))]
+use uuid;
 
 /// Test image information with expected OCR content
 #[derive(Debug, Clone)]
@@ -187,6 +189,13 @@ pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
         // Performance
         memory_limit_mb: 256, // Lower for tests
         cpu_priority: "normal".to_string(),
+        
+        // OIDC Configuration
+        oidc_enabled: false,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_issuer_url: None,
+        oidc_redirect_uri: None,
     };
     
     let queue_service = Arc::new(crate::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
@@ -197,6 +206,7 @@ pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
+        oidc_client: None,
     });
     
     let app = Router::new()
@@ -213,9 +223,14 @@ pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
 
 #[cfg(any(test, feature = "test-utils"))]
 pub async fn create_test_user(app: &Router) -> UserResponse {
+    // Generate random identifiers to avoid test interference
+    let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+    let test_username = format!("testuser_{}", test_id);
+    let test_email = format!("test_{}@example.com", test_id);
+    
     let user_data = json!({
-        "username": "testuser",
-        "email": "test@example.com",
+        "username": test_username,
+        "email": test_email,
         "password": "password123"
     });
     
@@ -240,9 +255,14 @@ pub async fn create_test_user(app: &Router) -> UserResponse {
 
 #[cfg(any(test, feature = "test-utils"))]
 pub async fn create_admin_user(app: &Router) -> UserResponse {
+    // Generate random identifiers to avoid test interference
+    let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+    let admin_username = format!("adminuser_{}", test_id);
+    let admin_email = format!("admin_{}@example.com", test_id);
+    
     let admin_data = json!({
-        "username": "adminuser",
-        "email": "admin@example.com",
+        "username": admin_username,
+        "email": admin_email,
         "password": "adminpass123",
         "role": "admin"
     });

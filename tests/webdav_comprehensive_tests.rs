@@ -340,6 +340,11 @@ fn test_webdav_scheduler_creation() {
         max_file_size_mb: 50,
         ocr_language: "eng".to_string(),
         ocr_timeout_seconds: 300,
+        oidc_enabled: false,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_issuer_url: None,
+        oidc_redirect_uri: None,
     };
 
     // Note: This is a minimal test since we can't easily mock the database

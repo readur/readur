@@ -12,6 +12,14 @@ pub enum UserRole {
     User,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
+pub enum AuthProvider {
+    #[serde(rename = "local")]
+    Local,
+    #[serde(rename = "oidc")]
+    Oidc,
+}
+
 impl std::fmt::Display for UserRole {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -33,16 +41,42 @@ impl TryFrom<String> for UserRole {
     }
 }
 
+impl std::fmt::Display for AuthProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AuthProvider::Local => write!(f, "local"),
+            AuthProvider::Oidc => write!(f, "oidc"),
+        }
+    }
+}
+
+impl TryFrom<String> for AuthProvider {
+    type Error = String;
+    
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "local" => Ok(AuthProvider::Local),
+            "oidc" => Ok(AuthProvider::Oidc),
+            _ => Err(format!("Invalid auth provider: {}", value)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
     pub email: String,
-    pub password_hash: String,
+    pub password_hash: Option<String>,
     #[sqlx(try_from = "String")]
     pub role: UserRole,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub oidc_subject: Option<String>,
+    pub oidc_issuer: Option<String>,
+    pub oidc_email: Option<String>,
+    #[sqlx(try_from = "String")]
+    pub auth_provider: AuthProvider,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

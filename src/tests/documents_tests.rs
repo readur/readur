@@ -316,7 +316,7 @@ mod tests {
 mod document_deletion_tests {
     use super::*;
     use crate::db::Database;
-    use crate::models::{UserRole, User, Document};
+    use crate::models::{UserRole, User, Document, AuthProvider};
     use chrono::Utc;
     use sqlx::PgPool;
     use std::env;
@@ -336,14 +336,18 @@ mod document_deletion_tests {
             id: user_id,
             username: format!("testuser_{}", user_id),
             email: format!("test_{}@example.com", user_id),
-            password_hash: "hashed_password".to_string(),
+            password_hash: Some("hashed_password".to_string()),
             role,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            oidc_subject: None,
+            oidc_issuer: None,
+            oidc_email: None,
+            auth_provider: AuthProvider::Local,
         };
 
         // Insert user into database
-        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at, oidc_subject, oidc_issuer, oidc_email, auth_provider) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
             .bind(user.id)
             .bind(&user.username)
             .bind(&user.email)
@@ -351,6 +355,10 @@ mod document_deletion_tests {
             .bind(user.role.to_string())
             .bind(user.created_at)
             .bind(user.updated_at)
+            .bind(&user.oidc_subject)
+            .bind(&user.oidc_issuer)
+            .bind(&user.oidc_email)
+            .bind(user.auth_provider.to_string())
             .execute(pool)
             .await
             .expect("Failed to insert test user");
@@ -685,7 +693,7 @@ mod document_deletion_tests {
 mod rbac_deletion_tests {
     use super::*;
     use crate::db::Database;
-    use crate::models::{UserRole, User, Document};
+    use crate::models::{UserRole, User, Document, AuthProvider};
     use chrono::Utc;
     use sqlx::PgPool;
     use std::env;
@@ -705,13 +713,17 @@ mod rbac_deletion_tests {
             id: user_id,
             username: format!("testuser_{}", user_id),
             email: format!("test_{}@example.com", user_id),
-            password_hash: "hashed_password".to_string(),
+            password_hash: Some("hashed_password".to_string()),
             role,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            oidc_subject: None,
+            oidc_issuer: None,
+            oidc_email: None,
+            auth_provider: AuthProvider::Local,
         };
 
-        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at, oidc_subject, oidc_issuer, oidc_email, auth_provider) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
             .bind(user.id)
             .bind(&user.username)
             .bind(&user.email)
@@ -719,6 +731,10 @@ mod rbac_deletion_tests {
             .bind(user.role.to_string())
             .bind(user.created_at)
             .bind(user.updated_at)
+            .bind(&user.oidc_subject)
+            .bind(&user.oidc_issuer)
+            .bind(&user.oidc_email)
+            .bind(user.auth_provider.to_string())
             .execute(pool)
             .await
             .expect("Failed to insert test user");
@@ -1104,7 +1120,7 @@ mod rbac_deletion_tests {
 mod deletion_error_handling_tests {
     use super::*;
     use crate::db::Database;
-    use crate::models::{UserRole, User, Document};
+    use crate::models::{UserRole, User, Document, AuthProvider};
     use chrono::Utc;
     use sqlx::PgPool;
     use std::env;
@@ -1124,13 +1140,17 @@ mod deletion_error_handling_tests {
             id: user_id,
             username: format!("testuser_{}", user_id),
             email: format!("test_{}@example.com", user_id),
-            password_hash: "hashed_password".to_string(),
+            password_hash: Some("hashed_password".to_string()),
             role,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            oidc_subject: None,
+            oidc_issuer: None,
+            oidc_email: None,
+            auth_provider: AuthProvider::Local,
         };
 
-        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at, oidc_subject, oidc_issuer, oidc_email, auth_provider) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
             .bind(user.id)
             .bind(&user.username)
             .bind(&user.email)
@@ -1138,6 +1158,10 @@ mod deletion_error_handling_tests {
             .bind(user.role.to_string())
             .bind(user.created_at)
             .bind(user.updated_at)
+            .bind(&user.oidc_subject)
+            .bind(&user.oidc_issuer)
+            .bind(&user.oidc_email)
+            .bind(user.auth_provider.to_string())
             .execute(pool)
             .await
             .expect("Failed to insert test user");

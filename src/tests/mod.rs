@@ -1,5 +1,6 @@
 mod helpers;
 mod auth_tests;
+mod config_oidc_tests;
 mod db_tests;
 mod documents_tests;
 mod document_routes_tests;
@@ -7,6 +8,7 @@ mod file_service_tests;
 mod ignored_files_tests;
 mod labels_tests;
 mod ocr_tests;
+mod oidc_tests;
 mod enhanced_search_tests;
 mod settings_tests;
 mod users_tests; 

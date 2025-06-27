@@ -46,6 +46,11 @@ async fn create_test_app_state() -> Arc<AppState> {
         max_file_size_mb: 100,
         memory_limit_mb: 512,
         cpu_priority: "normal".to_string(),
+        oidc_enabled: false,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_issuer_url: None,
+        oidc_redirect_uri: None,
     };
 
     let db = Database::new(&config.database_url).await.unwrap();
@@ -61,6 +66,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
+        oidc_client: None,
     })
 }
 

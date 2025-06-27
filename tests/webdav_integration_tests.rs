@@ -93,6 +93,11 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         max_file_size_mb: 50,
         ocr_language: "eng".to_string(),
         ocr_timeout_seconds: 300,
+        oidc_enabled: false,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_issuer_url: None,
+        oidc_redirect_uri: None,
     };
 
     // Use the environment-based database URL
@@ -106,6 +111,7 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
+        oidc_client: None,
     });
 
     let app = Router::new()
