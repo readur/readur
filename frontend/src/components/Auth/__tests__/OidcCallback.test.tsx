@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 import OidcCallback from '../OidcCallback';
 import { AuthProvider } from '../../../contexts/AuthContext';
@@ -17,16 +17,14 @@ vi.mock('../../../services/api', () => ({
   }
 }));
 
-// Mock useNavigate and useSearchParams
+// Mock useNavigate
 const mockNavigate = vi.fn();
-const mockUseSearchParams = vi.fn(() => [new URLSearchParams('code=test-code&state=test-state')]);
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useNavigate: () => mockNavigate,
-    useSearchParams: mockUseSearchParams
+    useNavigate: () => mockNavigate
   };
 });
 
@@ -66,6 +64,11 @@ const MockAuthProvider = ({ children }: { children: React.ReactNode }) => (
 describe('OidcCallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.location.href = '';
+    // Clear API mocks
+    (api.get as any).mockClear();
+    // Reset API mocks to default implementation
+    (api.get as any).mockResolvedValue({ data: { token: 'default-token' } });
     
     // Mock window.matchMedia
     Object.defineProperty(window, 'matchMedia', {
@@ -83,18 +86,24 @@ describe('OidcCallback', () => {
     });
   });
 
-  const renderOidcCallback = () => {
+  const renderOidcCallback = (search = '') => {
     return render(
-      <BrowserRouter>
+      <MemoryRouter initialEntries={[`/auth/oidc/callback${search}`]}>
         <MockAuthProvider>
-          <OidcCallback />
+          <Routes>
+            <Route path="/auth/oidc/callback" element={<OidcCallback />} />
+            <Route path="/login" element={<div>Login Page</div>} />
+          </Routes>
         </MockAuthProvider>
-      </BrowserRouter>
+      </MemoryRouter>
     );
   };
 
-  it('shows loading state initially', () => {
-    renderOidcCallback();
+  it('shows loading state initially', async () => {
+    // Mock the API call to delay so we can see the loading state
+    (api.get as any).mockImplementation(() => new Promise(() => {})); // Never resolves
+    
+    renderOidcCallback('?code=test-code&state=test-state');
     
     expect(screen.getByText('Completing Authentication')).toBeInTheDocument();
     expect(screen.getByText('Please wait while we process your authentication...')).toBeInTheDocument();
@@ -114,7 +123,7 @@ describe('OidcCallback', () => {
 
     (api.get as any).mockResolvedValueOnce(mockResponse);
 
-    renderOidcCallback();
+    renderOidcCallback('?code=test-code&state=test-state');
 
     await waitFor(() => {
       expect(api.get).toHaveBeenCalledWith('/auth/oidc/callback?code=test-code&state=test-state');
@@ -125,39 +134,30 @@ describe('OidcCallback', () => {
   });
 
   it('handles authentication error from URL params', () => {
-    // Mock useSearchParams to return error
-    mockUseSearchParams.mockReturnValueOnce([
-      new URLSearchParams('error=access_denied&error_description=User+denied+access')
-    ]);
-
-    renderOidcCallback();
+    renderOidcCallback('?error=access_denied&error_description=User+denied+access');
 
     expect(screen.getByText('Authentication Error')).toBeInTheDocument();
     expect(screen.getByText('Authentication failed: access_denied')).toBeInTheDocument();
   });
 
   it('handles missing authorization code', () => {
-    // Mock useSearchParams to return no code
-    mockUseSearchParams.mockReturnValueOnce([
-      new URLSearchParams('')
-    ]);
-
-    renderOidcCallback();
+    renderOidcCallback('');
 
     expect(screen.getByText('Authentication Error')).toBeInTheDocument();
     expect(screen.getByText('No authorization code received')).toBeInTheDocument();
   });
 
   it('handles API error during callback', async () => {
-    (api.get as any).mockRejectedValueOnce({
+    const error = {
       response: {
         data: {
           error: 'Invalid authorization code'
         }
       }
-    });
+    };
+    (api.get as any).mockRejectedValueOnce(error);
 
-    renderOidcCallback();
+    renderOidcCallback('?code=test-code&state=test-state');
 
     await waitFor(() => {
       expect(screen.getByText('Authentication Error')).toBeInTheDocument();
@@ -173,7 +173,7 @@ describe('OidcCallback', () => {
       }
     });
 
-    renderOidcCallback();
+    renderOidcCallback('?code=test-code&state=test-state');
 
     await waitFor(() => {
       expect(screen.getByText('Authentication Error')).toBeInTheDocument();
@@ -184,14 +184,19 @@ describe('OidcCallback', () => {
   it('provides return to login button on error', async () => {
     (api.get as any).mockRejectedValueOnce(new Error('Network error'));
 
-    renderOidcCallback();
+    renderOidcCallback('?code=test-code&state=test-state');
 
     await waitFor(() => {
       expect(screen.getByText('Return to Login')).toBeInTheDocument();
     });
 
     // Test clicking return to login
-    screen.getByText('Return to Login').click();
-    expect(mockNavigate).toHaveBeenCalledWith('/login');
+    const returnButton = screen.getByText('Return to Login');
+    fireEvent.click(returnButton);
+    
+    // Check if navigation to login page occurred by looking for login page content
+    await waitFor(() => {
+      expect(screen.getByText('Login Page')).toBeInTheDocument();
+    });
   });
 });

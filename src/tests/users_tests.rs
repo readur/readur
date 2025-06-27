@@ -325,7 +325,7 @@ mod tests {
             create_user,
             &test_subject,
             "https://provider.example.com",
-            "oidc@example.com",
+            &test_email,
         ).await.unwrap();
 
         assert_eq!(user.username, test_username);
