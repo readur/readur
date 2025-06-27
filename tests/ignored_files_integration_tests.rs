@@ -40,7 +40,7 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
     });
 
     let db = Database::new(&config.database_url).await?;
-    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 1));
+    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 1));
     
     Ok(Arc::new(AppState {
         db,

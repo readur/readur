@@ -60,7 +60,7 @@ mod tests {
                 config,
                 webdav_scheduler: None,
                 source_scheduler: None,
-                queue_service: Arc::new(crate::ocr_queue::OcrQueueService::new(
+                queue_service: Arc::new(crate::ocr::queue::OcrQueueService::new(
                     db.clone(),
                     db.pool.clone(),
                     2
@@ -148,7 +148,7 @@ mod tests {
                 config,
                 webdav_scheduler: None,
                 source_scheduler: None,
-                queue_service: Arc::new(crate::ocr_queue::OcrQueueService::new(
+                queue_service: Arc::new(crate::ocr::queue::OcrQueueService::new(
                     db.clone(),
                     db.pool.clone(),
                     2

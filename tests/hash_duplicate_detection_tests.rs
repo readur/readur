@@ -6,7 +6,7 @@ use tempfile::TempDir;
 
 use readur::{
     db::Database,
-    file_service::FileService,
+    services::file_service::FileService,
     models::{Document, CreateUser, UserRole},
 };
 

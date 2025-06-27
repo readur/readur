@@ -48,7 +48,7 @@ pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
         oidc_redirect_uri: None,
     };
     
-    let queue_service = Arc::new(crate::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
+    let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
     
     let state = Arc::new(AppState { 
         db, 

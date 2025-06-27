@@ -16,9 +16,9 @@ use readur::{
     config::Config,
     db::Database,
     models::Document,
-    file_service::FileService,
-    enhanced_ocr::EnhancedOcrService,
-    ocr_queue::{OcrQueueService, OcrQueueItem},
+    services::file_service::FileService,
+    ocr::enhanced::EnhancedOcrService,
+    ocr::queue::{OcrQueueService, OcrQueueItem},
     db_guardrails_simple::DocumentTransactionManager,
 };
 
