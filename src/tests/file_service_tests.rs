@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::file_service::FileService;
+use crate::services::file_service::FileService;
 #[cfg(test)]
 use crate::models::Document;
 #[cfg(test)]

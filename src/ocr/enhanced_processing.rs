@@ -1,5 +1,5 @@
-use crate::ocr_error::OcrError;
-use crate::ocr_health::OcrHealthChecker;
+use crate::ocr::error::OcrError;
+use crate::ocr::health::OcrHealthChecker;
 use anyhow::{anyhow, Result};
 use image::DynamicImage;
 use std::path::Path;

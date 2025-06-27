@@ -8,9 +8,9 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use crate::{
     AppState,
     models::{CreateWebDAVFile, UpdateWebDAVSyncState},
-    file_service::FileService,
-    document_ingestion::{DocumentIngestionService, IngestionResult},
-    webdav_service::{WebDAVConfig, WebDAVService},
+    services::file_service::FileService,
+    ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
+    services::webdav_service::{WebDAVConfig, WebDAVService},
 };
 
 pub async fn perform_webdav_sync_with_tracking(

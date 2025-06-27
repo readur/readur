@@ -24,7 +24,7 @@ use readur::{
     config::Config,
     db::Database,
     models::{Source, SourceType, SourceStatus, WebDAVSourceConfig},
-    source_scheduler::SourceScheduler,
+    scheduling::source_scheduler::SourceScheduler,
 };
 
 /// Create a test app state
@@ -54,7 +54,7 @@ async fn create_test_app_state() -> Arc<AppState> {
 
     let db = Database::new(&config.database_url).await.unwrap();
     
-    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
+    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
     Arc::new(AppState {
         db,
         config,

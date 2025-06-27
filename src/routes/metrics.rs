@@ -134,7 +134,7 @@ async fn collect_database_metrics(state: &Arc<AppState>) -> Result<DatabaseMetri
 
 async fn collect_ocr_metrics(state: &Arc<AppState>) -> Result<OcrMetrics, StatusCode> {
     // Use existing OCR queue statistics
-    use crate::ocr_queue::OcrQueueService;
+    use crate::ocr::queue::OcrQueueService;
     
     let queue_service = OcrQueueService::new(
         state.db.clone(),

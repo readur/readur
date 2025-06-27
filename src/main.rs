@@ -119,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
     
     // Initialize upload directory structure
     info!("Initializing upload directory structure...");
-    let file_service = readur::file_service::FileService::new(config.upload_path.clone());
+    let file_service = readur::services::file_service::FileService::new(config.upload_path.clone());
     if let Err(e) = file_service.initialize_directory_structure().await {
         error!("Failed to initialize directory structure: {}", e);
         return Err(e.into());
@@ -284,7 +284,7 @@ async fn main() -> anyhow::Result<()> {
     
     // Create shared OCR queue service for both web and background operations
     let concurrent_jobs = 15; // Limit concurrent OCR jobs to prevent DB pool exhaustion
-    let shared_queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(
+    let shared_queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
         background_db.clone(), 
         background_db.get_pool().clone(), 
         concurrent_jobs
@@ -333,7 +333,7 @@ async fn main() -> anyhow::Result<()> {
     let watcher_config = config.clone();
     let watcher_db = background_state.db.clone();
     tokio::spawn(async move {
-        if let Err(e) = readur::watcher::start_folder_watcher(watcher_config, watcher_db).await {
+        if let Err(e) = readur::scheduling::watcher::start_folder_watcher(watcher_config, watcher_db).await {
             error!("Folder watcher error: {}", e);
         }
     });
@@ -390,11 +390,11 @@ async fn main() -> anyhow::Result<()> {
     println!("\n📅 SCHEDULER INITIALIZATION:");
     println!("{}", "=".repeat(50));
     
-    let source_scheduler = Arc::new(readur::source_scheduler::SourceScheduler::new(background_state.clone()));
+    let source_scheduler = Arc::new(readur::scheduling::source_scheduler::SourceScheduler::new(background_state.clone()));
     println!("✅ Universal source scheduler created (handles WebDAV, Local, S3)");
     
     // Keep WebDAV scheduler for backward compatibility with existing WebDAV endpoints
-    let webdav_scheduler = Arc::new(readur::webdav_scheduler::WebDAVScheduler::new(background_state.clone()));
+    let webdav_scheduler = Arc::new(readur::scheduling::webdav_scheduler::WebDAVScheduler::new(background_state.clone()));
     println!("✅ Legacy WebDAV scheduler created (backward compatibility)");
     
     // Update the web state to include scheduler references

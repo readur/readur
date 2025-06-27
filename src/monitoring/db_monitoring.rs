@@ -5,7 +5,7 @@
  * and automatic alerting for potential issues.
  */
 
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use serde::{Deserialize, Serialize};
 use tokio::time::{Duration, interval};
 use tracing::{error, warn, info, debug};
@@ -166,7 +166,7 @@ impl DatabaseMonitor {
     }
 
     async fn check_ocr_processing_health(&self) -> Result<OcrProcessingHealth> {
-        let stats = sqlx::query!(
+        let stats = sqlx::query(
             r#"
             SELECT 
                 COUNT(*) FILTER (WHERE ocr_status = 'pending') as pending,
@@ -182,13 +182,13 @@ impl DatabaseMonitor {
         .fetch_one(&self.pool)
         .await?;
 
-        let pending = stats.pending.unwrap_or(0) as i32;
-        let processing = stats.processing.unwrap_or(0) as i32;
-        let stuck = stats.stuck.unwrap_or(0) as i32;
-        let failed_recent = stats.failed_recent.unwrap_or(0) as i32;
-        let avg_confidence = stats.avg_confidence;
-        let avg_time = stats.avg_time;
-        let throughput = stats.completed_last_minute.unwrap_or(0) as f64;
+        let pending = stats.get::<Option<i64>, _>("pending").unwrap_or(0) as i32;
+        let processing = stats.get::<Option<i64>, _>("processing").unwrap_or(0) as i32;
+        let stuck = stats.get::<Option<i64>, _>("stuck").unwrap_or(0) as i32;
+        let failed_recent = stats.get::<Option<i64>, _>("failed_recent").unwrap_or(0) as i32;
+        let avg_confidence = stats.get::<Option<f64>, _>("avg_confidence");
+        let avg_time = stats.get::<Option<f64>, _>("avg_time");
+        let throughput = stats.get::<Option<i64>, _>("completed_last_minute").unwrap_or(0) as f64;
 
         let status = if stuck > 0 || failed_recent > 10 {
             HealthStatus::Critical
@@ -211,7 +211,7 @@ impl DatabaseMonitor {
     }
 
     async fn check_queue_health(&self) -> Result<QueueHealth> {
-        let queue_stats = sqlx::query!(
+        let queue_stats = sqlx::query(
             r#"
             SELECT 
                 COUNT(*) as total_items,
@@ -224,9 +224,9 @@ impl DatabaseMonitor {
         .fetch_one(&self.pool)
         .await?;
 
-        let queue_size = queue_stats.total_items.unwrap_or(0) as i32;
-        let oldest_pending = queue_stats.oldest_pending_minutes.map(|m| m as i32);
-        let worker_count = queue_stats.active_workers.unwrap_or(0) as i32;
+        let queue_size = queue_stats.get::<Option<i64>, _>("total_items").unwrap_or(0) as i32;
+        let oldest_pending = queue_stats.get::<Option<f64>, _>("oldest_pending_minutes").map(|m| m as i32);
+        let worker_count = queue_stats.get::<Option<i64>, _>("active_workers").unwrap_or(0) as i32;
 
         // Calculate queue growth rate (simplified)
         let growth_rate = 0.0; // Would need historical data for accurate calculation
@@ -252,14 +252,14 @@ impl DatabaseMonitor {
         let start = std::time::Instant::now();
         
         // Test pool responsiveness
-        sqlx::query!("SELECT 1")
+        sqlx::query("SELECT 1")
             .fetch_one(&self.pool)
             .await?;
         
         let response_time = start.elapsed().as_millis() as u64;
         
-        let total_connections = self.pool.size();
-        let idle_connections = self.pool.num_idle();
+        let total_connections = self.pool.size() as u32;
+        let idle_connections = self.pool.num_idle() as u32;
         let active_connections = total_connections - idle_connections;
         let utilization = if total_connections > 0 {
             (active_connections as f64 / total_connections as f64 * 100.0) as u8
@@ -286,7 +286,7 @@ impl DatabaseMonitor {
     }
 
     async fn check_data_consistency(&self) -> Result<ConsistencyHealth> {
-        let consistency_check = sqlx::query!(
+        let consistency_check = sqlx::query(
             r#"
             SELECT 
                 -- Orphaned queue items
@@ -306,9 +306,9 @@ impl DatabaseMonitor {
         .fetch_one(&self.pool)
         .await?;
 
-        let orphaned = consistency_check.orphaned_queue.unwrap_or(0) as i32;
-        let missing_files = consistency_check.missing_files.unwrap_or(0) as i32;
-        let inconsistent = consistency_check.inconsistent_states.unwrap_or(0) as i32;
+        let orphaned = consistency_check.get::<Option<i64>, _>("orphaned_queue").unwrap_or(0) as i32;
+        let missing_files = consistency_check.get::<Option<i32>, _>("missing_files").unwrap_or(0) as i32;
+        let inconsistent = consistency_check.get::<Option<i64>, _>("inconsistent_states").unwrap_or(0) as i32;
 
         let total_issues = orphaned + missing_files + inconsistent;
         let integrity_score = if total_issues == 0 { 100.0 } else { 100.0 - (total_issues as f64 * 10.0).min(100.0) };
@@ -430,18 +430,18 @@ impl DatabaseMonitor {
     }
 
     async fn reset_stuck_jobs(&self) -> Result<i32> {
-        let result = sqlx::query!(
-            "SELECT reset_stuck_ocr_jobs($1) as reset_count",
-            self.config.stuck_job_threshold_minutes
+        let result = sqlx::query(
+            "SELECT reset_stuck_ocr_jobs($1) as reset_count"
         )
+        .bind(self.config.stuck_job_threshold_minutes)
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(result.reset_count.unwrap_or(0))
+        Ok(result.get::<Option<i32>, _>("reset_count").unwrap_or(0))
     }
 
     async fn cleanup_orphaned_items(&self) -> Result<i32> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             DELETE FROM ocr_queue
             WHERE document_id NOT IN (SELECT id FROM documents)
@@ -464,7 +464,7 @@ impl DatabaseMonitor {
         let cleanup_count = self.cleanup_orphaned_items().await?;
         
         // Refresh OCR stats
-        sqlx::query!("SELECT refresh_ocr_stats()")
+        sqlx::query("SELECT refresh_ocr_stats()")
             .execute(&self.pool)
             .await?;
 

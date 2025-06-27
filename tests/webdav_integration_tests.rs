@@ -104,7 +104,7 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
     let db_url = database_url;
 
     let db = Database::new(&db_url).await.expect("Failed to connect to test database");
-    let queue_service = Arc::new(readur::ocr_queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
+    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
     let state = Arc::new(AppState { 
         db, 
         config,

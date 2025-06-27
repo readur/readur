@@ -11,8 +11,8 @@ use uuid::Uuid;
 use crate::{
     AppState,
     models::{SourceType, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
-    source_sync::SourceSyncService,
 };
+use super::source_sync::SourceSyncService;
 
 pub struct SourceScheduler {
     state: Arc<AppState>,

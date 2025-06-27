@@ -126,7 +126,7 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
     });
     let db = Database::new(&config.database_url).await?;
     let queue_service = std::sync::Arc::new(
-        readur::ocr_queue::OcrQueueService::new(db.clone(), db.get_pool().clone(), 1)
+        readur::ocr::queue::OcrQueueService::new(db.clone(), db.get_pool().clone(), 1)
     );
     
     Ok(Arc::new(AppState {

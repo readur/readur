@@ -14,8 +14,8 @@ use uuid::Uuid;
 
 use readur::{
     db::Database,
-    ocr_queue::OcrQueueService,
-    enhanced_ocr::EnhancedOcrService,
+    ocr::queue::OcrQueueService,
+    ocr::enhanced::EnhancedOcrService,
 };
 
 // Use the same database URL as the running server

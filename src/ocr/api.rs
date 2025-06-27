@@ -1,5 +1,5 @@
-use crate::ocr_enhanced::EnhancedOcrService;
-use crate::ocr_error::OcrError;
+use crate::ocr::enhanced_processing::EnhancedOcrService;
+use crate::ocr::error::OcrError;
 use crate::AppState;
 use axum::{
     extract::State,
@@ -38,7 +38,7 @@ pub async fn health_check(
     let service = EnhancedOcrService::new();
     let diagnostics = service.get_diagnostics().await;
     
-    let health_checker = crate::ocr_health::OcrHealthChecker::new();
+    let health_checker = crate::ocr::health::OcrHealthChecker::new();
     
     match health_checker.perform_full_health_check() {
         Ok(diag) => {

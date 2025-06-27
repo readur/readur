@@ -19,7 +19,7 @@ use serde_json::json;
 
 use readur::{
     models::{LocalFolderSourceConfig, SourceType},
-    local_folder_service::LocalFolderService,
+    services::local_folder_service::LocalFolderService,
 };
 
 /// Create a test local folder configuration

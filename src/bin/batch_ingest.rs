@@ -4,11 +4,11 @@ use std::path::Path;
 use uuid::Uuid;
 
 use readur::{
-    batch_ingest::BatchIngester,
+    ingestion::batch_ingest::BatchIngester,
     config::Config,
     db::Database,
-    file_service::FileService,
-    ocr_queue::OcrQueueService,
+    services::file_service::FileService,
+    ocr::queue::OcrQueueService,
 };
 
 #[tokio::main]
