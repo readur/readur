@@ -1584,6 +1584,7 @@ impl Database {
         };
 
         Ok(documents)
+    }
 
     pub async fn count_documents_for_source(&self, source_id: Uuid) -> Result<(i64, i64)> {
         let row = sqlx::query(
