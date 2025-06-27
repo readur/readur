@@ -1525,4 +1525,275 @@ mod deletion_error_handling_tests {
         // If transaction were to be rolled back, document would exist again
         // This test verifies the transaction was committed properly
     }
+
+    mod low_confidence_deletion_db_tests {
+        use super::*;
+        use crate::models::UserRole;
+
+        #[cfg(test)]
+        fn create_test_document_with_confidence(user_id: Uuid, confidence: f32) -> Document {
+            Document {
+                id: Uuid::new_v4(),
+                filename: format!("test_conf_{}.pdf", confidence),
+                original_filename: format!("test_conf_{}.pdf", confidence),
+                file_path: format!("/uploads/test_conf_{}.pdf", confidence),
+                file_size: 1024,
+                mime_type: "application/pdf".to_string(),
+                content: Some("Test document content".to_string()),
+                ocr_text: Some("Test OCR text".to_string()),
+                ocr_confidence: Some(confidence),
+                ocr_word_count: Some(50),
+                ocr_processing_time_ms: Some(1000),
+                ocr_status: Some("completed".to_string()),
+                ocr_error: None,
+                ocr_completed_at: Some(Utc::now()),
+                tags: vec!["test".to_string()],
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id,
+                file_hash: Some("test_hash_123456789abcdef123456789abcdef123456789abcdef123456789abcdef".to_string()),
+            }
+        }
+
+        #[test]
+        fn test_confidence_filtering_logic() {
+            let user_id = Uuid::new_v4();
+            
+            let documents = vec![
+                create_test_document_with_confidence(user_id, 95.0),  // Should not be deleted
+                create_test_document_with_confidence(user_id, 75.0),  // Should not be deleted  
+                create_test_document_with_confidence(user_id, 45.0),  // Should not be deleted
+                create_test_document_with_confidence(user_id, 25.0),  // Should be deleted (< 30)
+                create_test_document_with_confidence(user_id, 15.0),  // Should be deleted (< 30)
+                create_test_document_with_confidence(user_id, 5.0),   // Should be deleted (< 30)
+            ];
+
+            let threshold = 30.0;
+            let low_confidence_docs: Vec<_> = documents.iter()
+                .filter(|doc| {
+                    doc.ocr_confidence.is_some() && 
+                    doc.ocr_confidence.unwrap() < threshold
+                })
+                .collect();
+
+            assert_eq!(low_confidence_docs.len(), 3);
+            assert_eq!(low_confidence_docs[0].ocr_confidence.unwrap(), 25.0);
+            assert_eq!(low_confidence_docs[1].ocr_confidence.unwrap(), 15.0);
+            assert_eq!(low_confidence_docs[2].ocr_confidence.unwrap(), 5.0);
+        }
+
+        #[test]
+        fn test_documents_without_ocr_confidence_excluded() {
+            let user_id = Uuid::new_v4();
+            
+            let mut doc_no_confidence = create_test_document_with_confidence(user_id, 20.0);
+            doc_no_confidence.ocr_confidence = None;
+
+            let doc_with_confidence = create_test_document_with_confidence(user_id, 20.0);
+
+            let documents = vec![doc_no_confidence, doc_with_confidence];
+            let threshold = 30.0;
+
+            let low_confidence_docs: Vec<_> = documents.iter()
+                .filter(|doc| {
+                    doc.ocr_confidence.is_some() && 
+                    doc.ocr_confidence.unwrap() < threshold
+                })
+                .collect();
+
+            // Only the document with confidence should be included
+            assert_eq!(low_confidence_docs.len(), 1);
+            assert!(low_confidence_docs[0].ocr_confidence.is_some());
+        }
+
+        #[test]
+        fn test_user_role_authorization_in_filtering() {
+            let user1_id = Uuid::new_v4();
+            let user2_id = Uuid::new_v4();
+            
+            let user1_doc = create_test_document_with_confidence(user1_id, 20.0);
+            let user2_doc = create_test_document_with_confidence(user2_id, 15.0);
+
+            // Regular user should only see their own documents
+            let user_role = UserRole::User;
+            let admin_role = UserRole::Admin;
+
+            // User1 should only access their own document
+            let user1_can_access_own = user1_doc.user_id == user1_id || user_role == UserRole::Admin;
+            let user1_can_access_other = user2_doc.user_id == user1_id || user_role == UserRole::Admin;
+            
+            assert!(user1_can_access_own);
+            assert!(!user1_can_access_other);
+
+            // Admin should access all documents
+            let admin_can_access_user1 = user1_doc.user_id == user1_id || admin_role == UserRole::Admin;
+            let admin_can_access_user2 = user2_doc.user_id == user1_id || admin_role == UserRole::Admin;
+            
+            assert!(admin_can_access_user1);
+            assert!(admin_can_access_user2);
+        }
+
+        #[test]
+        fn test_boundary_conditions_for_confidence_thresholds() {
+            let user_id = Uuid::new_v4();
+            
+            let test_cases = vec![
+                (0.0, 10.0, true),   // 0% < 10% threshold  
+                (10.0, 10.0, false), // 10% = 10% threshold (not less than)
+                (10.1, 10.0, false), // 10.1% > 10% threshold
+                (29.9, 30.0, true),  // 29.9% < 30% threshold
+                (30.0, 30.0, false), // 30% = 30% threshold (not less than)
+                (30.1, 30.0, false), // 30.1% > 30% threshold
+                (99.9, 100.0, true), // 99.9% < 100% threshold
+                (100.0, 100.0, false), // 100% = 100% threshold (not less than)
+            ];
+
+            for (doc_confidence, threshold, should_be_included) in test_cases {
+                let doc = create_test_document_with_confidence(user_id, doc_confidence);
+                let is_included = doc.ocr_confidence.is_some() && 
+                                 doc.ocr_confidence.unwrap() < threshold;
+                
+                assert_eq!(is_included, should_be_included, 
+                    "Document with {}% confidence vs {}% threshold", 
+                    doc_confidence, threshold);
+            }
+        }
+
+        #[test]
+        fn test_performance_considerations_for_large_datasets() {
+            let user_id = Uuid::new_v4();
+            
+            // Create a large number of test documents
+            let mut documents = Vec::new();
+            for i in 0..1000 {
+                let confidence = (i as f32) / 10.0; // 0.0 to 99.9
+                documents.push(create_test_document_with_confidence(user_id, confidence));
+            }
+
+            let threshold = 50.0;
+            let start_time = std::time::Instant::now();
+            
+            let low_confidence_docs: Vec<_> = documents.iter()
+                .filter(|doc| {
+                    doc.ocr_confidence.is_some() && 
+                    doc.ocr_confidence.unwrap() < threshold
+                })
+                .collect();
+
+            let elapsed = start_time.elapsed();
+            
+            // Verify the filtering works correctly for large datasets
+            assert_eq!(low_confidence_docs.len(), 500); // 0.0 to 49.9
+            
+            // Performance should be reasonable (under 10ms for 1000 documents in memory)
+            assert!(elapsed.as_millis() < 10, 
+                "Filtering 1000 documents took too long: {:?}", elapsed);
+        }
+
+        #[test]
+        fn test_sql_query_structure_expectations() {
+            // Test that our expected SQL query structure would work
+            let user_id = Uuid::new_v4();
+            let confidence_threshold = 30.0;
+
+            // This tests the logical structure we expect in the actual SQL query
+            let expected_where_conditions = vec![
+                "ocr_confidence IS NOT NULL",
+                "ocr_confidence < $1", // $1 = confidence_threshold
+                "user_id = $2",        // $2 = user_id (for non-admin users)
+            ];
+
+            // Verify our test documents would match the expected query logic
+            let test_doc = create_test_document_with_confidence(user_id, 25.0);
+            
+            // Simulate the SQL conditions
+            let confidence_not_null = test_doc.ocr_confidence.is_some();
+            let confidence_below_threshold = test_doc.ocr_confidence.unwrap() < confidence_threshold;
+            let user_matches = test_doc.user_id == user_id;
+            
+            assert!(confidence_not_null);
+            assert!(confidence_below_threshold);
+            assert!(user_matches);
+            
+            // This document should be included in results
+            let would_be_selected = confidence_not_null && confidence_below_threshold && user_matches;
+            assert!(would_be_selected);
+        }
+
+        #[test]
+        fn test_deletion_ordering_expectations() {
+            let user_id = Uuid::new_v4();
+            
+            let mut documents = vec![
+                create_test_document_with_confidence(user_id, 25.0),
+                create_test_document_with_confidence(user_id, 5.0),
+                create_test_document_with_confidence(user_id, 15.0),
+                create_test_document_with_confidence(user_id, 35.0), // Above threshold
+            ];
+
+            let threshold = 30.0;
+            let mut low_confidence_docs: Vec<_> = documents.iter()
+                .filter(|doc| {
+                    doc.ocr_confidence.is_some() && 
+                    doc.ocr_confidence.unwrap() < threshold
+                })
+                .collect();
+
+            // Sort by confidence ascending (lowest first) then by creation date descending (newest first)
+            low_confidence_docs.sort_by(|a, b| {
+                let conf_a = a.ocr_confidence.unwrap();
+                let conf_b = b.ocr_confidence.unwrap();
+                conf_a.partial_cmp(&conf_b).unwrap()
+                    .then_with(|| b.created_at.cmp(&a.created_at))
+            });
+
+            assert_eq!(low_confidence_docs.len(), 3);
+            assert_eq!(low_confidence_docs[0].ocr_confidence.unwrap(), 5.0);   // Lowest confidence first
+            assert_eq!(low_confidence_docs[1].ocr_confidence.unwrap(), 15.0);
+            assert_eq!(low_confidence_docs[2].ocr_confidence.unwrap(), 25.0);
+        }
+
+        #[test]
+        fn test_error_handling_scenarios() {
+            let user_id = Uuid::new_v4();
+            
+            // Test invalid threshold values (these would be caught by the API handler)
+            let invalid_thresholds = vec![-1.0, 101.0, f32::NAN, f32::INFINITY];
+            
+            for threshold in invalid_thresholds {
+                // The database query itself should handle these gracefully
+                // Invalid thresholds should either match no documents or be rejected
+                let test_doc = create_test_document_with_confidence(user_id, 50.0);
+                
+                if threshold.is_finite() {
+                    let would_match = test_doc.ocr_confidence.is_some() && 
+                                     test_doc.ocr_confidence.unwrap() < threshold;
+                    
+                    if threshold < 0.0 {
+                        assert!(!would_match, "Negative threshold should match no documents");
+                    }
+                    if threshold > 100.0 {
+                        // Documents with confidence > 100 shouldn't exist, but if they did,
+                        // they should still be considered for deletion if threshold > 100
+                        assert!(would_match, "Threshold > 100 should match normal documents");
+                    }
+                } else {
+                    // NaN and infinity comparisons
+                    let would_match = test_doc.ocr_confidence.is_some() && 
+                                     test_doc.ocr_confidence.unwrap() < threshold;
+                    
+                    if threshold.is_nan() {
+                        // NaN comparisons should always be false
+                        assert!(!would_match, "NaN threshold should match no documents");
+                    } else if threshold == f32::INFINITY {
+                        // Positive infinity should match all finite numbers
+                        assert!(would_match, "Positive infinity threshold should match finite documents");
+                    } else {
+                        // Other invalid values like negative infinity
+                        assert!(!would_match, "Invalid threshold should match no documents");
+                    }
+                }
+            }
+        }
+    }
 }

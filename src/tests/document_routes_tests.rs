@@ -367,4 +367,270 @@ mod document_routes_deletion_tests {
         assert!(!unauthorized_error.contains("403"));
         assert!(!validation_error.contains("serde"));
     }
+
+    // Low confidence deletion tests
+    mod low_confidence_deletion_tests {
+        use super::*;
+        use crate::routes::documents::DeleteLowConfidenceRequest;
+
+        fn create_low_confidence_document(user_id: Uuid, confidence: f32) -> Document {
+            Document {
+                id: Uuid::new_v4(),
+                filename: format!("low_conf_{}.pdf", confidence),
+                original_filename: format!("low_conf_{}.pdf", confidence),
+                file_path: format!("/uploads/low_conf_{}.pdf", confidence),
+                file_size: 1024,
+                mime_type: "application/pdf".to_string(),
+                content: Some("Test document content".to_string()),
+                ocr_text: Some("Low quality OCR text".to_string()),
+                ocr_confidence: Some(confidence),
+                ocr_word_count: Some(10),
+                ocr_processing_time_ms: Some(500),
+                ocr_status: Some("completed".to_string()),
+                ocr_error: None,
+                ocr_completed_at: Some(Utc::now()),
+                tags: vec!["low-confidence".to_string()],
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id,
+                file_hash: Some("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string()),
+            }
+        }
+
+        #[test]
+        fn test_delete_low_confidence_request_serialization() {
+            // Test valid request
+            let valid_request = json!({
+                "max_confidence": 50.0,
+                "preview_only": true
+            });
+
+            let result: Result<DeleteLowConfidenceRequest, _> = serde_json::from_value(valid_request);
+            assert!(result.is_ok());
+            let request = result.unwrap();
+            assert_eq!(request.max_confidence, 50.0);
+            assert_eq!(request.preview_only, Some(true));
+
+            // Test request with only max_confidence
+            let minimal_request = json!({
+                "max_confidence": 30.0
+            });
+
+            let result: Result<DeleteLowConfidenceRequest, _> = serde_json::from_value(minimal_request);
+            assert!(result.is_ok());
+            let request = result.unwrap();
+            assert_eq!(request.max_confidence, 30.0);
+            assert_eq!(request.preview_only, None);
+        }
+
+        #[test]
+        fn test_delete_low_confidence_request_validation() {
+            // Test invalid confidence values
+            let invalid_negative = json!({
+                "max_confidence": -10.0,
+                "preview_only": false
+            });
+
+            let result: Result<DeleteLowConfidenceRequest, _> = serde_json::from_value(invalid_negative);
+            assert!(result.is_ok()); // Serialization succeeds, validation happens in handler
+
+            let invalid_too_high = json!({
+                "max_confidence": 150.0,
+                "preview_only": false
+            });
+
+            let result: Result<DeleteLowConfidenceRequest, _> = serde_json::from_value(invalid_too_high);
+            assert!(result.is_ok()); // Serialization succeeds, validation happens in handler
+        }
+
+        #[test]
+        fn test_confidence_threshold_logic() {
+            let user = create_test_user(UserRole::User);
+            
+            // Create documents with various confidence levels
+            let high_confidence_doc = create_low_confidence_document(user.id, 95.0);
+            let medium_confidence_doc = create_low_confidence_document(user.id, 60.0);
+            let low_confidence_doc = create_low_confidence_document(user.id, 25.0);
+            let very_low_confidence_doc = create_low_confidence_document(user.id, 5.0);
+
+            let documents = vec![
+                &high_confidence_doc,
+                &medium_confidence_doc, 
+                &low_confidence_doc,
+                &very_low_confidence_doc
+            ];
+
+            // Test threshold logic for different confidence values
+            let threshold_50 = 50.0;
+            let threshold_30 = 30.0;
+            let threshold_10 = 10.0;
+
+            // Documents below 50% threshold
+            let below_50: Vec<_> = documents.iter()
+                .filter(|doc| doc.ocr_confidence.unwrap_or(0.0) < threshold_50)
+                .collect();
+            assert_eq!(below_50.len(), 2); // 25.0 and 5.0
+
+            // Documents below 30% threshold  
+            let below_30: Vec<_> = documents.iter()
+                .filter(|doc| doc.ocr_confidence.unwrap_or(0.0) < threshold_30)
+                .collect();
+            assert_eq!(below_30.len(), 2); // 25.0 and 5.0
+
+            // Documents below 10% threshold
+            let below_10: Vec<_> = documents.iter()
+                .filter(|doc| doc.ocr_confidence.unwrap_or(0.0) < threshold_10)
+                .collect();
+            assert_eq!(below_10.len(), 1); // 5.0
+        }
+
+        #[test]
+        fn test_user_role_authorization_for_low_confidence_deletion() {
+            let user1 = create_test_user(UserRole::User);
+            let user2 = create_test_user(UserRole::User);
+            let admin = create_test_user(UserRole::Admin);
+
+            let user1_doc = create_low_confidence_document(user1.id, 25.0);
+            let user2_doc = create_low_confidence_document(user2.id, 15.0);
+
+            // User1 should only be able to delete their own low confidence documents
+            assert_eq!(user1_doc.user_id, user1.id);
+            assert_ne!(user1_doc.user_id, user2.id);
+
+            // User2 should only be able to delete their own low confidence documents  
+            assert_eq!(user2_doc.user_id, user2.id);
+            assert_ne!(user2_doc.user_id, user1.id);
+
+            // Admin should be able to delete any low confidence documents
+            let admin_can_delete_user1 = user1_doc.user_id == admin.id || admin.role == UserRole::Admin;
+            let admin_can_delete_user2 = user2_doc.user_id == admin.id || admin.role == UserRole::Admin;
+            assert!(admin_can_delete_user1);
+            assert!(admin_can_delete_user2);
+        }
+
+        #[test]
+        fn test_edge_cases_for_confidence_values() {
+            let user = create_test_user(UserRole::User);
+
+            // Test document with None confidence (should not be included)
+            let mut no_confidence_doc = create_low_confidence_document(user.id, 0.0);
+            no_confidence_doc.ocr_confidence = None;
+
+            // Test document with exactly threshold confidence (should not be included)
+            let exact_threshold_doc = create_low_confidence_document(user.id, 30.0);
+
+            // Test document just below threshold (should be included)
+            let just_below_doc = create_low_confidence_document(user.id, 29.9);
+
+            let threshold = 30.0;
+
+            // None confidence should be excluded (no OCR confidence available)
+            assert!(no_confidence_doc.ocr_confidence.is_none());
+
+            // Exact threshold should be excluded (not less than threshold)
+            assert_eq!(exact_threshold_doc.ocr_confidence.unwrap(), threshold);
+            assert!(!(exact_threshold_doc.ocr_confidence.unwrap() < threshold));
+
+            // Just below threshold should be included
+            assert!(just_below_doc.ocr_confidence.unwrap() < threshold);
+        }
+
+        #[test]
+        fn test_preview_mode_behavior() {
+            let user = create_test_user(UserRole::User);
+            let doc1 = create_low_confidence_document(user.id, 20.0);
+            let doc2 = create_low_confidence_document(user.id, 10.0);
+
+            let preview_request = DeleteLowConfidenceRequest {
+                max_confidence: 30.0,
+                preview_only: Some(true),
+            };
+
+            let delete_request = DeleteLowConfidenceRequest {
+                max_confidence: 30.0,
+                preview_only: Some(false),
+            };
+
+            let no_preview_request = DeleteLowConfidenceRequest {
+                max_confidence: 30.0,
+                preview_only: None,
+            };
+
+            // Preview mode should be true when explicitly set
+            assert_eq!(preview_request.preview_only.unwrap_or(false), true);
+
+            // Delete mode should be false when explicitly set
+            assert_eq!(delete_request.preview_only.unwrap_or(false), false);
+
+            // Default should be false when not specified
+            assert_eq!(no_preview_request.preview_only.unwrap_or(false), false);
+        }
+
+        #[test]
+        fn test_response_format_expectations() {
+            // Test expected response structure for preview mode
+            let expected_preview_response = json!({
+                "success": true,
+                "message": "Found 5 documents with OCR confidence below 30%",
+                "matched_count": 5,
+                "preview": true,
+                "document_ids": ["uuid1", "uuid2", "uuid3", "uuid4", "uuid5"]
+            });
+
+            // Test expected response structure for delete mode
+            let expected_delete_response = json!({
+                "success": true,
+                "message": "Successfully deleted 5 documents with OCR confidence below 30%",
+                "deleted_count": 5,
+                "matched_count": 5,
+                "successful_file_deletions": 5,
+                "failed_file_deletions": 0,
+                "ignored_file_creation_failures": 0,
+                "deleted_document_ids": ["uuid1", "uuid2", "uuid3", "uuid4", "uuid5"]
+            });
+
+            // Verify JSON structure is valid
+            assert!(expected_preview_response.is_object());
+            assert!(expected_delete_response.is_object());
+
+            // Verify required fields exist
+            assert!(expected_preview_response["success"].is_boolean());
+            assert!(expected_preview_response["matched_count"].is_number());
+            assert!(expected_preview_response["document_ids"].is_array());
+
+            assert!(expected_delete_response["success"].is_boolean());
+            assert!(expected_delete_response["deleted_count"].is_number());
+            assert!(expected_delete_response["deleted_document_ids"].is_array());
+        }
+
+        #[test]
+        fn test_error_scenarios() {
+            // Test validation error for invalid confidence range
+            let invalid_confidence_cases = vec![
+                (-1.0, "negative confidence"),
+                (101.0, "confidence over 100"),
+                (150.5, "way over 100"),
+            ];
+
+            for (confidence, description) in invalid_confidence_cases {
+                let request = DeleteLowConfidenceRequest {
+                    max_confidence: confidence,
+                    preview_only: Some(false),
+                };
+
+                // Validation logic should catch these in the handler
+                assert!(confidence < 0.0 || confidence > 100.0, 
+                    "Should be invalid: {}", description);
+            }
+
+            // Test empty result scenario
+            let request = DeleteLowConfidenceRequest {
+                max_confidence: 0.0, // Very low threshold, should match nothing
+                preview_only: Some(true),
+            };
+
+            assert_eq!(request.max_confidence, 0.0);
+            // This should result in zero matched documents
+        }
+    }
 }

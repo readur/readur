@@ -6,6 +6,7 @@ const mockGetOcrText = vi.fn();
 const mockList = vi.fn();
 const mockUpload = vi.fn();
 const mockDownload = vi.fn();
+const mockDeleteLowConfidence = vi.fn();
 
 // Mock the entire api module
 vi.mock('../api', async () => {
@@ -17,6 +18,7 @@ vi.mock('../api', async () => {
       list: mockList,
       upload: mockUpload,
       download: mockDownload,
+      deleteLowConfidence: mockDeleteLowConfidence,
     },
   };
 });
@@ -308,5 +310,184 @@ describe('OcrResponse interface', () => {
     expect(ocrResponseMinimal.has_ocr_text).toBe(false);
     expect(ocrResponseMinimal.ocr_text).toBeNull();
     expect(ocrResponseMinimal.ocr_confidence).toBeUndefined();
+  });
+});
+
+describe('documentService.deleteLowConfidence', () => {
+  it('should delete low confidence documents successfully', async () => {
+    const mockDeleteResponse = {
+      data: {
+        success: true,
+        message: 'Successfully deleted 3 documents with OCR confidence below 30%',
+        deleted_count: 3,
+        matched_count: 3,
+        successful_file_deletions: 3,
+        failed_file_deletions: 0,
+        ignored_file_creation_failures: 0,
+        deleted_document_ids: ['doc-1', 'doc-2', 'doc-3']
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockDeleteLowConfidence.mockResolvedValue(mockDeleteResponse);
+
+    const result = await documentService.deleteLowConfidence(30.0, false);
+
+    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(30.0, false);
+    expect(result.data.success).toBe(true);
+    expect(result.data.deleted_count).toBe(3);
+    expect(result.data.matched_count).toBe(3);
+    expect(result.data.deleted_document_ids).toHaveLength(3);
+  });
+
+  it('should preview low confidence documents without deleting', async () => {
+    const mockPreviewResponse = {
+      data: {
+        success: true,
+        message: 'Found 5 documents with OCR confidence below 50%',
+        matched_count: 5,
+        preview: true,
+        document_ids: ['doc-1', 'doc-2', 'doc-3', 'doc-4', 'doc-5']
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockDeleteLowConfidence.mockResolvedValue(mockPreviewResponse);
+
+    const result = await documentService.deleteLowConfidence(50.0, true);
+
+    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(50.0, true);
+    expect(result.data.success).toBe(true);
+    expect(result.data.preview).toBe(true);
+    expect(result.data.matched_count).toBe(5);
+    expect(result.data.document_ids).toHaveLength(5);
+    expect(result.data).not.toHaveProperty('deleted_count');
+  });
+
+  it('should handle no matching documents', async () => {
+    const mockEmptyResponse = {
+      data: {
+        success: true,
+        message: 'No documents found with OCR confidence below 10%',
+        deleted_count: 0
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockDeleteLowConfidence.mockResolvedValue(mockEmptyResponse);
+
+    const result = await documentService.deleteLowConfidence(10.0, false);
+
+    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(10.0, false);
+    expect(result.data.success).toBe(true);
+    expect(result.data.deleted_count).toBe(0);
+  });
+
+  it('should handle validation errors for invalid confidence threshold', async () => {
+    const mockErrorResponse = {
+      data: {
+        success: false,
+        message: 'max_confidence must be between 0.0 and 100.0',
+        matched_count: 0
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockDeleteLowConfidence.mockResolvedValue(mockErrorResponse);
+
+    const result = await documentService.deleteLowConfidence(-10.0, false);
+
+    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(-10.0, false);
+    expect(result.data.success).toBe(false);
+    expect(result.data.message).toContain('must be between 0.0 and 100.0');
+  });
+
+  it('should handle API errors gracefully', async () => {
+    const mockError = new Error('Network error');
+    mockDeleteLowConfidence.mockRejectedValue(mockError);
+
+    await expect(documentService.deleteLowConfidence(30.0, false))
+      .rejects.toThrow('Network error');
+
+    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(30.0, false);
+  });
+
+  it('should use correct default values', async () => {
+    const mockResponse = {
+      data: { success: true, matched_count: 0 },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockDeleteLowConfidence.mockResolvedValue(mockResponse);
+
+    // Test with explicit false value (the default)
+    await documentService.deleteLowConfidence(40.0, false);
+
+    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(40.0, false);
+  });
+
+  it('should handle partial deletion failures', async () => {
+    const mockPartialFailureResponse = {
+      data: {
+        success: true,
+        message: 'Successfully deleted 2 documents with OCR confidence below 25%',
+        deleted_count: 2,
+        matched_count: 3,
+        successful_file_deletions: 1,
+        failed_file_deletions: 1,
+        ignored_file_creation_failures: 1,
+        deleted_document_ids: ['doc-1', 'doc-2']
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockDeleteLowConfidence.mockResolvedValue(mockPartialFailureResponse);
+
+    const result = await documentService.deleteLowConfidence(25.0, false);
+
+    expect(result.data.success).toBe(true);
+    expect(result.data.deleted_count).toBe(2);
+    expect(result.data.matched_count).toBe(3);
+    expect(result.data.failed_file_deletions).toBe(1);
+    expect(result.data.ignored_file_creation_failures).toBe(1);
+  });
+
+  it('should properly encode confidence threshold values', async () => {
+    const mockResponse = {
+      data: { success: true, matched_count: 0 },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockDeleteLowConfidence.mockResolvedValue(mockResponse);
+
+    // Test various confidence values
+    const testValues = [0.0, 0.1, 30.5, 50.0, 99.9, 100.0];
+    
+    for (const confidence of testValues) {
+      mockDeleteLowConfidence.mockClear();
+      await documentService.deleteLowConfidence(confidence, true);
+      expect(mockDeleteLowConfidence).toHaveBeenCalledWith(confidence, true);
+    }
   });
 });

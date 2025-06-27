@@ -241,6 +241,13 @@ export const documentService = {
       data: { document_ids: documentIds }
     })
   },
+
+  deleteLowConfidence: (maxConfidence: number, previewOnly: boolean = false) => {
+    return api.post('/documents/delete-low-confidence', {
+      max_confidence: maxConfidence,
+      preview_only: previewOnly
+    })
+  },
 }
 
 export interface OcrStatusResponse {

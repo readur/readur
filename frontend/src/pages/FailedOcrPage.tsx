@@ -28,6 +28,7 @@ import {
   Snackbar,
   Tabs,
   Tab,
+  TextField,
   useTheme,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
@@ -147,6 +148,12 @@ const FailedOcrPage: React.FC = () => {
     message: '',
     severity: 'success'
   });
+  
+  // Low confidence documents state
+  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(30);
+  const [lowConfidenceLoading, setLowConfidenceLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const fetchFailedDocuments = async () => {
     try {
@@ -297,8 +304,68 @@ const FailedOcrPage: React.FC = () => {
   const refreshCurrentTab = () => {
     if (currentTab === 0) {
       fetchFailedDocuments();
-    } else {
+    } else if (currentTab === 1) {
       fetchDuplicates();
+    } else if (currentTab === 2) {
+      handlePreviewLowConfidence();
+    }
+  };
+
+  // Low confidence document handlers
+  const handlePreviewLowConfidence = async () => {
+    try {
+      setLowConfidenceLoading(true);
+      const response = await documentService.deleteLowConfidence(confidenceThreshold, true);
+      setPreviewData(response.data);
+      setSnackbar({
+        open: true,
+        message: response.data.message,
+        severity: 'info'
+      });
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to preview low confidence documents',
+        severity: 'error'
+      });
+    } finally {
+      setLowConfidenceLoading(false);
+    }
+  };
+
+  const handleDeleteLowConfidence = async () => {
+    if (!previewData || previewData.matched_count === 0) {
+      setSnackbar({
+        open: true,
+        message: 'No documents to delete',
+        severity: 'warning'
+      });
+      return;
+    }
+
+    try {
+      setLowConfidenceLoading(true);
+      const response = await documentService.deleteLowConfidence(confidenceThreshold, false);
+      setSnackbar({
+        open: true,
+        message: response.data.message,
+        severity: 'success'
+      });
+      setPreviewData(null);
+      setConfirmDeleteOpen(false);
+      
+      // Refresh other tabs if they have data affected
+      if (currentTab === 0) {
+        fetchFailedDocuments();
+      }
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to delete low confidence documents',
+        severity: 'error'
+      });
+    } finally {
+      setLowConfidenceLoading(false);
     }
   };
 
@@ -314,7 +381,7 @@ const FailedOcrPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
-          Failed OCR & Duplicates
+          Document Management
         </Typography>
         <Button
           variant="outlined"
@@ -327,7 +394,7 @@ const FailedOcrPage: React.FC = () => {
       </Box>
 
       <Paper sx={{ mb: 3 }}>
-        <Tabs value={currentTab} onChange={handleTabChange} aria-label="failed ocr and duplicates tabs">
+        <Tabs value={currentTab} onChange={handleTabChange} aria-label="document management tabs">
           <Tab
             icon={<ErrorIcon />}
             label={`Failed OCR${statistics ? ` (${statistics.total_failed})` : ''}`}
@@ -336,6 +403,11 @@ const FailedOcrPage: React.FC = () => {
           <Tab
             icon={<FileCopyIcon />}
             label={`Duplicates${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
+            iconPosition="start"
+          />
+          <Tab
+            icon={<FindInPageIcon />}
+            label={`Low Confidence${previewData ? ` (${previewData.matched_count})` : ''}`}
             iconPosition="start"
           />
         </Tabs>
@@ -829,6 +901,128 @@ const FailedOcrPage: React.FC = () => {
           )}
         </>
       )}
+
+      {/* Low Confidence Documents Tab Content */}
+      {currentTab === 2 && (
+        <>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <AlertTitle>Low Confidence Document Deletion</AlertTitle>
+            <Typography>
+              This tool allows you to delete documents with OCR confidence below a specified threshold. 
+              Use the preview feature first to see what documents would be affected before deleting.
+            </Typography>
+          </Alert>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Grid container spacing={3} alignItems="center">
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Maximum Confidence Threshold (%)"
+                    type="number"
+                    value={confidenceThreshold}
+                    onChange={(e) => setConfidenceThreshold(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    fullWidth
+                    inputProps={{ min: 0, max: 100, step: 1 }}
+                    helperText="Documents with confidence below this value will be deleted"
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Button
+                    variant="outlined"
+                    onClick={handlePreviewLowConfidence}
+                    disabled={lowConfidenceLoading}
+                    startIcon={lowConfidenceLoading ? <CircularProgress size={20} /> : <FindInPageIcon />}
+                    fullWidth
+                  >
+                    Preview Documents
+                  </Button>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Button
+                    variant="contained"
+                    color="warning"
+                    onClick={() => setConfirmDeleteOpen(true)}
+                    disabled={!previewData || previewData.matched_count === 0 || lowConfidenceLoading}
+                    startIcon={<DeleteIcon />}
+                    fullWidth
+                  >
+                    Delete Low Confidence Documents
+                  </Button>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+
+          {/* Preview Results */}
+          {previewData && (
+            <Card sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Preview Results
+                </Typography>
+                <Typography color={previewData.matched_count > 0 ? 'warning.main' : 'success.main'}>
+                  {previewData.message}
+                </Typography>
+                {previewData.matched_count > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Document IDs that would be deleted:
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                      {previewData.document_ids.slice(0, 10).join(', ')}
+                      {previewData.document_ids.length > 10 && ` ... and ${previewData.document_ids.length - 10} more`}
+                    </Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Loading State */}
+          {lowConfidenceLoading && !previewData && (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+              <CircularProgress />
+              <Typography sx={{ ml: 2 }}>Processing request...</Typography>
+            </Box>
+          )}
+        </>
+      )}
+
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle color="warning.main">
+          <DeleteIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Confirm Low Confidence Document Deletion
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete {previewData?.matched_count || 0} documents with OCR confidence below {confidenceThreshold}%?
+          </Typography>
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            This action cannot be undone. The documents and their files will be permanently deleted.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDeleteOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteLowConfidence}
+            color="warning"
+            variant="contained"
+            disabled={lowConfidenceLoading}
+            startIcon={lowConfidenceLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
+          >
+            {lowConfidenceLoading ? 'Deleting...' : 'Delete Documents'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Document Details Dialog */}
       <Dialog
