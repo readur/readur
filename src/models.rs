@@ -862,6 +862,12 @@ pub struct SourceResponse {
     pub total_size_bytes: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Total number of documents/files currently stored from this source
+    #[serde(default)]
+    pub total_documents: i64,
+    /// Total number of documents that have been OCR'd from this source
+    #[serde(default)]
+    pub total_documents_ocr: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -903,6 +909,9 @@ impl From<Source> for SourceResponse {
             total_size_bytes: source.total_size_bytes,
             created_at: source.created_at,
             updated_at: source.updated_at,
+            // These will be populated separately when needed
+            total_documents: 0,
+            total_documents_ocr: 0,
         }
     }
 }

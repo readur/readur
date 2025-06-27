@@ -50,7 +50,33 @@ async fn list_sources(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let responses: Vec<SourceResponse> = sources.into_iter().map(|s| s.into()).collect();
+    // Get source IDs for batch counting
+    let source_ids: Vec<Uuid> = sources.iter().map(|s| s.id).collect();
+    
+    // Get document counts for all sources in one query
+    let counts = state
+        .db
+        .count_documents_for_sources(&source_ids)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    // Create a map for quick lookup
+    let count_map: std::collections::HashMap<Uuid, (i64, i64)> = counts
+        .into_iter()
+        .map(|(id, total, ocr)| (id, (total, ocr)))
+        .collect();
+
+    let responses: Vec<SourceResponse> = sources
+        .into_iter()
+        .map(|s| {
+            let (total_docs, total_ocr) = count_map.get(&s.id).copied().unwrap_or((0, 0));
+            let mut response: SourceResponse = s.into();
+            response.total_documents = total_docs;
+            response.total_documents_ocr = total_ocr;
+            response
+        })
+        .collect();
+    
     Ok(Json(responses))
 }
 
@@ -90,7 +116,12 @@ async fn create_source(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    Ok(Json(source.into()))
+    let mut response: SourceResponse = source.into();
+    // New sources have no documents yet
+    response.total_documents = 0;
+    response.total_documents_ocr = 0;
+
+    Ok(Json(response))
 }
 
 #[utoipa::path(
@@ -129,6 +160,13 @@ async fn get_source(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Get document counts
+    let (total_documents, total_documents_ocr) = state
+        .db
+        .count_documents_for_source(source_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     // Calculate sync progress
     let sync_progress = if source.total_files_pending > 0 {
         Some(
@@ -140,8 +178,12 @@ async fn get_source(
         None
     };
 
+    let mut source_response: SourceResponse = source.into();
+    source_response.total_documents = total_documents;
+    source_response.total_documents_ocr = total_documents_ocr;
+
     let response = SourceWithStats {
-        source: source.into(),
+        source: source_response,
         recent_documents: recent_documents.into_iter().map(|d| d.into()).collect(),
         sync_progress,
     };
@@ -202,8 +244,19 @@ async fn update_source(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    info!("Successfully updated source {}: {}", source_id, source.name);
-    Ok(Json(source.into()))
+    // Get document counts
+    let (total_documents, total_documents_ocr) = state
+        .db
+        .count_documents_for_source(source_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut response: SourceResponse = source.into();
+    response.total_documents = total_documents;
+    response.total_documents_ocr = total_documents_ocr;
+
+    info!("Successfully updated source {}: {}", source_id, response.name);
+    Ok(Json(response))
 }
 
 #[utoipa::path(
