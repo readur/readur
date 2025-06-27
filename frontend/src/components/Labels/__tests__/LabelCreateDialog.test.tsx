@@ -377,7 +377,10 @@ describe('LabelCreateDialog Component', () => {
       const createButton = screen.getByText('Create');
       await user.click(createButton);
       
-      expect(screen.getByText('Saving...')).toBeInTheDocument();
+      // Wait for loading state to appear
+      await waitFor(() => {
+        expect(screen.getByText('Saving...')).toBeInTheDocument();
+      });
       expect(createButton).toBeDisabled();
       
       // Wait for submission to complete
@@ -396,7 +399,10 @@ describe('LabelCreateDialog Component', () => {
       const createButton = screen.getByText('Create');
       await user.click(createButton);
       
-      expect(nameInput).toBeDisabled();
+      // Wait for loading state to take effect
+      await waitFor(() => {
+        expect(nameInput).toBeDisabled();
+      });
       expect(screen.getByLabelText(/description/i)).toBeDisabled();
       
       // Wait for submission to complete
