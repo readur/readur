@@ -23,6 +23,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/oidc/callback", get(oidc_callback))
 }
 
+
 #[utoipa::path(
     post,
     path = "/api/auth/register",
@@ -170,6 +171,9 @@ async fn oidc_callback(
     State(state): State<Arc<AppState>>,
     Query(params): Query<OidcCallbackQuery>,
 ) -> Result<Json<LoginResponse>, StatusCode> {
+    tracing::info!("OIDC callback called with params: code={:?}, state={:?}, error={:?}", 
+        params.code, params.state, params.error);
+    
     if let Some(error) = params.error {
         tracing::error!("OIDC callback error: {}", error);
         return Err(StatusCode::UNAUTHORIZED);
@@ -201,15 +205,23 @@ async fn oidc_callback(
         })?;
 
     // Find or create user in database
-    let user = match state.db.get_user_by_oidc_subject(&user_info.sub, &state.config.oidc_issuer_url.as_ref().unwrap()).await {
-        Ok(Some(existing_user)) => existing_user,
+    let issuer_url = state.config.oidc_issuer_url.as_ref().unwrap();
+    tracing::debug!("Looking up user by OIDC subject: {} and issuer: {}", user_info.sub, issuer_url);
+    let user = match state.db.get_user_by_oidc_subject(&user_info.sub, issuer_url).await {
+        Ok(Some(existing_user)) => {
+            tracing::debug!("Found existing OIDC user: {}", existing_user.username);
+            existing_user
+        },
         Ok(None) => {
+            tracing::debug!("Creating new OIDC user");
             // Create new user
             let username = user_info.preferred_username
                 .or_else(|| user_info.email.clone())
                 .unwrap_or_else(|| format!("oidc_user_{}", &user_info.sub[..8]));
             
             let email = user_info.email.unwrap_or_else(|| format!("{}@oidc.local", username));
+            
+            tracing::debug!("New user details - username: {}, email: {}", username, email);
             
             let create_user = CreateUser {
                 username,
@@ -218,15 +230,23 @@ async fn oidc_callback(
                 role: Some(UserRole::User),
             };
             
-            state.db.create_oidc_user(
+            let result = state.db.create_oidc_user(
                 create_user,
                 &user_info.sub,
-                &state.config.oidc_issuer_url.as_ref().unwrap(),
+                issuer_url,
                 &email,
-            ).await.map_err(|e| {
-                tracing::error!("Failed to create OIDC user: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+            ).await;
+            
+            match result {
+                Ok(user) => {
+                    tracing::info!("Successfully created OIDC user: {}", user.username);
+                    user
+                },
+                Err(e) => {
+                    tracing::error!("Failed to create OIDC user: {} (full error: {:#})", e, e);
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            }
         }
         Err(e) => {
             tracing::error!("Database error during OIDC lookup: {}", e);
@@ -236,7 +256,10 @@ async fn oidc_callback(
 
     // Create JWT token
     let token = create_jwt(&user, &state.config.jwt_secret)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("Failed to create JWT token: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(LoginResponse {
         token,

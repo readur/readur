@@ -1,16 +1,76 @@
 #[cfg(test)]
 mod tests {
     use crate::models::{AuthProvider, CreateUser, UserRole};
-    use super::super::helpers::{create_test_app};
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
-    use wiremock::{matchers::{method, path, query_param}, Mock, MockServer, ResponseTemplate};
+    use wiremock::{matchers::{method, path, query_param, header}, Mock, MockServer, ResponseTemplate};
     use std::sync::Arc;
     use crate::{AppState, oidc::OidcClient};
 
-    async fn create_test_app_with_oidc() -> (axum::Router, testcontainers::ContainerAsync<testcontainers_modules::postgres::Postgres>, MockServer) {
-        let (mut app, container) = create_test_app().await;
+    async fn create_test_app_simple() -> (axum::Router, ()) {
+        // Use TEST_DATABASE_URL directly, no containers
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+        
+        let config = crate::config::Config {
+            database_url: database_url.clone(),
+            server_address: "127.0.0.1:0".to_string(),
+            jwt_secret: "test-secret".to_string(),
+            upload_path: "./test-uploads".to_string(),
+            watch_folder: "./test-watch".to_string(),
+            allowed_file_types: vec!["pdf".to_string()],
+            watch_interval_seconds: Some(30),
+            file_stability_check_ms: Some(500),
+            max_file_age_hours: None,
+            ocr_language: "eng".to_string(),
+            concurrent_ocr_jobs: 2,
+            ocr_timeout_seconds: 60,
+            max_file_size_mb: 10,
+            memory_limit_mb: 256,
+            cpu_priority: "normal".to_string(),
+            oidc_enabled: false,
+            oidc_client_id: None,
+            oidc_client_secret: None,
+            oidc_issuer_url: None,
+            oidc_redirect_uri: None,
+        };
+
+        let db = crate::db::Database::new(&config.database_url).await.unwrap();
+        
+        // Retry migration up to 3 times to handle concurrent test execution
+        for attempt in 1..=3 {
+            match db.migrate().await {
+                Ok(_) => break,
+                Err(e) if attempt < 3 && e.to_string().contains("tuple concurrently updated") => {
+                    // Wait a bit and retry
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100 * attempt)).await;
+                    continue;
+                }
+                Err(e) => panic!("Migration failed after {} attempts: {}", attempt, e),
+            }
+        }
+        
+        let app = axum::Router::new()
+            .nest("/api/auth", crate::routes::auth::router())
+            .with_state(Arc::new(AppState {
+                db: db.clone(),
+                config,
+                webdav_scheduler: None,
+                source_scheduler: None,
+                queue_service: Arc::new(crate::ocr_queue::OcrQueueService::new(
+                    db.clone(),
+                    db.pool.clone(),
+                    2
+                )),
+                oidc_client: None,
+            }));
+
+        (app, ())
+    }
+
+    async fn create_test_app_with_oidc() -> (axum::Router, MockServer) {
         let mock_server = MockServer::start().await;
         
         // Mock OIDC discovery endpoint
@@ -27,9 +87,14 @@ mod tests {
             .mount(&mock_server)
             .await;
 
+        // Use TEST_DATABASE_URL directly, no containers
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+        
         // Update the app state to include OIDC client
         let config = crate::config::Config {
-            database_url: "postgresql://test:test@localhost/test".to_string(),
+            database_url: database_url.clone(),
             server_address: "127.0.0.1:0".to_string(),
             jwt_secret: "test-secret".to_string(),
             upload_path: "./test-uploads".to_string(),
@@ -51,34 +116,51 @@ mod tests {
             oidc_redirect_uri: Some("http://localhost:8000/auth/oidc/callback".to_string()),
         };
 
-        let oidc_client = OidcClient::new(&config).await.ok().map(Arc::new);
+        let oidc_client = match OidcClient::new(&config).await {
+            Ok(client) => Some(Arc::new(client)),
+            Err(e) => {
+                panic!("OIDC client creation failed: {}", e);
+            }
+        };
         
-        // We need to extract the state from the existing app and recreate it
-        // This is a bit hacky, but necessary for testing
-        app = axum::Router::new()
+        // Connect to the database and run migrations with retry logic for concurrency
+        let db = crate::db::Database::new(&config.database_url).await.unwrap();
+        
+        // Retry migration up to 3 times to handle concurrent test execution
+        for attempt in 1..=3 {
+            match db.migrate().await {
+                Ok(_) => break,
+                Err(e) if attempt < 3 && e.to_string().contains("tuple concurrently updated") => {
+                    // Wait a bit and retry
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100 * attempt)).await;
+                    continue;
+                }
+                Err(e) => panic!("Migration failed after {} attempts: {}", attempt, e),
+            }
+        }
+        
+        // Create app with OIDC configuration
+        let app = axum::Router::new()
             .nest("/api/auth", crate::routes::auth::router())
             .with_state(Arc::new(AppState {
-                db: crate::db::Database::new(&format!("postgresql://test:test@localhost:{}/test", 
-                    container.get_host_port_ipv4(5432).await.unwrap())).await.unwrap(),
+                db: db.clone(),
                 config,
                 webdav_scheduler: None,
                 source_scheduler: None,
                 queue_service: Arc::new(crate::ocr_queue::OcrQueueService::new(
-                    crate::db::Database::new(&format!("postgresql://test:test@localhost:{}/test", 
-                        container.get_host_port_ipv4(5432).await.unwrap())).await.unwrap(),
-                    sqlx::PgPool::connect(&format!("postgresql://test:test@localhost:{}/test", 
-                        container.get_host_port_ipv4(5432).await.unwrap())).await.unwrap(),
+                    db.clone(),
+                    db.pool.clone(),
                     2
                 )),
                 oidc_client,
             }));
 
-        (app, container, mock_server)
+        (app, mock_server)
     }
 
     #[tokio::test]
     async fn test_oidc_login_redirect() {
-        let (app, _container, _mock_server) = create_test_app_with_oidc().await;
+        let (app, _mock_server) = create_test_app_with_oidc().await;
 
         let response = app
             .oneshot(
@@ -101,7 +183,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oidc_login_disabled() {
-        let (app, _container) = create_test_app().await; // Regular app without OIDC
+        let (app, _container) = create_test_app_simple().await; // Regular app without OIDC
 
         let response = app
             .oneshot(
@@ -119,7 +201,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oidc_callback_missing_code() {
-        let (app, _container, _mock_server) = create_test_app_with_oidc().await;
+        let (app, _mock_server) = create_test_app_with_oidc().await;
 
         let response = app
             .oneshot(
@@ -137,7 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oidc_callback_with_error() {
-        let (app, _container, _mock_server) = create_test_app_with_oidc().await;
+        let (app, _mock_server) = create_test_app_with_oidc().await;
 
         let response = app
             .oneshot(
@@ -155,7 +237,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_oidc_callback_success_new_user() {
-        let (app, _container, mock_server) = create_test_app_with_oidc().await;
+        let (app, mock_server) = create_test_app_with_oidc().await;
+        
+        // Clean up any existing test user to ensure test isolation
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+        let db = crate::db::Database::new(&database_url).await.unwrap();
+        
+        // Delete any existing user with the test username or OIDC subject
+        let _ = sqlx::query("DELETE FROM users WHERE username = $1 OR oidc_subject = $2")
+            .bind("oidcuser")
+            .bind("oidc-user-123")
+            .execute(&db.pool)
+            .await;
+        
 
         // Mock token exchange
         let token_response = json!({
@@ -166,7 +262,10 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/token"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(token_response))
+            .and(header("content-type", "application/x-www-form-urlencoded"))
+            .respond_with(ResponseTemplate::new(200)
+                .set_body_json(token_response)
+                .insert_header("content-type", "application/json"))
             .mount(&mock_server)
             .await;
 
@@ -180,10 +279,15 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/userinfo"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(user_info_response))
+            .respond_with(ResponseTemplate::new(200)
+                .set_body_json(user_info_response)
+                .insert_header("content-type", "application/json"))
             .mount(&mock_server)
             .await;
 
+        // Add a small delay to make sure everything is set up
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
         let response = app
             .oneshot(
                 axum::http::Request::builder()
@@ -195,11 +299,31 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
-
+        let status = response.status();
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
+        
+        if status != StatusCode::OK {
+            let error_text = String::from_utf8_lossy(&body);
+            eprintln!("Response status: {}", status);
+            eprintln!("Response body: {}", error_text);
+            
+            // Also check if we made the expected API calls to the mock server
+            eprintln!("Mock server received calls:");
+            let received_requests = mock_server.received_requests().await.unwrap();
+            for req in received_requests {
+                eprintln!("  {} {} - {}", req.method, req.url.path(), String::from_utf8_lossy(&req.body));
+            }
+            
+            // Try to parse as JSON to see if there's a more detailed error message
+            if let Ok(error_json) = serde_json::from_slice::<serde_json::Value>(&body) {
+                eprintln!("Error JSON: {:#}", error_json);
+            }
+        }
+        
+        assert_eq!(status, StatusCode::OK);
+        
         let login_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
         
         assert!(login_response["token"].is_string());
@@ -209,7 +333,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oidc_callback_invalid_token() {
-        let (app, _container, mock_server) = create_test_app_with_oidc().await;
+        let (app, mock_server) = create_test_app_with_oidc().await;
 
         // Mock failed token exchange
         Mock::given(method("POST"))
@@ -236,7 +360,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_oidc_callback_invalid_user_info() {
-        let (app, _container, mock_server) = create_test_app_with_oidc().await;
+        let (app, mock_server) = create_test_app_with_oidc().await;
+        
+        // Clean up any existing test user to ensure test isolation
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+        let db = crate::db::Database::new(&database_url).await.unwrap();
+        
+        // Delete any existing user that might conflict
+        let _ = sqlx::query("DELETE FROM users WHERE username LIKE 'oidc%' OR oidc_subject IS NOT NULL")
+            .execute(&db.pool)
+            .await;
 
         // Mock successful token exchange
         let token_response = json!({

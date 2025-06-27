@@ -40,11 +40,22 @@ mod tests {
 
     #[test]
     fn test_oidc_enabled_from_env() {
+        // Clean up environment first to ensure test isolation
+        env::remove_var("OIDC_ENABLED");
+        env::remove_var("OIDC_CLIENT_ID");
+        env::remove_var("OIDC_CLIENT_SECRET");
+        env::remove_var("OIDC_ISSUER_URL");
+        env::remove_var("OIDC_REDIRECT_URI");
+        env::remove_var("DATABASE_URL");
+        env::remove_var("JWT_SECRET");
+        
         env::set_var("OIDC_ENABLED", "true");
         env::set_var("OIDC_CLIENT_ID", "test-client-id");
         env::set_var("OIDC_CLIENT_SECRET", "test-client-secret");
         env::set_var("OIDC_ISSUER_URL", "https://provider.example.com");
         env::set_var("OIDC_REDIRECT_URI", "http://localhost:8000/auth/oidc/callback");
+        env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
+        env::set_var("JWT_SECRET", "test-secret");
 
         let config = Config::from_env().unwrap();
 
@@ -60,6 +71,8 @@ mod tests {
         env::remove_var("OIDC_CLIENT_SECRET");
         env::remove_var("OIDC_ISSUER_URL");
         env::remove_var("OIDC_REDIRECT_URI");
+        env::remove_var("DATABASE_URL");
+        env::remove_var("JWT_SECRET");
     }
 
     #[test]
@@ -83,6 +96,15 @@ mod tests {
         ];
 
         for (value, expected) in test_cases {
+            // Clean up environment first for each iteration
+            env::remove_var("OIDC_ENABLED");
+            env::remove_var("OIDC_CLIENT_ID");
+            env::remove_var("OIDC_CLIENT_SECRET");
+            env::remove_var("OIDC_ISSUER_URL");
+            env::remove_var("OIDC_REDIRECT_URI");
+            env::remove_var("DATABASE_URL");
+            env::remove_var("JWT_SECRET");
+            
             env::set_var("OIDC_ENABLED", value);
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
             env::set_var("JWT_SECRET", "test-secret");

@@ -17,14 +17,16 @@ vi.mock('../../../services/api', () => ({
   }
 }));
 
-// Mock useNavigate
+// Mock useNavigate and useSearchParams
 const mockNavigate = vi.fn();
+const mockUseSearchParams = vi.fn(() => [new URLSearchParams('code=test-code&state=test-state')]);
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
-    useSearchParams: () => [new URLSearchParams('code=test-code&state=test-state')]
+    useSearchParams: mockUseSearchParams
   };
 });
 
@@ -45,6 +47,7 @@ Object.defineProperty(window, 'location', {
   writable: true
 });
 
+
 // Mock AuthContext
 const mockAuthContextValue = {
   user: null,
@@ -55,12 +58,29 @@ const mockAuthContextValue = {
 };
 
 const MockAuthProvider = ({ children }: { children: React.ReactNode }) => (
-  <div data-testid="mock-auth-provider">{children}</div>
+  <AuthProvider>
+    {children}
+  </AuthProvider>
 );
 
 describe('OidcCallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    
+    // Mock window.matchMedia
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation(query => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
   });
 
   const renderOidcCallback = () => {
@@ -106,7 +126,7 @@ describe('OidcCallback', () => {
 
   it('handles authentication error from URL params', () => {
     // Mock useSearchParams to return error
-    vi.mocked(require('react-router-dom').useSearchParams).mockReturnValue([
+    mockUseSearchParams.mockReturnValueOnce([
       new URLSearchParams('error=access_denied&error_description=User+denied+access')
     ]);
 
@@ -118,7 +138,7 @@ describe('OidcCallback', () => {
 
   it('handles missing authorization code', () => {
     // Mock useSearchParams to return no code
-    vi.mocked(require('react-router-dom').useSearchParams).mockReturnValue([
+    mockUseSearchParams.mockReturnValueOnce([
       new URLSearchParams('')
     ]);
 

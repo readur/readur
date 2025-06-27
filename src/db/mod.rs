@@ -88,22 +88,40 @@ impl Database {
             .execute(&self.pool)
             .await?;
         
-        // Create users table
+        // Create users table with OIDC support
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS users (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 username VARCHAR(255) UNIQUE NOT NULL,
                 email VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                role VARCHAR(10) DEFAULT 'user',
+                password_hash VARCHAR(255),
+                role VARCHAR(20) DEFAULT 'user',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                oidc_subject VARCHAR(255),
+                oidc_issuer VARCHAR(255),
+                oidc_email VARCHAR(255),
+                auth_provider VARCHAR(50) DEFAULT 'local',
+                CONSTRAINT check_auth_method CHECK (
+                    (auth_provider = 'local' AND password_hash IS NOT NULL) OR 
+                    (auth_provider = 'oidc' AND oidc_subject IS NOT NULL AND oidc_issuer IS NOT NULL)
+                ),
+                CONSTRAINT check_user_role CHECK (role IN ('admin', 'user'))
             )
             "#,
         )
         .execute(&self.pool)
         .await?;
+        
+        // Create indexes for OIDC
+        sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_users_oidc_subject_issuer ON users(oidc_subject, oidc_issuer)"#)
+            .execute(&self.pool)
+            .await?;
+            
+        sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_users_auth_provider ON users(auth_provider)"#)
+            .execute(&self.pool)
+            .await?;
         
         
         // Create documents table

@@ -44,6 +44,7 @@ Object.defineProperty(window, 'location', {
   writable: true
 });
 
+
 // Mock AuthContext
 const mockAuthContextValue = {
   user: null,
@@ -54,16 +55,35 @@ const mockAuthContextValue = {
 };
 
 const MockAuthProvider = ({ children }: { children: React.ReactNode }) => (
-  <div data-testid="mock-auth-provider">{children}</div>
+  <AuthProvider>
+    {children}
+  </AuthProvider>
 );
 
 const MockThemeProvider = ({ children }: { children: React.ReactNode }) => (
-  <div data-testid="mock-theme-provider">{children}</div>
+  <ThemeProvider>
+    {children}
+  </ThemeProvider>
 );
 
 describe('Login - OIDC Features', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    
+    // Mock window.matchMedia
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation(query => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
   });
 
   const renderLogin = () => {
