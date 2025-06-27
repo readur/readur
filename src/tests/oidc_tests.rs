@@ -7,6 +7,7 @@ mod tests {
     use wiremock::{matchers::{method, path, query_param, header}, Mock, MockServer, ResponseTemplate};
     use std::sync::Arc;
     use crate::{AppState, oidc::OidcClient};
+    use uuid;
 
     async fn create_test_app_simple() -> (axum::Router, ()) {
         // Use TEST_DATABASE_URL directly, no containers
@@ -239,6 +240,12 @@ mod tests {
     async fn test_oidc_callback_success_new_user() {
         let (app, mock_server) = create_test_app_with_oidc().await;
         
+        // Generate random identifiers to avoid test interference
+        let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+        let test_username = format!("oidcuser_{}", test_id);
+        let test_email = format!("oidc_{}@example.com", test_id);
+        let test_subject = format!("oidc-user-{}", test_id);
+        
         // Clean up any existing test user to ensure test isolation
         let database_url = std::env::var("TEST_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
@@ -247,8 +254,8 @@ mod tests {
         
         // Delete any existing user with the test username or OIDC subject
         let _ = sqlx::query("DELETE FROM users WHERE username = $1 OR oidc_subject = $2")
-            .bind("oidcuser")
-            .bind("oidc-user-123")
+            .bind(&test_username)
+            .bind(&test_subject)
             .execute(&db.pool)
             .await;
         
@@ -271,10 +278,10 @@ mod tests {
 
         // Mock user info
         let user_info_response = json!({
-            "sub": "oidc-user-123",
-            "email": "oidc@example.com",
+            "sub": test_subject,
+            "email": test_email,
             "name": "OIDC User",
-            "preferred_username": "oidcuser"
+            "preferred_username": test_username
         });
 
         Mock::given(method("GET"))
@@ -327,8 +334,8 @@ mod tests {
         let login_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
         
         assert!(login_response["token"].is_string());
-        assert_eq!(login_response["user"]["username"], "oidcuser");
-        assert_eq!(login_response["user"]["email"], "oidc@example.com");
+        assert_eq!(login_response["user"]["username"], test_username);
+        assert_eq!(login_response["user"]["email"], test_email);
     }
 
     #[tokio::test]
@@ -362,6 +369,11 @@ mod tests {
     async fn test_oidc_callback_invalid_user_info() {
         let (app, mock_server) = create_test_app_with_oidc().await;
         
+        // Generate random identifiers to avoid test interference
+        let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+        let test_username = format!("oidcuser_{}", test_id);
+        let test_subject = format!("oidc-user-{}", test_id);
+        
         // Clean up any existing test user to ensure test isolation
         let database_url = std::env::var("TEST_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
@@ -369,7 +381,9 @@ mod tests {
         let db = crate::db::Database::new(&database_url).await.unwrap();
         
         // Delete any existing user that might conflict
-        let _ = sqlx::query("DELETE FROM users WHERE username LIKE 'oidc%' OR oidc_subject IS NOT NULL")
+        let _ = sqlx::query("DELETE FROM users WHERE username = $1 OR oidc_subject = $2")
+            .bind(&test_username)
+            .bind(&test_subject)
             .execute(&db.pool)
             .await;
 

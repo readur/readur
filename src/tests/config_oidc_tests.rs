@@ -120,6 +120,15 @@ mod tests {
 
     #[test]
     fn test_oidc_partial_config() {
+        // Clean up environment first to ensure test isolation
+        env::remove_var("OIDC_ENABLED");
+        env::remove_var("OIDC_CLIENT_ID");
+        env::remove_var("OIDC_CLIENT_SECRET");
+        env::remove_var("OIDC_ISSUER_URL");
+        env::remove_var("OIDC_REDIRECT_URI");
+        env::remove_var("DATABASE_URL");
+        env::remove_var("JWT_SECRET");
+        
         // Only set some OIDC vars
         env::set_var("OIDC_ENABLED", "true");
         env::set_var("OIDC_CLIENT_ID", "test-client-id");
@@ -138,12 +147,24 @@ mod tests {
         // Clean up
         env::remove_var("OIDC_ENABLED");
         env::remove_var("OIDC_CLIENT_ID");
+        env::remove_var("OIDC_CLIENT_SECRET");
+        env::remove_var("OIDC_ISSUER_URL");
+        env::remove_var("OIDC_REDIRECT_URI");
         env::remove_var("DATABASE_URL");
         env::remove_var("JWT_SECRET");
     }
 
     #[test]
     fn test_oidc_disabled_with_config_present() {
+        // Clean up environment first to ensure test isolation
+        env::remove_var("OIDC_ENABLED");
+        env::remove_var("OIDC_CLIENT_ID");
+        env::remove_var("OIDC_CLIENT_SECRET");
+        env::remove_var("OIDC_ISSUER_URL");
+        env::remove_var("OIDC_REDIRECT_URI");
+        env::remove_var("DATABASE_URL");
+        env::remove_var("JWT_SECRET");
+        
         // OIDC disabled but config present
         env::set_var("OIDC_ENABLED", "false");
         env::set_var("OIDC_CLIENT_ID", "test-client-id");
@@ -173,6 +194,15 @@ mod tests {
 
     #[test]
     fn test_oidc_empty_values() {
+        // Clean up environment first to ensure test isolation
+        env::remove_var("OIDC_ENABLED");
+        env::remove_var("OIDC_CLIENT_ID");
+        env::remove_var("OIDC_CLIENT_SECRET");
+        env::remove_var("OIDC_ISSUER_URL");
+        env::remove_var("OIDC_REDIRECT_URI");
+        env::remove_var("DATABASE_URL");
+        env::remove_var("JWT_SECRET");
+        
         env::set_var("OIDC_ENABLED", "true");
         env::set_var("OIDC_CLIENT_ID", "");
         env::set_var("OIDC_CLIENT_SECRET", "");
@@ -202,6 +232,15 @@ mod tests {
 
     #[test]
     fn test_oidc_config_validation_output() {
+        // Clean up environment first to ensure test isolation
+        env::remove_var("OIDC_ENABLED");
+        env::remove_var("OIDC_CLIENT_ID");
+        env::remove_var("OIDC_CLIENT_SECRET");
+        env::remove_var("OIDC_ISSUER_URL");
+        env::remove_var("OIDC_REDIRECT_URI");
+        env::remove_var("DATABASE_URL");
+        env::remove_var("JWT_SECRET");
+        
         // Test that validation warnings are properly formatted
         env::set_var("OIDC_ENABLED", "true");
         env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
@@ -215,12 +254,25 @@ mod tests {
 
         // Clean up
         env::remove_var("OIDC_ENABLED");
+        env::remove_var("OIDC_CLIENT_ID");
+        env::remove_var("OIDC_CLIENT_SECRET");
+        env::remove_var("OIDC_ISSUER_URL");
+        env::remove_var("OIDC_REDIRECT_URI");
         env::remove_var("DATABASE_URL");
         env::remove_var("JWT_SECRET");
     }
 
     #[test]
     fn test_oidc_complete_configuration() {
+        // Clean up environment first to ensure test isolation
+        env::remove_var("OIDC_ENABLED");
+        env::remove_var("OIDC_CLIENT_ID");
+        env::remove_var("OIDC_CLIENT_SECRET");
+        env::remove_var("OIDC_ISSUER_URL");
+        env::remove_var("OIDC_REDIRECT_URI");
+        env::remove_var("DATABASE_URL");
+        env::remove_var("JWT_SECRET");
+        
         env::set_var("OIDC_ENABLED", "true");
         env::set_var("OIDC_CLIENT_ID", "my-app-client-id");
         env::set_var("OIDC_CLIENT_SECRET", "super-secret-client-secret");

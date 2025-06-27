@@ -5,6 +5,7 @@ mod tests {
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
+    use uuid;
 
     #[tokio::test]
     async fn test_list_users() {
@@ -302,77 +303,93 @@ mod tests {
     // OIDC Database Tests
     #[tokio::test]
     async fn test_create_oidc_user() {
-        let (app, container) = create_test_app().await;
+        let (_app, container) = create_test_app().await;
         let port = container.get_host_port_ipv4(5432).await.unwrap();
         let database_url = format!("postgresql://test:test@localhost:{}/test", port);
         let db = crate::db::Database::new(&database_url).await.unwrap();
 
+        // Generate random identifiers to avoid test interference
+        let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+        let test_username = format!("oidcuser_{}", test_id);
+        let test_email = format!("oidc_{}@example.com", test_id);
+        let test_subject = format!("oidc-subject-{}", test_id);
+
         let create_user = CreateUser {
-            username: "oidcuser".to_string(),
-            email: "oidc@example.com".to_string(),
+            username: test_username.clone(),
+            email: test_email.clone(),
             password: "".to_string(), // Not used for OIDC
             role: Some(UserRole::User),
         };
 
         let user = db.create_oidc_user(
             create_user,
-            "oidc-subject-123",
+            &test_subject,
             "https://provider.example.com",
             "oidc@example.com",
         ).await.unwrap();
 
-        assert_eq!(user.username, "oidcuser");
-        assert_eq!(user.email, "oidc@example.com");
-        assert_eq!(user.oidc_subject, Some("oidc-subject-123".to_string()));
+        assert_eq!(user.username, test_username);
+        assert_eq!(user.email, test_email);
+        assert_eq!(user.oidc_subject, Some(test_subject));
         assert_eq!(user.oidc_issuer, Some("https://provider.example.com".to_string()));
-        assert_eq!(user.oidc_email, Some("oidc@example.com".to_string()));
+        assert_eq!(user.oidc_email, Some(test_email.clone()));
         assert_eq!(user.auth_provider, AuthProvider::Oidc);
         assert!(user.password_hash.is_none());
     }
 
     #[tokio::test]
     async fn test_get_user_by_oidc_subject() {
-        let (app, container) = create_test_app().await;
+        let (_app, container) = create_test_app().await;
         let port = container.get_host_port_ipv4(5432).await.unwrap();
         let database_url = format!("postgresql://test:test@localhost:{}/test", port);
         let db = crate::db::Database::new(&database_url).await.unwrap();
 
+        // Generate random identifiers to avoid test interference
+        let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+        let test_username = format!("oidcuser_{}", test_id);
+        let test_email = format!("oidc_{}@example.com", test_id);
+        let test_subject = format!("oidc-subject-{}", test_id);
+
         // Create OIDC user
         let create_user = CreateUser {
-            username: "oidcuser2".to_string(),
-            email: "oidc2@example.com".to_string(),
+            username: test_username,
+            email: test_email.clone(),
             password: "".to_string(),
             role: Some(UserRole::User),
         };
 
         let created_user = db.create_oidc_user(
             create_user,
-            "oidc-subject-456",
+            &test_subject,
             "https://provider.example.com",
-            "oidc2@example.com",
+            &test_email,
         ).await.unwrap();
 
         // Retrieve by OIDC subject
         let found_user = db.get_user_by_oidc_subject(
-            "oidc-subject-456",
+            &test_subject,
             "https://provider.example.com"
         ).await.unwrap();
 
         assert!(found_user.is_some());
         let user = found_user.unwrap();
         assert_eq!(user.id, created_user.id);
-        assert_eq!(user.oidc_subject, Some("oidc-subject-456".to_string()));
+        assert_eq!(user.oidc_subject, Some(test_subject));
     }
 
     #[tokio::test]
     async fn test_get_user_by_oidc_subject_not_found() {
-        let (app, container) = create_test_app().await;
+        let (_app, container) = create_test_app().await;
         let port = container.get_host_port_ipv4(5432).await.unwrap();
         let database_url = format!("postgresql://test:test@localhost:{}/test", port);
         let db = crate::db::Database::new(&database_url).await.unwrap();
 
+        // Generate random subject that definitely doesn't exist
+        let test_id = uuid::Uuid::new_v4().to_string();
+        let nonexistent_subject = format!("nonexistent-subject-{}", test_id);
+        
         let found_user = db.get_user_by_oidc_subject(
-            "nonexistent-subject",
+            &nonexistent_subject,
             "https://provider.example.com"
         ).await.unwrap();
 
@@ -381,29 +398,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_oidc_user_different_issuer() {
-        let (app, container) = create_test_app().await;
+        let (_app, container) = create_test_app().await;
         let port = container.get_host_port_ipv4(5432).await.unwrap();
         let database_url = format!("postgresql://test:test@localhost:{}/test", port);
         let db = crate::db::Database::new(&database_url).await.unwrap();
 
+        // Generate random identifiers to avoid test interference
+        let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+        let test_username = format!("oidcuser_{}", test_id);
+        let test_email = format!("oidc_{}@example.com", test_id);
+        let test_subject = format!("same-subject-{}", test_id);
+
         // Create OIDC user with one issuer
         let create_user = CreateUser {
-            username: "oidcuser3".to_string(),
-            email: "oidc3@example.com".to_string(),
+            username: test_username,
+            email: test_email.clone(),
             password: "".to_string(),
             role: Some(UserRole::User),
         };
 
         db.create_oidc_user(
             create_user,
-            "same-subject",
+            &test_subject,
             "https://provider1.example.com",
-            "oidc3@example.com",
+            &test_email,
         ).await.unwrap();
 
         // Try to find with different issuer (should not find)
         let found_user = db.get_user_by_oidc_subject(
-            "same-subject",
+            &test_subject,
             "https://provider2.example.com"
         ).await.unwrap();
 
