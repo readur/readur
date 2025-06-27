@@ -69,7 +69,7 @@ test-utils = ["testcontainers", "testcontainers-modules"]
 tempfile = "3"
 testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
-wiremock = "0.5"
+wiremock = "0.6"
 tokio-test = "0.4"
 
 [profile.test]
