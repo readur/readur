@@ -31,6 +31,12 @@ pub struct BulkDeleteRequest {
     pub document_ids: Vec<uuid::Uuid>,
 }
 
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct DeleteLowConfidenceRequest {
+    pub max_confidence: f32,
+    pub preview_only: Option<bool>,
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", post(upload_document))
@@ -46,6 +52,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/retry-ocr", post(retry_ocr))
         .route("/failed-ocr", get(get_failed_ocr_documents))
         .route("/duplicates", get(get_user_duplicates))
+        .route("/delete-low-confidence", post(delete_low_confidence_documents))
 }
 
 #[utoipa::path(
@@ -1012,6 +1019,118 @@ pub async fn bulk_delete_documents(
         "message": message,
         "deleted_count": deleted_count,
         "requested_count": requested_count,
+        "successful_file_deletions": successful_file_deletions,
+        "failed_file_deletions": failed_file_deletions,
+        "ignored_file_creation_failures": ignored_file_creation_failures,
+        "deleted_document_ids": deleted_documents.iter().map(|d| d.id).collect::<Vec<_>>()
+    })))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/documents/delete-low-confidence",
+    request_body = DeleteLowConfidenceRequest,
+    responses(
+        (status = 200, description = "Low confidence documents operation result"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "documents"
+)]
+pub async fn delete_low_confidence_documents(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(request): Json<DeleteLowConfidenceRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if request.max_confidence < 0.0 || request.max_confidence > 100.0 {
+        return Ok(Json(serde_json::json!({
+            "success": false,
+            "message": "max_confidence must be between 0.0 and 100.0",
+            "matched_count": 0
+        })));
+    }
+
+    let is_preview = request.preview_only.unwrap_or(false);
+    
+    // Find documents with confidence below threshold
+    let matched_documents = state
+        .db
+        .find_documents_by_confidence_threshold(request.max_confidence, auth_user.user.id, auth_user.user.role)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let matched_count = matched_documents.len();
+
+    if is_preview {
+        return Ok(Json(serde_json::json!({
+            "success": true,
+            "message": format!("Found {} documents with OCR confidence below {}%", matched_count, request.max_confidence),
+            "matched_count": matched_count,
+            "preview": true,
+            "document_ids": matched_documents.iter().map(|d| d.id).collect::<Vec<_>>()
+        })));
+    }
+
+    if matched_documents.is_empty() {
+        return Ok(Json(serde_json::json!({
+            "success": true,
+            "message": format!("No documents found with OCR confidence below {}%", request.max_confidence),
+            "deleted_count": 0
+        })));
+    }
+
+    // Extract document IDs for bulk deletion
+    let document_ids: Vec<uuid::Uuid> = matched_documents.iter().map(|d| d.id).collect();
+
+    // Use existing bulk delete logic
+    let deleted_documents = state
+        .db
+        .bulk_delete_documents(&document_ids, auth_user.user.id, auth_user.user.role)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create ignored file records for all successfully deleted documents
+    let mut ignored_file_creation_failures = 0;
+    for document in &deleted_documents {
+        if let Err(e) = crate::db::ignored_files::create_ignored_file_from_document(
+            state.db.get_pool(),
+            document.id,
+            auth_user.user.id,
+            Some(format!("deleted due to low OCR confidence ({}%)", 
+                document.ocr_confidence.unwrap_or(0.0))),
+            None,
+            None,
+            None,
+        ).await {
+            ignored_file_creation_failures += 1;
+            tracing::warn!("Failed to create ignored file record for document {}: {}", document.id, e);
+        }
+    }
+
+    let file_service = FileService::new(state.config.upload_path.clone());
+    let mut successful_file_deletions = 0;
+    let mut failed_file_deletions = 0;
+
+    for document in &deleted_documents {
+        match file_service.delete_document_files(document).await {
+            Ok(_) => successful_file_deletions += 1,
+            Err(e) => {
+                failed_file_deletions += 1;
+                tracing::warn!("Failed to delete files for document {}: {}", document.id, e);
+            }
+        }
+    }
+
+    let deleted_count = deleted_documents.len();
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": format!("Successfully deleted {} documents with OCR confidence below {}%", deleted_count, request.max_confidence),
+        "deleted_count": deleted_count,
+        "matched_count": matched_count,
         "successful_file_deletions": successful_file_deletions,
         "failed_file_deletions": failed_file_deletions,
         "ignored_file_creation_failures": ignored_file_creation_failures,

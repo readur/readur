@@ -22,6 +22,7 @@ export const documentService = {
   getFailedOcrDocuments: vi.fn(),
   getDuplicates: vi.fn(),
   retryOcr: vi.fn(),
+  deleteLowConfidence: vi.fn(),
 }
 
 // Re-export types that components might need
