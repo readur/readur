@@ -11,11 +11,11 @@ use uuid::Uuid;
 use crate::{
     AppState,
     models::{FileInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
-    file_service::FileService,
-    document_ingestion::{DocumentIngestionService, IngestionResult},
-    local_folder_service::LocalFolderService,
-    s3_service::S3Service,
-    webdav_service::{WebDAVService, WebDAVConfig},
+    services::file_service::FileService,
+    ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
+    services::local_folder_service::LocalFolderService,
+    services::s3_service::S3Service,
+    services::webdav_service::{WebDAVService, WebDAVConfig},
 };
 
 #[derive(Clone)]

@@ -12,7 +12,7 @@ use tracing::{debug, info, warn};
 
 use crate::models::Document;
 use crate::db::Database;
-use crate::file_service::FileService;
+use crate::services::file_service::FileService;
 
 #[derive(Debug, Clone)]
 pub enum DeduplicationPolicy {

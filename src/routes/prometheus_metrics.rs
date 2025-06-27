@@ -288,7 +288,7 @@ async fn collect_document_metrics(state: &Arc<AppState>) -> Result<DocumentMetri
 }
 
 async fn collect_ocr_metrics(state: &Arc<AppState>) -> Result<OcrMetrics, StatusCode> {
-    use crate::ocr_queue::OcrQueueService;
+    use crate::ocr::queue::OcrQueueService;
     
     let queue_service = OcrQueueService::new(
         state.db.clone(),

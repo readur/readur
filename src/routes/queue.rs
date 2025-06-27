@@ -7,7 +7,7 @@ use axum::{
 };
 use std::sync::Arc;
 
-use crate::{auth::AuthUser, ocr_queue::OcrQueueService, AppState, models::UserRole};
+use crate::{auth::AuthUser, ocr::queue::OcrQueueService, AppState, models::UserRole};
 
 fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
     if auth_user.user.role != UserRole::Admin {

@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use crate::ocr_error::{OcrError, OcrDiagnostics, CpuFeatures};
-    use crate::ocr_health::OcrHealthChecker;
-    use crate::ocr_enhanced::EnhancedOcrService;
+    use crate::ocr::error::{OcrError, OcrDiagnostics, CpuFeatures};
+    use crate::ocr::health::OcrHealthChecker;
+    use crate::ocr::enhanced_processing::EnhancedOcrService;
     use std::env;
     use tempfile::TempDir;
     use std::fs;

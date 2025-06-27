@@ -12,8 +12,8 @@ use sqlx::Row;
 
 use crate::{
     auth::AuthUser,
-    document_ingestion::{DocumentIngestionService, IngestionResult},
-    file_service::FileService,
+    ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
+    services::file_service::FileService,
     models::DocumentResponse,
     AppState,
 };

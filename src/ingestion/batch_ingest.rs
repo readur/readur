@@ -10,9 +10,9 @@ use walkdir::WalkDir;
 use crate::{
     config::Config,
     db::Database,
-    file_service::FileService,
-    document_ingestion::{DocumentIngestionService, IngestionResult},
-    ocr_queue::OcrQueueService,
+    services::file_service::FileService,
+    ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
+    ocr::queue::OcrQueueService,
 };
 
 pub struct BatchIngester {

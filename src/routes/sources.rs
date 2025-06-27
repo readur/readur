@@ -442,7 +442,7 @@ async fn test_connection(
             let config: crate::models::WebDAVSourceConfig = serde_json::from_value(source.config)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-            match crate::webdav_service::test_webdav_connection(
+            match crate::services::webdav_service::test_webdav_connection(
                 &config.server_url,
                 &config.username,
                 &config.password,
@@ -464,7 +464,7 @@ async fn test_connection(
             let config: crate::models::LocalFolderSourceConfig = serde_json::from_value(source.config)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-            match crate::local_folder_service::LocalFolderService::new(config) {
+            match crate::services::local_folder_service::LocalFolderService::new(config) {
                 Ok(service) => {
                     match service.test_connection().await {
                         Ok(message) => Ok(Json(serde_json::json!({
@@ -488,7 +488,7 @@ async fn test_connection(
             let config: crate::models::S3SourceConfig = serde_json::from_value(source.config)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-            match crate::s3_service::S3Service::new(config).await {
+            match crate::services::s3_service::S3Service::new(config).await {
                 Ok(service) => {
                     match service.test_connection().await {
                         Ok(message) => Ok(Json(serde_json::json!({
@@ -610,7 +610,7 @@ async fn estimate_webdav_crawl_internal(
     config: &crate::models::WebDAVSourceConfig,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Create WebDAV service config
-    let webdav_config = crate::webdav_service::WebDAVConfig {
+    let webdav_config = crate::services::webdav_service::WebDAVConfig {
         server_url: config.server_url.clone(),
         username: config.username.clone(),
         password: config.password.clone(),
@@ -621,7 +621,7 @@ async fn estimate_webdav_crawl_internal(
     };
 
     // Create WebDAV service and estimate crawl
-    match crate::webdav_service::WebDAVService::new(webdav_config) {
+    match crate::services::webdav_service::WebDAVService::new(webdav_config) {
         Ok(webdav_service) => {
             match webdav_service.estimate_crawl(&config.watch_folders).await {
                 Ok(estimate) => Ok(Json(serde_json::to_value(estimate).unwrap())),
@@ -678,7 +678,7 @@ async fn test_connection_with_config(
             let config: crate::models::WebDAVSourceConfig = serde_json::from_value(request.config)
                 .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-            match crate::webdav_service::test_webdav_connection(
+            match crate::services::webdav_service::test_webdav_connection(
                 &config.server_url,
                 &config.username,
                 &config.password,
@@ -700,7 +700,7 @@ async fn test_connection_with_config(
             let config: crate::models::LocalFolderSourceConfig = serde_json::from_value(request.config)
                 .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-            match crate::local_folder_service::LocalFolderService::new(config) {
+            match crate::services::local_folder_service::LocalFolderService::new(config) {
                 Ok(service) => {
                     match service.test_connection().await {
                         Ok(message) => Ok(Json(serde_json::json!({
@@ -724,7 +724,7 @@ async fn test_connection_with_config(
             let config: crate::models::S3SourceConfig = serde_json::from_value(request.config)
                 .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-            match crate::s3_service::S3Service::new(config).await {
+            match crate::services::s3_service::S3Service::new(config).await {
                 Ok(service) => {
                     match service.test_connection().await {
                         Ok(message) => Ok(Json(serde_json::json!({

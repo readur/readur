@@ -15,7 +15,7 @@ use imageproc::{
 use tesseract::{Tesseract, PageSegMode, OcrEngineMode};
 
 use crate::models::Settings;
-use crate::file_service::FileService;
+use crate::services::file_service::FileService;
 
 #[derive(Debug, Clone)]
 pub struct ImageQualityStats {

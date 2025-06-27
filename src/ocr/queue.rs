@@ -9,7 +9,7 @@ use tokio::time::{sleep, Duration};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{db::Database, enhanced_ocr::EnhancedOcrService, db_guardrails_simple::DocumentTransactionManager, request_throttler::RequestThrottler};
+use crate::{db::Database, ocr::enhanced::EnhancedOcrService, db_guardrails_simple::DocumentTransactionManager, monitoring::request_throttler::RequestThrottler};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct OcrQueueItem {
@@ -557,7 +557,7 @@ impl OcrQueueService {
         use std::path::Path;
         
         // Use the FileService to get the proper processed images directory
-        use crate::file_service::FileService;
+        use crate::services::file_service::FileService;
         let base_upload_dir = std::env::var("UPLOAD_PATH").unwrap_or_else(|_| "uploads".to_string());
         let file_service = FileService::new(base_upload_dir);
         let processed_images_dir = file_service.get_processed_images_path();

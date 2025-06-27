@@ -1,8 +1,16 @@
+pub mod api;
+pub mod enhanced;
+pub mod enhanced_processing;
+pub mod error;
+pub mod health;
+pub mod queue;
+pub mod tests;
+
 use anyhow::{anyhow, Result};
 use std::path::Path;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use crate::ocr_error::OcrError;
-use crate::ocr_health::OcrHealthChecker;
+use crate::ocr::error::OcrError;
+use crate::ocr::health::OcrHealthChecker;
 
 #[cfg(feature = "ocr")]
 use tesseract::Tesseract;

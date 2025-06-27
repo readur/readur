@@ -17,8 +17,8 @@ use crate::{
     },
     AppState,
 };
-use crate::webdav_service::WebDAVConfig;
-use crate::webdav_service::WebDAVService;
+use crate::services::webdav_service::WebDAVConfig;
+use crate::services::webdav_service::WebDAVService;
 
 pub mod webdav_sync;
 use webdav_sync::perform_webdav_sync_with_tracking;

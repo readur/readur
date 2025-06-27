@@ -1,4 +1,4 @@
-use crate::ocr_error::{CpuFeatures, OcrDiagnostics, OcrError};
+use crate::ocr::error::{CpuFeatures, OcrDiagnostics, OcrError};
 use std::process::Command;
 use std::env;
 use std::path::Path;
