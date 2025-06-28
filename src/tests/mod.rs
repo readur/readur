@@ -16,4 +16,6 @@ mod route_compilation_tests;
 mod settings_tests;
 mod sql_type_safety_tests;
 mod users_tests;
-mod generic_migration_tests; 
+mod generic_migration_tests;
+mod migration_constraint_tests;
+mod migration_integration_tests; 

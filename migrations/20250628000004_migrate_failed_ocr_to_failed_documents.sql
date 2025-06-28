@@ -41,7 +41,16 @@ SELECT
     d.ocr_confidence,
     d.ocr_word_count,
     d.ocr_processing_time_ms,
-    COALESCE(d.ocr_failure_reason, 'other') as failure_reason,
+    CASE 
+        WHEN d.ocr_failure_reason = 'low_ocr_confidence' THEN 'low_ocr_confidence'
+        WHEN d.ocr_failure_reason = 'timeout' THEN 'ocr_timeout'
+        WHEN d.ocr_failure_reason = 'memory_limit' THEN 'ocr_memory_limit'
+        WHEN d.ocr_failure_reason = 'pdf_parsing_error' THEN 'pdf_parsing_error'
+        WHEN d.ocr_failure_reason = 'corrupted' OR d.ocr_failure_reason = 'file_corrupted' THEN 'file_corrupted'
+        WHEN d.ocr_failure_reason = 'unsupported_format' THEN 'unsupported_format'
+        WHEN d.ocr_failure_reason = 'access_denied' THEN 'access_denied'
+        ELSE 'other'
+    END as failure_reason,
     'ocr' as failure_stage,
     'migration' as ingestion_source, -- Mark these as migrated from existing system
     d.ocr_error as error_message,
@@ -57,28 +66,8 @@ LEFT JOIN (
 ) q ON d.id = q.document_id
 WHERE d.ocr_status = 'failed';
 
--- Log the migration for audit purposes
-INSERT INTO failed_documents (
-    user_id,
-    filename,
-    original_filename,
-    failure_reason,
-    failure_stage,
-    ingestion_source,
-    error_message,
-    created_at,
-    updated_at
-) VALUES (
-    '00000000-0000-0000-0000-000000000000'::uuid, -- System user ID
-    'migration_log',
-    'Failed OCR Migration Log',
-    'migration_completed',
-    'migration',
-    'system',
-    'Migrated ' || (SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed') || ' failed OCR documents to failed_documents table',
-    NOW(),
-    NOW()
-);
+-- Migration audit: Log count of migrated documents in comment
+-- Migrated documents count will be visible in failed_documents table with ingestion_source = 'migration'
 
 -- Remove failed OCR documents from documents table
 -- Note: This uses CASCADE to also clean up related records in ocr_queue table

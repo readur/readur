@@ -121,10 +121,10 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
       expect(tabs).toBeInTheDocument();
     });
 
-    // Check for Low Confidence tab
+    // Check for Low Quality Manager tab
     await waitFor(() => {
-      const lowConfidenceTab = screen.getByText(/Low Confidence/i);
-      expect(lowConfidenceTab).toBeInTheDocument();
+      const lowQualityTab = screen.getByText(/Low Quality Manager/i);
+      expect(lowQualityTab).toBeInTheDocument();
     });
   });
 
@@ -141,9 +141,9 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
       expect(tabs).toBeInTheDocument();
     });
 
-    // Click on Low Confidence tab (third tab, index 2)
-    const lowConfidenceTab = screen.getByText(/Low Confidence/i);
-    lowConfidenceTab.click();
+    // Click on Low Quality Manager tab (third tab, index 2)
+    const lowQualityTab = screen.getByText(/Low Quality Manager/i);
+    lowQualityTab.click();
 
     // Wait for tab content to render
     await waitFor(() => {
@@ -159,10 +159,10 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
       </FailedOcrPageWrapper>
     );
 
-    // Navigate to Low Confidence tab
+    // Navigate to Low Quality Manager tab
     await waitFor(() => {
-      const lowConfidenceTab = screen.getByText(/Low Confidence/i);
-      lowConfidenceTab.click();
+      const lowQualityTab = screen.getByText(/Low Quality Manager/i);
+      lowQualityTab.click();
     });
 
     // Check for action buttons
@@ -182,10 +182,10 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
       </FailedOcrPageWrapper>
     );
 
-    // Navigate to Low Confidence tab
+    // Navigate to Low Quality Manager tab
     await waitFor(() => {
-      const lowConfidenceTab = screen.getByText(/Low Confidence/i);
-      lowConfidenceTab.click();
+      const lowQualityTab = screen.getByText(/Low Quality Manager/i);
+      lowQualityTab.click();
     });
 
     // Check for informational content

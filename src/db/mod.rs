@@ -11,6 +11,7 @@ pub mod webdav;
 pub mod sources;
 pub mod images;
 pub mod ignored_files;
+pub mod constraint_validation;
 
 #[derive(Clone)]
 pub struct Database {

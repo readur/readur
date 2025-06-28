@@ -615,7 +615,7 @@ const FailedOcrPage: React.FC = () => {
                   Failure Categories
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={1}>
-                  {statistics.failure_categories.map((category) => (
+                  {statistics?.failure_categories?.map((category) => (
                     <Chip
                       key={category.reason}
                       label={`${category.display_name}: ${category.count}`}
@@ -623,7 +623,11 @@ const FailedOcrPage: React.FC = () => {
                       variant="outlined"
                       size="small"
                     />
-                  ))}
+                  )) || (
+                    <Typography variant="body2" color="text.secondary">
+                      No failure data available
+                    </Typography>
+                  )}
                 </Box>
               </CardContent>
             </Card>
@@ -858,12 +862,14 @@ const FailedOcrPage: React.FC = () => {
 
               <Alert severity="warning" sx={{ mb: 2 }}>
                 <AlertTitle>What should you do?</AlertTitle>
-                <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
-                  <li><strong>Review each group:</strong> Click to expand and see all duplicate files</li>
-                  <li><strong>Keep the best version:</strong> Choose the file with the most descriptive name</li>
-                  <li><strong>Check content:</strong> Use View/Download to verify files are truly identical</li>
-                  <li><strong>Note for admin:</strong> Consider implementing bulk delete functionality for duplicates</li>
-                </Box>
+                <Typography variant="body2" component="div" sx={{ mt: 1, mb: 0 }}>
+                  <Box component="ul" sx={{ pl: 2, mt: 0, mb: 0 }}>
+                    <li><strong>Review each group:</strong> Click to expand and see all duplicate files</li>
+                    <li><strong>Keep the best version:</strong> Choose the file with the most descriptive name</li>
+                    <li><strong>Check content:</strong> Use View/Download to verify files are truly identical</li>
+                    <li><strong>Note for admin:</strong> Consider implementing bulk delete functionality for duplicates</li>
+                  </Box>
+                </Typography>
               </Alert>
 
               <TableContainer component={Paper}>
