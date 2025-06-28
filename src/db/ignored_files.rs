@@ -59,22 +59,99 @@ pub async fn list_ignored_files(
     let limit = query.limit.unwrap_or(25);
     let offset = query.offset.unwrap_or(0);
 
-    // Build the base query
-    let base_query = r#"
-        SELECT 
-            ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
-            ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
-            ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
-            u.username as ignored_by_username
-        FROM ignored_files ig
-        LEFT JOIN users u ON ig.ignored_by = u.id
-        WHERE ig.ignored_by = $1
-    "#;
-
-    // For now, implement a simple version without complex filtering
-    let rows = if let Some(source_type) = &query.source_type {
-        let sql = format!("{} AND ig.source_type = $2 ORDER BY ig.ignored_at DESC LIMIT $3 OFFSET $4", base_query);
-        sqlx::query(&sql)
+    // Build query based on filters
+    let rows = match (&query.source_type, &query.source_identifier, &query.filename) {
+        (Some(source_type), Some(source_identifier), Some(filename)) => {
+            let pattern = format!("%{}%", filename);
+            sqlx::query(
+                r#"
+                SELECT 
+                    ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
+                    ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
+                    ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
+                    u.username as ignored_by_username
+                FROM ignored_files ig
+                LEFT JOIN users u ON ig.ignored_by = u.id
+                WHERE ig.ignored_by = $1 
+                  AND ig.source_type = $2 
+                  AND ig.source_identifier = $3 
+                  AND (ig.filename ILIKE $4 OR ig.original_filename ILIKE $4)
+                ORDER BY ig.ignored_at DESC LIMIT $5 OFFSET $6
+                "#
+            )
+            .bind(user_id)
+            .bind(source_type)
+            .bind(source_identifier)
+            .bind(&pattern)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await
+            .context("Failed to fetch ignored files")?
+        },
+        (Some(source_type), Some(source_identifier), None) => {
+            sqlx::query(
+                r#"
+                SELECT 
+                    ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
+                    ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
+                    ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
+                    u.username as ignored_by_username
+                FROM ignored_files ig
+                LEFT JOIN users u ON ig.ignored_by = u.id
+                WHERE ig.ignored_by = $1 AND ig.source_type = $2 AND ig.source_identifier = $3
+                ORDER BY ig.ignored_at DESC LIMIT $4 OFFSET $5
+                "#
+            )
+            .bind(user_id)
+            .bind(source_type)
+            .bind(source_identifier)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await
+            .context("Failed to fetch ignored files")?
+        },
+        (Some(source_type), None, Some(filename)) => {
+            let pattern = format!("%{}%", filename);
+            sqlx::query(
+                r#"
+                SELECT 
+                    ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
+                    ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
+                    ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
+                    u.username as ignored_by_username
+                FROM ignored_files ig
+                LEFT JOIN users u ON ig.ignored_by = u.id
+                WHERE ig.ignored_by = $1 
+                  AND ig.source_type = $2 
+                  AND (ig.filename ILIKE $3 OR ig.original_filename ILIKE $3)
+                ORDER BY ig.ignored_at DESC LIMIT $4 OFFSET $5
+                "#
+            )
+            .bind(user_id)
+            .bind(source_type)
+            .bind(&pattern)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await
+            .context("Failed to fetch ignored files")?
+        },
+        (Some(source_type), None, None) => {
+            sqlx::query(
+                r#"
+                SELECT 
+                    ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
+                    ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
+                    ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
+                    u.username as ignored_by_username
+                FROM ignored_files ig
+                LEFT JOIN users u ON ig.ignored_by = u.id
+                WHERE ig.ignored_by = $1 AND ig.source_type = $2
+                ORDER BY ig.ignored_at DESC LIMIT $3 OFFSET $4
+                "#
+            )
             .bind(user_id)
             .bind(source_type)
             .bind(limit)
@@ -82,10 +159,70 @@ pub async fn list_ignored_files(
             .fetch_all(pool)
             .await
             .context("Failed to fetch ignored files")?
-    } else if let Some(filename) = &query.filename {
-        let pattern = format!("%{}%", filename);
-        let sql = format!("{} AND (ig.filename ILIKE $2 OR ig.original_filename ILIKE $2) ORDER BY ig.ignored_at DESC LIMIT $3 OFFSET $4", base_query);
-        sqlx::query(&sql)
+        },
+        (None, Some(source_identifier), Some(filename)) => {
+            let pattern = format!("%{}%", filename);
+            sqlx::query(
+                r#"
+                SELECT 
+                    ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
+                    ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
+                    ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
+                    u.username as ignored_by_username
+                FROM ignored_files ig
+                LEFT JOIN users u ON ig.ignored_by = u.id
+                WHERE ig.ignored_by = $1 
+                  AND ig.source_identifier = $2 
+                  AND (ig.filename ILIKE $3 OR ig.original_filename ILIKE $3)
+                ORDER BY ig.ignored_at DESC LIMIT $4 OFFSET $5
+                "#
+            )
+            .bind(user_id)
+            .bind(source_identifier)
+            .bind(&pattern)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await
+            .context("Failed to fetch ignored files")?
+        },
+        (None, Some(source_identifier), None) => {
+            sqlx::query(
+                r#"
+                SELECT 
+                    ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
+                    ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
+                    ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
+                    u.username as ignored_by_username
+                FROM ignored_files ig
+                LEFT JOIN users u ON ig.ignored_by = u.id
+                WHERE ig.ignored_by = $1 AND ig.source_identifier = $2
+                ORDER BY ig.ignored_at DESC LIMIT $3 OFFSET $4
+                "#
+            )
+            .bind(user_id)
+            .bind(source_identifier)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await
+            .context("Failed to fetch ignored files")?
+        },
+        (None, None, Some(filename)) => {
+            let pattern = format!("%{}%", filename);
+            sqlx::query(
+                r#"
+                SELECT 
+                    ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
+                    ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
+                    ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
+                    u.username as ignored_by_username
+                FROM ignored_files ig
+                LEFT JOIN users u ON ig.ignored_by = u.id
+                WHERE ig.ignored_by = $1 AND (ig.filename ILIKE $2 OR ig.original_filename ILIKE $2)
+                ORDER BY ig.ignored_at DESC LIMIT $3 OFFSET $4
+                "#
+            )
             .bind(user_id)
             .bind(&pattern)
             .bind(limit)
@@ -93,16 +230,28 @@ pub async fn list_ignored_files(
             .fetch_all(pool)
             .await
             .context("Failed to fetch ignored files")?
-    } else {
-        // Simple query without filters
-        let sql = format!("{} ORDER BY ig.ignored_at DESC LIMIT $2 OFFSET $3", base_query);
-        sqlx::query(&sql)
+        },
+        (None, None, None) => {
+            sqlx::query(
+                r#"
+                SELECT 
+                    ig.id, ig.file_hash, ig.filename, ig.original_filename, ig.file_path,
+                    ig.file_size, ig.mime_type, ig.source_type, ig.source_path, 
+                    ig.source_identifier, ig.ignored_at, ig.ignored_by, ig.reason, ig.created_at,
+                    u.username as ignored_by_username
+                FROM ignored_files ig
+                LEFT JOIN users u ON ig.ignored_by = u.id
+                WHERE ig.ignored_by = $1
+                ORDER BY ig.ignored_at DESC LIMIT $2 OFFSET $3
+                "#
+            )
             .bind(user_id)
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
             .await
             .context("Failed to fetch ignored files")?
+        }
     };
 
     let mut ignored_files = Vec::new();
@@ -225,28 +374,79 @@ pub async fn count_ignored_files(
     user_id: Uuid,
     query: &IgnoredFilesQuery,
 ) -> Result<i64> {
-    // Simple count query for now
-    let row = if let Some(source_type) = &query.source_type {
-        sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2")
-            .bind(user_id)
-            .bind(source_type)
-            .fetch_one(pool)
-            .await
-            .context("Failed to count ignored files")?
-    } else if let Some(filename) = &query.filename {
-        let pattern = format!("%{}%", filename);
-        sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND (filename ILIKE $2 OR original_filename ILIKE $2)")
-            .bind(user_id)
-            .bind(&pattern)
-            .fetch_one(pool)
-            .await
-            .context("Failed to count ignored files")?
-    } else {
-        sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1")
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-            .context("Failed to count ignored files")?
+    let row = match (&query.source_type, &query.source_identifier, &query.filename) {
+        (Some(source_type), Some(source_identifier), Some(filename)) => {
+            let pattern = format!("%{}%", filename);
+            sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2 AND source_identifier = $3 AND (filename ILIKE $4 OR original_filename ILIKE $4)")
+                .bind(user_id)
+                .bind(source_type)
+                .bind(source_identifier)
+                .bind(&pattern)
+                .fetch_one(pool)
+                .await
+                .context("Failed to count ignored files")?
+        },
+        (Some(source_type), Some(source_identifier), None) => {
+            sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2 AND source_identifier = $3")
+                .bind(user_id)
+                .bind(source_type)
+                .bind(source_identifier)
+                .fetch_one(pool)
+                .await
+                .context("Failed to count ignored files")?
+        },
+        (Some(source_type), None, Some(filename)) => {
+            let pattern = format!("%{}%", filename);
+            sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2 AND (filename ILIKE $3 OR original_filename ILIKE $3)")
+                .bind(user_id)
+                .bind(source_type)
+                .bind(&pattern)
+                .fetch_one(pool)
+                .await
+                .context("Failed to count ignored files")?
+        },
+        (Some(source_type), None, None) => {
+            sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2")
+                .bind(user_id)
+                .bind(source_type)
+                .fetch_one(pool)
+                .await
+                .context("Failed to count ignored files")?
+        },
+        (None, Some(source_identifier), Some(filename)) => {
+            let pattern = format!("%{}%", filename);
+            sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_identifier = $2 AND (filename ILIKE $3 OR original_filename ILIKE $3)")
+                .bind(user_id)
+                .bind(source_identifier)
+                .bind(&pattern)
+                .fetch_one(pool)
+                .await
+                .context("Failed to count ignored files")?
+        },
+        (None, Some(source_identifier), None) => {
+            sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_identifier = $2")
+                .bind(user_id)
+                .bind(source_identifier)
+                .fetch_one(pool)
+                .await
+                .context("Failed to count ignored files")?
+        },
+        (None, None, Some(filename)) => {
+            let pattern = format!("%{}%", filename);
+            sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND (filename ILIKE $2 OR original_filename ILIKE $2)")
+                .bind(user_id)
+                .bind(&pattern)
+                .fetch_one(pool)
+                .await
+                .context("Failed to count ignored files")?
+        },
+        (None, None, None) => {
+            sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1")
+                .bind(user_id)
+                .fetch_one(pool)
+                .await
+                .context("Failed to count ignored files")?
+        }
     };
 
     Ok(row.get::<i64, _>("count"))
