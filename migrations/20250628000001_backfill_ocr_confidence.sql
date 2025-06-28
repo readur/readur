@@ -18,19 +18,19 @@ UPDATE documents
 SET ocr_confidence = CASE
     -- High quality text: good length, reasonable character distribution
     WHEN length(trim(ocr_text)) > 1000 
-         AND (length(ocr_text) - length(replace(replace(ocr_text, ' ', ''), char(10), ''))) * 100.0 / length(ocr_text) > 10.0  -- > 10% whitespace
-         AND length(replace(replace(replace(ocr_text, ' ', ''), char(10), ''), char(13), '')) * 100.0 / length(ocr_text) > 70.0  -- > 70% non-whitespace chars
+         AND (length(ocr_text) - length(replace(replace(ocr_text, ' ', ''), chr(10), ''))) * 100.0 / length(ocr_text) > 10.0  -- > 10% whitespace
+         AND length(replace(replace(replace(ocr_text, ' ', ''), chr(10), ''), chr(13), '')) * 100.0 / length(ocr_text) > 70.0  -- > 70% non-whitespace chars
     THEN 90.0 + (random() * 8.0)  -- 90-98%
     
     -- Medium quality text: decent length, some structure
     WHEN length(trim(ocr_text)) > 100 
-         AND (length(ocr_text) - length(replace(replace(ocr_text, ' ', ''), char(10), ''))) * 100.0 / length(ocr_text) > 5.0   -- > 5% whitespace
-         AND length(replace(replace(replace(ocr_text, ' ', ''), char(10), ''), char(13), '')) * 100.0 / length(ocr_text) > 50.0  -- > 50% non-whitespace chars
+         AND (length(ocr_text) - length(replace(replace(ocr_text, ' ', ''), chr(10), ''))) * 100.0 / length(ocr_text) > 5.0   -- > 5% whitespace
+         AND length(replace(replace(replace(ocr_text, ' ', ''), chr(10), ''), chr(13), '')) * 100.0 / length(ocr_text) > 50.0  -- > 50% non-whitespace chars
     THEN 70.0 + (random() * 15.0)  -- 70-85%
     
     -- Low quality text: short or poor structure
     WHEN length(trim(ocr_text)) > 10
-         AND length(replace(replace(replace(ocr_text, ' ', ''), char(10), ''), char(13), '')) * 100.0 / length(ocr_text) > 30.0  -- > 30% non-whitespace chars
+         AND length(replace(replace(replace(ocr_text, ' ', ''), chr(10), ''), chr(13), '')) * 100.0 / length(ocr_text) > 30.0  -- > 30% non-whitespace chars
     THEN 40.0 + (random() * 25.0)  -- 40-65%
     
     -- Very poor quality: very short or mostly garbage
