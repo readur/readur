@@ -167,6 +167,7 @@ mod tests {
             limit: Some(10),
             offset: Some(0),
             source_type: None,
+            source_identifier: None,
             ignored_by: None,
             filename: None,
         };
