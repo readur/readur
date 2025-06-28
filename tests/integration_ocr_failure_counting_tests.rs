@@ -172,12 +172,12 @@ async fn test_zero_failures_display_correctly() {
     assert_eq!(result["statistics"]["total_failed"], 0);
     assert!(result["documents"].is_array());
     assert_eq!(result["documents"].as_array().unwrap().len(), 0);
-    assert!(result["statistics"]["failure_categories"].is_array());
-    assert_eq!(result["statistics"]["failure_categories"].as_array().unwrap().len(), 0);
+    assert!(result["statistics"]["by_reason"].is_object());
+    assert_eq!(result["statistics"]["by_reason"].as_object().unwrap().len(), 0);
     
     // Verify pagination shows zero
     assert_eq!(result["pagination"]["total"], 0);
-    assert_eq!(result["pagination"]["has_more"], false);
+    assert_eq!(result["pagination"]["total_pages"], 0);
     
     println!("✅ Zero failures are displayed correctly");
 }
@@ -195,27 +195,21 @@ async fn test_failure_categories_structure() {
     };
     
     let result = client.get_failed_ocr_documents().await.unwrap();
-    let failure_categories = &result["statistics"]["failure_categories"];
+    let by_reason = &result["statistics"]["by_reason"];
     
-    // Verify failure categories is an array
-    assert!(failure_categories.is_array());
+    // Verify by_reason is an object
+    assert!(by_reason.is_object());
     
-    // Check structure of any failure categories that exist
-    if let Some(categories) = failure_categories.as_array() {
-        for category in categories {
-            // Each category should have these fields
-            assert!(category.get("reason").is_some(), "Category should have 'reason' field");
-            assert!(category.get("display_name").is_some(), "Category should have 'display_name' field");
-            assert!(category.get("count").is_some(), "Category should have 'count' field");
-            
-            // Verify data types
-            assert!(category["reason"].is_string(), "'reason' should be a string");
-            assert!(category["display_name"].is_string(), "'display_name' should be a string");
-            assert!(category["count"].is_number(), "'count' should be a number");
+    // Check structure of any failure reasons that exist
+    if let Some(reasons) = by_reason.as_object() {
+        for (reason, count) in reasons {
+            // Each entry should have a non-empty reason and numeric count
+            assert!(!reason.is_empty(), "Reason should not be empty");
+            assert!(count.is_number(), "Count should be a number");
             
             // Count should be non-negative
-            let count = category["count"].as_i64().unwrap();
-            assert!(count >= 0, "Failure count should be non-negative");
+            let count_val = count.as_i64().unwrap();
+            assert!(count_val >= 0, "Failure count should be non-negative");
         }
     }
     
@@ -274,17 +268,17 @@ async fn test_failure_category_counts_sum_to_total() {
     let result = client.get_failed_ocr_documents().await.unwrap();
     
     let total_failed = result["statistics"]["total_failed"].as_i64().unwrap();
-    let failure_categories = result["statistics"]["failure_categories"].as_array().unwrap();
+    let by_reason = result["statistics"]["by_reason"].as_object().unwrap();
     
-    // Sum up all category counts
-    let category_sum: i64 = failure_categories
-        .iter()
-        .map(|cat| cat["count"].as_i64().unwrap())
+    // Sum up all reason counts
+    let reason_sum: i64 = by_reason
+        .values()
+        .map(|count| count.as_i64().unwrap())
         .sum();
     
-    // Category counts should sum to total failed
-    assert_eq!(category_sum, total_failed, 
-               "Sum of category counts should equal total failed count");
+    // Reason counts should sum to total failed
+    assert_eq!(reason_sum, total_failed, 
+               "Sum of reason counts should equal total failed count");
     
     println!("✅ Failure category counts sum to total failed count");
 }
@@ -302,23 +296,23 @@ async fn test_failure_reason_classification() {
     };
     
     let result = client.get_failed_ocr_documents().await.unwrap();
-    let failure_categories = result["statistics"]["failure_categories"].as_array().unwrap();
+    let by_reason = result["statistics"]["by_reason"].as_object().unwrap();
     
     // Check that known failure reasons are properly categorized
-    let valid_display_names = vec![
-        "PDF Font Issues",
-        "PDF Corruption", 
-        "Timeout",
-        "Memory Limit",
-        "PDF Parsing Error",
-        "Unknown Error",
-        "Other"
+    let valid_reason_keys = vec![
+        "low_ocr_confidence",
+        "ocr_timeout", 
+        "ocr_memory_limit",
+        "pdf_parsing_error",
+        "file_corrupted",
+        "unsupported_format",
+        "access_denied",
+        "other"
     ];
     
-    for category in failure_categories {
-        let display_name = category["display_name"].as_str().unwrap();
-        assert!(valid_display_names.contains(&display_name), 
-                "Display name '{}' should be one of the valid categories", display_name);
+    for (reason_key, _count) in by_reason {
+        assert!(valid_reason_keys.contains(&reason_key.as_str()), 
+                "Reason key '{}' should be one of the valid failure reasons", reason_key);
     }
     
     println!("✅ Failure reasons are properly classified");
