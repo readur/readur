@@ -345,15 +345,37 @@ const DocumentDetailsPage: React.FC = () => {
                   <img
                     src={thumbnailUrl}
                     alt={document.original_filename}
+                    onClick={handleViewDocument}
                     style={{
                       maxWidth: '100%',
                       maxHeight: '200px',
                       borderRadius: '8px',
                       objectFit: 'contain',
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.02)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = 'none';
                     }}
                   />
                 ) : (
-                  getFileIcon(document.mime_type)
+                  <Box
+                    onClick={handleViewDocument}
+                    sx={{
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s ease-in-out',
+                      '&:hover': {
+                        transform: 'scale(1.02)',
+                      }
+                    }}
+                  >
+                    {getFileIcon(document.mime_type)}
+                  </Box>
                 )}
               </Box>
               
