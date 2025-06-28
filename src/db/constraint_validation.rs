@@ -76,9 +76,10 @@ impl ConstraintValidator {
     }
 
     /// Tests database constraint enforcement by attempting to insert invalid data
+    /// Note: This function requires a live database connection and is intended for integration tests
     pub async fn test_constraint_enforcement(pool: &PgPool) -> Result<(), sqlx::Error> {
         // Test that invalid failure_reason is rejected
-        let invalid_result = sqlx::query!(
+        let invalid_result = sqlx::query(
             r#"
             INSERT INTO failed_documents (
                 user_id, filename, failure_reason, failure_stage, ingestion_source
@@ -96,7 +97,7 @@ impl ConstraintValidator {
         }
 
         // Test that valid data is accepted
-        let valid_result = sqlx::query!(
+        let valid_result = sqlx::query(
             r#"
             INSERT INTO failed_documents (
                 user_id, filename, failure_reason, failure_stage, ingestion_source
@@ -113,9 +114,7 @@ impl ConstraintValidator {
         }
 
         // Clean up test data
-        sqlx::query!(
-            "DELETE FROM failed_documents WHERE filename LIKE 'constraint_test%'"
-        )
+        sqlx::query("DELETE FROM failed_documents WHERE filename LIKE 'constraint_test%'")
         .execute(pool)
         .await?;
 
