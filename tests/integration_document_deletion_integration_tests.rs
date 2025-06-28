@@ -281,8 +281,11 @@ impl DocumentDeletionTestClient {
 
     /// Create and login user (convenience method)
     async fn create_and_login_user(&mut self, username: &str, password: &str, role: UserRole) -> Result<String, Box<dyn std::error::Error>> {
-        let email = format!("{}@example.com", username);
-        self.register_and_login(username, &email, password, Some(role)).await
+        // Add random suffix to avoid username collisions between parallel tests
+        let random_suffix = uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>();
+        let unique_username = format!("{}_{}", username, random_suffix);
+        let email = format!("{}@example.com", unique_username);
+        self.register_and_login(&unique_username, &email, password, Some(role)).await
     }
 }
 
