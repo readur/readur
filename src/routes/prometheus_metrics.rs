@@ -17,6 +17,15 @@ pub fn router() -> Router<Arc<AppState>> {
 }
 
 /// Returns metrics in Prometheus text format (text/plain; version=0.0.4)
+#[utoipa::path(
+    get,
+    path = "/metrics",
+    tag = "metrics",
+    responses(
+        (status = 200, description = "Prometheus metrics in text format", content_type = "text/plain; version=0.0.4"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_prometheus_metrics(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, StatusCode> {

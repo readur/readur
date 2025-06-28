@@ -36,6 +36,8 @@ use crate::{
         crate::routes::auth::register,
         crate::routes::auth::login,
         crate::routes::auth::me,
+        crate::routes::auth::oidc_login,
+        crate::routes::auth::oidc_callback,
         // Document endpoints
         crate::routes::documents::upload_document,
         crate::routes::documents::list_documents,
@@ -82,6 +84,7 @@ use crate::{
         crate::routes::queue::resume_ocr_processing,
         // Metrics endpoints
         crate::routes::metrics::get_system_metrics,
+        crate::routes::prometheus_metrics::get_prometheus_metrics,
         // Notifications endpoints
         crate::routes::notifications::get_notifications,
         crate::routes::notifications::get_notification_summary,
