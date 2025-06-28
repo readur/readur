@@ -2,6 +2,9 @@
 -- Since OCR confidence was previously hardcoded to 85%, we need to reprocess
 -- these documents to get accurate confidence scores
 
+-- Temporarily disable the OCR consistency trigger to allow this migration
+ALTER TABLE documents DISABLE TRIGGER trigger_validate_ocr_consistency;
+
 -- Mark documents with exactly 85% confidence as pending OCR reprocessing
 UPDATE documents 
 SET ocr_status = 'pending',
@@ -11,6 +14,9 @@ SET ocr_status = 'pending',
 WHERE ocr_confidence = 85.0 
   AND ocr_status = 'completed'
   AND ocr_text IS NOT NULL;
+
+-- Re-enable the OCR consistency trigger
+ALTER TABLE documents ENABLE TRIGGER trigger_validate_ocr_consistency;
 
 -- Add a comment explaining what we did
 COMMENT ON COLUMN documents.ocr_confidence IS 'OCR confidence percentage (0-100) from Tesseract. Documents with NULL confidence and pending status will be reprocessed.';
