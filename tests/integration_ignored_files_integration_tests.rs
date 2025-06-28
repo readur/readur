@@ -96,6 +96,7 @@ async fn test_ignored_files_crud_operations() -> Result<()> {
         limit: Some(10),
         offset: Some(0),
         source_type: None,
+        source_identifier: None,
         ignored_by: None,
         filename: None,
     };
@@ -173,6 +174,7 @@ async fn test_ignored_files_filtering() -> Result<()> {
         limit: Some(10),
         offset: Some(0),
         source_type: Some("webdav".to_string()),
+        source_identifier: None,
         ignored_by: None,
         filename: None,
     };
@@ -186,6 +188,7 @@ async fn test_ignored_files_filtering() -> Result<()> {
         limit: Some(10),
         offset: Some(0),
         source_type: None,
+        source_identifier: None,
         ignored_by: None,
         filename: Some("s3_file".to_string()),
     };
@@ -248,6 +251,7 @@ async fn test_ignored_files_user_isolation() -> Result<()> {
         limit: Some(10),
         offset: Some(0),
         source_type: None,
+        source_identifier: None,
         ignored_by: None,
         filename: None,
     };
@@ -311,6 +315,7 @@ async fn test_ignored_files_bulk_operations() -> Result<()> {
         limit: Some(10),
         offset: Some(0),
         source_type: None,
+        source_identifier: None,
         ignored_by: None,
         filename: None,
     };
@@ -392,6 +397,7 @@ async fn test_ignored_files_count_functionality() -> Result<()> {
         limit: Some(10),
         offset: Some(0),
         source_type: None,
+        source_identifier: None,
         ignored_by: None,
         filename: None,
     };
@@ -427,6 +433,7 @@ async fn test_ignored_files_count_functionality() -> Result<()> {
         limit: Some(10),
         offset: Some(0),
         source_type: Some("webdav".to_string()),
+        source_identifier: None,
         ignored_by: None,
         filename: None,
     };

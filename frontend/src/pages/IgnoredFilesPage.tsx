@@ -30,6 +30,8 @@ import {
   Paper,
   Tooltip,
   MenuItem,
+  Breadcrumbs,
+  Link,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -42,9 +44,12 @@ import {
   Computer as ComputerIcon,
   Storage as StorageIcon,
   CalendarToday as DateIcon,
+  ArrowBack as ArrowBackIcon,
+  RestoreFromTrash as RestoreFromTrashIcon,
 } from '@mui/icons-material';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface IgnoredFile {
   id: string;
@@ -76,8 +81,11 @@ interface IgnoredFilesStats {
 }
 
 const IgnoredFilesPage: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [ignoredFiles, setIgnoredFiles] = useState<IgnoredFile[]>([]);
   const [stats, setStats] = useState<IgnoredFilesStats | null>(null);
+  const [sources, setSources] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -88,6 +96,11 @@ const IgnoredFilesPage: React.FC = () => {
   const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
   const [deletingFiles, setDeletingFiles] = useState(false);
   const { addNotification } = useNotifications();
+
+  // URL parameters for filtering
+  const sourceTypeParam = searchParams.get('sourceType');
+  const sourceNameParam = searchParams.get('sourceName');
+  const sourceIdParam = searchParams.get('sourceId');
 
   const pageSize = 25;
 
@@ -112,6 +125,10 @@ const IgnoredFilesPage: React.FC = () => {
 
       if (sourceTypeFilter) {
         params.append('source_type', sourceTypeFilter);
+      }
+
+      if (sourceIdParam) {
+        params.append('source_identifier', sourceIdParam);
       }
 
       const response = await fetch(`/api/ignored-files?${params}`, {
@@ -158,9 +175,38 @@ const IgnoredFilesPage: React.FC = () => {
   };
 
   useEffect(() => {
+    // Set initial filters from URL params
+    if (sourceTypeParam) {
+      setSourceTypeFilter(sourceTypeParam);
+    }
+    fetchSources();
+  }, []);
+
+  useEffect(() => {
     fetchIgnoredFiles();
     fetchStats();
   }, [page, searchTerm, sourceTypeFilter]);
+
+  const fetchSources = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch('/api/sources', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSources(data);
+      }
+    } catch (err) {
+      console.error('Error fetching sources:', err);
+    }
+  };
 
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
@@ -306,19 +352,73 @@ const IgnoredFilesPage: React.FC = () => {
     }
   };
 
+  const getSourceNameFromIdentifier = (sourceIdentifier?: string, sourceType?: string) => {
+    // Try to find the source name from the sources list
+    const source = sources.find(s => s.id === sourceIdentifier || s.name.toLowerCase().includes(sourceIdentifier?.toLowerCase() || ''));
+    return source?.name || sourceIdentifier || 'Unknown Source';
+  };
+
+  const clearFilters = () => {
+    setSourceTypeFilter('');
+    setSearchTerm('');
+    setPage(1);
+    navigate('/ignored-files', { replace: true });
+  };
+
   const uniqueSourceTypes = Array.from(
     new Set(ignoredFiles.map(file => file.source_type).filter(Boolean))
   );
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* Breadcrumbs and Navigation */}
+      <Box sx={{ mb: 3 }}>
+        <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
+          <Link
+            color="inherit"
+            href="#"
+            onClick={() => navigate('/sources')}
+            sx={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}
+          >
+            <StorageIcon sx={{ mr: 0.5 }} fontSize="inherit" />
+            Sources
+          </Link>
+          <Typography color="text.primary" sx={{ display: 'flex', alignItems: 'center' }}>
+            <BlockIcon sx={{ mr: 0.5 }} fontSize="inherit" />
+            Ignored Files
+            {(sourceTypeParam || sourceNameParam) && (
+              <Chip
+                label={sourceNameParam ? `${sourceNameParam}` : `${getSourceTypeDisplay(sourceTypeParam)} Sources`}
+                size="small"
+                onDelete={clearFilters}
+                sx={{ ml: 1 }}
+              />
+            )}
+          </Typography>
+        </Breadcrumbs>
+      </Box>
+
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
         <BlockIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
         Ignored Files
+        {(sourceTypeParam || sourceNameParam || sourceIdParam) && (
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<ArrowBackIcon />}
+            onClick={clearFilters}
+            sx={{ ml: 2, textTransform: 'none' }}
+          >
+            View All
+          </Button>
+        )}
       </Typography>
 
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        Files that have been deleted and will be ignored during future syncs from their sources.
+        {sourceTypeParam || sourceNameParam || sourceIdParam
+          ? `Files from ${sourceNameParam || getSourceTypeDisplay(sourceTypeParam)} sources that have been deleted and will be ignored during future syncs.`
+          : 'Files that have been deleted and will be ignored during future syncs from their sources.'
+        }
       </Typography>
 
       {/* Statistics Cards */}
@@ -421,12 +521,12 @@ const IgnoredFilesPage: React.FC = () => {
               </Typography>
               <Button
                 variant="contained"
-                color="error"
-                startIcon={<DeleteIcon />}
+                color="success"
+                startIcon={<RestoreFromTrashIcon />}
                 onClick={() => setBulkDeleteDialog(true)}
                 size="small"
               >
-                Delete Selected
+                Remove from Ignored List
               </Button>
             </Stack>
           </CardContent>
@@ -533,15 +633,17 @@ const IgnoredFilesPage: React.FC = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Tooltip title="Remove from ignored list">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeleteSingle(file.id)}
-                          color="error"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      <Stack direction="row" spacing={1}>
+                        <Tooltip title="Remove from ignored list (allow re-syncing)">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeleteSingle(file.id)}
+                            color="success"
+                          >
+                            <RestoreFromTrashIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 ))
@@ -571,19 +673,19 @@ const IgnoredFilesPage: React.FC = () => {
             Are you sure you want to remove {selectedFiles.size} file{selectedFiles.size !== 1 ? 's' : ''} from the ignored list?
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            These files will be eligible for syncing again if encountered from their sources.
+            These files will be eligible for syncing again if encountered from their sources. This action allows them to be re-imported during future syncs.
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setBulkDeleteDialog(false)}>Cancel</Button>
           <Button
             onClick={handleDeleteSelected}
-            color="error"
+            color="success"
             variant="contained"
             disabled={deletingFiles}
-            startIcon={deletingFiles ? <CircularProgress size={16} /> : <DeleteIcon />}
+            startIcon={deletingFiles ? <CircularProgress size={16} /> : <RestoreFromTrashIcon />}
           >
-            Delete
+            Remove from Ignored List
           </Button>
         </DialogActions>
       </Dialog>

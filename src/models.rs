@@ -1040,6 +1040,8 @@ pub struct IgnoredFilesQuery {
     pub offset: Option<i64>,
     /// Filter by source type
     pub source_type: Option<String>,
+    /// Filter by source identifier (specific source)
+    pub source_identifier: Option<String>,
     /// Filter by user who ignored the files
     pub ignored_by: Option<Uuid>,
     /// Search by filename

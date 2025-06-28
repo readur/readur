@@ -82,7 +82,7 @@ pub fn ignored_files_routes() -> Router<Arc<AppState>> {
     ),
     params(IgnoredFilesQuery),
     responses(
-        (status = 200, description = "List of ignored files", body = Vec<IgnoredFileResponse>),
+        (status = 200, description = "List of ignored files with pagination and filtering support. Supports filtering by source_type, source_identifier, and filename search.", body = Vec<IgnoredFileResponse>),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
     )
@@ -170,7 +170,7 @@ pub async fn get_ignored_file(
         ("id" = uuid::Uuid, Path, description = "Ignored file ID")
     ),
     responses(
-        (status = 200, description = "Ignored file deleted successfully"),
+        (status = 200, description = "Ignored file deleted successfully - removes file from ignored list allowing it to be re-synced"),
         (status = 401, description = "Unauthorized"),
         (status = 404, description = "Ignored file not found"),
         (status = 500, description = "Internal server error")
@@ -212,7 +212,7 @@ pub async fn delete_ignored_file(
     ),
     request_body(content = BulkDeleteIgnoredFilesRequest, description = "List of ignored file IDs to delete"),
     responses(
-        (status = 200, description = "Ignored files deleted successfully"),
+        (status = 200, description = "Ignored files deleted successfully - removes multiple files from ignored list allowing them to be re-synced"),
         (status = 400, description = "Bad request - no ignored file IDs provided"),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
@@ -265,7 +265,7 @@ pub async fn bulk_delete_ignored_files(
         ("bearer_auth" = [])
     ),
     responses(
-        (status = 200, description = "Ignored files statistics", body = IgnoredFilesStats),
+        (status = 200, description = "Ignored files statistics including totals, counts by source type, and size information", body = IgnoredFilesStats),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
     )

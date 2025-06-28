@@ -67,6 +67,7 @@ import {
   PlayArrow as ResumeIcon,
   TextSnippet as DocumentIcon,
   Visibility as OcrIcon,
+  Block as BlockIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api, { queueService } from '../services/api';
@@ -825,6 +826,18 @@ const SourcesPage: React.FC = () => {
                   }}
                 >
                   <EditIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="View Ignored Files">
+                <IconButton 
+                  onClick={() => navigate(`/ignored-files?sourceType=${source.source_type}&sourceName=${encodeURIComponent(source.name)}&sourceId=${source.id}`)}
+                  sx={{
+                    bgcolor: alpha(theme.palette.warning.main, 0.1),
+                    '&:hover': { bgcolor: alpha(theme.palette.warning.main, 0.2) },
+                    color: theme.palette.warning.main,
+                  }}
+                >
+                  <BlockIcon />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Delete Source">
