@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use sqlx::Row;
 use std::sync::Arc;
 
 use crate::{auth::AuthUser, ocr::queue::OcrQueueService, AppState, models::UserRole};
