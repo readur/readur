@@ -322,11 +322,12 @@ impl OcrQueueService {
                             warn!("⚠️  OCR quality issues for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words", 
                                   filename, item.id, item.document_id, ocr_result.confidence, ocr_result.word_count);
                             
-                            // Mark as failed for quality issues
+                            // Mark as failed for quality issues with proper failure reason
                             sqlx::query(
                                 r#"
                                 UPDATE documents
                                 SET ocr_status = 'failed',
+                                    ocr_failure_reason = 'low_ocr_confidence',
                                     ocr_error = $2,
                                     updated_at = NOW()
                                 WHERE id = $1

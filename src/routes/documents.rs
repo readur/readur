@@ -26,6 +26,14 @@ struct PaginationQuery {
     ocr_status: Option<String>,
 }
 
+#[derive(Deserialize, ToSchema)]
+struct FailedDocumentsQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+    stage: Option<String>,  // 'ocr', 'ingestion', 'validation', etc.
+    reason: Option<String>, // 'duplicate_content', 'low_ocr_confidence', etc.
+}
+
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct BulkDeleteRequest {
     pub document_ids: Vec<uuid::Uuid>,
@@ -50,8 +58,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/ocr", get(get_document_ocr))
         .route("/{id}/processed-image", get(get_processed_image))
         .route("/{id}/retry-ocr", post(retry_ocr))
-        .route("/failed-ocr", get(get_failed_ocr_documents))
         .route("/duplicates", get(get_user_duplicates))
+        .route("/failed", get(get_failed_documents))
         .route("/delete-low-confidence", post(delete_low_confidence_documents))
         .route("/delete-failed-ocr", post(delete_failed_ocr_documents))
 }
@@ -757,6 +765,202 @@ async fn get_failed_ocr_documents(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/documents/failed",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("limit" = Option<i64>, Query, description = "Number of documents to return"),
+        ("offset" = Option<i64>, Query, description = "Number of documents to skip"),
+        ("stage" = Option<String>, Query, description = "Filter by failure stage (ocr, ingestion, validation, etc.)"),
+        ("reason" = Option<String>, Query, description = "Filter by failure reason")
+    ),
+    responses(
+        (status = 200, description = "List of failed documents", body = String),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn get_failed_documents(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Query(params): Query<FailedDocumentsQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let limit = params.limit.unwrap_or(25);
+    let offset = params.offset.unwrap_or(0);
+    
+    // Query the unified failed_documents table
+    let mut query_builder = sqlx::QueryBuilder::new(
+        r#"
+        SELECT id, filename, original_filename, file_path, file_size, mime_type,
+               content, tags, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms,
+               failure_reason, failure_stage, error_message, existing_document_id,
+               ingestion_source, retry_count, last_retry_at, created_at, updated_at
+        FROM failed_documents
+        WHERE ($1::uuid IS NULL OR user_id = $1)
+        "#
+    );
+    
+    let mut bind_count = 1;
+    
+    // Add stage filter if specified
+    if let Some(stage) = &params.stage {
+        bind_count += 1;
+        query_builder.push(&format!(" AND failure_stage = ${}", bind_count));
+    }
+    
+    // Add reason filter if specified  
+    if let Some(reason) = &params.reason {
+        bind_count += 1;
+        query_builder.push(&format!(" AND failure_reason = ${}", bind_count));
+    }
+    
+    query_builder.push(" ORDER BY created_at DESC");
+    query_builder.push(&format!(" LIMIT ${} OFFSET ${}", bind_count + 1, bind_count + 2));
+    
+    let mut query = query_builder.build();
+    
+    // Bind parameters in order
+    query = query.bind(if auth_user.user.role == crate::models::UserRole::Admin { 
+        None 
+    } else { 
+        Some(auth_user.user.id) 
+    });
+    
+    if let Some(stage) = &params.stage {
+        query = query.bind(stage);
+    }
+    
+    if let Some(reason) = &params.reason {
+        query = query.bind(reason);
+    }
+    
+    query = query.bind(limit).bind(offset);
+    
+    let failed_docs = query
+        .fetch_all(state.db.get_pool())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch failed documents: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    
+    // Count total for pagination
+    let mut count_query_builder = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*) FROM failed_documents WHERE ($1::uuid IS NULL OR user_id = $1)"
+    );
+    
+    let mut count_bind_count = 1;
+    
+    if let Some(stage) = &params.stage {
+        count_bind_count += 1;
+        count_query_builder.push(&format!(" AND failure_stage = ${}", count_bind_count));
+    }
+    
+    if let Some(reason) = &params.reason {
+        count_bind_count += 1;
+        count_query_builder.push(&format!(" AND failure_reason = ${}", count_bind_count));
+    }
+    
+    let mut count_query = count_query_builder.build_query_scalar::<i64>();
+    
+    count_query = count_query.bind(if auth_user.user.role == crate::models::UserRole::Admin { 
+        None 
+    } else { 
+        Some(auth_user.user.id) 
+    });
+    
+    if let Some(stage) = &params.stage {
+        count_query = count_query.bind(stage);
+    }
+    
+    if let Some(reason) = &params.reason {
+        count_query = count_query.bind(reason);
+    }
+    
+    let total_count = count_query
+        .fetch_one(state.db.get_pool())
+        .await
+        .unwrap_or(0);
+    
+    // Convert to JSON response format
+    let documents: Vec<serde_json::Value> = failed_docs.iter().map(|row| {
+        serde_json::json!({
+            "id": row.get::<uuid::Uuid, _>("id"),
+            "filename": row.get::<String, _>("filename"),
+            "original_filename": row.get::<Option<String>, _>("original_filename"),
+            "file_path": row.get::<Option<String>, _>("file_path"),
+            "file_size": row.get::<Option<i64>, _>("file_size"),
+            "mime_type": row.get::<Option<String>, _>("mime_type"),
+            "content": row.get::<Option<String>, _>("content"),
+            "tags": row.get::<Vec<String>, _>("tags"),
+            "ocr_text": row.get::<Option<String>, _>("ocr_text"),
+            "ocr_confidence": row.get::<Option<f32>, _>("ocr_confidence"),
+            "ocr_word_count": row.get::<Option<i32>, _>("ocr_word_count"),
+            "ocr_processing_time_ms": row.get::<Option<i32>, _>("ocr_processing_time_ms"),
+            "failure_reason": row.get::<String, _>("failure_reason"),
+            "failure_stage": row.get::<String, _>("failure_stage"),
+            "error_message": row.get::<Option<String>, _>("error_message"),
+            "existing_document_id": row.get::<Option<uuid::Uuid>, _>("existing_document_id"),
+            "ingestion_source": row.get::<String, _>("ingestion_source"),
+            "retry_count": row.get::<Option<i32>, _>("retry_count"),
+            "last_retry_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_retry_at"),
+            "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
+            
+            // Computed fields for backward compatibility
+            "failure_category": categorize_failure_reason(
+                Some(&row.get::<String, _>("failure_reason")),
+                row.get::<Option<String>, _>("error_message").as_deref()
+            ),
+            "source": match row.get::<String, _>("failure_stage").as_str() {
+                "ocr" => "OCR Processing",
+                "ingestion" => "Document Ingestion", 
+                "validation" => "Document Validation",
+                "storage" => "File Storage",
+                "processing" => "Document Processing",
+                "sync" => "Source Synchronization",
+                _ => "Unknown"
+            }
+        })
+    }).collect();
+    
+    // Calculate statistics for the response
+    let mut stage_stats = std::collections::HashMap::new();
+    let mut reason_stats = std::collections::HashMap::new();
+    
+    for doc in &documents {
+        let stage = doc["failure_stage"].as_str().unwrap_or("unknown");
+        let reason = doc["failure_reason"].as_str().unwrap_or("unknown");
+        
+        *stage_stats.entry(stage).or_insert(0) += 1;
+        *reason_stats.entry(reason).or_insert(0) += 1;
+    }
+    
+    let response = serde_json::json!({
+        "documents": documents,
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": total_count,
+            "total_pages": (total_count as f64 / limit as f64).ceil() as i64
+        },
+        "statistics": {
+            "total_failed": total_count,
+            "by_stage": stage_stats,
+            "by_reason": reason_stats
+        },
+        "filters": {
+            "stage": params.stage,
+            "reason": params.reason
+        }
+    });
+    
+    Ok(Json(response))
+}
+
 async fn calculate_estimated_wait_time(priority: i32) -> i64 {
     // Simple estimation based on priority - in a real implementation,
     // this would check actual queue depth and processing times
@@ -775,6 +979,7 @@ fn categorize_failure_reason(failure_reason: Option<&str>, error_message: Option
         Some("processing_timeout") => "Timeout",
         Some("memory_limit") => "Memory Limit",
         Some("pdf_parsing_panic") => "PDF Parsing Error",
+        Some("low_ocr_confidence") => "Low OCR Confidence",
         Some("unknown") | None => {
             // Try to categorize based on error message
             if let Some(error) = error_message {
@@ -787,6 +992,8 @@ fn categorize_failure_reason(failure_reason: Option<&str>, error_message: Option
                     "PDF Font Issues"
                 } else if error_lower.contains("corrupt") {
                     "PDF Corruption"
+                } else if error_lower.contains("quality below threshold") || error_lower.contains("confidence") {
+                    "Low OCR Confidence"
                 } else {
                     "Unknown Error"
                 }
@@ -1066,12 +1273,27 @@ pub async fn delete_low_confidence_documents(
     let matched_count = matched_documents.len();
 
     if is_preview {
+        // Convert documents to response format with key details
+        let document_details: Vec<serde_json::Value> = matched_documents.iter().map(|d| {
+            serde_json::json!({
+                "id": d.id,
+                "filename": d.filename,
+                "original_filename": d.original_filename,
+                "file_size": d.file_size,
+                "ocr_confidence": d.ocr_confidence,
+                "ocr_status": d.ocr_status,
+                "created_at": d.created_at,
+                "mime_type": d.mime_type
+            })
+        }).collect();
+
         return Ok(Json(serde_json::json!({
             "success": true,
             "message": format!("Found {} documents with OCR confidence below {}%", matched_count, request.max_confidence),
             "matched_count": matched_count,
             "preview": true,
-            "document_ids": matched_documents.iter().map(|d| d.id).collect::<Vec<_>>()
+            "document_ids": matched_documents.iter().map(|d| d.id).collect::<Vec<_>>(),
+            "documents": document_details
         })));
     }
 

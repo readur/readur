@@ -200,8 +200,8 @@ export const documentService = {
   },
 
   getFailedOcrDocuments: (limit = 50, offset = 0) => {
-    return api.get(`/documents/failed-ocr`, {
-      params: { limit, offset },
+    return api.get(`/documents/failed`, {
+      params: { stage: 'ocr', limit, offset },
     })
   },
 
@@ -252,6 +252,13 @@ export const documentService = {
     return api.post('/documents/delete-failed-ocr', {
       preview_only: previewOnly
     })
+  },
+
+  getFailedDocuments: (limit = 25, offset = 0, stage?: string, reason?: string) => {
+    const params: any = { limit, offset };
+    if (stage) params.stage = stage;
+    if (reason) params.reason = reason;
+    return api.get('/documents/failed', { params })
   },
 }
 
