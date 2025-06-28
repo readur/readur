@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -30,6 +31,7 @@ import {
   Tab,
   TextField,
   useTheme,
+  Divider,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -44,9 +46,11 @@ import {
   FileCopy as FileCopyIcon,
   Delete as DeleteIcon,
   FindInPage as FindInPageIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { api, documentService } from '../services/api';
+import DocumentViewer from '../components/DocumentViewer';
 
 interface FailedDocument {
   id: string;
@@ -127,6 +131,7 @@ interface DuplicatesResponse {
 
 const FailedOcrPage: React.FC = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [currentTab, setCurrentTab] = useState(0);
   const [documents, setDocuments] = useState<FailedDocument[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
@@ -1028,7 +1033,7 @@ const FailedOcrPage: React.FC = () => {
       <Dialog
         open={detailsOpen}
         onClose={() => setDetailsOpen(false)}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
         <DialogTitle>
@@ -1036,74 +1041,122 @@ const FailedOcrPage: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           {selectedDocument && (
-            <Grid container spacing={2}>
+            <Grid container spacing={3}>
+              {/* File Preview Section */}
               <Grid item xs={12} md={6}>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Original Filename:</strong>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  File Preview
                 </Typography>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  {selectedDocument.original_filename}
-                </Typography>
-
-                <Typography variant="body2" color="text.secondary">
-                  <strong>File Size:</strong>
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  {formatFileSize(selectedDocument.file_size)}
-                </Typography>
-
-                <Typography variant="body2" color="text.secondary">
-                  <strong>MIME Type:</strong>
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  {selectedDocument.mime_type}
-                </Typography>
-
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Tags:</strong>
-                </Typography>
-                <Box sx={{ mb: 2 }}>
-                  {selectedDocument.tags.length > 0 ? (
-                    selectedDocument.tags.map((tag) => (
-                      <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
-                    ))
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">No tags</Typography>
-                  )}
+                <Box
+                  onClick={() => {
+                    if (selectedDocument) {
+                      navigate(`/documents/${selectedDocument.id}`);
+                    }
+                  }}
+                  sx={{
+                    cursor: 'pointer',
+                    border: '2px dashed',
+                    borderColor: 'primary.main',
+                    borderRadius: 2,
+                    p: 1,
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      borderColor: 'primary.dark',
+                      boxShadow: 2,
+                    },
+                  }}
+                >
+                  <DocumentViewer
+                    documentId={selectedDocument.id}
+                    filename={selectedDocument.original_filename}
+                    mimeType={selectedDocument.mime_type}
+                  />
+                  <Box sx={{ mt: 1, textAlign: 'center' }}>
+                    <Typography variant="caption" color="primary.main">
+                      Click to open full document details page
+                    </Typography>
+                  </Box>
                 </Box>
               </Grid>
+
+              {/* Document Information Section */}
               <Grid item xs={12} md={6}>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Failure Category:</strong>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Document Information
                 </Typography>
-                <Chip
-                  label={selectedDocument.failure_category}
-                  color={getFailureCategoryColor(selectedDocument.failure_category)}
-                  sx={{ mb: 2 }}
-                />
+                <Box>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Original Filename:</strong>
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    {selectedDocument.original_filename}
+                  </Typography>
 
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Retry Count:</strong>
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  {selectedDocument.retry_count} attempts
-                </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>File Size:</strong>
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    {formatFileSize(selectedDocument.file_size)}
+                  </Typography>
 
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Created:</strong>
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  {format(new Date(selectedDocument.created_at), 'PPpp')}
-                </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>MIME Type:</strong>
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    {selectedDocument.mime_type}
+                  </Typography>
 
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Last Updated:</strong>
-                </Typography>
-                <Typography variant="body2">
-                  {format(new Date(selectedDocument.updated_at), 'PPpp')}
-                </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Failure Category:</strong>
+                  </Typography>
+                  <Chip
+                    label={selectedDocument.failure_category}
+                    color={getFailureCategoryColor(selectedDocument.failure_category)}
+                    sx={{ mb: 2 }}
+                  />
+
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                    <strong>Retry Count:</strong>
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    {selectedDocument.retry_count} attempts
+                  </Typography>
+
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Created:</strong>
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    {format(new Date(selectedDocument.created_at), 'PPpp')}
+                  </Typography>
+
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Last Updated:</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    {format(new Date(selectedDocument.updated_at), 'PPpp')}
+                  </Typography>
+
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                    <strong>Tags:</strong>
+                  </Typography>
+                  <Box sx={{ mb: 2 }}>
+                    {selectedDocument.tags.length > 0 ? (
+                      selectedDocument.tags.map((tag) => (
+                        <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
+                      ))
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">No tags</Typography>
+                    )}
+                  </Box>
+                </Box>
               </Grid>
+
+              {/* Error Details Section */}
               <Grid item xs={12}>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Error Details
+                </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   <strong>Full Error Message:</strong>
                 </Typography>
@@ -1125,6 +1178,17 @@ const FailedOcrPage: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
+          <Button
+            onClick={() => {
+              if (selectedDocument) {
+                navigate(`/documents/${selectedDocument.id}`);
+              }
+            }}
+            startIcon={<OpenInNewIcon />}
+            color="primary"
+          >
+            Open Document Details
+          </Button>
           {selectedDocument?.can_retry && (
             <Button
               onClick={() => {
