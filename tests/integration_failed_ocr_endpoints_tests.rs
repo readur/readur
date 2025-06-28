@@ -144,7 +144,7 @@ impl FailedOcrTestClient {
     
     /// Get failed OCR documents
     async fn get_failed_ocr_documents(&self, limit: Option<i32>, offset: Option<i32>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let mut url = format!("{}/api/documents/failed-ocr", get_base_url());
+        let mut url = format!("{}/api/documents/failed", get_base_url());
         
         let mut params = Vec::new();
         if let Some(l) = limit {
@@ -153,6 +153,8 @@ impl FailedOcrTestClient {
         if let Some(o) = offset {
             params.push(format!("offset={}", o));
         }
+        // Filter to only OCR failures since this is the OCR-specific test
+        params.push("stage=ocr".to_string());
         
         if !params.is_empty() {
             url.push_str(&format!("?{}", params.join("&")));

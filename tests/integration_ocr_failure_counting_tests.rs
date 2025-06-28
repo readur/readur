@@ -115,7 +115,7 @@ impl OcrFailureCountingTestClient {
     /// Get failed OCR documents and statistics
     async fn get_failed_ocr_documents(&self) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let response = self.client
-            .get(&format!("{}/api/documents/failed-ocr", get_base_url()))
+            .get(&format!("{}/api/documents/failed?stage=ocr", get_base_url()))
             .header("Authorization", self.get_auth_header())
             .timeout(TIMEOUT)
             .send()
