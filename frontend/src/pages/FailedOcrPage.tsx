@@ -49,7 +49,7 @@ import {
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { api, documentService } from '../services/api';
+import { api, documentService, queueService } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 
 interface FailedDocument {
@@ -138,6 +138,7 @@ const FailedOcrPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [duplicatesLoading, setDuplicatesLoading] = useState(false);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [retryingAll, setRetryingAll] = useState(false);
   const [statistics, setStatistics] = useState<FailedOcrResponse['statistics'] | null>(null);
   const [duplicateStatistics, setDuplicateStatistics] = useState<DuplicatesResponse['statistics'] | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 25 });
@@ -255,6 +256,39 @@ const FailedOcrPage: React.FC = () => {
       });
     } finally {
       setRetrying(null);
+    }
+  };
+
+  const handleRetryAllFailed = async () => {
+    try {
+      setRetryingAll(true);
+      const response = await queueService.requeueFailed();
+      
+      if (response.data.requeued_count > 0) {
+        setSnackbar({
+          open: true,
+          message: `Successfully queued ${response.data.requeued_count} failed documents for OCR retry. Check the queue stats for progress.`,
+          severity: 'success'
+        });
+        
+        // Refresh the list to update status
+        await fetchFailedDocuments();
+      } else {
+        setSnackbar({
+          open: true,
+          message: 'No failed documents found to retry',
+          severity: 'info'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to retry all failed OCR:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to retry all failed OCR documents',
+        severity: 'error'
+      });
+    } finally {
+      setRetryingAll(false);
     }
   };
 
@@ -444,7 +478,7 @@ const FailedOcrPage: React.FC = () => {
           variant="outlined"
           startIcon={<RefreshIcon />}
           onClick={refreshCurrentTab}
-          disabled={loading || duplicatesLoading}
+          disabled={loading || duplicatesLoading || retryingAll}
         >
           Refresh
         </Button>
@@ -491,6 +525,19 @@ const FailedOcrPage: React.FC = () => {
                 <Typography variant="h3" color="error.main">
                   {statistics.total_failed}
                 </Typography>
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    variant="contained"
+                    color="warning"
+                    startIcon={retryingAll ? <CircularProgress size={20} /> : <RefreshIcon />}
+                    onClick={handleRetryAllFailed}
+                    disabled={retryingAll || statistics.total_failed === 0}
+                    size="small"
+                    fullWidth
+                  >
+                    {retryingAll ? 'Retrying All...' : 'Retry All Failed OCR'}
+                  </Button>
+                </Box>
               </CardContent>
             </Card>
           </Grid>

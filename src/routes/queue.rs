@@ -21,6 +21,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/stats", get(get_queue_stats))
         .route("/requeue-failed", post(requeue_failed))
+        .route("/enqueue-pending", post(enqueue_pending_documents))
         .route("/pause", post(pause_ocr_processing))
         .route("/resume", post(resume_ocr_processing))
         .route("/status", get(get_ocr_status))
@@ -171,5 +172,82 @@ async fn get_ocr_status(
     Ok(Json(serde_json::json!({
         "is_paused": is_paused,
         "status": if is_paused { "paused" } else { "running" }
+    })))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/queue/enqueue-pending",
+    tag = "queue",
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Pending documents queued successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin access required"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+async fn enqueue_pending_documents(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    require_admin(&auth_user)?;
+    
+    // Find all documents with pending OCR status that aren't already in the queue
+    let pending_documents = sqlx::query(
+        r#"
+        SELECT d.id, d.file_size
+        FROM documents d
+        LEFT JOIN ocr_queue oq ON d.id = oq.document_id
+        WHERE d.ocr_status = 'pending'
+          AND oq.document_id IS NULL
+          AND d.file_path IS NOT NULL
+          AND (d.mime_type LIKE 'image/%' OR d.mime_type = 'application/pdf' OR d.mime_type = 'text/plain')
+        ORDER BY d.created_at ASC
+        "#
+    )
+    .fetch_all(state.db.get_pool())
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    if pending_documents.is_empty() {
+        return Ok(Json(serde_json::json!({
+            "queued_count": 0,
+            "message": "No pending documents found to queue"
+        })));
+    }
+    
+    // Prepare batch insert data
+    let documents_to_queue: Vec<(uuid::Uuid, i32, i64)> = pending_documents
+        .into_iter()
+        .map(|row| {
+            let document_id: uuid::Uuid = row.get("id");
+            let file_size: i64 = row.get("file_size");
+            
+            // Calculate priority based on file size
+            let priority = match file_size {
+                0..=1048576 => 10,          // <= 1MB: highest priority
+                ..=5242880 => 8,            // 1-5MB: high priority  
+                ..=10485760 => 6,           // 5-10MB: medium priority
+                ..=52428800 => 4,           // 10-50MB: low priority
+                _ => 2,                     // > 50MB: lowest priority
+            };
+            
+            (document_id, priority, file_size)
+        })
+        .collect();
+    
+    // Batch enqueue documents
+    let queue_ids = state.queue_service
+        .enqueue_documents_batch(documents_to_queue)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(Json(serde_json::json!({
+        "queued_count": queue_ids.len(),
+        "message": format!("Successfully queued {} pending documents for OCR processing", queue_ids.len()),
+        "queue_ids": queue_ids
     })))
 }
