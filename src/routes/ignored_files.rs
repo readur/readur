@@ -278,7 +278,7 @@ pub async fn get_ignored_files_stats(
         r#"
         SELECT 
             COUNT(*) as total_ignored_files,
-            COALESCE(SUM(file_size), 0) as total_size_bytes,
+            COALESCE(SUM(file_size), 0)::BIGINT as total_size_bytes,
             MAX(ignored_at) as most_recent_ignored_at
         FROM ignored_files 
         WHERE ignored_by = $1
@@ -297,7 +297,7 @@ pub async fn get_ignored_files_stats(
         SELECT 
             source_type,
             COUNT(*) as count,
-            COALESCE(SUM(file_size), 0) as total_size_bytes
+            COALESCE(SUM(file_size), 0)::BIGINT as total_size_bytes
         FROM ignored_files 
         WHERE ignored_by = $1
         GROUP BY source_type
