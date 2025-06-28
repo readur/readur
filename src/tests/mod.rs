@@ -12,4 +12,5 @@ mod enhanced_ocr_tests;
 mod oidc_tests;
 mod enhanced_search_tests;
 mod settings_tests;
-mod users_tests; 
+mod users_tests;
+mod generic_migration_tests; 
