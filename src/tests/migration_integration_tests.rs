@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -22,7 +22,7 @@ mod migration_integration_tests {
 
         // Insert test documents
         for (filename, failure_reason, error_msg) in &test_documents {
-            sqlx::query!(
+            sqlx::query(
                 r#"
                 INSERT INTO documents (
                     user_id, filename, original_filename, file_path, file_size, 
@@ -31,30 +31,29 @@ mod migration_integration_tests {
                     $1, $2, $2, '/fake/path', 1000, 'application/pdf', 
                     'failed', $3, $4
                 )
-                "#,
-                user_id,
-                filename,
-                *failure_reason,
-                error_msg
+                "#
             )
+            .bind(user_id)
+            .bind(filename)
+            .bind(*failure_reason)
+            .bind(error_msg)
             .execute(&pool)
             .await
             .expect("Failed to insert test document");
         }
 
         // Count documents before migration
-        let before_count = sqlx::query_scalar!(
+        let before_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed'"
         )
         .fetch_one(&pool)
         .await
-        .expect("Failed to count documents")
-        .unwrap_or(0);
+        .expect("Failed to count documents");
 
         assert_eq!(before_count, test_documents.len() as i64);
 
         // Simulate the migration logic
-        let migration_result = sqlx::query!(
+        let migration_result = sqlx::query(
             r#"
             INSERT INTO failed_documents (
                 user_id, filename, original_filename, file_path, file_size,
@@ -87,13 +86,12 @@ mod migration_integration_tests {
         assert!(migration_result.is_ok(), "Migration should succeed");
 
         // Verify all documents were migrated
-        let migrated_count = sqlx::query_scalar!(
+        let migrated_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM failed_documents WHERE ingestion_source = 'migration'"
         )
         .fetch_one(&pool)
         .await
-        .expect("Failed to count migrated documents")
-        .unwrap_or(0);
+        .expect("Failed to count migrated documents");
 
         assert_eq!(migrated_count, test_documents.len() as i64);
 
@@ -108,24 +106,24 @@ mod migration_integration_tests {
         ];
 
         for (filename, expected_reason) in mapping_tests {
-            let actual_reason = sqlx::query_scalar!(
-                "SELECT failure_reason FROM failed_documents WHERE filename = $1",
-                filename
+            let actual_reason: String = sqlx::query_scalar(
+                "SELECT failure_reason FROM failed_documents WHERE filename = $1"
             )
+            .bind(filename)
             .fetch_one(&pool)
             .await
             .expect("Failed to fetch failure reason");
 
             assert_eq!(
-                actual_reason.as_deref(),
-                Some(expected_reason),
+                actual_reason,
+                expected_reason,
                 "Incorrect mapping for {}",
                 filename
             );
         }
 
         // Test deletion of original failed documents
-        let delete_result = sqlx::query!(
+        let delete_result = sqlx::query(
             "DELETE FROM documents WHERE ocr_status = 'failed'"
         )
         .execute(&pool)
@@ -134,18 +132,17 @@ mod migration_integration_tests {
         assert!(delete_result.is_ok(), "Delete should succeed");
 
         // Verify cleanup
-        let remaining_failed = sqlx::query_scalar!(
+        let remaining_failed: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed'"
         )
         .fetch_one(&pool)
         .await
-        .expect("Failed to count remaining documents")
-        .unwrap_or(0);
+        .expect("Failed to count remaining documents");
 
         assert_eq!(remaining_failed, 0);
 
         // Verify failed_documents table integrity
-        let failed_docs = sqlx::query!(
+        let failed_docs = sqlx::query(
             "SELECT filename, failure_reason, failure_stage FROM failed_documents ORDER BY filename"
         )
         .fetch_all(&pool)
@@ -156,11 +153,13 @@ mod migration_integration_tests {
 
         for doc in &failed_docs {
             // All should have proper stage
-            assert_eq!(doc.failure_stage, "ocr");
+            let stage: String = doc.get("failure_stage");
+            assert_eq!(stage, "ocr");
             
             // All should have valid failure_reason
+            let reason: String = doc.get("failure_reason");
             assert!(matches!(
-                doc.failure_reason.as_str(),
+                reason.as_str(),
                 "low_ocr_confidence" | "ocr_timeout" | "ocr_memory_limit" | 
                 "file_corrupted" | "other"
             ));
@@ -181,7 +180,7 @@ mod migration_integration_tests {
         ];
 
         for (filename, failure_reason, error_msg) in &edge_cases {
-            sqlx::query!(
+            sqlx::query(
                 r#"
                 INSERT INTO documents (
                     user_id, filename, original_filename, file_path, file_size, 
@@ -190,19 +189,19 @@ mod migration_integration_tests {
                     $1, $2, $2, '/fake/path', 1000, 'application/pdf', 
                     'failed', $3, $4
                 )
-                "#,
-                user_id,
-                filename,
-                *failure_reason,
-                error_msg
+                "#
             )
+            .bind(user_id)
+            .bind(filename)
+            .bind(*failure_reason)
+            .bind(error_msg)
             .execute(&pool)
             .await
             .expect("Failed to insert edge case document");
         }
 
         // Run migration on edge cases
-        let migration_result = sqlx::query!(
+        let migration_result = sqlx::query(
             r#"
             INSERT INTO failed_documents (
                 user_id, filename, failure_reason, failure_stage, ingestion_source
@@ -231,7 +230,7 @@ mod migration_integration_tests {
         assert!(migration_result.is_ok(), "Migration should handle edge cases");
 
         // Verify all edge cases mapped to 'other' (since they're not in our mapping)
-        let edge_case_mappings = sqlx::query!(
+        let edge_case_mappings = sqlx::query(
             "SELECT filename, failure_reason FROM failed_documents WHERE ingestion_source = 'migration_edge_test'"
         )
         .fetch_all(&pool)
@@ -239,8 +238,10 @@ mod migration_integration_tests {
         .expect("Failed to fetch edge case mappings");
 
         for mapping in edge_case_mappings {
-            assert_eq!(mapping.failure_reason, "other", 
-                      "Edge case '{}' should map to 'other'", mapping.filename);
+            let filename: String = mapping.get("filename");
+            let failure_reason: String = mapping.get("failure_reason");
+            assert_eq!(failure_reason, "other", 
+                      "Edge case '{}' should map to 'other'", filename);
         }
     }
 
@@ -250,7 +251,7 @@ mod migration_integration_tests {
         // during migration, the constraints will catch it
 
         // Try to insert data that violates constraints
-        let invalid_insert = sqlx::query!(
+        let invalid_insert = sqlx::query(
             r#"
             INSERT INTO failed_documents (
                 user_id, filename, failure_reason, failure_stage, ingestion_source

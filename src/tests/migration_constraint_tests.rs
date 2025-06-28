@@ -1,5 +1,4 @@
 use sqlx::PgPool;
-use crate::tests::helpers::setup_test_db;
 
 #[cfg(test)]
 mod migration_constraint_tests {
@@ -18,17 +17,17 @@ mod migration_constraint_tests {
         ];
 
         for reason in valid_reasons {
-            let result = sqlx::query!(
+            let result = sqlx::query(
                 r#"
                 INSERT INTO failed_documents (
                     user_id, filename, failure_reason, failure_stage, ingestion_source
                 ) VALUES (
                     gen_random_uuid(), $1, $2, 'validation', 'test'
                 )
-                "#,
-                format!("test_file_{}.txt", reason),
-                reason
+                "#
             )
+            .bind(format!("test_file_{}.txt", reason))
+            .bind(reason)
             .execute(&pool)
             .await;
 
@@ -45,17 +44,17 @@ mod migration_constraint_tests {
         ];
 
         for reason in invalid_reasons {
-            let result = sqlx::query!(
+            let result = sqlx::query(
                 r#"
                 INSERT INTO failed_documents (
                     user_id, filename, failure_reason, failure_stage, ingestion_source
                 ) VALUES (
                     gen_random_uuid(), $1, $2, 'validation', 'test'
                 )
-                "#,
-                format!("test_file_{}.txt", reason),
-                reason
+                "#
             )
+            .bind(format!("test_file_{}.txt", reason))
+            .bind(reason)
             .execute(&pool)
             .await;
 
@@ -71,17 +70,17 @@ mod migration_constraint_tests {
         ];
 
         for stage in valid_stages {
-            let result = sqlx::query!(
+            let result = sqlx::query(
                 r#"
                 INSERT INTO failed_documents (
                     user_id, filename, failure_reason, failure_stage, ingestion_source
                 ) VALUES (
                     gen_random_uuid(), $1, 'other', $2, 'test'
                 )
-                "#,
-                format!("test_file_{}.txt", stage),
-                stage
+                "#
             )
+            .bind(format!("test_file_{}.txt", stage))
+            .bind(stage)
             .execute(&pool)
             .await;
 
@@ -123,17 +122,17 @@ mod migration_constraint_tests {
                       input_reason, expected_output);
 
             // Test that the mapped value works in the database
-            let result = sqlx::query!(
+            let result = sqlx::query(
                 r#"
                 INSERT INTO failed_documents (
                     user_id, filename, failure_reason, failure_stage, ingestion_source
                 ) VALUES (
                     gen_random_uuid(), $1, $2, 'ocr', 'migration'
                 )
-                "#,
-                format!("migration_test_{}.txt", input_reason.replace("/", "_")),
-                mapped_reason
+                "#
             )
+            .bind(format!("migration_test_{}.txt", input_reason.replace("/", "_")))
+            .bind(mapped_reason)
             .execute(&pool)
             .await;
 

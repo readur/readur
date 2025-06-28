@@ -7,6 +7,9 @@ const mockList = vi.fn();
 const mockUpload = vi.fn();
 const mockDownload = vi.fn();
 const mockDeleteLowConfidence = vi.fn();
+const mockGetFailedOcrDocuments = vi.fn();
+const mockGetFailedDocuments = vi.fn();
+const mockRetryOcr = vi.fn();
 
 // Mock the entire api module
 vi.mock('../api', async () => {
@@ -19,6 +22,9 @@ vi.mock('../api', async () => {
       upload: mockUpload,
       download: mockDownload,
       deleteLowConfidence: mockDeleteLowConfidence,
+      getFailedOcrDocuments: mockGetFailedOcrDocuments,
+      getFailedDocuments: mockGetFailedDocuments,
+      retryOcr: mockRetryOcr,
     },
   };
 });
@@ -489,5 +495,275 @@ describe('documentService.deleteLowConfidence', () => {
       await documentService.deleteLowConfidence(confidence, true);
       expect(mockDeleteLowConfidence).toHaveBeenCalledWith(confidence, true);
     }
+  });
+});
+
+describe('documentService.getFailedOcrDocuments', () => {
+  const mockFailedOcrResponse = {
+    documents: [
+      {
+        id: 'doc-1',
+        filename: 'failed_doc1.pdf',
+        failure_reason: 'low_ocr_confidence',
+        failure_stage: 'ocr',
+        created_at: '2024-01-01T10:00:00Z',
+        retry_count: 1
+      },
+      {
+        id: 'doc-2', 
+        filename: 'failed_doc2.pdf',
+        failure_reason: 'pdf_parsing_error',
+        failure_stage: 'ocr',
+        created_at: '2024-01-01T11:00:00Z',
+        retry_count: 0
+      }
+    ],
+    pagination: {
+      total: 2,
+      limit: 50,
+      offset: 0,
+      has_more: false
+    },
+    statistics: {
+      total_failed: 2,
+      failure_categories: [
+        { reason: 'low_ocr_confidence', display_name: 'Low OCR Confidence', count: 1 },
+        { reason: 'pdf_parsing_error', display_name: 'PDF Parsing Error', count: 1 }
+      ]
+    }
+  };
+
+  it('should fetch failed OCR documents successfully', async () => {
+    const mockResponse = {
+      data: mockFailedOcrResponse,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockGetFailedOcrDocuments.mockResolvedValue(mockResponse);
+
+    const result = await documentService.getFailedOcrDocuments(50, 0);
+
+    expect(mockGetFailedOcrDocuments).toHaveBeenCalledWith(50, 0);
+    expect(result.data).toEqual(mockFailedOcrResponse);
+    expect(result.data.documents).toHaveLength(2);
+    expect(result.data.documents[0].failure_stage).toBe('ocr');
+    expect(result.data.pagination.total).toBe(2);
+  });
+
+  it('should handle pagination parameters correctly', async () => {
+    mockGetFailedOcrDocuments.mockResolvedValue({ data: mockFailedOcrResponse });
+
+    await documentService.getFailedOcrDocuments(25, 10);
+
+    expect(mockGetFailedOcrDocuments).toHaveBeenCalledWith(25, 10);
+  });
+
+  it('should use default pagination when not specified', async () => {
+    mockGetFailedOcrDocuments.mockResolvedValue({ data: mockFailedOcrResponse });
+
+    await documentService.getFailedOcrDocuments();
+
+    expect(mockGetFailedOcrDocuments).toHaveBeenCalledWith();
+  });
+
+  it('should handle empty results', async () => {
+    const emptyResponse = {
+      documents: [],
+      pagination: { total: 0, limit: 50, offset: 0, has_more: false },
+      statistics: { total_failed: 0, failure_categories: [] }
+    };
+
+    mockGetFailedOcrDocuments.mockResolvedValue({ data: emptyResponse });
+
+    const result = await documentService.getFailedOcrDocuments();
+
+    expect(result.data.documents).toHaveLength(0);
+    expect(result.data.pagination.total).toBe(0);
+    expect(result.data.statistics.total_failed).toBe(0);
+  });
+
+  it('should handle API errors', async () => {
+    const mockError = new Error('Network error');
+    mockGetFailedOcrDocuments.mockRejectedValue(mockError);
+
+    await expect(documentService.getFailedOcrDocuments()).rejects.toThrow('Network error');
+  });
+});
+
+describe('documentService.getFailedDocuments', () => {
+  const mockFailedDocumentsResponse = {
+    documents: [
+      {
+        id: 'doc-1',
+        filename: 'failed_doc1.pdf',
+        failure_reason: 'low_ocr_confidence',
+        failure_stage: 'ocr',
+        created_at: '2024-01-01T10:00:00Z',
+        retry_count: 1
+      },
+      {
+        id: 'doc-2',
+        filename: 'duplicate_doc.pdf', 
+        failure_reason: 'duplicate_content',
+        failure_stage: 'ingestion',
+        created_at: '2024-01-01T11:00:00Z',
+        retry_count: 0
+      },
+      {
+        id: 'doc-3',
+        filename: 'large_file.pdf',
+        failure_reason: 'file_too_large',
+        failure_stage: 'validation',
+        created_at: '2024-01-01T12:00:00Z',
+        retry_count: 2
+      }
+    ],
+    pagination: {
+      total: 3,
+      limit: 25,
+      offset: 0,
+      has_more: false
+    },
+    statistics: {
+      total_failed: 3,
+      failure_categories: [
+        { reason: 'low_ocr_confidence', display_name: 'Low OCR Confidence', count: 1 },
+        { reason: 'duplicate_content', display_name: 'Duplicate Content', count: 1 },
+        { reason: 'file_too_large', display_name: 'File Too Large', count: 1 }
+      ]
+    }
+  };
+
+  it('should fetch failed documents with default parameters', async () => {
+    mockGetFailedDocuments.mockResolvedValue({ data: mockFailedDocumentsResponse });
+
+    const result = await documentService.getFailedDocuments();
+
+    expect(mockGetFailedDocuments).toHaveBeenCalledWith();
+    expect(result.data).toEqual(mockFailedDocumentsResponse);
+    expect(result.data.documents).toHaveLength(3);
+  });
+
+  it('should filter by stage parameter', async () => {
+    const ocrOnlyResponse = {
+      ...mockFailedDocumentsResponse,
+      documents: [mockFailedDocumentsResponse.documents[0]], // Only OCR failure
+      pagination: { ...mockFailedDocumentsResponse.pagination, total: 1 },
+      statistics: { total_failed: 1, failure_categories: [{ reason: 'low_ocr_confidence', display_name: 'Low OCR Confidence', count: 1 }] }
+    };
+
+    mockGetFailedDocuments.mockResolvedValue({ data: ocrOnlyResponse });
+
+    const result = await documentService.getFailedDocuments(25, 0, 'ocr');
+
+    expect(mockGetFailedDocuments).toHaveBeenCalledWith(25, 0, 'ocr');
+    expect(result.data.documents).toHaveLength(1);
+    expect(result.data.documents[0].failure_stage).toBe('ocr');
+  });
+
+  it('should filter by reason parameter', async () => {
+    const duplicateOnlyResponse = {
+      ...mockFailedDocumentsResponse,
+      documents: [mockFailedDocumentsResponse.documents[1]], // Only duplicate failure
+      pagination: { ...mockFailedDocumentsResponse.pagination, total: 1 },
+      statistics: { total_failed: 1, failure_categories: [{ reason: 'duplicate_content', display_name: 'Duplicate Content', count: 1 }] }
+    };
+
+    mockGetFailedDocuments.mockResolvedValue({ data: duplicateOnlyResponse });
+
+    const result = await documentService.getFailedDocuments(25, 0, undefined, 'duplicate_content');
+
+    expect(mockGetFailedDocuments).toHaveBeenCalledWith(25, 0, undefined, 'duplicate_content');
+    expect(result.data.documents).toHaveLength(1);
+    expect(result.data.documents[0].failure_reason).toBe('duplicate_content');
+  });
+
+  it('should filter by both stage and reason', async () => {
+    const filteredResponse = {
+      ...mockFailedDocumentsResponse,
+      documents: [mockFailedDocumentsResponse.documents[0]], // OCR + low_ocr_confidence
+      pagination: { ...mockFailedDocumentsResponse.pagination, total: 1 },
+      statistics: { total_failed: 1, failure_categories: [{ reason: 'low_ocr_confidence', display_name: 'Low OCR Confidence', count: 1 }] }
+    };
+
+    mockGetFailedDocuments.mockResolvedValue({ data: filteredResponse });
+
+    const result = await documentService.getFailedDocuments(25, 0, 'ocr', 'low_ocr_confidence');
+
+    expect(mockGetFailedDocuments).toHaveBeenCalledWith(25, 0, 'ocr', 'low_ocr_confidence');
+    expect(result.data.documents).toHaveLength(1);
+    expect(result.data.documents[0].failure_stage).toBe('ocr');
+    expect(result.data.documents[0].failure_reason).toBe('low_ocr_confidence');
+  });
+
+  it('should handle custom pagination', async () => {
+    mockGetFailedDocuments.mockResolvedValue({ data: mockFailedDocumentsResponse });
+
+    await documentService.getFailedDocuments(10, 20);
+
+    expect(mockGetFailedDocuments).toHaveBeenCalledWith(10, 20);
+  });
+
+  it('should handle empty results', async () => {
+    const emptyResponse = {
+      documents: [],
+      pagination: { total: 0, limit: 25, offset: 0, has_more: false },
+      statistics: { total_failed: 0, failure_categories: [] }
+    };
+
+    mockGetFailedDocuments.mockResolvedValue({ data: emptyResponse });
+
+    const result = await documentService.getFailedDocuments();
+
+    expect(result.data.documents).toHaveLength(0);
+    expect(result.data.statistics.total_failed).toBe(0);
+  });
+});
+
+describe('documentService.retryOcr', () => {
+  it('should retry OCR for a document successfully', async () => {
+    const mockRetryResponse = {
+      data: {
+        success: true,
+        message: 'OCR retry queued successfully',
+        document_id: 'doc-123'
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+
+    mockRetryOcr.mockResolvedValue(mockRetryResponse);
+
+    const result = await documentService.retryOcr('doc-123');
+
+    expect(mockRetryOcr).toHaveBeenCalledWith('doc-123');
+    expect(result.data.success).toBe(true);
+    expect(result.data.document_id).toBe('doc-123');
+  });
+
+  it('should handle retry errors', async () => {
+    const mockError = {
+      response: {
+        status: 404,
+        data: { error: 'Document not found' }
+      }
+    };
+
+    mockRetryOcr.mockRejectedValue(mockError);
+
+    await expect(documentService.retryOcr('non-existent-doc')).rejects.toMatchObject({
+      response: { status: 404 }
+    });
+  });
+
+  it('should handle network errors', async () => {
+    mockRetryOcr.mockRejectedValue(new Error('Network error'));
+
+    await expect(documentService.retryOcr('doc-123')).rejects.toThrow('Network error');
   });
 });
