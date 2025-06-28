@@ -84,11 +84,12 @@ interface FailedOcrResponse {
     total: number;
     limit: number;
     offset: number;
-    has_more: boolean;
+    total_pages: number;
   };
   statistics: {
     total_failed: number;
-    failure_categories: FailureCategory[];
+    by_reason: Record<string, number>;
+    by_stage: Record<string, number>;
   };
 }
 
@@ -615,15 +616,15 @@ const FailedOcrPage: React.FC = () => {
                   Failure Categories
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={1}>
-                  {statistics?.failure_categories?.map((category) => (
+                  {statistics?.by_reason ? Object.entries(statistics.by_reason).map(([reason, count]) => (
                     <Chip
-                      key={category.reason}
-                      label={`${category.display_name}: ${category.count}`}
-                      color={getFailureCategoryColor(category.display_name)}
+                      key={reason}
+                      label={`${reason}: ${count}`}
+                      color={getFailureCategoryColor(reason)}
                       variant="outlined"
                       size="small"
                     />
-                  )) || (
+                  )) : (
                     <Typography variant="body2" color="text.secondary">
                       No failure data available
                     </Typography>
