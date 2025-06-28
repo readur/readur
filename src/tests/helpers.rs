@@ -8,6 +8,7 @@ use tower::util::ServiceExt;
 
 pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
     let postgres_image = Postgres::default()
+        .with_tag("15-alpine")
         .with_env_var("POSTGRES_USER", "test")
         .with_env_var("POSTGRES_PASSWORD", "test")
         .with_env_var("POSTGRES_DB", "test");

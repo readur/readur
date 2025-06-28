@@ -1586,6 +1586,165 @@ impl Database {
         Ok(documents)
     }
 
+    /// Find documents with failed OCR processing
+    pub async fn find_failed_ocr_documents(&self, user_id: uuid::Uuid, user_role: crate::models::UserRole) -> Result<Vec<Document>> {
+        let documents = if user_role == crate::models::UserRole::Admin {
+            let rows = sqlx::query(
+                r#"
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                FROM documents 
+                WHERE ocr_status = 'failed' OR (ocr_confidence IS NULL AND ocr_status != 'pending' AND ocr_status != 'processing')
+                ORDER BY created_at DESC
+                "#,
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
+            rows.into_iter().map(|r| Document {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                original_filename: r.get("original_filename"),
+                file_path: r.get("file_path"),
+                file_size: r.get("file_size"),
+                mime_type: r.get("mime_type"),
+                content: r.get("content"),
+                ocr_text: r.get("ocr_text"),
+                ocr_confidence: r.get("ocr_confidence"),
+                ocr_word_count: r.get("ocr_word_count"),
+                ocr_processing_time_ms: r.get("ocr_processing_time_ms"),
+                ocr_status: r.get("ocr_status"),
+                ocr_error: r.get("ocr_error"),
+                ocr_completed_at: r.get("ocr_completed_at"),
+                tags: r.get("tags"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+                user_id: r.get("user_id"),
+                file_hash: r.get("file_hash"),
+            }).collect()
+        } else {
+            let rows = sqlx::query(
+                r#"
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                FROM documents 
+                WHERE (ocr_status = 'failed' OR (ocr_confidence IS NULL AND ocr_status != 'pending' AND ocr_status != 'processing')) AND user_id = $1
+                ORDER BY created_at DESC
+                "#,
+            )
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+            rows.into_iter().map(|r| Document {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                original_filename: r.get("original_filename"),
+                file_path: r.get("file_path"),
+                file_size: r.get("file_size"),
+                mime_type: r.get("mime_type"),
+                content: r.get("content"),
+                ocr_text: r.get("ocr_text"),
+                ocr_confidence: r.get("ocr_confidence"),
+                ocr_word_count: r.get("ocr_word_count"),
+                ocr_processing_time_ms: r.get("ocr_processing_time_ms"),
+                ocr_status: r.get("ocr_status"),
+                ocr_error: r.get("ocr_error"),
+                ocr_completed_at: r.get("ocr_completed_at"),
+                tags: r.get("tags"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+                user_id: r.get("user_id"),
+                file_hash: r.get("file_hash"),
+            }).collect()
+        };
+
+        Ok(documents)
+    }
+
+    /// Find documents with low confidence or failed OCR (combined)
+    pub async fn find_low_confidence_and_failed_documents(&self, max_confidence: f32, user_id: uuid::Uuid, user_role: crate::models::UserRole) -> Result<Vec<Document>> {
+        let documents = if user_role == crate::models::UserRole::Admin {
+            let rows = sqlx::query(
+                r#"
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                FROM documents 
+                WHERE (ocr_confidence IS NOT NULL AND ocr_confidence < $1) 
+                   OR ocr_status = 'failed' 
+                   OR (ocr_confidence IS NULL AND ocr_status != 'pending' AND ocr_status != 'processing')
+                ORDER BY 
+                    CASE WHEN ocr_confidence IS NOT NULL THEN ocr_confidence ELSE -1 END ASC, 
+                    created_at DESC
+                "#,
+            )
+            .bind(max_confidence)
+            .fetch_all(&self.pool)
+            .await?;
+
+            rows.into_iter().map(|r| Document {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                original_filename: r.get("original_filename"),
+                file_path: r.get("file_path"),
+                file_size: r.get("file_size"),
+                mime_type: r.get("mime_type"),
+                content: r.get("content"),
+                ocr_text: r.get("ocr_text"),
+                ocr_confidence: r.get("ocr_confidence"),
+                ocr_word_count: r.get("ocr_word_count"),
+                ocr_processing_time_ms: r.get("ocr_processing_time_ms"),
+                ocr_status: r.get("ocr_status"),
+                ocr_error: r.get("ocr_error"),
+                ocr_completed_at: r.get("ocr_completed_at"),
+                tags: r.get("tags"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+                user_id: r.get("user_id"),
+                file_hash: r.get("file_hash"),
+            }).collect()
+        } else {
+            let rows = sqlx::query(
+                r#"
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                FROM documents 
+                WHERE ((ocr_confidence IS NOT NULL AND ocr_confidence < $1) 
+                    OR ocr_status = 'failed' 
+                    OR (ocr_confidence IS NULL AND ocr_status != 'pending' AND ocr_status != 'processing'))
+                  AND user_id = $2
+                ORDER BY 
+                    CASE WHEN ocr_confidence IS NOT NULL THEN ocr_confidence ELSE -1 END ASC, 
+                    created_at DESC
+                "#,
+            )
+            .bind(max_confidence)
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+            rows.into_iter().map(|r| Document {
+                id: r.get("id"),
+                filename: r.get("filename"),
+                original_filename: r.get("original_filename"),
+                file_path: r.get("file_path"),
+                file_size: r.get("file_size"),
+                mime_type: r.get("mime_type"),
+                content: r.get("content"),
+                ocr_text: r.get("ocr_text"),
+                ocr_confidence: r.get("ocr_confidence"),
+                ocr_word_count: r.get("ocr_word_count"),
+                ocr_processing_time_ms: r.get("ocr_processing_time_ms"),
+                ocr_status: r.get("ocr_status"),
+                ocr_error: r.get("ocr_error"),
+                ocr_completed_at: r.get("ocr_completed_at"),
+                tags: r.get("tags"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+                user_id: r.get("user_id"),
+                file_hash: r.get("file_hash"),
+            }).collect()
+        };
+
+        Ok(documents)
+    }
+
     pub async fn count_documents_for_source(&self, source_id: Uuid) -> Result<(i64, i64)> {
         let row = sqlx::query(
             r#"

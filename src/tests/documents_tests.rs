@@ -1796,4 +1796,398 @@ mod deletion_error_handling_tests {
             }
         }
     }
+
+    #[tokio::test]
+    async fn test_find_failed_ocr_documents() {
+        use testcontainers::{runners::AsyncRunner};
+        use testcontainers_modules::postgres::Postgres;
+        
+        let postgres_image = Postgres::default();
+        let container = postgres_image.start().await.expect("Failed to start postgres container");
+        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
+        
+        // Use TEST_DATABASE_URL if available, otherwise use the container
+        let connection_string = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", port));
+        let database = Database::new(&connection_string).await.unwrap();
+        database.migrate().await.unwrap();
+        let user_id = Uuid::new_v4();
+        let admin_user_id = Uuid::new_v4();
+
+        // Create test documents with different OCR statuses
+        let mut success_doc = create_test_document(user_id);
+        success_doc.ocr_status = Some("completed".to_string());
+        success_doc.ocr_confidence = Some(85.0);
+        success_doc.ocr_text = Some("Successfully extracted text".to_string());
+
+        let mut failed_doc = create_test_document(user_id);
+        failed_doc.ocr_status = Some("failed".to_string());
+        failed_doc.ocr_confidence = None;
+        failed_doc.ocr_text = None;
+        failed_doc.ocr_error = Some("OCR processing failed due to corrupted image".to_string());
+
+        let mut null_confidence_doc = create_test_document(user_id);
+        null_confidence_doc.ocr_status = Some("completed".to_string());
+        null_confidence_doc.ocr_confidence = None; // NULL confidence but not failed
+        null_confidence_doc.ocr_text = Some("Text extracted but no confidence".to_string());
+
+        let mut pending_doc = create_test_document(user_id);
+        pending_doc.ocr_status = Some("pending".to_string());
+        pending_doc.ocr_confidence = None;
+        pending_doc.ocr_text = None;
+
+        let mut processing_doc = create_test_document(user_id);
+        processing_doc.ocr_status = Some("processing".to_string());
+        processing_doc.ocr_confidence = None;
+        processing_doc.ocr_text = None;
+
+        // Different user's failed document
+        let mut other_user_failed_doc = create_test_document(admin_user_id);
+        other_user_failed_doc.ocr_status = Some("failed".to_string());
+        other_user_failed_doc.ocr_confidence = None;
+
+        // Insert all documents
+        let success_id = database.create_document(success_doc).await.unwrap().id;
+        let failed_id = database.create_document(failed_doc).await.unwrap().id;
+        let null_confidence_id = database.create_document(null_confidence_doc).await.unwrap().id;
+        let pending_id = database.create_document(pending_doc).await.unwrap().id;
+        let processing_id = database.create_document(processing_doc).await.unwrap().id;
+        let other_user_failed_id = database.create_document(other_user_failed_doc).await.unwrap().id;
+
+        // Test as regular user
+        let failed_docs = database
+            .find_failed_ocr_documents(user_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        // Should find: failed_doc and null_confidence_doc (but not pending/processing)
+        assert_eq!(failed_docs.len(), 2);
+        let failed_ids: Vec<Uuid> = failed_docs.iter().map(|d| d.id).collect();
+        assert!(failed_ids.contains(&failed_id));
+        assert!(failed_ids.contains(&null_confidence_id));
+        assert!(!failed_ids.contains(&success_id));
+        assert!(!failed_ids.contains(&pending_id));
+        assert!(!failed_ids.contains(&processing_id));
+        assert!(!failed_ids.contains(&other_user_failed_id)); // Different user
+
+        // Test as admin
+        let admin_failed_docs = database
+            .find_failed_ocr_documents(admin_user_id, crate::models::UserRole::Admin)
+            .await
+            .unwrap();
+
+        // Should find all failed documents (from all users)
+        assert!(admin_failed_docs.len() >= 3); // At least our 3 failed docs
+        let admin_failed_ids: Vec<Uuid> = admin_failed_docs.iter().map(|d| d.id).collect();
+        assert!(admin_failed_ids.contains(&failed_id));
+        assert!(admin_failed_ids.contains(&null_confidence_id));
+        assert!(admin_failed_ids.contains(&other_user_failed_id));
+    }
+
+    #[tokio::test]
+    async fn test_find_low_confidence_and_failed_documents() {
+        use testcontainers::{runners::AsyncRunner};
+        use testcontainers_modules::postgres::Postgres;
+        
+        let postgres_image = Postgres::default();
+        let container = postgres_image.start().await.expect("Failed to start postgres container");
+        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
+        
+        // Use TEST_DATABASE_URL if available, otherwise use the container
+        let connection_string = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", port));
+        let database = Database::new(&connection_string).await.unwrap();
+        database.migrate().await.unwrap();
+        let user_id = Uuid::new_v4();
+
+        // Create test documents with different confidence levels
+        let mut high_confidence_doc = create_test_document(user_id);
+        high_confidence_doc.ocr_confidence = Some(95.0);
+        high_confidence_doc.ocr_status = Some("completed".to_string());
+
+        let mut medium_confidence_doc = create_test_document(user_id);
+        medium_confidence_doc.ocr_confidence = Some(65.0);
+        medium_confidence_doc.ocr_status = Some("completed".to_string());
+
+        let mut low_confidence_doc = create_test_document(user_id);
+        low_confidence_doc.ocr_confidence = Some(25.0);
+        low_confidence_doc.ocr_status = Some("completed".to_string());
+
+        let mut failed_doc = create_test_document(user_id);
+        failed_doc.ocr_status = Some("failed".to_string());
+        failed_doc.ocr_confidence = None;
+        failed_doc.ocr_error = Some("Processing failed".to_string());
+
+        let mut null_confidence_doc = create_test_document(user_id);
+        null_confidence_doc.ocr_status = Some("completed".to_string());
+        null_confidence_doc.ocr_confidence = None;
+
+        let mut pending_doc = create_test_document(user_id);
+        pending_doc.ocr_status = Some("pending".to_string());
+        pending_doc.ocr_confidence = None;
+
+        // Insert all documents
+        let high_id = database.create_document(high_confidence_doc).await.unwrap().id;
+        let medium_id = database.create_document(medium_confidence_doc).await.unwrap().id;
+        let low_id = database.create_document(low_confidence_doc).await.unwrap().id;
+        let failed_id = database.create_document(failed_doc).await.unwrap().id;
+        let null_confidence_id = database.create_document(null_confidence_doc).await.unwrap().id;
+        let pending_id = database.create_document(pending_doc).await.unwrap().id;
+
+        // Test with threshold of 50% - should include low confidence, failed, and null confidence
+        let threshold_50_docs = database
+            .find_low_confidence_and_failed_documents(50.0, user_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        assert_eq!(threshold_50_docs.len(), 3);
+        let threshold_50_ids: Vec<Uuid> = threshold_50_docs.iter().map(|d| d.id).collect();
+        assert!(threshold_50_ids.contains(&low_id)); // 25% confidence
+        assert!(threshold_50_ids.contains(&failed_id)); // failed status
+        assert!(threshold_50_ids.contains(&null_confidence_id)); // NULL confidence
+        assert!(!threshold_50_ids.contains(&high_id)); // 95% confidence
+        assert!(!threshold_50_ids.contains(&medium_id)); // 65% confidence
+        assert!(!threshold_50_ids.contains(&pending_id)); // pending status
+
+        // Test with threshold of 70% - should include low and medium confidence, failed, and null confidence
+        let threshold_70_docs = database
+            .find_low_confidence_and_failed_documents(70.0, user_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        assert_eq!(threshold_70_docs.len(), 4);
+        let threshold_70_ids: Vec<Uuid> = threshold_70_docs.iter().map(|d| d.id).collect();
+        assert!(threshold_70_ids.contains(&low_id)); // 25% confidence
+        assert!(threshold_70_ids.contains(&medium_id)); // 65% confidence
+        assert!(threshold_70_ids.contains(&failed_id)); // failed status
+        assert!(threshold_70_ids.contains(&null_confidence_id)); // NULL confidence
+        assert!(!threshold_70_ids.contains(&high_id)); // 95% confidence
+        assert!(!threshold_70_ids.contains(&pending_id)); // pending status
+
+        // Test with threshold of 100% - should include all except pending/processing
+        let threshold_100_docs = database
+            .find_low_confidence_and_failed_documents(100.0, user_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        assert_eq!(threshold_100_docs.len(), 5);
+        let threshold_100_ids: Vec<Uuid> = threshold_100_docs.iter().map(|d| d.id).collect();
+        assert!(threshold_100_ids.contains(&high_id)); // 95% confidence
+        assert!(threshold_100_ids.contains(&medium_id)); // 65% confidence
+        assert!(threshold_100_ids.contains(&low_id)); // 25% confidence
+        assert!(threshold_100_ids.contains(&failed_id)); // failed status
+        assert!(threshold_100_ids.contains(&null_confidence_id)); // NULL confidence
+        assert!(!threshold_100_ids.contains(&pending_id)); // pending status
+
+        // Test with threshold of 0% - should only include failed and null confidence
+        let threshold_0_docs = database
+            .find_low_confidence_and_failed_documents(0.0, user_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        assert_eq!(threshold_0_docs.len(), 2);
+        let threshold_0_ids: Vec<Uuid> = threshold_0_docs.iter().map(|d| d.id).collect();
+        assert!(threshold_0_ids.contains(&failed_id)); // failed status
+        assert!(threshold_0_ids.contains(&null_confidence_id)); // NULL confidence
+        assert!(!threshold_0_ids.contains(&high_id)); // 95% confidence
+        assert!(!threshold_0_ids.contains(&medium_id)); // 65% confidence
+        assert!(!threshold_0_ids.contains(&low_id)); // 25% confidence
+        assert!(!threshold_0_ids.contains(&pending_id)); // pending status
+    }
+
+    #[tokio::test]
+    async fn test_find_documents_by_confidence_threshold_original_behavior() {
+        use testcontainers::{runners::AsyncRunner};
+        use testcontainers_modules::postgres::Postgres;
+        
+        let postgres_image = Postgres::default();
+        let container = postgres_image.start().await.expect("Failed to start postgres container");
+        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
+        
+        // Use TEST_DATABASE_URL if available, otherwise use the container
+        let connection_string = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", port));
+        let database = Database::new(&connection_string).await.unwrap();
+        database.migrate().await.unwrap();
+        let user_id = Uuid::new_v4();
+
+        // Create test documents to verify original behavior is preserved
+        let mut high_confidence_doc = create_test_document(user_id);
+        high_confidence_doc.ocr_confidence = Some(90.0);
+        high_confidence_doc.ocr_status = Some("completed".to_string());
+
+        let mut low_confidence_doc = create_test_document(user_id);
+        low_confidence_doc.ocr_confidence = Some(40.0);
+        low_confidence_doc.ocr_status = Some("completed".to_string());
+
+        let mut null_confidence_doc = create_test_document(user_id);
+        null_confidence_doc.ocr_confidence = None;
+        null_confidence_doc.ocr_status = Some("completed".to_string());
+
+        let mut failed_doc = create_test_document(user_id);
+        failed_doc.ocr_confidence = None;
+        failed_doc.ocr_status = Some("failed".to_string());
+
+        // Insert documents
+        let high_id = database.create_document(high_confidence_doc).await.unwrap().id;
+        let low_id = database.create_document(low_confidence_doc).await.unwrap().id;
+        let null_confidence_id = database.create_document(null_confidence_doc).await.unwrap().id;
+        let failed_id = database.create_document(failed_doc).await.unwrap().id;
+
+        // Test original method - should only find documents with explicit confidence below threshold
+        let original_results = database
+            .find_documents_by_confidence_threshold(50.0, user_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        // Should only include low_confidence_doc (40%), not NULL confidence or failed docs
+        assert_eq!(original_results.len(), 1);
+        assert_eq!(original_results[0].id, low_id);
+        
+        let original_ids: Vec<Uuid> = original_results.iter().map(|d| d.id).collect();
+        assert!(!original_ids.contains(&high_id)); // 90% > 50%
+        assert!(!original_ids.contains(&null_confidence_id)); // NULL confidence excluded
+        assert!(!original_ids.contains(&failed_id)); // NULL confidence excluded
+    }
+
+    #[tokio::test]
+    async fn test_confidence_query_ordering() {
+        use testcontainers::{runners::AsyncRunner};
+        use testcontainers_modules::postgres::Postgres;
+        
+        let postgres_image = Postgres::default();
+        let container = postgres_image.start().await.expect("Failed to start postgres container");
+        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
+        
+        // Use TEST_DATABASE_URL if available, otherwise use the container
+        let connection_string = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", port));
+        let database = Database::new(&connection_string).await.unwrap();
+        database.migrate().await.unwrap();
+        let user_id = Uuid::new_v4();
+
+        // Create documents with different confidence levels and statuses
+        let mut confidence_10_doc = create_test_document(user_id);
+        confidence_10_doc.ocr_confidence = Some(10.0);
+        confidence_10_doc.ocr_status = Some("completed".to_string());
+
+        let mut confidence_30_doc = create_test_document(user_id);
+        confidence_30_doc.ocr_confidence = Some(30.0);
+        confidence_30_doc.ocr_status = Some("completed".to_string());
+
+        let mut failed_doc = create_test_document(user_id);
+        failed_doc.ocr_confidence = None;
+        failed_doc.ocr_status = Some("failed".to_string());
+
+        let mut null_confidence_doc = create_test_document(user_id);
+        null_confidence_doc.ocr_confidence = None;
+        null_confidence_doc.ocr_status = Some("completed".to_string());
+
+        // Insert documents
+        let id_10 = database.create_document(confidence_10_doc).await.unwrap().id;
+        let id_30 = database.create_document(confidence_30_doc).await.unwrap().id;
+        let failed_id = database.create_document(failed_doc).await.unwrap().id;
+        let null_id = database.create_document(null_confidence_doc).await.unwrap().id;
+
+        // Test ordering in combined query
+        let results = database
+            .find_low_confidence_and_failed_documents(50.0, user_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        assert_eq!(results.len(), 4);
+
+        // Check that documents with actual confidence are ordered by confidence (ascending)
+        // and NULL confidence documents come first (due to CASE WHEN ordering)
+        let confidence_values: Vec<Option<f32>> = results.iter().map(|d| d.ocr_confidence).collect();
+        
+        // First two should be NULL confidence (failed and completed with NULL)
+        assert!(confidence_values[0].is_none());
+        assert!(confidence_values[1].is_none());
+        
+        // Next should be lowest confidence
+        assert_eq!(confidence_values[2], Some(10.0));
+        
+        // Last should be higher confidence
+        assert_eq!(confidence_values[3], Some(30.0));
+    }
+
+    #[tokio::test]
+    async fn test_user_isolation_in_confidence_queries() {
+        use testcontainers::{runners::AsyncRunner};
+        use testcontainers_modules::postgres::Postgres;
+        
+        let postgres_image = Postgres::default();
+        let container = postgres_image.start().await.expect("Failed to start postgres container");
+        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
+        
+        // Use TEST_DATABASE_URL if available, otherwise use the container
+        let connection_string = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", port));
+        let database = Database::new(&connection_string).await.unwrap();
+        database.migrate().await.unwrap();
+        let user1_id = Uuid::new_v4();
+        let user2_id = Uuid::new_v4();
+
+        // Create documents for user1
+        let mut user1_low_doc = create_test_document(user1_id);
+        user1_low_doc.ocr_confidence = Some(20.0);
+
+        let mut user1_failed_doc = create_test_document(user1_id);
+        user1_failed_doc.ocr_status = Some("failed".to_string());
+        user1_failed_doc.ocr_confidence = None;
+
+        // Create documents for user2
+        let mut user2_low_doc = create_test_document(user2_id);
+        user2_low_doc.ocr_confidence = Some(25.0);
+
+        let mut user2_failed_doc = create_test_document(user2_id);
+        user2_failed_doc.ocr_status = Some("failed".to_string());
+        user2_failed_doc.ocr_confidence = None;
+
+        // Insert documents
+        let user1_low_id: Uuid = database.create_document(user1_low_doc).await.unwrap().id;
+        let user1_failed_id: Uuid = database.create_document(user1_failed_doc).await.unwrap().id;
+        let user2_low_id: Uuid = database.create_document(user2_low_doc).await.unwrap().id;
+        let user2_failed_id: Uuid = database.create_document(user2_failed_doc).await.unwrap().id;
+
+        // Test user1 can only see their documents
+        let user1_results = database
+            .find_low_confidence_and_failed_documents(50.0, user1_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        assert_eq!(user1_results.len(), 2);
+        let user1_ids: Vec<Uuid> = user1_results.iter().map(|d| d.id).collect();
+        assert!(user1_ids.contains(&user1_low_id));
+        assert!(user1_ids.contains(&user1_failed_id));
+        assert!(!user1_ids.contains(&user2_low_id));
+        assert!(!user1_ids.contains(&user2_failed_id));
+
+        // Test user2 can only see their documents
+        let user2_results = database
+            .find_low_confidence_and_failed_documents(50.0, user2_id, crate::models::UserRole::User)
+            .await
+            .unwrap();
+
+        assert_eq!(user2_results.len(), 2);
+        let user2_ids: Vec<Uuid> = user2_results.iter().map(|d| d.id).collect();
+        assert!(user2_ids.contains(&user2_low_id));
+        assert!(user2_ids.contains(&user2_failed_id));
+        assert!(!user2_ids.contains(&user1_low_id));
+        assert!(!user2_ids.contains(&user1_failed_id));
+
+        // Test admin can see all documents
+        let admin_results = database
+            .find_low_confidence_and_failed_documents(50.0, user1_id, crate::models::UserRole::Admin)
+            .await
+            .unwrap();
+
+        assert!(admin_results.len() >= 4); // At least our 4 test documents
+        let admin_ids: Vec<Uuid> = admin_results.iter().map(|d| d.id).collect();
+        assert!(admin_ids.contains(&user1_low_id));
+        assert!(admin_ids.contains(&user1_failed_id));
+        assert!(admin_ids.contains(&user2_low_id));
+        assert!(admin_ids.contains(&user2_failed_id));
+    }
 }

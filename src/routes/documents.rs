@@ -53,6 +53,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/failed-ocr", get(get_failed_ocr_documents))
         .route("/duplicates", get(get_user_duplicates))
         .route("/delete-low-confidence", post(delete_low_confidence_documents))
+        .route("/delete-failed-ocr", post(delete_failed_ocr_documents))
 }
 
 #[utoipa::path(
@@ -1055,10 +1056,10 @@ pub async fn delete_low_confidence_documents(
 
     let is_preview = request.preview_only.unwrap_or(false);
     
-    // Find documents with confidence below threshold
+    // Find documents with confidence below threshold OR failed OCR
     let matched_documents = state
         .db
-        .find_documents_by_confidence_threshold(request.max_confidence, auth_user.user.id, auth_user.user.role)
+        .find_low_confidence_and_failed_documents(request.max_confidence, auth_user.user.id, auth_user.user.role)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -1129,6 +1130,102 @@ pub async fn delete_low_confidence_documents(
     Ok(Json(serde_json::json!({
         "success": true,
         "message": format!("Successfully deleted {} documents with OCR confidence below {}%", deleted_count, request.max_confidence),
+        "deleted_count": deleted_count,
+        "matched_count": matched_count,
+        "successful_file_deletions": successful_file_deletions,
+        "failed_file_deletions": failed_file_deletions,
+        "ignored_file_creation_failures": ignored_file_creation_failures,
+        "deleted_document_ids": deleted_documents.iter().map(|d| d.id).collect::<Vec<_>>()
+    })))
+}
+
+/// Delete all documents with failed OCR processing
+pub async fn delete_failed_ocr_documents(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(request): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let is_preview = request.get("preview_only").and_then(|v| v.as_bool()).unwrap_or(false);
+    
+    // Find documents with failed OCR
+    let matched_documents = state
+        .db
+        .find_failed_ocr_documents(auth_user.user.id, auth_user.user.role)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let matched_count = matched_documents.len();
+
+    if is_preview {
+        return Ok(Json(serde_json::json!({
+            "success": true,
+            "message": format!("Found {} documents with failed OCR processing", matched_count),
+            "matched_count": matched_count,
+            "preview": true,
+            "document_ids": matched_documents.iter().map(|d| d.id).collect::<Vec<_>>()
+        })));
+    }
+
+    if matched_documents.is_empty() {
+        return Ok(Json(serde_json::json!({
+            "success": true,
+            "message": "No documents found with failed OCR processing",
+            "deleted_count": 0
+        })));
+    }
+
+    // Extract document IDs for bulk deletion
+    let document_ids: Vec<uuid::Uuid> = matched_documents.iter().map(|d| d.id).collect();
+
+    // Use existing bulk delete logic
+    let deleted_documents = state
+        .db
+        .bulk_delete_documents(&document_ids, auth_user.user.id, auth_user.user.role)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create ignored file records for all successfully deleted documents
+    let mut ignored_file_creation_failures = 0;
+    for document in &deleted_documents {
+        let reason = if let Some(ref error) = document.ocr_error {
+            format!("deleted due to failed OCR processing: {}", error)
+        } else {
+            "deleted due to failed OCR processing".to_string()
+        };
+        
+        if let Err(e) = crate::db::ignored_files::create_ignored_file_from_document(
+            state.db.get_pool(),
+            document.id,
+            auth_user.user.id,
+            Some(reason),
+            None,
+            None,
+            None,
+        ).await {
+            ignored_file_creation_failures += 1;
+            tracing::warn!("Failed to create ignored file record for document {}: {}", document.id, e);
+        }
+    }
+
+    let file_service = FileService::new(state.config.upload_path.clone());
+    let mut successful_file_deletions = 0;
+    let mut failed_file_deletions = 0;
+
+    for document in &deleted_documents {
+        match file_service.delete_document_files(document).await {
+            Ok(_) => successful_file_deletions += 1,
+            Err(e) => {
+                failed_file_deletions += 1;
+                tracing::warn!("Failed to delete files for document {}: {}", document.id, e);
+            }
+        }
+    }
+
+    let deleted_count = deleted_documents.len();
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": format!("Successfully deleted {} documents with failed OCR processing", deleted_count),
         "deleted_count": deleted_count,
         "matched_count": matched_count,
         "successful_file_deletions": successful_file_deletions,

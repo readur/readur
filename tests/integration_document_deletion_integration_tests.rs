@@ -233,6 +233,57 @@ impl DocumentDeletionTestClient {
         let result: Value = response.json().await?;
         Ok(result)
     }
+
+    /// Delete failed OCR documents
+    async fn delete_failed_ocr_documents(&self, preview_only: bool) -> Result<Value, Box<dyn std::error::Error>> {
+        let token = self.token.as_ref().ok_or("Not authenticated")?;
+        
+        let response = self.client
+            .post(&format!("{}/api/documents/delete-failed-ocr", get_base_url()))
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&json!({
+                "preview_only": preview_only
+            }))
+            .timeout(TIMEOUT)
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            return Err(format!("Delete failed OCR documents failed: {}", response.text().await?).into());
+        }
+        
+        let result: Value = response.json().await?;
+        Ok(result)
+    }
+
+    /// Delete low confidence documents (updated to use new combined endpoint)
+    async fn delete_low_confidence_documents(&self, threshold: f64, preview_only: bool) -> Result<Value, Box<dyn std::error::Error>> {
+        let token = self.token.as_ref().ok_or("Not authenticated")?;
+        
+        let response = self.client
+            .post(&format!("{}/api/documents/delete-low-confidence", get_base_url()))
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&json!({
+                "max_confidence": threshold,
+                "preview_only": preview_only
+            }))
+            .timeout(TIMEOUT)
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            return Err(format!("Delete low confidence documents failed: {}", response.text().await?).into());
+        }
+        
+        let result: Value = response.json().await?;
+        Ok(result)
+    }
+
+    /// Create and login user (convenience method)
+    async fn create_and_login_user(&mut self, username: &str, password: &str, role: UserRole) -> Result<String, Box<dyn std::error::Error>> {
+        let email = format!("{}@example.com", username);
+        self.register_and_login(username, &email, password, Some(role)).await
+    }
 }
 
 /// Skip test if server is not running
@@ -613,4 +664,224 @@ async fn test_document_count_updates_after_deletion() {
     assert_eq!(final_count, initial_count, "Document count should be back to initial after bulk deletion");
     
     println!("✅ Document count updates after deletion test passed");
+}
+
+/// Test the new failed OCR document deletion endpoint
+#[tokio::test]
+async fn test_delete_failed_ocr_documents_endpoint() {
+    let mut client = DocumentDeletionTestClient::new();
+    
+    if let Err(e) = client.check_server_health().await {
+        println!("⚠️ Server not available: {}. Skipping test.", e);
+        return;
+    }
+    
+    println!("🧪 Testing failed OCR document deletion endpoint...");
+    
+    // Create and login as regular user
+    client.create_and_login_user("failed_ocr_user", "failed_ocr_password", UserRole::User)
+        .await.expect("Failed to create and login user");
+    
+    // Preview failed documents (should return empty initially)
+    let preview_response = client.delete_failed_ocr_documents(true)
+        .await.expect("Failed to preview failed OCR documents");
+    
+    assert_eq!(preview_response["success"], true);
+    assert!(preview_response["matched_count"].as_i64().unwrap() >= 0);
+    assert_eq!(preview_response["preview"], true);
+    
+    println!("📋 Preview request successful: {} failed documents found", 
+             preview_response["matched_count"]);
+    
+    // If there are failed documents, test deletion
+    if preview_response["matched_count"].as_i64().unwrap() > 0 {
+        // Test actual deletion
+        let delete_response = client.delete_failed_ocr_documents(false)
+            .await.expect("Failed to delete failed OCR documents");
+        
+        assert_eq!(delete_response["success"], true);
+        assert!(delete_response["deleted_count"].as_i64().unwrap() >= 0);
+        assert!(delete_response.get("preview").is_none());
+        
+        println!("🗑️ Successfully deleted {} failed documents", 
+                 delete_response["deleted_count"]);
+    } else {
+        println!("ℹ️ No failed documents found to delete");
+    }
+    
+    println!("✅ Failed OCR document deletion endpoint test passed");
+}
+
+/// Test confidence-based vs failed document deletion distinction
+#[tokio::test]
+async fn test_confidence_vs_failed_document_distinction() {
+    let mut client = DocumentDeletionTestClient::new();
+    
+    if let Err(e) = client.check_server_health().await {
+        println!("⚠️ Server not available: {}. Skipping test.", e);
+        return;
+    }
+    
+    println!("🧪 Testing distinction between confidence and failed document deletion...");
+    
+    // Create and login as admin to see all documents
+    client.create_and_login_user("distinction_admin", "distinction_password", UserRole::Admin)
+        .await.expect("Failed to create and login admin");
+    
+    // Get baseline counts
+    let initial_low_confidence = client.delete_low_confidence_documents(30.0, true)
+        .await.expect("Failed to preview low confidence documents");
+    let initial_failed = client.delete_failed_ocr_documents(true)
+        .await.expect("Failed to preview failed documents");
+    
+    let initial_low_count = initial_low_confidence["matched_count"].as_i64().unwrap();
+    let initial_failed_count = initial_failed["matched_count"].as_i64().unwrap();
+    
+    println!("📊 Initial counts - Low confidence: {}, Failed: {}", 
+             initial_low_count, initial_failed_count);
+    
+    // Test that the endpoints return different sets of documents
+    // (This assumes there are some of each type in the system)
+    
+    // Verify that failed documents endpoint only includes failed/NULL confidence docs
+    if initial_failed_count > 0 {
+        let failed_docs = initial_failed["document_ids"].as_array().unwrap();
+        println!("🔍 Found {} failed document IDs", failed_docs.len());
+    }
+    
+    // Verify that low confidence endpoint respects threshold
+    if initial_low_count > 0 {
+        let low_confidence_docs = initial_low_confidence["document_ids"].as_array().unwrap();
+        println!("🔍 Found {} low confidence document IDs", low_confidence_docs.len());
+    }
+    
+    println!("✅ Document type distinction test passed");
+}
+
+/// Test error handling for delete endpoints
+#[tokio::test]
+async fn test_delete_endpoints_error_handling() {
+    let client = DocumentDeletionTestClient::new();
+    
+    if let Err(e) = client.check_server_health().await {
+        println!("⚠️ Server not available: {}. Skipping test.", e);
+        return;
+    }
+    
+    println!("🧪 Testing delete endpoints error handling...");
+    
+    // Test unauthenticated request
+    let failed_response = client.client
+        .post(&format!("{}/api/documents/delete-failed-ocr", get_base_url()))
+        .json(&json!({"preview_only": true}))
+        .timeout(TIMEOUT)
+        .send()
+        .await
+        .expect("Failed to send request");
+    
+    assert_eq!(failed_response.status(), 401, "Should require authentication");
+    
+    // Test invalid JSON
+    let invalid_json_response = client.client
+        .post(&format!("{}/api/documents/delete-failed-ocr", get_base_url()))
+        .header("content-type", "application/json")
+        .body("invalid json")
+        .timeout(TIMEOUT)
+        .send()
+        .await
+        .expect("Failed to send request");
+    
+    assert!(invalid_json_response.status().is_client_error(), "Should reject invalid JSON");
+    
+    println!("✅ Error handling test passed");
+}
+
+/// Test role-based access for new delete endpoints
+#[tokio::test]
+async fn test_role_based_access_for_delete_endpoints() {
+    let mut client = DocumentDeletionTestClient::new();
+    
+    if let Err(e) = client.check_server_health().await {
+        println!("⚠️ Server not available: {}. Skipping test.", e);
+        return;
+    }
+    
+    println!("🧪 Testing role-based access for delete endpoints...");
+    
+    // Test as regular user
+    client.create_and_login_user("delete_regular_user", "delete_password", UserRole::User)
+        .await.expect("Failed to create and login user");
+    
+    let user_response = client.delete_failed_ocr_documents(true)
+        .await.expect("Failed to preview as user");
+    
+    assert_eq!(user_response["success"], true);
+    let user_count = user_response["matched_count"].as_i64().unwrap();
+    
+    // Test as admin
+    client.create_and_login_user("delete_admin_user", "delete_admin_password", UserRole::Admin)
+        .await.expect("Failed to create and login admin");
+    
+    let admin_response = client.delete_failed_ocr_documents(true)
+        .await.expect("Failed to preview as admin");
+    
+    assert_eq!(admin_response["success"], true);
+    let admin_count = admin_response["matched_count"].as_i64().unwrap();
+    
+    // Admin should see at least as many documents as regular user
+    assert!(admin_count >= user_count, 
+            "Admin should see at least as many documents as user");
+    
+    println!("👤 User can see {} documents, Admin can see {} documents", 
+             user_count, admin_count);
+    
+    println!("✅ Role-based access test passed");
+}
+
+/// Test the enhanced low confidence deletion with failed documents
+#[tokio::test]
+async fn test_enhanced_low_confidence_deletion() {
+    let mut client = DocumentDeletionTestClient::new();
+    
+    if let Err(e) = client.check_server_health().await {
+        println!("⚠️ Server not available: {}. Skipping test.", e);
+        return;
+    }
+    
+    println!("🧪 Testing enhanced low confidence deletion (includes failed docs)...");
+    
+    // Create and login as admin
+    client.create_and_login_user("enhanced_delete_admin", "enhanced_password", UserRole::Admin)
+        .await.expect("Failed to create and login admin");
+    
+    // Test with various thresholds
+    let thresholds = vec![0.0, 30.0, 50.0, 85.0, 100.0];
+    
+    for threshold in thresholds {
+        let response = client.delete_low_confidence_documents(threshold, true)
+            .await.expect(&format!("Failed to preview with threshold {}", threshold));
+        
+        assert_eq!(response["success"], true);
+        let count = response["matched_count"].as_i64().unwrap();
+        
+        println!("🎯 Threshold {}%: {} documents would be deleted", threshold, count);
+        
+        // Verify response format
+        assert!(response.get("document_ids").is_some());
+        assert_eq!(response["preview"], true);
+    }
+    
+    // Test that higher thresholds generally include more documents
+    let low_threshold_response = client.delete_low_confidence_documents(10.0, true)
+        .await.expect("Failed to preview with low threshold");
+    let high_threshold_response = client.delete_low_confidence_documents(90.0, true)
+        .await.expect("Failed to preview with high threshold");
+    
+    let low_count = low_threshold_response["matched_count"].as_i64().unwrap();
+    let high_count = high_threshold_response["matched_count"].as_i64().unwrap();
+    
+    assert!(high_count >= low_count, 
+            "Higher threshold should include at least as many documents as lower threshold");
+    
+    println!("✅ Enhanced low confidence deletion test passed");
 }

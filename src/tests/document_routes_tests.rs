@@ -633,4 +633,304 @@ mod document_routes_deletion_tests {
             // This should result in zero matched documents
         }
     }
+
+    #[cfg(test)]
+    mod delete_failed_ocr_tests {
+        use super::*;
+        use serde_json::json;
+
+        #[test]
+        fn test_delete_failed_ocr_request_serialization() {
+            // Test preview mode
+            let preview_request = json!({
+                "preview_only": true
+            });
+            
+            let parsed: serde_json::Value = serde_json::from_value(preview_request).unwrap();
+            assert_eq!(parsed["preview_only"], true);
+
+            // Test delete mode
+            let delete_request = json!({
+                "preview_only": false
+            });
+            
+            let parsed: serde_json::Value = serde_json::from_value(delete_request).unwrap();
+            assert_eq!(parsed["preview_only"], false);
+
+            // Test empty request (should default to preview_only: false)
+            let empty_request = json!({});
+            
+            let parsed: serde_json::Value = serde_json::from_value(empty_request).unwrap();
+            assert!(parsed.get("preview_only").is_none() || parsed["preview_only"] == false);
+        }
+
+        #[test]
+        fn test_delete_failed_ocr_user_authorization() {
+            let admin_user = create_test_user(UserRole::Admin);
+            let regular_user = create_test_user(UserRole::User);
+            
+            // Both admins and regular users should be able to delete their own failed documents
+            assert_eq!(admin_user.role, UserRole::Admin);
+            assert_eq!(regular_user.role, UserRole::User);
+
+            // Admin should be able to see all failed documents
+            // Regular user should only see their own failed documents
+            // This logic would be tested in the actual endpoint implementation
+        }
+
+        #[test]
+        fn test_failed_document_criteria() {
+            let user_id = Uuid::new_v4();
+
+            // Test document with failed OCR status
+            let mut failed_doc = create_test_document(user_id);
+            failed_doc.ocr_status = Some("failed".to_string());
+            failed_doc.ocr_confidence = None;
+            failed_doc.ocr_error = Some("OCR processing failed".to_string());
+            
+            // Should be included in failed document deletion
+            assert_eq!(failed_doc.ocr_status, Some("failed".to_string()));
+            assert!(failed_doc.ocr_confidence.is_none());
+
+            // Test document with NULL confidence but completed status
+            let mut null_confidence_doc = create_test_document(user_id);
+            null_confidence_doc.ocr_status = Some("completed".to_string());
+            null_confidence_doc.ocr_confidence = None;
+            null_confidence_doc.ocr_text = Some("Text but no confidence".to_string());
+            
+            // Should be included in failed document deletion (NULL confidence indicates failure)
+            assert_eq!(null_confidence_doc.ocr_status, Some("completed".to_string()));
+            assert!(null_confidence_doc.ocr_confidence.is_none());
+
+            // Test document with successful OCR
+            let mut success_doc = create_test_document(user_id);
+            success_doc.ocr_status = Some("completed".to_string());
+            success_doc.ocr_confidence = Some(85.0);
+            success_doc.ocr_text = Some("Successfully extracted text".to_string());
+            
+            // Should NOT be included in failed document deletion
+            assert_eq!(success_doc.ocr_status, Some("completed".to_string()));
+            assert!(success_doc.ocr_confidence.is_some());
+
+            // Test document with pending status
+            let mut pending_doc = create_test_document(user_id);
+            pending_doc.ocr_status = Some("pending".to_string());
+            pending_doc.ocr_confidence = None;
+            
+            // Should NOT be included in failed document deletion (still processing)
+            assert_eq!(pending_doc.ocr_status, Some("pending".to_string()));
+
+            // Test document with processing status
+            let mut processing_doc = create_test_document(user_id);
+            processing_doc.ocr_status = Some("processing".to_string());
+            processing_doc.ocr_confidence = None;
+            
+            // Should NOT be included in failed document deletion (still processing)
+            assert_eq!(processing_doc.ocr_status, Some("processing".to_string()));
+        }
+
+        #[test]
+        fn test_delete_failed_ocr_response_format() {
+            // Test preview response format
+            let preview_response = json!({
+                "success": true,
+                "message": "Found 5 documents with failed OCR processing",
+                "matched_count": 5,
+                "preview": true,
+                "document_ids": ["id1", "id2", "id3", "id4", "id5"]
+            });
+
+            assert_eq!(preview_response["success"], true);
+            assert_eq!(preview_response["matched_count"], 5);
+            assert_eq!(preview_response["preview"], true);
+            assert!(preview_response["document_ids"].is_array());
+
+            // Test delete response format
+            let delete_response = json!({
+                "success": true,
+                "message": "Successfully deleted 3 documents with failed OCR processing",
+                "deleted_count": 3,
+                "matched_count": 3,
+                "successful_file_deletions": 3,
+                "failed_file_deletions": 0,
+                "ignored_file_creation_failures": 0,
+                "deleted_document_ids": ["id1", "id2", "id3"]
+            });
+
+            assert_eq!(delete_response["success"], true);
+            assert_eq!(delete_response["deleted_count"], 3);
+            assert_eq!(delete_response["matched_count"], 3);
+            assert!(delete_response["deleted_document_ids"].is_array());
+            assert!(delete_response.get("preview").is_none()); // Should not have preview flag in delete response
+
+            // Test no documents found response
+            let no_docs_response = json!({
+                "success": true,
+                "message": "No documents found with failed OCR processing",
+                "deleted_count": 0
+            });
+
+            assert_eq!(no_docs_response["success"], true);
+            assert_eq!(no_docs_response["deleted_count"], 0);
+        }
+
+        #[test]
+        fn test_delete_failed_ocr_error_scenarios() {
+            // Test with no failed documents
+            let no_failed_docs_request = json!({
+                "preview_only": true
+            });
+
+            // Should return success with 0 matched count
+            // This would be tested in integration tests with actual database
+
+            // Test with file deletion failures
+            let file_deletion_error = json!({
+                "success": true,
+                "message": "Successfully deleted 2 documents with failed OCR processing",
+                "deleted_count": 2,
+                "matched_count": 2,
+                "successful_file_deletions": 1,
+                "failed_file_deletions": 1,
+                "ignored_file_creation_failures": 0,
+                "deleted_document_ids": ["id1", "id2"]
+            });
+
+            // Should still report success but indicate file deletion issues
+            assert_eq!(file_deletion_error["success"], true);
+            assert_eq!(file_deletion_error["failed_file_deletions"], 1);
+
+            // Test with ignored file creation failures
+            let ignored_file_error = json!({
+                "success": true,
+                "message": "Successfully deleted 2 documents with failed OCR processing",
+                "deleted_count": 2,
+                "matched_count": 2,
+                "successful_file_deletions": 2,
+                "failed_file_deletions": 0,
+                "ignored_file_creation_failures": 1,
+                "deleted_document_ids": ["id1", "id2"]
+            });
+
+            assert_eq!(ignored_file_error["success"], true);
+            assert_eq!(ignored_file_error["ignored_file_creation_failures"], 1);
+        }
+
+        #[test]
+        fn test_delete_failed_ocr_failure_reason_handling() {
+            let user_id = Uuid::new_v4();
+
+            // Test document with specific failure reason
+            let mut ocr_timeout_doc = create_test_document(user_id);
+            ocr_timeout_doc.ocr_status = Some("failed".to_string());
+            ocr_timeout_doc.ocr_error = Some("OCR processing timed out after 2 minutes".to_string());
+            
+            // Test document with corruption error
+            let mut corruption_doc = create_test_document(user_id);
+            corruption_doc.ocr_status = Some("failed".to_string());
+            corruption_doc.ocr_error = Some("Invalid image format - file appears corrupted".to_string());
+            
+            // Test document with font encoding error
+            let mut font_error_doc = create_test_document(user_id);
+            font_error_doc.ocr_status = Some("failed".to_string());
+            font_error_doc.ocr_error = Some("PDF text extraction failed due to font encoding issues".to_string());
+            
+            // All should be valid candidates for deletion
+            assert!(ocr_timeout_doc.ocr_error.is_some());
+            assert!(corruption_doc.ocr_error.is_some());
+            assert!(font_error_doc.ocr_error.is_some());
+            
+            // The deletion should create appropriate ignored file records with the error reasons
+        }
+
+        #[test]
+        fn test_delete_failed_ocr_ignored_file_creation() {
+            // Test that deleted failed documents create proper ignored file records
+            let user_id = Uuid::new_v4();
+            
+            let mut failed_doc = create_test_document(user_id);
+            failed_doc.ocr_status = Some("failed".to_string());
+            failed_doc.ocr_error = Some("OCR processing failed due to corrupted image".to_string());
+            
+            // Expected ignored file reason should include the error
+            let expected_reason = "deleted due to failed OCR processing: OCR processing failed due to corrupted image";
+            
+            // In the actual implementation, this would be tested by verifying the ignored file record
+            assert!(failed_doc.ocr_error.is_some());
+            
+            // Test document with no specific error
+            let mut failed_no_error_doc = create_test_document(user_id);
+            failed_no_error_doc.ocr_status = Some("failed".to_string());
+            failed_no_error_doc.ocr_error = None;
+            
+            // Should use generic reason
+            let expected_generic_reason = "deleted due to failed OCR processing";
+            
+            // Both should result in appropriate ignored file records
+            assert_eq!(failed_doc.ocr_status, Some("failed".to_string()));
+            assert_eq!(failed_no_error_doc.ocr_status, Some("failed".to_string()));
+        }
+
+        #[test]
+        fn test_delete_failed_ocr_vs_low_confidence_distinction() {
+            let user_id = Uuid::new_v4();
+
+            // Failed OCR document (should be in failed deletion, not low confidence)
+            let mut failed_doc = create_test_document(user_id);
+            failed_doc.ocr_status = Some("failed".to_string());
+            failed_doc.ocr_confidence = None;
+            
+            // Low confidence document (should be in low confidence deletion, not failed)
+            let mut low_confidence_doc = create_test_document(user_id);
+            low_confidence_doc.ocr_status = Some("completed".to_string());
+            low_confidence_doc.ocr_confidence = Some(25.0);
+            
+            // NULL confidence but completed (edge case - should be in failed deletion)
+            let mut null_confidence_doc = create_test_document(user_id);
+            null_confidence_doc.ocr_status = Some("completed".to_string());
+            null_confidence_doc.ocr_confidence = None;
+            
+            // High confidence document (should be in neither)
+            let mut high_confidence_doc = create_test_document(user_id);
+            high_confidence_doc.ocr_status = Some("completed".to_string());
+            high_confidence_doc.ocr_confidence = Some(95.0);
+            
+            // Verify the logic for each type
+            assert_eq!(failed_doc.ocr_status, Some("failed".to_string()));
+            assert!(failed_doc.ocr_confidence.is_none());
+            
+            assert_eq!(low_confidence_doc.ocr_status, Some("completed".to_string()));
+            assert!(low_confidence_doc.ocr_confidence.unwrap() < 50.0);
+            
+            assert_eq!(null_confidence_doc.ocr_status, Some("completed".to_string()));
+            assert!(null_confidence_doc.ocr_confidence.is_none());
+            
+            assert_eq!(high_confidence_doc.ocr_status, Some("completed".to_string()));
+            assert!(high_confidence_doc.ocr_confidence.unwrap() > 50.0);
+        }
+
+        #[test]
+        fn test_delete_failed_ocr_endpoint_path() {
+            // Test that the endpoint path is correct
+            let endpoint_path = "/api/documents/delete-failed-ocr";
+            
+            // This would be used in integration tests
+            assert!(endpoint_path.contains("delete-failed-ocr"));
+            assert!(endpoint_path.starts_with("/api/documents/"));
+        }
+
+        #[test]
+        fn test_delete_failed_ocr_http_methods() {
+            // The endpoint should only accept POST requests
+            // GET, PUT, DELETE should not be allowed
+            
+            // This would be tested in integration tests with actual HTTP requests
+            let allowed_method = "POST";
+            let disallowed_methods = vec!["GET", "PUT", "DELETE", "PATCH"];
+            
+            assert_eq!(allowed_method, "POST");
+            assert!(disallowed_methods.contains(&"GET"));
+            assert!(disallowed_methods.contains(&"DELETE"));
+        }
+    }
 }

@@ -248,6 +248,11 @@ export const documentService = {
       preview_only: previewOnly
     })
   },
+  deleteFailedOcr: (previewOnly: boolean = false) => {
+    return api.post('/documents/delete-failed-ocr', {
+      preview_only: previewOnly
+    })
+  },
 }
 
 export interface OcrStatusResponse {

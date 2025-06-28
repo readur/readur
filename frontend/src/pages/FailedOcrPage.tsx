@@ -160,6 +160,11 @@ const FailedOcrPage: React.FC = () => {
   const [previewData, setPreviewData] = useState<any>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
+  // Failed documents deletion state
+  const [failedDocsLoading, setFailedDocsLoading] = useState(false);
+  const [failedPreviewData, setFailedPreviewData] = useState<any>(null);
+  const [confirmDeleteFailedOpen, setConfirmDeleteFailedOpen] = useState(false);
+
   const fetchFailedDocuments = async () => {
     try {
       setLoading(true);
@@ -313,6 +318,8 @@ const FailedOcrPage: React.FC = () => {
       fetchDuplicates();
     } else if (currentTab === 2) {
       handlePreviewLowConfidence();
+    } else if (currentTab === 3) {
+      handlePreviewFailedDocuments();
     }
   };
 
@@ -374,6 +381,51 @@ const FailedOcrPage: React.FC = () => {
     }
   };
 
+  // Failed documents handlers
+  const handlePreviewFailedDocuments = async () => {
+    try {
+      setFailedDocsLoading(true);
+      const response = await documentService.deleteFailedOcr(true);
+      setFailedPreviewData(response.data);
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to preview failed documents',
+        severity: 'error'
+      });
+    } finally {
+      setFailedDocsLoading(false);
+    }
+  };
+
+  const handleDeleteFailedDocuments = async () => {
+    try {
+      setFailedDocsLoading(true);
+      const response = await documentService.deleteFailedOcr(false);
+      
+      setSnackbar({
+        open: true,
+        message: response.data.message,
+        severity: 'success'
+      });
+      setFailedPreviewData(null);
+      setConfirmDeleteFailedOpen(false);
+      
+      // Refresh failed OCR tab if currently viewing it
+      if (currentTab === 0) {
+        fetchFailedDocuments();
+      }
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to delete failed documents',
+        severity: 'error'
+      });
+    } finally {
+      setFailedDocsLoading(false);
+    }
+  };
+
   if (loading && (!documents || documents.length === 0)) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -413,6 +465,11 @@ const FailedOcrPage: React.FC = () => {
           <Tab
             icon={<FindInPageIcon />}
             label={`Low Confidence${previewData ? ` (${previewData.matched_count})` : ''}`}
+            iconPosition="start"
+          />
+          <Tab
+            icon={<DeleteIcon />}
+            label="Delete Failed"
             iconPosition="start"
           />
         </Tabs>
@@ -994,6 +1051,83 @@ const FailedOcrPage: React.FC = () => {
         </>
       )}
 
+      {/* Delete Failed Documents Tab Content */}
+      {currentTab === 3 && (
+        <>
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            <AlertTitle>Delete Failed OCR Documents</AlertTitle>
+            <Typography>
+              This tool allows you to delete all documents where OCR processing failed completely. 
+              This includes documents with NULL confidence values or explicit failure status.
+              Use the preview feature first to see what documents would be affected before deleting.
+            </Typography>
+          </Alert>
+
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Grid container spacing={3} alignItems="center">
+                <Grid item xs={12} md={6}>
+                  <Button
+                    variant="outlined"
+                    onClick={handlePreviewFailedDocuments}
+                    disabled={failedDocsLoading}
+                    startIcon={failedDocsLoading ? <CircularProgress size={20} /> : <FindInPageIcon />}
+                    fullWidth
+                  >
+                    Preview Failed Documents
+                  </Button>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    onClick={() => setConfirmDeleteFailedOpen(true)}
+                    disabled={!failedPreviewData || failedPreviewData.matched_count === 0 || failedDocsLoading}
+                    startIcon={<DeleteIcon />}
+                    fullWidth
+                  >
+                    Delete Failed Documents
+                  </Button>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+
+          {/* Preview Results */}
+          {failedPreviewData && (
+            <Card sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Preview Results
+                </Typography>
+                <Typography color={failedPreviewData.matched_count > 0 ? 'error.main' : 'success.main'}>
+                  {failedPreviewData.message}
+                </Typography>
+                {failedPreviewData.matched_count > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Document IDs that would be deleted:
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                      {failedPreviewData.document_ids.slice(0, 10).join(', ')}
+                      {failedPreviewData.document_ids.length > 10 && ` ... and ${failedPreviewData.document_ids.length - 10} more`}
+                    </Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Loading State */}
+          {failedDocsLoading && !failedPreviewData && (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+              <CircularProgress />
+              <Typography sx={{ ml: 2 }}>Processing request...</Typography>
+            </Box>
+          )}
+        </>
+      )}
+
       {/* Confirmation Dialog */}
       <Dialog
         open={confirmDeleteOpen}
@@ -1025,6 +1159,41 @@ const FailedOcrPage: React.FC = () => {
             startIcon={lowConfidenceLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
           >
             {lowConfidenceLoading ? 'Deleting...' : 'Delete Documents'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmation Dialog for Failed Documents */}
+      <Dialog
+        open={confirmDeleteFailedOpen}
+        onClose={() => setConfirmDeleteFailedOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle color="error.main">
+          <DeleteIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Confirm Failed Document Deletion
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete {failedPreviewData?.matched_count || 0} documents with failed OCR processing?
+          </Typography>
+          <Alert severity="error" sx={{ mt: 2 }}>
+            This action cannot be undone. The documents and their files will be permanently deleted.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDeleteFailedOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteFailedDocuments}
+            color="error"
+            variant="contained"
+            disabled={failedDocsLoading}
+            startIcon={failedDocsLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
+          >
+            {failedDocsLoading ? 'Deleting...' : 'Delete Failed Documents'}
           </Button>
         </DialogActions>
       </Dialog>
