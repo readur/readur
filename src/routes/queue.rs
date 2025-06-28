@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::{auth::AuthUser, ocr::queue::OcrQueueService, AppState, models::UserRole};
 
-fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
+pub fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
     if auth_user.user.role != UserRole::Admin {
         Err(StatusCode::FORBIDDEN)
     } else {
