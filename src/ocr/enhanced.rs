@@ -295,15 +295,21 @@ impl EnhancedOcrService {
         Ok(tesseract)
     }
     
-    /// Calculate overall confidence score
+    /// Calculate overall confidence score using Tesseract's mean confidence
     #[cfg(feature = "ocr")]
-    fn calculate_overall_confidence(&self, _tesseract: &mut Tesseract) -> Result<f32> {
-        // Note: get_word_confidences may not be available in current tesseract crate version
-        // For now, we'll estimate confidence based on text quality
-        // This can be enhanced when the API is available or with alternative methods
+    fn calculate_overall_confidence(&self, tesseract: &mut Tesseract) -> Result<f32> {
+        // Use Tesseract's built-in mean confidence calculation
+        let confidence = tesseract.mean_text_conf();
         
-        // Return a reasonable default confidence for now
-        Ok(85.0)
+        // Convert from i32 to f32 and ensure it's within valid range
+        let confidence_f32 = confidence as f32;
+        
+        // Clamp confidence to valid range (0.0 to 100.0)
+        let clamped_confidence = confidence_f32.max(0.0).min(100.0);
+        
+        debug!("Tesseract confidence: {} -> {:.1}%", confidence, clamped_confidence);
+        
+        Ok(clamped_confidence)
     }
     
     /// Detect and correct image orientation
