@@ -110,13 +110,42 @@ impl DocumentIngestionService {
         }
 
         // Save file to storage
-        let file_path = self.file_service
+        let file_path = match self.file_service
             .save_file(&request.filename, &request.file_data)
-            .await
-            .map_err(|e| {
-                warn!("Failed to save file {}: {}", request.filename, e);
-                e
-            })?;
+            .await {
+                Ok(path) => path,
+                Err(e) => {
+                    warn!("Failed to save file {}: {}", request.filename, e);
+                    
+                    // Create failed document record for storage failure
+                    if let Err(failed_err) = self.db.create_failed_document(
+                        request.user_id,
+                        request.filename.clone(),
+                        Some(request.original_filename.clone()),
+                        None, // original_path
+                        None, // file_path (couldn't save)
+                        Some(file_size),
+                        Some(file_hash.clone()),
+                        Some(request.mime_type.clone()),
+                        None, // content
+                        Vec::new(), // tags
+                        None, // ocr_text
+                        None, // ocr_confidence
+                        None, // ocr_word_count
+                        None, // ocr_processing_time_ms
+                        "storage_error".to_string(),
+                        "storage".to_string(),
+                        None, // existing_document_id
+                        request.source_type.unwrap_or_else(|| "upload".to_string()),
+                        Some(e.to_string()),
+                        None, // retry_count
+                    ).await {
+                        warn!("Failed to create failed document record for storage error: {}", failed_err);
+                    }
+                    
+                    return Err(e.into());
+                }
+            };
 
         // Create document record
         let document = self.file_service.create_document(
@@ -158,6 +187,33 @@ impl DocumentIngestionService {
                 } else {
                     warn!("Failed to create document record for {} (hash: {}): {}", 
                           request.filename, &file_hash[..8], e);
+                    
+                    // Create failed document record for database creation failure
+                    if let Err(failed_err) = self.db.create_failed_document(
+                        request.user_id,
+                        request.filename.clone(),
+                        Some(request.original_filename.clone()),
+                        None, // original_path
+                        Some(file_path.clone()), // file was saved successfully
+                        Some(file_size),
+                        Some(file_hash.clone()),
+                        Some(request.mime_type.clone()),
+                        None, // content
+                        Vec::new(), // tags
+                        None, // ocr_text
+                        None, // ocr_confidence
+                        None, // ocr_word_count
+                        None, // ocr_processing_time_ms
+                        "database_error".to_string(),
+                        "ingestion".to_string(),
+                        None, // existing_document_id
+                        request.source_type.unwrap_or_else(|| "upload".to_string()),
+                        Some(e.to_string()),
+                        None, // retry_count
+                    ).await {
+                        warn!("Failed to create failed document record for database error: {}", failed_err);
+                    }
+                    
                     return Err(e.into());
                 }
             }

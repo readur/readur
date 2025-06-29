@@ -147,7 +147,7 @@ describe('DocumentManagementPage - Low Confidence Deletion', () => {
 
     // Wait for tab content to render
     await waitFor(() => {
-      const thresholdInput = screen.getByLabelText(/Maximum Confidence Threshold/i);
+      const thresholdInput = screen.getByLabelText(/Confidence Threshold/i);
       expect(thresholdInput).toBeInTheDocument();
     });
   });
@@ -224,7 +224,7 @@ describe('DocumentManagementPage - Low Confidence Deletion', () => {
   //   const lowConfidenceTab = screen.getByText(/Low Confidence/i);
   //   fireEvent.click(lowConfidenceTab);
   //   
-  //   const thresholdInput = screen.getByLabelText(/Maximum Confidence Threshold/i);
+  //   const thresholdInput = screen.getByLabelText(/Confidence Threshold/i);
   //   
   //   // Test invalid values
   //   fireEvent.change(thresholdInput, { target: { value: '150' } });

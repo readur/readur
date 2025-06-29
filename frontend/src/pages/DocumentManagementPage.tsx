@@ -30,8 +30,10 @@ import {
   Tabs,
   Tab,
   TextField,
+  MenuItem,
   useTheme,
   Divider,
+  InputAdornment,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -48,10 +50,12 @@ import {
   FindInPage as FindInPageIcon,
   OpenInNew as OpenInNewIcon,
   Warning as WarningIcon,
+  Block as BlockIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { api, documentService, queueService } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
+import FailedDocumentViewer from '../components/FailedDocumentViewer';
 
 interface FailedDocument {
   id: string;
@@ -70,6 +74,10 @@ interface FailedDocument {
   last_attempt_at?: string;
   can_retry: boolean;
   failure_category: string;
+  ocr_confidence?: number;
+  ocr_word_count?: number;
+  failure_reason: string;
+  error_message?: string;
 }
 
 interface FailureCategory {
@@ -131,16 +139,43 @@ interface DuplicatesResponse {
   };
 }
 
+interface IgnoredFile {
+  id: string;
+  file_hash: string;
+  filename: string;
+  original_filename: string;
+  file_path: string;
+  file_size: number;
+  mime_type: string;
+  source_type?: string;
+  source_path?: string;
+  source_identifier?: string;
+  ignored_at: string;
+  ignored_by: string;
+  ignored_by_username?: string;
+  reason?: string;
+  created_at: string;
+}
+
+interface IgnoredFilesStats {
+  total_ignored_files: number;
+  by_source_type: Array<{
+    source_type?: string;
+    count: number;
+    total_size_bytes: number;
+  }>;
+  total_size_bytes: number;
+  most_recent_ignored_at?: string;
+}
+
 const DocumentManagementPage: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [currentTab, setCurrentTab] = useState(0);
   const [documents, setDocuments] = useState<FailedDocument[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
-  const [failedDocuments, setFailedDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [duplicatesLoading, setDuplicatesLoading] = useState(false);
-  const [failedDocumentsLoading, setFailedDocumentsLoading] = useState(false);
   const [failedDocumentsFilters, setFailedDocumentsFilters] = useState<{ stage?: string; reason?: string }>({});
   const [selectedFailedDocument, setSelectedFailedDocument] = useState<any>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
@@ -149,10 +184,8 @@ const DocumentManagementPage: React.FC = () => {
   const [duplicateStatistics, setDuplicateStatistics] = useState<DuplicatesResponse['statistics'] | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 25 });
   const [duplicatesPagination, setDuplicatesPagination] = useState({ page: 1, limit: 25 });
-  const [failedDocumentsPagination, setFailedDocumentsPagination] = useState({ page: 1, limit: 25 });
   const [totalPages, setTotalPages] = useState(0);
   const [duplicatesTotalPages, setDuplicatesTotalPages] = useState(0);
-  const [failedDocumentsTotalPages, setFailedDocumentsTotalPages] = useState(0);
   const [selectedDocument, setSelectedDocument] = useState<FailedDocument | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -173,12 +206,30 @@ const DocumentManagementPage: React.FC = () => {
   const [failedDocsLoading, setFailedDocsLoading] = useState(false);
   const [failedPreviewData, setFailedPreviewData] = useState<any>(null);
   const [confirmDeleteFailedOpen, setConfirmDeleteFailedOpen] = useState(false);
+  
+  // Ignored files state
+  const [ignoredFiles, setIgnoredFiles] = useState<IgnoredFile[]>([]);
+  const [ignoredFilesStats, setIgnoredFilesStats] = useState<IgnoredFilesStats | null>(null);
+  const [ignoredFilesLoading, setIgnoredFilesLoading] = useState(false);
+  const [ignoredFilesPagination, setIgnoredFilesPagination] = useState({ page: 1, limit: 25 });
+  const [ignoredFilesTotalPages, setIgnoredFilesTotalPages] = useState(0);
+  const [ignoredFilesSearchTerm, setIgnoredFilesSearchTerm] = useState('');
+  const [ignoredFilesSourceTypeFilter, setIgnoredFilesSourceTypeFilter] = useState('');
+  const [selectedIgnoredFiles, setSelectedIgnoredFiles] = useState<Set<string>>(new Set());
+  const [bulkDeleteIgnoredDialog, setBulkDeleteIgnoredDialog] = useState(false);
+  const [deletingIgnoredFiles, setDeletingIgnoredFiles] = useState(false);
 
   const fetchFailedDocuments = async () => {
     try {
       setLoading(true);
       const offset = (pagination.page - 1) * pagination.limit;
-      const response = await documentService.getFailedOcrDocuments(pagination.limit, offset);
+      // Use the comprehensive API that supports filtering
+      const response = await documentService.getFailedDocuments(
+        pagination.limit, 
+        offset,
+        failedDocumentsFilters.stage,
+        failedDocumentsFilters.reason
+      );
       
       if (response?.data) {
         setDocuments(response.data.documents || []);
@@ -188,10 +239,10 @@ const DocumentManagementPage: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('Failed to fetch failed OCR documents:', error);
+      console.error('Failed to fetch failed documents:', error);
       setSnackbar({
         open: true,
-        message: 'Failed to load failed OCR documents',
+        message: 'Failed to load failed documents',
         severity: 'error'
       });
     } finally {
@@ -226,44 +277,18 @@ const DocumentManagementPage: React.FC = () => {
 
   useEffect(() => {
     fetchFailedDocuments();
-  }, [pagination.page]);
+    // Also fetch ignored files stats for the tab label
+    fetchIgnoredFilesStats();
+  }, [pagination.page, failedDocumentsFilters]);
 
   useEffect(() => {
-    if (currentTab === 1) {
+    if (currentTab === 2) {
       fetchDuplicates();
     } else if (currentTab === 4) {
-      fetchFailedDocumentsList();
+      fetchIgnoredFiles();
     }
-  }, [currentTab, duplicatesPagination.page, failedDocumentsPagination.page, failedDocumentsFilters]);
+  }, [currentTab, duplicatesPagination.page, ignoredFilesPagination.page, ignoredFilesSearchTerm, ignoredFilesSourceTypeFilter]);
 
-  const fetchFailedDocumentsList = async () => {
-    try {
-      setFailedDocumentsLoading(true);
-      const offset = (failedDocumentsPagination.page - 1) * failedDocumentsPagination.limit;
-      const response = await documentService.getFailedDocuments(
-        failedDocumentsPagination.limit, 
-        offset, 
-        failedDocumentsFilters.stage, 
-        failedDocumentsFilters.reason
-      );
-      
-      if (response?.data) {
-        setFailedDocuments(response.data.documents || []);
-        if (response.data.pagination) {
-          setFailedDocumentsTotalPages(Math.ceil(response.data.pagination.total / failedDocumentsPagination.limit));
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch failed documents:', error);
-      setSnackbar({
-        open: true,
-        message: 'Failed to load failed documents',
-        severity: 'error'
-      });
-    } finally {
-      setFailedDocumentsLoading(false);
-    }
-  };
 
   const getFailureReasonColor = (reason: string): "error" | "warning" | "info" | "default" => {
     switch (reason) {
@@ -391,6 +416,148 @@ const DocumentManagementPage: React.FC = () => {
     setSelectedDocument(document);
     setDetailsOpen(true);
   };
+  
+  // Ignored Files functions
+  const fetchIgnoredFiles = async () => {
+    try {
+      setIgnoredFilesLoading(true);
+      const offset = (ignoredFilesPagination.page - 1) * ignoredFilesPagination.limit;
+      
+      const params = new URLSearchParams({
+        limit: ignoredFilesPagination.limit.toString(),
+        offset: offset.toString(),
+      });
+      
+      if (ignoredFilesSearchTerm) {
+        params.append('filename', ignoredFilesSearchTerm);
+      }
+      
+      if (ignoredFilesSourceTypeFilter) {
+        params.append('source_type', ignoredFilesSourceTypeFilter);
+      }
+      
+      const response = await api.get(`/ignored-files?${params}`);
+      
+      if (response?.data) {
+        setIgnoredFiles(response.data.ignored_files || []);
+        setIgnoredFilesTotalPages(Math.ceil(response.data.total / ignoredFilesPagination.limit));
+      }
+    } catch (error) {
+      console.error('Failed to fetch ignored files:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load ignored files',
+        severity: 'error'
+      });
+    } finally {
+      setIgnoredFilesLoading(false);
+    }
+  };
+  
+  const fetchIgnoredFilesStats = async () => {
+    try {
+      const response = await api.get('/ignored-files/stats');
+      if (response?.data) {
+        setIgnoredFilesStats(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch ignored files stats:', error);
+    }
+  };
+  
+  const handleIgnoredFileSelect = (fileId: string) => {
+    const newSelected = new Set(selectedIgnoredFiles);
+    if (newSelected.has(fileId)) {
+      newSelected.delete(fileId);
+    } else {
+      newSelected.add(fileId);
+    }
+    setSelectedIgnoredFiles(newSelected);
+  };
+  
+  const handleIgnoredFilesSelectAll = () => {
+    if (selectedIgnoredFiles.size === ignoredFiles.length) {
+      setSelectedIgnoredFiles(new Set());
+    } else {
+      setSelectedIgnoredFiles(new Set(ignoredFiles.map(file => file.id)));
+    }
+  };
+  
+  const handleDeleteSelectedIgnoredFiles = async () => {
+    if (selectedIgnoredFiles.size === 0) return;
+    
+    setDeletingIgnoredFiles(true);
+    try {
+      const response = await api.delete('/ignored-files/bulk-delete', {
+        data: {
+          ignored_file_ids: Array.from(selectedIgnoredFiles)
+        }
+      });
+      
+      setSnackbar({
+        open: true,
+        message: response.data.message || 'Files removed from ignored list',
+        severity: 'success'
+      });
+      setSelectedIgnoredFiles(new Set());
+      setBulkDeleteIgnoredDialog(false);
+      fetchIgnoredFiles();
+      fetchIgnoredFilesStats();
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to delete ignored files',
+        severity: 'error'
+      });
+    } finally {
+      setDeletingIgnoredFiles(false);
+    }
+  };
+  
+  const handleDeleteSingleIgnoredFile = async (fileId: string) => {
+    try {
+      const response = await api.delete(`/ignored-files/${fileId}`);
+      setSnackbar({
+        open: true,
+        message: response.data.message || 'File removed from ignored list',
+        severity: 'success'
+      });
+      fetchIgnoredFiles();
+      fetchIgnoredFilesStats();
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to delete ignored file',
+        severity: 'error'
+      });
+    }
+  };
+  
+  const getSourceIcon = (sourceType?: string) => {
+    switch (sourceType) {
+      case 'webdav':
+        return <OpenInNewIcon fontSize="small" />;
+      case 'local_folder':
+        return <FileCopyIcon fontSize="small" />;
+      case 's3':
+        return <DownloadIcon fontSize="small" />;
+      default:
+        return <FileCopyIcon fontSize="small" />;
+    }
+  };
+  
+  const getSourceTypeDisplay = (sourceType?: string) => {
+    switch (sourceType) {
+      case 'webdav':
+        return 'WebDAV';
+      case 'local_folder':
+        return 'Local Folder';
+      case 's3':
+        return 'S3';
+      default:
+        return sourceType || 'Unknown';
+    }
+  };
 
   const toggleDuplicateGroupExpansion = (groupHash: string) => {
     const newExpanded = new Set(expandedDuplicateGroups);
@@ -410,13 +577,14 @@ const DocumentManagementPage: React.FC = () => {
     if (currentTab === 0) {
       fetchFailedDocuments();
     } else if (currentTab === 1) {
-      fetchDuplicates();
-    } else if (currentTab === 2) {
       handlePreviewLowConfidence();
+    } else if (currentTab === 2) {
+      fetchDuplicates();
     } else if (currentTab === 3) {
       handlePreviewFailedDocuments();
     } else if (currentTab === 4) {
-      fetchFailedDocumentsList();
+      fetchIgnoredFiles();
+      fetchIgnoredFilesStats();
     }
   };
 
@@ -547,33 +715,64 @@ const DocumentManagementPage: React.FC = () => {
         </Button>
       </Box>
 
-      <Paper sx={{ mb: 3 }}>
-        <Tabs value={currentTab} onChange={handleTabChange} aria-label="document management tabs">
-          <Tab
-            icon={<ErrorIcon />}
-            label={`Failed Documents${statistics ? ` (${statistics.total_failed})` : ''}`}
-            iconPosition="start"
-          />
-          <Tab
-            icon={<FileCopyIcon />}
-            label={`Duplicate Files${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
-            iconPosition="start"
-          />
-          <Tab
-            icon={<FindInPageIcon />}
-            label={`Low Quality Manager${previewData ? ` (${previewData.matched_count})` : ''}`}
-            iconPosition="start"
-          />
-          <Tab
-            icon={<DeleteIcon />}
-            label="Bulk Cleanup"
-            iconPosition="start"
-          />
-          <Tab
-            icon={<WarningIcon />}
-            label="Failed Documents"
-            iconPosition="start"
-          />
+      <Paper sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
+        <Tabs 
+          value={currentTab} 
+          onChange={handleTabChange} 
+          aria-label="document management tabs"
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            '& .MuiTabs-flexContainer': {
+              gap: 1,
+            },
+            '& .MuiTab-root': {
+              minHeight: 64,
+              py: 2,
+              px: 3,
+              textTransform: 'none',
+              fontWeight: 500,
+              '&.Mui-selected': {
+                backgroundColor: 'action.selected',
+              },
+            },
+          }}
+        >
+          <Tooltip title="View and manage documents that failed during processing (OCR, ingestion, validation, etc.)">
+            <Tab
+              icon={<ErrorIcon />}
+              label={`Failed Documents${statistics ? ` (${statistics.total_failed})` : ''}`}
+              iconPosition="start"
+            />
+          </Tooltip>
+          <Tooltip title="Manage documents with low OCR confidence scores - preview and delete documents below a confidence threshold">
+            <Tab
+              icon={<FindInPageIcon />}
+              label={`Low Quality Manager${previewData ? ` (${previewData.matched_count})` : ''}`}
+              iconPosition="start"
+            />
+          </Tooltip>
+          <Tooltip title="View and manage duplicate document groups - documents with identical content">
+            <Tab
+              icon={<FileCopyIcon />}
+              label={`Duplicate Files${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
+              iconPosition="start"
+            />
+          </Tooltip>
+          <Tooltip title="Bulk operations for document cleanup and maintenance">
+            <Tab
+              icon={<DeleteIcon />}
+              label="Bulk Cleanup"
+              iconPosition="start"
+            />
+          </Tooltip>
+          <Tooltip title="Manage files that have been ignored during sync operations">
+            <Tab
+              icon={<BlockIcon />}
+              label={`Ignored Files${ignoredFilesStats ? ` (${ignoredFilesStats.total_ignored_files})` : ''}`}
+              iconPosition="start"
+            />
+          </Tooltip>
         </Tabs>
       </Paper>
 
@@ -636,6 +835,63 @@ const DocumentManagementPage: React.FC = () => {
         </Grid>
       )}
 
+      {/* Filter Controls */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" mb={2}>Filter Options</Typography>
+          <Grid container spacing={3} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <TextField
+                label="Filter by Stage"
+                select
+                value={failedDocumentsFilters.stage || ''}
+                onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, stage: e.target.value || undefined }))}
+                displayEmpty
+                fullWidth
+              >
+                <MenuItem value="">All Stages</MenuItem>
+                <MenuItem value="ocr">OCR Processing</MenuItem>
+                <MenuItem value="ingestion">Document Ingestion</MenuItem>
+                <MenuItem value="validation">Validation</MenuItem>
+                <MenuItem value="storage">File Storage</MenuItem>
+                <MenuItem value="processing">Processing</MenuItem>
+                <MenuItem value="sync">Synchronization</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+                label="Filter by Reason"
+                select
+                value={failedDocumentsFilters.reason || ''}
+                onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, reason: e.target.value || undefined }))}
+                displayEmpty
+                fullWidth
+              >
+                <MenuItem value="">All Reasons</MenuItem>
+                <MenuItem value="duplicate_content">Duplicate Content</MenuItem>
+                <MenuItem value="low_ocr_confidence">Low OCR Confidence</MenuItem>
+                <MenuItem value="unsupported_format">Unsupported Format</MenuItem>
+                <MenuItem value="file_too_large">File Too Large</MenuItem>
+                <MenuItem value="file_corrupted">File Corrupted</MenuItem>
+                <MenuItem value="ocr_timeout">OCR Timeout</MenuItem>
+                <MenuItem value="pdf_parsing_error">PDF Parsing Error</MenuItem>
+                <MenuItem value="other">Other</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Button
+                variant="outlined"
+                onClick={() => setFailedDocumentsFilters({})}
+                disabled={!failedDocumentsFilters.stage && !failedDocumentsFilters.reason}
+                fullWidth
+              >
+                Clear Filters
+              </Button>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
+
       {(!documents || documents.length === 0) ? (
         <Alert severity="success" sx={{ mt: 2 }}>
           <AlertTitle>Great news!</AlertTitle>
@@ -644,9 +900,9 @@ const DocumentManagementPage: React.FC = () => {
       ) : (
         <>
           <Alert severity="info" sx={{ mb: 2 }}>
-            <AlertTitle>OCR Failures</AlertTitle>
-            These documents failed OCR processing. You can retry OCR with detailed output to understand why failures occurred.
-            Common causes include corrupted PDFs, unsupported fonts, or memory limitations.
+            <AlertTitle>Failed Documents Overview</AlertTitle>
+            These documents failed at various stages of processing: ingestion, validation, OCR, storage, etc.
+            Use the filters above to narrow down by failure stage or specific reason. You can retry processing for recoverable failures.
           </Alert>
 
           <TableContainer component={Paper}>
@@ -758,8 +1014,37 @@ const DocumentManagementPage: React.FC = () => {
                                   <strong>Failure Reason:</strong>
                                 </Typography>
                                 <Typography variant="body2" sx={{ mb: 1 }}>
-                                  {document.ocr_failure_reason || 'Not specified'}
+                                  {document.failure_reason || document.ocr_failure_reason || 'Not specified'}
                                 </Typography>
+                                
+                                {/* Show OCR confidence and word count for low confidence failures */}
+                                {(document.failure_reason === 'low_ocr_confidence' || document.ocr_failure_reason === 'low_ocr_confidence') && (
+                                  <>
+                                    <Typography variant="body2" color="text.secondary">
+                                      <strong>OCR Results:</strong>
+                                    </Typography>
+                                    <Box sx={{ mb: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                                      {document.ocr_confidence !== undefined && (
+                                        <Chip
+                                          size="small"
+                                          icon={<WarningIcon />}
+                                          label={`${document.ocr_confidence.toFixed(1)}% confidence`}
+                                          color="warning"
+                                          variant="outlined"
+                                        />
+                                      )}
+                                      {document.ocr_word_count !== undefined && (
+                                        <Chip
+                                          size="small"
+                                          icon={<FindInPageIcon />}
+                                          label={`${document.ocr_word_count} words found`}
+                                          color="info"
+                                          variant="outlined"
+                                        />
+                                      )}
+                                    </Box>
+                                  </>
+                                )}
                                 
                                 <Typography variant="body2" color="text.secondary">
                                   <strong>Error Message:</strong>
@@ -775,7 +1060,7 @@ const DocumentManagementPage: React.FC = () => {
                                     wordBreak: 'break-word'
                                   }}
                                 >
-                                  {document.ocr_error || 'No error message available'}
+                                  {document.error_message || document.ocr_error || 'No error message available'}
                                 </Typography>
                               </Grid>
                               <Grid item xs={12} md={6}>
@@ -822,8 +1107,8 @@ const DocumentManagementPage: React.FC = () => {
         </>
       )}
 
-      {/* Duplicates Tab Content */}
-      {currentTab === 1 && (
+      {/* Duplicate Files Tab Content */}
+      {currentTab === 2 && (
         <>
           {/* Duplicate Statistics Overview */}
           {duplicateStatistics && (
@@ -1085,8 +1370,8 @@ const DocumentManagementPage: React.FC = () => {
         </>
       )}
 
-      {/* Low Confidence Documents Tab Content */}
-      {currentTab === 2 && (
+      {/* Low Quality Manager Tab Content */}
+      {currentTab === 1 && (
         <>
           <Alert severity="info" sx={{ mb: 3 }}>
             <AlertTitle>Low Confidence Document Deletion</AlertTitle>
@@ -1101,7 +1386,7 @@ const DocumentManagementPage: React.FC = () => {
               <Grid container spacing={3} alignItems="center">
                 <Grid item xs={12} md={4}>
                   <TextField
-                    label="Maximum Confidence Threshold (%)"
+                    label="Confidence Threshold (%)"
                     type="number"
                     value={confidenceThreshold}
                     onChange={(e) => setConfidenceThreshold(Math.max(0, Math.min(100, Number(e.target.value))))}
@@ -1296,183 +1581,254 @@ const DocumentManagementPage: React.FC = () => {
         </>
       )}
 
-      {/* Failed Documents Tab Content */}
+      {/* Ignored Files Tab Content */}
       {currentTab === 4 && (
         <>
           <Alert severity="info" sx={{ mb: 3 }}>
-            <AlertTitle>Failed Documents Overview</AlertTitle>
+            <AlertTitle>Ignored Files Management</AlertTitle>
             <Typography>
-              This shows all documents that failed at any stage of processing: ingestion, validation, OCR, storage, etc.
-              Use the filters to narrow down by failure stage or specific reason.
+              Files that have been marked as ignored during sync operations from various sources. 
+              You can remove files from the ignored list to allow them to be synced again.
             </Typography>
           </Alert>
 
-          {/* Filter Controls */}
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
-              <Grid container spacing={3} alignItems="center">
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    label="Filter by Stage"
-                    select
-                    value={failedDocumentsFilters.stage || ''}
-                    onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, stage: e.target.value || undefined }))}
-                    fullWidth
-                    SelectProps={{ native: true }}
-                  >
-                    <option value="">All Stages</option>
-                    <option value="ocr">OCR Processing</option>
-                    <option value="ingestion">Document Ingestion</option>
-                    <option value="validation">Validation</option>
-                    <option value="storage">File Storage</option>
-                    <option value="processing">Processing</option>
-                    <option value="sync">Synchronization</option>
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    label="Filter by Reason"
-                    select
-                    value={failedDocumentsFilters.reason || ''}
-                    onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, reason: e.target.value || undefined }))}
-                    fullWidth
-                    SelectProps={{ native: true }}
-                  >
-                    <option value="">All Reasons</option>
-                    <option value="duplicate_content">Duplicate Content</option>
-                    <option value="low_ocr_confidence">Low OCR Confidence</option>
-                    <option value="unsupported_format">Unsupported Format</option>
-                    <option value="file_too_large">File Too Large</option>
-                    <option value="file_corrupted">File Corrupted</option>
-                    <option value="ocr_timeout">OCR Timeout</option>
-                    <option value="pdf_parsing_error">PDF Parsing Error</option>
-                    <option value="other">Other</option>
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <Button
-                    variant="outlined"
-                    onClick={fetchFailedDocumentsList}
-                    disabled={failedDocumentsLoading}
-                    startIcon={failedDocumentsLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
-                    fullWidth
-                  >
-                    Apply Filters
-                  </Button>
-                </Grid>
+          {/* Statistics Cards */}
+          {ignoredFilesStats && (
+            <Grid container spacing={3} mb={3}>
+              <Grid item xs={12} md={4}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" color="primary">
+                      <BlockIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Total Ignored
+                    </Typography>
+                    <Typography variant="h3" color="primary.main">
+                      {ignoredFilesStats.total_ignored_files}
+                    </Typography>
+                  </CardContent>
+                </Card>
               </Grid>
+              <Grid item xs={12} md={4}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" color="primary">
+                      Total Size
+                    </Typography>
+                    <Typography variant="h3" color="primary.main">
+                      {formatFileSize(ignoredFilesStats.total_size_bytes)}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {ignoredFilesStats.most_recent_ignored_at && (
+                <Grid item xs={12} md={4}>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" color="primary">
+                        Most Recent
+                      </Typography>
+                      <Typography variant="body1" color="primary.main">
+                        {format(new Date(ignoredFilesStats.most_recent_ignored_at), 'MMM dd, yyyy')}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+            </Grid>
+          )}
+
+          {/* Filters and Search */}
+          <Card variant="outlined" sx={{ mb: 3 }}>
+            <CardContent>
+              <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                <TextField
+                  placeholder="Search filenames..."
+                  variant="outlined"
+                  size="small"
+                  value={ignoredFilesSearchTerm}
+                  onChange={(e) => {
+                    setIgnoredFilesSearchTerm(e.target.value);
+                    setIgnoredFilesPagination(prev => ({ ...prev, page: 1 }));
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <FindInPageIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{ flexGrow: 1, minWidth: '200px' }}
+                />
+                
+                <TextField
+                  select
+                  label="Source Type"
+                  size="small"
+                  value={ignoredFilesSourceTypeFilter}
+                  onChange={(e) => {
+                    setIgnoredFilesSourceTypeFilter(e.target.value);
+                    setIgnoredFilesPagination(prev => ({ ...prev, page: 1 }));
+                  }}
+                  sx={{ minWidth: '150px' }}
+                >
+                  <MenuItem value="">All Sources</MenuItem>
+                  <MenuItem value="webdav">WebDAV</MenuItem>
+                  <MenuItem value="local_folder">Local Folder</MenuItem>
+                  <MenuItem value="s3">S3</MenuItem>
+                </TextField>
+
+                <Button
+                  variant="outlined"
+                  startIcon={<RefreshIcon />}
+                  onClick={() => {
+                    fetchIgnoredFiles();
+                    fetchIgnoredFilesStats();
+                  }}
+                >
+                  Refresh
+                </Button>
+              </Box>
             </CardContent>
           </Card>
 
-          {/* Failed Documents List */}
-          {failedDocuments.length > 0 && (
-            <Card sx={{ mb: 3 }}>
+          {/* Bulk Actions */}
+          {selectedIgnoredFiles.size > 0 && (
+            <Card variant="outlined" sx={{ mb: 2, bgcolor: 'action.selected' }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Failed Documents ({failedDocuments.length})
-                </Typography>
-                <TableContainer component={Paper} variant="outlined">
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Filename</TableCell>
-                        <TableCell>Stage</TableCell>
-                        <TableCell>Reason</TableCell>
-                        <TableCell>Size</TableCell>
-                        <TableCell>Date</TableCell>
-                        <TableCell>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {failedDocuments.slice((failedDocumentsPagination.page - 1) * failedDocumentsPagination.limit, failedDocumentsPagination.page * failedDocumentsPagination.limit).map((doc: any) => (
-                        <TableRow key={doc.id}>
-                          <TableCell>
-                            <Typography variant="body2" noWrap>
-                              {doc.original_filename || doc.filename}
-                            </Typography>
-                            {doc.ingestion_source && (
-                              <Chip size="small" label={doc.ingestion_source} variant="outlined" sx={{ mt: 0.5 }} />
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              label={doc.source || doc.failure_stage}
-                              color={doc.failure_stage === 'ocr' ? 'error' : 'warning'}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              label={doc.failure_category || doc.failure_reason}
-                              color={getFailureReasonColor(doc.failure_reason)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {doc.file_size ? formatFileSize(doc.file_size) : 'N/A'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {new Date(doc.created_at).toLocaleDateString()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <IconButton
-                              size="small"
-                              onClick={() => setSelectedFailedDocument(doc)}
-                              title="View Details"
-                            >
-                              <InfoIcon />
-                            </IconButton>
-                            {doc.existing_document_id && (
-                              <IconButton
-                                size="small"
-                                onClick={() => navigate(`/documents/${doc.existing_document_id}`)}
-                                title="View Existing Document"
-                              >
-                                <OpenInNewIcon />
-                              </IconButton>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                
-                {/* Pagination */}
-                {failedDocumentsTotalPages > 1 && (
-                  <Box display="flex" justifyContent="center" mt={2}>
-                    <Pagination
-                      count={failedDocumentsTotalPages}
-                      page={failedDocumentsPagination.page}
-                      onChange={(_, page) => setFailedDocumentsPagination(prev => ({ ...prev, page }))}
-                      color="primary"
-                    />
-                  </Box>
-                )}
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body2">
+                    {selectedIgnoredFiles.size} file{selectedIgnoredFiles.size !== 1 ? 's' : ''} selected
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    startIcon={<RefreshIcon />}
+                    onClick={() => setBulkDeleteIgnoredDialog(true)}
+                    size="small"
+                  >
+                    Remove from Ignored List
+                  </Button>
+                </Box>
               </CardContent>
             </Card>
           )}
 
-          {/* Loading State */}
-          {failedDocumentsLoading && (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+          {ignoredFilesLoading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
               <CircularProgress />
-              <Typography sx={{ ml: 2 }}>Loading failed documents...</Typography>
             </Box>
-          )}
-
-          {/* Empty State */}
-          {!failedDocumentsLoading && failedDocuments.length === 0 && (
-            <Alert severity="success">
-              <AlertTitle>No Failed Documents Found</AlertTitle>
-              <Typography>
-                No documents have failed processing with the current filters. This is good!
-              </Typography>
+          ) : ignoredFiles.length === 0 ? (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              <AlertTitle>No ignored files found!</AlertTitle>
+              You don't have any files in the ignored list. All your files are being processed normally.
             </Alert>
+          ) : (
+            <>
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          indeterminate={selectedIgnoredFiles.size > 0 && selectedIgnoredFiles.size < ignoredFiles.length}
+                          checked={ignoredFiles.length > 0 && selectedIgnoredFiles.size === ignoredFiles.length}
+                          onChange={handleIgnoredFilesSelectAll}
+                        />
+                      </TableCell>
+                      <TableCell>Filename</TableCell>
+                      <TableCell>Source</TableCell>
+                      <TableCell>Size</TableCell>
+                      <TableCell>Ignored Date</TableCell>
+                      <TableCell>Reason</TableCell>
+                      <TableCell>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {ignoredFiles.map((file) => (
+                      <TableRow key={file.id} hover>
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            checked={selectedIgnoredFiles.has(file.id)}
+                            onChange={() => handleIgnoredFileSelect(file.id)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Box>
+                            <Typography variant="body2" fontWeight="medium">
+                              {file.filename}
+                            </Typography>
+                            {file.filename !== file.original_filename && (
+                              <Typography variant="caption" color="text.secondary">
+                                Original: {file.original_filename}
+                              </Typography>
+                            )}
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              {file.mime_type}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" alignItems="center" gap={1}>
+                            {getSourceIcon(file.source_type)}
+                            <Box>
+                              <Typography variant="body2">
+                                {getSourceTypeDisplay(file.source_type)}
+                              </Typography>
+                              {file.source_path && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {file.source_path}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {formatFileSize(file.file_size)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {format(new Date(file.ignored_at), 'MMM dd, yyyy')}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {format(new Date(file.ignored_at), 'HH:mm')}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {file.reason || 'No reason provided'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip title="Remove from ignored list (allow re-syncing)">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteSingleIgnoredFile(file.id)}
+                              color="success"
+                            >
+                              <RefreshIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Pagination */}
+              {ignoredFilesTotalPages > 1 && (
+                <Box display="flex" justifyContent="center" mt={3}>
+                  <Pagination
+                    count={ignoredFilesTotalPages}
+                    page={ignoredFilesPagination.page}
+                    onChange={(_, page) => setIgnoredFilesPagination(prev => ({ ...prev, page }))}
+                    color="primary"
+                  />
+                </Box>
+              )}
+            </>
           )}
         </>
       )}
@@ -1584,8 +1940,8 @@ const DocumentManagementPage: React.FC = () => {
                     },
                   }}
                 >
-                  <DocumentViewer
-                    documentId={selectedDocument.id}
+                  <FailedDocumentViewer
+                    failedDocumentId={selectedDocument.id}
                     filename={selectedDocument.original_filename}
                     mimeType={selectedDocument.mime_type}
                   />
@@ -1678,7 +2034,11 @@ const DocumentManagementPage: React.FC = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   <strong>Full Error Message:</strong>
                 </Typography>
-                <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                <Paper sx={{ 
+                  p: 2, 
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.50',
+                  borderRadius: 1
+                }}>
                   <Typography
                     variant="body2"
                     sx={{
@@ -1688,7 +2048,7 @@ const DocumentManagementPage: React.FC = () => {
                       whiteSpace: 'pre-wrap'
                     }}
                   >
-                    {selectedDocument.ocr_error || 'No error message available'}
+                    {selectedDocument.error_message || selectedDocument.ocr_error || 'No error message available'}
                   </Typography>
                 </Paper>
               </Grid>
@@ -1699,13 +2059,20 @@ const DocumentManagementPage: React.FC = () => {
           <Button
             onClick={() => {
               if (selectedDocument) {
-                navigate(`/documents/${selectedDocument.id}`);
+                // For failed documents, we need to create a special route or disable this feature
+                // since the document might not exist in the main documents table
+                setSnackbar({
+                  open: true,
+                  message: 'Failed documents are only available in this management view. The document may not exist in the main documents table.',
+                  severity: 'info'
+                });
               }
             }}
-            startIcon={<OpenInNewIcon />}
-            color="primary"
+            startIcon={<InfoIcon />}
+            color="secondary"
+            disabled
           >
-            Open Document Details
+            Document Info Only
           </Button>
           {selectedDocument?.can_retry && (
             <Button
@@ -1722,6 +2089,31 @@ const DocumentManagementPage: React.FC = () => {
             </Button>
           )}
           <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Delete Ignored Files Confirmation Dialog */}
+      <Dialog open={bulkDeleteIgnoredDialog} onClose={() => setBulkDeleteIgnoredDialog(false)}>
+        <DialogTitle>Confirm Bulk Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to remove {selectedIgnoredFiles.size} file{selectedIgnoredFiles.size !== 1 ? 's' : ''} from the ignored list?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            These files will be eligible for syncing again if encountered from their sources. This action allows them to be re-imported during future syncs.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteIgnoredDialog(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteSelectedIgnoredFiles}
+            color="success"
+            variant="contained"
+            disabled={deletingIgnoredFiles}
+            startIcon={deletingIgnoredFiles ? <CircularProgress size={16} /> : <RefreshIcon />}
+          >
+            Remove from Ignored List
+          </Button>
         </DialogActions>
       </Dialog>
 

@@ -322,6 +322,14 @@ impl OcrQueueService {
                             warn!("⚠️  OCR quality issues for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words", 
                                   filename, item.id, item.document_id, ocr_result.confidence, ocr_result.word_count);
                             
+                            // Create failed document record using helper function
+                            let _ = self.create_failed_document_from_ocr_error(
+                                item.document_id,
+                                "low_ocr_confidence",
+                                &error_msg,
+                                item.attempts,
+                            ).await;
+
                             // Mark as failed for quality issues with proper failure reason
                             sqlx::query(
                                 r#"
@@ -360,12 +368,30 @@ impl OcrQueueService {
                                 Ok(false) => {
                                     let error_msg = "OCR update failed validation (document may have been modified)";
                                     warn!("{} for document {}", error_msg, item.document_id);
+                                    
+                                    // Create failed document record using helper function
+                                    let _ = self.create_failed_document_from_ocr_error(
+                                        item.document_id,
+                                        "processing",
+                                        error_msg,
+                                        item.attempts,
+                                    ).await;
+                                    
                                     self.mark_failed(item.id, error_msg).await?;
                                     return Ok(());
                                 }
                                 Err(e) => {
                                     let error_msg = format!("Transaction-safe OCR update failed: {}", e);
                                     error!("{}", error_msg);
+                                    
+                                    // Create failed document record using helper function
+                                    let _ = self.create_failed_document_from_ocr_error(
+                                        item.document_id,
+                                        "processing",
+                                        &error_msg,
+                                        item.attempts,
+                                    ).await;
+                                    
                                     self.mark_failed(item.id, &error_msg).await?;
                                     return Ok(());
                                 }
@@ -411,21 +437,7 @@ impl OcrQueueService {
                         let error_str = e.to_string();
                         
                         // Classify error type and determine failure reason
-                        let (failure_reason, should_suppress) = if error_str.contains("font encoding") || 
-                                                                   error_str.contains("missing unicode map") {
-                            ("pdf_font_encoding", true)
-                        } else if error_str.contains("corrupted internal structure") ||
-                                  error_str.contains("corrupted") {
-                            ("pdf_corruption", true)
-                        } else if error_str.contains("timeout") || error_str.contains("timed out") {
-                            ("processing_timeout", false)
-                        } else if error_str.contains("memory") || error_str.contains("out of memory") {
-                            ("memory_limit", false)
-                        } else if error_str.contains("panic") {
-                            ("pdf_parsing_panic", true)
-                        } else {
-                            ("unknown", false)
-                        };
+                        let (failure_reason, should_suppress) = Self::classify_ocr_error(&error_str);
                         
                         // Use intelligent logging based on error type
                         if should_suppress {
@@ -438,6 +450,14 @@ impl OcrQueueService {
                             warn!("❌ OCR failed for '{}' | Job: {} | Document: {} | Reason: {} | Error: {}", 
                                   filename, item.id, item.document_id, failure_reason, e);
                         }
+                        
+                        // Create failed document record using helper function
+                        let _ = self.create_failed_document_from_ocr_error(
+                            item.document_id,
+                            failure_reason,
+                            &error_msg,
+                            item.attempts,
+                        ).await;
                         
                         // Always use 'failed' status with specific failure reason
                         sqlx::query(
@@ -730,5 +750,89 @@ impl OcrQueueService {
         }
 
         Ok(result.rows_affected() as i64)
+    }
+
+    /// Helper function to create failed document record from OCR failure
+    async fn create_failed_document_from_ocr_error(
+        &self,
+        document_id: Uuid,
+        failure_reason: &str,
+        error_message: &str,
+        retry_count: i32,
+    ) -> Result<()> {
+        // Query document directly from database without user restrictions (OCR service context)
+        let document_row = sqlx::query(
+            r#"
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, 
+                   content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, 
+                   ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, 
+                   user_id, file_hash
+            FROM documents 
+            WHERE id = $1
+            "#
+        )
+        .bind(document_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        
+        if let Some(row) = document_row {
+            // Extract document data
+            let user_id: Uuid = row.get("user_id");
+            let filename: String = row.get("filename");
+            let original_filename: String = row.get("original_filename");
+            let file_path: String = row.get("file_path");
+            let file_size: i64 = row.get("file_size");
+            let mime_type: String = row.get("mime_type");
+            let file_hash: Option<String> = row.get("file_hash");
+            
+            // Create failed document record directly
+            if let Err(e) = self.db.create_failed_document(
+                user_id,
+                filename,
+                Some(original_filename),
+                None, // original_path
+                Some(file_path),
+                Some(file_size),
+                file_hash,
+                Some(mime_type),
+                None, // content
+                Vec::new(), // tags
+                None, // ocr_text
+                None, // ocr_confidence
+                None, // ocr_word_count
+                None, // ocr_processing_time_ms
+                failure_reason.to_string(),
+                "ocr".to_string(),
+                None, // existing_document_id
+                "ocr_queue".to_string(),
+                Some(error_message.to_string()),
+                Some(retry_count),
+            ).await {
+                error!("Failed to create failed document record: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Helper function to map OCR error strings to standardized failure reasons
+    fn classify_ocr_error(error_str: &str) -> (&'static str, bool) {
+        if error_str.contains("font encoding") || error_str.contains("missing unicode map") {
+            ("pdf_font_encoding", true)
+        } else if error_str.contains("corrupted internal structure") || error_str.contains("corrupted") {
+            ("pdf_corruption", true)
+        } else if error_str.contains("timeout") || error_str.contains("timed out") {
+            ("ocr_timeout", false)
+        } else if error_str.contains("memory") || error_str.contains("out of memory") {
+            ("ocr_memory_limit", false)
+        } else if error_str.contains("panic") {
+            ("pdf_parsing_error", true)
+        } else if error_str.contains("unsupported") {
+            ("unsupported_format", false)
+        } else if error_str.contains("too large") || error_str.contains("file size") {
+            ("file_too_large", false)
+        } else {
+            ("other", false)
+        }
     }
 }
