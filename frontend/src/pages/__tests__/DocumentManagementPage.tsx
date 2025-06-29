@@ -1,7 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import FailedOcrPage from '../FailedOcrPage';
+import DocumentManagementPage from '../DocumentManagementPage';
 
 // Simple mock that just returns promises to avoid the component crashing
 vi.mock('../../services/api', () => ({
@@ -35,20 +35,20 @@ vi.mock('../../services/api', () => ({
   },
 }));
 
-const FailedOcrPageWrapper = ({ children }: { children: React.ReactNode }) => {
+const DocumentManagementPageWrapper = ({ children }: { children: React.ReactNode }) => {
   return <BrowserRouter>{children}</BrowserRouter>;
 };
 
-describe('FailedOcrPage', () => {
+describe('DocumentManagementPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   test('renders page structure without crashing', () => {
     render(
-      <FailedOcrPageWrapper>
-        <FailedOcrPage />
-      </FailedOcrPageWrapper>
+      <DocumentManagementPageWrapper>
+        <DocumentManagementPage />
+      </DocumentManagementPageWrapper>
     );
 
     // Basic check that the component renders without throwing errors
@@ -57,9 +57,9 @@ describe('FailedOcrPage', () => {
 
   test('renders page title', async () => {
     render(
-      <FailedOcrPageWrapper>
-        <FailedOcrPage />
-      </FailedOcrPageWrapper>
+      <DocumentManagementPageWrapper>
+        <DocumentManagementPage />
+      </DocumentManagementPageWrapper>
     );
 
     // Wait for the page to load and show the title
@@ -70,9 +70,9 @@ describe('FailedOcrPage', () => {
 
   test('renders refresh button', async () => {
     render(
-      <FailedOcrPageWrapper>
-        <FailedOcrPage />
-      </FailedOcrPageWrapper>
+      <DocumentManagementPageWrapper>
+        <DocumentManagementPage />
+      </DocumentManagementPageWrapper>
     );
 
     await waitFor(() => {
@@ -82,9 +82,9 @@ describe('FailedOcrPage', () => {
 
   test('renders tabs structure', async () => {
     render(
-      <FailedOcrPageWrapper>
-        <FailedOcrPage />
-      </FailedOcrPageWrapper>
+      <DocumentManagementPageWrapper>
+        <DocumentManagementPage />
+      </DocumentManagementPageWrapper>
     );
 
     // Wait for tabs to appear
@@ -103,16 +103,16 @@ describe('FailedOcrPage', () => {
   // test('refreshes data when refresh button is clicked', async () => { ... });
 });
 
-describe('FailedOcrPage - Low Confidence Deletion', () => {
+describe('DocumentManagementPage - Low Confidence Deletion', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   test('renders low confidence deletion tab', async () => {
     render(
-      <FailedOcrPageWrapper>
-        <FailedOcrPage />
-      </FailedOcrPageWrapper>
+      <DocumentManagementPageWrapper>
+        <DocumentManagementPage />
+      </DocumentManagementPageWrapper>
     );
 
     // Wait for tabs to load
@@ -130,9 +130,9 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
 
   test('displays confidence threshold input when low confidence tab is active', async () => {
     render(
-      <FailedOcrPageWrapper>
-        <FailedOcrPage />
-      </FailedOcrPageWrapper>
+      <DocumentManagementPageWrapper>
+        <DocumentManagementPage />
+      </DocumentManagementPageWrapper>
     );
 
     // Wait for component to load
@@ -154,9 +154,9 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
 
   test('displays preview and delete buttons in low confidence tab', async () => {
     render(
-      <FailedOcrPageWrapper>
-        <FailedOcrPage />
-      </FailedOcrPageWrapper>
+      <DocumentManagementPageWrapper>
+        <DocumentManagementPage />
+      </DocumentManagementPageWrapper>
     );
 
     // Navigate to Low Quality Manager tab
@@ -177,9 +177,9 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
 
   test('shows informational alert about low confidence deletion', async () => {
     render(
-      <FailedOcrPageWrapper>
-        <FailedOcrPage />
-      </FailedOcrPageWrapper>
+      <DocumentManagementPageWrapper>
+        <DocumentManagementPage />
+      </DocumentManagementPageWrapper>
     );
 
     // Navigate to Low Quality Manager tab
@@ -204,7 +204,7 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
   // test('calls deleteLowConfidence API when preview button is clicked', async () => {
   //   const mockDeleteLowConfidence = vi.mocked(documentService.deleteLowConfidence);
   //   
-  //   render(<FailedOcrPageWrapper><FailedOcrPage /></FailedOcrPageWrapper>);
+  //   render(<DocumentManagementPageWrapper><DocumentManagementPage /></DocumentManagementPageWrapper>);
   //   
   //   // Navigate to tab and click preview
   //   const lowConfidenceTab = screen.getByText(/Low Confidence/i);
@@ -219,7 +219,7 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
   // });
 
   // test('validates confidence threshold input values', async () => {
-  //   render(<FailedOcrPageWrapper><FailedOcrPage /></FailedOcrPageWrapper>);
+  //   render(<DocumentManagementPageWrapper><DocumentManagementPage /></DocumentManagementPageWrapper>);
   //   
   //   const lowConfidenceTab = screen.getByText(/Low Confidence/i);
   //   fireEvent.click(lowConfidenceTab);
@@ -245,7 +245,7 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
   //     }
   //   });
   //   
-  //   render(<FailedOcrPageWrapper><FailedOcrPage /></FailedOcrPageWrapper>);
+  //   render(<DocumentManagementPageWrapper><DocumentManagementPage /></DocumentManagementPageWrapper>);
   //   
   //   // Navigate to tab, preview, then try to delete
   //   const lowConfidenceTab = screen.getByText(/Low Confidence/i);
@@ -267,7 +267,7 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
   // });
 
   // test('disables delete button when no preview data available', async () => {
-  //   render(<FailedOcrPageWrapper><FailedOcrPage /></FailedOcrPageWrapper>);
+  //   render(<DocumentManagementPageWrapper><DocumentManagementPage /></DocumentManagementPageWrapper>);
   //   
   //   const lowConfidenceTab = screen.getByText(/Low Confidence/i);
   //   fireEvent.click(lowConfidenceTab);
@@ -290,7 +290,7 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
   //     }
   //   });
   //   
-  //   render(<FailedOcrPageWrapper><FailedOcrPage /></FailedOcrPageWrapper>);
+  //   render(<DocumentManagementPageWrapper><DocumentManagementPage /></DocumentManagementPageWrapper>);
   //   
   //   const lowConfidenceTab = screen.getByText(/Low Confidence/i);
   //   fireEvent.click(lowConfidenceTab);
@@ -308,7 +308,7 @@ describe('FailedOcrPage - Low Confidence Deletion', () => {
   //   const mockDeleteLowConfidence = vi.mocked(documentService.deleteLowConfidence);
   //   mockDeleteLowConfidence.mockRejectedValueOnce(new Error('Network error'));
   //   
-  //   render(<FailedOcrPageWrapper><FailedOcrPage /></FailedOcrPageWrapper>);
+  //   render(<DocumentManagementPageWrapper><DocumentManagementPage /></DocumentManagementPageWrapper>);
   //   
   //   const lowConfidenceTab = screen.getByText(/Low Confidence/i);
   //   fireEvent.click(lowConfidenceTab);

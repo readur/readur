@@ -131,7 +131,7 @@ interface DuplicatesResponse {
   };
 }
 
-const FailedOcrPage: React.FC = () => {
+const DocumentManagementPage: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [currentTab, setCurrentTab] = useState(0);
@@ -1743,4 +1743,4 @@ const FailedOcrPage: React.FC = () => {
   );
 };
 
-export default FailedOcrPage;
+export default DocumentManagementPage;

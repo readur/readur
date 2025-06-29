@@ -70,7 +70,7 @@ const navigationItems: NavigationItem[] = [
   { text: 'Labels', icon: LabelIcon, path: '/labels' },
   { text: 'Sources', icon: StorageIcon, path: '/sources' },
   { text: 'Watch Folder', icon: FolderIcon, path: '/watch' },
-  { text: 'Document Management', icon: ManageIcon, path: '/failed-ocr' },
+  { text: 'Document Management', icon: ManageIcon, path: '/documents/management' },
   { text: 'Ignored Files', icon: BlockIcon, path: '/ignored-files' },
 ];
 
