@@ -47,6 +47,7 @@ import {
   Delete as DeleteIcon,
   FindInPage as FindInPageIcon,
   OpenInNew as OpenInNewIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { api, documentService, queueService } from '../services/api';
@@ -83,11 +84,12 @@ interface FailedOcrResponse {
     total: number;
     limit: number;
     offset: number;
-    has_more: boolean;
+    total_pages: number;
   };
   statistics: {
     total_failed: number;
-    failure_categories: FailureCategory[];
+    by_reason: Record<string, number>;
+    by_stage: Record<string, number>;
   };
 }
 
@@ -135,16 +137,22 @@ const FailedOcrPage: React.FC = () => {
   const [currentTab, setCurrentTab] = useState(0);
   const [documents, setDocuments] = useState<FailedDocument[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
+  const [failedDocuments, setFailedDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+  const [failedDocumentsLoading, setFailedDocumentsLoading] = useState(false);
+  const [failedDocumentsFilters, setFailedDocumentsFilters] = useState<{ stage?: string; reason?: string }>({});
+  const [selectedFailedDocument, setSelectedFailedDocument] = useState<any>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
   const [retryingAll, setRetryingAll] = useState(false);
   const [statistics, setStatistics] = useState<FailedOcrResponse['statistics'] | null>(null);
   const [duplicateStatistics, setDuplicateStatistics] = useState<DuplicatesResponse['statistics'] | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 25 });
   const [duplicatesPagination, setDuplicatesPagination] = useState({ page: 1, limit: 25 });
+  const [failedDocumentsPagination, setFailedDocumentsPagination] = useState({ page: 1, limit: 25 });
   const [totalPages, setTotalPages] = useState(0);
   const [duplicatesTotalPages, setDuplicatesTotalPages] = useState(0);
+  const [failedDocumentsTotalPages, setFailedDocumentsTotalPages] = useState(0);
   const [selectedDocument, setSelectedDocument] = useState<FailedDocument | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -223,8 +231,59 @@ const FailedOcrPage: React.FC = () => {
   useEffect(() => {
     if (currentTab === 1) {
       fetchDuplicates();
+    } else if (currentTab === 4) {
+      fetchFailedDocumentsList();
     }
-  }, [currentTab, duplicatesPagination.page]);
+  }, [currentTab, duplicatesPagination.page, failedDocumentsPagination.page, failedDocumentsFilters]);
+
+  const fetchFailedDocumentsList = async () => {
+    try {
+      setFailedDocumentsLoading(true);
+      const offset = (failedDocumentsPagination.page - 1) * failedDocumentsPagination.limit;
+      const response = await documentService.getFailedDocuments(
+        failedDocumentsPagination.limit, 
+        offset, 
+        failedDocumentsFilters.stage, 
+        failedDocumentsFilters.reason
+      );
+      
+      if (response?.data) {
+        setFailedDocuments(response.data.documents || []);
+        if (response.data.pagination) {
+          setFailedDocumentsTotalPages(Math.ceil(response.data.pagination.total / failedDocumentsPagination.limit));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch failed documents:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load failed documents',
+        severity: 'error'
+      });
+    } finally {
+      setFailedDocumentsLoading(false);
+    }
+  };
+
+  const getFailureReasonColor = (reason: string): "error" | "warning" | "info" | "default" => {
+    switch (reason) {
+      case 'low_ocr_confidence':
+      case 'ocr_timeout':
+      case 'ocr_memory_limit':
+      case 'pdf_parsing_error':
+        return 'error';
+      case 'duplicate_content':
+      case 'unsupported_format':
+      case 'file_too_large':
+        return 'warning';
+      case 'file_corrupted':
+      case 'access_denied':
+      case 'permission_denied':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
 
   const handleRetryOcr = async (document: FailedDocument) => {
     try {
@@ -309,6 +368,8 @@ const FailedOcrPage: React.FC = () => {
       case 'Timeout':
       case 'Memory Limit':
         return 'error';
+      case 'Low OCR Confidence':
+        return 'warning';
       case 'Unknown Error':
         return 'info';
       default:
@@ -354,6 +415,8 @@ const FailedOcrPage: React.FC = () => {
       handlePreviewLowConfidence();
     } else if (currentTab === 3) {
       handlePreviewFailedDocuments();
+    } else if (currentTab === 4) {
+      fetchFailedDocumentsList();
     }
   };
 
@@ -488,22 +551,27 @@ const FailedOcrPage: React.FC = () => {
         <Tabs value={currentTab} onChange={handleTabChange} aria-label="document management tabs">
           <Tab
             icon={<ErrorIcon />}
-            label={`Failed OCR${statistics ? ` (${statistics.total_failed})` : ''}`}
+            label={`Failed Documents${statistics ? ` (${statistics.total_failed})` : ''}`}
             iconPosition="start"
           />
           <Tab
             icon={<FileCopyIcon />}
-            label={`Duplicates${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
+            label={`Duplicate Files${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
             iconPosition="start"
           />
           <Tab
             icon={<FindInPageIcon />}
-            label={`Low Confidence${previewData ? ` (${previewData.matched_count})` : ''}`}
+            label={`Low Quality Manager${previewData ? ` (${previewData.matched_count})` : ''}`}
             iconPosition="start"
           />
           <Tab
             icon={<DeleteIcon />}
-            label="Delete Failed"
+            label="Bulk Cleanup"
+            iconPosition="start"
+          />
+          <Tab
+            icon={<WarningIcon />}
+            label="Failed Documents"
             iconPosition="start"
           />
         </Tabs>
@@ -548,15 +616,19 @@ const FailedOcrPage: React.FC = () => {
                   Failure Categories
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={1}>
-                  {statistics.failure_categories.map((category) => (
+                  {statistics?.by_reason ? Object.entries(statistics.by_reason).map(([reason, count]) => (
                     <Chip
-                      key={category.reason}
-                      label={`${category.display_name}: ${category.count}`}
-                      color={getFailureCategoryColor(category.display_name)}
+                      key={reason}
+                      label={`${reason}: ${count}`}
+                      color={getFailureCategoryColor(reason)}
                       variant="outlined"
                       size="small"
                     />
-                  ))}
+                  )) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No failure data available
+                    </Typography>
+                  )}
                 </Box>
               </CardContent>
             </Card>
@@ -791,12 +863,14 @@ const FailedOcrPage: React.FC = () => {
 
               <Alert severity="warning" sx={{ mb: 2 }}>
                 <AlertTitle>What should you do?</AlertTitle>
-                <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
-                  <li><strong>Review each group:</strong> Click to expand and see all duplicate files</li>
-                  <li><strong>Keep the best version:</strong> Choose the file with the most descriptive name</li>
-                  <li><strong>Check content:</strong> Use View/Download to verify files are truly identical</li>
-                  <li><strong>Note for admin:</strong> Consider implementing bulk delete functionality for duplicates</li>
-                </Box>
+                <Typography variant="body2" component="div" sx={{ mt: 1, mb: 0 }}>
+                  <Box component="ul" sx={{ pl: 2, mt: 0, mb: 0 }}>
+                    <li><strong>Review each group:</strong> Click to expand and see all duplicate files</li>
+                    <li><strong>Keep the best version:</strong> Choose the file with the most descriptive name</li>
+                    <li><strong>Check content:</strong> Use View/Download to verify files are truly identical</li>
+                    <li><strong>Note for admin:</strong> Consider implementing bulk delete functionality for duplicates</li>
+                  </Box>
+                </Typography>
               </Alert>
 
               <TableContainer component={Paper}>
@@ -1073,15 +1147,62 @@ const FailedOcrPage: React.FC = () => {
                 <Typography color={previewData.matched_count > 0 ? 'warning.main' : 'success.main'}>
                   {previewData.message}
                 </Typography>
-                {previewData.matched_count > 0 && (
+                {previewData.matched_count > 0 && previewData.documents && (
                   <Box sx={{ mt: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Document IDs that would be deleted:
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Documents that would be deleted:
                     </Typography>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                      {previewData.document_ids.slice(0, 10).join(', ')}
-                      {previewData.document_ids.length > 10 && ` ... and ${previewData.document_ids.length - 10} more`}
-                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Filename</TableCell>
+                            <TableCell>Size</TableCell>
+                            <TableCell>OCR Confidence</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell>Date</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {previewData.documents.slice(0, 20).map((doc: any) => (
+                            <TableRow key={doc.id}>
+                              <TableCell>
+                                <Typography variant="body2" noWrap>
+                                  {doc.original_filename || doc.filename}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {formatFileSize(doc.file_size)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" color={doc.ocr_confidence ? 'warning.main' : 'error.main'}>
+                                  {doc.ocr_confidence ? `${doc.ocr_confidence.toFixed(1)}%` : 'N/A'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  size="small"
+                                  label={doc.ocr_status || 'Unknown'}
+                                  color={doc.ocr_status === 'failed' ? 'error' : 'default'}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {new Date(doc.created_at).toLocaleDateString()}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    {previewData.documents.length > 20 && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        ... and {previewData.documents.length - 20} more documents
+                      </Typography>
+                    )}
                   </Box>
                 )}
               </CardContent>
@@ -1171,6 +1292,187 @@ const FailedOcrPage: React.FC = () => {
               <CircularProgress />
               <Typography sx={{ ml: 2 }}>Processing request...</Typography>
             </Box>
+          )}
+        </>
+      )}
+
+      {/* Failed Documents Tab Content */}
+      {currentTab === 4 && (
+        <>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <AlertTitle>Failed Documents Overview</AlertTitle>
+            <Typography>
+              This shows all documents that failed at any stage of processing: ingestion, validation, OCR, storage, etc.
+              Use the filters to narrow down by failure stage or specific reason.
+            </Typography>
+          </Alert>
+
+          {/* Filter Controls */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Grid container spacing={3} alignItems="center">
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Filter by Stage"
+                    select
+                    value={failedDocumentsFilters.stage || ''}
+                    onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, stage: e.target.value || undefined }))}
+                    fullWidth
+                    SelectProps={{ native: true }}
+                  >
+                    <option value="">All Stages</option>
+                    <option value="ocr">OCR Processing</option>
+                    <option value="ingestion">Document Ingestion</option>
+                    <option value="validation">Validation</option>
+                    <option value="storage">File Storage</option>
+                    <option value="processing">Processing</option>
+                    <option value="sync">Synchronization</option>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    label="Filter by Reason"
+                    select
+                    value={failedDocumentsFilters.reason || ''}
+                    onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, reason: e.target.value || undefined }))}
+                    fullWidth
+                    SelectProps={{ native: true }}
+                  >
+                    <option value="">All Reasons</option>
+                    <option value="duplicate_content">Duplicate Content</option>
+                    <option value="low_ocr_confidence">Low OCR Confidence</option>
+                    <option value="unsupported_format">Unsupported Format</option>
+                    <option value="file_too_large">File Too Large</option>
+                    <option value="file_corrupted">File Corrupted</option>
+                    <option value="ocr_timeout">OCR Timeout</option>
+                    <option value="pdf_parsing_error">PDF Parsing Error</option>
+                    <option value="other">Other</option>
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <Button
+                    variant="outlined"
+                    onClick={fetchFailedDocumentsList}
+                    disabled={failedDocumentsLoading}
+                    startIcon={failedDocumentsLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
+                    fullWidth
+                  >
+                    Apply Filters
+                  </Button>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+
+          {/* Failed Documents List */}
+          {failedDocuments.length > 0 && (
+            <Card sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Failed Documents ({failedDocuments.length})
+                </Typography>
+                <TableContainer component={Paper} variant="outlined">
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Filename</TableCell>
+                        <TableCell>Stage</TableCell>
+                        <TableCell>Reason</TableCell>
+                        <TableCell>Size</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {failedDocuments.slice((failedDocumentsPagination.page - 1) * failedDocumentsPagination.limit, failedDocumentsPagination.page * failedDocumentsPagination.limit).map((doc: any) => (
+                        <TableRow key={doc.id}>
+                          <TableCell>
+                            <Typography variant="body2" noWrap>
+                              {doc.original_filename || doc.filename}
+                            </Typography>
+                            {doc.ingestion_source && (
+                              <Chip size="small" label={doc.ingestion_source} variant="outlined" sx={{ mt: 0.5 }} />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={doc.source || doc.failure_stage}
+                              color={doc.failure_stage === 'ocr' ? 'error' : 'warning'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={doc.failure_category || doc.failure_reason}
+                              color={getFailureReasonColor(doc.failure_reason)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {doc.file_size ? formatFileSize(doc.file_size) : 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {new Date(doc.created_at).toLocaleDateString()}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              onClick={() => setSelectedFailedDocument(doc)}
+                              title="View Details"
+                            >
+                              <InfoIcon />
+                            </IconButton>
+                            {doc.existing_document_id && (
+                              <IconButton
+                                size="small"
+                                onClick={() => navigate(`/documents/${doc.existing_document_id}`)}
+                                title="View Existing Document"
+                              >
+                                <OpenInNewIcon />
+                              </IconButton>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                
+                {/* Pagination */}
+                {failedDocumentsTotalPages > 1 && (
+                  <Box display="flex" justifyContent="center" mt={2}>
+                    <Pagination
+                      count={failedDocumentsTotalPages}
+                      page={failedDocumentsPagination.page}
+                      onChange={(_, page) => setFailedDocumentsPagination(prev => ({ ...prev, page }))}
+                      color="primary"
+                    />
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Loading State */}
+          {failedDocumentsLoading && (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+              <CircularProgress />
+              <Typography sx={{ ml: 2 }}>Loading failed documents...</Typography>
+            </Box>
+          )}
+
+          {/* Empty State */}
+          {!failedDocumentsLoading && failedDocuments.length === 0 && (
+            <Alert severity="success">
+              <AlertTitle>No Failed Documents Found</AlertTitle>
+              <Typography>
+                No documents have failed processing with the current filters. This is good!
+              </Typography>
+            </Alert>
           )}
         </>
       )}

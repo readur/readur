@@ -144,7 +144,7 @@ impl FailedOcrTestClient {
     
     /// Get failed OCR documents
     async fn get_failed_ocr_documents(&self, limit: Option<i32>, offset: Option<i32>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        let mut url = format!("{}/api/documents/failed-ocr", get_base_url());
+        let mut url = format!("{}/api/documents/failed", get_base_url());
         
         let mut params = Vec::new();
         if let Some(l) = limit {
@@ -153,6 +153,8 @@ impl FailedOcrTestClient {
         if let Some(o) = offset {
             params.push(format!("offset={}", o));
         }
+        // Filter to only OCR failures since this is the OCR-specific test
+        params.push("stage=ocr".to_string());
         
         if !params.is_empty() {
             url.push_str(&format!("?{}", params.join("&")));
@@ -248,12 +250,12 @@ async fn test_failed_ocr_endpoint_structure() {
     assert!(pagination.get("total").is_some());
     assert!(pagination.get("limit").is_some());
     assert!(pagination.get("offset").is_some());
-    assert!(pagination.get("has_more").is_some());
+    assert!(pagination.get("total_pages").is_some());
     
     // Verify statistics structure
     let statistics = &failed_docs["statistics"];
     assert!(statistics.get("total_failed").is_some());
-    assert!(statistics.get("failure_categories").is_some());
+    assert!(statistics.get("by_reason").is_some());
     
     println!("✅ Failed OCR endpoint returns proper structure");
 }
@@ -300,15 +302,20 @@ async fn test_failed_ocr_statistics_format() {
     
     // Verify statistics format
     assert!(statistics["total_failed"].is_number());
-    assert!(statistics["failure_categories"].is_array());
+    assert!(statistics["by_reason"].is_object());
     
-    // Verify failure categories structure
-    let categories = statistics["failure_categories"].as_array().unwrap();
-    for category in categories {
-        assert!(category.get("reason").is_some());
-        assert!(category.get("display_name").is_some());
-        assert!(category.get("count").is_some());
-        assert!(category["count"].is_number());
+    // Verify failure reasons structure
+    let by_reason = statistics["by_reason"].as_object().unwrap();
+    for (reason, count) in by_reason {
+        assert!(!reason.is_empty());
+        assert!(count.is_number());
+    }
+    
+    // Verify failure stages structure
+    let by_stage = statistics["by_stage"].as_object().unwrap();
+    for (stage, count) in by_stage {
+        assert!(!stage.is_empty());
+        assert!(count.is_number());
     }
     
     println!("✅ Failed OCR statistics have correct format");
@@ -449,7 +456,7 @@ async fn test_failed_ocr_empty_response_structure() {
     // Structure should be consistent regardless of document count
     assert!(failed_docs["documents"].is_array());
     assert!(failed_docs["statistics"]["total_failed"].is_number());
-    assert!(failed_docs["statistics"]["failure_categories"].is_array());
+    assert!(failed_docs["statistics"]["by_reason"].is_object());
     
     // The key test is structure consistency
     let documents = failed_docs["documents"].as_array().unwrap();
@@ -461,7 +468,7 @@ async fn test_failed_ocr_empty_response_structure() {
     
     // Also test pagination values for empty result
     assert_eq!(failed_docs["pagination"]["total"], 0);
-    assert_eq!(failed_docs["pagination"]["has_more"], false);
+    assert_eq!(failed_docs["pagination"]["total_pages"], 0);
     
     println!("✅ Failed OCR endpoint returns consistent empty structure for new user");
 }

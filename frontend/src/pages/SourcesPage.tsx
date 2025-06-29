@@ -151,6 +151,7 @@ const SourcesPage: React.FC = () => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [syncingSource, setSyncingSource] = useState<string | null>(null);
   const [stoppingSync, setStoppingSync] = useState<string | null>(null);
+  const [autoRefreshing, setAutoRefreshing] = useState(false);
 
   useEffect(() => {
     loadSources();
@@ -158,6 +159,25 @@ const SourcesPage: React.FC = () => {
       loadOcrStatus();
     }
   }, [user]);
+
+  // Auto-refresh sources when any source is syncing
+  useEffect(() => {
+    const activeSyncingSources = sources.filter(source => source.status === 'syncing');
+    
+    if (activeSyncingSources.length > 0) {
+      setAutoRefreshing(true);
+      const interval = setInterval(() => {
+        loadSources();
+      }, 5000); // Poll every 5 seconds during active sync
+      
+      return () => {
+        clearInterval(interval);
+        setAutoRefreshing(false);
+      };
+    } else {
+      setAutoRefreshing(false);
+    }
+  }, [sources]);
 
   // Update default folders when source type changes
   useEffect(() => {
@@ -979,8 +999,9 @@ const SourcesPage: React.FC = () => {
           <Button
             variant="outlined"
             size="large"
-            startIcon={<AutoFixHighIcon />}
+            startIcon={autoRefreshing ? <CircularProgress size={20} /> : <AutoFixHighIcon />}
             onClick={loadSources}
+            disabled={autoRefreshing}
             sx={{
               borderRadius: 3,
               px: 4,
@@ -993,7 +1014,7 @@ const SourcesPage: React.FC = () => {
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
-            Refresh
+            {autoRefreshing ? 'Auto-refreshing...' : 'Refresh'}
           </Button>
 
           {/* OCR Controls for Admin Users */}
