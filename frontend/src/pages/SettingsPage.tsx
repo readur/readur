@@ -42,6 +42,7 @@ import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon,
          Pause as PauseIcon, Stop as StopIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import api, { queueService } from '../services/api';
+import OcrLanguageSelector from '../components/OcrLanguageSelector';
 
 interface User {
   id: string;
@@ -112,10 +113,6 @@ interface UserFormData {
   password: string;
 }
 
-interface OcrLanguage {
-  code: string;
-  name: string;
-}
 
 interface WebDAVFolderInfo {
   path: string;
@@ -233,23 +230,6 @@ const SettingsPage: React.FC = () => {
   const [ocrStatus, setOcrStatus] = useState<{ is_paused: boolean; status: 'paused' | 'running' } | null>(null);
   const [ocrActionLoading, setOcrActionLoading] = useState(false);
 
-  const ocrLanguages: OcrLanguage[] = [
-    { code: 'eng', name: 'English' },
-    { code: 'spa', name: 'Spanish' },
-    { code: 'fra', name: 'French' },
-    { code: 'deu', name: 'German' },
-    { code: 'ita', name: 'Italian' },
-    { code: 'por', name: 'Portuguese' },
-    { code: 'rus', name: 'Russian' },
-    { code: 'jpn', name: 'Japanese' },
-    { code: 'chi_sim', name: 'Chinese (Simplified)' },
-    { code: 'chi_tra', name: 'Chinese (Traditional)' },
-    { code: 'kor', name: 'Korean' },
-    { code: 'ara', name: 'Arabic' },
-    { code: 'hin', name: 'Hindi' },
-    { code: 'nld', name: 'Dutch' },
-    { code: 'pol', name: 'Polish' },
-  ];
 
   useEffect(() => {
     fetchSettings();
@@ -415,9 +395,6 @@ const SettingsPage: React.FC = () => {
     setTabValue(newValue);
   };
 
-  const handleOcrLanguageChange = (event: SelectChangeEvent<string>): void => {
-    handleSettingsChange('ocrLanguage', event.target.value);
-  };
 
   const handleCpuPriorityChange = (event: SelectChangeEvent<string>): void => {
     handleSettingsChange('cpuPriority', event.target.value);
@@ -501,21 +478,13 @@ const SettingsPage: React.FC = () => {
                   <Divider sx={{ mb: 2 }} />
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
-                      <FormControl fullWidth>
-                        <InputLabel>OCR Language</InputLabel>
-                        <Select
-                          value={settings.ocrLanguage}
-                          label="OCR Language"
-                          onChange={handleOcrLanguageChange}
-                          disabled={loading}
-                        >
-                          {ocrLanguages.map((lang) => (
-                            <MenuItem key={lang.code} value={lang.code}>
-                              {lang.name}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <OcrLanguageSelector
+                        value={settings.ocrLanguage}
+                        onChange={(language) => handleSettingsChange('ocrLanguage', language)}
+                        disabled={loading}
+                        showCurrentIndicator={false}
+                        helperText="Default language for OCR text extraction from your documents"
+                      />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField

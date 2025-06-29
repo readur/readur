@@ -384,4 +384,25 @@ impl Database {
             updated_at: row.get("updated_at"),
         })
     }
+
+    pub async fn update_user_ocr_language(&self, user_id: Uuid, language: &str) -> Result<()> {
+        self.with_retry(|| async {
+            sqlx::query(
+                r#"
+                INSERT INTO settings (user_id, ocr_language)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    ocr_language = $2,
+                    updated_at = NOW()
+                "#
+            )
+            .bind(user_id)
+            .bind(language)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to update OCR language: {}", e))?;
+            
+            Ok(())
+        }).await
+    }
 }

@@ -73,11 +73,8 @@ impl OcrHealthChecker {
         })
     }
     
-    pub fn get_available_languages(&self) -> Vec<String> {
-        let tessdata_path = match self.get_tessdata_path() {
-            Ok(path) => path,
-            Err(_) => return vec![],
-        };
+    pub fn get_available_languages(&self) -> Result<Vec<String>, OcrError> {
+        let tessdata_path = self.get_tessdata_path()?;
         
         let mut languages = vec![];
         if let Ok(entries) = std::fs::read_dir(&tessdata_path) {
@@ -92,7 +89,18 @@ impl OcrHealthChecker {
         }
         
         languages.sort();
-        languages
+        Ok(languages)
+    }
+    
+    pub fn validate_language(&self, lang: &str) -> Result<(), OcrError> {
+        // Check if language is supported
+        let available_languages = self.get_available_languages()?;
+        if !available_languages.contains(&lang.to_string()) {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: lang.to_string(),
+            });
+        }
+        Ok(())
     }
     
     pub fn check_cpu_features(&self) -> CpuFeatures {
@@ -240,7 +248,7 @@ impl OcrHealthChecker {
     pub fn get_full_diagnostics(&self) -> OcrDiagnostics {
         OcrDiagnostics {
             tesseract_version: self.check_tesseract_installation().ok(),
-            available_languages: self.get_available_languages(),
+            available_languages: self.get_available_languages().unwrap_or_else(|_| vec![]),
             tessdata_path: self.get_tessdata_path().ok(),
             cpu_features: self.check_cpu_features(),
             memory_available_mb: self.check_memory_available(),

@@ -272,6 +272,21 @@ export interface OcrActionResponse {
   message: string
 }
 
+export interface LanguageInfo {
+  code: string
+  name: string
+  installed: boolean
+}
+
+export interface AvailableLanguagesResponse {
+  available_languages: LanguageInfo[]
+  current_user_language: string
+}
+
+export interface RetryOcrRequest {
+  language?: string
+}
+
 export const queueService = {
   getStats: () => {
     return api.get<QueueStats>('/queue/stats')
@@ -291,5 +306,23 @@ export const queueService = {
 
   resumeOcr: () => {
     return api.post<OcrActionResponse>('/queue/resume')
+  },
+}
+
+export const ocrService = {
+  getAvailableLanguages: () => {
+    return api.get<AvailableLanguagesResponse>('/ocr/languages')
+  },
+
+  getHealthStatus: () => {
+    return api.get('/ocr/health')
+  },
+
+  retryWithLanguage: (documentId: string, language?: string) => {
+    const data: RetryOcrRequest = {}
+    if (language) {
+      data.language = language
+    }
+    return api.post(`/documents/${documentId}/retry-ocr`, data)
   },
 }

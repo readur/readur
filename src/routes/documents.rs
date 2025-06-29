@@ -27,6 +27,11 @@ struct PaginationQuery {
 }
 
 #[derive(Deserialize, ToSchema)]
+pub struct RetryOcrRequest {
+    pub language: Option<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
 struct FailedDocumentsQuery {
     limit: Option<i64>,
     offset: Option<i64>,
@@ -152,6 +157,7 @@ async fn upload_document(
         .unwrap_or_else(|| crate::models::Settings::default());
     
     let mut label_ids: Option<Vec<uuid::Uuid>> = None;
+    let mut ocr_language: Option<String> = None;
     
     // First pass: collect all multipart fields
     while let Some(field) = multipart.next_field().await.map_err(|_| StatusCode::BAD_REQUEST)? {
@@ -170,6 +176,23 @@ async fn upload_document(
                 },
                 Err(e) => {
                     tracing::warn!("Failed to parse label_ids from upload: {} - Error: {}", label_ids_text, e);
+                }
+            }
+        } else if name == "ocr_language" {
+            let language = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            if !language.trim().is_empty() {
+                // Validate that the language is available
+                let health_checker = crate::ocr::health::OcrHealthChecker::new();
+                match health_checker.validate_language(language.trim()) {
+                    Ok(_) => {
+                        ocr_language = Some(language.trim().to_string());
+                        tracing::info!("OCR language specified and validated: {}", language);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Invalid OCR language specified '{}': {}", language, e);
+                        // Return early with bad request for invalid language
+                        return Err(StatusCode::BAD_REQUEST);
+                    }
                 }
             }
         } else if name == "file" {
@@ -214,6 +237,15 @@ async fn upload_document(
             let enable_background_ocr = settings.enable_background_ocr;
             
             if enable_background_ocr && should_queue_ocr {
+                // If a language was specified, update the user's OCR language setting for this session
+                if let Some(lang) = &ocr_language {
+                    if let Err(e) = state.db.update_user_ocr_language(auth_user.user.id, lang).await {
+                        tracing::warn!("Failed to update user OCR language to {}: {}", lang, e);
+                    } else {
+                        tracing::info!("Updated user {} OCR language to: {}", auth_user.user.id, lang);
+                    }
+                }
+                
                 // Use the shared queue service from AppState instead of creating a new one
                 // Calculate priority based on file size
                 let priority = match saved_document.file_size {
@@ -550,6 +582,7 @@ async fn get_processed_image(
     params(
         ("id" = uuid::Uuid, Path, description = "Document ID")
     ),
+    request_body(content = RetryOcrRequest, description = "OCR retry options"),
     responses(
         (status = 200, description = "OCR retry queued successfully", body = String),
         (status = 404, description = "Document not found"),
@@ -561,6 +594,7 @@ async fn retry_ocr(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
+    Json(request): Json<RetryOcrRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Check if document exists and belongs to user
     let document = state
@@ -617,12 +651,36 @@ async fn retry_ocr(
         _ => 6,                     // > 50MB: lowest priority
     };
     
+    // If a language was specified, validate and update the user's OCR language setting
+    if let Some(lang) = &request.language {
+        // Validate that the language is available
+        let health_checker = crate::ocr::health::OcrHealthChecker::new();
+        match health_checker.validate_language(lang) {
+            Ok(_) => {
+                if let Err(e) = state.db.update_user_ocr_language(auth_user.user.id, lang).await {
+                    tracing::warn!("Failed to update user OCR language to {}: {}", lang, e);
+                } else {
+                    tracing::info!("Updated user {} OCR language to: {} for retry", auth_user.user.id, lang);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Invalid OCR language specified '{}' for retry: {}", lang, e);
+                return Ok(Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("Invalid OCR language '{}': {}", lang, e),
+                    "error_code": "INVALID_LANGUAGE"
+                })));
+            }
+        }
+    }
+    
     // Add to OCR queue with detailed logging
     match state.queue_service.enqueue_document(document_id, priority, document.file_size).await {
         Ok(queue_id) => {
+            let language_info = request.language.as_ref().map(|l| format!(" with language: {}", l)).unwrap_or_default();
             tracing::info!(
-                "OCR retry queued for document {} ({}): queue_id={}, priority={}, size={}",
-                document_id, document.filename, queue_id, priority, document.file_size
+                "OCR retry queued for document {} ({}): queue_id={}, priority={}, size={}{}",
+                document_id, document.filename, queue_id, priority, document.file_size, language_info
             );
             
             Ok(Json(serde_json::json!({
@@ -631,6 +689,7 @@ async fn retry_ocr(
                 "queue_id": queue_id,
                 "document_id": document_id,
                 "priority": priority,
+                "language": request.language,
                 "estimated_wait_minutes": calculate_estimated_wait_time(priority).await
             })))
         }
