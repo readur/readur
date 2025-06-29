@@ -8,6 +8,9 @@ mod tests {
     use tempfile::TempDir;
     use std::fs;
 
+    // Include language validation tests
+    mod language_validation_tests;
+
     #[test]
     fn test_ocr_error_types() {
         // Test error creation and properties
