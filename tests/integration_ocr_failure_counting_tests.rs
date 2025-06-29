@@ -373,7 +373,7 @@ async fn test_pagination_consistency() {
     
     // Test different pagination parameters
     let response1 = client.client
-        .get(&format!("{}/api/documents/failed-ocr?limit=10&offset=0", get_base_url()))
+        .get(&format!("{}/api/documents/failed?stage=ocr&limit=10&offset=0", get_base_url()))
         .header("Authorization", client.get_auth_header())
         .timeout(TIMEOUT)
         .send()
@@ -382,7 +382,7 @@ async fn test_pagination_consistency() {
     let result1: Value = response1.json().await.unwrap();
     
     let response2 = client.client
-        .get(&format!("{}/api/documents/failed-ocr?limit=5&offset=0", get_base_url()))
+        .get(&format!("{}/api/documents/failed?stage=ocr&limit=5&offset=0", get_base_url()))
         .header("Authorization", client.get_auth_header())
         .timeout(TIMEOUT)
         .send()
@@ -430,11 +430,13 @@ async fn test_statistics_are_always_present() {
     
     let statistics = &result["statistics"];
     assert!(statistics.get("total_failed").is_some(), "total_failed should always be present");
-    assert!(statistics.get("failure_categories").is_some(), "failure_categories should always be present");
+    assert!(statistics.get("by_reason").is_some(), "by_reason should always be present");
+    assert!(statistics.get("by_stage").is_some(), "by_stage should always be present");
     
     // Values should be valid even if zero
     assert!(statistics["total_failed"].is_number(), "total_failed should be a number");
-    assert!(statistics["failure_categories"].is_array(), "failure_categories should be an array");
+    assert!(statistics["by_reason"].is_object(), "by_reason should be an object");
+    assert!(statistics["by_stage"].is_object(), "by_stage should be an object");
     
     let total_failed = statistics["total_failed"].as_i64().unwrap();
     assert!(total_failed >= 0, "total_failed should be non-negative");
