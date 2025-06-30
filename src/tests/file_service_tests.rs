@@ -82,6 +82,9 @@ mod tests {
             "application/pdf",
             user_id,
             Some("abcd1234hash".to_string()),
+            None, // original_created_at
+            None, // original_modified_at
+            None, // source_metadata
         );
         
         assert_eq!(document.filename, "saved_file.pdf");
@@ -189,6 +192,9 @@ mod file_deletion_tests {
             updated_at: Utc::now(),
             user_id,
             file_hash: Some("hash123".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
         
         (
@@ -324,6 +330,9 @@ mod file_deletion_tests {
             updated_at: Utc::now(),
             user_id,
             file_hash: None,
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
         
         // Try to delete nonexistent files (should not fail)
@@ -375,6 +384,9 @@ mod file_deletion_tests {
             updated_at: Utc::now(),
             user_id,
             file_hash: Some("imagehash456".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
         
         // Verify files exist
@@ -430,6 +442,9 @@ mod file_deletion_tests {
             updated_at: Utc::now(),
             user_id,
             file_hash: Some("hash789".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
         
         // Verify files exist
@@ -476,6 +491,9 @@ mod file_deletion_tests {
             updated_at: Utc::now(),
             user_id,
             file_hash: Some("texthash".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
         
         // Verify file exists

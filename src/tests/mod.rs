@@ -19,4 +19,5 @@ mod users_tests;
 mod generic_migration_tests;
 mod migration_constraint_tests;
 mod migration_integration_tests;
-mod failed_documents_unit_tests; 
+mod failed_documents_unit_tests;
+mod document_response_serialization_tests; 

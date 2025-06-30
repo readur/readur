@@ -25,6 +25,9 @@ fn test_document_response_conversion_with_ocr() {
         updated_at: Utc::now(),
         user_id,
         file_hash: Some("abc123".to_string()),
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
     };
     
     let response: DocumentResponse = document.clone().into();
@@ -59,6 +62,9 @@ fn test_document_response_conversion_without_ocr() {
         updated_at: Utc::now(),
         user_id,
         file_hash: None,
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
     };
     
     let response: DocumentResponse = document.clone().into();

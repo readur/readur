@@ -939,6 +939,9 @@ mod tests {
             updated_at: Utc::now(),
             user_id: user.id,
             file_hash: Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
         
         db.create_document(document).await.unwrap();

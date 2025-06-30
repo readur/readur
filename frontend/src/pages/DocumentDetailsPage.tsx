@@ -35,11 +35,16 @@ import {
   Search as SearchIcon,
   Edit as EditIcon,
   PhotoFilter as ProcessedImageIcon,
+  Source as SourceIcon,
+  AccessTime as AccessTimeIcon,
+  Create as CreateIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { documentService, OcrResponse } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { type LabelData } from '../components/Labels/Label';
+import MetadataDisplay from '../components/MetadataDisplay';
 import api from '../services/api';
 
 interface Document {
@@ -51,6 +56,9 @@ interface Document {
   created_at: string;
   has_ocr_text?: boolean;
   tags?: string[];
+  original_created_at?: string;
+  original_modified_at?: string;
+  source_metadata?: any;
 }
 
 const DocumentDetailsPage: React.FC = () => {
@@ -499,6 +507,55 @@ const DocumentDetailsPage: React.FC = () => {
                     </Typography>
                   </Paper>
                 </Grid>
+
+                {/* Source Metadata Section */}
+                {(document.original_created_at || document.original_modified_at || document.source_metadata) && (
+                  <>
+                    {document.original_created_at && (
+                      <Grid item xs={12} sm={6}>
+                        <Paper sx={{ p: 2, height: '100%' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                            <CreateIcon color="primary" sx={{ mr: 1 }} />
+                            <Typography variant="subtitle2" color="text.secondary">
+                              Original Created
+                            </Typography>
+                          </Box>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatDate(document.original_created_at)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    )}
+
+                    {document.original_modified_at && (
+                      <Grid item xs={12} sm={6}>
+                        <Paper sx={{ p: 2, height: '100%' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                            <AccessTimeIcon color="primary" sx={{ mr: 1 }} />
+                            <Typography variant="subtitle2" color="text.secondary">
+                              Original Modified
+                            </Typography>
+                          </Box>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {formatDate(document.original_modified_at)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    )}
+
+                    {document.source_metadata && Object.keys(document.source_metadata).length > 0 && (
+                      <Grid item xs={12}>
+                        <Paper sx={{ p: 2 }}>
+                          <MetadataDisplay 
+                            metadata={document.source_metadata} 
+                            title="Source Metadata"
+                            compact={false}
+                          />
+                        </Paper>
+                      </Grid>
+                    )}
+                  </>
+                )}
 
                 {document.tags && document.tags.length > 0 && (
                   <Grid item xs={12}>
