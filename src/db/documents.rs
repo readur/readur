@@ -10,9 +10,9 @@ impl Database {
     pub async fn create_document(&self, document: Document) -> Result<Document> {
         let row = sqlx::query(
             r#"
-            INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-            RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+            RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
             "#
         )
         .bind(document.id)
@@ -34,6 +34,9 @@ impl Database {
         .bind(document.updated_at)
         .bind(document.user_id)
         .bind(&document.file_hash)
+        .bind(document.original_created_at)
+        .bind(document.original_modified_at)
+        .bind(&document.source_metadata)
         .fetch_one(&self.pool)
         .await?;
 
@@ -57,6 +60,9 @@ impl Database {
             updated_at: row.get("updated_at"),
             user_id: row.get("user_id"),
             file_hash: row.get("file_hash"),
+            original_created_at: row.get("original_created_at"),
+            original_modified_at: row.get("original_modified_at"),
+            source_metadata: row.get("source_metadata"),
         })
     }
 
@@ -64,7 +70,7 @@ impl Database {
         let query = if user_role == crate::models::UserRole::Admin {
             // Admins can see all documents
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata, original_created_at, original_modified_at, source_metadata
             FROM documents 
             ORDER BY created_at DESC 
             LIMIT $1 OFFSET $2
@@ -72,7 +78,7 @@ impl Database {
         } else {
             // Regular users can only see their own documents
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata, original_created_at, original_modified_at, source_metadata
             FROM documents 
             WHERE user_id = $3 
             ORDER BY created_at DESC 
@@ -117,6 +123,9 @@ impl Database {
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
                 file_hash: row.get("file_hash"),
+                original_created_at: row.get("original_created_at"),
+                original_modified_at: row.get("original_modified_at"),
+                source_metadata: row.get("source_metadata"),
             })
             .collect();
 
@@ -129,7 +138,7 @@ impl Database {
                 // Admin with OCR filter
                 sqlx::query(
                     r#"
-                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                     FROM documents 
                     WHERE ocr_status = $3
                     ORDER BY created_at DESC 
@@ -146,7 +155,7 @@ impl Database {
                 // Admin without OCR filter
                 sqlx::query(
                     r#"
-                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                     FROM documents 
                     ORDER BY created_at DESC 
                     LIMIT $1 OFFSET $2
@@ -161,7 +170,7 @@ impl Database {
                 // Regular user with OCR filter
                 sqlx::query(
                     r#"
-                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                     FROM documents 
                     WHERE user_id = $3 AND ocr_status = $4
                     ORDER BY created_at DESC 
@@ -179,7 +188,7 @@ impl Database {
                 // Regular user without OCR filter
                 sqlx::query(
                     r#"
-                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                    SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                     FROM documents 
                     WHERE user_id = $3 
                     ORDER BY created_at DESC 
@@ -216,6 +225,9 @@ impl Database {
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
                 file_hash: row.get("file_hash"),
+                original_created_at: row.get("original_created_at"),
+                original_modified_at: row.get("original_modified_at"),
+                source_metadata: row.get("source_metadata"),
             })
             .collect();
 
@@ -268,7 +280,7 @@ impl Database {
     pub async fn get_documents_by_user(&self, user_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Document>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
             FROM documents 
             WHERE user_id = $1 
             ORDER BY created_at DESC 
@@ -303,6 +315,9 @@ impl Database {
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
                 file_hash: row.get("file_hash"),
+                original_created_at: row.get("original_created_at"),
+                original_modified_at: row.get("original_modified_at"),
+                source_metadata: row.get("source_metadata"),
             })
             .collect();
 
@@ -312,7 +327,7 @@ impl Database {
     pub async fn find_documents_by_filename(&self, filename: &str) -> Result<Vec<Document>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
             FROM documents 
             WHERE filename = $1 OR original_filename = $1
             ORDER BY created_at DESC
@@ -344,6 +359,9 @@ impl Database {
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
                 file_hash: row.get("file_hash"),
+                original_created_at: row.get("original_created_at"),
+                original_modified_at: row.get("original_modified_at"),
+                source_metadata: row.get("source_metadata"),
             })
             .collect();
 
@@ -353,7 +371,7 @@ impl Database {
     pub async fn search_documents(&self, user_id: Uuid, search: SearchRequest) -> Result<(Vec<Document>, i64)> {
         let mut query_builder = QueryBuilder::new(
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash,
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata,
                    ts_rank(to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, '')), plainto_tsquery('english', "# 
         );
         
@@ -415,6 +433,9 @@ impl Database {
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
                 file_hash: row.get("file_hash"),
+                original_created_at: row.get("original_created_at"),
+                original_modified_at: row.get("original_modified_at"),
+                source_metadata: row.get("source_metadata"),
             })
             .collect();
 
@@ -456,7 +477,7 @@ impl Database {
             // Use trigram similarity for substring matching
             let mut builder = QueryBuilder::new(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash,
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata,
                        GREATEST(
                            similarity(filename, "#
             );
@@ -499,7 +520,7 @@ impl Database {
 
             let mut builder = QueryBuilder::new(&format!(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash,
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata,
                        GREATEST(
                            CASE WHEN filename ILIKE '%' || "#
             ));
@@ -645,7 +666,7 @@ impl Database {
             // Use trigram similarity for substring matching
             let mut builder = QueryBuilder::new(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash,
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata,
                        GREATEST(
                            similarity(filename, "#
             );
@@ -684,7 +705,7 @@ impl Database {
 
             let mut builder = QueryBuilder::new(&format!(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash,
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata,
                        GREATEST(
                            CASE WHEN filename ILIKE '%' || "#
             ));
@@ -993,6 +1014,9 @@ impl Database {
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
                 file_hash: row.get("file_hash"),
+                original_created_at: row.get("original_created_at"),
+                original_modified_at: row.get("original_modified_at"),
+                source_metadata: row.get("source_metadata"),
             });
         }
 
@@ -1081,14 +1105,14 @@ impl Database {
         let query = if user_role == crate::models::UserRole::Admin {
             // Admins can see any document
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
             FROM documents 
             WHERE id = $1
             "#
         } else {
             // Regular users can only see their own documents
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
             FROM documents 
             WHERE id = $1 AND user_id = $2
             "#
@@ -1128,6 +1152,9 @@ impl Database {
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
                 file_hash: row.get("file_hash"),
+                original_created_at: row.get("original_created_at"),
+                original_modified_at: row.get("original_modified_at"),
+                source_metadata: row.get("source_metadata"),
             })),
             None => Ok(None),
         }
@@ -1137,7 +1164,7 @@ impl Database {
     pub async fn get_document_by_user_and_hash(&self, user_id: Uuid, file_hash: &str) -> Result<Option<Document>> {
         let row = sqlx::query(
             r#"
-            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+            SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
             FROM documents 
             WHERE user_id = $1 AND file_hash = $2
             LIMIT 1
@@ -1169,6 +1196,9 @@ impl Database {
                 updated_at: row.get("updated_at"),
                 user_id: row.get("user_id"),
                 file_hash: row.get("file_hash"),
+                original_created_at: row.get("original_created_at"),
+                original_modified_at: row.get("original_modified_at"),
+                source_metadata: row.get("source_metadata"),
             })),
             None => Ok(None),
         }
@@ -1393,6 +1423,9 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             })
         } else {
             let row = sqlx::query(
@@ -1427,6 +1460,9 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             })
         };
 
@@ -1470,6 +1506,9 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             }).collect()
         } else {
             let rows = sqlx::query(
@@ -1504,6 +1543,9 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             }).collect()
         };
 
@@ -1515,7 +1557,7 @@ impl Database {
         let documents = if user_role == crate::models::UserRole::Admin {
             let rows = sqlx::query(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 FROM documents 
                 WHERE ocr_confidence IS NOT NULL AND ocr_confidence < $1
                 ORDER BY ocr_confidence ASC, created_at DESC
@@ -1545,11 +1587,14 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             }).collect()
         } else {
             let rows = sqlx::query(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 FROM documents 
                 WHERE ocr_confidence IS NOT NULL AND ocr_confidence < $1 AND user_id = $2
                 ORDER BY ocr_confidence ASC, created_at DESC
@@ -1580,6 +1625,9 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             }).collect()
         };
 
@@ -1591,7 +1639,7 @@ impl Database {
         let documents = if user_role == crate::models::UserRole::Admin {
             let rows = sqlx::query(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 FROM documents 
                 WHERE ocr_status = 'failed' OR (ocr_confidence IS NULL AND ocr_status != 'pending' AND ocr_status != 'processing')
                 ORDER BY created_at DESC
@@ -1620,11 +1668,14 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             }).collect()
         } else {
             let rows = sqlx::query(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 FROM documents 
                 WHERE (ocr_status = 'failed' OR (ocr_confidence IS NULL AND ocr_status != 'pending' AND ocr_status != 'processing')) AND user_id = $1
                 ORDER BY created_at DESC
@@ -1654,6 +1705,9 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             }).collect()
         };
 
@@ -1665,7 +1719,7 @@ impl Database {
         let documents = if user_role == crate::models::UserRole::Admin {
             let rows = sqlx::query(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 FROM documents 
                 WHERE (ocr_confidence IS NOT NULL AND ocr_confidence < $1) 
                    OR ocr_status = 'failed' 
@@ -1699,11 +1753,14 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             }).collect()
         } else {
             let rows = sqlx::query(
                 r#"
-                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 FROM documents 
                 WHERE ((ocr_confidence IS NOT NULL AND ocr_confidence < $1) 
                     OR ocr_status = 'failed' 
@@ -1739,6 +1796,9 @@ impl Database {
                 updated_at: r.get("updated_at"),
                 user_id: r.get("user_id"),
                 file_hash: r.get("file_hash"),
+                original_created_at: r.get("original_created_at"),
+                original_modified_at: r.get("original_modified_at"),
+                source_metadata: r.get("source_metadata"),
             }).collect()
         };
 

@@ -26,6 +26,9 @@ fn create_test_document(user_id: Uuid) -> Document {
         updated_at: Utc::now(),
         user_id,
         file_hash: Some("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string()),
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
     }
 }
 
@@ -51,6 +54,9 @@ fn create_test_document_without_ocr(user_id: Uuid) -> Document {
         updated_at: Utc::now(),
         user_id,
         file_hash: Some("fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321".to_string()),
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
     }
 }
 
@@ -76,6 +82,9 @@ fn create_test_document_with_ocr_error(user_id: Uuid) -> Document {
         updated_at: Utc::now(),
         user_id,
         file_hash: Some("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string()),
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
     }
 }
 
@@ -1552,6 +1561,9 @@ mod deletion_error_handling_tests {
                 updated_at: Utc::now(),
                 user_id,
                 file_hash: Some("test_hash_123456789abcdef123456789abcdef123456789abcdef123456789abcdef".to_string()),
+                original_created_at: None,
+                original_modified_at: None,
+                source_metadata: None,
             }
         }
 

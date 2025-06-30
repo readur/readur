@@ -158,6 +158,9 @@ impl FileService {
         mime_type: &str,
         user_id: Uuid,
         file_hash: Option<String>,
+        original_created_at: Option<chrono::DateTime<chrono::Utc>>,
+        original_modified_at: Option<chrono::DateTime<chrono::Utc>>,
+        source_metadata: Option<serde_json::Value>,
     ) -> Document {
         Document {
             id: Uuid::new_v4(),
@@ -179,6 +182,9 @@ impl FileService {
             updated_at: Utc::now(),
             user_id,
             file_hash,
+            original_created_at,
+            original_modified_at,
+            source_metadata,
         }
     }
 

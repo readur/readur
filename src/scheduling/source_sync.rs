@@ -533,13 +533,13 @@ impl SourceSyncService {
         let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
         
         let result = ingestion_service
-            .ingest_from_source(
-                &file_info.name,
+            .ingest_from_file_info(
+                file_info,
                 file_data,
-                &file_info.mime_type,
                 user_id,
-                source_id,
+                crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,
                 "source_sync",
+                Some(source_id),
             )
             .await
             .map_err(|e| anyhow!("Document ingestion failed for {}: {}", file_info.name, e))?;
@@ -637,13 +637,13 @@ impl SourceSyncService {
         let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
         
         let result = ingestion_service
-            .ingest_from_source(
-                &file_info.name,
+            .ingest_from_file_info(
+                file_info,
                 file_data,
-                &file_info.mime_type,
                 user_id,
-                source_id,
+                crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,
                 "source_sync",
+                Some(source_id),
             )
             .await
             .map_err(|e| anyhow!("Document ingestion failed for {}: {}", file_info.name, e))?;

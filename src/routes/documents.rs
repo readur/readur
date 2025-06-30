@@ -116,6 +116,9 @@ async fn get_document_by_id(
         ocr_word_count: document.ocr_word_count,
         ocr_processing_time_ms: document.ocr_processing_time_ms,
         ocr_status: document.ocr_status,
+        original_created_at: document.original_created_at,
+        original_modified_at: document.original_modified_at,
+        source_metadata: document.source_metadata,
     };
     
     Ok(Json(response))

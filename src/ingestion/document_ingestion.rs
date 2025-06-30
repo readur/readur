@@ -9,8 +9,10 @@
 use uuid::Uuid;
 use sha2::{Digest, Sha256};
 use tracing::{debug, info, warn};
+use chrono::Utc;
+use serde_json;
 
-use crate::models::Document;
+use crate::models::{Document, FileInfo};
 use crate::db::Database;
 use crate::services::file_service::FileService;
 
@@ -49,6 +51,10 @@ pub struct DocumentIngestionRequest {
     /// Optional source identifier for tracking
     pub source_type: Option<String>,
     pub source_id: Option<Uuid>,
+    /// Optional metadata from source file system
+    pub original_created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub original_modified_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub source_metadata: Option<serde_json::Value>,
 }
 
 pub struct DocumentIngestionService {
@@ -59,6 +65,47 @@ pub struct DocumentIngestionService {
 impl DocumentIngestionService {
     pub fn new(db: Database, file_service: FileService) -> Self {
         Self { db, file_service }
+    }
+
+    /// Extract metadata from FileInfo for storage in document
+    fn extract_metadata_from_file_info(file_info: &FileInfo) -> (Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, Option<serde_json::Value>) {
+        let original_created_at = file_info.created_at;
+        let original_modified_at = file_info.last_modified;
+        
+        // Build comprehensive metadata object
+        let mut metadata = serde_json::Map::new();
+        
+        // Add permissions if available
+        if let Some(perms) = file_info.permissions {
+            metadata.insert("permissions".to_string(), serde_json::Value::Number(perms.into()));
+        }
+        
+        // Add owner/group info
+        if let Some(ref owner) = file_info.owner {
+            metadata.insert("owner".to_string(), serde_json::Value::String(owner.clone()));
+        }
+        
+        if let Some(ref group) = file_info.group {
+            metadata.insert("group".to_string(), serde_json::Value::String(group.clone()));
+        }
+        
+        // Add source path
+        metadata.insert("source_path".to_string(), serde_json::Value::String(file_info.path.clone()));
+        
+        // Merge any additional metadata from the source
+        if let Some(ref source_meta) = file_info.metadata {
+            if let serde_json::Value::Object(source_map) = source_meta {
+                metadata.extend(source_map.clone());
+            }
+        }
+        
+        let final_metadata = if metadata.is_empty() { 
+            None 
+        } else { 
+            Some(serde_json::Value::Object(metadata)) 
+        };
+        
+        (original_created_at, original_modified_at, final_metadata)
     }
 
     /// Unified document ingestion with configurable deduplication policy
@@ -156,6 +203,9 @@ impl DocumentIngestionService {
             &request.mime_type,
             request.user_id,
             Some(file_hash.clone()),
+            request.original_created_at,
+            request.original_modified_at,
+            request.source_metadata,
         );
 
         let saved_document = match self.db.create_document(document).await {
@@ -235,6 +285,36 @@ impl DocumentIngestionService {
         format!("{:x}", result)
     }
 
+    /// Ingest document from source with FileInfo metadata
+    pub async fn ingest_from_file_info(
+        &self,
+        file_info: &FileInfo,
+        file_data: Vec<u8>,
+        user_id: Uuid,
+        deduplication_policy: DeduplicationPolicy,
+        source_type: &str,
+        source_id: Option<Uuid>,
+    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+        let (original_created_at, original_modified_at, source_metadata) = 
+            Self::extract_metadata_from_file_info(file_info);
+            
+        let request = DocumentIngestionRequest {
+            filename: file_info.name.clone(),
+            original_filename: file_info.name.clone(),
+            file_data,
+            mime_type: file_info.mime_type.clone(),
+            user_id,
+            deduplication_policy,
+            source_type: Some(source_type.to_string()),
+            source_id,
+            original_created_at,
+            original_modified_at,
+            source_metadata,
+        };
+
+        self.ingest_document(request).await
+    }
+
     /// Convenience method for direct uploads (maintains backward compatibility)
     pub async fn ingest_upload(
         &self,
@@ -252,6 +332,9 @@ impl DocumentIngestionService {
             deduplication_policy: DeduplicationPolicy::AllowDuplicateContent, // Fixed behavior for uploads
             source_type: Some("direct_upload".to_string()),
             source_id: None,
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
 
         self.ingest_document(request).await
@@ -276,6 +359,9 @@ impl DocumentIngestionService {
             deduplication_policy: DeduplicationPolicy::Skip, // Skip duplicates for source sync
             source_type: Some(source_type.to_string()),
             source_id: Some(source_id),
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
 
         self.ingest_document(request).await
@@ -299,6 +385,9 @@ impl DocumentIngestionService {
             deduplication_policy: DeduplicationPolicy::TrackAsDuplicate, // Track duplicates for WebDAV
             source_type: Some("webdav".to_string()),
             source_id: Some(webdav_source_id),
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
 
         self.ingest_document(request).await
@@ -321,6 +410,9 @@ impl DocumentIngestionService {
             deduplication_policy: DeduplicationPolicy::Skip, // Skip duplicates for batch operations
             source_type: Some("batch_ingest".to_string()),
             source_id: None,
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         };
 
         self.ingest_document(request).await

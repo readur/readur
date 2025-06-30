@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use utoipa::{ToSchema, IntoParams};
+use serde_json;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
 pub enum UserRole {
@@ -133,6 +134,12 @@ pub struct Document {
     pub updated_at: DateTime<Utc>,
     pub user_id: Uuid,
     pub file_hash: Option<String>,
+    /// Original file creation timestamp from source system
+    pub original_created_at: Option<DateTime<Utc>>,
+    /// Original file modification timestamp from source system
+    pub original_modified_at: Option<DateTime<Utc>>,
+    /// Additional metadata from source system (permissions, attributes, EXIF data, etc.)
+    pub source_metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -307,6 +314,15 @@ pub struct DocumentResponse {
     pub ocr_processing_time_ms: Option<i32>,
     /// Current status of OCR processing (pending, processing, completed, failed)
     pub ocr_status: Option<String>,
+    /// Original file creation timestamp from source system
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_created_at: Option<DateTime<Utc>>,
+    /// Original file modification timestamp from source system
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_modified_at: Option<DateTime<Utc>>,
+    /// Additional metadata from source system (permissions, attributes, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
@@ -447,6 +463,9 @@ impl From<Document> for DocumentResponse {
             ocr_word_count: doc.ocr_word_count,
             ocr_processing_time_ms: doc.ocr_processing_time_ms,
             ocr_status: doc.ocr_status,
+            original_created_at: doc.original_created_at,
+            original_modified_at: doc.original_modified_at,
+            source_metadata: doc.source_metadata,
         }
     }
 }
@@ -900,6 +919,16 @@ pub struct FileInfo {
     pub last_modified: Option<DateTime<Utc>>,
     pub etag: String,
     pub is_directory: bool,
+    /// Original file creation time from source system
+    pub created_at: Option<DateTime<Utc>>,
+    /// File permissions (Unix mode bits or similar)
+    pub permissions: Option<u32>,
+    /// File owner (username or uid)
+    pub owner: Option<String>,
+    /// File group (groupname or gid)
+    pub group: Option<String>,
+    /// Additional metadata from source (EXIF, PDF metadata, custom attributes, etc.)
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]

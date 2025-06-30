@@ -283,24 +283,25 @@ async fn process_single_file(
     
     let result = if let Some(source_id) = webdav_source_id {
         ingestion_service
-            .ingest_from_webdav(
-                &file_info.name,
+            .ingest_from_file_info(
+                &file_info,
                 file_data,
-                &file_info.mime_type,
                 user_id,
-                source_id,
+                crate::ingestion::document_ingestion::DeduplicationPolicy::TrackAsDuplicate,
+                "webdav_sync",
+                Some(source_id),
             )
             .await
     } else {
         // Fallback for backward compatibility - treat as generic WebDAV sync
         ingestion_service
-            .ingest_from_source(
-                &file_info.name,
+            .ingest_from_file_info(
+                &file_info,
                 file_data,
-                &file_info.mime_type,
                 user_id,
-                uuid::Uuid::new_v4(), // Generate a temporary ID for tracking
+                crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,
                 "webdav_sync",
+                Some(uuid::Uuid::new_v4()), // Generate a temporary ID for tracking
             )
             .await
     };

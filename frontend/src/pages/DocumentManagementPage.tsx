@@ -56,6 +56,7 @@ import { format } from 'date-fns';
 import { api, documentService, queueService } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import FailedDocumentViewer from '../components/FailedDocumentViewer';
+import MetadataDisplay from '../components/MetadataDisplay';
 
 interface FailedDocument {
   id: string;
@@ -78,6 +79,9 @@ interface FailedDocument {
   ocr_word_count?: number;
   failure_reason: string;
   error_message?: string;
+  original_created_at?: string;
+  original_modified_at?: string;
+  source_metadata?: any;
 }
 
 interface FailureCategory {
@@ -1988,6 +1992,39 @@ const DocumentManagementPage: React.FC = () => {
                     color={getFailureCategoryColor(selectedDocument.failure_category)}
                     sx={{ mb: 2 }}
                   />
+
+                  {/* Source Metadata Section */}
+                  {selectedDocument.original_created_at && (
+                    <>
+                      <Typography variant="body2" color="text.secondary" component="div">
+                        <strong>Original Created:</strong>
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 2 }}>
+                        {format(new Date(selectedDocument.original_created_at), 'PPpp')}
+                      </Typography>
+                    </>
+                  )}
+
+                  {selectedDocument.original_modified_at && (
+                    <>
+                      <Typography variant="body2" color="text.secondary" component="div">
+                        <strong>Original Modified:</strong>
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 2 }}>
+                        {format(new Date(selectedDocument.original_modified_at), 'PPpp')}
+                      </Typography>
+                    </>
+                  )}
+
+                  {selectedDocument.source_metadata && Object.keys(selectedDocument.source_metadata).length > 0 && (
+                    <Box sx={{ mt: 2, mb: 2 }}>
+                      <MetadataDisplay 
+                        metadata={selectedDocument.source_metadata} 
+                        title="Source Metadata"
+                        compact={true}
+                      />
+                    </Box>
+                  )}
 
                   <Typography variant="body2" color="text.secondary" component="div" sx={{ mt: 2 }}>
                     <strong>Retry Count:</strong>

@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 use sha2::{Sha256, Digest};
+use serde_json;
 
 use crate::models::{FileInfo, LocalFolderSourceConfig};
 
@@ -89,6 +90,14 @@ impl LocalFolderService {
                                         DateTime::from_timestamp(duration.as_secs() as i64, 0)
                                     });
 
+                                // Try to get creation time (not available on all systems)
+                                let created_time = metadata.created()
+                                    .ok()
+                                    .and_then(|time| {
+                                        let duration = time.duration_since(std::time::UNIX_EPOCH).ok()?;
+                                        DateTime::from_timestamp(duration.as_secs() as i64, 0)
+                                    });
+
                                 let file_name = path.file_name()
                                     .and_then(|name| name.to_str())
                                     .unwrap_or("unknown")
@@ -100,6 +109,34 @@ impl LocalFolderService {
                                 // Determine MIME type based on extension
                                 let mime_type = Self::get_mime_type(&extension);
 
+                                // Extract file permissions and ownership info
+                                #[cfg(unix)]
+                                let (permissions, owner, group) = {
+                                    use std::os::unix::fs::MetadataExt;
+                                    (
+                                        Some(metadata.mode() & 0o777), // File mode bits (permissions)
+                                        Some(metadata.uid().to_string()), // User ID
+                                        Some(metadata.gid().to_string()), // Group ID
+                                    )
+                                };
+                                
+                                #[cfg(not(unix))]
+                                let (permissions, owner, group) = (None, None, None);
+
+                                // Prepare additional metadata
+                                let mut additional_metadata = serde_json::Map::new();
+                                
+                                #[cfg(unix)]
+                                {
+                                    use std::os::unix::fs::MetadataExt;
+                                    additional_metadata.insert("inode".to_string(), serde_json::Value::Number(metadata.ino().into()));
+                                    additional_metadata.insert("nlinks".to_string(), serde_json::Value::Number(metadata.nlink().into()));
+                                    additional_metadata.insert("device".to_string(), serde_json::Value::Number(metadata.dev().into()));
+                                }
+                                
+                                // Add file attributes
+                                additional_metadata.insert("readonly".to_string(), serde_json::Value::Bool(metadata.permissions().readonly()));
+                                
                                 let file_info = FileInfo {
                                     path: path.to_string_lossy().to_string(),
                                     name: file_name,
@@ -108,6 +145,11 @@ impl LocalFolderService {
                                     last_modified: modified_time,
                                     etag,
                                     is_directory: false,
+                                    created_at: created_time,
+                                    permissions,
+                                    owner,
+                                    group,
+                                    metadata: if additional_metadata.is_empty() { None } else { Some(serde_json::Value::Object(additional_metadata)) },
                                 };
 
                                 files.push(file_info);

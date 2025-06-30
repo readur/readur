@@ -423,14 +423,7 @@ impl WebDAVService {
 
         let propfind_body = r#"<?xml version="1.0"?>
             <d:propfind xmlns:d="DAV:">
-                <d:prop>
-                    <d:displayname/>
-                    <d:getcontentlength/>
-                    <d:getlastmodified/>
-                    <d:getcontenttype/>
-                    <d:getetag/>
-                    <d:resourcetype/>
-                </d:prop>
+                <d:allprop/>
             </d:propfind>"#;
 
         let response = self.client

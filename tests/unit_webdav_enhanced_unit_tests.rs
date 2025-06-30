@@ -607,6 +607,11 @@ fn test_special_characters_in_paths() {
             last_modified: Some(Utc::now()),
             etag: "\"test123\"".to_string(),
             is_directory: false,
+            created_at: None,
+            permissions: None,
+            owner: None,
+            group: None,
+            metadata: None,
         };
 
         assert!(!file_info.name.is_empty());
