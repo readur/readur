@@ -91,7 +91,7 @@ const FailedDocumentViewer: React.FC<FailedDocumentViewerProps> = ({
     }}>
       {documentUrl && (
         <>
-          {mimeType.startsWith('image/') ? (
+          {mimeType?.startsWith('image/') ? (
             <Box sx={{ textAlign: 'center' }}>
               <img
                 src={documentUrl}
@@ -111,7 +111,7 @@ const FailedDocumentViewer: React.FC<FailedDocumentViewerProps> = ({
               style={{ border: 'none', borderRadius: '4px' }}
               title={filename}
             />
-          ) : mimeType.startsWith('text/') ? (
+          ) : mimeType?.startsWith('text/') ? (
             <Box sx={{ 
               fontFamily: 'monospace', 
               fontSize: '0.875rem',
@@ -133,7 +133,7 @@ const FailedDocumentViewer: React.FC<FailedDocumentViewerProps> = ({
           ) : (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="body1" color="text.secondary">
-                Cannot preview this file type ({mimeType})
+                Cannot preview this file type ({mimeType || 'unknown'})
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 File: {filename}

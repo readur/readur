@@ -1020,11 +1020,11 @@ const DocumentManagementPage: React.FC = () => {
                                 {/* Show OCR confidence and word count for low confidence failures */}
                                 {(document.failure_reason === 'low_ocr_confidence' || document.ocr_failure_reason === 'low_ocr_confidence') && (
                                   <>
-                                    <Typography variant="body2" color="text.secondary">
+                                    <Typography variant="body2" color="text.secondary" component="div">
                                       <strong>OCR Results:</strong>
                                     </Typography>
-                                    <Box sx={{ mb: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                                      {document.ocr_confidence !== undefined && (
+                                    <Box component="div" sx={{ mb: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                                      {document.ocr_confidence !== undefined && document.ocr_confidence !== null && (
                                         <Chip
                                           size="small"
                                           icon={<WarningIcon />}
@@ -1959,28 +1959,28 @@ const DocumentManagementPage: React.FC = () => {
                   Document Information
                 </Typography>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" component="div">
                     <strong>Original Filename:</strong>
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 2 }}>
                     {selectedDocument.original_filename}
                   </Typography>
 
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" component="div">
                     <strong>File Size:</strong>
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 2 }}>
                     {formatFileSize(selectedDocument.file_size)}
                   </Typography>
 
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" component="div">
                     <strong>MIME Type:</strong>
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 2 }}>
                     {selectedDocument.mime_type}
                   </Typography>
 
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" component="div">
                     <strong>Failure Category:</strong>
                   </Typography>
                   <Chip
@@ -1989,21 +1989,21 @@ const DocumentManagementPage: React.FC = () => {
                     sx={{ mb: 2 }}
                   />
 
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                  <Typography variant="body2" color="text.secondary" component="div" sx={{ mt: 2 }}>
                     <strong>Retry Count:</strong>
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 2 }}>
                     {selectedDocument.retry_count} attempts
                   </Typography>
 
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" component="div">
                     <strong>Created:</strong>
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 2 }}>
                     {format(new Date(selectedDocument.created_at), 'PPpp')}
                   </Typography>
 
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" component="div">
                     <strong>Last Updated:</strong>
                   </Typography>
                   <Typography variant="body2">
@@ -2013,13 +2013,13 @@ const DocumentManagementPage: React.FC = () => {
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                     <strong>Tags:</strong>
                   </Typography>
-                  <Box sx={{ mb: 2 }}>
+                  <Box component="div" sx={{ mb: 2 }}>
                     {selectedDocument.tags.length > 0 ? (
                       selectedDocument.tags.map((tag) => (
                         <Chip key={tag} label={tag} size="small" sx={{ mr: 1, mb: 1 }} />
                       ))
                     ) : (
-                      <Typography variant="body2" color="text.secondary">No tags</Typography>
+                      <Typography variant="body2" color="text.secondary" component="span">No tags</Typography>
                     )}
                   </Box>
                 </Box>
@@ -2031,7 +2031,7 @@ const DocumentManagementPage: React.FC = () => {
                 <Typography variant="h6" sx={{ mb: 2 }}>
                   Error Details
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <Typography variant="body2" color="text.secondary" component="div" sx={{ mb: 1 }}>
                   <strong>Full Error Message:</strong>
                 </Typography>
                 <Paper sx={{ 
