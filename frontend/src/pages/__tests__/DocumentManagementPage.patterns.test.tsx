@@ -3,7 +3,7 @@ import { describe, test, expect } from 'vitest';
 // Regression tests that validate the code patterns we implemented
 // without interfering with existing component tests
 
-describe('FailedOcrPage - Code Pattern Validation', () => {
+describe('DocumentManagementPage - Code Pattern Validation', () => {
   test('validates null-safe access pattern for statistics', () => {
     // This test ensures the null-safe pattern is working correctly
     // Pattern: statistics?.failure_categories?.map(...) || fallback

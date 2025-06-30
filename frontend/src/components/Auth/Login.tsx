@@ -319,9 +319,6 @@ const Login: React.FC = () => {
                     </Button>
 
                     <Box sx={{ textAlign: 'center', mt: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Demo credentials: admin / readur2024
-                      </Typography>
                     </Box>
                   </Box>
                 </CardContent>

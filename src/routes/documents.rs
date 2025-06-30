@@ -60,6 +60,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/retry-ocr", post(retry_ocr))
         .route("/duplicates", get(get_user_duplicates))
         .route("/failed", get(get_failed_documents))
+        .route("/failed/{id}/view", get(view_failed_document))
         .route("/delete-low-confidence", post(delete_low_confidence_documents))
         .route("/delete-failed-ocr", post(delete_failed_ocr_documents))
 }
@@ -959,6 +960,77 @@ async fn get_failed_documents(
     });
     
     Ok(Json(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/documents/failed/{id}/view",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Failed Document ID")
+    ),
+    responses(
+        (status = 200, description = "Failed document content for viewing in browser"),
+        (status = 404, description = "Failed document not found or file deleted"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn view_failed_document(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Path(failed_document_id): Path<uuid::Uuid>,
+) -> Result<Response, StatusCode> {
+    // Get failed document from database
+    let row = sqlx::query(
+        r#"
+        SELECT file_path, filename, mime_type, user_id
+        FROM failed_documents 
+        WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)
+        "#
+    )
+    .bind(failed_document_id)
+    .bind(if auth_user.user.role == crate::models::UserRole::Admin { 
+        None 
+    } else { 
+        Some(auth_user.user.id) 
+    })
+    .fetch_optional(&state.db.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+    
+    let file_path: Option<String> = row.get("file_path");
+    let filename: String = row.get("filename");
+    let mime_type: Option<String> = row.get("mime_type");
+    
+    // Check if file_path exists (some failed documents might not have been saved)
+    let file_path = file_path.ok_or(StatusCode::NOT_FOUND)?;
+    
+    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_data = file_service
+        .read_file(&file_path)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?; // File was deleted or moved
+    
+    // Determine content type from mime_type or file extension
+    let content_type = mime_type
+        .unwrap_or_else(|| {
+            mime_guess::from_path(&filename)
+                .first_or_octet_stream()
+                .to_string()
+        });
+    
+    let response = Response::builder()
+        .header(CONTENT_TYPE, content_type)
+        .header("Content-Length", file_data.len())
+        .header("Content-Disposition", format!("inline; filename=\"{}\"", filename))
+        .body(file_data.into())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(response)
 }
 
 async fn calculate_estimated_wait_time(priority: i32) -> i64 {

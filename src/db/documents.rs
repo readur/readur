@@ -1798,6 +1798,104 @@ impl Database {
             .collect();
 
         Ok(results)
+    }
 
+    /// Create a failed document record
+    pub async fn create_failed_document(
+        &self,
+        user_id: Uuid,
+        filename: String,
+        original_filename: Option<String>,
+        original_path: Option<String>,
+        file_path: Option<String>,
+        file_size: Option<i64>,
+        file_hash: Option<String>,
+        mime_type: Option<String>,
+        content: Option<String>,
+        tags: Vec<String>,
+        ocr_text: Option<String>,
+        ocr_confidence: Option<f32>,
+        ocr_word_count: Option<i32>,
+        ocr_processing_time_ms: Option<i32>,
+        failure_reason: String,
+        failure_stage: String,
+        existing_document_id: Option<Uuid>,
+        ingestion_source: String,
+        error_message: Option<String>,
+        retry_count: Option<i32>,
+    ) -> Result<Uuid> {
+        let id = Uuid::new_v4();
+        
+        sqlx::query(
+            r#"
+            INSERT INTO failed_documents (
+                id, user_id, filename, original_filename, original_path, file_path,
+                file_size, file_hash, mime_type, content, tags, ocr_text, 
+                ocr_confidence, ocr_word_count, ocr_processing_time_ms,
+                failure_reason, failure_stage, existing_document_id,
+                ingestion_source, error_message, retry_count, created_at, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 
+                $16, $17, $18, $19, $20, $21, NOW(), NOW()
+            )
+            "#
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(&filename)
+        .bind(&original_filename)
+        .bind(&original_path)
+        .bind(&file_path)
+        .bind(file_size)
+        .bind(&file_hash)
+        .bind(&mime_type)
+        .bind(&content)
+        .bind(&tags)
+        .bind(&ocr_text)
+        .bind(ocr_confidence)
+        .bind(ocr_word_count)
+        .bind(ocr_processing_time_ms)
+        .bind(&failure_reason)
+        .bind(&failure_stage)
+        .bind(existing_document_id)
+        .bind(&ingestion_source)
+        .bind(&error_message)
+        .bind(retry_count)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(id)
+    }
+
+    /// Create a failed document from an existing document that failed OCR
+    pub async fn create_failed_document_from_document(
+        &self,
+        document: &Document,
+        failure_reason: String,
+        error_message: Option<String>,
+        retry_count: Option<i32>,
+    ) -> Result<Uuid> {
+        self.create_failed_document(
+            document.user_id, // user_id is required in Document struct
+            document.filename.clone(),
+            Some(document.original_filename.clone()),
+            None, // original_path - not available in Document model
+            Some(document.file_path.clone()),
+            Some(document.file_size),
+            document.file_hash.clone(),
+            Some(document.mime_type.clone()),
+            document.content.clone(),
+            document.tags.clone(),
+            document.ocr_text.clone(),
+            document.ocr_confidence,
+            document.ocr_word_count,
+            document.ocr_processing_time_ms,
+            failure_reason,
+            "ocr".to_string(), // OCR failure stage
+            None, // existing_document_id
+            "unknown".to_string(), // Default ingestion source - would need to be passed in for better tracking
+            error_message,
+            retry_count,
+        ).await
     }
 }
