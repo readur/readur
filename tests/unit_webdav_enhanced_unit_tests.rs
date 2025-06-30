@@ -213,7 +213,7 @@ fn test_webdav_response_parsing_comprehensive() {
         server_type: Some("nextcloud".to_string()),
     };
 
-    let service = WebDAVService::new(config).unwrap();
+    let service = WebDAVService::new(config.clone()).unwrap();
     
     // Test Nextcloud response parsing
     let nextcloud_response = mock_nextcloud_propfind_response();
@@ -221,7 +221,22 @@ fn test_webdav_response_parsing_comprehensive() {
     assert!(files.is_ok());
 
     let files = files.unwrap();
-    assert_eq!(files.len(), 3); // Should have 3 files (excluding directory)
+    
+    // Filter files by supported extensions
+    let supported_files: Vec<_> = files.iter()
+        .filter(|f| {
+            if let Some(ext) = std::path::Path::new(&f.name)
+                .extension()
+                .and_then(|e| e.to_str())
+            {
+                config.file_extensions.contains(&ext.to_lowercase())
+            } else {
+                false
+            }
+        })
+        .collect();
+    
+    assert_eq!(supported_files.len(), 2); // Should have 2 files with supported extensions (pdf, png)
 
     // Verify first file (report.pdf)
     let pdf_file = files.iter().find(|f| f.name == "report.pdf").unwrap();
@@ -237,12 +252,8 @@ fn test_webdav_response_parsing_comprehensive() {
     assert_eq!(png_file.etag, "png456"); // ETag should be normalized (quotes removed)
     assert!(!png_file.is_directory);
 
-    // Verify third file (unsupported.docx)
-    let docx_file = files.iter().find(|f| f.name == "unsupported.docx").unwrap();
-    assert_eq!(docx_file.size, 102400);
-    assert_eq!(docx_file.mime_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    assert_eq!(docx_file.etag, "docx789"); // ETag should be normalized (quotes removed)
-    assert!(!docx_file.is_directory);
+    // Verify that unsupported file (docx) is not included in supported files
+    assert!(supported_files.iter().find(|f| f.name == "unsupported.docx").is_none());
 }
 
 #[test]

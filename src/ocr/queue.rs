@@ -396,6 +396,38 @@ impl OcrQueueService {
                                     return Ok(());
                                 }
                             }
+                        } else {
+                            // Handle empty text results - fail the document since no searchable content was extracted
+                            let error_msg = format!("No extractable text found in document (0 words)");
+                            warn!("⚠️  No searchable content extracted for '{}' | Job: {} | Document: {} | 0 words", 
+                                  filename, item.id, item.document_id);
+                            
+                            // Create failed document record using helper function
+                            let _ = self.create_failed_document_from_ocr_error(
+                                item.document_id,
+                                "no_extractable_text",
+                                &error_msg,
+                                item.attempts,
+                            ).await;
+
+                            // Mark document as failed for no extractable text
+                            sqlx::query(
+                                r#"
+                                UPDATE documents
+                                SET ocr_status = 'failed',
+                                    ocr_failure_reason = 'no_extractable_text',
+                                    ocr_error = $2,
+                                    updated_at = NOW()
+                                WHERE id = $1
+                                "#
+                            )
+                            .bind(item.document_id)
+                            .bind(&error_msg)
+                            .execute(&self.pool)
+                            .await?;
+                            
+                            self.mark_failed(item.id, &error_msg).await?;
+                            return Ok(());
                         }
 
                         // Save processed image if setting is enabled and image was processed

@@ -1946,61 +1946,61 @@ mod deletion_error_handling_tests {
         let null_confidence_id = database.create_document(null_confidence_doc).await.unwrap().id;
         let pending_id = database.create_document(pending_doc).await.unwrap().id;
 
-        // Test with threshold of 50% - should include low confidence, failed, and null confidence
+        // Test with threshold of 50% - should include low confidence and failed only
         let threshold_50_docs = database
             .find_low_confidence_and_failed_documents(50.0, user_id, crate::models::UserRole::User)
             .await
             .unwrap();
 
-        assert_eq!(threshold_50_docs.len(), 3);
+        assert_eq!(threshold_50_docs.len(), 2);
         let threshold_50_ids: Vec<Uuid> = threshold_50_docs.iter().map(|d| d.id).collect();
         assert!(threshold_50_ids.contains(&low_id)); // 25% confidence
         assert!(threshold_50_ids.contains(&failed_id)); // failed status
-        assert!(threshold_50_ids.contains(&null_confidence_id)); // NULL confidence
+        assert!(!threshold_50_ids.contains(&null_confidence_id)); // NULL confidence excluded
         assert!(!threshold_50_ids.contains(&high_id)); // 95% confidence
         assert!(!threshold_50_ids.contains(&medium_id)); // 65% confidence
         assert!(!threshold_50_ids.contains(&pending_id)); // pending status
 
-        // Test with threshold of 70% - should include low and medium confidence, failed, and null confidence
+        // Test with threshold of 70% - should include low and medium confidence and failed only
         let threshold_70_docs = database
             .find_low_confidence_and_failed_documents(70.0, user_id, crate::models::UserRole::User)
             .await
             .unwrap();
 
-        assert_eq!(threshold_70_docs.len(), 4);
+        assert_eq!(threshold_70_docs.len(), 3);
         let threshold_70_ids: Vec<Uuid> = threshold_70_docs.iter().map(|d| d.id).collect();
         assert!(threshold_70_ids.contains(&low_id)); // 25% confidence
         assert!(threshold_70_ids.contains(&medium_id)); // 65% confidence
         assert!(threshold_70_ids.contains(&failed_id)); // failed status
-        assert!(threshold_70_ids.contains(&null_confidence_id)); // NULL confidence
+        assert!(!threshold_70_ids.contains(&null_confidence_id)); // NULL confidence excluded
         assert!(!threshold_70_ids.contains(&high_id)); // 95% confidence
         assert!(!threshold_70_ids.contains(&pending_id)); // pending status
 
-        // Test with threshold of 100% - should include all except pending/processing
+        // Test with threshold of 100% - should include all confidence levels and failed only
         let threshold_100_docs = database
             .find_low_confidence_and_failed_documents(100.0, user_id, crate::models::UserRole::User)
             .await
             .unwrap();
 
-        assert_eq!(threshold_100_docs.len(), 5);
+        assert_eq!(threshold_100_docs.len(), 4);
         let threshold_100_ids: Vec<Uuid> = threshold_100_docs.iter().map(|d| d.id).collect();
         assert!(threshold_100_ids.contains(&high_id)); // 95% confidence
         assert!(threshold_100_ids.contains(&medium_id)); // 65% confidence
         assert!(threshold_100_ids.contains(&low_id)); // 25% confidence
         assert!(threshold_100_ids.contains(&failed_id)); // failed status
-        assert!(threshold_100_ids.contains(&null_confidence_id)); // NULL confidence
+        assert!(!threshold_100_ids.contains(&null_confidence_id)); // NULL confidence excluded
         assert!(!threshold_100_ids.contains(&pending_id)); // pending status
 
-        // Test with threshold of 0% - should only include failed and null confidence
+        // Test with threshold of 0% - should only include failed documents
         let threshold_0_docs = database
             .find_low_confidence_and_failed_documents(0.0, user_id, crate::models::UserRole::User)
             .await
             .unwrap();
 
-        assert_eq!(threshold_0_docs.len(), 2);
+        assert_eq!(threshold_0_docs.len(), 1);
         let threshold_0_ids: Vec<Uuid> = threshold_0_docs.iter().map(|d| d.id).collect();
         assert!(threshold_0_ids.contains(&failed_id)); // failed status
-        assert!(threshold_0_ids.contains(&null_confidence_id)); // NULL confidence
+        assert!(!threshold_0_ids.contains(&null_confidence_id)); // NULL confidence excluded
         assert!(!threshold_0_ids.contains(&high_id)); // 95% confidence
         assert!(!threshold_0_ids.contains(&medium_id)); // 65% confidence
         assert!(!threshold_0_ids.contains(&low_id)); // 25% confidence

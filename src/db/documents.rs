@@ -1722,8 +1722,7 @@ impl Database {
                 SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 FROM documents 
                 WHERE (ocr_confidence IS NOT NULL AND ocr_confidence < $1) 
-                   OR ocr_status = 'failed' 
-                   OR (ocr_confidence IS NULL AND ocr_status != 'pending' AND ocr_status != 'processing')
+                   OR ocr_status = 'failed'
                 ORDER BY 
                     CASE WHEN ocr_confidence IS NOT NULL THEN ocr_confidence ELSE -1 END ASC, 
                     created_at DESC
@@ -1763,8 +1762,7 @@ impl Database {
                 SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 FROM documents 
                 WHERE ((ocr_confidence IS NOT NULL AND ocr_confidence < $1) 
-                    OR ocr_status = 'failed' 
-                    OR (ocr_confidence IS NULL AND ocr_status != 'pending' AND ocr_status != 'processing'))
+                    OR ocr_status = 'failed')
                   AND user_id = $2
                 ORDER BY 
                     CASE WHEN ocr_confidence IS NOT NULL THEN ocr_confidence ELSE -1 END ASC, 

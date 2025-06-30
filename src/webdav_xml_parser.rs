@@ -101,6 +101,12 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                             "group" => {
                                 resp.group = Some(text.trim().to_string());
                             }
+                            "status" if in_propstat => {
+                                // Check if status is 200 OK
+                                if text.contains("200") {
+                                    status_ok = true;
+                                }
+                            }
                             _ => {
                                 // Store any other properties as generic metadata
                                 // This handles vendor-specific properties from any WebDAV server
@@ -139,13 +145,6 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                                     }
                                 }
                             }
-                            "status" if in_propstat => {
-                                // Check if status is 200 OK
-                                if text.contains("200") {
-                                    status_ok = true;
-                                }
-                            }
-                            _ => {}
                         }
                     }
                 }
