@@ -168,7 +168,7 @@ const MetadataDisplay: React.FC<MetadataDisplayProps> = ({
     return (
       <Grid container spacing={2}>
         {Object.entries(metadata).map(([key, value]) => (
-          <Grid item xs={12} sm={6} key={key}>
+          <Grid size={{ xs: 12, sm: 6 }} key={key}>
             <Box sx={{ mb: 1 }}>
               <Typography 
                 variant="caption" 

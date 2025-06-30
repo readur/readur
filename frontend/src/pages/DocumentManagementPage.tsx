@@ -34,6 +34,7 @@ import {
   useTheme,
   Divider,
   InputAdornment,
+  Checkbox,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -850,7 +851,6 @@ const DocumentManagementPage: React.FC = () => {
                 select
                 value={failedDocumentsFilters.stage || ''}
                 onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, stage: e.target.value || undefined }))}
-                displayEmpty
                 fullWidth
               >
                 <MenuItem value="">All Stages</MenuItem>
@@ -868,7 +868,6 @@ const DocumentManagementPage: React.FC = () => {
                 select
                 value={failedDocumentsFilters.reason || ''}
                 onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, reason: e.target.value || undefined }))}
-                displayEmpty
                 fullWidth
               >
                 <MenuItem value="">All Reasons</MenuItem>
