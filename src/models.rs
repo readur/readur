@@ -315,13 +315,13 @@ pub struct DocumentResponse {
     /// Current status of OCR processing (pending, processing, completed, failed)
     pub ocr_status: Option<String>,
     /// Original file creation timestamp from source system
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub original_created_at: Option<DateTime<Utc>>,
     /// Original file modification timestamp from source system
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub original_modified_at: Option<DateTime<Utc>>,
     /// Additional metadata from source system (permissions, attributes, etc.)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub source_metadata: Option<serde_json::Value>,
 }
 
