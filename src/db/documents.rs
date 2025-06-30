@@ -1396,7 +1396,7 @@ impl Database {
                 r#"
                 DELETE FROM documents 
                 WHERE id = $1
-                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 "#,
             )
             .bind(document_id)
@@ -1432,7 +1432,7 @@ impl Database {
                 r#"
                 DELETE FROM documents 
                 WHERE id = $1 AND user_id = $2
-                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 "#,
             )
             .bind(document_id)
@@ -1479,7 +1479,7 @@ impl Database {
                 r#"
                 DELETE FROM documents 
                 WHERE id = ANY($1)
-                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 "#,
             )
             .bind(document_ids)
@@ -1515,7 +1515,7 @@ impl Database {
                 r#"
                 DELETE FROM documents 
                 WHERE id = ANY($1) AND user_id = $2
-                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash
+                RETURNING id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata
                 "#,
             )
             .bind(document_ids)
