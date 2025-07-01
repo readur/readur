@@ -4,6 +4,7 @@ pub mod ignored_files;
 pub mod labels;
 pub mod metrics;
 pub mod notifications;
+pub mod ocr;
 pub mod prometheus_metrics;
 pub mod queue;
 pub mod search;

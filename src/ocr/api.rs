@@ -7,33 +7,43 @@ use axum::{
     response::Json,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct OcrHealthResponse {
-    status: String,
-    tesseract_installed: bool,
-    available_languages: Vec<String>,
-    diagnostics: Option<String>,
-    errors: Vec<String>,
+    pub status: String,
+    pub tesseract_installed: bool,
+    pub available_languages: Vec<String>,
+    pub diagnostics: Option<String>,
+    pub errors: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct OcrErrorResponse {
-    error: String,
-    error_code: String,
-    details: Option<String>,
-    is_recoverable: bool,
+    pub error: String,
+    pub error_code: String,
+    pub details: Option<String>,
+    pub is_recoverable: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct OcrRequest {
-    file_path: String,
-    language: Option<String>,
-    use_fallback: Option<bool>,
+    pub file_path: String,
+    pub language: Option<String>,
+    pub use_fallback: Option<bool>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/ocr/health",
+    tag = "ocr",
+    responses(
+        (status = 200, description = "OCR service health status", body = OcrHealthResponse),
+        (status = 500, description = "OCR service is unhealthy", body = OcrErrorResponse)
+    )
+)]
 pub async fn health_check(
-    State(_state): State<AppState>,
+    State(_state): State<Arc<AppState>>,
 ) -> Result<Json<OcrHealthResponse>, (StatusCode, Json<OcrErrorResponse>)> {
     let service = EnhancedOcrService::new();
     let diagnostics = service.get_diagnostics().await;
@@ -72,8 +82,19 @@ pub async fn health_check(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/ocr/perform",
+    tag = "ocr",
+    request_body = OcrRequest,
+    responses(
+        (status = 200, description = "OCR text extraction successful", body = serde_json::Value),
+        (status = 400, description = "Bad request or invalid language", body = OcrErrorResponse),
+        (status = 500, description = "OCR processing failed", body = OcrErrorResponse)
+    )
+)]
 pub async fn perform_ocr(
-    State(_state): State<AppState>,
+    State(_state): State<Arc<AppState>>,
     Json(request): Json<OcrRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<OcrErrorResponse>)> {
     let service = EnhancedOcrService::new();
