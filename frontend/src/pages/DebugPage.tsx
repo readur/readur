@@ -6,7 +6,6 @@ import {
   Typography,
   TextField,
   Button,
-  Grid,
   Paper,
   Stepper,
   Step,
@@ -30,6 +29,7 @@ import {
   LinearProgress,
   Divider,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   ExpandMore as ExpandMoreIcon,
   BugReport as BugReportIcon,
