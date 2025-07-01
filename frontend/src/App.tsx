@@ -15,9 +15,10 @@ import DocumentDetailsPage from './pages/DocumentDetailsPage';
 import SettingsPage from './pages/SettingsPage';
 import SourcesPage from './pages/SourcesPage';
 import WatchFolderPage from './pages/WatchFolderPage';
-import FailedOcrPage from './pages/FailedOcrPage';
+import DocumentManagementPage from './pages/DocumentManagementPage';
 import LabelsPage from './pages/LabelsPage';
 import IgnoredFilesPage from './pages/IgnoredFilesPage';
+import DebugPage from './pages/DebugPage';
 
 function App(): React.ReactElement {
   const { user, loading } = useAuth();
@@ -75,8 +76,9 @@ function App(): React.ReactElement {
                     <Route path="/sources" element={<SourcesPage />} />
                     <Route path="/watch" element={<WatchFolderPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/failed-ocr" element={<FailedOcrPage />} />
+                    <Route path="/documents/management" element={<DocumentManagementPage />} />
                     <Route path="/ignored-files" element={<IgnoredFilesPage />} />
+                    <Route path="/debug" element={<DebugPage />} />
                     <Route path="/profile" element={<div>Profile Page - Coming Soon</div>} />
                   </Routes>
                 </AppLayout>

@@ -791,7 +791,7 @@ impl EnhancedOcrService {
     
     /// Extract text from PDF with size and time limits
     #[cfg(feature = "ocr")]
-    pub async fn extract_text_from_pdf(&self, file_path: &str, _settings: &Settings) -> Result<OcrResult> {
+    pub async fn extract_text_from_pdf(&self, file_path: &str, settings: &Settings) -> Result<OcrResult> {
         let start_time = std::time::Instant::now();
         info!("Extracting text from PDF: {}", file_path);
         
@@ -878,14 +878,198 @@ impl EnhancedOcrService {
         let processing_time = start_time.elapsed().as_millis() as u64;
         let word_count = self.count_words_safely(&trimmed_text);
         
+        // Debug logging to understand PDF extraction issues
+        debug!(
+            "PDF extraction debug - File: '{}' | Raw text length: {} | Trimmed text length: {} | Word count: {} | First 200 chars: {:?}",
+            file_path,
+            text.len(),
+            trimmed_text.len(),
+            word_count,
+            trimmed_text.chars().take(200).collect::<String>()
+        );
+        
+        // Smart detection: assess if text extraction quality is good enough
+        if self.is_text_extraction_quality_sufficient(&trimmed_text, word_count, file_size) {
+            info!("PDF text extraction successful for '{}', using extracted text", file_path);
+            Ok(OcrResult {
+                text: trimmed_text,
+                confidence: 95.0, // PDF text extraction is generally high confidence
+                processing_time_ms: processing_time,
+                word_count,
+                preprocessing_applied: vec!["PDF text extraction".to_string()],
+                processed_image_path: None,
+            })
+        } else {
+            info!("PDF text extraction insufficient for '{}' ({} words), falling back to OCR", file_path, word_count);
+            // Fall back to OCR using ocrmypdf
+            self.extract_text_from_pdf_with_ocr(file_path, settings, start_time).await
+        }
+    }
+    
+    /// Assess if text extraction quality is sufficient or if OCR fallback is needed
+    #[cfg(feature = "ocr")]
+    fn is_text_extraction_quality_sufficient(&self, text: &str, word_count: usize, file_size: u64) -> bool {
+        // If we got no words at all, definitely need OCR
+        if word_count == 0 {
+            return false;
+        }
+        
+        // For very small files, low word count might be normal
+        if file_size < 50_000 && word_count >= 1 {
+            return true;
+        }
+        
+        // Calculate word density (words per KB)
+        let file_size_kb = (file_size as f64) / 1024.0;
+        let word_density = (word_count as f64) / file_size_kb;
+        
+        // Reasonable thresholds based on typical PDF content:
+        // - Text-based PDFs typically have 50-200 words per KB
+        // - Below 5 words per KB suggests mostly images/scanned content
+        const MIN_WORD_DENSITY: f64 = 5.0;
+        const MIN_WORDS_FOR_LARGE_FILES: usize = 10;
+        
+        if word_density < MIN_WORD_DENSITY && word_count < MIN_WORDS_FOR_LARGE_FILES {
+            debug!("PDF appears to be image-based: {} words in {:.1} KB (density: {:.2} words/KB)", 
+                   word_count, file_size_kb, word_density);
+            return false;
+        }
+        
+        // Additional check: if text is mostly non-alphanumeric, might be extraction artifacts
+        let alphanumeric_chars = text.chars().filter(|c| c.is_alphanumeric()).count();
+        let alphanumeric_ratio = if text.len() > 0 {
+            (alphanumeric_chars as f64) / (text.len() as f64)
+        } else {
+            0.0
+        };
+        
+        // If less than 30% alphanumeric content, likely poor extraction
+        if alphanumeric_ratio < 0.3 {
+            debug!("PDF text has low alphanumeric content: {:.1}% ({} of {} chars)", 
+                   alphanumeric_ratio * 100.0, alphanumeric_chars, text.len());
+            return false;
+        }
+        
+        debug!("PDF text extraction quality sufficient: {} words, {:.2} words/KB, {:.1}% alphanumeric", 
+               word_count, word_density, alphanumeric_ratio * 100.0);
+        true
+    }
+    
+    /// Extract text from PDF using OCR (ocrmypdf) for image-based or poor-quality PDFs
+    #[cfg(feature = "ocr")]
+    async fn extract_text_from_pdf_with_ocr(&self, file_path: &str, settings: &Settings, start_time: std::time::Instant) -> Result<OcrResult> {
+        info!("Starting OCR extraction for PDF: {}", file_path);
+        
+        // Check if ocrmypdf is available
+        if !self.is_ocrmypdf_available().await {
+            return Err(anyhow!(
+                "ocrmypdf is not available on this system. To extract text from image-based PDFs like '{}', please install ocrmypdf. \
+                On Ubuntu/Debian: 'apt-get install ocrmypdf'. \
+                On macOS: 'brew install ocrmypdf'. \
+                Alternatively, convert the PDF to images and upload those instead.",
+                file_path
+            ));
+        }
+        
+        // Generate temporary file path for OCR'd PDF
+        let temp_ocr_filename = format!("ocr_{}_{}.pdf", 
+            std::process::id(), 
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
+        );
+        let temp_ocr_path = format!("{}/{}", self.temp_dir, temp_ocr_filename);
+        
+        // Run ocrmypdf to create searchable PDF
+        let ocrmypdf_result = tokio::time::timeout(
+            std::time::Duration::from_secs(300), // 5 minute timeout for OCR
+            tokio::task::spawn_blocking({
+                let file_path = file_path.to_string();
+                let temp_ocr_path = temp_ocr_path.clone();
+                move || {
+                    std::process::Command::new("ocrmypdf")
+                        .arg("--force-ocr")  // OCR even if text is detected
+                        .arg("-O2")          // Optimize level 2 (balanced quality/speed)
+                        .arg("--deskew")     // Correct skewed pages
+                        .arg("--clean")      // Clean up artifacts
+                        .arg("--language")
+                        .arg("eng")          // English language
+                        .arg(&file_path)
+                        .arg(&temp_ocr_path)
+                        .output()
+                }
+            })
+        ).await;
+        
+        let ocrmypdf_output = match ocrmypdf_result {
+            Ok(Ok(output)) => output?,
+            Ok(Err(e)) => return Err(anyhow!("Failed to join ocrmypdf task: {}", e)),
+            Err(_) => return Err(anyhow!("ocrmypdf timed out after 5 minutes for file '{}'", file_path)),
+        };
+        
+        if !ocrmypdf_output.status.success() {
+            let stderr = String::from_utf8_lossy(&ocrmypdf_output.stderr);
+            let stdout = String::from_utf8_lossy(&ocrmypdf_output.stdout);
+            return Err(anyhow!(
+                "ocrmypdf failed for '{}': Exit code {}\nStderr: {}\nStdout: {}",
+                file_path, ocrmypdf_output.status.code().unwrap_or(-1), stderr, stdout
+            ));
+        }
+        
+        // Extract text from the OCR'd PDF
+        let ocr_text_result = tokio::task::spawn_blocking({
+            let temp_ocr_path = temp_ocr_path.clone();
+            move || -> Result<String> {
+                let bytes = std::fs::read(&temp_ocr_path)?;
+                let text = pdf_extract::extract_text_from_mem(&bytes)?;
+                Ok(text.trim().to_string())
+            }
+        }).await??;
+        
+        // Clean up temporary file
+        let _ = tokio::fs::remove_file(&temp_ocr_path).await;
+        
+        let processing_time = start_time.elapsed().as_millis() as u64;
+        let word_count = self.count_words_safely(&ocr_text_result);
+        
+        info!("OCR extraction completed for '{}': {} words in {}ms", 
+              file_path, word_count, processing_time);
+        
         Ok(OcrResult {
-            text: trimmed_text,
-            confidence: 95.0, // PDF text extraction is generally high confidence
+            text: ocr_text_result,
+            confidence: 85.0, // OCR is generally lower confidence than direct text extraction
             processing_time_ms: processing_time,
             word_count,
-            preprocessing_applied: vec!["PDF text extraction".to_string()],
-            processed_image_path: None, // No image processing for PDF text extraction
+            preprocessing_applied: vec!["OCR via ocrmypdf".to_string()],
+            processed_image_path: None,
         })
+    }
+    
+    /// Check if ocrmypdf is available on the system
+    #[cfg(feature = "ocr")]
+    async fn is_ocrmypdf_available(&self) -> bool {
+        match tokio::process::Command::new("ocrmypdf")
+            .arg("--version")
+            .output()
+            .await
+        {
+            Ok(output) => output.status.success(),
+            Err(_) => false,
+        }
+    }
+    
+    #[cfg(not(feature = "ocr"))]
+    fn is_text_extraction_quality_sufficient(&self, _text: &str, _word_count: usize, _file_size: u64) -> bool {
+        // When OCR is disabled, always accept text extraction results
+        true
+    }
+    
+    #[cfg(not(feature = "ocr"))]
+    async fn is_ocrmypdf_available(&self) -> bool {
+        false // OCR feature not enabled
+    }
+    
+    #[cfg(not(feature = "ocr"))]
+    async fn extract_text_from_pdf_with_ocr(&self, file_path: &str, _settings: &Settings, _start_time: std::time::Instant) -> Result<OcrResult> {
+        Err(anyhow::anyhow!("OCR feature not enabled - cannot process image-based PDF: {}", file_path))
     }
     
     /// Resolve file path to actual location, handling both old and new directory structures
@@ -978,19 +1162,76 @@ impl EnhancedOcrService {
     
     /// Safely count words to prevent overflow on very large texts
     #[cfg(feature = "ocr")]
-    fn count_words_safely(&self, text: &str) -> usize {
+    pub fn count_words_safely(&self, text: &str) -> usize {
         // For very large texts, sample to estimate word count to prevent overflow
         if text.len() > 1_000_000 { // > 1MB of text
             // Sample first 100KB and extrapolate
             let sample_size = 100_000;
             let sample_text = &text[..sample_size.min(text.len())];
-            let sample_words = sample_text.split_whitespace().count();
+            let sample_words = self.count_words_in_text(sample_text);
             let estimated_total = (sample_words as f64 * (text.len() as f64 / sample_size as f64)) as usize;
             
             // Cap at reasonable maximum to prevent display issues
             estimated_total.min(10_000_000) // Max 10M words
         } else {
-            text.split_whitespace().count()
+            self.count_words_in_text(text)
+        }
+    }
+
+    #[cfg(feature = "ocr")]
+    fn count_words_in_text(&self, text: &str) -> usize {
+        let whitespace_words = text.split_whitespace().count();
+        
+        // If we have exactly 1 "word" but it's very long (likely continuous text), try enhanced detection
+        // OR if we have no whitespace words but text exists
+        let is_continuous_text = whitespace_words == 1 && text.len() > 15; // 15+ chars suggests it might be continuous
+        let is_no_words = whitespace_words == 0 && !text.trim().is_empty();
+        
+        if is_continuous_text || is_no_words {
+            // Count total alphanumeric characters first
+            let alphanumeric_chars = text.chars().filter(|c| c.is_alphanumeric()).count();
+            
+            // If no alphanumeric content, it's pure punctuation/symbols
+            if alphanumeric_chars == 0 {
+                return 0;
+            }
+            
+            // For continuous text, look for word boundaries using multiple strategies
+            let mut word_count = 0;
+            
+            // Strategy 1: Count transitions from lowercase to uppercase (camelCase detection)
+            let chars: Vec<char> = text.chars().collect();
+            let mut camel_transitions = 0;
+            
+            for i in 1..chars.len() {
+                let prev_char = chars[i-1];
+                let curr_char = chars[i];
+                
+                // Count transitions from lowercase letter to uppercase letter
+                if prev_char.is_lowercase() && curr_char.is_uppercase() {
+                    camel_transitions += 1;
+                }
+                // Count transitions from letter to digit or digit to letter
+                else if (prev_char.is_alphabetic() && curr_char.is_numeric()) ||
+                        (prev_char.is_numeric() && curr_char.is_alphabetic()) {
+                    camel_transitions += 1;
+                }
+            }
+            
+            // If we found camelCase transitions, estimate words
+            if camel_transitions > 0 {
+                word_count = camel_transitions + 1; // +1 for the first word
+            }
+            
+            // Strategy 2: If no camelCase detected, estimate based on character count
+            if word_count == 0 {
+                // Estimate based on typical word length (4-6 characters per word)
+                word_count = (alphanumeric_chars / 5).max(1);
+            }
+            
+            word_count
+        } else {
+            whitespace_words
         }
     }
     

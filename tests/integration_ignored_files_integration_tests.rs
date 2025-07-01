@@ -356,6 +356,9 @@ async fn test_create_ignored_file_from_document() -> Result<()> {
         updated_at: chrono::Utc::now(),
         user_id,
         file_hash: Some("document_hash_123".to_string()),
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
     };
     
     // Insert document into database

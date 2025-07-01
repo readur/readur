@@ -59,6 +59,9 @@ fn create_test_document(user_id: Uuid, filename: &str, file_hash: Option<String>
         updated_at: Utc::now(),
         user_id,
         file_hash,
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
     }
 }
 
@@ -248,6 +251,9 @@ async fn test_file_service_create_document_with_hash() {
         "application/pdf",
         user_id,
         Some(test_hash.to_string()),
+        None, // original_created_at
+        None, // original_modified_at
+        None, // source_metadata
     );
 
     assert_eq!(document.filename, "test.pdf");
@@ -271,6 +277,9 @@ async fn test_file_service_create_document_without_hash() {
         "application/pdf",
         user_id,
         None,
+        None, // original_created_at
+        None, // original_modified_at
+        None, // source_metadata
     );
 
     assert_eq!(document.filename, "test.pdf");

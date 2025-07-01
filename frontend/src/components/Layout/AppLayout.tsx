@@ -37,6 +37,7 @@ import {
   Block as BlockIcon,
   Api as ApiIcon,
   ManageAccounts as ManageIcon,
+  BugReport as BugReportIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -70,8 +71,9 @@ const navigationItems: NavigationItem[] = [
   { text: 'Labels', icon: LabelIcon, path: '/labels' },
   { text: 'Sources', icon: StorageIcon, path: '/sources' },
   { text: 'Watch Folder', icon: FolderIcon, path: '/watch' },
-  { text: 'Document Management', icon: ManageIcon, path: '/failed-ocr' },
+  { text: 'Document Management', icon: ManageIcon, path: '/documents/management' },
   { text: 'Ignored Files', icon: BlockIcon, path: '/ignored-files' },
+  { text: 'Debug', icon: BugReportIcon, path: '/debug' },
 ];
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {

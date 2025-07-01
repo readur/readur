@@ -239,6 +239,9 @@ impl FileProcessingTestClient {
                                 ocr_word_count: doc.ocr_word_count,
                                 ocr_processing_time_ms: doc.ocr_processing_time_ms,
                                 ocr_status: doc.ocr_status.clone(),
+                                original_created_at: None,
+                                original_modified_at: None,
+                                source_metadata: None,
                             };
                             return Ok(doc_copy);
                         }

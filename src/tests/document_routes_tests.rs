@@ -60,6 +60,9 @@ mod document_routes_deletion_tests {
             updated_at: Utc::now(),
             user_id,
             file_hash: Some("hash123".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_metadata: None,
         }
     }
 
@@ -394,6 +397,9 @@ mod document_routes_deletion_tests {
                 updated_at: Utc::now(),
                 user_id,
                 file_hash: Some("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string()),
+                original_created_at: None,
+                original_modified_at: None,
+                source_metadata: None,
             }
         }
 

@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 use std::str;
+use serde_json;
 
 use crate::models::FileInfo;
 
@@ -15,6 +16,12 @@ struct PropFindResponse {
     content_type: Option<String>,
     etag: Option<String>,
     is_collection: bool,
+    creation_date: Option<String>,
+    owner: Option<String>,
+    group: Option<String>,
+    permissions: Option<String>,
+    owner_display_name: Option<String>,
+    metadata: Option<serde_json::Value>,
 }
 
 pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
@@ -85,13 +92,59 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                             "getetag" => {
                                 resp.etag = Some(normalize_etag(&text));
                             }
+                            "creationdate" => {
+                                resp.creation_date = Some(text.trim().to_string());
+                            }
+                            "owner" => {
+                                resp.owner = Some(text.trim().to_string());
+                            }
+                            "group" => {
+                                resp.group = Some(text.trim().to_string());
+                            }
                             "status" if in_propstat => {
                                 // Check if status is 200 OK
                                 if text.contains("200") {
                                     status_ok = true;
                                 }
                             }
-                            _ => {}
+                            _ => {
+                                // Store any other properties as generic metadata
+                                // This handles vendor-specific properties from any WebDAV server
+                                if !text.trim().is_empty() && in_prop {
+                                    if resp.metadata.is_none() {
+                                        resp.metadata = Some(serde_json::Value::Object(serde_json::Map::new()));
+                                    }
+                                    
+                                    if let Some(serde_json::Value::Object(ref mut map)) = resp.metadata {
+                                        // Special handling for known properties
+                                        match current_element.as_str() {
+                                            "permissions" | "oc:permissions" => {
+                                                resp.permissions = Some(text.trim().to_string());
+                                                map.insert("permissions_raw".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "fileid" | "oc:fileid" => {
+                                                map.insert("file_id".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "owner-id" | "oc:owner-id" => {
+                                                map.insert("owner_id".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "owner-display-name" | "oc:owner-display-name" => {
+                                                resp.owner_display_name = Some(text.trim().to_string());
+                                                map.insert("owner_display_name".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "has-preview" | "nc:has-preview" => {
+                                                if let Ok(val) = text.trim().parse::<bool>() {
+                                                    map.insert("has_preview".to_string(), serde_json::Value::Bool(val));
+                                                }
+                                            }
+                                            _ => {
+                                                // Store any other property as-is
+                                                map.insert(current_element.clone(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -120,6 +173,33 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                                     .unwrap_or_else(|_| std::borrow::Cow::Borrowed(&name))
                                     .to_string();
                                 
+                                // Parse creation date
+                                let created_at = resp.creation_date
+                                    .as_ref()
+                                    .and_then(|d| parse_http_date(d));
+                                
+                                // Parse permissions (Nextcloud/ownCloud format)
+                                let permissions_int = resp.permissions
+                                    .as_ref()
+                                    .and_then(|p| {
+                                        // Nextcloud permissions are a string like "RGDNVW"
+                                        // Convert to Unix-style octal permissions
+                                        if p.chars().all(|c| c.is_uppercase()) {
+                                            // This is Nextcloud format
+                                            let mut perms = 0u32;
+                                            if p.contains('R') { perms |= 0o444; } // Read
+                                            if p.contains('W') { perms |= 0o222; } // Write
+                                            if p.contains('D') { perms |= 0o111; } // Delete (execute-like)
+                                            Some(perms)
+                                        } else {
+                                            // Try to parse as numeric
+                                            p.parse().ok()
+                                        }
+                                    });
+                                
+                                // Use the metadata collected during parsing
+                                let metadata = resp.metadata;
+                                
                                 let file_info = FileInfo {
                                     path: resp.href.clone(),
                                     name,
@@ -128,6 +208,11 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                                     last_modified: parse_http_date(&resp.last_modified.unwrap_or_default()),
                                     etag: resp.etag.unwrap_or_else(|| format!("\"{}\"", uuid::Uuid::new_v4())),
                                     is_directory: false,
+                                    created_at,
+                                    permissions: permissions_int,
+                                    owner: resp.owner.or(resp.owner_display_name),
+                                    group: resp.group,
+                                    metadata,
                                 };
                                 
                                 files.push(file_info);

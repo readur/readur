@@ -63,8 +63,10 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/ocr", get(get_document_ocr))
         .route("/{id}/processed-image", get(get_processed_image))
         .route("/{id}/retry-ocr", post(retry_ocr))
+        .route("/{id}/debug", get(get_document_debug_info))
         .route("/duplicates", get(get_user_duplicates))
         .route("/failed", get(get_failed_documents))
+        .route("/failed/{id}/view", get(view_failed_document))
         .route("/delete-low-confidence", post(delete_low_confidence_documents))
         .route("/delete-failed-ocr", post(delete_failed_ocr_documents))
 }
@@ -120,6 +122,9 @@ async fn get_document_by_id(
         ocr_word_count: document.ocr_word_count,
         ocr_processing_time_ms: document.ocr_processing_time_ms,
         ocr_status: document.ocr_status,
+        original_created_at: document.original_created_at,
+        original_modified_at: document.original_modified_at,
+        source_metadata: document.source_metadata,
     };
     
     Ok(Json(response))
@@ -702,6 +707,560 @@ async fn retry_ocr(
 
 #[utoipa::path(
     get,
+    path = "/api/documents/{id}/debug",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Document ID")
+    ),
+    responses(
+        (status = 200, description = "Debug information for document processing pipeline", body = String),
+        (status = 404, description = "Document not found"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn get_document_debug_info(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Path(document_id): Path<uuid::Uuid>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    tracing::info!("Starting debug analysis for document {} by user {}", document_id, auth_user.user.id);
+    
+    // Get the document
+    let document = match state
+        .db
+        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
+        .await
+    {
+        Ok(Some(doc)) => {
+            tracing::info!("Found document: {} ({})", doc.filename, doc.mime_type);
+            doc
+        }
+        Ok(None) => {
+            tracing::warn!("Document {} not found for user {}", document_id, auth_user.user.id);
+            return Err(StatusCode::NOT_FOUND);
+        }
+        Err(e) => {
+            tracing::error!("Database error fetching document {}: {}", document_id, e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Get user settings
+    tracing::info!("Fetching user settings for user {}", auth_user.user.id);
+    let settings = match state
+        .db
+        .get_user_settings(auth_user.user.id)
+        .await
+    {
+        Ok(Some(s)) => {
+            tracing::info!("Found user settings: OCR enabled={}, min_confidence={}", s.enable_background_ocr, s.ocr_min_confidence);
+            s
+        }
+        Ok(None) => {
+            tracing::info!("No user settings found, using defaults");
+            crate::models::Settings::default()
+        }
+        Err(e) => {
+            tracing::error!("Error fetching user settings: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Get OCR queue history for this document
+    tracing::info!("Fetching OCR queue history for document {}", document_id);
+    let queue_history = match sqlx::query(
+        r#"
+        SELECT id, status, priority, created_at, started_at, completed_at, 
+               error_message, attempts, worker_id
+        FROM ocr_queue 
+        WHERE document_id = $1 
+        ORDER BY created_at DESC
+        LIMIT 10
+        "#
+    )
+    .bind(document_id)
+    .fetch_all(state.db.get_pool())
+    .await {
+        Ok(history) => {
+            tracing::info!("Queue history query successful, found {} entries", history.len());
+            history
+        },
+        Err(e) => {
+            tracing::error!("Queue history query error: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Get processed image info if it exists
+    tracing::info!("Fetching processed image for document {}", document_id);
+    let processed_image = match state
+        .db
+        .get_processed_image_by_document_id(document_id, auth_user.user.id)
+        .await {
+        Ok(Some(img)) => {
+            tracing::info!("Found processed image for document {}", document_id);
+            Some(img)
+        },
+        Ok(None) => {
+            tracing::info!("No processed image found for document {}", document_id);
+            None
+        },
+        Err(e) => {
+            tracing::warn!("Error fetching processed image for document {}: {}", document_id, e);
+            None
+        }
+    };
+
+    // Get failed document record if it exists
+    tracing::info!("Fetching failed document record for document {}", document_id);
+    let failed_document = match sqlx::query(
+        r#"
+        SELECT failure_reason, failure_stage, error_message, retry_count, 
+               last_retry_at, created_at, content, ocr_text, ocr_confidence,
+               ocr_word_count, ocr_processing_time_ms
+        FROM failed_documents 
+        WHERE id = $1 OR existing_document_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#
+    )
+    .bind(document_id)
+    .fetch_optional(state.db.get_pool())
+    .await {
+        Ok(result) => {
+            tracing::info!("Failed document query successful, found: {}", result.is_some());
+            result
+        },
+        Err(e) => {
+            tracing::error!("Failed document query error: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Get detailed OCR processing logs and attempts
+    tracing::info!("Fetching detailed OCR processing logs for document {}", document_id);
+    let ocr_processing_logs = match sqlx::query(
+        r#"
+        SELECT id, status, priority, created_at, started_at, completed_at,
+               error_message, attempts, worker_id, processing_time_ms, file_size
+        FROM ocr_queue 
+        WHERE document_id = $1 
+        ORDER BY created_at ASC
+        "#
+    )
+    .bind(document_id)
+    .fetch_all(state.db.get_pool())
+    .await {
+        Ok(logs) => {
+            tracing::info!("OCR processing logs query successful, found {} entries", logs.len());
+            logs
+        },
+        Err(e) => {
+            tracing::error!("OCR processing logs query error: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // File service for file info
+    let file_service = FileService::new(state.config.upload_path.clone());
+    
+    // Check if file exists
+    let file_exists = tokio::fs::metadata(&document.file_path).await.is_ok();
+    let file_metadata = if file_exists {
+        tokio::fs::metadata(&document.file_path).await.ok()
+    } else {
+        None
+    };
+
+    // Try to analyze file content for additional diagnostic info
+    tracing::info!("Analyzing file content for document {} (exists: {})", document_id, file_exists);
+    let file_analysis = if file_exists {
+        match analyze_file_content(&document.file_path, &document.mime_type).await {
+            Ok(analysis) => {
+                tracing::info!("File analysis successful for document {}", document_id);
+                analysis
+            },
+            Err(e) => {
+                tracing::warn!("Failed to analyze file content for {}: {}", document_id, e);
+                FileAnalysis {
+                    error_details: Some(format!("File analysis failed: {}", e)),
+                    ..Default::default()
+                }
+            }
+        }
+    } else {
+        tracing::warn!("File does not exist for document {}, skipping analysis", document_id);
+        FileAnalysis::default()
+    };
+
+    // Pipeline steps analysis
+    let mut pipeline_steps = Vec::new();
+
+    // Step 1: File Upload & Ingestion
+    pipeline_steps.push(serde_json::json!({
+        "step": 1,
+        "name": "File Upload & Ingestion",
+        "status": "completed", // Document exists if we got this far
+        "details": {
+            "filename": document.filename,
+            "original_filename": document.original_filename,
+            "file_size": document.file_size,
+            "mime_type": document.mime_type,
+            "file_exists": file_exists,
+            "file_path": document.file_path,
+            "created_at": document.created_at,
+            "file_metadata": file_metadata.as_ref().map(|m| serde_json::json!({
+                "size": m.len(),
+                "modified": m.modified().ok(),
+                "is_file": m.is_file(),
+                "is_dir": m.is_dir()
+            })),
+            "file_analysis": file_analysis
+        },
+        "success": true,
+        "error": None::<String>
+    }));
+
+    // Step 2: OCR Queue Enrollment
+    let queue_enrollment_status = if queue_history.is_empty() {
+        if settings.enable_background_ocr {
+            "not_queued"
+        } else {
+            "ocr_disabled"
+        }
+    } else {
+        "queued"
+    };
+
+    pipeline_steps.push(serde_json::json!({
+        "step": 2,
+        "name": "OCR Queue Enrollment",
+        "status": queue_enrollment_status,
+        "details": {
+            "user_ocr_enabled": settings.enable_background_ocr,
+            "queue_entries_count": queue_history.len(),
+            "queue_history": queue_history.iter().map(|row| serde_json::json!({
+                "id": row.get::<uuid::Uuid, _>("id"),
+                "status": row.get::<String, _>("status"),
+                "priority": row.get::<i32, _>("priority"),
+                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+                "started_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("started_at"),
+                "completed_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("completed_at"),
+                "error_message": row.get::<Option<String>, _>("error_message"),
+                "attempts": row.get::<i32, _>("attempts"),
+                "worker_id": row.get::<Option<String>, _>("worker_id")
+            })).collect::<Vec<_>>()
+        },
+        "success": !queue_history.is_empty() || !settings.enable_background_ocr,
+        "error": if !settings.enable_background_ocr && queue_history.is_empty() {
+            Some("OCR processing is disabled in user settings")
+        } else { None }
+    }));
+
+    // Step 3: OCR Processing
+    let ocr_status = document.ocr_status.as_deref().unwrap_or("not_started");
+    let ocr_success = matches!(ocr_status, "completed");
+    
+    pipeline_steps.push(serde_json::json!({
+        "step": 3,
+        "name": "OCR Text Extraction",
+        "status": ocr_status,
+        "details": {
+            "ocr_text_length": document.ocr_text.as_ref().map(|t| t.len()).unwrap_or(0),
+            "ocr_confidence": document.ocr_confidence,
+            "ocr_word_count": document.ocr_word_count,
+            "ocr_processing_time_ms": document.ocr_processing_time_ms,
+            "ocr_completed_at": document.ocr_completed_at,
+            "ocr_error": document.ocr_error,
+            "has_processed_image": processed_image.is_some(),
+            "processed_image_info": processed_image.as_ref().map(|pi| serde_json::json!({
+                "image_path": pi.processed_image_path,
+                "image_width": pi.image_width,
+                "image_height": pi.image_height,
+                "file_size": pi.file_size,
+                "processing_parameters": pi.processing_parameters,
+                "processing_steps": pi.processing_steps,
+                "created_at": pi.created_at
+            }))
+        },
+        "success": ocr_success,
+        "error": document.ocr_error.clone()
+    }));
+
+    // Step 4: Quality Validation
+    let quality_passed = if let Some(confidence) = document.ocr_confidence {
+        confidence >= settings.ocr_min_confidence && document.ocr_word_count.unwrap_or(0) > 0
+    } else {
+        false
+    };
+
+    pipeline_steps.push(serde_json::json!({
+        "step": 4,
+        "name": "OCR Quality Validation",
+        "status": if ocr_success {
+            if quality_passed { "passed" } else { "failed" }
+        } else {
+            "not_reached"
+        },
+        "details": {
+            "quality_thresholds": {
+                "min_confidence": settings.ocr_min_confidence,
+                "brightness_threshold": settings.ocr_quality_threshold_brightness,
+                "contrast_threshold": settings.ocr_quality_threshold_contrast,
+                "noise_threshold": settings.ocr_quality_threshold_noise,
+                "sharpness_threshold": settings.ocr_quality_threshold_sharpness
+            },
+            "actual_values": {
+                "confidence": document.ocr_confidence,
+                "word_count": document.ocr_word_count,
+                "processed_image_available": processed_image.is_some(),
+                "processing_parameters": processed_image.as_ref().map(|pi| &pi.processing_parameters)
+            },
+            "quality_checks": {
+                "confidence_check": document.ocr_confidence.map(|c| c >= settings.ocr_min_confidence),
+                "word_count_check": document.ocr_word_count.map(|w| w > 0),
+                "processed_image_available": processed_image.is_some()
+            }
+        },
+        "success": quality_passed,
+        "error": if !quality_passed && ocr_success {
+            Some(format!("Quality validation failed: confidence {:.1}% (required: {:.1}%), words: {}", 
+                document.ocr_confidence.unwrap_or(0.0),
+                settings.ocr_min_confidence,
+                document.ocr_word_count.unwrap_or(0)
+            ))
+        } else { None }
+    }));
+
+    // Overall summary
+    let overall_status = if quality_passed {
+        "success"
+    } else if matches!(ocr_status, "failed") {
+        "failed"
+    } else if matches!(ocr_status, "processing") {
+        "processing"
+    } else if matches!(ocr_status, "pending") {
+        "pending"
+    } else {
+        "not_started"
+    };
+
+    Ok(Json(serde_json::json!({
+        "document_id": document_id,
+        "filename": document.filename,
+        "overall_status": overall_status,
+        "pipeline_steps": pipeline_steps,
+        "failed_document_info": failed_document.as_ref().map(|row| serde_json::json!({
+            "failure_reason": row.get::<String, _>("failure_reason"),
+            "failure_stage": row.get::<String, _>("failure_stage"),
+            "error_message": row.get::<Option<String>, _>("error_message"),
+            "retry_count": row.get::<Option<i32>, _>("retry_count"),
+            "last_retry_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_retry_at"),
+            "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "content_preview": row.get::<Option<String>, _>("content").map(|c| 
+                c.chars().take(200).collect::<String>()
+            ),
+            "failed_ocr_text": row.get::<Option<String>, _>("ocr_text"),
+            "failed_ocr_confidence": row.get::<Option<f32>, _>("ocr_confidence"),
+            "failed_ocr_word_count": row.get::<Option<i32>, _>("ocr_word_count"),
+            "failed_ocr_processing_time_ms": row.get::<Option<i32>, _>("ocr_processing_time_ms")
+        })),
+        "user_settings": {
+            "enable_background_ocr": settings.enable_background_ocr,
+            "ocr_min_confidence": settings.ocr_min_confidence,
+            "max_file_size_mb": settings.max_file_size_mb,
+            "quality_thresholds": {
+                "brightness": settings.ocr_quality_threshold_brightness,
+                "contrast": settings.ocr_quality_threshold_contrast,
+                "noise": settings.ocr_quality_threshold_noise,
+                "sharpness": settings.ocr_quality_threshold_sharpness
+            }
+        },
+        "debug_timestamp": chrono::Utc::now(),
+        "file_analysis": file_analysis,
+        "detailed_processing_logs": ocr_processing_logs.iter().map(|row| serde_json::json!({
+            "id": row.get::<uuid::Uuid, _>("id"),
+            "status": row.get::<String, _>("status"),
+            "priority": row.get::<i32, _>("priority"),
+            "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "started_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("started_at"),
+            "completed_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("completed_at"),
+            "error_message": row.get::<Option<String>, _>("error_message"),
+            "attempts": row.get::<i32, _>("attempts"),
+            "worker_id": row.get::<Option<String>, _>("worker_id"),
+            "processing_time_ms": row.get::<Option<i32>, _>("processing_time_ms"),
+            "file_size": row.get::<Option<i64>, _>("file_size"),
+            // Calculate processing duration if both timestamps are available
+            "processing_duration_ms": if let (Some(started), Some(completed)) = (
+                row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("started_at"),
+                row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("completed_at")
+            ) {
+                Some((completed.timestamp_millis() - started.timestamp_millis()) as i32)
+            } else {
+                row.get::<Option<i32>, _>("processing_time_ms")
+            },
+            // Calculate queue wait time
+            "queue_wait_time_ms": if let Some(started) = row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("started_at") {
+                let created = row.get::<chrono::DateTime<chrono::Utc>, _>("created_at");
+                Some((started.timestamp_millis() - created.timestamp_millis()) as i32)
+            } else {
+                None::<i32>
+            }
+        })).collect::<Vec<_>>()
+    })))
+}
+
+#[derive(Debug, Default, serde::Serialize)]
+struct FileAnalysis {
+    file_type: String,
+    file_size_bytes: u64,
+    is_readable: bool,
+    pdf_info: Option<PdfAnalysis>,
+    text_preview: Option<String>,
+    error_details: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct PdfAnalysis {
+    is_valid_pdf: bool,
+    page_count: Option<i32>,
+    has_text_content: bool,
+    has_images: bool,
+    is_encrypted: bool,
+    pdf_version: Option<String>,
+    font_count: usize,
+    text_extraction_error: Option<String>,
+    estimated_text_length: usize,
+}
+
+async fn analyze_file_content(file_path: &str, mime_type: &str) -> Result<FileAnalysis, Box<dyn std::error::Error + Send + Sync>> {
+    let mut analysis = FileAnalysis {
+        file_type: mime_type.to_string(),
+        ..Default::default()
+    };
+
+    // Try to read file size
+    if let Ok(metadata) = tokio::fs::metadata(file_path).await {
+        analysis.file_size_bytes = metadata.len();
+    }
+
+    // Try to read the file
+    let file_content = match tokio::fs::read(file_path).await {
+        Ok(content) => {
+            analysis.is_readable = true;
+            content
+        }
+        Err(e) => {
+            analysis.error_details = Some(format!("Failed to read file: {}", e));
+            return Ok(analysis);
+        }
+    };
+
+    // Analyze based on file type
+    if mime_type.contains("pdf") {
+        analysis.pdf_info = Some(analyze_pdf_content(&file_content).await);
+    } else if mime_type.starts_with("text/") {
+        // For text files, show a preview
+        match String::from_utf8(file_content.clone()) {
+            Ok(text) => {
+                analysis.text_preview = Some(text.chars().take(500).collect());
+            }
+            Err(e) => {
+                analysis.error_details = Some(format!("Failed to decode text file: {}", e));
+            }
+        }
+    }
+
+    Ok(analysis)
+}
+
+async fn analyze_pdf_content(content: &[u8]) -> PdfAnalysis {
+    use std::panic;
+
+    let mut analysis = PdfAnalysis {
+        is_valid_pdf: false,
+        page_count: None,
+        has_text_content: false,
+        has_images: false,
+        is_encrypted: false,
+        pdf_version: None,
+        font_count: 0,
+        text_extraction_error: None,
+        estimated_text_length: 0,
+    };
+
+    // Check PDF header
+    if content.len() < 8 {
+        analysis.text_extraction_error = Some("File too small to be a valid PDF".to_string());
+        return analysis;
+    }
+
+    if !content.starts_with(b"%PDF-") {
+        analysis.text_extraction_error = Some("File does not start with PDF header".to_string());
+        return analysis;
+    }
+
+    analysis.is_valid_pdf = true;
+
+    // Extract PDF version from header
+    if content.len() >= 8 {
+        if let Ok(header) = std::str::from_utf8(&content[0..8]) {
+            if let Some(version) = header.strip_prefix("%PDF-") {
+                analysis.pdf_version = Some(version.to_string());
+            }
+        }
+    }
+
+    // Try to extract text using pdf_extract (same as the main OCR pipeline)
+    let text_result = panic::catch_unwind(|| {
+        pdf_extract::extract_text_from_mem(content)
+    });
+
+    match text_result {
+        Ok(Ok(text)) => {
+            analysis.has_text_content = !text.trim().is_empty();
+            analysis.estimated_text_length = text.len();
+            
+            // Count words for comparison with OCR results
+            let word_count = text.split_whitespace().count();
+            if word_count == 0 && text.len() > 0 {
+                analysis.text_extraction_error = Some("PDF contains characters but no extractable words".to_string());
+            }
+        }
+        Ok(Err(e)) => {
+            analysis.text_extraction_error = Some(format!("PDF text extraction failed: {}", e));
+        }
+        Err(_) => {
+            analysis.text_extraction_error = Some("PDF text extraction panicked (likely corrupted PDF)".to_string());
+        }
+    }
+
+    // Basic PDF structure analysis
+    let content_str = String::from_utf8_lossy(content);
+    
+    // Check for encryption
+    analysis.is_encrypted = content_str.contains("/Encrypt");
+    
+    // Check for images
+    analysis.has_images = content_str.contains("/Image") || content_str.contains("/XObject");
+    
+    // Estimate page count (rough)
+    let page_matches = content_str.matches("/Type /Page").count();
+    if page_matches > 0 {
+        analysis.page_count = Some(page_matches as i32);
+    }
+
+    // Count fonts (rough)
+    analysis.font_count = content_str.matches("/Type /Font").count();
+
+    analysis
+}
+
+#[utoipa::path(
+    get,
     path = "/api/documents/failed-ocr",
     tag = "documents",
     security(
@@ -1018,6 +1577,77 @@ async fn get_failed_documents(
     });
     
     Ok(Json(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/documents/failed/{id}/view",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Failed Document ID")
+    ),
+    responses(
+        (status = 200, description = "Failed document content for viewing in browser"),
+        (status = 404, description = "Failed document not found or file deleted"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+async fn view_failed_document(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Path(failed_document_id): Path<uuid::Uuid>,
+) -> Result<Response, StatusCode> {
+    // Get failed document from database
+    let row = sqlx::query(
+        r#"
+        SELECT file_path, filename, mime_type, user_id
+        FROM failed_documents 
+        WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)
+        "#
+    )
+    .bind(failed_document_id)
+    .bind(if auth_user.user.role == crate::models::UserRole::Admin { 
+        None 
+    } else { 
+        Some(auth_user.user.id) 
+    })
+    .fetch_optional(&state.db.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+    
+    let file_path: Option<String> = row.get("file_path");
+    let filename: String = row.get("filename");
+    let mime_type: Option<String> = row.get("mime_type");
+    
+    // Check if file_path exists (some failed documents might not have been saved)
+    let file_path = file_path.ok_or(StatusCode::NOT_FOUND)?;
+    
+    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_data = file_service
+        .read_file(&file_path)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?; // File was deleted or moved
+    
+    // Determine content type from mime_type or file extension
+    let content_type = mime_type
+        .unwrap_or_else(|| {
+            mime_guess::from_path(&filename)
+                .first_or_octet_stream()
+                .to_string()
+        });
+    
+    let response = Response::builder()
+        .header(CONTENT_TYPE, content_type)
+        .header("Content-Length", file_data.len())
+        .header("Content-Disposition", format!("inline; filename=\"{}\"", filename))
+        .body(file_data.into())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    Ok(response)
 }
 
 async fn calculate_estimated_wait_time(priority: i32) -> i64 {

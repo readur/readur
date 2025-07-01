@@ -29,6 +29,11 @@ fn create_test_file_info(name: &str, path: &str, content: &[u8]) -> FileInfo {
         etag: "test-etag".to_string(),
         mime_type: "application/pdf".to_string(),
         is_directory: false,
+        created_at: None,
+        permissions: None,
+        owner: None,
+        group: None,
+        metadata: None,
     }
 }
 
@@ -54,6 +59,9 @@ fn create_test_document(user_id: Uuid, filename: &str, file_hash: String) -> Doc
         updated_at: Utc::now(),
         user_id,
         file_hash: Some(file_hash),
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
     }
 }
 

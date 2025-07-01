@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use tracing::{debug, error, info, warn};
+use serde_json;
 
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
@@ -149,6 +150,32 @@ impl S3Service {
 
                                 let mime_type = Self::get_mime_type(&extension);
 
+                                // Build additional metadata from S3 object properties
+                                let mut metadata_map = serde_json::Map::new();
+                                
+                                // Add S3-specific metadata
+                                if let Some(storage_class) = &object.storage_class {
+                                    metadata_map.insert("storage_class".to_string(), serde_json::Value::String(storage_class.as_str().to_string()));
+                                }
+                                
+                                if let Some(owner) = &object.owner {
+                                    if let Some(display_name) = &owner.display_name {
+                                        metadata_map.insert("owner_display_name".to_string(), serde_json::Value::String(display_name.clone()));
+                                    }
+                                    if let Some(id) = &owner.id {
+                                        metadata_map.insert("owner_id".to_string(), serde_json::Value::String(id.clone()));
+                                    }
+                                }
+                                
+                                // Store the S3 key for reference
+                                metadata_map.insert("s3_key".to_string(), serde_json::Value::String(key.clone()));
+                                
+                                // Add bucket name for reference
+                                metadata_map.insert("s3_bucket".to_string(), serde_json::Value::String(self.config.bucket_name.clone()));
+                                
+                                // If we have region info, add it
+                                metadata_map.insert("s3_region".to_string(), serde_json::Value::String(self.config.region.clone()));
+                                
                                 let file_info = FileInfo {
                                     path: key.clone(),
                                     name: file_name,
@@ -157,6 +184,11 @@ impl S3Service {
                                     last_modified,
                                     etag,
                                     is_directory: false,
+                                    created_at: None, // S3 doesn't provide creation time, only last modified
+                                    permissions: None, // S3 uses different permission model (ACLs/policies)
+                                    owner: object.owner.as_ref().and_then(|o| o.display_name.clone()),
+                                    group: None, // S3 doesn't have Unix-style groups
+                                    metadata: if metadata_map.is_empty() { None } else { Some(serde_json::Value::Object(metadata_map)) },
                                 };
 
                                 files.push(file_info);
