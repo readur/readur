@@ -584,23 +584,33 @@ impl WebDAVService {
     }
     
     /// Check if a path is a direct child of a directory (not nested deeper)
-    fn is_direct_child(&self, child_path: &str, parent_path: &str) -> bool {
-        if !child_path.starts_with(parent_path) {
+    pub fn is_direct_child(&self, child_path: &str, parent_path: &str) -> bool {
+        // Normalize paths by removing trailing slashes
+        let child_normalized = child_path.trim_end_matches('/');
+        let parent_normalized = parent_path.trim_end_matches('/');
+        
+        if !child_normalized.starts_with(parent_normalized) {
+            return false;
+        }
+        
+        // Same path is not a direct child of itself
+        if child_normalized == parent_normalized {
             return false;
         }
         
         // Handle root directory case
-        if parent_path.is_empty() || parent_path == "/" {
-            return !child_path.trim_start_matches('/').contains('/');
+        if parent_normalized.is_empty() || parent_normalized == "/" {
+            let child_without_leading_slash = child_normalized.trim_start_matches('/');
+            return !child_without_leading_slash.is_empty() && !child_without_leading_slash.contains('/');
         }
         
         // Remove parent path prefix and check if remainder has exactly one more path segment
-        let remaining = child_path.strip_prefix(parent_path)
+        let remaining = child_normalized.strip_prefix(parent_normalized)
             .unwrap_or("")
             .trim_start_matches('/');
             
         // Direct child means no more slashes in the remaining path
-        !remaining.contains('/')
+        !remaining.contains('/') && !remaining.is_empty()
     }
     
     /// Check subdirectories individually for changes when parent directory is unchanged
@@ -719,7 +729,7 @@ impl WebDAVService {
         self.parse_directory_etag(&response_text)
     }
 
-    fn parse_directory_etag(&self, xml_text: &str) -> Result<String> {
+    pub fn parse_directory_etag(&self, xml_text: &str) -> Result<String> {
         use quick_xml::events::Event;
         use quick_xml::reader::Reader;
         

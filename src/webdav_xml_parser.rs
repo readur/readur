@@ -295,6 +295,7 @@ fn parse_http_date(date_str: &str) -> Option<DateTime<Utc>> {
 pub fn normalize_etag(etag: &str) -> String {
     etag.trim()
         .trim_start_matches("W/")
+        .trim()
         .trim_matches('"')
         .to_string()
 }
