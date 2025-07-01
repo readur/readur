@@ -878,6 +878,16 @@ impl EnhancedOcrService {
         let processing_time = start_time.elapsed().as_millis() as u64;
         let word_count = self.count_words_safely(&trimmed_text);
         
+        // Debug logging to understand PDF extraction issues
+        debug!(
+            "PDF extraction debug - File: '{}' | Raw text length: {} | Trimmed text length: {} | Word count: {} | First 200 chars: {:?}",
+            file_path,
+            text.len(),
+            trimmed_text.len(),
+            word_count,
+            trimmed_text.chars().take(200).collect::<String>()
+        );
+        
         Ok(OcrResult {
             text: trimmed_text,
             confidence: 95.0, // PDF text extraction is generally high confidence
@@ -984,13 +994,50 @@ impl EnhancedOcrService {
             // Sample first 100KB and extrapolate
             let sample_size = 100_000;
             let sample_text = &text[..sample_size.min(text.len())];
-            let sample_words = sample_text.split_whitespace().count();
+            let sample_words = self.count_words_in_text(sample_text);
             let estimated_total = (sample_words as f64 * (text.len() as f64 / sample_size as f64)) as usize;
             
             // Cap at reasonable maximum to prevent display issues
             estimated_total.min(10_000_000) // Max 10M words
         } else {
-            text.split_whitespace().count()
+            self.count_words_in_text(text)
+        }
+    }
+
+    #[cfg(feature = "ocr")]
+    fn count_words_in_text(&self, text: &str) -> usize {
+        let whitespace_words = text.split_whitespace().count();
+        
+        // If no whitespace-separated words found but text exists, try alternative word detection
+        if whitespace_words == 0 && !text.trim().is_empty() {
+            // For PDFs that extract as continuous text, estimate words based on character patterns
+            // Look for transitions from letters to non-letters as potential word boundaries
+            let mut word_count = 0;
+            let mut in_word = false;
+            
+            for c in text.chars() {
+                if c.is_alphabetic() {
+                    if !in_word {
+                        word_count += 1;
+                        in_word = true;
+                    }
+                } else {
+                    in_word = false;
+                }
+            }
+            
+            // If still no words found but we have alphanumeric content, 
+            // estimate based on reasonable word length (assume ~5 chars per word)
+            if word_count == 0 {
+                let alphanumeric_chars = text.chars().filter(|c| c.is_alphanumeric()).count();
+                if alphanumeric_chars > 0 {
+                    word_count = (alphanumeric_chars / 5).max(1);
+                }
+            }
+            
+            word_count
+        } else {
+            whitespace_words
         }
     }
     
