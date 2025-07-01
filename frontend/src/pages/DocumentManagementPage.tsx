@@ -582,12 +582,12 @@ const DocumentManagementPage: React.FC = () => {
     if (currentTab === 0) {
       fetchFailedDocuments();
     } else if (currentTab === 1) {
+      // Refresh both low confidence and failed documents for the merged cleanup tab
       handlePreviewLowConfidence();
+      handlePreviewFailedDocuments();
     } else if (currentTab === 2) {
       fetchDuplicates();
     } else if (currentTab === 3) {
-      handlePreviewFailedDocuments();
-    } else if (currentTab === 4) {
       fetchIgnoredFiles();
       fetchIgnoredFilesStats();
     }
@@ -750,10 +750,10 @@ const DocumentManagementPage: React.FC = () => {
               iconPosition="start"
             />
           </Tooltip>
-          <Tooltip title="Manage documents with low OCR confidence scores - preview and delete documents below a confidence threshold">
+          <Tooltip title="Manage and clean up documents with quality issues - low OCR confidence or failed processing">
             <Tab
-              icon={<FindInPageIcon />}
-              label={`Low Quality Manager${previewData ? ` (${previewData.matched_count})` : ''}`}
+              icon={<DeleteIcon />}
+              label={`Document Cleanup${(previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0) > 0 ? ` (${(previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0)})` : ''}`}
               iconPosition="start"
             />
           </Tooltip>
@@ -761,13 +761,6 @@ const DocumentManagementPage: React.FC = () => {
             <Tab
               icon={<FileCopyIcon />}
               label={`Duplicate Files${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
-              iconPosition="start"
-            />
-          </Tooltip>
-          <Tooltip title="Bulk operations for document cleanup and maintenance">
-            <Tab
-              icon={<DeleteIcon />}
-              label="Bulk Cleanup"
               iconPosition="start"
             />
           </Tooltip>
@@ -1373,16 +1366,27 @@ const DocumentManagementPage: React.FC = () => {
         </>
       )}
 
-      {/* Low Quality Manager Tab Content */}
+      {/* Document Cleanup Tab Content - Merged Low Quality Manager and Bulk Cleanup */}
       {currentTab === 1 && (
         <>
           <Alert severity="info" sx={{ mb: 3 }}>
-            <AlertTitle>Low Confidence Document Deletion</AlertTitle>
+            <AlertTitle>Document Cleanup Center</AlertTitle>
             <Typography>
-              This tool allows you to delete documents with OCR confidence below a specified threshold. 
-              Use the preview feature first to see what documents would be affected before deleting.
+              Clean up your document library by removing problematic documents. You can delete:
+            </Typography>
+            <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
+              <li>Documents with low OCR confidence scores (below a threshold you set)</li>
+              <li>Documents where OCR processing failed completely</li>
+            </Box>
+            <Typography sx={{ mt: 1 }}>
+              Always use the preview feature before deleting to see which documents will be affected.
             </Typography>
           </Alert>
+
+          {/* Low Confidence Documents Section */}
+          <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
+            Low Confidence Documents
+          </Typography>
 
           <Card sx={{ mb: 3 }}>
             <CardContent>
@@ -1504,18 +1508,20 @@ const DocumentManagementPage: React.FC = () => {
               <Typography sx={{ ml: 2 }}>Processing request...</Typography>
             </Box>
           )}
-        </>
-      )}
 
-      {/* Delete Failed Documents Tab Content */}
-      {currentTab === 3 && (
-        <>
+          {/* Divider between sections */}
+          <Divider sx={{ my: 4 }} />
+
+          {/* Failed Documents Section */}
+          <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>
+            Failed OCR Documents
+          </Typography>
+
           <Alert severity="warning" sx={{ mb: 3 }}>
             <AlertTitle>Delete Failed OCR Documents</AlertTitle>
             <Typography>
-              This tool allows you to delete all documents where OCR processing failed completely. 
+              This section allows you to delete all documents where OCR processing failed completely. 
               This includes documents with NULL confidence values or explicit failure status.
-              Use the preview feature first to see what documents would be affected before deleting.
             </Typography>
           </Alert>
 
@@ -1549,7 +1555,7 @@ const DocumentManagementPage: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Preview Results */}
+          {/* Preview Results for Failed Documents */}
           {failedPreviewData && (
             <Card sx={{ mb: 3 }}>
               <CardContent>
@@ -1574,7 +1580,7 @@ const DocumentManagementPage: React.FC = () => {
             </Card>
           )}
 
-          {/* Loading State */}
+          {/* Loading State for Failed Documents */}
           {failedDocsLoading && !failedPreviewData && (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
               <CircularProgress />
@@ -1585,7 +1591,7 @@ const DocumentManagementPage: React.FC = () => {
       )}
 
       {/* Ignored Files Tab Content */}
-      {currentTab === 4 && (
+      {currentTab === 3 && (
         <>
           <Alert severity="info" sx={{ mb: 3 }}>
             <AlertTitle>Ignored Files Management</AlertTitle>

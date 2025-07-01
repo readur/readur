@@ -73,7 +73,6 @@ const navigationItems: NavigationItem[] = [
   { text: 'Watch Folder', icon: FolderIcon, path: '/watch' },
   { text: 'Document Management', icon: ManageIcon, path: '/documents/management' },
   { text: 'Ignored Files', icon: BlockIcon, path: '/ignored-files' },
-  { text: 'Debug', icon: BugReportIcon, path: '/debug' },
 ];
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
@@ -532,6 +531,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             </MenuItem>
             <MenuItem onClick={() => navigate('/settings')}>
               <SettingsIcon sx={{ mr: 2 }} /> Settings
+            </MenuItem>
+            <MenuItem onClick={() => navigate('/debug')}>
+              <BugReportIcon sx={{ mr: 2 }} /> Debug
             </MenuItem>
             <Divider />
             <MenuItem onClick={() => window.open('/swagger-ui', '_blank')}>
