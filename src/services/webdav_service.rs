@@ -10,7 +10,7 @@ use crate::models::{
     FileInfo, WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVFolderInfo,
     WebDAVTestConnection,
 };
-use crate::webdav_xml_parser::parse_propfind_response;
+use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 
 #[derive(Debug, Clone)]
 pub struct WebDAVConfig {
@@ -416,6 +416,664 @@ impl WebDAVService {
         }).await
     }
 
+    /// Optimized discovery that checks directory ETag first to avoid unnecessary deep scans
+    pub async fn discover_files_in_folder_optimized(&self, folder_path: &str, user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
+        info!("🔍 Starting optimized discovery for folder: {}", folder_path);
+        
+        // Step 1: Check directory ETag first (lightweight PROPFIND with Depth: 0)
+        let current_dir_etag = match self.check_directory_etag(folder_path).await {
+            Ok(etag) => etag,
+            Err(e) => {
+                warn!("Failed to get directory ETag for {}, falling back to full scan: {}", folder_path, e);
+                return self.discover_files_in_folder_impl(folder_path).await;
+            }
+        };
+        
+        // Step 2: Check if we have this directory cached
+        match state.db.get_webdav_directory(user_id, folder_path).await {
+            Ok(Some(stored_dir)) => {
+                if stored_dir.directory_etag == current_dir_etag {
+                    info!("✅ Directory {} unchanged (ETag: {}), checking subdirectories individually", folder_path, current_dir_etag);
+                    
+                    // Update last_scanned_at to show we checked
+                    let update = crate::models::UpdateWebDAVDirectory {
+                        directory_etag: current_dir_etag,
+                        last_scanned_at: chrono::Utc::now(),
+                        file_count: stored_dir.file_count,
+                        total_size_bytes: stored_dir.total_size_bytes,
+                    };
+                    
+                    if let Err(e) = state.db.update_webdav_directory(user_id, folder_path, &update).await {
+                        warn!("Failed to update directory scan time: {}", e);
+                    }
+                    
+                    // Step 2a: Check subdirectories individually for changes
+                    let changed_files = self.check_subdirectories_for_changes(folder_path, user_id, state).await?;
+                    return Ok(changed_files);
+                } else {
+                    info!("🔄 Directory {} changed (old ETag: {}, new ETag: {}), performing deep scan", 
+                        folder_path, stored_dir.directory_etag, current_dir_etag);
+                }
+            }
+            Ok(None) => {
+                info!("🆕 New directory {}, performing initial scan", folder_path);
+            }
+            Err(e) => {
+                warn!("Database error checking directory {}: {}, proceeding with scan", folder_path, e);
+            }
+        }
+        
+        // Step 3: Directory has changed or is new - perform full discovery
+        let files = self.discover_files_in_folder_impl(folder_path).await?;
+        
+        // Step 4: Update directory tracking info for main directory
+        let file_count = files.iter().filter(|f| !f.is_directory).count() as i64;
+        let total_size_bytes = files.iter().filter(|f| !f.is_directory).map(|f| f.size).sum::<i64>();
+        
+        let directory_record = crate::models::CreateWebDAVDirectory {
+            user_id,
+            directory_path: folder_path.to_string(),
+            directory_etag: current_dir_etag.clone(),
+            file_count,
+            total_size_bytes,
+        };
+        
+        if let Err(e) = state.db.create_or_update_webdav_directory(&directory_record).await {
+            error!("Failed to update directory tracking for {}: {}", folder_path, e);
+        } else {
+            info!("📊 Updated directory tracking: {} files, {} bytes, ETag: {}", 
+                file_count, total_size_bytes, current_dir_etag);
+        }
+        
+        // Step 5: Track ALL subdirectories found during the scan (n-depth)
+        self.track_subdirectories_recursively(&files, user_id, state).await;
+        
+        Ok(files)
+    }
+
+    /// Track all subdirectories recursively with rock-solid n-depth support
+    async fn track_subdirectories_recursively(&self, files: &[FileInfo], user_id: uuid::Uuid, state: &crate::AppState) {
+        use std::collections::{HashMap, BTreeSet};
+        
+        // Step 1: Extract all unique directory paths from the file list
+        let mut all_directories = BTreeSet::new();
+        
+        for file in files {
+            if file.is_directory {
+                // Add the directory itself
+                all_directories.insert(file.path.clone());
+            } else {
+                // Extract all parent directories from file paths
+                let mut path_parts: Vec<&str> = file.path.split('/').collect();
+                path_parts.pop(); // Remove the filename
+                
+                // Build directory paths from root down to immediate parent
+                let mut current_path = String::new();
+                for part in path_parts {
+                    if !part.is_empty() {
+                        if !current_path.is_empty() {
+                            current_path.push('/');
+                        }
+                        current_path.push_str(part);
+                        all_directories.insert(current_path.clone());
+                    }
+                }
+            }
+        }
+        
+        info!("🗂️ Found {} unique directories at all levels", all_directories.len());
+        
+        // Step 2: Create a mapping of directory -> ETag from the files list
+        let mut directory_etags: HashMap<String, String> = HashMap::new();
+        for file in files {
+            if file.is_directory {
+                directory_etags.insert(file.path.clone(), file.etag.clone());
+            }
+        }
+        
+        // Step 3: For each directory, calculate its direct content (files and immediate subdirs)
+        for dir_path in &all_directories {
+            let dir_etag = match directory_etags.get(dir_path) {
+                Some(etag) => etag.clone(),
+                None => {
+                    debug!("⚠️ No ETag found for directory: {}", dir_path);
+                    continue; // Skip directories without ETags
+                }
+            };
+            
+            // Count direct files in this directory (not in subdirectories)
+            let direct_files: Vec<_> = files.iter()
+                .filter(|f| {
+                    !f.is_directory && 
+                    self.is_direct_child(&f.path, dir_path)
+                })
+                .collect();
+            
+            // Count direct subdirectories  
+            let direct_subdirs: Vec<_> = files.iter()
+                .filter(|f| {
+                    f.is_directory && 
+                    self.is_direct_child(&f.path, dir_path)
+                })
+                .collect();
+            
+            let file_count = direct_files.len() as i64;
+            let total_size_bytes = direct_files.iter().map(|f| f.size).sum::<i64>();
+            
+            // Create or update directory tracking record
+            let directory_record = crate::models::CreateWebDAVDirectory {
+                user_id,
+                directory_path: dir_path.clone(),
+                directory_etag: dir_etag.clone(),
+                file_count,
+                total_size_bytes,
+            };
+            
+            match state.db.create_or_update_webdav_directory(&directory_record).await {
+                Ok(_) => {
+                    debug!("📁 Tracked directory: {} ({} files, {} subdirs, {} bytes, ETag: {})", 
+                        dir_path, file_count, direct_subdirs.len(), total_size_bytes, dir_etag);
+                }
+                Err(e) => {
+                    warn!("Failed to update directory tracking for {}: {}", dir_path, e);
+                }
+            }
+        }
+        
+        info!("✅ Completed tracking {} directories at all depth levels", all_directories.len());
+    }
+    
+    /// Check if a path is a direct child of a directory (not nested deeper)
+    pub fn is_direct_child(&self, child_path: &str, parent_path: &str) -> bool {
+        // Normalize paths by removing trailing slashes
+        let child_normalized = child_path.trim_end_matches('/');
+        let parent_normalized = parent_path.trim_end_matches('/');
+        
+        if !child_normalized.starts_with(parent_normalized) {
+            return false;
+        }
+        
+        // Same path is not a direct child of itself
+        if child_normalized == parent_normalized {
+            return false;
+        }
+        
+        // Handle root directory case
+        if parent_normalized.is_empty() || parent_normalized == "/" {
+            let child_without_leading_slash = child_normalized.trim_start_matches('/');
+            return !child_without_leading_slash.is_empty() && !child_without_leading_slash.contains('/');
+        }
+        
+        // Remove parent path prefix and check if remainder has exactly one more path segment
+        let remaining = child_normalized.strip_prefix(parent_normalized)
+            .unwrap_or("")
+            .trim_start_matches('/');
+            
+        // Direct child means no more slashes in the remaining path
+        !remaining.contains('/') && !remaining.is_empty()
+    }
+    
+    /// Perform targeted re-scanning of only specific paths that have changed
+    pub async fn discover_files_targeted_rescan(&self, paths_to_scan: &[String], user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
+        info!("🎯 Starting targeted re-scan for {} specific paths", paths_to_scan.len());
+        
+        let mut all_files = Vec::new();
+        
+        for path in paths_to_scan {
+            info!("🔍 Targeted scan of: {}", path);
+            
+            // Check if this specific path has changed
+            match self.check_directory_etag(path).await {
+                Ok(current_etag) => {
+                    // Check cached ETag
+                    let needs_scan = match state.db.get_webdav_directory(user_id, path).await {
+                        Ok(Some(stored_dir)) => {
+                            if stored_dir.directory_etag != current_etag {
+                                info!("🔄 Path {} changed (old: {}, new: {})", path, stored_dir.directory_etag, current_etag);
+                                true
+                            } else {
+                                debug!("✅ Path {} unchanged (ETag: {})", path, current_etag);
+                                false
+                            }
+                        }
+                        Ok(None) => {
+                            info!("🆕 New path {} detected", path);
+                            true
+                        }
+                        Err(e) => {
+                            warn!("Database error for path {}: {}", path, e);
+                            true // Scan on error to be safe
+                        }
+                    };
+                    
+                    if needs_scan {
+                        // Use shallow scan for this specific directory only
+                        match self.discover_files_in_folder_shallow(path).await {
+                            Ok(mut path_files) => {
+                                info!("📂 Found {} files in changed path {}", path_files.len(), path);
+                                all_files.append(&mut path_files);
+                                
+                                // Update tracking for this specific path
+                                self.update_single_directory_tracking(path, &path_files, user_id, state).await;
+                            }
+                            Err(e) => {
+                                error!("Failed to scan changed path {}: {}", path, e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to check ETag for path {}: {}, skipping", path, e);
+                }
+            }
+        }
+        
+        info!("🎯 Targeted re-scan completed: {} total files found", all_files.len());
+        Ok(all_files)
+    }
+    
+    /// Discover files in a single directory only (shallow scan, no recursion)
+    async fn discover_files_in_folder_shallow(&self, folder_path: &str) -> Result<Vec<FileInfo>> {
+        let folder_url = format!("{}{}", self.base_webdav_url, folder_path);
+        
+        debug!("Shallow scan of directory: {}", folder_url);
+
+        let propfind_body = r#"<?xml version="1.0"?>
+            <d:propfind xmlns:d="DAV:">
+                <d:allprop/>
+            </d:propfind>"#;
+
+        let response = self.client
+            .request(Method::from_bytes(b"PROPFIND").unwrap(), &folder_url)
+            .basic_auth(&self.config.username, Some(&self.config.password))
+            .header("Depth", "1")  // Only direct children, not recursive
+            .header("Content-Type", "application/xml")
+            .body(propfind_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("PROPFIND request failed: {}", response.status()));
+        }
+
+        let response_text = response.text().await?;
+        debug!("Shallow WebDAV response received, parsing...");
+
+        // Use the parser that includes directories for shallow scans
+        self.parse_webdav_response_with_directories(&response_text)
+    }
+    
+    /// Update tracking for a single directory without recursive processing
+    async fn update_single_directory_tracking(&self, directory_path: &str, files: &[FileInfo], user_id: uuid::Uuid, state: &crate::AppState) {
+        // Get the directory's own ETag
+        let dir_etag = files.iter()
+            .find(|f| f.is_directory && f.path == directory_path)
+            .map(|f| f.etag.clone())
+            .unwrap_or_else(|| {
+                warn!("No ETag found for directory {}, using timestamp-based fallback", directory_path);
+                chrono::Utc::now().timestamp().to_string()
+            });
+        
+        // Count direct files in this directory only
+        let direct_files: Vec<_> = files.iter()
+            .filter(|f| !f.is_directory && self.is_direct_child(&f.path, directory_path))
+            .collect();
+        
+        let file_count = direct_files.len() as i64;
+        let total_size_bytes = direct_files.iter().map(|f| f.size).sum::<i64>();
+        
+        let directory_record = crate::models::CreateWebDAVDirectory {
+            user_id,
+            directory_path: directory_path.to_string(),
+            directory_etag: dir_etag.clone(),
+            file_count,
+            total_size_bytes,
+        };
+        
+        match state.db.create_or_update_webdav_directory(&directory_record).await {
+            Ok(_) => {
+                info!("📊 Updated single directory tracking: {} ({} files, {} bytes, ETag: {})", 
+                    directory_path, file_count, total_size_bytes, dir_etag);
+            }
+            Err(e) => {
+                error!("Failed to update single directory tracking for {}: {}", directory_path, e);
+            }
+        }
+    }
+    
+    /// Get a list of directories that need targeted scanning based on recent changes
+    pub async fn get_directories_needing_scan(&self, user_id: uuid::Uuid, state: &crate::AppState, max_age_hours: i64) -> Result<Vec<String>> {
+        let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(max_age_hours);
+        
+        match state.db.list_webdav_directories(user_id).await {
+            Ok(directories) => {
+                let stale_dirs: Vec<String> = directories.iter()
+                    .filter(|dir| dir.last_scanned_at < cutoff_time)
+                    .map(|dir| dir.directory_path.clone())
+                    .collect();
+                
+                info!("🕒 Found {} directories not scanned in last {} hours", stale_dirs.len(), max_age_hours);
+                Ok(stale_dirs)
+            }
+            Err(e) => {
+                error!("Failed to get directories needing scan: {}", e);
+                Err(e.into())
+            }
+        }
+    }
+    
+    /// Smart sync mode that combines multiple optimization strategies
+    pub async fn discover_files_smart_sync(&self, watch_folders: &[String], user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
+        info!("🧠 Starting smart sync for {} watch folders", watch_folders.len());
+        
+        let mut all_files = Vec::new();
+        
+        for folder_path in watch_folders {
+            info!("🔍 Smart sync processing folder: {}", folder_path);
+            
+            // Step 1: Try optimized discovery first (checks directory ETag)
+            let optimized_result = self.discover_files_in_folder_optimized(folder_path, user_id, state).await;
+            
+            match optimized_result {
+                Ok(files) => {
+                    if !files.is_empty() {
+                        info!("✅ Optimized discovery found {} files in {}", files.len(), folder_path);
+                        all_files.extend(files);
+                    } else {
+                        info!("🔍 Directory {} unchanged, checking for stale subdirectories", folder_path);
+                        
+                        // Step 2: Check for stale subdirectories that need targeted scanning
+                        let stale_dirs = self.get_stale_subdirectories(folder_path, user_id, state, 24).await?;
+                        
+                        if !stale_dirs.is_empty() {
+                            info!("🎯 Found {} stale subdirectories, performing targeted scan", stale_dirs.len());
+                            let targeted_files = self.discover_files_targeted_rescan(&stale_dirs, user_id, state).await?;
+                            all_files.extend(targeted_files);
+                        } else {
+                            info!("✅ All subdirectories of {} are fresh, no scan needed", folder_path);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Optimized discovery failed for {}, falling back to full scan: {}", folder_path, e);
+                    // Fallback to traditional full scan
+                    match self.discover_files_in_folder(folder_path).await {
+                        Ok(files) => {
+                            info!("📂 Fallback scan found {} files in {}", files.len(), folder_path);
+                            all_files.extend(files);
+                        }
+                        Err(fallback_error) => {
+                            error!("Both optimized and fallback scans failed for {}: {}", folder_path, fallback_error);
+                            return Err(fallback_error);
+                        }
+                    }
+                }
+            }
+        }
+        
+        info!("🧠 Smart sync completed: {} total files discovered", all_files.len());
+        Ok(all_files)
+    }
+    
+    /// Get subdirectories of a parent that haven't been scanned recently
+    async fn get_stale_subdirectories(&self, parent_path: &str, user_id: uuid::Uuid, state: &crate::AppState, max_age_hours: i64) -> Result<Vec<String>> {
+        let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(max_age_hours);
+        
+        match state.db.list_webdav_directories(user_id).await {
+            Ok(directories) => {
+                let stale_subdirs: Vec<String> = directories.iter()
+                    .filter(|dir| {
+                        dir.directory_path.starts_with(parent_path) && 
+                        dir.directory_path != parent_path &&
+                        dir.last_scanned_at < cutoff_time
+                    })
+                    .map(|dir| dir.directory_path.clone())
+                    .collect();
+                
+                debug!("🕒 Found {} stale subdirectories under {} (not scanned in {} hours)", 
+                    stale_subdirs.len(), parent_path, max_age_hours);
+                Ok(stale_subdirs)
+            }
+            Err(e) => {
+                error!("Failed to get stale subdirectories: {}", e);
+                Err(e.into())
+            }
+        }
+    }
+    
+    /// Perform incremental sync - only scan directories that have actually changed
+    pub async fn discover_files_incremental(&self, watch_folders: &[String], user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
+        info!("⚡ Starting incremental sync for {} watch folders", watch_folders.len());
+        
+        let mut changed_files = Vec::new();
+        let mut unchanged_count = 0;
+        let mut changed_count = 0;
+        
+        for folder_path in watch_folders {
+            // Check directory ETag to see if it changed
+            match self.check_directory_etag(folder_path).await {
+                Ok(current_etag) => {
+                    let needs_scan = match state.db.get_webdav_directory(user_id, folder_path).await {
+                        Ok(Some(stored_dir)) => {
+                            if stored_dir.directory_etag != current_etag {
+                                info!("🔄 Directory {} changed (ETag: {} → {})", folder_path, stored_dir.directory_etag, current_etag);
+                                changed_count += 1;
+                                true
+                            } else {
+                                debug!("✅ Directory {} unchanged (ETag: {})", folder_path, current_etag);
+                                unchanged_count += 1;
+                                false
+                            }
+                        }
+                        Ok(None) => {
+                            info!("🆕 New directory {} detected", folder_path);
+                            changed_count += 1;
+                            true
+                        }
+                        Err(e) => {
+                            warn!("Database error for {}: {}, scanning to be safe", folder_path, e);
+                            changed_count += 1;
+                            true
+                        }
+                    };
+                    
+                    if needs_scan {
+                        // Directory changed - perform targeted scan
+                        match self.discover_files_in_folder_optimized(folder_path, user_id, state).await {
+                            Ok(mut files) => {
+                                info!("📂 Incremental scan found {} files in changed directory {}", files.len(), folder_path);
+                                changed_files.append(&mut files);
+                            }
+                            Err(e) => {
+                                error!("Failed incremental scan of {}: {}", folder_path, e);
+                            }
+                        }
+                    } else {
+                        // Directory unchanged - just update scan timestamp
+                        let update = crate::models::UpdateWebDAVDirectory {
+                            directory_etag: current_etag,
+                            last_scanned_at: chrono::Utc::now(),
+                            file_count: 0, // Will be updated by the database layer
+                            total_size_bytes: 0,
+                        };
+                        
+                        if let Err(e) = state.db.update_webdav_directory(user_id, folder_path, &update).await {
+                            warn!("Failed to update scan timestamp for {}: {}", folder_path, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to check directory ETag for {}: {}", folder_path, e);
+                }
+            }
+        }
+        
+        info!("⚡ Incremental sync completed: {} unchanged, {} changed, {} total files found", 
+            unchanged_count, changed_count, changed_files.len());
+        
+        Ok(changed_files)
+    }
+
+    /// Check subdirectories individually for changes when parent directory is unchanged
+    async fn check_subdirectories_for_changes(&self, parent_path: &str, user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
+        // Get all known subdirectories from database
+        let known_directories = match state.db.list_webdav_directories(user_id).await {
+            Ok(dirs) => dirs,
+            Err(e) => {
+                warn!("Failed to get known directories, falling back to full scan: {}", e);
+                return self.discover_files_in_folder_impl(parent_path).await;
+            }
+        };
+        
+        // Filter to subdirectories of this parent
+        let subdirectories: Vec<_> = known_directories.iter()
+            .filter(|dir| dir.directory_path.starts_with(parent_path) && dir.directory_path != parent_path)
+            .collect();
+            
+        if subdirectories.is_empty() {
+            info!("📁 No known subdirectories for {}, no changes to process", parent_path);
+            return Ok(Vec::new());
+        }
+        
+        info!("🔍 Checking {} known subdirectories for changes", subdirectories.len());
+        
+        let mut changed_files = Vec::new();
+        let subdirectory_count = subdirectories.len();
+        
+        // Check each subdirectory individually
+        for subdir in subdirectories {
+            let subdir_path = &subdir.directory_path;
+            
+            // Check if this subdirectory has changed
+            match self.check_directory_etag(subdir_path).await {
+                Ok(current_etag) => {
+                    if current_etag != subdir.directory_etag {
+                        info!("🔄 Subdirectory {} changed (old: {}, new: {}), scanning recursively", 
+                            subdir_path, subdir.directory_etag, current_etag);
+                        
+                        // This subdirectory changed - get all its files recursively
+                        match self.discover_files_in_folder_impl(subdir_path).await {
+                            Ok(mut subdir_files) => {
+                                info!("📂 Found {} files in changed subdirectory {}", subdir_files.len(), subdir_path);
+                                changed_files.append(&mut subdir_files);
+                                
+                                // Update tracking for this subdirectory and its children
+                                self.track_subdirectories_recursively(&subdir_files, user_id, state).await;
+                            }
+                            Err(e) => {
+                                error!("Failed to scan changed subdirectory {}: {}", subdir_path, e);
+                            }
+                        }
+                    } else {
+                        debug!("✅ Subdirectory {} unchanged (ETag: {})", subdir_path, current_etag);
+                        
+                        // Update last_scanned_at even for unchanged directories
+                        let update = crate::models::UpdateWebDAVDirectory {
+                            directory_etag: current_etag,
+                            last_scanned_at: chrono::Utc::now(),
+                            file_count: subdir.file_count,
+                            total_size_bytes: subdir.total_size_bytes,
+                        };
+                        
+                        if let Err(e) = state.db.update_webdav_directory(user_id, subdir_path, &update).await {
+                            warn!("Failed to update scan time for {}: {}", subdir_path, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to check ETag for subdirectory {}: {}", subdir_path, e);
+                    // Don't fail the entire operation, just log and continue
+                }
+            }
+        }
+        
+        info!("🎯 Found {} changed files across {} subdirectories", changed_files.len(), subdirectory_count);
+        Ok(changed_files)
+    }
+
+    /// Check directory ETag without performing deep scan - used for optimization
+    pub async fn check_directory_etag(&self, folder_path: &str) -> Result<String> {
+        self.retry_with_backoff("check_directory_etag", || {
+            self.check_directory_etag_impl(folder_path)
+        }).await
+    }
+
+    async fn check_directory_etag_impl(&self, folder_path: &str) -> Result<String> {
+        let folder_url = format!("{}{}", self.base_webdav_url, folder_path);
+        
+        debug!("Checking directory ETag for: {}", folder_url);
+
+        let propfind_body = r#"<?xml version="1.0"?>
+            <d:propfind xmlns:d="DAV:">
+                <d:prop>
+                    <d:getetag/>
+                </d:prop>
+            </d:propfind>"#;
+
+        let response = self.client
+            .request(Method::from_bytes(b"PROPFIND").unwrap(), &folder_url)
+            .basic_auth(&self.config.username, Some(&self.config.password))
+            .header("Depth", "0")  // Only check the directory itself, not contents
+            .header("Content-Type", "application/xml")
+            .body(propfind_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("PROPFIND request failed: {}", response.status()));
+        }
+
+        let response_text = response.text().await?;
+        debug!("Directory ETag response received, parsing...");
+
+        // Parse the response to extract directory ETag
+        self.parse_directory_etag(&response_text)
+    }
+
+    pub fn parse_directory_etag(&self, xml_text: &str) -> Result<String> {
+        use quick_xml::events::Event;
+        use quick_xml::reader::Reader;
+        
+        let mut reader = Reader::from_str(xml_text);
+        reader.config_mut().trim_text(true);
+        
+        let mut current_element = String::new();
+        let mut etag = String::new();
+        let mut buf = Vec::new();
+        
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                    let local_name = e.local_name();
+                    let name = std::str::from_utf8(local_name.as_ref())?;
+                    current_element = name.to_lowercase();
+                }
+                Ok(Event::Text(e)) => {
+                    if current_element == "getetag" {
+                        etag = e.unescape()?.to_string();
+                        break;
+                    }
+                }
+                Ok(Event::End(_)) => {
+                    current_element.clear();
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(anyhow!("XML parsing error: {}", e)),
+                _ => {}
+            }
+        }
+        
+        if etag.is_empty() {
+            return Err(anyhow!("No ETag found in directory response"));
+        }
+        
+        // Use existing ETag normalization function from parser module
+        let normalized_etag = crate::webdav_xml_parser::normalize_etag(&etag);
+        debug!("Directory ETag: {}", normalized_etag);
+        
+        Ok(normalized_etag)
+    }
+
     async fn discover_files_in_folder_impl(&self, folder_path: &str) -> Result<Vec<FileInfo>> {
         let folder_url = format!("{}{}", self.base_webdav_url, folder_path);
         
@@ -447,6 +1105,12 @@ impl WebDAVService {
 
     pub fn parse_webdav_response(&self, xml_text: &str) -> Result<Vec<FileInfo>> {
         parse_propfind_response(xml_text)
+    }
+
+    /// Parse WebDAV response including both files and directories
+    /// Used for shallow directory scans where we need to track directory structure
+    pub fn parse_webdav_response_with_directories(&self, xml_text: &str) -> Result<Vec<FileInfo>> {
+        parse_propfind_response_with_directories(xml_text)
     }
 
     pub async fn download_file(&self, file_path: &str) -> Result<Vec<u8>> {

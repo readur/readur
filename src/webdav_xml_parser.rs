@@ -246,6 +246,225 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
     Ok(files)
 }
 
+/// Parse PROPFIND response including both files and directories
+/// This is used for shallow directory scans where we need to track directory structure
+pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<FileInfo>> {
+    let mut reader = Reader::from_str(xml_text);
+    reader.config_mut().trim_text(true);
+    
+    let mut files = Vec::new();
+    let mut current_response: Option<PropFindResponse> = None;
+    let mut current_element = String::new();
+    let mut in_response = false;
+    let mut in_propstat = false;
+    let mut in_prop = false;
+    let mut in_resourcetype = false;
+    let mut status_ok = false;
+    
+    let mut buf = Vec::new();
+    
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                let name = get_local_name(&e)?;
+                
+                match name.as_str() {
+                    "response" => {
+                        in_response = true;
+                        current_response = Some(PropFindResponse::default());
+                    }
+                    "propstat" => {
+                        in_propstat = true;
+                    }
+                    "prop" => {
+                        in_prop = true;
+                    }
+                    "resourcetype" => {
+                        in_resourcetype = true;
+                    }
+                    "collection" if in_resourcetype => {
+                        if let Some(ref mut resp) = current_response {
+                            resp.is_collection = true;
+                        }
+                    }
+                    _ => {
+                        current_element = name;
+                    }
+                }
+            }
+            Ok(Event::Text(e)) => {
+                let text = e.unescape()?.to_string();
+                
+                if in_response && !text.trim().is_empty() {
+                    if let Some(ref mut resp) = current_response {
+                        match current_element.as_str() {
+                            "href" => {
+                                resp.href = text.trim().to_string();
+                            }
+                            "displayname" => {
+                                resp.displayname = text.trim().to_string();
+                            }
+                            "getcontentlength" => {
+                                resp.content_length = text.trim().parse().ok();
+                            }
+                            "getlastmodified" => {
+                                resp.last_modified = Some(text.trim().to_string());
+                            }
+                            "getcontenttype" => {
+                                resp.content_type = Some(text.trim().to_string());
+                            }
+                            "getetag" => {
+                                resp.etag = Some(normalize_etag(&text));
+                            }
+                            "creationdate" => {
+                                resp.creation_date = Some(text.trim().to_string());
+                            }
+                            "owner" => {
+                                resp.owner = Some(text.trim().to_string());
+                            }
+                            "group" => {
+                                resp.group = Some(text.trim().to_string());
+                            }
+                            "status" if in_propstat => {
+                                // Check if status is 200 OK
+                                if text.contains("200") {
+                                    status_ok = true;
+                                }
+                            }
+                            _ => {
+                                // Store any other properties as generic metadata
+                                if !text.trim().is_empty() && in_prop {
+                                    if resp.metadata.is_none() {
+                                        resp.metadata = Some(serde_json::Value::Object(serde_json::Map::new()));
+                                    }
+                                    
+                                    if let Some(serde_json::Value::Object(ref mut map)) = resp.metadata {
+                                        match current_element.as_str() {
+                                            "permissions" | "oc:permissions" => {
+                                                resp.permissions = Some(text.trim().to_string());
+                                                map.insert("permissions_raw".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "fileid" | "oc:fileid" => {
+                                                map.insert("file_id".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "owner-id" | "oc:owner-id" => {
+                                                map.insert("owner_id".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "owner-display-name" | "oc:owner-display-name" => {
+                                                resp.owner_display_name = Some(text.trim().to_string());
+                                                map.insert("owner_display_name".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "has-preview" | "nc:has-preview" => {
+                                                if let Ok(val) = text.trim().parse::<bool>() {
+                                                    map.insert("has_preview".to_string(), serde_json::Value::Bool(val));
+                                                }
+                                            }
+                                            _ => {
+                                                map.insert(current_element.clone(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::End(e)) => {
+                let name = get_local_name_from_end(&e)?;
+                
+                match name.as_str() {
+                    "response" => {
+                        if let Some(resp) = current_response.take() {
+                            // Include both files AND directories with valid properties
+                            if status_ok && !resp.href.is_empty() {
+                                // Extract name from href
+                                let name = if resp.displayname.is_empty() {
+                                    resp.href
+                                        .split('/')
+                                        .filter(|s| !s.is_empty())
+                                        .last()
+                                        .unwrap_or("")
+                                        .to_string()
+                                } else {
+                                    resp.displayname.clone()
+                                };
+                                
+                                // Decode URL-encoded characters
+                                let name = urlencoding::decode(&name)
+                                    .unwrap_or_else(|_| std::borrow::Cow::Borrowed(&name))
+                                    .to_string();
+                                
+                                // Parse creation date
+                                let created_at = resp.creation_date
+                                    .as_ref()
+                                    .and_then(|d| parse_http_date(d));
+                                
+                                // Parse permissions
+                                let permissions_int = resp.permissions
+                                    .as_ref()
+                                    .and_then(|p| {
+                                        if p.chars().all(|c| c.is_uppercase()) {
+                                            let mut perms = 0u32;
+                                            if p.contains('R') { perms |= 0o444; }
+                                            if p.contains('W') { perms |= 0o222; }
+                                            if p.contains('D') { perms |= 0o111; }
+                                            Some(perms)
+                                        } else {
+                                            p.parse().ok()
+                                        }
+                                    });
+                                
+                                let file_info = FileInfo {
+                                    path: resp.href.clone(),
+                                    name,
+                                    size: resp.content_length.unwrap_or(0),
+                                    mime_type: if resp.is_collection {
+                                        "".to_string()
+                                    } else {
+                                        resp.content_type.unwrap_or_else(|| "application/octet-stream".to_string())
+                                    },
+                                    last_modified: parse_http_date(&resp.last_modified.unwrap_or_default()),
+                                    etag: resp.etag.unwrap_or_else(|| format!("\"{}\"", uuid::Uuid::new_v4())),
+                                    is_directory: resp.is_collection,
+                                    created_at,
+                                    permissions: permissions_int,
+                                    owner: resp.owner.or(resp.owner_display_name),
+                                    group: resp.group,
+                                    metadata: resp.metadata,
+                                };
+                                
+                                files.push(file_info);
+                            }
+                        }
+                        in_response = false;
+                        status_ok = false;
+                    }
+                    "propstat" => {
+                        in_propstat = false;
+                    }
+                    "prop" => {
+                        in_prop = false;
+                    }
+                    "resourcetype" => {
+                        in_resourcetype = false;
+                    }
+                    _ => {}
+                }
+                
+                current_element.clear();
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(anyhow!("XML parsing error: {}", e)),
+            _ => {}
+        }
+        
+        buf.clear();
+    }
+    
+    Ok(files)
+}
+
 fn get_local_name(e: &BytesStart) -> Result<String> {
     let qname = e.name();
     let local = qname.local_name();
@@ -292,9 +511,10 @@ fn parse_http_date(date_str: &str) -> Option<DateTime<Utc>> {
 /// - `"abc123"` → `abc123`
 /// - `W/"abc123"` → `abc123`
 /// - `abc123` → `abc123`
-fn normalize_etag(etag: &str) -> String {
+pub fn normalize_etag(etag: &str) -> String {
     etag.trim()
         .trim_start_matches("W/")
+        .trim()
         .trim_matches('"')
         .to_string()
 }

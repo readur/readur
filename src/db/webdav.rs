@@ -218,4 +218,125 @@ impl Database {
 
         Ok(files)
     }
+
+    // Directory tracking functions for efficient sync optimization
+    pub async fn get_webdav_directory(&self, user_id: Uuid, directory_path: &str) -> Result<Option<crate::models::WebDAVDirectory>> {
+        self.with_retry(|| async {
+            let row = sqlx::query(
+                r#"SELECT id, user_id, directory_path, directory_etag, last_scanned_at, 
+                   file_count, total_size_bytes, created_at, updated_at
+                   FROM webdav_directories WHERE user_id = $1 AND directory_path = $2"#
+            )
+            .bind(user_id)
+            .bind(directory_path)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
+
+            match row {
+                Some(row) => Ok(Some(crate::models::WebDAVDirectory {
+                    id: row.get("id"),
+                    user_id: row.get("user_id"),
+                    directory_path: row.get("directory_path"),
+                    directory_etag: row.get("directory_etag"),
+                    last_scanned_at: row.get("last_scanned_at"),
+                    file_count: row.get("file_count"),
+                    total_size_bytes: row.get("total_size_bytes"),
+                    created_at: row.get("created_at"),
+                    updated_at: row.get("updated_at"),
+                })),
+                None => Ok(None),
+            }
+        }).await
+    }
+
+    pub async fn create_or_update_webdav_directory(&self, directory: &crate::models::CreateWebDAVDirectory) -> Result<crate::models::WebDAVDirectory> {
+        let row = sqlx::query(
+            r#"INSERT INTO webdav_directories (user_id, directory_path, directory_etag, 
+               file_count, total_size_bytes, last_scanned_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+               ON CONFLICT (user_id, directory_path) DO UPDATE SET
+               directory_etag = EXCLUDED.directory_etag,
+               file_count = EXCLUDED.file_count,
+               total_size_bytes = EXCLUDED.total_size_bytes,
+               last_scanned_at = NOW(),
+               updated_at = NOW()
+               RETURNING id, user_id, directory_path, directory_etag, last_scanned_at,
+               file_count, total_size_bytes, created_at, updated_at"#
+        )
+        .bind(directory.user_id)
+        .bind(&directory.directory_path)
+        .bind(&directory.directory_etag)
+        .bind(directory.file_count)
+        .bind(directory.total_size_bytes)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(crate::models::WebDAVDirectory {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            directory_path: row.get("directory_path"),
+            directory_etag: row.get("directory_etag"),
+            last_scanned_at: row.get("last_scanned_at"),
+            file_count: row.get("file_count"),
+            total_size_bytes: row.get("total_size_bytes"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
+    pub async fn update_webdav_directory(&self, user_id: Uuid, directory_path: &str, update: &crate::models::UpdateWebDAVDirectory) -> Result<()> {
+        self.with_retry(|| async {
+            sqlx::query(
+                r#"UPDATE webdav_directories SET 
+                   directory_etag = $3,
+                   last_scanned_at = $4,
+                   file_count = $5,
+                   total_size_bytes = $6,
+                   updated_at = NOW()
+                   WHERE user_id = $1 AND directory_path = $2"#
+            )
+            .bind(user_id)
+            .bind(directory_path)
+            .bind(&update.directory_etag)
+            .bind(update.last_scanned_at)
+            .bind(update.file_count)
+            .bind(update.total_size_bytes)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Database update failed: {}", e))?;
+
+            Ok(())
+        }).await
+    }
+
+    pub async fn list_webdav_directories(&self, user_id: Uuid) -> Result<Vec<crate::models::WebDAVDirectory>> {
+        let rows = sqlx::query(
+            r#"SELECT id, user_id, directory_path, directory_etag, last_scanned_at,
+               file_count, total_size_bytes, created_at, updated_at
+               FROM webdav_directories 
+               WHERE user_id = $1
+               ORDER BY directory_path ASC"#
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut directories = Vec::new();
+        for row in rows {
+            directories.push(crate::models::WebDAVDirectory {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                directory_path: row.get("directory_path"),
+                directory_etag: row.get("directory_etag"),
+                last_scanned_at: row.get("last_scanned_at"),
+                file_count: row.get("file_count"),
+                total_size_bytes: row.get("total_size_bytes"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(directories)
+    }
 }
