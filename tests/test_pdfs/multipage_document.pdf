@@ -1,0 +1,101 @@
+%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R 4 0 R]
+/Count 2
+>>
+endobj
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/Contents 5 0 R
+/MediaBox [0 0 612 792]
+/Resources <<
+  /Font <<
+    /F1 <<
+      /Type /Font
+      /Subtype /Type1
+      /BaseFont /Helvetica
+    >>
+  >>
+>>
+>>
+endobj
+4 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/Contents 6 0 R
+/MediaBox [0 0 612 792]
+/Resources <<
+  /Font <<
+    /F1 <<
+      /Type /Font
+      /Subtype /Type1
+      /BaseFont /Helvetica
+    >>
+  >>
+>>
+>>
+endobj
+5 0 obj
+<<
+/Length 200
+>>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(Page 1: This is the first page of a multi-page document.) Tj
+0 -24 Td
+(It contains multiple sentences with proper spacing.) Tj
+0 -24 Td
+(Each line should be counted as separate words.) Tj
+0 -24 Td
+(Total words on this page should be easily counted.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<<
+/Length 180
+>>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(Page 2: Continuing from the previous page.) Tj
+0 -24 Td
+(This page also has normal text formatting.) Tj
+0 -24 Td
+(Word counting should work correctly here too.) Tj
+0 -24 Td
+(End of document with proper word boundaries.) Tj
+ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000074 00000 n 
+0000000125 00000 n 
+0000000369 00000 n 
+0000000613 00000 n 
+0000000863 00000 n 
+trailer
+<<
+/Size 7
+/Root 1 0 R
+>>
+startxref
+1092
+%%EOF

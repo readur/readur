@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     libclang-dev \
     clang \
     poppler-utils \
+    ocrmypdf \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -37,6 +38,7 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-eng \
     ca-certificates \
     poppler-utils \
+    ocrmypdf \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

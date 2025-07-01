@@ -39,6 +39,108 @@ mod tests {
     }
 
     #[test]
+    fn test_count_words_safely_whitespace_separated() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let service = EnhancedOcrService::new(temp_path);
+        
+        // Test normal whitespace-separated text
+        let text = "Hello world this is a test";
+        let count = service.count_words_safely(&text);
+        assert_eq!(count, 6);
+        
+        // Test with extra whitespace
+        let text = "  Hello   world  \n  test  ";
+        let count = service.count_words_safely(&text);
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_count_words_safely_continuous_text() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let service = EnhancedOcrService::new(temp_path);
+        
+        // Test continuous text without spaces (like some PDF extractions)
+        let text = "HelloWorldThisIsAContinuousText";
+        let count = service.count_words_safely(&text);
+        assert!(count > 0, "Should detect words even without whitespace");
+        
+        // Test mixed alphanumeric without spaces
+        let text = "ABC123DEF456GHI789";
+        let count = service.count_words_safely(&text);
+        assert!(count > 0, "Should detect alphanumeric patterns as words");
+    }
+
+    #[test]
+    fn test_count_words_safely_edge_cases() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let service = EnhancedOcrService::new(temp_path);
+        
+        // Test empty text
+        let count = service.count_words_safely("");
+        assert_eq!(count, 0);
+        
+        // Test only whitespace
+        let count = service.count_words_safely("   \n\t  ");
+        assert_eq!(count, 0);
+        
+        // Test only punctuation
+        let text = "!@#$%^&*()_+-=[]{}|;':\",./<>?";
+        let count = service.count_words_safely(&text);
+        // Since there are no alphabetic or alphanumeric chars, should be 0
+        assert_eq!(count, 0, "Pure punctuation should not count as words, got {}", count);
+        
+        // Test single character
+        let count = service.count_words_safely("A");
+        assert_eq!(count, 1);
+        
+        // Test mixed content with low alphanumeric ratio
+        let text = "A!!!B@@@C###D$$$E%%%";
+        let count = service.count_words_safely(&text);
+        assert!(count > 0, "Should detect words in mixed content");
+    }
+
+    #[test]
+    fn test_count_words_safely_large_text() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let service = EnhancedOcrService::new(temp_path);
+        
+        // Test with large text (over 1MB) to trigger sampling
+        let word = "test ";
+        let large_text = word.repeat(250_000); // Creates ~1.25MB of text
+        let count = service.count_words_safely(&large_text);
+        
+        // Should estimate around 250,000 words (may vary due to sampling)
+        assert!(count > 200_000, "Should estimate large word count: got {}", count);
+        assert!(count <= 10_000_000, "Should cap at max limit: got {}", count);
+    }
+
+    #[test]
+    fn test_count_words_safely_fallback_patterns() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let service = EnhancedOcrService::new(temp_path);
+        
+        // Test letter transition detection
+        let text = "OneWordAnotherWordFinalWord";
+        let count = service.count_words_safely(&text);
+        assert!(count >= 3, "Should detect at least 3 words from transitions: got {}", count);
+        
+        // Test alphanumeric estimation fallback
+        let text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 26 chars, should estimate ~5-6 words
+        let count = service.count_words_safely(&text);
+        assert!(count >= 1 && count <= 10, "Should estimate reasonable word count: got {}", count);
+        
+        // Test mixed case with numbers
+        let text = "ABC123def456GHI789jkl";
+        let count = service.count_words_safely(&text);
+        assert!(count >= 1, "Should detect words in mixed alphanumeric: got {}", count);
+    }
+
+    #[test]
     fn test_ocr_result_structure() {
         let result = OcrResult {
             text: "Test text".to_string(),
