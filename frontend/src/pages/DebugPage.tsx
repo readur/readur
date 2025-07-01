@@ -62,6 +62,18 @@ interface DebugInfo {
   failed_document_info?: any;
   user_settings: any;
   debug_timestamp: string;
+  detailed_processing_logs?: any[];
+  file_analysis?: {
+    file_size: number;
+    mime_type: string;
+    is_text_file: boolean;
+    is_image_file: boolean;
+    character_count: number;
+    word_count: number;
+    estimated_processing_time: number;
+    complexity_score: number;
+    [key: string]: any;
+  };
 }
 
 const DebugPage: React.FC = () => {
