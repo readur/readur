@@ -1992,6 +1992,20 @@ pub async fn delete_low_confidence_documents(
 }
 
 /// Delete all documents with failed OCR processing
+#[utoipa::path(
+    post,
+    path = "/api/documents/delete-failed-ocr",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "Failed OCR documents deleted successfully", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn delete_failed_ocr_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,

@@ -50,7 +50,11 @@ use crate::{
         crate::routes::documents::get_document_ocr,
         crate::routes::documents::get_processed_image,
         crate::routes::documents::retry_ocr,
+        crate::routes::documents::get_document_debug_info,
         crate::routes::documents::get_failed_ocr_documents,
+        crate::routes::documents::view_failed_document,
+        crate::routes::documents::delete_low_confidence_documents,
+        crate::routes::documents::delete_failed_ocr_documents,
         crate::routes::documents::get_user_duplicates,
         // Labels endpoints
         crate::routes::labels::get_labels,
@@ -79,6 +83,7 @@ use crate::{
         // Queue endpoints
         crate::routes::queue::get_queue_stats,
         crate::routes::queue::requeue_failed,
+        crate::routes::queue::enqueue_pending_documents,
         crate::routes::queue::get_ocr_status,
         crate::routes::queue::pause_ocr_processing,
         crate::routes::queue::resume_ocr_processing,
