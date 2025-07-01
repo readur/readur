@@ -125,11 +125,18 @@ impl SourceSyncService {
             cancellation_token,
             |folder_path| {
                 let service = webdav_service.clone();
+                let state_clone = self.state.clone();
                 async move { 
-                    debug!("WebDAV discover_files_in_folder called for: {}", folder_path);
-                    let result = service.discover_files_in_folder(&folder_path).await;
+                    info!("🚀 Using optimized WebDAV discovery for: {}", folder_path);
+                    let result = service.discover_files_in_folder_optimized(&folder_path, source.user_id, &state_clone).await;
                     match &result {
-                        Ok(files) => debug!("WebDAV discovered {} files in folder: {}", files.len(), folder_path),
+                        Ok(files) => {
+                            if files.is_empty() {
+                                info!("✅ Directory {} unchanged, skipped deep scan", folder_path);
+                            } else {
+                                info!("🔄 Directory {} changed, discovered {} files", folder_path, files.len());
+                            }
+                        },
                         Err(e) => error!("WebDAV discovery failed for folder {}: {}", folder_path, e),
                     }
                     result

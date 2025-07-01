@@ -292,7 +292,7 @@ fn parse_http_date(date_str: &str) -> Option<DateTime<Utc>> {
 /// - `"abc123"` → `abc123`
 /// - `W/"abc123"` → `abc123`
 /// - `abc123` → `abc123`
-fn normalize_etag(etag: &str) -> String {
+pub fn normalize_etag(etag: &str) -> String {
     etag.trim()
         .trim_start_matches("W/")
         .trim_matches('"')

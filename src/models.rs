@@ -931,6 +931,36 @@ pub struct FileInfo {
     pub metadata: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct WebDAVDirectory {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub directory_path: String,
+    pub directory_etag: String,
+    pub last_scanned_at: DateTime<Utc>,
+    pub file_count: i64,
+    pub total_size_bytes: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateWebDAVDirectory {
+    pub user_id: Uuid,
+    pub directory_path: String,
+    pub directory_etag: String,
+    pub file_count: i64,
+    pub total_size_bytes: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateWebDAVDirectory {
+    pub directory_etag: String,
+    pub last_scanned_at: DateTime<Utc>,
+    pub file_count: i64,
+    pub total_size_bytes: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub enum SourceType {
     #[serde(rename = "webdav")]
