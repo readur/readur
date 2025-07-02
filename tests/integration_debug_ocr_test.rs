@@ -109,6 +109,13 @@ async fn debug_ocr_content() {
         .await
         .expect("Upload should work");
     
+    println!("📤 Document 1 upload response status: {}", doc1_response.status());
+    if !doc1_response.status().is_success() {
+        let status = doc1_response.status();
+        let error_text = doc1_response.text().await.unwrap_or_else(|_| "No response body".to_string());
+        panic!("Document 1 upload failed with status {}: {}", status, error_text);
+    }
+    
     let doc2_response = client
         .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
@@ -117,8 +124,15 @@ async fn debug_ocr_content() {
         .await
         .expect("Upload should work");
     
-    let doc1: DocumentResponse = doc1_response.json().await.expect("Valid JSON");
-    let doc2: DocumentResponse = doc2_response.json().await.expect("Valid JSON");
+    println!("📤 Document 2 upload response status: {}", doc2_response.status());
+    if !doc2_response.status().is_success() {
+        let status = doc2_response.status();
+        let error_text = doc2_response.text().await.unwrap_or_else(|_| "No response body".to_string());
+        panic!("Document 2 upload failed with status {}: {}", status, error_text);
+    }
+    
+    let doc1: DocumentResponse = doc1_response.json().await.expect("Valid JSON for doc1");
+    let doc2: DocumentResponse = doc2_response.json().await.expect("Valid JSON for doc2");
     
     println!("📄 Document 1: {}", doc1.id);
     println!("📄 Document 2: {}", doc2.id);

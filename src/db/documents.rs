@@ -29,6 +29,8 @@ impl Database {
         .bind(&document.ocr_status)
         .bind(&document.ocr_error)
         .bind(document.ocr_completed_at)
+        .bind(document.ocr_retry_count)
+        .bind(&document.ocr_failure_reason)
         .bind(&document.tags)
         .bind(document.created_at)
         .bind(document.updated_at)
@@ -36,8 +38,6 @@ impl Database {
         .bind(&document.file_hash)
         .bind(document.original_created_at)
         .bind(document.original_modified_at)
-        .bind(document.ocr_retry_count)
-        .bind(&document.ocr_failure_reason)
         .bind(&document.source_metadata)
         .fetch_one(&self.pool)
         .await?;
