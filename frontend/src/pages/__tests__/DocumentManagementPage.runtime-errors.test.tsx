@@ -14,6 +14,9 @@ const mockDocumentService = {
   deleteLowConfidence: vi.fn(),
   deleteFailedOcr: vi.fn(),
   downloadFile: vi.fn(),
+  getRetryRecommendations: vi.fn(),
+  getRetryStats: vi.fn(),
+  getDocumentRetryHistory: vi.fn(),
 };
 
 const mockQueueService = {
@@ -23,6 +26,7 @@ const mockQueueService = {
 const mockApi = {
   get: vi.fn(),
   delete: vi.fn(),
+  bulkRetryOcr: vi.fn(),
 };
 
 // Mock API with comprehensive responses
@@ -51,6 +55,20 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
     mockDocumentService.getFailedOcrDocuments.mockClear();
     mockDocumentService.getDuplicates.mockClear();
     mockQueueService.requeueFailed.mockClear();
+    
+    // Setup default mock returns for retry functionality
+    mockDocumentService.getRetryRecommendations.mockResolvedValue({
+      data: { recommendations: [], total_recommendations: 0 }
+    });
+    mockDocumentService.getRetryStats.mockResolvedValue({
+      data: { failure_reasons: [], file_types: [], total_failed: 0 }
+    });
+    mockDocumentService.getDocumentRetryHistory.mockResolvedValue({
+      data: { document_id: 'test', retry_history: [], total_retries: 0 }
+    });
+    mockApi.bulkRetryOcr.mockResolvedValue({
+      data: { success: true, queued_count: 0, matched_count: 0, documents: [] }
+    });
   });
 
   describe('OCR Confidence Display - Null Safety', () => {

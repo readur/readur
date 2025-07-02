@@ -92,7 +92,7 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({
     return `${percentage}% (Low)`;
   };
 
-  if (loading && recommendations.length === 0) {
+  if (loading && (!recommendations || recommendations.length === 0)) {
     return (
       <Card>
         <CardContent>
@@ -138,7 +138,7 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({
           </Alert>
         )}
 
-        {recommendations.length === 0 && !loading ? (
+        {(!recommendations || recommendations.length === 0) && !loading ? (
           <Alert severity="info">
             <Typography variant="body2">
               No retry recommendations available. This usually means:
@@ -151,7 +151,7 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({
           </Alert>
         ) : (
           <Stack spacing={2}>
-            {recommendations.map((recommendation, index) => (
+            {(recommendations || []).map((recommendation, index) => (
               <Card key={recommendation.reason} variant="outlined">
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
@@ -236,7 +236,7 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({
           </Stack>
         )}
 
-        {loading && recommendations.length > 0 && (
+        {loading && recommendations && recommendations.length > 0 && (
           <LinearProgress sx={{ mt: 2 }} />
         )}
       </CardContent>
