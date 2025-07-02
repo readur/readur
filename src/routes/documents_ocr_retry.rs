@@ -717,10 +717,10 @@ fn calculate_priority(file_size: i64, override_priority: Option<i32>) -> i32 {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct DocumentInfo {
-    id: Uuid,
-    filename: String,
-    file_size: i64,
-    mime_type: String,
-    ocr_failure_reason: Option<String>,
+pub struct DocumentInfo {
+    pub id: Uuid,
+    pub filename: String,
+    pub file_size: i64,
+    pub mime_type: String,
+    pub ocr_failure_reason: Option<String>,
 }
