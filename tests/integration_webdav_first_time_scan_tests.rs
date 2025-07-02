@@ -1,12 +1,10 @@
-use std::collections::HashMap;
 use tokio;
 use uuid::Uuid;
 use chrono::Utc;
-use std::sync::Arc;
 use anyhow::Result;
 use readur::models::{FileInfo, CreateWebDAVDirectory};
 use readur::services::webdav_service::{WebDAVService, WebDAVConfig};
-use readur::{db::Database, config::Config, AppState};
+use readur::db::Database;
 
 // Helper function to create test WebDAV service
 fn create_test_webdav_service() -> WebDAVService {
@@ -173,29 +171,23 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
     ]
 }
 
-// Helper function to create test database and app state
-async fn create_test_app_state() -> Result<(Arc<AppState>, Uuid)> {
+// Helper function to create test database
+async fn create_test_database() -> Result<(Database, Uuid)> {
     let db_url = std::env::var("DATABASE_URL")
         .or_else(|_| std::env::var("TEST_DATABASE_URL"))
         .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
     
     let database = Database::new(&db_url).await?;
-    let config = Config::from_env().unwrap_or_default();
-    
-    let app_state = Arc::new(AppState {
-        db: database,
-        config,
-    });
     
     // Create a test user
     let user_id = Uuid::new_v4();
     
-    Ok((app_state, user_id))
+    Ok((database, user_id))
 }
 
 #[tokio::test]
 async fn test_first_time_directory_scan_with_subdirectories() {
-    let (app_state, user_id) = create_test_app_state().await.unwrap();
+    let (database, user_id) = create_test_database().await.unwrap();
     let service = create_test_webdav_service();
     
     // Mock the scenario where we have files but no previously tracked directories
@@ -206,7 +198,7 @@ async fn test_first_time_directory_scan_with_subdirectories() {
     // 2. But no subdirectories are known in database (first-time scan)
     
     // Verify that list_webdav_directories returns empty (first-time scenario)
-    let known_dirs = app_state.db.list_webdav_directories(user_id).await.unwrap();
+    let known_dirs = database.list_webdav_directories(user_id).await.unwrap();
     assert!(known_dirs.is_empty(), "Should have no known directories on first scan");
     
     // This is the critical test: check_subdirectories_for_changes should fall back to full scan
@@ -225,10 +217,10 @@ async fn test_first_time_directory_scan_with_subdirectories() {
     };
     
     // Insert the root directory to simulate it being "known" but without subdirectories
-    app_state.db.create_or_update_webdav_directory(&root_dir).await.unwrap();
+    database.create_or_update_webdav_directory(&root_dir).await.unwrap();
     
     // Now verify that known directories contains only the root
-    let known_dirs_after = app_state.db.list_webdav_directories(user_id).await.unwrap();
+    let known_dirs_after = database.list_webdav_directories(user_id).await.unwrap();
     assert_eq!(known_dirs_after.len(), 1);
     assert_eq!(known_dirs_after[0].directory_path, "/FullerDocuments/JonDocuments");
     
@@ -251,7 +243,7 @@ async fn test_first_time_directory_scan_with_subdirectories() {
 
 #[tokio::test]
 async fn test_subdirectory_tracking_after_full_scan() {
-    let (app_state, user_id) = create_test_app_state().await.unwrap();
+    let (database, user_id) = create_test_database().await.unwrap();
     let service = create_test_webdav_service();
     let mock_files = mock_realistic_directory_structure();
     
@@ -323,11 +315,11 @@ async fn test_subdirectory_tracking_after_full_scan() {
             total_size_bytes,
         };
         
-        app_state.db.create_or_update_webdav_directory(&directory_record).await.unwrap();
+        database.create_or_update_webdav_directory(&directory_record).await.unwrap();
     }
     
     // Now verify that all directories are tracked
-    let tracked_dirs = app_state.db.list_webdav_directories(user_id).await.unwrap();
+    let tracked_dirs = database.list_webdav_directories(user_id).await.unwrap();
     
     // We should have tracked all directories found in the file structure
     let expected_directories = vec![

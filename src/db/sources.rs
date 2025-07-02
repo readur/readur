@@ -261,7 +261,7 @@ impl Database {
     }
 
     pub async fn get_sources_for_sync(&self) -> Result<Vec<crate::models::Source>> {
-        info!("🔍 Loading sources from database for sync check...");
+        crate::debug_log!("DB_SOURCES", "🔍 Loading sources from database for sync check...");
         
         let rows = sqlx::query(
             r#"SELECT id, user_id, name, source_type, enabled, config, status, 
@@ -278,7 +278,7 @@ impl Database {
             e
         })?;
         
-        info!("📊 Database query returned {} sources for sync processing", rows.len());
+        crate::debug_log!("DB_SOURCES", "📊 Database query returned {} sources for sync processing", rows.len());
 
         let mut sources = Vec::new();
         for (index, row) in rows.iter().enumerate() {
@@ -287,7 +287,7 @@ impl Database {
             let source_type_str: String = row.get("source_type");
             let config_json: serde_json::Value = row.get("config");
             
-            info!("📋 Processing source {}: ID={}, Name='{}', Type={}", 
+            crate::debug_log!("DB_SOURCES", "📋 Processing source {}: ID={}, Name='{}', Type={}", 
                   index + 1, source_id, source_name, source_type_str);
             
             // Log config structure for debugging

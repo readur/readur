@@ -309,7 +309,7 @@ impl SourceScheduler {
             if elapsed_minutes < sync_interval_minutes as i64 {
                 // Only log this occasionally to avoid spam
                 if elapsed_minutes % 10 == 0 {
-                    info!("Sync not due for source {} (last sync {} minutes ago, interval {} minutes)", 
+                    crate::debug_log!("SOURCE_SCHEDULER", "Sync not due for source {} (last sync {} minutes ago, interval {} minutes)", 
                         source.name, elapsed_minutes, sync_interval_minutes);
                 }
                 return Ok(false);
@@ -499,7 +499,7 @@ impl SourceScheduler {
                     ));
                 }
                 
-                info!("✅ WebDAV URL validation passed for source '{}': {}", source_name, server_url);
+                crate::debug_log!("SOURCE_SCHEDULER", "✅ WebDAV URL validation passed for source '{}': {}", source_name, server_url);
                 Ok(())
             }
             Err(e) => {

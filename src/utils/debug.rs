@@ -60,11 +60,17 @@ macro_rules! debug_log {
     ($msg:expr) => {
         crate::utils::debug::debug_log($msg)
     };
-    ($context:expr, $msg:expr) => {
-        crate::utils::debug::debug_log_context($context, $msg)
-    };
+    // Structured logging pattern (must come before format pattern due to => token)
     ($context:expr, $($key:expr => $value:expr),+ $(,)?) => {
         crate::utils::debug::debug_log_structured($context, &[$(($key, &$value)),+])
+    };
+    // Format pattern with arguments
+    ($context:expr, $msg:expr, $($args:expr),+ $(,)?) => {
+        crate::utils::debug::debug_log_context($context, &format!($msg, $($args),+))
+    };
+    // Simple context + message pattern
+    ($context:expr, $msg:expr) => {
+        crate::utils::debug::debug_log_context($context, $msg)
     };
 }
 
