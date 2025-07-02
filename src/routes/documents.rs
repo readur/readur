@@ -571,28 +571,57 @@ async fn retry_ocr(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    crate::debug_log!("OCR_RETRY", 
+        "document_id" => document_id,
+        "user_id" => auth_user.user.id,
+        "message" => "Starting OCR retry request"
+    );
+    
     // Check if document exists and belongs to user
     let document = state
         .db
         .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .map_err(|e| {
+            crate::debug_error!("OCR_RETRY", format!("Failed to get document {}: {}", document_id, e));
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or_else(|| {
+            crate::debug_log!("OCR_RETRY", &format!("Document {} not found or access denied for user {}", document_id, auth_user.user.id));
+            StatusCode::NOT_FOUND
+        })?;
     
     // Check if document is eligible for OCR retry (failed or not processed)
+    let current_status = document.ocr_status.as_deref().unwrap_or("unknown");
     let eligible = document.ocr_status.as_ref().map_or(true, |status| {
         status == "failed" || status == "pending"
     });
     
+    crate::debug_log!("OCR_RETRY",
+        "document_id" => document_id,
+        "filename" => &document.filename,
+        "current_status" => current_status,
+        "eligible" => eligible,
+        "file_size" => document.file_size,
+        "retry_count" => document.ocr_retry_count.unwrap_or(0),
+        "message" => "Checking document eligibility"
+    );
+    
     if !eligible {
+        crate::debug_log!("OCR_RETRY", &format!("Document {} is not eligible for retry - current status: {}", document_id, current_status));
         return Ok(Json(serde_json::json!({
             "success": false,
-            "message": "Document is not eligible for OCR retry. Current status: {}",
+            "message": format!("Document is not eligible for OCR retry. Current status: {}", current_status),
             "current_status": document.ocr_status
         })));
     }
     
     // Reset document OCR fields
+    crate::debug_log!("OCR_RETRY",
+        "document_id" => document_id,
+        "message" => "Resetting document OCR fields"
+    );
+    
     let reset_result = sqlx::query(
         r#"
         UPDATE documents
@@ -611,11 +640,21 @@ async fn retry_ocr(
     .bind(document_id)
     .execute(state.db.get_pool())
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| {
+        crate::debug_error!("OCR_RETRY", format!("Failed to reset OCR fields for document {}: {}", document_id, e));
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     
     if reset_result.rows_affected() == 0 {
+        crate::debug_error!("OCR_RETRY", format!("No rows affected when resetting OCR fields for document {}", document_id));
         return Err(StatusCode::NOT_FOUND);
     }
+    
+    crate::debug_log!("OCR_RETRY",
+        "document_id" => document_id,
+        "rows_affected" => reset_result.rows_affected(),
+        "message" => "Successfully reset OCR fields"
+    );
     
     // Calculate priority based on file size (higher priority for retries)
     let priority = match document.file_size {
@@ -626,10 +665,38 @@ async fn retry_ocr(
         _ => 6,                     // > 50MB: lowest priority
     };
     
+    crate::debug_log!("OCR_RETRY",
+        "document_id" => document_id,
+        "file_size" => document.file_size,
+        "priority" => priority,
+        "message" => "Calculated retry priority"
+    );
+    
     // Add to OCR queue with detailed logging
+    crate::debug_log!("OCR_RETRY",
+        "document_id" => document_id,
+        "priority" => priority,
+        "file_size" => document.file_size,
+        "message" => "Enqueueing document for OCR processing"
+    );
+    
     match state.queue_service.enqueue_document(document_id, priority, document.file_size).await {
         Ok(queue_id) => {
+            crate::debug_log!("OCR_RETRY",
+                "document_id" => document_id,
+                "queue_id" => queue_id,
+                "priority" => priority,
+                "message" => "Successfully enqueued document"
+            );
+            
             // Record retry history
+            crate::debug_log!("OCR_RETRY",
+                "document_id" => document_id,
+                "user_id" => auth_user.user.id,
+                "queue_id" => queue_id,
+                "message" => "Recording retry history"
+            );
+            
             if let Err(e) = crate::db::ocr_retry::record_ocr_retry(
                 state.db.get_pool(),
                 document_id,
@@ -638,8 +705,24 @@ async fn retry_ocr(
                 priority,
                 Some(queue_id),
             ).await {
+                crate::debug_error!("OCR_RETRY", format!("Failed to record retry history for document {}: {}", document_id, e));
                 tracing::warn!("Failed to record retry history for document {}: {}", document_id, e);
+            } else {
+                crate::debug_log!("OCR_RETRY",
+                    "document_id" => document_id,
+                    "queue_id" => queue_id,
+                    "message" => "Successfully recorded retry history"
+                );
             }
+            
+            crate::debug_log!("OCR_RETRY",
+                "document_id" => document_id,
+                "filename" => &document.filename,
+                "queue_id" => queue_id,
+                "priority" => priority,
+                "file_size" => document.file_size,
+                "message" => "OCR retry process completed successfully"
+            );
             
             tracing::info!(
                 "OCR retry queued for document {} ({}): queue_id={}, priority={}, size={}",
@@ -656,6 +739,7 @@ async fn retry_ocr(
             })))
         }
         Err(e) => {
+            crate::debug_error!("OCR_RETRY", format!("Failed to enqueue document {}: {}", document_id, e));
             tracing::error!("Failed to queue OCR retry for document {}: {}", document_id, e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }

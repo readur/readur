@@ -75,6 +75,13 @@ impl OcrQueueService {
 
     /// Add a document to the OCR queue
     pub async fn enqueue_document(&self, document_id: Uuid, priority: i32, file_size: i64) -> Result<Uuid> {
+        crate::debug_log!("OCR_QUEUE",
+            "document_id" => document_id,
+            "priority" => priority,
+            "file_size" => file_size,
+            "message" => "Enqueueing document"
+        );
+        
         let row = sqlx::query(
             r#"
             INSERT INTO ocr_queue (document_id, priority, file_size)
@@ -86,10 +93,22 @@ impl OcrQueueService {
         .bind(priority)
         .bind(file_size)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            crate::debug_error!("OCR_QUEUE", format!("Failed to insert document {} into queue: {}", document_id, e));
+            e
+        })?;
         
         let id: Uuid = row.get("id");
 
+        crate::debug_log!("OCR_QUEUE",
+            "document_id" => document_id,
+            "queue_id" => id,
+            "priority" => priority,
+            "file_size" => file_size,
+            "message" => "Successfully enqueued document"
+        );
+        
         info!("Enqueued document {} with priority {} for OCR processing", document_id, priority);
         Ok(id)
     }

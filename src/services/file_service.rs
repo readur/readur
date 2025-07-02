@@ -177,6 +177,8 @@ impl FileService {
             ocr_status: Some("pending".to_string()),
             ocr_error: None,
             ocr_completed_at: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
             tags: Vec::new(),
             created_at: Utc::now(),
             updated_at: Utc::now(),

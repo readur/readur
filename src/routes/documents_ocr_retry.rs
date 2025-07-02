@@ -101,61 +101,119 @@ pub async fn bulk_retry_ocr(
     auth_user: AuthUser,
     Json(request): Json<BulkOcrRetryRequest>,
 ) -> Result<Json<BulkOcrRetryResponse>, StatusCode> {
+    crate::debug_log!("BULK_OCR_RETRY",
+        "user_id" => auth_user.user.id,
+        "mode" => format!("{:?}", request.mode),
+        "preview_only" => request.preview_only.unwrap_or(false),
+        "priority_override" => request.priority_override.unwrap_or(-1),
+        "message" => "Starting bulk OCR retry request"
+    );
+    
     info!("Bulk OCR retry requested by user {} with mode: {:?}", auth_user.user.id, request.mode);
     
     let preview_only = request.preview_only.unwrap_or(false);
     
     // Build query based on selection mode
+    crate::debug_log!("BULK_OCR_RETRY", "Building document query based on selection mode");
+    
     let documents = match request.mode {
         SelectionMode::All => {
+            crate::debug_log!("BULK_OCR_RETRY", "Fetching all failed OCR documents");
             get_all_failed_ocr_documents(&state, &auth_user).await?
         }
         SelectionMode::Specific => {
-            if let Some(ids) = request.document_ids {
-                get_specific_documents(&state, &auth_user, ids).await?
+            if let Some(ids) = &request.document_ids {
+                crate::debug_log!("BULK_OCR_RETRY",
+                    "document_count" => ids.len(),
+                    "message" => "Fetching specific documents"
+                );
+                get_specific_documents(&state, &auth_user, ids.clone()).await?
             } else {
+                crate::debug_error!("BULK_OCR_RETRY", "Specific mode requested but no document IDs provided");
                 return Err(StatusCode::BAD_REQUEST);
             }
         }
         SelectionMode::Filter => {
-            if let Some(filter) = request.filter {
-                get_filtered_documents(&state, &auth_user, filter).await?
+            if let Some(filter) = &request.filter {
+                crate::debug_log!("BULK_OCR_RETRY",
+                    "filter_mime_types" => filter.mime_types.as_ref().map(|v| v.len()).unwrap_or(0),
+                    "filter_failure_reasons" => filter.failure_reasons.as_ref().map(|v| v.len()).unwrap_or(0),
+                    "message" => "Fetching filtered documents"
+                );
+                get_filtered_documents(&state, &auth_user, filter.clone()).await?
             } else {
+                crate::debug_error!("BULK_OCR_RETRY", "Filter mode requested but no filter provided");
                 return Err(StatusCode::BAD_REQUEST);
             }
         }
     };
     
     let matched_count = documents.len();
+    crate::debug_log!("BULK_OCR_RETRY",
+        "matched_count" => matched_count,
+        "message" => "Document query completed"
+    );
     let mut retry_documents = Vec::new();
     let mut queued_count = 0;
     let mut total_estimated_time = 0.0;
     
-    for doc in documents {
+    for (index, doc) in documents.iter().enumerate() {
         let priority = calculate_priority(doc.file_size, request.priority_override);
+        
+        crate::debug_log!("BULK_OCR_RETRY",
+            "index" => index + 1,
+            "total" => matched_count,
+            "document_id" => doc.id,
+            "filename" => &doc.filename,
+            "file_size" => doc.file_size,
+            "priority" => priority,
+            "failure_reason" => doc.ocr_failure_reason.as_deref().unwrap_or("none"),
+            "message" => "Processing document"
+        );
         
         let mut doc_info = OcrRetryDocumentInfo {
             id: doc.id,
             filename: doc.filename.clone(),
             file_size: doc.file_size,
-            mime_type: doc.mime_type,
-            ocr_failure_reason: doc.ocr_failure_reason,
+            mime_type: doc.mime_type.clone(),
+            ocr_failure_reason: doc.ocr_failure_reason.clone(),
             priority,
             queue_id: None,
         };
         
         if !preview_only {
             // Reset OCR fields
+            crate::debug_log!("BULK_OCR_RETRY",
+                "document_id" => doc.id,
+                "message" => "Resetting OCR status for document"
+            );
+            
             if let Err(e) = reset_document_ocr_status(&state, doc.id).await {
+                crate::debug_error!("BULK_OCR_RETRY", format!("Failed to reset OCR status for document {}: {}", doc.id, e));
                 warn!("Failed to reset OCR status for document {}: {}", doc.id, e);
                 continue;
             }
             
             // Queue for OCR
+            crate::debug_log!("BULK_OCR_RETRY",
+                "document_id" => doc.id,
+                "priority" => priority,
+                "file_size" => doc.file_size,
+                "message" => "Enqueueing document for OCR"
+            );
+            
             match state.queue_service.enqueue_document(doc.id, priority, doc.file_size).await {
                 Ok(queue_id) => {
                     doc_info.queue_id = Some(queue_id);
                     queued_count += 1;
+                    
+                    crate::debug_log!("BULK_OCR_RETRY",
+                        "document_id" => doc.id,
+                        "queue_id" => queue_id,
+                        "priority" => priority,
+                        "queued_count" => queued_count,
+                        "message" => "Successfully enqueued document"
+                    );
                     
                     // Record retry history
                     let retry_reason = match &request.mode {
@@ -163,6 +221,13 @@ pub async fn bulk_retry_ocr(
                         SelectionMode::Specific => "bulk_retry_specific",
                         SelectionMode::Filter => "bulk_retry_filtered",
                     };
+                    
+                    crate::debug_log!("BULK_OCR_RETRY",
+                        "document_id" => doc.id,
+                        "retry_reason" => retry_reason,
+                        "queue_id" => queue_id,
+                        "message" => "Recording retry history"
+                    );
                     
                     if let Err(e) = crate::db::ocr_retry::record_ocr_retry(
                         state.db.get_pool(),
@@ -172,12 +237,20 @@ pub async fn bulk_retry_ocr(
                         priority,
                         Some(queue_id),
                     ).await {
+                        crate::debug_error!("BULK_OCR_RETRY", format!("Failed to record retry history for document {}: {}", doc.id, e));
                         warn!("Failed to record retry history for document {}: {}", doc.id, e);
+                    } else {
+                        crate::debug_log!("BULK_OCR_RETRY", 
+                            "document_id" => doc.id,
+                            "queue_id" => queue_id,
+                            "message" => "Successfully recorded retry history"
+                        );
                     }
                     
                     info!("Queued document {} for OCR retry with priority {}", doc.id, priority);
                 }
                 Err(e) => {
+                    crate::debug_error!("BULK_OCR_RETRY", format!("Failed to enqueue document {}: {}", doc.id, e));
                     error!("Failed to queue document {} for OCR retry: {}", doc.id, e);
                 }
             }
@@ -187,6 +260,15 @@ pub async fn bulk_retry_ocr(
         total_estimated_time += (doc.file_size as f64 / 1_048_576.0) * 2.0;
         retry_documents.push(doc_info);
     }
+    
+    crate::debug_log!("BULK_OCR_RETRY", 
+        "matched_count" => matched_count,
+        "queued_count" => queued_count,
+        "preview_only" => preview_only,
+        "estimated_time_minutes" => (total_estimated_time / 60.0) as i32,
+        "user_id" => auth_user.user.id,
+        "message" => "Bulk retry operation completed"
+    );
     
     let response = BulkOcrRetryResponse {
         success: true,
@@ -585,6 +667,7 @@ async fn reset_document_ocr_status(state: &Arc<AppState>, document_id: Uuid) -> 
             ocr_text = NULL,
             ocr_error = NULL,
             ocr_failure_reason = NULL,
+            ocr_retry_count = NULL,
             ocr_confidence = NULL,
             ocr_word_count = NULL,
             ocr_processing_time_ms = NULL,

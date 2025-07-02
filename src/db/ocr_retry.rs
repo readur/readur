@@ -27,7 +27,21 @@ pub async fn record_ocr_retry(
     priority: i32,
     queue_id: Option<Uuid>,
 ) -> Result<Uuid> {
+    crate::debug_log!("OCR_RETRY_HISTORY",
+        "document_id" => document_id,
+        "user_id" => user_id,
+        "retry_reason" => retry_reason,
+        "priority" => priority,
+        "queue_id" => queue_id.unwrap_or_default(),
+        "message" => "Recording OCR retry attempt"
+    );
+    
     // First get the current OCR status
+    crate::debug_log!("OCR_RETRY_HISTORY",
+        "document_id" => document_id,
+        "message" => "Fetching current OCR status"
+    );
+    
     let current_status = sqlx::query(
         r#"
         SELECT ocr_status, ocr_failure_reason, ocr_error
@@ -37,19 +51,38 @@ pub async fn record_ocr_retry(
     )
     .bind(document_id)
     .fetch_optional(pool)
-    .await?;
+    .await
+    .map_err(|e| {
+        crate::debug_error!("OCR_RETRY_HISTORY", format!("Failed to fetch current status for document {}: {}", document_id, e));
+        e
+    })?;
     
     let (previous_status, previous_failure_reason, previous_error) = if let Some(row) = current_status {
-        (
-            row.get::<Option<String>, _>("ocr_status"),
-            row.get::<Option<String>, _>("ocr_failure_reason"),
-            row.get::<Option<String>, _>("ocr_error"),
-        )
+        let status = row.get::<Option<String>, _>("ocr_status");
+        let failure = row.get::<Option<String>, _>("ocr_failure_reason");
+        let error = row.get::<Option<String>, _>("ocr_error");
+        
+        crate::debug_log!("OCR_RETRY_HISTORY",
+            "document_id" => document_id,
+            "status" => status.as_deref().unwrap_or("none"),
+            "failure_reason" => failure.as_deref().unwrap_or("none"),
+            "has_error" => error.is_some(),
+            "message" => "Found current document status"
+        );
+        
+        (status, failure, error)
     } else {
+        crate::debug_warn!("OCR_RETRY_HISTORY", "Document not found when recording retry history");
         (None, None, None)
     };
     
     // Insert retry history record
+    crate::debug_log!("OCR_RETRY_HISTORY",
+        "document_id" => document_id,
+        "previous_status" => previous_status.as_deref().unwrap_or("none"),
+        "message" => "Inserting retry history record"
+    );
+    
     let retry_id: Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO ocr_retry_history (
@@ -63,15 +96,25 @@ pub async fn record_ocr_retry(
     .bind(document_id)
     .bind(user_id)
     .bind(retry_reason)
-    .bind(previous_status)
-    .bind(previous_failure_reason)
-    .bind(previous_error)
+    .bind(&previous_status)
+    .bind(&previous_failure_reason)
+    .bind(&previous_error)
     .bind(priority)
     .bind(queue_id)
     .fetch_one(pool)
-    .await?;
+    .await
+    .map_err(|e| {
+        crate::debug_error!("OCR_RETRY_HISTORY", format!("Failed to insert retry history for document {}: {}", document_id, e));
+        e
+    })?;
     
     // Increment retry count
+    crate::debug_log!("OCR_RETRY_HISTORY",
+        "document_id" => document_id,
+        "retry_id" => retry_id,
+        "message" => "Incrementing retry count"
+    );
+    
     sqlx::query(
         r#"
         UPDATE documents
@@ -82,7 +125,18 @@ pub async fn record_ocr_retry(
     )
     .bind(document_id)
     .execute(pool)
-    .await?;
+    .await
+    .map_err(|e| {
+        crate::debug_error!("OCR_RETRY_HISTORY", format!("Failed to increment retry count for document {}: {}", document_id, e));
+        e
+    })?;
+    
+    crate::debug_log!("OCR_RETRY_HISTORY",
+        "document_id" => document_id,
+        "retry_id" => retry_id,
+        "user_id" => user_id,
+        "message" => "Successfully recorded retry history"
+    );
     
     Ok(retry_id)
 }

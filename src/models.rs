@@ -129,6 +129,8 @@ pub struct Document {
     pub ocr_status: Option<String>,
     pub ocr_error: Option<String>,
     pub ocr_completed_at: Option<DateTime<Utc>>,
+    pub ocr_retry_count: Option<i32>,
+    pub ocr_failure_reason: Option<String>,
     pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
