@@ -63,6 +63,8 @@ mod document_routes_deletion_tests {
             original_created_at: None,
             original_modified_at: None,
             source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
         }
     }
 
@@ -400,6 +402,8 @@ mod document_routes_deletion_tests {
                 original_created_at: None,
                 original_modified_at: None,
                 source_metadata: None,
+                ocr_retry_count: None,
+                ocr_failure_reason: None,
             }
         }
 

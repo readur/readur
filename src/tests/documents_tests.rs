@@ -29,6 +29,8 @@ fn create_test_document(user_id: Uuid) -> Document {
         original_created_at: None,
         original_modified_at: None,
         source_metadata: None,
+        ocr_retry_count: None,
+        ocr_failure_reason: None,
     }
 }
 
@@ -57,6 +59,8 @@ fn create_test_document_without_ocr(user_id: Uuid) -> Document {
         original_created_at: None,
         original_modified_at: None,
         source_metadata: None,
+        ocr_retry_count: None,
+        ocr_failure_reason: None,
     }
 }
 
@@ -85,6 +89,8 @@ fn create_test_document_with_ocr_error(user_id: Uuid) -> Document {
         original_created_at: None,
         original_modified_at: None,
         source_metadata: None,
+        ocr_retry_count: None,
+        ocr_failure_reason: None,
     }
 }
 
@@ -1564,6 +1570,8 @@ mod deletion_error_handling_tests {
                 original_created_at: None,
                 original_modified_at: None,
                 source_metadata: None,
+                ocr_retry_count: None,
+                ocr_failure_reason: None,
             }
         }
 

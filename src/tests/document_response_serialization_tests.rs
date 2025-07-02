@@ -103,6 +103,8 @@ mod tests {
             original_created_at: Some(DateTime::parse_from_rfc3339("2023-12-01T10:00:00Z").unwrap().with_timezone(&Utc)),
             original_modified_at: Some(DateTime::parse_from_rfc3339("2023-12-15T15:30:00Z").unwrap().with_timezone(&Utc)),
             source_metadata: Some(serde_json::json!({"permissions": "644", "owner": "user1"})),
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
         };
 
         // Convert to DocumentResponse
