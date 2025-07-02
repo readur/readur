@@ -521,7 +521,8 @@ async fn get_all_failed_ocr_documents(
         r#"
         SELECT id, filename, file_size, mime_type, ocr_failure_reason
         FROM documents
-        WHERE ($1::uuid IS NULL OR user_id = $1)
+        WHERE ocr_status = 'failed'
+          AND ($1::uuid IS NULL OR user_id = $1)
         ORDER BY created_at DESC
         "#
     )
@@ -716,10 +717,10 @@ fn calculate_priority(file_size: i64, override_priority: Option<i32>) -> i32 {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct DocumentInfo {
-    id: Uuid,
-    filename: String,
-    file_size: i64,
-    mime_type: String,
-    ocr_failure_reason: Option<String>,
+pub struct DocumentInfo {
+    pub id: Uuid,
+    pub filename: String,
+    pub file_size: i64,
+    pub mime_type: String,
+    pub ocr_failure_reason: Option<String>,
 }
