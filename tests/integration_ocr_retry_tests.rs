@@ -228,9 +228,11 @@ impl OcrRetryTestHelper {
     async fn create_failed_test_document(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Upload a simple text file first
         let test_content = "This is a test document for OCR retry testing.";
+        let file_part = reqwest::multipart::Part::bytes(test_content.as_bytes())
+            .file_name("test_retry_document.txt")
+            .mime_str("text/plain")?;
         let form = reqwest::multipart::Form::new()
-            .text("file", test_content)
-            .text("filename", "test_retry_document.txt");
+            .part("file", file_part);
             
         let response = self.client
             .post(&format!("{}/api/documents", get_base_url()))

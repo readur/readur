@@ -12,21 +12,24 @@ export const api = {
 // Mock document service
 export const documentService = {
   list: vi.fn(),
-  get: vi.fn(),
+  getById: vi.fn(),
+  getOcrText: vi.fn(),
   upload: vi.fn(),
   delete: vi.fn(),
   search: vi.fn(),
   enhancedSearch: vi.fn(),
   download: vi.fn(),
+  getThumbnail: vi.fn(),
+  getProcessedImage: vi.fn(),
   updateTags: vi.fn(),
   getFailedOcrDocuments: vi.fn(),
   getDuplicates: vi.fn(),
   retryOcr: vi.fn(),
   deleteLowConfidence: vi.fn(),
-  getDocumentRetryHistory: vi.fn().mockResolvedValue({ data: { retry_history: [], total_retries: 0 } }),
-  getRetryRecommendations: vi.fn().mockResolvedValue({ data: { recommendations: [], total_recommendations: 0 } }),
-  getRetryStats: vi.fn().mockResolvedValue({ data: { failure_reasons: [], file_types: [], total_failed: 0 } }),
-  bulkRetryOcr: vi.fn().mockResolvedValue({ data: { success: true, queued_count: 0, matched_count: 0, documents: [] } }),
+  getDocumentRetryHistory: vi.fn(),
+  getRetryRecommendations: vi.fn(),
+  getRetryStats: vi.fn(),
+  bulkRetryOcr: vi.fn(),
 }
 
 // Re-export types that components might need
