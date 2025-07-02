@@ -343,7 +343,7 @@ const DocumentsPage: React.FC = () => {
   const handleRetryOcr = async (doc: Document): Promise<void> => {
     try {
       setRetryingDocument(doc.id);
-      await api.bulkRetryOcr({
+      await documentService.bulkRetryOcr({
         mode: 'specific',
         document_ids: [doc.id],
         priority_override: 15,

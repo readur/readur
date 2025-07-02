@@ -94,7 +94,7 @@ const DocumentDetailsPage: React.FC = () => {
     
     setRetryingOcr(true);
     try {
-      await api.bulkRetryOcr({
+      await documentService.bulkRetryOcr({
         mode: 'specific',
         document_ids: [document.id],
         priority_override: 15,
