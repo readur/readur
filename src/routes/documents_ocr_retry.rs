@@ -335,10 +335,19 @@ pub async fn get_ocr_retry_stats(
     
     let failure_reasons: Vec<serde_json::Value> = failure_stats.into_iter()
         .map(|row| {
+            // Handle NUMERIC type from database by trying different types
+            let avg_file_size_mb = if let Ok(val) = row.try_get::<f64, _>("avg_file_size") {
+                val / 1_048_576.0
+            } else if let Ok(val) = row.try_get::<i64, _>("avg_file_size") {
+                val as f64 / 1_048_576.0
+            } else {
+                0.0
+            };
+            
             serde_json::json!({
                 "reason": row.get::<Option<String>, _>("ocr_failure_reason").unwrap_or_else(|| "unknown".to_string()),
                 "count": row.get::<i64, _>("count"),
-                "avg_file_size_mb": row.get::<Option<f64>, _>("avg_file_size").unwrap_or(0.0) / 1_048_576.0,
+                "avg_file_size_mb": avg_file_size_mb,
                 "first_occurrence": row.get::<chrono::DateTime<chrono::Utc>, _>("first_occurrence"),
                 "last_occurrence": row.get::<chrono::DateTime<chrono::Utc>, _>("last_occurrence"),
             })
@@ -347,10 +356,19 @@ pub async fn get_ocr_retry_stats(
     
     let file_types: Vec<serde_json::Value> = type_stats.into_iter()
         .map(|row| {
+            // Handle NUMERIC type from database by trying different types
+            let avg_file_size_mb = if let Ok(val) = row.try_get::<f64, _>("avg_file_size") {
+                val / 1_048_576.0
+            } else if let Ok(val) = row.try_get::<i64, _>("avg_file_size") {
+                val as f64 / 1_048_576.0
+            } else {
+                0.0
+            };
+            
             serde_json::json!({
                 "mime_type": row.get::<String, _>("mime_type"),
                 "count": row.get::<i64, _>("count"),
-                "avg_file_size_mb": row.get::<Option<f64>, _>("avg_file_size").unwrap_or(0.0) / 1_048_576.0,
+                "avg_file_size_mb": avg_file_size_mb,
             })
         })
         .collect();

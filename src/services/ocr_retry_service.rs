@@ -306,7 +306,16 @@ impl OcrRetryService {
             .map(|row| FailureStatistic {
                 reason: row.get::<String, _>("reason"),
                 count: row.get::<i64, _>("count"),
-                avg_file_size_mb: row.get::<Option<f64>, _>("avg_file_size").unwrap_or(0.0) / 1_048_576.0,
+                avg_file_size_mb: {
+                    // Handle NUMERIC type from database by trying different types
+                    if let Ok(val) = row.try_get::<f64, _>("avg_file_size") {
+                        val / 1_048_576.0
+                    } else if let Ok(val) = row.try_get::<i64, _>("avg_file_size") {
+                        val as f64 / 1_048_576.0
+                    } else {
+                        0.0
+                    }
+                },
                 recent_failures: row.get::<i64, _>("recent_failures"),
             })
             .collect();

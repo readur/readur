@@ -20,16 +20,30 @@ impl OcrRetryTestHelper {
     async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::new();
         
-        // First check if server is running
+        // First check if server is running with better error handling
         let health_check = client
             .get(&format!("{}/api/health", get_base_url()))
-            .timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(10))
             .send()
             .await;
         
-        if let Err(e) = health_check {
-            eprintln!("Health check failed: {}. Is the server running at {}?", e, get_base_url());
-            return Err(format!("Server not running: {}", e).into());
+        match health_check {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let text = response.text().await.unwrap_or_else(|_| "Unable to read response".to_string());
+                    return Err(format!("Health check failed with status {}: {}. Is the server running at {}?", status, text, get_base_url()).into());
+                }
+                println!("✅ Server health check passed at {}", get_base_url());
+            }
+            Err(e) => {
+                eprintln!("❌ Cannot connect to server at {}: {}", get_base_url(), e);
+                eprintln!("💡 To run integration tests, start the server first:");
+                eprintln!("   cargo run");
+                eprintln!("   Then run tests in another terminal:");
+                eprintln!("   cargo test --test integration_ocr_retry_tests");
+                return Err(format!("Server not reachable: {}", e).into());
+            }
         }
         
         // Create a test admin user
@@ -96,12 +110,23 @@ impl OcrRetryTestHelper {
             .send()
             .await?;
         
-        if !response.status().is_success() {
-            return Err(format!("Failed to get retry stats: {}", response.text().await?).into());
+        let status = response.status();
+        let response_text = response.text().await?;
+        
+        if !status.is_success() {
+            return Err(format!("Failed to get retry stats (status {}): {}", status, response_text).into());
         }
         
-        let result: Value = response.json().await?;
-        Ok(result)
+        // Try to parse the JSON and provide better error messages
+        match serde_json::from_str::<Value>(&response_text) {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                eprintln!("JSON parsing failed for retry stats response:");
+                eprintln!("Status: {}", status);
+                eprintln!("Response text: {}", response_text);
+                Err(format!("Failed to parse JSON response: {}. Raw response: {}", e, response_text).into())
+            }
+        }
     }
     
     async fn get_retry_recommendations(&self) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
@@ -112,12 +137,23 @@ impl OcrRetryTestHelper {
             .send()
             .await?;
         
-        if !response.status().is_success() {
-            return Err(format!("Failed to get retry recommendations: {}", response.text().await?).into());
+        let status = response.status();
+        let response_text = response.text().await?;
+        
+        if !status.is_success() {
+            return Err(format!("Failed to get retry recommendations (status {}): {}", status, response_text).into());
         }
         
-        let result: Value = response.json().await?;
-        Ok(result)
+        // Try to parse the JSON and provide better error messages
+        match serde_json::from_str::<Value>(&response_text) {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                eprintln!("JSON parsing failed for retry recommendations response:");
+                eprintln!("Status: {}", status);
+                eprintln!("Response text: {}", response_text);
+                Err(format!("Failed to parse JSON response: {}. Raw response: {}", e, response_text).into())
+            }
+        }
     }
     
     async fn bulk_retry_ocr(&self, mode: &str, document_ids: Option<Vec<String>>, preview_only: bool) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
@@ -138,12 +174,23 @@ impl OcrRetryTestHelper {
             .send()
             .await?;
         
-        if !response.status().is_success() {
-            return Err(format!("Failed to bulk retry OCR: {}", response.text().await?).into());
+        let status = response.status();
+        let response_text = response.text().await?;
+        
+        if !status.is_success() {
+            return Err(format!("Failed to bulk retry OCR (status {}): {}", status, response_text).into());
         }
         
-        let result: Value = response.json().await?;
-        Ok(result)
+        // Try to parse the JSON and provide better error messages
+        match serde_json::from_str::<Value>(&response_text) {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                eprintln!("JSON parsing failed for bulk retry response:");
+                eprintln!("Status: {}", status);
+                eprintln!("Response text: {}", response_text);
+                Err(format!("Failed to parse JSON response: {}. Raw response: {}", e, response_text).into())
+            }
+        }
     }
     
     async fn get_document_retry_history(&self, document_id: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
@@ -203,6 +250,7 @@ async fn test_ocr_retry_stats_endpoint() {
         }
         Err(e) => {
             println!("❌ OCR retry stats test failed: {}", e);
+            println!("💡 This might indicate a server issue or missing endpoint implementation");
             panic!("OCR retry stats endpoint failed: {}", e);
         }
     }
@@ -240,6 +288,7 @@ async fn test_ocr_retry_recommendations_endpoint() {
         }
         Err(e) => {
             println!("❌ OCR retry recommendations test failed: {}", e);
+            println!("💡 This might indicate a server issue or missing endpoint implementation");
             panic!("OCR retry recommendations endpoint failed: {}", e);
         }
     }
@@ -274,6 +323,7 @@ async fn test_bulk_retry_preview_mode() {
         }
         Err(e) => {
             println!("❌ Bulk retry preview test failed: {}", e);
+            println!("💡 This might indicate a server issue or missing endpoint implementation");
             panic!("Bulk retry preview failed: {}", e);
         }
     }
@@ -319,6 +369,7 @@ async fn test_document_retry_history() {
                 }
                 Err(e) => {
                     println!("❌ Document retry history test failed: {}", e);
+                    println!("💡 This might indicate a server issue or missing endpoint implementation");
                     panic!("Document retry history failed: {}", e);
                 }
             }
