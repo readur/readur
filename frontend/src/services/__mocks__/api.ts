@@ -23,6 +23,10 @@ export const documentService = {
   getDuplicates: vi.fn(),
   retryOcr: vi.fn(),
   deleteLowConfidence: vi.fn(),
+  getDocumentRetryHistory: vi.fn().mockResolvedValue({ data: { retry_history: [], total_retries: 0 } }),
+  getRetryRecommendations: vi.fn().mockResolvedValue({ data: { recommendations: [], total_recommendations: 0 } }),
+  getRetryStats: vi.fn().mockResolvedValue({ data: { failure_reasons: [], file_types: [], total_failed: 0 } }),
+  bulkRetryOcr: vi.fn().mockResolvedValue({ data: { success: true, queued_count: 0, matched_count: 0, documents: [] } }),
 }
 
 // Re-export types that components might need

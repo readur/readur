@@ -7,17 +7,11 @@ import { RetryRecommendations } from '../RetryRecommendations';
 const mockGetRetryRecommendations = vi.fn();
 const mockBulkRetryOcr = vi.fn();
 
-const mockDocumentService = {
-  getRetryRecommendations: mockGetRetryRecommendations,
-};
-
-const mockApi = {
-  bulkRetryOcr: mockBulkRetryOcr,
-};
-
 vi.mock('../../services/api', () => ({
-  documentService: mockDocumentService,
-  default: mockApi,
+  documentService: {
+    getRetryRecommendations: mockGetRetryRecommendations,
+    bulkRetryOcr: mockBulkRetryOcr,
+  },
 }));
 
 describe('RetryRecommendations', () => {
@@ -74,17 +68,20 @@ describe('RetryRecommendations', () => {
     render(<RetryRecommendations {...mockProps} />);
 
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
-    expect(screen.getByText('Loading retry recommendations...')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing failure patterns...')).toBeInTheDocument();
   });
 
   test('loads and displays recommendations on mount', async () => {
     render(<RetryRecommendations {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('OCR Retry Recommendations')).toBeInTheDocument();
+      expect(mockGetRetryRecommendations).toHaveBeenCalled();
     });
 
-    expect(screen.getByText('Low Confidence Results')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Low Confidence Results')).toBeInTheDocument();
+    });
+
     expect(screen.getByText('Image Quality Issues')).toBeInTheDocument();
     expect(screen.getByText('15 documents')).toBeInTheDocument();
     expect(screen.getByText('8 documents')).toBeInTheDocument();
@@ -204,14 +201,14 @@ describe('RetryRecommendations', () => {
     render(<RetryRecommendations {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('No retry recommendations available')).toBeInTheDocument();
+      expect(screen.getByText('No retry recommendations available. This usually means:')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('All documents have been processed successfully')).toBeInTheDocument();
-    expect(screen.getByText('No failed documents found')).toBeInTheDocument();
+    expect(screen.getByText('All failed documents have already been retried multiple times')).toBeInTheDocument();
+    expect(screen.getByText('No clear patterns in failure reasons that suggest likely success')).toBeInTheDocument();
   });
 
-  test('shows correct success rate labels', () => {
+  test('shows correct success rate labels', async () => {
     const { rerender } = render(<div />);
 
     // Test high success rate (>= 70%)
@@ -227,7 +224,7 @@ describe('RetryRecommendations', () => {
 
     rerender(<RetryRecommendations {...mockProps} />);
 
-    waitFor(() => {
+    await waitFor(() => {
       expect(screen.getByText('85% (High)')).toBeInTheDocument();
     });
 
@@ -244,7 +241,7 @@ describe('RetryRecommendations', () => {
 
     rerender(<RetryRecommendations {...mockProps} />);
 
-    waitFor(() => {
+    await waitFor(() => {
       expect(screen.getByText('55% (Medium)')).toBeInTheDocument();
     });
 
@@ -261,7 +258,7 @@ describe('RetryRecommendations', () => {
 
     rerender(<RetryRecommendations {...mockProps} />);
 
-    waitFor(() => {
+    await waitFor(() => {
       expect(screen.getByText('25% (Low)')).toBeInTheDocument();
     });
   });

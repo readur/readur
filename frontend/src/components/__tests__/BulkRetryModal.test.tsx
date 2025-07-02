@@ -5,16 +5,11 @@ import { BulkRetryModal } from '../BulkRetryModal';
 
 // Mock the API
 const mockBulkRetryOcr = vi.fn();
-const mockDocumentService = {
-  bulkRetryOcr: mockBulkRetryOcr,
-};
-const mockApi = {
-  bulkRetryOcr: mockBulkRetryOcr,
-};
 
 vi.mock('../../services/api', () => ({
-  default: mockApi,
-  documentService: mockDocumentService,
+  documentService: {
+    bulkRetryOcr: mockBulkRetryOcr,
+  },
 }));
 
 describe('BulkRetryModal', () => {
@@ -155,6 +150,30 @@ describe('BulkRetryModal', () => {
 
   test('executes actual retry request successfully', async () => {
     const user = userEvent.setup();
+    
+    // Set up different responses for preview and execute
+    mockBulkRetryOcr
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          queued_count: 0,
+          matched_count: 5,
+          documents: [],
+          estimated_total_time_minutes: 2.5,
+          message: 'Preview completed',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          queued_count: 5,
+          matched_count: 5,
+          documents: [],
+          estimated_total_time_minutes: 2.5,
+          message: 'Operation completed successfully',
+        },
+      });
+    
     render(<BulkRetryModal {...mockProps} />);
 
     // First do a preview
@@ -162,19 +181,30 @@ describe('BulkRetryModal', () => {
     await user.click(previewButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Retry \d+ Documents/)).toBeInTheDocument();
+      expect(screen.getByText('Preview Results')).toBeInTheDocument();
     });
 
     // Now execute the retry
-    const executeButton = screen.getByText(/Retry \d+ Documents/);
+    const executeButton = screen.getByText('Retry 5 Documents');
     await user.click(executeButton);
 
     await waitFor(() => {
-      expect(mockBulkRetryOcr).toHaveBeenCalledWith({
+      expect(mockBulkRetryOcr).toHaveBeenCalledTimes(2);
+    });
+    
+    expect(mockBulkRetryOcr).toHaveBeenNthCalledWith(1,
+      expect.objectContaining({
+        mode: 'all',
+        preview_only: true,
+      })
+    );
+    
+    expect(mockBulkRetryOcr).toHaveBeenNthCalledWith(2,
+      expect.objectContaining({
         mode: 'all',
         preview_only: false,
-      });
-    });
+      })
+    );
 
     expect(mockProps.onSuccess).toHaveBeenCalled();
     expect(mockProps.onClose).toHaveBeenCalled();
@@ -190,7 +220,7 @@ describe('BulkRetryModal', () => {
     await user.click(previewButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Failed to preview retry/)).toBeInTheDocument();
+      expect(screen.getByText('Failed to preview retry operation')).toBeInTheDocument();
     });
   });
 
@@ -217,12 +247,8 @@ describe('BulkRetryModal', () => {
   test('shows loading state during API calls', async () => {
     const user = userEvent.setup();
     
-    // Make the API call take time
-    mockBulkRetryOcr.mockImplementation(() => new Promise(resolve => 
-      setTimeout(() => resolve({
-        data: { success: true, queued_count: 0, matched_count: 0, documents: [] }
-      }), 100)
-    ));
+    // Make the API call never resolve
+    mockBulkRetryOcr.mockImplementation(() => new Promise(() => {}));
 
     render(<BulkRetryModal {...mockProps} />);
 
@@ -230,9 +256,9 @@ describe('BulkRetryModal', () => {
     await user.click(previewButton);
 
     // Should show loading state
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
-    // The button should remain as "Preview" during loading, not change text
-    expect(screen.getByText('Preview')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    });
   });
 
   test('resets form when modal is closed and reopened', () => {

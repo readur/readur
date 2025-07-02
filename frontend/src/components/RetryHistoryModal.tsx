@@ -72,8 +72,8 @@ export const RetryHistoryModal: React.FC<RetryHistoryModalProps> = ({
     setError(null);
     try {
       const response = await documentService.getDocumentRetryHistory(documentId);
-      setHistory(response.data.retry_history);
-      setTotalRetries(response.data.total_retries);
+      setHistory(response.data?.retry_history || []);
+      setTotalRetries(response.data?.total_retries || 0);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load retry history');
       setHistory([]);
@@ -144,7 +144,7 @@ export const RetryHistoryModal: React.FC<RetryHistoryModalProps> = ({
               Loading retry history...
             </Typography>
           </Box>
-        ) : history.length === 0 ? (
+        ) : (!history || history.length === 0) ? (
           <Alert severity="info">
             <Typography variant="body1">
               No retry attempts found for this document.
@@ -161,7 +161,7 @@ export const RetryHistoryModal: React.FC<RetryHistoryModalProps> = ({
                 <strong>{totalRetries}</strong> retry attempts found for this document.
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Most recent attempt: {formatDistanceToNow(new Date(history[0].created_at))} ago
+                Most recent attempt: {history && history.length > 0 ? formatDistanceToNow(new Date(history[0].created_at)) + ' ago' : 'No attempts yet'}
               </Typography>
             </Alert>
 
@@ -178,7 +178,7 @@ export const RetryHistoryModal: React.FC<RetryHistoryModalProps> = ({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {history.map((item, index) => (
+                  {(history || []).map((item, index) => (
                     <TableRow key={item.id} hover>
                       <TableCell>
                         <Box>
