@@ -86,6 +86,93 @@ export interface SearchFacetsResponse {
   tags: FacetItem[]
 }
 
+// OCR Retry Types
+export interface OcrRetryFilter {
+  mime_types?: string[]
+  file_extensions?: string[]
+  failure_reasons?: string[]
+  min_file_size?: number
+  max_file_size?: number
+  created_after?: string
+  created_before?: string
+  tags?: string[]
+  limit?: number
+}
+
+export interface BulkOcrRetryRequest {
+  mode: 'all' | 'specific' | 'filter'
+  document_ids?: string[]
+  filter?: OcrRetryFilter
+  priority_override?: number
+  preview_only?: boolean
+}
+
+export interface OcrRetryDocumentInfo {
+  id: string
+  filename: string
+  file_size: number
+  mime_type: string
+  ocr_failure_reason?: string
+  priority: number
+  queue_id?: string
+}
+
+export interface BulkOcrRetryResponse {
+  success: boolean
+  message: string
+  queued_count: number
+  matched_count: number
+  documents: OcrRetryDocumentInfo[]
+  estimated_total_time_minutes: number
+}
+
+export interface OcrRetryStatsResponse {
+  failure_reasons: Array<{
+    reason: string
+    count: number
+    avg_file_size_mb: number
+    first_occurrence: string
+    last_occurrence: string
+  }>
+  file_types: Array<{
+    mime_type: string
+    count: number
+    avg_file_size_mb: number
+  }>
+  total_failed: number
+}
+
+export interface OcrRetryRecommendation {
+  reason: string
+  title: string
+  description: string
+  estimated_success_rate: number
+  document_count: number
+  filter: OcrRetryFilter
+}
+
+export interface OcrRetryRecommendationsResponse {
+  recommendations: OcrRetryRecommendation[]
+  total_recommendations: number
+}
+
+export interface DocumentRetryHistoryItem {
+  id: string
+  retry_reason: string
+  previous_status?: string
+  previous_failure_reason?: string
+  previous_error?: string
+  priority: number
+  queue_id?: string
+  created_at: string
+}
+
+export interface DocumentRetryHistoryResponse {
+  document_id: string
+  retry_history: DocumentRetryHistoryItem[]
+  total_retries: number
+}
+
 export interface PaginatedResponse<T> {
   documents: T[]
   pagination: {
@@ -201,6 +288,23 @@ export const documentService = {
 
   retryOcr: (id: string) => {
     return api.post(`/documents/${id}/retry-ocr`)
+  },
+
+  // Advanced OCR retry functionality
+  bulkRetryOcr: (request: BulkOcrRetryRequest) => {
+    return api.post<BulkOcrRetryResponse>('/documents/ocr/bulk-retry', request)
+  },
+
+  getRetryStats: () => {
+    return api.get<OcrRetryStatsResponse>('/documents/ocr/retry-stats')
+  },
+
+  getRetryRecommendations: () => {
+    return api.get<OcrRetryRecommendationsResponse>('/documents/ocr/retry-recommendations')
+  },
+
+  getDocumentRetryHistory: (id: string) => {
+    return api.get<DocumentRetryHistoryResponse>(`/documents/${id}/ocr/retry-history`)
   },
 
   getFailedOcrDocuments: (limit = 50, offset = 0) => {

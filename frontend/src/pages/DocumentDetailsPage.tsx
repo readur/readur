@@ -39,12 +39,15 @@ import {
   AccessTime as AccessTimeIcon,
   Create as CreateIcon,
   Info as InfoIcon,
+  Refresh as RefreshIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
 import { documentService, OcrResponse } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { type LabelData } from '../components/Labels/Label';
 import MetadataDisplay from '../components/MetadataDisplay';
+import { RetryHistoryModal } from '../components/RetryHistoryModal';
 import api from '../services/api';
 
 interface Document {
@@ -80,6 +83,37 @@ const DocumentDetailsPage: React.FC = () => {
   const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
   const [showLabelDialog, setShowLabelDialog] = useState<boolean>(false);
   const [labelsLoading, setLabelsLoading] = useState<boolean>(false);
+  
+  // Retry functionality state
+  const [retryingOcr, setRetryingOcr] = useState<boolean>(false);
+  const [retryHistoryModalOpen, setRetryHistoryModalOpen] = useState<boolean>(false);
+
+  // Retry handlers
+  const handleRetryOcr = async () => {
+    if (!document) return;
+    
+    setRetryingOcr(true);
+    try {
+      await documentService.bulkRetryOcr({
+        mode: 'specific',
+        document_ids: [document.id],
+        priority_override: 15,
+      });
+      
+      // Show success message and refresh document
+      setTimeout(() => {
+        fetchDocumentDetails();
+      }, 1000);
+    } catch (error) {
+      console.error('Failed to retry OCR:', error);
+    } finally {
+      setRetryingOcr(false);
+    }
+  };
+
+  const handleShowRetryHistory = () => {
+    setRetryHistoryModalOpen(true);
+  };
 
   useEffect(() => {
     if (id) {
@@ -429,6 +463,23 @@ const DocumentDetailsPage: React.FC = () => {
                     {processedImageLoading ? 'Loading...' : 'Processed Image'}
                   </Button>
                 )}
+                <Button
+                  variant="outlined"
+                  startIcon={retryingOcr ? <CircularProgress size={16} /> : <RefreshIcon />}
+                  onClick={handleRetryOcr}
+                  disabled={retryingOcr}
+                  sx={{ borderRadius: 2 }}
+                >
+                  {retryingOcr ? 'Retrying...' : 'Retry OCR'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<HistoryIcon />}
+                  onClick={handleShowRetryHistory}
+                  sx={{ borderRadius: 2 }}
+                >
+                  Retry History
+                </Button>
               </Stack>
               
               {document.has_ocr_text && (
@@ -980,6 +1031,16 @@ const DocumentDetailsPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Retry History Modal */}
+      {document && (
+        <RetryHistoryModal
+          open={retryHistoryModalOpen}
+          onClose={() => setRetryHistoryModalOpen(false)}
+          documentId={document.id}
+          documentName={document.original_filename}
+        />
+      )}
     </Box>
   );
 };
