@@ -12,6 +12,7 @@ pub mod scheduling;
 pub mod seed;
 pub mod services;
 pub mod swagger;
+pub mod utils;
 pub mod webdav_xml_parser;
 
 #[cfg(test)]

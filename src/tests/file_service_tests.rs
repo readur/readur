@@ -195,6 +195,8 @@ mod file_deletion_tests {
             original_created_at: None,
             original_modified_at: None,
             source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
         };
         
         (
@@ -333,6 +335,8 @@ mod file_deletion_tests {
             original_created_at: None,
             original_modified_at: None,
             source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
         };
         
         // Try to delete nonexistent files (should not fail)
@@ -387,6 +391,8 @@ mod file_deletion_tests {
             original_created_at: None,
             original_modified_at: None,
             source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
         };
         
         // Verify files exist
@@ -445,6 +451,8 @@ mod file_deletion_tests {
             original_created_at: None,
             original_modified_at: None,
             source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
         };
         
         // Verify files exist
@@ -494,6 +502,8 @@ mod file_deletion_tests {
             original_created_at: None,
             original_modified_at: None,
             source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
         };
         
         // Verify file exists

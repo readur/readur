@@ -54,6 +54,8 @@ fn create_test_document(user_id: Uuid, filename: &str, file_hash: Option<String>
         ocr_status: Some("pending".to_string()),
         ocr_error: None,
         ocr_completed_at: None,
+        ocr_retry_count: None,
+        ocr_failure_reason: None,
         tags: Vec::new(),
         created_at: Utc::now(),
         updated_at: Utc::now(),

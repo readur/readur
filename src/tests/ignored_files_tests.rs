@@ -84,6 +84,8 @@ mod tests {
             original_created_at: None,
             original_modified_at: None,
             source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
         };
 
         sqlx::query("INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)")

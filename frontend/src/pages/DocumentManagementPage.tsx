@@ -19,6 +19,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   Pagination,
   CircularProgress,
@@ -233,6 +234,7 @@ const DocumentManagementPage: React.FC = () => {
   const [retryHistoryModalOpen, setRetryHistoryModalOpen] = useState(false);
   const [selectedDocumentForHistory, setSelectedDocumentForHistory] = useState<string | null>(null);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [confirmRetryAllOpen, setConfirmRetryAllOpen] = useState(false);
 
   const fetchFailedDocuments = async () => {
     try {
@@ -355,6 +357,42 @@ const DocumentManagementPage: React.FC = () => {
       });
     } finally {
       setRetrying(null);
+    }
+  };
+
+  const handleRetryAllDocuments = async () => {
+    try {
+      setRetryingAll(true);
+      const response = await documentService.bulkRetryOcr({
+        mode: 'all',
+        preview_only: false
+      });
+      
+      if (response.data.queued_count > 0) {
+        setSnackbar({
+          open: true,
+          message: `Successfully queued ${response.data.queued_count} documents for OCR retry. Estimated processing time: ${Math.ceil(response.data.estimated_total_time_minutes)} minutes.`,
+          severity: 'success'
+        });
+        
+        // Refresh all tabs since we're retrying all documents
+        await refreshCurrentTab();
+      } else {
+        setSnackbar({
+          open: true,
+          message: 'No documents found to retry',
+          severity: 'info'
+        });
+      }
+    } catch (error) {
+      console.error('Error retrying all documents:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to retry documents. Please try again.',
+        severity: 'error'
+      });
+    } finally {
+      setRetryingAll(false);
     }
   };
 
@@ -735,14 +773,33 @@ const DocumentManagementPage: React.FC = () => {
         <Typography variant="h4" component="h1">
           Document Management
         </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={refreshCurrentTab}
-          disabled={loading || duplicatesLoading || retryingAll}
-        >
-          Refresh
-        </Button>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="contained"
+            color="primary"
+            size="large"
+            startIcon={retryingAll ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
+            onClick={() => setConfirmRetryAllOpen(true)}
+            disabled={retryingAll}
+            sx={{ 
+              minWidth: 200,
+              boxShadow: 3,
+              '&:hover': {
+                boxShadow: 6,
+              }
+            }}
+          >
+            {retryingAll ? 'Retrying All...' : 'Retry All Documents'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={refreshCurrentTab}
+            disabled={loading || duplicatesLoading || retryingAll}
+          >
+            Refresh
+          </Button>
+        </Box>
       </Box>
 
       <Paper sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
@@ -825,7 +882,7 @@ const DocumentManagementPage: React.FC = () => {
                     size="small"
                     fullWidth
                   >
-                    {retryingAll ? 'Retrying All...' : 'Retry All Failed OCR'}
+                    {retryingAll ? 'Retrying...' : 'Retry Failed Only'}
                   </Button>
                 </Box>
               </CardContent>
@@ -2215,6 +2272,43 @@ const DocumentManagementPage: React.FC = () => {
             startIcon={deletingIgnoredFiles ? <CircularProgress size={16} /> : <RefreshIcon />}
           >
             Remove from Ignored List
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirm Retry All Documents Dialog */}
+      <Dialog open={confirmRetryAllOpen} onClose={() => setConfirmRetryAllOpen(false)}>
+        <DialogTitle>
+          <Box display="flex" alignItems="center">
+            <RefreshIcon sx={{ mr: 1, color: 'primary.main' }} />
+            Retry All Documents
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will retry OCR processing for <strong>all documents</strong> in your library, regardless of their current OCR status. 
+            This includes documents that have already been successfully processed.
+          </DialogContentText>
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'warning.light', borderRadius: 1 }}>
+            <Typography variant="body2" color="warning.dark">
+              <strong>Note:</strong> This is a resource-intensive operation that may take a significant amount of time depending on the number of documents.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmRetryAllOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => {
+              setConfirmRetryAllOpen(false);
+              handleRetryAllDocuments();
+            }}
+            variant="contained"
+            color="primary"
+            startIcon={<RefreshIcon />}
+          >
+            Retry All Documents
           </Button>
         </DialogActions>
       </Dialog>
