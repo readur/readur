@@ -365,13 +365,13 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({
                       {formatDuration(previewResult.estimated_total_time_minutes)}
                     </Typography>
                   </Box>
-                  {previewResult.documents.length > 0 && (
+                  {previewResult.documents && previewResult.documents.length > 0 && (
                     <Box>
                       <Typography variant="subtitle2" gutterBottom>
                         Sample Documents:
                       </Typography>
                       <Box maxHeight={200} overflow="auto">
-                        {previewResult.documents.slice(0, 10).map((doc) => (
+                        {(previewResult.documents || []).slice(0, 10).map((doc) => (
                           <Box key={doc.id} py={0.5}>
                             <Typography variant="body2">
                               {doc.filename} ({formatFileSize(doc.file_size)})
@@ -385,7 +385,7 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({
                             </Typography>
                           </Box>
                         ))}
-                        {previewResult.documents.length > 10 && (
+                        {previewResult.documents && previewResult.documents.length > 10 && (
                           <Typography variant="body2" color="text.secondary" mt={1}>
                             ... and {previewResult.documents.length - 10} more documents
                           </Typography>
