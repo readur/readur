@@ -521,7 +521,8 @@ async fn get_all_failed_ocr_documents(
         r#"
         SELECT id, filename, file_size, mime_type, ocr_failure_reason
         FROM documents
-        WHERE ($1::uuid IS NULL OR user_id = $1)
+        WHERE ocr_status = 'failed'
+          AND ($1::uuid IS NULL OR user_id = $1)
         ORDER BY created_at DESC
         "#
     )

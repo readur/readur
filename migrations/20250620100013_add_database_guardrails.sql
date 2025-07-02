@@ -53,9 +53,10 @@ WHERE status IN ('pending', 'processing');
 CREATE OR REPLACE FUNCTION validate_ocr_consistency()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Prevent updating completed OCR unless explicitly allowed
-    IF OLD.ocr_status = 'completed' AND NEW.ocr_status != 'completed' THEN
-        RAISE EXCEPTION 'Cannot modify completed OCR data for document %', OLD.id;
+    -- Allow OCR retry operations: completed -> pending is allowed for retry functionality
+    -- Prevent other modifications to completed OCR data
+    IF OLD.ocr_status = 'completed' AND NEW.ocr_status != 'completed' AND NEW.ocr_status != 'pending' THEN
+        RAISE EXCEPTION 'Cannot modify completed OCR data for document %. Only retry (pending) is allowed.', OLD.id;
     END IF;
     
     -- Ensure OCR text and metadata consistency
