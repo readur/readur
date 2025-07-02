@@ -118,7 +118,7 @@ pub async fn bulk_retry_ocr(
     
     let documents = match request.mode {
         SelectionMode::All => {
-            crate::debug_log!("BULK_OCR_RETRY", "Fetching all failed OCR documents");
+            crate::debug_log!("BULK_OCR_RETRY", "Fetching all documents for retry");
             get_all_failed_ocr_documents(&state, &auth_user).await?
         }
         SelectionMode::Specific => {
@@ -385,8 +385,7 @@ pub async fn get_ocr_retry_stats(
             MIN(created_at) as first_occurrence,
             MAX(updated_at) as last_occurrence
         FROM documents
-        WHERE ocr_status = 'failed'
-          AND ($1::uuid IS NULL OR user_id = $1)
+        WHERE ($1::uuid IS NULL OR user_id = $1)
         GROUP BY ocr_failure_reason
         ORDER BY count DESC
         "#
@@ -404,8 +403,7 @@ pub async fn get_ocr_retry_stats(
             COUNT(*) as count,
             AVG(file_size) as avg_file_size
         FROM documents
-        WHERE ocr_status = 'failed'
-          AND ($1::uuid IS NULL OR user_id = $1)
+        WHERE ($1::uuid IS NULL OR user_id = $1)
         GROUP BY mime_type
         ORDER BY count DESC
         "#
@@ -523,8 +521,7 @@ async fn get_all_failed_ocr_documents(
         r#"
         SELECT id, filename, file_size, mime_type, ocr_failure_reason
         FROM documents
-        WHERE ocr_status = 'failed'
-          AND ($1::uuid IS NULL OR user_id = $1)
+        WHERE ($1::uuid IS NULL OR user_id = $1)
         ORDER BY created_at DESC
         "#
     )
@@ -547,12 +544,33 @@ async fn get_specific_documents(
         Some(auth_user.user.id)
     };
     
+    // First let's debug what documents we're looking for and their current status
+    for doc_id in &document_ids {
+        if let Ok(Some(row)) = sqlx::query("SELECT id, filename, ocr_status FROM documents WHERE id = $1")
+            .bind(doc_id)
+            .fetch_optional(state.db.get_pool())
+            .await {
+            let status: Option<String> = row.get("ocr_status");
+            let filename: String = row.get("filename");
+            crate::debug_log!("BULK_OCR_RETRY",
+                "requested_document_id" => doc_id,
+                "filename" => &filename,
+                "current_ocr_status" => status.as_deref().unwrap_or("NULL"),
+                "message" => "Document found in database"
+            );
+        } else {
+            crate::debug_log!("BULK_OCR_RETRY",
+                "requested_document_id" => doc_id,
+                "message" => "Document NOT found in database"
+            );
+        }
+    }
+
     let documents = sqlx::query_as::<_, DocumentInfo>(
         r#"
         SELECT id, filename, file_size, mime_type, ocr_failure_reason
         FROM documents
         WHERE id = ANY($1)
-          AND ocr_status = 'failed'
           AND ($2::uuid IS NULL OR user_id = $2)
         "#
     )
@@ -571,7 +589,7 @@ async fn get_filtered_documents(
     filter: OcrRetryFilter
 ) -> Result<Vec<DocumentInfo>, StatusCode> {
     let mut query = sqlx::QueryBuilder::new(
-        "SELECT id, filename, file_size, mime_type, ocr_failure_reason FROM documents WHERE ocr_status = 'failed'"
+        "SELECT id, filename, file_size, mime_type, ocr_failure_reason FROM documents WHERE 1=1"
     );
     
     // User filter

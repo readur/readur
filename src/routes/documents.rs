@@ -591,11 +591,9 @@ async fn retry_ocr(
             StatusCode::NOT_FOUND
         })?;
     
-    // Check if document is eligible for OCR retry (failed or not processed)
+    // Check if document is eligible for OCR retry (all documents are now retryable)
     let current_status = document.ocr_status.as_deref().unwrap_or("unknown");
-    let eligible = document.ocr_status.as_ref().map_or(true, |status| {
-        status == "failed" || status == "pending"
-    });
+    let eligible = true; // All documents are retryable
     
     crate::debug_log!("OCR_RETRY",
         "document_id" => document_id,
