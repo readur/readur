@@ -3,7 +3,13 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use uuid::Uuid;
 
-use readur::test_utils::{TestConfig, get_base_url, TIMEOUT};
+use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+
+fn get_base_url() -> String {
+    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
+}
+
+const TIMEOUT: Duration = Duration::from_secs(60);
 
 struct OcrRetryTestHelper {
     client: Client,
@@ -13,15 +19,57 @@ struct OcrRetryTestHelper {
 impl OcrRetryTestHelper {
     async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::new();
-        let config = TestConfig::load();
         
-        // Login as admin
+        // First check if server is running
+        let health_check = client
+            .get(&format!("{}/api/health", get_base_url()))
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await;
+        
+        if let Err(e) = health_check {
+            eprintln!("Health check failed: {}. Is the server running at {}?", e, get_base_url());
+            return Err(format!("Server not running: {}", e).into());
+        }
+        
+        // Create a test admin user
+        let test_id = Uuid::new_v4().simple().to_string();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("ocr_retry_admin_{}_{}", test_id, nanos);
+        let email = format!("ocr_retry_admin_{}@{}.example.com", test_id, nanos);
+        let password = "testpassword123";
+        
+        // Register admin user
+        let user_data = CreateUser {
+            username: username.clone(),
+            email: email.clone(),
+            password: password.to_string(),
+            role: Some(UserRole::Admin),
+        };
+        
+        let register_response = client
+            .post(&format!("{}/api/auth/register", get_base_url()))
+            .json(&user_data)
+            .timeout(TIMEOUT)
+            .send()
+            .await?;
+        
+        if !register_response.status().is_success() {
+            return Err(format!("Registration failed: {}", register_response.text().await?).into());
+        }
+        
+        // Login with the new user
+        let login_data = LoginRequest {
+            username: username.clone(),
+            password: password.to_string(),
+        };
+        
         let login_response = client
             .post(&format!("{}/api/auth/login", get_base_url()))
-            .json(&json!({
-                "username": config.admin_username,
-                "password": config.admin_password
-            }))
+            .json(&login_data)
             .timeout(TIMEOUT)
             .send()
             .await?;
@@ -30,10 +78,8 @@ impl OcrRetryTestHelper {
             return Err(format!("Login failed: {}", login_response.text().await?).into());
         }
         
-        let login_result: Value = login_response.json().await?;
-        let token = login_result["token"].as_str()
-            .ok_or("No token in login response")?
-            .to_string();
+        let login_result: LoginResponse = login_response.json().await?;
+        let token = login_result.token;
         
         Ok(Self { client, token })
     }
@@ -246,7 +292,8 @@ async fn test_document_retry_history() {
     // First get some failed documents to test with
     match helper.get_failed_documents().await {
         Ok(failed_docs) => {
-            let documents = failed_docs["documents"].as_array().unwrap_or(&vec![]);
+            let empty_vec = vec![];
+            let documents = failed_docs["documents"].as_array().unwrap_or(&empty_vec);
             
             if documents.is_empty() {
                 println!("⚠️  No failed documents found, skipping retry history test");
@@ -329,8 +376,9 @@ async fn test_filtered_bulk_retry_preview() {
             println!("🔍 Filtered preview found {} matching documents", documents.len());
         }
         Ok(res) => {
+            let status = res.status();
             let error_text = res.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            println!("❌ Filtered bulk retry failed with status {}: {}", res.status(), error_text);
+            println!("❌ Filtered bulk retry failed with status {}: {}", status, error_text);
         }
         Err(e) => {
             println!("❌ Filtered bulk retry request failed: {}", e);
