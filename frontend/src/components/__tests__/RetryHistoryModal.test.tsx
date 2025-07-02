@@ -6,12 +6,10 @@ import { RetryHistoryModal } from '../RetryHistoryModal';
 // Mock the API
 const mockGetDocumentRetryHistory = vi.fn();
 
-const mockDocumentService = {
-  getDocumentRetryHistory: mockGetDocumentRetryHistory,
-};
-
-vi.mock('../../services/api', () => ({
-  documentService: mockDocumentService,
+vi.mock('../services/api', () => ({
+  documentService: {
+    getDocumentRetryHistory: mockGetDocumentRetryHistory,
+  },
 }));
 
 describe('RetryHistoryModal', () => {
@@ -73,14 +71,14 @@ describe('RetryHistoryModal', () => {
     render(<RetryHistoryModal {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Bulk Retry (All Documents)')).toBeInTheDocument();
+      expect(screen.getByText('Bulk Retry (All)')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Manual Retry')).toBeInTheDocument();
-    expect(screen.getByText('Low Confidence')).toBeInTheDocument();
-    expect(screen.getByText('Image Quality')).toBeInTheDocument();
-    expect(screen.getByText('High')).toBeInTheDocument(); // Priority 15
-    expect(screen.getByText('Medium')).toBeInTheDocument(); // Priority 12
+    expect(screen.getByText('low confidence')).toBeInTheDocument(); // Component replaces _ with space
+    expect(screen.getByText('image quality')).toBeInTheDocument(); // Component replaces _ with space
+    expect(screen.getByText('Very High (15)')).toBeInTheDocument(); // Priority 15 shows as "Very High (15)"
+    expect(screen.getByText('High (12)')).toBeInTheDocument(); // Priority 12 shows as "High (12)"
   });
 
   test('shows loading state initially', () => {
@@ -112,7 +110,7 @@ describe('RetryHistoryModal', () => {
     render(<RetryHistoryModal {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('No retry history found for this document.')).toBeInTheDocument();
+      expect(screen.getByText('No retry attempts found for this document.')).toBeInTheDocument();
     });
   });
 
@@ -146,11 +144,11 @@ describe('RetryHistoryModal', () => {
     render(<RetryHistoryModal {...mockProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Bulk Retry (All Documents)')).toBeInTheDocument();
-      expect(screen.getByText('Bulk Retry (Specific Documents)')).toBeInTheDocument();
+      expect(screen.getByText('Bulk Retry (All)')).toBeInTheDocument();
+      expect(screen.getByText('Bulk Retry (Selected)')).toBeInTheDocument();
       expect(screen.getByText('Bulk Retry (Filtered)')).toBeInTheDocument();
       expect(screen.getByText('Manual Retry')).toBeInTheDocument();
-      expect(screen.getByText('unknown_reason')).toBeInTheDocument(); // Unknown reasons show as-is
+      expect(screen.getByText('unknown reason')).toBeInTheDocument(); // Unknown reasons have _ replaced with space
     });
   });
 
