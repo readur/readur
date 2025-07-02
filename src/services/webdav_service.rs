@@ -931,8 +931,8 @@ impl WebDAVService {
             .collect();
             
         if subdirectories.is_empty() {
-            info!("📁 No known subdirectories for {}, no changes to process", parent_path);
-            return Ok(Vec::new());
+            info!("📁 No known subdirectories for {}, performing initial scan to discover structure", parent_path);
+            return self.discover_files_in_folder_impl(parent_path).await;
         }
         
         info!("🔍 Checking {} known subdirectories for changes", subdirectories.len());
