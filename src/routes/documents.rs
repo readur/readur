@@ -64,6 +64,10 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/failed/{id}/view", get(view_failed_document))
         .route("/delete-low-confidence", post(delete_low_confidence_documents))
         .route("/delete-failed-ocr", post(delete_failed_ocr_documents))
+        .route("/ocr/bulk-retry", post(crate::routes::documents_ocr_retry::bulk_retry_ocr))
+        .route("/ocr/retry-stats", get(crate::routes::documents_ocr_retry::get_ocr_retry_stats))
+        .route("/ocr/retry-recommendations", get(crate::routes::documents_ocr_retry::get_retry_recommendations))
+        .route("/{id}/ocr/retry-history", get(crate::routes::documents_ocr_retry::get_document_retry_history))
 }
 
 #[utoipa::path(
@@ -625,6 +629,18 @@ async fn retry_ocr(
     // Add to OCR queue with detailed logging
     match state.queue_service.enqueue_document(document_id, priority, document.file_size).await {
         Ok(queue_id) => {
+            // Record retry history
+            if let Err(e) = crate::db::ocr_retry::record_ocr_retry(
+                state.db.get_pool(),
+                document_id,
+                auth_user.user.id,
+                "manual_retry",
+                priority,
+                Some(queue_id),
+            ).await {
+                tracing::warn!("Failed to record retry history for document {}: {}", document_id, e);
+            }
+            
             tracing::info!(
                 "OCR retry queued for document {} ({}): queue_id={}, priority={}, size={}",
                 document_id, document.filename, queue_id, priority, document.file_size

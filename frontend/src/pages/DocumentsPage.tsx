@@ -57,12 +57,15 @@ import {
   CheckBox as CheckBoxIcon,
   SelectAll as SelectAllIcon,
   Close as CloseIcon,
+  Refresh as RefreshIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
 import { documentService } from '../services/api';
 import DocumentThumbnail from '../components/DocumentThumbnail';
 import Label, { type LabelData } from '../components/Labels/Label';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { useApi } from '../hooks/useApi';
+import { RetryHistoryModal } from '../components/RetryHistoryModal';
 
 interface Document {
   id: string;
@@ -129,6 +132,11 @@ const DocumentsPage: React.FC = () => {
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState<boolean>(false);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState<boolean>(false);
+
+  // Retry functionality state
+  const [retryingDocument, setRetryingDocument] = useState<string | null>(null);
+  const [retryHistoryModalOpen, setRetryHistoryModalOpen] = useState<boolean>(false);
+  const [selectedDocumentForHistory, setSelectedDocumentForHistory] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDocuments();
@@ -329,6 +337,35 @@ const DocumentsPage: React.FC = () => {
   const handleDeleteCancel = (): void => {
     setDeleteDialogOpen(false);
     setDocumentToDelete(null);
+  };
+
+  // Retry functionality handlers
+  const handleRetryOcr = async (doc: Document): Promise<void> => {
+    try {
+      setRetryingDocument(doc.id);
+      await api.bulkRetryOcr({
+        mode: 'specific',
+        document_ids: [doc.id],
+        priority_override: 15,
+      });
+      
+      // Refresh the document list to get updated status
+      await fetchDocuments();
+      
+      setError(null);
+    } catch (error) {
+      console.error('Failed to retry OCR:', error);
+      setError('Failed to retry OCR processing');
+    } finally {
+      setRetryingDocument(null);
+      handleDocMenuClose();
+    }
+  };
+
+  const handleShowRetryHistory = (docId: string): void => {
+    setSelectedDocumentForHistory(docId);
+    setRetryHistoryModalOpen(true);
+    handleDocMenuClose();
   };
 
   const handlePageChange = (event: React.ChangeEvent<unknown>, page: number): void => {
@@ -630,6 +667,27 @@ const DocumentsPage: React.FC = () => {
         }}>
           <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Edit Labels</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={() => { 
+          if (selectedDoc) handleRetryOcr(selectedDoc); 
+        }} disabled={retryingDocument === selectedDoc?.id}>
+          <ListItemIcon>
+            {retryingDocument === selectedDoc?.id ? (
+              <CircularProgress size={16} />
+            ) : (
+              <RefreshIcon fontSize="small" />
+            )}
+          </ListItemIcon>
+          <ListItemText>
+            {retryingDocument === selectedDoc?.id ? 'Retrying OCR...' : 'Retry OCR'}
+          </ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { 
+          if (selectedDoc) handleShowRetryHistory(selectedDoc.id); 
+        }}>
+          <ListItemIcon><HistoryIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Retry History</ListItemText>
         </MenuItem>
         <Divider />
         <MenuItem onClick={() => { 
@@ -989,6 +1047,15 @@ const DocumentsPage: React.FC = () => {
           </Box>
         )}
       </Box>
+
+      {/* Retry History Modal */}
+      <RetryHistoryModal
+        open={retryHistoryModalOpen}
+        onClose={() => setRetryHistoryModalOpen(false)}
+        documentId={selectedDocumentForHistory || ''}
+        documentName={selectedDocumentForHistory ? 
+          documents.find(d => d.id === selectedDocumentForHistory)?.original_filename : undefined}
+      />
     </Box>
   );
 };

@@ -52,12 +52,16 @@ import {
   OpenInNew as OpenInNewIcon,
   Warning as WarningIcon,
   Block as BlockIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { api, documentService, queueService } from '../services/api';
+import { api, documentService, queueService, BulkOcrRetryResponse } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import FailedDocumentViewer from '../components/FailedDocumentViewer';
 import MetadataDisplay from '../components/MetadataDisplay';
+import { BulkRetryModal } from '../components/BulkRetryModal';
+import { RetryRecommendations } from '../components/RetryRecommendations';
+import { RetryHistoryModal } from '../components/RetryHistoryModal';
 
 interface FailedDocument {
   id: string;
@@ -224,6 +228,12 @@ const DocumentManagementPage: React.FC = () => {
   const [bulkDeleteIgnoredDialog, setBulkDeleteIgnoredDialog] = useState(false);
   const [deletingIgnoredFiles, setDeletingIgnoredFiles] = useState(false);
 
+  // Advanced retry functionality state
+  const [bulkRetryModalOpen, setBulkRetryModalOpen] = useState(false);
+  const [retryHistoryModalOpen, setRetryHistoryModalOpen] = useState(false);
+  const [selectedDocumentForHistory, setSelectedDocumentForHistory] = useState<string | null>(null);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+
   const fetchFailedDocuments = async () => {
     try {
       setLoading(true);
@@ -379,6 +389,21 @@ const DocumentManagementPage: React.FC = () => {
     } finally {
       setRetryingAll(false);
     }
+  };
+
+  // Advanced retry functionality handlers
+  const handleBulkRetrySuccess = (result: BulkOcrRetryResponse) => {
+    setSnackbar({
+      open: true,
+      message: `Successfully queued ${result.queued_count} of ${result.matched_count} documents for retry. Estimated processing time: ${Math.round(result.estimated_total_time_minutes)} minutes.`,
+      severity: 'success'
+    });
+    fetchFailedDocuments(); // Refresh the list
+  };
+
+  const handleShowRetryHistory = (documentId: string) => {
+    setSelectedDocumentForHistory(documentId);
+    setRetryHistoryModalOpen(true);
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -833,6 +858,33 @@ const DocumentManagementPage: React.FC = () => {
         </Grid>
       )}
 
+      {/* Advanced Retry Components */}
+      <Grid container spacing={3} mb={3}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h6">Advanced Retry Options</Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => setBulkRetryModalOpen(true)}
+                  disabled={!statistics || statistics.total_failed === 0}
+                  startIcon={<RefreshIcon />}
+                >
+                  Advanced Retry
+                </Button>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Use advanced filtering and selection options to retry specific subsets of failed documents based on file type, failure reason, size, and more.
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <RetryRecommendations onRetrySuccess={handleBulkRetrySuccess} />
+        </Grid>
+      </Grid>
+
       {/* Filter Controls */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
@@ -973,6 +1025,14 @@ const DocumentManagementPage: React.FC = () => {
                               onClick={() => showDocumentDetails(document)}
                             >
                               <VisibilityIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Retry History">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleShowRetryHistory(document.id)}
+                            >
+                              <HistoryIcon />
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Download Document">
@@ -2158,6 +2218,23 @@ const DocumentManagementPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Advanced Retry Modal */}
+      <BulkRetryModal
+        open={bulkRetryModalOpen}
+        onClose={() => setBulkRetryModalOpen(false)}
+        onSuccess={handleBulkRetrySuccess}
+        selectedDocumentIds={selectedDocumentIds}
+      />
+
+      {/* Retry History Modal */}
+      <RetryHistoryModal
+        open={retryHistoryModalOpen}
+        onClose={() => setRetryHistoryModalOpen(false)}
+        documentId={selectedDocumentForHistory || ''}
+        documentName={selectedDocumentForHistory ? 
+          documents.find(d => d.id === selectedDocumentForHistory)?.filename : undefined}
+      />
 
       {/* Success/Error Snackbar */}
       <Snackbar

@@ -12,6 +12,7 @@ pub mod sources;
 pub mod images;
 pub mod ignored_files;
 pub mod constraint_validation;
+pub mod ocr_retry;
 
 #[derive(Clone)]
 pub struct Database {
