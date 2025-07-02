@@ -351,6 +351,8 @@ async fn test_create_ignored_file_from_document() -> Result<()> {
         ocr_status: Some("completed".to_string()),
         ocr_error: None,
         ocr_completed_at: Some(chrono::Utc::now()),
+        ocr_retry_count: None,
+        ocr_failure_reason: None,
         tags: vec!["test".to_string()],
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
