@@ -5,14 +5,15 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import OcrLanguageSelector from '../OcrLanguageSelector';
 import { ocrService } from '../../../services/api';
 
+// Create mock functions
+const mockGetAvailableLanguages = vi.fn();
+
 // Mock the API service
 vi.mock('../../../services/api', () => ({
   ocrService: {
-    getAvailableLanguages: vi.fn(),
+    getAvailableLanguages: mockGetAvailableLanguages,
   },
 }));
-
-const mockOcrService = vi.mocked(ocrService);
 
 const theme = createTheme();
 
@@ -33,11 +34,11 @@ describe('OcrLanguageSelector', () => {
 
   const mockLanguagesResponse = {
     data: {
-      languages: [
-        { code: 'eng', name: 'English' },
-        { code: 'spa', name: 'Spanish' },
-        { code: 'fra', name: 'French' },
-        { code: 'deu', name: 'German' },
+      available_languages: [
+        { code: 'eng', name: 'English', installed: true },
+        { code: 'spa', name: 'Spanish', installed: true },
+        { code: 'fra', name: 'French', installed: true },
+        { code: 'deu', name: 'German', installed: true },
       ],
       current_user_language: 'eng',
     },
@@ -45,7 +46,7 @@ describe('OcrLanguageSelector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockOcrService.getAvailableLanguages.mockResolvedValue(mockLanguagesResponse);
+    mockGetAvailableLanguages.mockResolvedValue(mockLanguagesResponse);
   });
 
   afterEach(() => {
@@ -59,7 +60,7 @@ describe('OcrLanguageSelector', () => {
     
     // Wait for languages to load
     await waitFor(() => {
-      expect(mockOcrService.getAvailableLanguages).toHaveBeenCalledTimes(1);
+      expect(mockGetAvailableLanguages).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -73,7 +74,7 @@ describe('OcrLanguageSelector', () => {
     renderWithTheme(<OcrLanguageSelector {...defaultProps} />);
     
     await waitFor(() => {
-      expect(mockOcrService.getAvailableLanguages).toHaveBeenCalledTimes(1);
+      expect(mockGetAvailableLanguages).toHaveBeenCalledTimes(1);
     });
 
     // Open the select dropdown
@@ -96,7 +97,7 @@ describe('OcrLanguageSelector', () => {
     );
     
     await waitFor(() => {
-      expect(mockOcrService.getAvailableLanguages).toHaveBeenCalledTimes(1);
+      expect(mockGetAvailableLanguages).toHaveBeenCalledTimes(1);
     });
 
     // Open the select dropdown
@@ -117,7 +118,7 @@ describe('OcrLanguageSelector', () => {
     );
     
     await waitFor(() => {
-      expect(mockOcrService.getAvailableLanguages).toHaveBeenCalledTimes(1);
+      expect(mockGetAvailableLanguages).toHaveBeenCalledTimes(1);
     });
 
     // Open the select dropdown
@@ -131,7 +132,7 @@ describe('OcrLanguageSelector', () => {
 
   it('displays error state when API call fails', async () => {
     const mockError = new Error('Failed to fetch languages');
-    mockOcrService.getAvailableLanguages.mockRejectedValue(mockError);
+    mockGetAvailableLanguages.mockRejectedValue(mockError);
     
     renderWithTheme(<OcrLanguageSelector {...defaultProps} />);
     
@@ -142,8 +143,8 @@ describe('OcrLanguageSelector', () => {
 
   it('retries loading languages when retry button is clicked', async () => {
     const mockError = new Error('Failed to fetch languages');
-    mockOcrService.getAvailableLanguages.mockRejectedValueOnce(mockError);
-    mockOcrService.getAvailableLanguages.mockResolvedValueOnce(mockLanguagesResponse);
+    mockGetAvailableLanguages.mockRejectedValueOnce(mockError);
+    mockGetAvailableLanguages.mockResolvedValueOnce(mockLanguagesResponse);
     
     renderWithTheme(<OcrLanguageSelector {...defaultProps} />);
     
@@ -157,7 +158,7 @@ describe('OcrLanguageSelector', () => {
     
     // Should call API again
     await waitFor(() => {
-      expect(mockOcrService.getAvailableLanguages).toHaveBeenCalledTimes(2);
+      expect(mockGetAvailableLanguages).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -208,9 +209,9 @@ describe('OcrLanguageSelector', () => {
   });
 
   it('handles empty language list gracefully', async () => {
-    mockOcrService.getAvailableLanguages.mockResolvedValue({
+    mockGetAvailableLanguages.mockResolvedValue({
       data: {
-        languages: [],
+        available_languages: [],
         current_user_language: null,
       },
     });
@@ -218,7 +219,7 @@ describe('OcrLanguageSelector', () => {
     renderWithTheme(<OcrLanguageSelector {...defaultProps} />);
     
     await waitFor(() => {
-      expect(mockOcrService.getAvailableLanguages).toHaveBeenCalledTimes(1);
+      expect(mockGetAvailableLanguages).toHaveBeenCalledTimes(1);
     });
 
     // Open the select dropdown
@@ -238,7 +239,7 @@ describe('OcrLanguageSelector', () => {
     );
     
     await waitFor(() => {
-      expect(mockOcrService.getAvailableLanguages).toHaveBeenCalledTimes(1);
+      expect(mockGetAvailableLanguages).toHaveBeenCalledTimes(1);
     });
 
     // The selected value should be displayed
@@ -248,7 +249,7 @@ describe('OcrLanguageSelector', () => {
   it('handles network errors gracefully', async () => {
     const networkError = new Error('Network Error');
     networkError.name = 'NetworkError';
-    mockOcrService.getAvailableLanguages.mockRejectedValue(networkError);
+    mockGetAvailableLanguages.mockRejectedValue(networkError);
     
     renderWithTheme(<OcrLanguageSelector {...defaultProps} />);
     
@@ -267,7 +268,7 @@ describe('OcrLanguageSelector', () => {
     );
     
     await waitFor(() => {
-      expect(mockOcrService.getAvailableLanguages).toHaveBeenCalledTimes(1);
+      expect(mockGetAvailableLanguages).toHaveBeenCalledTimes(1);
     });
 
     const select = screen.getByRole('combobox');

@@ -134,7 +134,7 @@ mod tests {
         
         env::set_var("TESSDATA_PREFIX", &tessdata_path);
         
-        let languages = checker.get_available_languages();
+        let languages = checker.get_available_languages().unwrap();
         assert!(languages.contains(&"eng".to_string()));
         assert!(languages.contains(&"fra".to_string()));
         assert!(languages.contains(&"deu".to_string()));
@@ -231,7 +231,7 @@ mod tests {
                 .expect("Failed to create mock language file");
         }
         
-        let health_checker = OcrHealthChecker::new(tessdata_path);
+        let health_checker = OcrHealthChecker::new_with_path(tessdata_path);
         (health_checker, temp_dir)
     }
 
@@ -331,7 +331,7 @@ mod tests {
                 .expect("Failed to create mock file");
         }
         
-        let health_checker = OcrHealthChecker::new(tessdata_path);
+        let health_checker = OcrHealthChecker::new_with_path(tessdata_path);
         let languages = health_checker.get_available_languages().unwrap();
         
         // Should only include .traineddata files

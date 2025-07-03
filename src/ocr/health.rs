@@ -4,11 +4,21 @@ use std::env;
 use std::path::Path;
 use sysinfo::System;
 
-pub struct OcrHealthChecker;
+pub struct OcrHealthChecker {
+    custom_tessdata_path: Option<String>,
+}
 
 impl OcrHealthChecker {
     pub fn new() -> Self {
-        Self
+        Self {
+            custom_tessdata_path: None,
+        }
+    }
+    
+    pub fn new_with_path<P: AsRef<Path>>(custom_tessdata_path: P) -> Self {
+        Self {
+            custom_tessdata_path: Some(custom_tessdata_path.as_ref().to_string_lossy().to_string()),
+        }
     }
     
     pub fn check_tesseract_installation(&self) -> Result<String, OcrError> {
@@ -46,6 +56,17 @@ impl OcrHealthChecker {
     }
     
     pub fn get_tessdata_path(&self) -> Result<String, OcrError> {
+        // Use custom tessdata path if provided
+        if let Some(ref custom_path) = self.custom_tessdata_path {
+            if Path::new(custom_path).exists() {
+                return Ok(custom_path.clone());
+            } else {
+                return Err(OcrError::TessdataPathNotFound { 
+                    path: custom_path.clone() 
+                });
+            }
+        }
+        
         if let Ok(path) = env::var("TESSDATA_PREFIX") {
             if Path::new(&path).exists() {
                 return Ok(path);
@@ -101,6 +122,36 @@ impl OcrHealthChecker {
             });
         }
         Ok(())
+    }
+    
+    pub fn get_language_display_name(&self, lang_code: &str) -> String {
+        match lang_code {
+            "eng" => "English".to_string(),
+            "spa" => "Spanish".to_string(),
+            "fra" => "French".to_string(),
+            "deu" => "German".to_string(),
+            "ita" => "Italian".to_string(),
+            "por" => "Portuguese".to_string(),
+            "rus" => "Russian".to_string(),
+            "chi_sim" => "Chinese (Simplified)".to_string(),
+            "chi_tra" => "Chinese (Traditional)".to_string(),
+            "jpn" => "Japanese".to_string(),
+            "kor" => "Korean".to_string(),
+            "ara" => "Arabic".to_string(),
+            "hin" => "Hindi".to_string(),
+            "nld" => "Dutch".to_string(),
+            "swe" => "Swedish".to_string(),
+            "nor" => "Norwegian".to_string(),
+            "dan" => "Danish".to_string(),
+            "fin" => "Finnish".to_string(),
+            "pol" => "Polish".to_string(),
+            "ces" => "Czech".to_string(),
+            "hun" => "Hungarian".to_string(),
+            "tur" => "Turkish".to_string(),
+            "tha" => "Thai".to_string(),
+            "vie" => "Vietnamese".to_string(),
+            _ => lang_code.to_string(), // Return the code itself for unknown languages
+        }
     }
     
     pub fn check_cpu_features(&self) -> CpuFeatures {
