@@ -41,6 +41,7 @@ async fn test_webdav_service_with_custom_retry() {
         max_delay_ms: 10000,
         backoff_multiplier: 1.5,
         timeout_seconds: 60,
+        rate_limit_backoff_ms: 5000,
     };
 
     let result = WebDAVService::new_with_retry(config, retry_config);
