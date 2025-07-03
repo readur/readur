@@ -2,7 +2,7 @@ use tokio;
 use uuid::Uuid;
 use chrono::Utc;
 use anyhow::Result;
-use readur::models::{FileInfo, CreateWebDAVDirectory};
+use readur::models::{FileInfo, CreateWebDAVDirectory, CreateUser, UserRole};
 use readur::services::webdav_service::{WebDAVService, WebDAVConfig};
 use readur::db::Database;
 
@@ -179,10 +179,17 @@ async fn create_test_database() -> Result<(Database, Uuid)> {
     
     let database = Database::new(&db_url).await?;
     
-    // Create a test user
-    let user_id = Uuid::new_v4();
+    // Create a test user in the database
+    let unique_suffix = Uuid::new_v4().to_string()[..8].to_string();
+    let test_user = CreateUser {
+        username: format!("testuser_{}", unique_suffix),
+        email: format!("testuser_{}@example.com", unique_suffix),
+        password: "password123".to_string(),
+        role: Some(UserRole::User),
+    };
+    let created_user = database.create_user(test_user).await?;
     
-    Ok((database, user_id))
+    Ok((database, created_user.id))
 }
 
 #[tokio::test]
