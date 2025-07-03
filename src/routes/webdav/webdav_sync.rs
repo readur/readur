@@ -10,7 +10,7 @@ use crate::{
     models::{CreateWebDAVFile, UpdateWebDAVSyncState},
     services::file_service::FileService,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
-    services::webdav_service::{WebDAVConfig, WebDAVService},
+    services::webdav::{WebDAVConfig, WebDAVService},
 };
 
 pub async fn perform_webdav_sync_with_tracking(

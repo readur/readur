@@ -1,4 +1,4 @@
-use crate::services::webdav_service::{WebDAVConfig, WebDAVService};
+use crate::services::webdav::{WebDAVConfig, WebDAVService};
 
 fn create_test_config() -> WebDAVConfig {
     WebDAVConfig {

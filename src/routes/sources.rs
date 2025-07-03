@@ -443,7 +443,7 @@ async fn trigger_deep_scan(
                 })?;
 
             // Create WebDAV service
-            let webdav_config = crate::services::webdav_service::WebDAVConfig {
+            let webdav_config = crate::services::webdav::WebDAVConfig {
                 server_url: config.server_url.clone(),
                 username: config.username.clone(),
                 password: config.password.clone(),
@@ -453,7 +453,7 @@ async fn trigger_deep_scan(
                 server_type: config.server_type.clone(),
             };
 
-            let webdav_service = crate::services::webdav_service::WebDAVService::new(webdav_config.clone())
+            let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config.clone())
                 .map_err(|e| {
                     error!("Failed to create WebDAV service for deep scan: {}", e);
                     StatusCode::INTERNAL_SERVER_ERROR
@@ -795,7 +795,7 @@ async fn test_connection(
             let config: crate::models::WebDAVSourceConfig = serde_json::from_value(source.config)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-            match crate::services::webdav_service::test_webdav_connection(
+            match crate::services::webdav::test_webdav_connection(
                 &config.server_url,
                 &config.username,
                 &config.password,
@@ -963,7 +963,7 @@ async fn estimate_webdav_crawl_internal(
     config: &crate::models::WebDAVSourceConfig,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Create WebDAV service config
-    let webdav_config = crate::services::webdav_service::WebDAVConfig {
+    let webdav_config = crate::services::webdav::WebDAVConfig {
         server_url: config.server_url.clone(),
         username: config.username.clone(),
         password: config.password.clone(),
@@ -974,7 +974,7 @@ async fn estimate_webdav_crawl_internal(
     };
 
     // Create WebDAV service and estimate crawl
-    match crate::services::webdav_service::WebDAVService::new(webdav_config) {
+    match crate::services::webdav::WebDAVService::new(webdav_config) {
         Ok(webdav_service) => {
             match webdav_service.estimate_crawl(&config.watch_folders).await {
                 Ok(estimate) => Ok(Json(serde_json::to_value(estimate).unwrap())),
@@ -1031,7 +1031,7 @@ async fn test_connection_with_config(
             let config: crate::models::WebDAVSourceConfig = serde_json::from_value(request.config)
                 .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-            match crate::services::webdav_service::test_webdav_connection(
+            match crate::services::webdav::test_webdav_connection(
                 &config.server_url,
                 &config.username,
                 &config.password,

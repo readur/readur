@@ -662,8 +662,8 @@ impl SourceScheduler {
             // Trigger the deep scan via the API endpoint
             // We'll reuse the existing deep scan logic from the sources route
             let webdav_config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())?;
-            let webdav_service = crate::services::webdav_service::WebDAVService::new(
-                crate::services::webdav_service::WebDAVConfig {
+            let webdav_service = crate::services::webdav::WebDAVService::new(
+                crate::services::webdav::WebDAVConfig {
                     server_url: webdav_config.server_url.clone(),
                     username: webdav_config.username.clone(),
                     password: webdav_config.password.clone(),
@@ -950,7 +950,7 @@ impl SourceScheduler {
         let config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())
             .map_err(|e| format!("Config parse error: {}", e))?;
 
-        let webdav_config = crate::services::webdav_service::WebDAVConfig {
+        let webdav_config = crate::services::webdav::WebDAVConfig {
             server_url: config.server_url.clone(),
             username: config.username.clone(),
             password: config.password.clone(),
@@ -960,7 +960,7 @@ impl SourceScheduler {
             server_type: config.server_type.clone(),
         };
 
-        let webdav_service = crate::services::webdav_service::WebDAVService::new(webdav_config)
+        let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config)
             .map_err(|e| format!("Service creation failed: {}", e))?;
 
         let test_config = crate::models::WebDAVTestConnection {

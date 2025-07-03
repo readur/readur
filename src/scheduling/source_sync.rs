@@ -15,7 +15,7 @@ use crate::{
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::local_folder_service::LocalFolderService,
     services::s3_service::S3Service,
-    services::webdav_service::{WebDAVService, WebDAVConfig},
+    services::webdav::{WebDAVService, WebDAVConfig},
 };
 
 #[derive(Clone)]

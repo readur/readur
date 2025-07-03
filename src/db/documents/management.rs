@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::{QueryBuilder, Postgres};
+use sqlx::{QueryBuilder, Postgres, Row};
 use uuid::Uuid;
 
 use crate::models::{Document, UserRole, FacetItem};
@@ -53,11 +53,16 @@ impl Database {
             let doc_id: Uuid = row.get("document_id");
             let label = Label {
                 id: row.get("label_id"),
-                user_id: row.get("user_id"),
+                user_id: Some(row.get("user_id")),
                 name: row.get("name"),
+                description: None,
                 color: row.get("color"),
+                background_color: None,
+                icon: None,
+                is_system: false,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                document_count: 0,
             };
 
             if Some(doc_id) != current_doc_id {

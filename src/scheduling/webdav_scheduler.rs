@@ -9,7 +9,7 @@ use crate::{
     services::file_service::FileService,
     AppState,
 };
-use crate::services::webdav_service::{WebDAVConfig, WebDAVService};
+use crate::services::webdav::{WebDAVConfig, WebDAVService};
 use crate::routes::webdav::webdav_sync::perform_webdav_sync_with_tracking;
 
 pub struct WebDAVScheduler {
