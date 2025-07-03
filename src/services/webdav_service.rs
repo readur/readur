@@ -4,6 +4,8 @@ use reqwest::{Client, Method, Url};
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio::time::sleep;
+use tokio::sync::Semaphore;
+use futures_util::stream::{self, StreamExt};
 use tracing::{debug, error, info, warn};
 
 use crate::models::{
@@ -30,6 +32,14 @@ pub struct RetryConfig {
     pub max_delay_ms: u64,
     pub backoff_multiplier: f64,
     pub timeout_seconds: u64,
+    pub rate_limit_backoff_ms: u64, // Additional backoff for 429 responses
+}
+
+#[derive(Debug, Clone)]
+pub struct ConcurrencyConfig {
+    pub max_concurrent_scans: usize,
+    pub max_concurrent_downloads: usize,
+    pub adaptive_rate_limiting: bool,
 }
 
 impl Default for RetryConfig {
@@ -40,6 +50,17 @@ impl Default for RetryConfig {
             max_delay_ms: 30000,    // 30 seconds
             backoff_multiplier: 2.0,
             timeout_seconds: 300,   // 5 minutes total timeout for crawl operations
+            rate_limit_backoff_ms: 5000, // 5 seconds extra for rate limits
+        }
+    }
+}
+
+impl Default for ConcurrencyConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_scans: 10,
+            max_concurrent_downloads: 5,
+            adaptive_rate_limiting: true,
         }
     }
 }
@@ -52,14 +73,19 @@ pub struct WebDAVService {
     config: WebDAVConfig,
     base_webdav_url: String,
     retry_config: RetryConfig,
+    concurrency_config: ConcurrencyConfig,
 }
 
 impl WebDAVService {
     pub fn new(config: WebDAVConfig) -> Result<Self> {
-        Self::new_with_retry(config, RetryConfig::default())
+        Self::new_with_configs(config, RetryConfig::default(), ConcurrencyConfig::default())
     }
 
     pub fn new_with_retry(config: WebDAVConfig, retry_config: RetryConfig) -> Result<Self> {
+        Self::new_with_configs(config, retry_config, ConcurrencyConfig::default())
+    }
+
+    pub fn new_with_configs(config: WebDAVConfig, retry_config: RetryConfig, concurrency_config: ConcurrencyConfig) -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(config.timeout_seconds))
             .build()?;
@@ -103,7 +129,7 @@ impl WebDAVService {
                     config.server_url.trim_end_matches('/'),
                     config.username
                 );
-                info!("🔗 Constructed Nextcloud/ownCloud WebDAV URL: {}", url);
+                debug!("🔗 Constructed Nextcloud/ownCloud WebDAV URL: {}", url);
                 url
             },
             _ => {
@@ -111,7 +137,7 @@ impl WebDAVService {
                     "{}/webdav",
                     config.server_url.trim_end_matches('/')
                 );
-                info!("🔗 Constructed generic WebDAV URL: {}", url);
+                debug!("🔗 Constructed generic WebDAV URL: {}", url);
                 url
             },
         };
@@ -121,6 +147,7 @@ impl WebDAVService {
             config,
             base_webdav_url,
             retry_config,
+            concurrency_config,
         })
     }
 
@@ -154,10 +181,19 @@ impl WebDAVService {
                         return Err(err);
                     }
 
-                    warn!("{} failed (attempt {}), retrying in {}ms: {}", 
-                        operation_name, attempt, delay, err);
+                    // Apply adaptive backoff for rate limiting
+                    let actual_delay = if Self::is_rate_limit_error(&err) && self.concurrency_config.adaptive_rate_limiting {
+                        let rate_limit_delay = delay + self.retry_config.rate_limit_backoff_ms;
+                        warn!("{} rate limited (attempt {}), retrying in {}ms with extra backoff: {}", 
+                            operation_name, attempt, rate_limit_delay, err);
+                        rate_limit_delay
+                    } else {
+                        warn!("{} failed (attempt {}), retrying in {}ms: {}", 
+                            operation_name, attempt, delay, err);
+                        delay
+                    };
                     
-                    sleep(Duration::from_millis(delay)).await;
+                    sleep(Duration::from_millis(actual_delay)).await;
                     
                     // Calculate next delay with exponential backoff
                     delay = ((delay as f64 * self.retry_config.backoff_multiplier) as u64)
@@ -175,7 +211,13 @@ impl WebDAVService {
                 || reqwest_error.is_connect() 
                 || reqwest_error.is_request()
                 || reqwest_error.status()
-                    .map(|s| s.is_server_error() || s == 429) // 429 = Too Many Requests
+                    .map(|s| {
+                        s.is_server_error() // 5xx errors (including server restart scenarios)
+                        || s == 429 // Too Many Requests
+                        || s == 502 // Bad Gateway (server restarting)
+                        || s == 503 // Service Unavailable (server restarting/overloaded)
+                        || s == 504 // Gateway Timeout (server slow to respond)
+                    })
                     .unwrap_or(true);
         }
         
@@ -185,6 +227,44 @@ impl WebDAVService {
             || error_str.contains("connection") 
             || error_str.contains("network")
             || error_str.contains("temporary")
+            || error_str.contains("rate limit")
+            || error_str.contains("too many requests")
+            || error_str.contains("connection reset")
+            || error_str.contains("connection aborted")
+            || error_str.contains("server unavailable")
+            || error_str.contains("bad gateway")
+            || error_str.contains("service unavailable")
+    }
+
+    fn is_rate_limit_error(error: &anyhow::Error) -> bool {
+        if let Some(reqwest_error) = error.downcast_ref::<reqwest::Error>() {
+            return reqwest_error.status()
+                .map(|s| s == 429)
+                .unwrap_or(false);
+        }
+        
+        let error_str = error.to_string().to_lowercase();
+        error_str.contains("rate limit") || error_str.contains("too many requests")
+    }
+
+    fn is_server_restart_error(&self, error: &anyhow::Error) -> bool {
+        if let Some(reqwest_error) = error.downcast_ref::<reqwest::Error>() {
+            if let Some(status) = reqwest_error.status() {
+                return status == 502 // Bad Gateway 
+                    || status == 503 // Service Unavailable
+                    || status == 504; // Gateway Timeout
+            }
+            
+            // Network-level connection issues often indicate server restart
+            return reqwest_error.is_connect() || reqwest_error.is_timeout();
+        }
+        
+        let error_str = error.to_string().to_lowercase();
+        error_str.contains("connection reset")
+            || error_str.contains("connection aborted")
+            || error_str.contains("bad gateway")
+            || error_str.contains("service unavailable")
+            || error_str.contains("server unreachable")
     }
 
     pub async fn test_connection(&self, test_config: WebDAVTestConnection) -> Result<WebDAVConnectionResult> {
@@ -243,7 +323,7 @@ impl WebDAVService {
             ),
         };
         
-        info!("🔗 Constructed test URL: {}", test_url);
+        debug!("🔗 Constructed test URL: {}", test_url);
 
         let resp = self.client
             .request(Method::from_bytes(b"PROPFIND").unwrap(), &test_url)
@@ -333,7 +413,7 @@ impl WebDAVService {
             .collect();
 
         for folder_path in folders {
-            info!("Analyzing folder: {}", folder_path);
+            debug!("Analyzing folder: {}", folder_path);
             
             match self.analyze_folder(folder_path, &supported_extensions).await {
                 Ok(folder_info) => {
@@ -418,16 +498,16 @@ impl WebDAVService {
 
     /// Optimized discovery that checks directory ETag first to avoid unnecessary deep scans
     pub async fn discover_files_in_folder_optimized(&self, folder_path: &str, user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
-        info!("🔍 Starting optimized discovery for folder: {}", folder_path);
+        debug!("🔍 Starting optimized discovery for folder: {}", folder_path);
         
         // Check if we should use smart scanning
         let use_smart_scan = match self.config.server_type.as_deref() {
             Some("nextcloud") | Some("owncloud") => {
-                info!("🚀 Using smart scanning for Nextcloud/ownCloud server");
+                debug!("🚀 Using smart scanning for Nextcloud/ownCloud server");
                 true
             }
             _ => {
-                info!("📁 Using traditional scanning for generic WebDAV server");
+                debug!("📁 Using traditional scanning for generic WebDAV server");
                 false
             }
         };
@@ -461,7 +541,7 @@ impl WebDAVService {
         match state.db.get_webdav_directory(user_id, folder_path).await {
             Ok(Some(stored_dir)) => {
                 if stored_dir.directory_etag == current_dir_etag {
-                    info!("✅ Directory {} unchanged (ETag: {}), checking subdirectories individually", folder_path, current_dir_etag);
+                    debug!("✅ Directory {} unchanged (ETag: {}), checking subdirectories individually", folder_path, current_dir_etag);
                     
                     // Update last_scanned_at to show we checked
                     let update = crate::models::UpdateWebDAVDirectory {
@@ -479,12 +559,12 @@ impl WebDAVService {
                     let changed_files = self.check_subdirectories_for_changes(folder_path, user_id, state).await?;
                     return Ok(changed_files);
                 } else {
-                    info!("🔄 Directory {} changed (old ETag: {}, new ETag: {}), performing deep scan", 
+                    debug!("🔄 Directory {} changed (old ETag: {}, new ETag: {}), performing deep scan", 
                         folder_path, stored_dir.directory_etag, current_dir_etag);
                 }
             }
             Ok(None) => {
-                info!("🆕 New directory {}, performing initial scan", folder_path);
+                debug!("🆕 New directory {}, performing initial scan", folder_path);
             }
             Err(e) => {
                 warn!("Database error checking directory {}: {}, proceeding with scan", folder_path, e);
@@ -509,7 +589,7 @@ impl WebDAVService {
         if let Err(e) = state.db.create_or_update_webdav_directory(&directory_record).await {
             error!("Failed to update directory tracking for {}: {}", folder_path, e);
         } else {
-            info!("📊 Updated directory tracking: {} files, {} bytes, ETag: {}", 
+            debug!("📊 Updated directory tracking: {} files, {} bytes, ETag: {}", 
                 file_count, total_size_bytes, current_dir_etag);
         }
         
@@ -549,7 +629,7 @@ impl WebDAVService {
             }
         }
         
-        info!("🗂️ Found {} unique directories at all levels", all_directories.len());
+        debug!("🗂️ Found {} unique directories at all levels", all_directories.len());
         
         // Step 2: Create a mapping of directory -> ETag from the files list
         let mut directory_etags: HashMap<String, String> = HashMap::new();
@@ -608,7 +688,7 @@ impl WebDAVService {
             }
         }
         
-        info!("✅ Completed tracking {} directories at all depth levels", all_directories.len());
+        debug!("✅ Completed tracking {} directories at all depth levels", all_directories.len());
     }
     
     /// Check if a path is a direct child of a directory (not nested deeper)
@@ -643,12 +723,12 @@ impl WebDAVService {
     
     /// Perform targeted re-scanning of only specific paths that have changed
     pub async fn discover_files_targeted_rescan(&self, paths_to_scan: &[String], user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
-        info!("🎯 Starting targeted re-scan for {} specific paths", paths_to_scan.len());
+        debug!("🎯 Starting targeted re-scan for {} specific paths", paths_to_scan.len());
         
         let mut all_files = Vec::new();
         
         for path in paths_to_scan {
-            info!("🔍 Targeted scan of: {}", path);
+            debug!("🔍 Targeted scan of: {}", path);
             
             // Check if this specific path has changed
             match self.check_directory_etag(path).await {
@@ -657,7 +737,7 @@ impl WebDAVService {
                     let needs_scan = match state.db.get_webdav_directory(user_id, path).await {
                         Ok(Some(stored_dir)) => {
                             if stored_dir.directory_etag != current_etag {
-                                info!("🔄 Path {} changed (old: {}, new: {})", path, stored_dir.directory_etag, current_etag);
+                                debug!("🔄 Path {} changed (old: {}, new: {})", path, stored_dir.directory_etag, current_etag);
                                 true
                             } else {
                                 debug!("✅ Path {} unchanged (ETag: {})", path, current_etag);
@@ -665,7 +745,7 @@ impl WebDAVService {
                             }
                         }
                         Ok(None) => {
-                            info!("🆕 New path {} detected", path);
+                            debug!("🆕 New path {} detected", path);
                             true
                         }
                         Err(e) => {
@@ -678,7 +758,7 @@ impl WebDAVService {
                         // Use shallow scan for this specific directory only
                         match self.discover_files_in_folder_shallow(path).await {
                             Ok(mut path_files) => {
-                                info!("📂 Found {} files in changed path {}", path_files.len(), path);
+                                debug!("📂 Found {} files in changed path {}", path_files.len(), path);
                                 all_files.append(&mut path_files);
                                 
                                 // Update tracking for this specific path
@@ -696,7 +776,7 @@ impl WebDAVService {
             }
         }
         
-        info!("🎯 Targeted re-scan completed: {} total files found", all_files.len());
+        debug!("🎯 Targeted re-scan completed: {} total files found", all_files.len());
         Ok(all_files)
     }
     
@@ -760,7 +840,7 @@ impl WebDAVService {
         
         match state.db.create_or_update_webdav_directory(&directory_record).await {
             Ok(_) => {
-                info!("📊 Updated single directory tracking: {} ({} files, {} bytes, ETag: {})", 
+                debug!("📊 Updated single directory tracking: {} ({} files, {} bytes, ETag: {})", 
                     directory_path, file_count, total_size_bytes, dir_etag);
             }
             Err(e) => {
@@ -780,7 +860,7 @@ impl WebDAVService {
                     .map(|dir| dir.directory_path.clone())
                     .collect();
                 
-                info!("🕒 Found {} directories not scanned in last {} hours", stale_dirs.len(), max_age_hours);
+                debug!("🕒 Found {} directories not scanned in last {} hours", stale_dirs.len(), max_age_hours);
                 Ok(stale_dirs)
             }
             Err(e) => {
@@ -792,12 +872,12 @@ impl WebDAVService {
     
     /// Smart sync mode that combines multiple optimization strategies
     pub async fn discover_files_smart_sync(&self, watch_folders: &[String], user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
-        info!("🧠 Starting smart sync for {} watch folders", watch_folders.len());
+        debug!("🧠 Starting smart sync for {} watch folders", watch_folders.len());
         
         let mut all_files = Vec::new();
         
         for folder_path in watch_folders {
-            info!("🔍 Smart sync processing folder: {}", folder_path);
+            debug!("🔍 Smart sync processing folder: {}", folder_path);
             
             // Step 1: Try optimized discovery first (checks directory ETag)
             let optimized_result = self.discover_files_in_folder_optimized(folder_path, user_id, state).await;
@@ -805,20 +885,20 @@ impl WebDAVService {
             match optimized_result {
                 Ok(files) => {
                     if !files.is_empty() {
-                        info!("✅ Optimized discovery found {} files in {}", files.len(), folder_path);
+                        debug!("✅ Optimized discovery found {} files in {}", files.len(), folder_path);
                         all_files.extend(files);
                     } else {
-                        info!("🔍 Directory {} unchanged, checking for stale subdirectories", folder_path);
+                        debug!("🔍 Directory {} unchanged, checking for stale subdirectories", folder_path);
                         
                         // Step 2: Check for stale subdirectories that need targeted scanning
                         let stale_dirs = self.get_stale_subdirectories(folder_path, user_id, state, 24).await?;
                         
                         if !stale_dirs.is_empty() {
-                            info!("🎯 Found {} stale subdirectories, performing targeted scan", stale_dirs.len());
+                            debug!("🎯 Found {} stale subdirectories, performing targeted scan", stale_dirs.len());
                             let targeted_files = self.discover_files_targeted_rescan(&stale_dirs, user_id, state).await?;
                             all_files.extend(targeted_files);
                         } else {
-                            info!("✅ All subdirectories of {} are fresh, no scan needed", folder_path);
+                            debug!("✅ All subdirectories of {} are fresh, no scan needed", folder_path);
                         }
                     }
                 }
@@ -827,7 +907,7 @@ impl WebDAVService {
                     // Fallback to traditional full scan
                     match self.discover_files_in_folder(folder_path).await {
                         Ok(files) => {
-                            info!("📂 Fallback scan found {} files in {}", files.len(), folder_path);
+                            debug!("📂 Fallback scan found {} files in {}", files.len(), folder_path);
                             all_files.extend(files);
                         }
                         Err(fallback_error) => {
@@ -839,7 +919,7 @@ impl WebDAVService {
             }
         }
         
-        info!("🧠 Smart sync completed: {} total files discovered", all_files.len());
+        debug!("🧠 Smart sync completed: {} total files discovered", all_files.len());
         Ok(all_files)
     }
     
@@ -871,7 +951,7 @@ impl WebDAVService {
     
     /// Perform incremental sync - only scan directories that have actually changed
     pub async fn discover_files_incremental(&self, watch_folders: &[String], user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
-        info!("⚡ Starting incremental sync for {} watch folders", watch_folders.len());
+        debug!("⚡ Starting incremental sync for {} watch folders", watch_folders.len());
         
         let mut changed_files = Vec::new();
         let mut unchanged_count = 0;
@@ -884,7 +964,7 @@ impl WebDAVService {
                     let needs_scan = match state.db.get_webdav_directory(user_id, folder_path).await {
                         Ok(Some(stored_dir)) => {
                             if stored_dir.directory_etag != current_etag {
-                                info!("🔄 Directory {} changed (ETag: {} → {})", folder_path, stored_dir.directory_etag, current_etag);
+                                debug!("🔄 Directory {} changed (ETag: {} → {})", folder_path, stored_dir.directory_etag, current_etag);
                                 changed_count += 1;
                                 true
                             } else {
@@ -894,7 +974,7 @@ impl WebDAVService {
                             }
                         }
                         Ok(None) => {
-                            info!("🆕 New directory {} detected", folder_path);
+                            debug!("🆕 New directory {} detected", folder_path);
                             changed_count += 1;
                             true
                         }
@@ -909,7 +989,7 @@ impl WebDAVService {
                         // Directory changed - perform targeted scan
                         match self.discover_files_in_folder_optimized(folder_path, user_id, state).await {
                             Ok(mut files) => {
-                                info!("📂 Incremental scan found {} files in changed directory {}", files.len(), folder_path);
+                                debug!("📂 Incremental scan found {} files in changed directory {}", files.len(), folder_path);
                                 changed_files.append(&mut files);
                             }
                             Err(e) => {
@@ -936,7 +1016,7 @@ impl WebDAVService {
             }
         }
         
-        info!("⚡ Incremental sync completed: {} unchanged, {} changed, {} total files found", 
+        debug!("⚡ Incremental sync completed: {} unchanged, {} changed, {} total files found", 
             unchanged_count, changed_count, changed_files.len());
         
         Ok(changed_files)
@@ -952,12 +1032,12 @@ impl WebDAVService {
         
         if supports_recursive_etags {
             // With recursive ETags, if parent hasn't changed, nothing inside has changed
-            info!("🚀 Server supports recursive ETags - parent {} unchanged means all contents unchanged", parent_path);
+            debug!("🚀 Server supports recursive ETags - parent {} unchanged means all contents unchanged", parent_path);
             return Ok(Vec::new());
         }
         
         // For servers without recursive ETags, fall back to checking each subdirectory
-        info!("📁 Server doesn't support recursive ETags, checking subdirectories individually");
+        debug!("📁 Server doesn't support recursive ETags, checking subdirectories individually");
         
         // Get all known subdirectories from database
         let known_directories = match state.db.list_webdav_directories(user_id).await {
@@ -974,11 +1054,11 @@ impl WebDAVService {
             .collect();
             
         if subdirectories.is_empty() {
-            info!("📁 No known subdirectories for {}, performing initial scan to discover structure", parent_path);
+            debug!("📁 No known subdirectories for {}, performing initial scan to discover structure", parent_path);
             return self.discover_files_in_folder_impl(parent_path).await;
         }
         
-        info!("🔍 Checking {} known subdirectories for changes", subdirectories.len());
+        debug!("🔍 Checking {} known subdirectories for changes", subdirectories.len());
         
         let mut changed_files = Vec::new();
         let subdirectory_count = subdirectories.len();
@@ -991,13 +1071,13 @@ impl WebDAVService {
             match self.check_directory_etag(subdir_path).await {
                 Ok(current_etag) => {
                     if current_etag != subdir.directory_etag {
-                        info!("🔄 Subdirectory {} changed (old: {}, new: {}), scanning recursively", 
+                        debug!("🔄 Subdirectory {} changed (old: {}, new: {}), scanning recursively", 
                             subdir_path, subdir.directory_etag, current_etag);
                         
                         // This subdirectory changed - get all its files recursively
                         match self.discover_files_in_folder_impl(subdir_path).await {
                             Ok(mut subdir_files) => {
-                                info!("📂 Found {} files in changed subdirectory {}", subdir_files.len(), subdir_path);
+                                debug!("📂 Found {} files in changed subdirectory {}", subdir_files.len(), subdir_path);
                                 changed_files.append(&mut subdir_files);
                                 
                                 // Update tracking for this subdirectory and its children
@@ -1030,7 +1110,7 @@ impl WebDAVService {
             }
         }
         
-        info!("🎯 Found {} changed files across {} subdirectories", changed_files.len(), subdirectory_count);
+        debug!("🎯 Found {} changed files across {} subdirectories", changed_files.len(), subdirectory_count);
         Ok(changed_files)
     }
 
@@ -1160,7 +1240,7 @@ impl WebDAVService {
     /// (i.e., parent directory ETags change when child content changes)
     /// This test is read-only and checks existing directory structures
     pub async fn test_recursive_etag_support(&self) -> Result<bool> {
-        info!("🔬 Testing recursive ETag support using existing directory structure");
+        debug!("🔬 Testing recursive ETag support using existing directory structure");
         
         // Find a directory with subdirectories from our watch folders
         for watch_folder in &self.config.watch_folders {
@@ -1178,7 +1258,7 @@ impl WebDAVService {
                     
                     // Use the first subdirectory for testing
                     let test_subdir = &subdirs[0];
-                    info!("Testing with directory: {} and subdirectory: {}", watch_folder, test_subdir.path);
+                    debug!("Testing with directory: {} and subdirectory: {}", watch_folder, test_subdir.path);
                     
                     // Step 1: Get parent directory ETag
                     let parent_etag = self.check_directory_etag(watch_folder).await?;
@@ -1193,19 +1273,19 @@ impl WebDAVService {
                     
                     // For now, we'll just check if the server provides ETags at all
                     if !parent_etag.is_empty() && !subdir_etag.is_empty() {
-                        info!("✅ Server provides ETags for directories");
-                        info!("   Parent ETag: {}", parent_etag);
-                        info!("   Subdir ETag: {}", subdir_etag);
+                        debug!("✅ Server provides ETags for directories");
+                        debug!("   Parent ETag: {}", parent_etag);
+                        debug!("   Subdir ETag: {}", subdir_etag);
                         
                         // Without write access, we can't definitively test recursive propagation
                         // But we can make an educated guess based on the server type
                         let likely_supports_recursive = match self.config.server_type.as_deref() {
                             Some("nextcloud") | Some("owncloud") => {
-                                info!("   Nextcloud/ownCloud servers typically support recursive ETags");
+                                debug!("   Nextcloud/ownCloud servers typically support recursive ETags");
                                 true
                             }
                             _ => {
-                                info!("   Unknown server type - recursive ETag support uncertain");
+                                debug!("   Unknown server type - recursive ETag support uncertain");
                                 false
                             }
                         };
@@ -1220,10 +1300,29 @@ impl WebDAVService {
             }
         }
         
-        info!("❓ Could not determine recursive ETag support - no suitable directories found");
+        debug!("❓ Could not determine recursive ETag support - no suitable directories found");
         Ok(false)
     }
     
+    /// Convert full WebDAV path to relative path for use with base_webdav_url
+    pub fn convert_to_relative_path(&self, full_webdav_path: &str) -> String {
+        // For Nextcloud/ownCloud paths like "/remote.php/dav/files/username/folder/subfolder/"
+        // We need to extract just the "folder/subfolder/" part
+        let webdav_prefix = match self.config.server_type.as_deref() {
+            Some("nextcloud") | Some("owncloud") => {
+                format!("/remote.php/dav/files/{}/", self.config.username)
+            },
+            _ => "/webdav/".to_string()
+        };
+        
+        if let Some(relative_part) = full_webdav_path.strip_prefix(&webdav_prefix) {
+            format!("/{}", relative_part)
+        } else {
+            // If path doesn't match expected format, return as-is
+            full_webdav_path.to_string()
+        }
+    }
+
     /// Smart directory scan that uses depth-1 traversal for efficient synchronization
     /// Only scans directories whose ETags have changed, avoiding unnecessary deep scans
     pub fn smart_directory_scan<'a>(
@@ -1234,14 +1333,18 @@ impl WebDAVService {
         state: &'a crate::AppState
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FileInfo>>> + Send + 'a>> {
         Box::pin(async move {
-        info!("🧠 Smart scan starting for path: {}", path);
+        debug!("🧠 Smart scan starting for path: {}", path);
+        
+        // Convert full WebDAV path to relative path for existing functions
+        let relative_path = self.convert_to_relative_path(path);
+        debug!("🔄 Converted {} to relative path: {}", path, relative_path);
         
         // Step 1: Check current directory ETag
-        let current_etag = match self.check_directory_etag(path).await {
+        let current_etag = match self.check_directory_etag(&relative_path).await {
             Ok(etag) => etag,
             Err(e) => {
                 warn!("Failed to get directory ETag for {}, falling back to full scan: {}", path, e);
-                return self.discover_files_in_folder_impl(path).await;
+                return self.discover_files_in_folder_impl(&relative_path).await;
             }
         };
         
@@ -1253,17 +1356,17 @@ impl WebDAVService {
             };
             
             if supports_recursive {
-                info!("✅ Directory {} unchanged (recursive ETag: {}), skipping scan", path, current_etag);
+                debug!("✅ Directory {} unchanged (recursive ETag: {}), skipping scan", path, current_etag);
                 return Ok(Vec::new());
             } else {
-                info!("📁 Directory {} ETag unchanged but server doesn't support recursive ETags, checking subdirectories", path);
+                debug!("📁 Directory {} ETag unchanged but server doesn't support recursive ETags, checking subdirectories", path);
             }
         } else {
-            info!("🔄 Directory {} changed (old: {:?}, new: {})", path, known_etag, current_etag);
+            debug!("🔄 Directory {} changed (old: {:?}, new: {})", path, known_etag, current_etag);
         }
         
         // Step 3: Directory changed or we need to check subdirectories - do depth-1 scan
-        let entries = match self.discover_files_in_folder_shallow(path).await {
+        let entries = match self.discover_files_in_folder_shallow(&relative_path).await {
             Ok(files) => files,
             Err(e) => {
                 error!("Failed shallow scan of {}: {}", path, e);
@@ -1301,55 +1404,213 @@ impl WebDAVService {
             warn!("Failed to update directory tracking for {}: {}", path, e);
         }
         
-        // Step 4: For each subdirectory, check if it needs scanning
-        for subdir in subdirs_to_scan {
-            // Get stored ETag for this subdirectory
-            let stored_etag = match state.db.get_webdav_directory(user_id, &subdir.path).await {
-                Ok(Some(dir)) => Some(dir.directory_etag),
-                Ok(None) => {
-                    info!("🆕 New subdirectory discovered: {}", subdir.path);
-                    None
-                }
-                Err(e) => {
-                    warn!("Database error checking subdirectory {}: {}", subdir.path, e);
-                    None
-                }
-            };
+        // Step 4: Process subdirectories concurrently with controlled parallelism
+        if !subdirs_to_scan.is_empty() {
+            let semaphore = std::sync::Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
+            let subdirs_stream = stream::iter(subdirs_to_scan)
+                .map(|subdir| {
+                    let semaphore = semaphore.clone();
+                    let service = self.clone();
+                    async move {
+                        let _permit = semaphore.acquire().await.map_err(|e| anyhow!("Semaphore error: {}", e))?;
+                        
+                        // Get stored ETag for this subdirectory
+                        let stored_etag = match state.db.get_webdav_directory(user_id, &subdir.path).await {
+                            Ok(Some(dir)) => Some(dir.directory_etag),
+                            Ok(None) => {
+                                debug!("🆕 New subdirectory discovered: {}", subdir.path);
+                                None
+                            }
+                            Err(e) => {
+                                warn!("Database error checking subdirectory {}: {}", subdir.path, e);
+                                None
+                            }
+                        };
+                        
+                        // If ETag changed or new directory, scan it recursively
+                        if stored_etag.as_deref() != Some(&subdir.etag) {
+                            debug!("🔄 Subdirectory {} needs scanning (old: {:?}, new: {})", 
+                                subdir.path, stored_etag, subdir.etag);
+                                
+                            match service.smart_directory_scan(&subdir.path, stored_etag.as_deref(), user_id, state).await {
+                                Ok(subdir_files) => {
+                                    debug!("📂 Found {} entries in subdirectory {}", subdir_files.len(), subdir.path);
+                                    Result::<Vec<FileInfo>, anyhow::Error>::Ok(subdir_files)
+                                }
+                                Err(e) => {
+                                    error!("Failed to scan subdirectory {}: {}", subdir.path, e);
+                                    Result::<Vec<FileInfo>, anyhow::Error>::Ok(Vec::new()) // Continue with other subdirectories
+                                }
+                            }
+                        } else {
+                            debug!("✅ Subdirectory {} unchanged (ETag: {})", subdir.path, subdir.etag);
+                            // Update last_scanned_at
+                            let update = crate::models::UpdateWebDAVDirectory {
+                                directory_etag: subdir.etag.clone(),
+                                last_scanned_at: chrono::Utc::now(),
+                                file_count: 0, // Will be preserved by database
+                                total_size_bytes: 0,
+                            };
+                            
+                            if let Err(e) = state.db.update_webdav_directory(user_id, &subdir.path, &update).await {
+                                warn!("Failed to update scan time for {}: {}", subdir.path, e);
+                            }
+                            Result::<Vec<FileInfo>, anyhow::Error>::Ok(Vec::new())
+                        }
+                    }
+                })
+                .buffer_unordered(self.concurrency_config.max_concurrent_scans);
             
-            // If ETag changed or new directory, scan it recursively
-            if stored_etag.as_deref() != Some(&subdir.etag) {
-                info!("🔄 Subdirectory {} needs scanning (old: {:?}, new: {})", 
-                    subdir.path, stored_etag, subdir.etag);
-                    
-                match self.smart_directory_scan(&subdir.path, stored_etag.as_deref(), user_id, state).await {
+            // Collect all results concurrently
+            let mut subdirs_stream = std::pin::pin!(subdirs_stream);
+            while let Some(result) = subdirs_stream.next().await {
+                match result {
                     Ok(mut subdir_files) => {
-                        info!("📂 Found {} entries in subdirectory {}", subdir_files.len(), subdir.path);
                         all_files.append(&mut subdir_files);
                     }
                     Err(e) => {
-                        error!("Failed to scan subdirectory {}: {}", subdir.path, e);
-                        // Continue with other subdirectories
+                        warn!("Concurrent subdirectory scan error: {}", e);
+                        // Continue processing other subdirectories
                     }
-                }
-            } else {
-                debug!("✅ Subdirectory {} unchanged (ETag: {})", subdir.path, subdir.etag);
-                // Update last_scanned_at
-                let update = crate::models::UpdateWebDAVDirectory {
-                    directory_etag: subdir.etag.clone(),
-                    last_scanned_at: chrono::Utc::now(),
-                    file_count: 0, // Will be preserved by database
-                    total_size_bytes: 0,
-                };
-                
-                if let Err(e) = state.db.update_webdav_directory(user_id, &subdir.path, &update).await {
-                    warn!("Failed to update scan time for {}: {}", subdir.path, e);
                 }
             }
         }
         
-        info!("🧠 Smart scan completed for {}: {} total entries found", path, all_files.len());
+        debug!("🧠 Smart scan completed for {}: {} total entries found", path, all_files.len());
         Ok(all_files)
         })
+    }
+
+    /// Resume a deep scan from a checkpoint after server restart/interruption
+    pub async fn resume_deep_scan(&self, checkpoint_path: &str, user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
+        info!("🔄 Resuming deep scan from checkpoint: {}", checkpoint_path);
+        
+        // Check if the checkpoint directory is still accessible
+        match self.check_directory_etag(checkpoint_path).await {
+            Ok(current_etag) => {
+                info!("✅ Checkpoint directory accessible, resuming scan");
+                
+                // Check if directory changed since checkpoint
+                match state.db.get_webdav_directory(user_id, checkpoint_path).await {
+                    Ok(Some(stored_dir)) => {
+                        if stored_dir.directory_etag != current_etag {
+                            info!("🔄 Directory changed since checkpoint, performing full rescan");
+                        } else {
+                            info!("✅ Directory unchanged since checkpoint, can skip");
+                            return Ok(Vec::new());
+                        }
+                    }
+                    Ok(None) => {
+                        info!("🆕 New checkpoint directory, performing full scan");
+                    }
+                    Err(e) => {
+                        warn!("Database error checking checkpoint {}: {}, performing full scan", checkpoint_path, e);
+                    }
+                }
+                
+                // Resume with smart scanning from this point
+                self.discover_files_in_folder_optimized(checkpoint_path, user_id, state).await
+            }
+            Err(e) => {
+                warn!("Checkpoint directory {} inaccessible after restart: {}", checkpoint_path, e);
+                // Server might have restarted, wait a bit and retry
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                
+                match self.check_directory_etag(checkpoint_path).await {
+                    Ok(_) => {
+                        info!("🔄 Server recovered, resuming scan");
+                        self.discover_files_in_folder_optimized(checkpoint_path, user_id, state).await
+                    }
+                    Err(e2) => {
+                        error!("Failed to resume deep scan after server restart: {}", e2);
+                        Err(anyhow!("Cannot resume deep scan: server unreachable after restart"))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Discover files in multiple folders concurrently with rate limiting
+    pub async fn discover_files_concurrent(&self, folders: &[String], user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
+        if folders.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        info!("🚀 Starting concurrent discovery for {} folders", folders.len());
+        
+        let semaphore = std::sync::Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
+        let folders_stream = stream::iter(folders.iter())
+            .map(|folder_path| {
+                let semaphore = semaphore.clone();
+                let service = self.clone();
+                let folder_path = folder_path.clone();
+                async move {
+                    let _permit = semaphore.acquire().await.map_err(|e| anyhow!("Semaphore error: {}", e))?;
+                    
+                    info!("📂 Scanning folder: {}", folder_path);
+                    let start_time = std::time::Instant::now();
+                    
+                    // Save checkpoint for resumption after interruption
+                    let checkpoint_record = crate::models::CreateWebDAVDirectory {
+                        user_id,
+                        directory_path: folder_path.clone(),
+                        directory_etag: "scanning".to_string(), // Temporary marker
+                        file_count: 0,
+                        total_size_bytes: 0,
+                    };
+                    
+                    if let Err(e) = state.db.create_or_update_webdav_directory(&checkpoint_record).await {
+                        warn!("Failed to save scan checkpoint for {}: {}", folder_path, e);
+                    }
+                    
+                    let result = service.discover_files_in_folder_optimized(&folder_path, user_id, state).await;
+                    
+                    match &result {
+                        Ok(files) => {
+                            let duration = start_time.elapsed();
+                            info!("✅ Completed folder {} in {:?}: {} files found", 
+                                folder_path, duration, files.len());
+                        }
+                        Err(e) => {
+                            // Check if this was a server restart/connection issue
+                            if service.is_server_restart_error(e) {
+                                warn!("🔄 Server restart detected during scan of {}, will resume later", folder_path);
+                                // Keep checkpoint for resumption
+                                return Err(anyhow!("Server restart detected: {}", e));
+                            } else {
+                                error!("❌ Failed to scan folder {}: {}", folder_path, e);
+                            }
+                        }
+                    }
+                    
+                    result.map(|files| (folder_path, files))
+                }
+            })
+            .buffer_unordered(self.concurrency_config.max_concurrent_scans);
+        
+        let mut all_files = Vec::new();
+        let mut success_count = 0;
+        let mut error_count = 0;
+        
+        let mut folders_stream = std::pin::pin!(folders_stream);
+        while let Some(result) = folders_stream.next().await {
+            match result {
+                Ok((folder_path, mut files)) => {
+                    debug!("📁 Folder {} contributed {} files", folder_path, files.len());
+                    all_files.append(&mut files);
+                    success_count += 1;
+                }
+                Err(e) => {
+                    warn!("Folder scan error: {}", e);
+                    error_count += 1;
+                }
+            }
+        }
+        
+        info!("🎯 Concurrent discovery completed: {} folders successful, {} failed, {} total files", 
+            success_count, error_count, all_files.len());
+        
+        Ok(all_files)
     }
 
     pub async fn download_file(&self, file_path: &str) -> Result<Vec<u8>> {

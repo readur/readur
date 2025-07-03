@@ -68,6 +68,7 @@ import {
   TextSnippet as DocumentIcon,
   Visibility as OcrIcon,
   Block as BlockIcon,
+  FindInPage as DeepScanIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api, { queueService } from '../services/api';
@@ -151,6 +152,7 @@ const SourcesPage: React.FC = () => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [syncingSource, setSyncingSource] = useState<string | null>(null);
   const [stoppingSync, setStoppingSync] = useState<string | null>(null);
+  const [deepScanning, setDeepScanning] = useState<string | null>(null);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
 
   useEffect(() => {
@@ -485,6 +487,31 @@ const SourcesPage: React.FC = () => {
       }
     } finally {
       setStoppingSync(null);
+    }
+  };
+
+  const handleDeepScan = async (sourceId: string) => {
+    setDeepScanning(sourceId);
+    try {
+      const response = await api.post(`/sources/${sourceId}/deep-scan`);
+      if (response.data.success) {
+        showSnackbar(response.data.message || 'Deep scan started successfully', 'success');
+        setTimeout(loadSources, 1000);
+      } else {
+        showSnackbar(response.data.message || 'Failed to start deep scan', 'error');
+      }
+    } catch (error: any) {
+      console.error('Failed to trigger deep scan:', error);
+      if (error.response?.status === 409) {
+        showSnackbar('Source is already syncing', 'warning');
+      } else if (error.response?.status === 404) {
+        showSnackbar('Source not found', 'error');
+      } else {
+        const message = error.response?.data?.message || 'Failed to start deep scan';
+        showSnackbar(message, 'error');
+      }
+    } finally {
+      setDeepScanning(null);
     }
   };
 
@@ -837,6 +864,25 @@ const SourcesPage: React.FC = () => {
                   </span>
                 </Tooltip>
               )}
+              <Tooltip title="Deep Scan">
+                <span>
+                  <IconButton
+                    onClick={() => handleDeepScan(source.id)}
+                    disabled={deepScanning === source.id || source.status === 'syncing' || !source.enabled}
+                    sx={{
+                      bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                      '&:hover': { bgcolor: alpha(theme.palette.secondary.main, 0.2) },
+                      color: theme.palette.secondary.main,
+                    }}
+                  >
+                    {deepScanning === source.id ? (
+                      <CircularProgress size={20} />
+                    ) : (
+                      <DeepScanIcon />
+                    )}
+                  </IconButton>
+                </span>
+              </Tooltip>
               <Tooltip title="Edit Source">
                 <IconButton 
                   onClick={() => handleEditSource(source)}

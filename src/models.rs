@@ -1120,7 +1120,7 @@ impl From<Source> for SourceResponse {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct WebDAVSourceConfig {
     pub server_url: String,
     pub username: String,

@@ -339,4 +339,16 @@ impl Database {
 
         Ok(directories)
     }
+
+    /// Clear all WebDAV directory tracking for a user (used for deep scan)
+    pub async fn clear_webdav_directories(&self, user_id: Uuid) -> Result<i64> {
+        let result = sqlx::query(
+            r#"DELETE FROM webdav_directories WHERE user_id = $1"#
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() as i64)
+    }
 }
