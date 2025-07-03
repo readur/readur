@@ -307,6 +307,7 @@ fn test_retry_config_custom_values() {
         max_delay_ms: 15000,
         backoff_multiplier: 1.5,
         timeout_seconds: 90,
+        rate_limit_backoff_ms: 10000,
     };
 
     assert_eq!(custom_retry.max_retries, 5);
@@ -314,6 +315,7 @@ fn test_retry_config_custom_values() {
     assert_eq!(custom_retry.max_delay_ms, 15000);
     assert_eq!(custom_retry.backoff_multiplier, 1.5);
     assert_eq!(custom_retry.timeout_seconds, 90);
+    assert_eq!(custom_retry.rate_limit_backoff_ms, 10000);
 
     let config = WebDAVConfig {
         server_url: "https://cloud.example.com".to_string(),
