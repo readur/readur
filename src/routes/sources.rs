@@ -23,6 +23,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/sync", post(trigger_sync))
         .route("/{id}/sync/stop", post(stop_sync))
         .route("/{id}/deep-scan", post(trigger_deep_scan))
+        .route("/{id}/validate", post(validate_source))
         .route("/{id}/test", post(test_connection))
         .route("/{id}/estimate", post(estimate_crawl))
         .route("/estimate", post(estimate_crawl_with_config))
@@ -640,6 +641,52 @@ async fn trigger_deep_scan(
             })))
         }
     }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/sources/{id}/validate",
+    tag = "sources",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Source ID")
+    ),
+    responses(
+        (status = 200, description = "Validation started successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Source not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+async fn validate_source(
+    auth_user: AuthUser,
+    Path(source_id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    info!("Starting validation check for source {} by user {}", source_id, auth_user.user.username);
+    
+    let source = state
+        .db
+        .get_source(auth_user.user.id, source_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Start validation in background
+    let state_clone = state.clone();
+    let source_clone = source.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::scheduling::source_scheduler::SourceScheduler::validate_source_health(&source_clone, &state_clone).await {
+            error!("Manual validation check failed for source {}: {}", source_clone.name, e);
+        }
+    });
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": format!("Validation check started for source '{}'", source.name)
+    })))
 }
 
 #[utoipa::path(

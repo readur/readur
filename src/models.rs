@@ -1048,6 +1048,15 @@ pub struct Source {
     pub total_size_bytes: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    // Validation status tracking
+    #[sqlx(default)]
+    pub validation_status: Option<String>,
+    #[sqlx(default)]
+    pub last_validation_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub validation_score: Option<i32>, // 0-100 health score
+    #[sqlx(default)]
+    pub validation_issues: Option<String>, // JSON array of validation issues
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -1072,6 +1081,15 @@ pub struct SourceResponse {
     /// Total number of documents that have been OCR'd from this source
     #[serde(default)]
     pub total_documents_ocr: i64,
+    /// Validation status and health score
+    #[serde(default)]
+    pub validation_status: Option<String>,
+    #[serde(default)]
+    pub last_validation_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub validation_score: Option<i32>,
+    #[serde(default)]
+    pub validation_issues: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -1116,6 +1134,11 @@ impl From<Source> for SourceResponse {
             // These will be populated separately when needed
             total_documents: 0,
             total_documents_ocr: 0,
+            // Validation fields
+            validation_status: source.validation_status,
+            last_validation_at: source.last_validation_at,
+            validation_score: source.validation_score,
+            validation_issues: source.validation_issues,
         }
     }
 }

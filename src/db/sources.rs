@@ -43,6 +43,10 @@ impl Database {
             total_size_bytes: row.get("total_size_bytes"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            validation_status: row.get("validation_status"),
+            last_validation_at: row.get("last_validation_at"),
+            validation_score: row.get("validation_score"),
+            validation_issues: row.get("validation_issues"),
         })
     }
 
@@ -103,6 +107,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             });
         }
 
@@ -164,6 +172,10 @@ impl Database {
             total_size_bytes: row.get("total_size_bytes"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            validation_status: row.get("validation_status"),
+            last_validation_at: row.get("last_validation_at"),
+            validation_score: row.get("validation_score"),
+            validation_issues: row.get("validation_issues"),
         })
     }
 
@@ -254,6 +266,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             });
         }
 
