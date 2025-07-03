@@ -76,6 +76,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             })),
             None => Ok(None),
         }
@@ -347,6 +351,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             };
             
             sources.push(source);
@@ -359,7 +367,8 @@ impl Database {
         let row = sqlx::query(
             r#"SELECT id, user_id, name, source_type, enabled, config, status, 
                last_sync_at, last_error, last_error_at, total_files_synced, 
-               total_files_pending, total_size_bytes, created_at, updated_at
+               total_files_pending, total_size_bytes, created_at, updated_at,
+               validation_status, last_validation_at, validation_score, validation_issues
                FROM sources WHERE id = $1"#
         )
         .bind(source_id)
@@ -385,6 +394,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             }))
         } else {
             Ok(None)

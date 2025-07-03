@@ -68,7 +68,6 @@ import {
   TextSnippet as DocumentIcon,
   Visibility as OcrIcon,
   Block as BlockIcon,
-  FindInPage as DeepScanIcon,
   HealthAndSafety as HealthIcon,
   Warning as WarningIcon,
   Error as CriticalIcon,

@@ -61,6 +61,11 @@ impl SourceScheduler {
             if let Err(e) = self.check_and_sync_sources().await {
                 error!("Error in source sync scheduler: {}", e);
             }
+            
+            // Run periodic validation checks for all sources
+            if let Err(e) = self.run_periodic_validations().await {
+                error!("Error in periodic validation checks: {}", e);
+            }
         }
     }
 
@@ -946,27 +951,27 @@ impl SourceScheduler {
             .map_err(|e| format!("Config parse error: {}", e))?;
 
         let webdav_config = crate::services::webdav_service::WebDAVConfig {
-            server_url: config.server_url,
-            username: config.username,
-            password: config.password,
-            watch_folders: config.watch_folders,
-            file_extensions: config.file_extensions,
+            server_url: config.server_url.clone(),
+            username: config.username.clone(),
+            password: config.password.clone(),
+            watch_folders: config.watch_folders.clone(),
+            file_extensions: config.file_extensions.clone(),
             timeout_seconds: 30, // Quick connectivity test
-            server_type: config.server_type,
+            server_type: config.server_type.clone(),
         };
 
         let webdav_service = crate::services::webdav_service::WebDAVService::new(webdav_config)
             .map_err(|e| format!("Service creation failed: {}", e))?;
 
         let test_config = crate::models::WebDAVTestConnection {
-            server_url: config.server_url.clone(),
-            username: config.username.clone(),
-            password: config.password.clone(),
-            server_type: config.server_type.clone(),
+            server_url: config.server_url,
+            username: config.username,
+            password: config.password,
+            server_type: config.server_type,
         };
         
         webdav_service.test_connection(test_config).await
-            .map_err(|e| format!("Connection test failed: {}", e.message))?;
+            .map_err(|e| format!("Connection test failed: {}", e))?;
 
         Ok(())
     }
@@ -1072,5 +1077,34 @@ impl SourceScheduler {
         }
 
         Ok(ErrorAnalysis { score_penalty, issues })
+    }
+
+    async fn run_periodic_validations(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Get all enabled sources
+        let sources = self.state.db.get_sources_for_sync().await?;
+        
+        for source in sources {
+            // Only validate if it's been more than 30 minutes since last validation
+            let should_validate = if let Some(last_validation) = source.last_validation_at {
+                chrono::Utc::now().signed_duration_since(last_validation).num_minutes() > 30
+            } else {
+                true // Never validated before
+            };
+            
+            if should_validate && source.enabled {
+                info!("Running periodic validation for source: {}", source.name);
+                
+                // Run validation in background to avoid blocking
+                let source_clone = source.clone();
+                let state_clone = self.state.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = Self::validate_source_health(&source_clone, &state_clone).await {
+                        error!("Periodic validation failed for source {}: {}", source_clone.name, e);
+                    }
+                });
+            }
+        }
+        
+        Ok(())
     }
 }
