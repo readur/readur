@@ -479,31 +479,16 @@ async fn trigger_deep_scan(
             tokio::spawn(async move {
                 let start_time = chrono::Utc::now();
                 
-                // Clear existing directory tracking to force full rescan
-                if let Err(e) = state_clone.db.clear_webdav_directories(user_id).await {
-                    error!("Failed to clear WebDAV directories for deep scan: {}", e);
-                }
-                
-                // Use traditional discovery for deep scan to avoid borrowing issues
-                let mut all_discovered_files = Vec::new();
-                for folder in &config_clone.watch_folders {
-                    match webdav_service.discover_files_in_folder(folder).await {
-                        Ok(mut folder_files) => {
-                            info!("Deep scan discovered {} files in folder {}", folder_files.len(), folder);
-                            all_discovered_files.append(&mut folder_files);
-                        }
-                        Err(e) => {
-                            error!("Deep scan failed to discover files in folder {}: {}", folder, e);
-                            // Continue with other folders
-                        }
-                    }
-                }
-                
-                if !all_discovered_files.is_empty() {
-                    info!("Deep scan discovery completed for source {}: {} files found", source_id_clone, all_discovered_files.len());
-                    
-                    // Filter files by extensions and process them
-                    let files_to_process: Vec<_> = all_discovered_files.into_iter()
+                // Use guaranteed completeness deep scan method
+                match webdav_service.deep_scan_with_guaranteed_completeness(user_id, &state_clone).await {
+                    Ok(all_discovered_files) => {
+                        info!("Deep scan with guaranteed completeness discovered {} files", all_discovered_files.len());
+                        
+                        if !all_discovered_files.is_empty() {
+                            info!("Deep scan discovery completed for source {}: {} files found", source_id_clone, all_discovered_files.len());
+                            
+                            // Filter files by extensions and process them
+                            let files_to_process: Vec<_> = all_discovered_files.into_iter()
                             .filter(|file_info| {
                                 if file_info.is_directory {
                                     return false;
@@ -596,16 +581,47 @@ async fn trigger_deep_scan(
                         }
                     }
 
-                } else {
-                    info!("Deep scan found no files for source {}", source_id_clone);
-                    
-                    // Update source status to idle even if no files found
-                    if let Err(e) = state_clone.db.update_source_status(
-                        source_id_clone,
-                        crate::models::SourceStatus::Idle,
-                        Some("Deep scan completed: no files found".to_string()),
-                    ).await {
-                        error!("Failed to update source status after empty deep scan: {}", e);
+                        } else {
+                            info!("Deep scan found no files for source {}", source_id_clone);
+                            
+                            // Update source status to idle even if no files found
+                            if let Err(e) = state_clone.db.update_source_status(
+                                source_id_clone,
+                                crate::models::SourceStatus::Idle,
+                                Some("Deep scan completed: no files found".to_string()),
+                            ).await {
+                                error!("Failed to update source status after empty deep scan: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Deep scan with guaranteed completeness failed for source {}: {}", source_id_clone, e);
+                        
+                        // Update source status to error
+                        if let Err(e2) = state_clone.db.update_source_status(
+                            source_id_clone,
+                            crate::models::SourceStatus::Error,
+                            Some(format!("Deep scan failed: {}", e)),
+                        ).await {
+                            error!("Failed to update source status after deep scan error: {}", e2);
+                        }
+                        
+                        // Send error notification
+                        let notification = crate::models::CreateNotification {
+                            notification_type: "error".to_string(),
+                            title: "Deep Scan Failed".to_string(),
+                            message: format!("Deep scan of {} failed: {}", source_name, e),
+                            action_url: Some("/sources".to_string()),
+                            metadata: Some(serde_json::json!({
+                                "source_id": source_id_clone,
+                                "scan_type": "deep_scan",
+                                "error": e.to_string()
+                            })),
+                        };
+                        
+                        if let Err(e) = state_clone.db.create_notification(user_id, &notification).await {
+                            error!("Failed to create deep scan error notification: {}", e);
+                        }
                     }
                 }
             });
