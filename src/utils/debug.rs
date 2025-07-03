@@ -1,5 +1,5 @@
 use std::env;
-use tracing::{debug, info, warn, error};
+use tracing::{info, warn, error};
 
 /// Check if DEBUG environment variable is set to enable verbose debug output
 pub fn is_debug_enabled() -> bool {

@@ -1,4 +1,3 @@
-use anyhow::Result;
 use sqlx::{Row, QueryBuilder, Postgres};
 use uuid::Uuid;
 

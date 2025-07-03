@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::{QueryBuilder, Postgres, Transaction};
+use sqlx::{QueryBuilder, Postgres, Row};
 use uuid::Uuid;
 
 use crate::models::{Document, UserRole, FailedDocument};

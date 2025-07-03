@@ -9,7 +9,6 @@
 use uuid::Uuid;
 use sha2::{Digest, Sha256};
 use tracing::{debug, info, warn};
-use chrono::Utc;
 use serde_json;
 
 use crate::models::{Document, FileInfo};

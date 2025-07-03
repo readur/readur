@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use tokio::fs;
 use uuid::Uuid;
 use tracing::{info, warn, error};
@@ -9,7 +8,7 @@ use tracing::{info, warn, error};
 use crate::models::Document;
 
 #[cfg(feature = "ocr")]
-use image::{DynamicImage, ImageFormat, imageops::FilterType, Rgb, RgbImage, Rgba, ImageBuffer};
+use image::{DynamicImage, ImageFormat, imageops::FilterType};
 
 #[derive(Clone)]
 pub struct FileService {

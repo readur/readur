@@ -63,6 +63,7 @@ impl Database {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 document_count: 0,
+                source_count: 0,
             };
 
             if Some(doc_id) != current_doc_id {

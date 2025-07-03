@@ -5,8 +5,6 @@ use tracing::{error, info, warn};
 
 use crate::{
     db::Database,
-    ocr::queue::OcrQueueService,
-    services::file_service::FileService,
     AppState,
 };
 use crate::services::webdav::{WebDAVConfig, WebDAVService};

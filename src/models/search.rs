@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::{ToSchema, IntoParams};
 
-use super::responses::{EnhancedDocumentResponse, SearchSnippet, HighlightRange};
+use super::responses::EnhancedDocumentResponse;
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
 pub struct SearchRequest {

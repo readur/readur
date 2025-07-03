@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
-use tracing::{debug, error, info, warn};
+use chrono::DateTime;
+use tracing::{debug, info, warn};
 use serde_json;
 
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
 #[cfg(feature = "s3")]
-use aws_config::{BehaviorVersion, load_from_env};
+use aws_config::load_from_env;
 #[cfg(feature = "s3")]
 use aws_credential_types::Credentials;
 #[cfg(feature = "s3")]

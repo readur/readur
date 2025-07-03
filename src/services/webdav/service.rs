@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::models::{
     FileInfo, WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVTestConnection,

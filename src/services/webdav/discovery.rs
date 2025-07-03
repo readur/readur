@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use reqwest::Method;
 use std::collections::HashSet;
 use tokio::sync::Semaphore;
 use futures_util::stream::{self, StreamExt};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::models::{FileInfo, WebDAVCrawlEstimate, WebDAVFolderInfo};
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};

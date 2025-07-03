@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::collections::HashMap;
 use tokio::time::interval;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use chrono::Utc;

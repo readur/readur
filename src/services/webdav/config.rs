@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 
 /// WebDAV server configuration
 #[derive(Debug, Clone)]
