@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::models::{CreateUser, UpdateUser, UserResponse, AuthProvider, UserRole};
-    use super::super::helpers::{create_test_app, create_test_user, create_admin_user, login_user};
+    use crate::test_utils::{create_test_app, create_test_user, create_admin_user, login_user};
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
