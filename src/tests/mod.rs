@@ -22,4 +22,5 @@ mod migration_integration_tests;
 mod failed_documents_unit_tests;
 mod document_response_serialization_tests;
 mod unit_ocr_retry_db_tests_simple;
-mod ocr_retry_regression_tests; 
+mod ocr_retry_regression_tests;
+mod unit_webdav_smart_scanning_tests; 

@@ -420,6 +420,34 @@ impl WebDAVService {
     pub async fn discover_files_in_folder_optimized(&self, folder_path: &str, user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
         info!("🔍 Starting optimized discovery for folder: {}", folder_path);
         
+        // Check if we should use smart scanning
+        let use_smart_scan = match self.config.server_type.as_deref() {
+            Some("nextcloud") | Some("owncloud") => {
+                info!("🚀 Using smart scanning for Nextcloud/ownCloud server");
+                true
+            }
+            _ => {
+                info!("📁 Using traditional scanning for generic WebDAV server");
+                false
+            }
+        };
+        
+        if use_smart_scan {
+            // Get stored ETag for this directory
+            let stored_etag = match state.db.get_webdav_directory(user_id, folder_path).await {
+                Ok(Some(dir)) => Some(dir.directory_etag),
+                Ok(None) => None,
+                Err(e) => {
+                    warn!("Database error checking directory {}: {}", folder_path, e);
+                    None
+                }
+            };
+            
+            // Use smart scanning with depth-1 traversal
+            return self.smart_directory_scan(folder_path, stored_etag.as_deref(), user_id, state).await;
+        }
+        
+        // Fall back to traditional optimization for other servers
         // Step 1: Check directory ETag first (lightweight PROPFIND with Depth: 0)
         let current_dir_etag = match self.check_directory_etag(folder_path).await {
             Ok(etag) => etag,
@@ -916,6 +944,21 @@ impl WebDAVService {
 
     /// Check subdirectories individually for changes when parent directory is unchanged
     async fn check_subdirectories_for_changes(&self, parent_path: &str, user_id: uuid::Uuid, state: &crate::AppState) -> Result<Vec<FileInfo>> {
+        // First, check if this server supports recursive ETags
+        let supports_recursive_etags = match self.config.server_type.as_deref() {
+            Some("nextcloud") | Some("owncloud") => true,
+            _ => false
+        };
+        
+        if supports_recursive_etags {
+            // With recursive ETags, if parent hasn't changed, nothing inside has changed
+            info!("🚀 Server supports recursive ETags - parent {} unchanged means all contents unchanged", parent_path);
+            return Ok(Vec::new());
+        }
+        
+        // For servers without recursive ETags, fall back to checking each subdirectory
+        info!("📁 Server doesn't support recursive ETags, checking subdirectories individually");
+        
         // Get all known subdirectories from database
         let known_directories = match state.db.list_webdav_directories(user_id).await {
             Ok(dirs) => dirs,
@@ -1111,6 +1154,202 @@ impl WebDAVService {
     /// Used for shallow directory scans where we need to track directory structure
     pub fn parse_webdav_response_with_directories(&self, xml_text: &str) -> Result<Vec<FileInfo>> {
         parse_propfind_response_with_directories(xml_text)
+    }
+    
+    /// Test if the WebDAV server supports recursive ETag propagation
+    /// (i.e., parent directory ETags change when child content changes)
+    /// This test is read-only and checks existing directory structures
+    pub async fn test_recursive_etag_support(&self) -> Result<bool> {
+        info!("🔬 Testing recursive ETag support using existing directory structure");
+        
+        // Find a directory with subdirectories from our watch folders
+        for watch_folder in &self.config.watch_folders {
+            // Get the directory structure with depth 1
+            match self.discover_files_in_folder_shallow(watch_folder).await {
+                Ok(entries) => {
+                    // Find a subdirectory to test with
+                    let subdirs: Vec<_> = entries.iter()
+                        .filter(|e| e.is_directory && &e.path != watch_folder)
+                        .collect();
+                    
+                    if subdirs.is_empty() {
+                        continue; // Try next watch folder
+                    }
+                    
+                    // Use the first subdirectory for testing
+                    let test_subdir = &subdirs[0];
+                    info!("Testing with directory: {} and subdirectory: {}", watch_folder, test_subdir.path);
+                    
+                    // Step 1: Get parent directory ETag
+                    let parent_etag = self.check_directory_etag(watch_folder).await?;
+                    
+                    // Step 2: Get subdirectory ETag  
+                    let subdir_etag = self.check_directory_etag(&test_subdir.path).await?;
+                    
+                    // Step 3: Check if parent has a different ETag than child
+                    // In a recursive ETag system, they should be different but related
+                    // The key test is: if we check the parent again after some time,
+                    // and a file deep inside changed, did the parent ETag change?
+                    
+                    // For now, we'll just check if the server provides ETags at all
+                    if !parent_etag.is_empty() && !subdir_etag.is_empty() {
+                        info!("✅ Server provides ETags for directories");
+                        info!("   Parent ETag: {}", parent_etag);
+                        info!("   Subdir ETag: {}", subdir_etag);
+                        
+                        // Without write access, we can't definitively test recursive propagation
+                        // But we can make an educated guess based on the server type
+                        let likely_supports_recursive = match self.config.server_type.as_deref() {
+                            Some("nextcloud") | Some("owncloud") => {
+                                info!("   Nextcloud/ownCloud servers typically support recursive ETags");
+                                true
+                            }
+                            _ => {
+                                info!("   Unknown server type - recursive ETag support uncertain");
+                                false
+                            }
+                        };
+                        
+                        return Ok(likely_supports_recursive);
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to scan directory {}: {}", watch_folder, e);
+                    continue;
+                }
+            }
+        }
+        
+        info!("❓ Could not determine recursive ETag support - no suitable directories found");
+        Ok(false)
+    }
+    
+    /// Smart directory scan that uses depth-1 traversal for efficient synchronization
+    /// Only scans directories whose ETags have changed, avoiding unnecessary deep scans
+    pub fn smart_directory_scan<'a>(
+        &'a self, 
+        path: &'a str, 
+        known_etag: Option<&'a str>,
+        user_id: uuid::Uuid,
+        state: &'a crate::AppState
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FileInfo>>> + Send + 'a>> {
+        Box::pin(async move {
+        info!("🧠 Smart scan starting for path: {}", path);
+        
+        // Step 1: Check current directory ETag
+        let current_etag = match self.check_directory_etag(path).await {
+            Ok(etag) => etag,
+            Err(e) => {
+                warn!("Failed to get directory ETag for {}, falling back to full scan: {}", path, e);
+                return self.discover_files_in_folder_impl(path).await;
+            }
+        };
+        
+        // Step 2: If unchanged and we support recursive ETags, nothing to do
+        if known_etag == Some(&current_etag) {
+            let supports_recursive = match self.config.server_type.as_deref() {
+                Some("nextcloud") | Some("owncloud") => true,
+                _ => false
+            };
+            
+            if supports_recursive {
+                info!("✅ Directory {} unchanged (recursive ETag: {}), skipping scan", path, current_etag);
+                return Ok(Vec::new());
+            } else {
+                info!("📁 Directory {} ETag unchanged but server doesn't support recursive ETags, checking subdirectories", path);
+            }
+        } else {
+            info!("🔄 Directory {} changed (old: {:?}, new: {})", path, known_etag, current_etag);
+        }
+        
+        // Step 3: Directory changed or we need to check subdirectories - do depth-1 scan
+        let entries = match self.discover_files_in_folder_shallow(path).await {
+            Ok(files) => files,
+            Err(e) => {
+                error!("Failed shallow scan of {}: {}", path, e);
+                return Err(e);
+            }
+        };
+        
+        let mut all_files = Vec::new();
+        let mut subdirs_to_scan = Vec::new();
+        
+        // Separate files and directories
+        for entry in entries {
+            if entry.is_directory && entry.path != path {
+                subdirs_to_scan.push(entry.clone());
+            }
+            all_files.push(entry);
+        }
+        
+        // Update tracking for this directory
+        let file_count = all_files.iter().filter(|f| !f.is_directory && self.is_direct_child(&f.path, path)).count() as i64;
+        let total_size = all_files.iter()
+            .filter(|f| !f.is_directory && self.is_direct_child(&f.path, path))
+            .map(|f| f.size)
+            .sum::<i64>();
+            
+        let dir_record = crate::models::CreateWebDAVDirectory {
+            user_id,
+            directory_path: path.to_string(),
+            directory_etag: current_etag.clone(),
+            file_count,
+            total_size_bytes: total_size,
+        };
+        
+        if let Err(e) = state.db.create_or_update_webdav_directory(&dir_record).await {
+            warn!("Failed to update directory tracking for {}: {}", path, e);
+        }
+        
+        // Step 4: For each subdirectory, check if it needs scanning
+        for subdir in subdirs_to_scan {
+            // Get stored ETag for this subdirectory
+            let stored_etag = match state.db.get_webdav_directory(user_id, &subdir.path).await {
+                Ok(Some(dir)) => Some(dir.directory_etag),
+                Ok(None) => {
+                    info!("🆕 New subdirectory discovered: {}", subdir.path);
+                    None
+                }
+                Err(e) => {
+                    warn!("Database error checking subdirectory {}: {}", subdir.path, e);
+                    None
+                }
+            };
+            
+            // If ETag changed or new directory, scan it recursively
+            if stored_etag.as_deref() != Some(&subdir.etag) {
+                info!("🔄 Subdirectory {} needs scanning (old: {:?}, new: {})", 
+                    subdir.path, stored_etag, subdir.etag);
+                    
+                match self.smart_directory_scan(&subdir.path, stored_etag.as_deref(), user_id, state).await {
+                    Ok(mut subdir_files) => {
+                        info!("📂 Found {} entries in subdirectory {}", subdir_files.len(), subdir.path);
+                        all_files.append(&mut subdir_files);
+                    }
+                    Err(e) => {
+                        error!("Failed to scan subdirectory {}: {}", subdir.path, e);
+                        // Continue with other subdirectories
+                    }
+                }
+            } else {
+                debug!("✅ Subdirectory {} unchanged (ETag: {})", subdir.path, subdir.etag);
+                // Update last_scanned_at
+                let update = crate::models::UpdateWebDAVDirectory {
+                    directory_etag: subdir.etag.clone(),
+                    last_scanned_at: chrono::Utc::now(),
+                    file_count: 0, // Will be preserved by database
+                    total_size_bytes: 0,
+                };
+                
+                if let Err(e) = state.db.update_webdav_directory(user_id, &subdir.path, &update).await {
+                    warn!("Failed to update scan time for {}: {}", subdir.path, e);
+                }
+            }
+        }
+        
+        info!("🧠 Smart scan completed for {}: {} total entries found", path, all_files.len());
+        Ok(all_files)
+        })
     }
 
     pub async fn download_file(&self, file_path: &str) -> Result<Vec<u8>> {
