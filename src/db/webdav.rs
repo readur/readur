@@ -351,4 +351,82 @@ impl Database {
 
         Ok(result.rows_affected() as i64)
     }
+
+    /// Find directories with incomplete scans that need recovery
+    pub async fn get_incomplete_webdav_scans(&self, user_id: Uuid) -> Result<Vec<String>> {
+        let rows = sqlx::query(
+            r#"SELECT directory_path FROM webdav_directories 
+               WHERE user_id = $1 AND scan_in_progress = TRUE
+               ORDER BY scan_started_at ASC"#
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|row| row.get("directory_path")).collect())
+    }
+
+    /// Find scans that have been running too long (possible crashes)
+    pub async fn get_stale_webdav_scans(&self, user_id: Uuid, timeout_minutes: i64) -> Result<Vec<String>> {
+        let rows = sqlx::query(
+            r#"SELECT directory_path FROM webdav_directories 
+               WHERE user_id = $1 AND scan_in_progress = TRUE 
+               AND scan_started_at < NOW() - INTERVAL '1 minute' * $2
+               ORDER BY scan_started_at ASC"#
+        )
+        .bind(user_id)
+        .bind(timeout_minutes)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|row| row.get("directory_path")).collect())
+    }
+
+    /// Mark a directory scan as in progress
+    pub async fn mark_webdav_scan_in_progress(&self, user_id: Uuid, directory_path: &str) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO webdav_directories (user_id, directory_path, directory_etag, scan_in_progress, scan_started_at, last_scanned_at)
+               VALUES ($1, $2, '', TRUE, NOW(), NOW())
+               ON CONFLICT (user_id, directory_path)
+               DO UPDATE SET scan_in_progress = TRUE, scan_started_at = NOW(), scan_error = NULL"#
+        )
+        .bind(user_id)
+        .bind(directory_path)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Mark a directory scan as complete
+    pub async fn mark_webdav_scan_complete(&self, user_id: Uuid, directory_path: &str) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE webdav_directories 
+               SET scan_in_progress = FALSE, scan_started_at = NULL, scan_error = NULL,
+                   last_scanned_at = NOW(), updated_at = NOW()
+               WHERE user_id = $1 AND directory_path = $2"#
+        )
+        .bind(user_id)
+        .bind(directory_path)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Mark a directory scan as failed with error
+    pub async fn mark_webdav_scan_failed(&self, user_id: Uuid, directory_path: &str, error: &str) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE webdav_directories 
+               SET scan_in_progress = FALSE, scan_error = $3, updated_at = NOW()
+               WHERE user_id = $1 AND directory_path = $2"#
+        )
+        .bind(user_id)
+        .bind(directory_path)
+        .bind(error)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }
