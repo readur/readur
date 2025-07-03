@@ -1,0 +1,62 @@
+use axum::{
+    routing::{get, post, delete},
+    Router,
+};
+use std::sync::Arc;
+
+use crate::AppState;
+
+// Import all the modularized functions
+mod types;
+mod crud;
+mod ocr;
+mod bulk;
+mod debug;
+mod failed;
+
+// Re-export types for external use
+pub use types::*;
+
+// Use the individual module functions
+use crud::*;
+use ocr::*;
+use bulk::*;
+use debug::*;
+use failed::*;
+
+/// Documents router with all document-related endpoints
+pub fn router() -> Router<Arc<AppState>> {
+    Router::new()
+        // Basic CRUD operations
+        .route("/", post(upload_document))
+        .route("/", get(list_documents))
+        .route("/", delete(bulk_delete_documents))
+        .route("/{id}", get(get_document_by_id))
+        .route("/{id}", delete(delete_document))
+        .route("/{id}/download", get(download_document))
+        .route("/{id}/view", get(view_document))
+        
+        // OCR operations
+        .route("/{id}/ocr", get(get_document_ocr))
+        .route("/{id}/retry-ocr", post(retry_ocr))
+        .route("/ocr/bulk-retry", post(crate::routes::documents_ocr_retry::bulk_retry_ocr))
+        .route("/ocr/retry-stats", get(crate::routes::documents_ocr_retry::get_ocr_retry_stats))
+        .route("/ocr/retry-recommendations", get(crate::routes::documents_ocr_retry::get_retry_recommendations))
+        .route("/{id}/ocr/retry-history", get(crate::routes::documents_ocr_retry::get_document_retry_history))
+        
+        // Bulk operations
+        .route("/delete-low-confidence", post(delete_low_confidence_documents))
+        .route("/delete-failed-ocr", post(delete_failed_ocr_documents))
+        
+        // Debug and diagnostic operations
+        .route("/{id}/debug", get(get_document_debug_info))
+        .route("/{id}/thumbnail", get(get_document_thumbnail))
+        .route("/{id}/processed-image", get(get_processed_image))
+        
+        // Failed document management
+        .route("/failed", get(get_failed_documents))
+        .route("/failed/{id}/view", get(view_failed_document))
+        
+        // Other operations
+        .route("/duplicates", get(get_user_duplicates))
+}
