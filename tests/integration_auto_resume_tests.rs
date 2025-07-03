@@ -128,6 +128,10 @@ fn create_interrupted_source(user_id: Uuid, source_type: SourceType) -> Source {
         total_size_bytes: 10_000_000, // 10MB
         created_at: Utc::now() - chrono::Duration::hours(1),
         updated_at: Utc::now() - chrono::Duration::minutes(10),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     }
 }
 
@@ -158,6 +162,10 @@ fn create_completed_source(user_id: Uuid) -> Source {
         total_size_bytes: 50_000_000,
         created_at: Utc::now() - chrono::Duration::hours(2),
         updated_at: Utc::now() - chrono::Duration::minutes(30),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     }
 }
 

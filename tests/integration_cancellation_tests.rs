@@ -92,6 +92,10 @@ fn create_test_source_for_cancellation(user_id: Uuid) -> Source {
         total_size_bytes: 100_000_000, // 100MB
         created_at: Utc::now() - chrono::Duration::hours(1),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     }
 }
 

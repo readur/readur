@@ -85,6 +85,10 @@ fn create_test_source(user_id: Uuid, source_type: SourceType) -> Source {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     }
 }
 
