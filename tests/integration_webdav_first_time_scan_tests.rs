@@ -24,6 +24,21 @@ fn create_test_webdav_service() -> WebDAVService {
 // Mock files structure that represents a real directory with subdirectories
 fn mock_realistic_directory_structure() -> Vec<FileInfo> {
     vec![
+        // Parent root directory
+        FileInfo {
+            path: "/FullerDocuments".to_string(),
+            name: "FullerDocuments".to_string(),
+            size: 0,
+            mime_type: "".to_string(),
+            last_modified: Some(Utc::now()),
+            etag: "fuller-docs-etag-000".to_string(),
+            is_directory: true,
+            created_at: Some(Utc::now()),
+            permissions: Some(755),
+            owner: Some("admin".to_string()),
+            group: Some("admin".to_string()),
+            metadata: None,
+        },
         // Root directory
         FileInfo {
             path: "/FullerDocuments/JonDocuments".to_string(),
