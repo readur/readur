@@ -1,32 +1,24 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { screen, fireEvent } from '@testing-library/react';
 import Label, { type LabelData } from '../Label';
+import { renderWithProviders } from '../../../test/test-utils';
+import { 
+  createMockLabel, 
+  createMockSystemLabel,
+  setupTestEnvironment 
+} from '../../../test/label-test-utils';
 
-const theme = createTheme();
-
-const mockLabel: LabelData = {
-  id: 'test-label-1',
+const mockLabel = createMockLabel({
   name: 'Test Label',
-  description: 'A test label',
   color: '#ff0000',
-  background_color: undefined,
-  icon: 'star',
-  is_system: false,
-  created_at: '2024-01-01T00:00:00Z',
-  updated_at: '2024-01-01T00:00:00Z',
   document_count: 5,
   source_count: 2,
-};
+});
 
-const systemLabel: LabelData = {
-  ...mockLabel,
-  id: 'system-label-1',
+const systemLabel = createMockSystemLabel({
   name: 'Important',
   color: '#d73a49',
-  icon: 'star',
-  is_system: true,
-};
+});
 
 const renderLabel = (props: Partial<React.ComponentProps<typeof Label>> = {}) => {
   const defaultProps = {
@@ -34,14 +26,14 @@ const renderLabel = (props: Partial<React.ComponentProps<typeof Label>> = {}) =>
     ...props,
   };
 
-  return render(
-    <ThemeProvider theme={theme}>
-      <Label {...defaultProps} />
-    </ThemeProvider>
-  );
+  return renderWithProviders(<Label {...defaultProps} />);
 };
 
 describe('Label Component', () => {
+  beforeEach(() => {
+    setupTestEnvironment();
+  });
+
   describe('Basic Rendering', () => {
     test('should render label with name', () => {
       renderLabel();
@@ -116,7 +108,7 @@ describe('Label Component', () => {
       const labelElement = screen.getByText('Test Label').closest('.MuiChip-root');
       fireEvent.click(labelElement!);
       
-      expect(handleClick).toHaveBeenCalledWith('test-label-1');
+      expect(handleClick).toHaveBeenCalledWith(mockLabel.id);
     });
 
     test('should not call onClick when disabled', () => {
@@ -166,7 +158,7 @@ describe('Label Component', () => {
       const deleteButton = screen.getByTestId('CloseIcon');
       fireEvent.click(deleteButton);
       
-      expect(handleDelete).toHaveBeenCalledWith('test-label-1');
+      expect(handleDelete).toHaveBeenCalledWith(mockLabel.id);
     });
 
     test('should not call onDelete when disabled', () => {
@@ -196,7 +188,7 @@ describe('Label Component', () => {
       const deleteButton = screen.getByTestId('CloseIcon');
       fireEvent.click(deleteButton);
       
-      expect(handleDelete).toHaveBeenCalledWith('test-label-1');
+      expect(handleDelete).toHaveBeenCalledWith(mockLabel.id);
       expect(handleClick).not.toHaveBeenCalled();
     });
   });
@@ -285,7 +277,7 @@ describe('Label Component', () => {
       
       // Test that clicking still works (keyboard events are handled internally by Material-UI)
       fireEvent.click(labelElement!);
-      expect(handleClick).toHaveBeenCalledWith('test-label-1');
+      expect(handleClick).toHaveBeenCalledWith(mockLabel.id);
     });
 
     test('should have proper disabled state attributes', () => {

@@ -1,18 +1,19 @@
 #[cfg(test)]
 mod tests {
     use crate::models::UpdateSettings;
-    use crate::test_utils::{create_test_app, create_test_user, login_user};
+    use crate::test_utils::{TestContext, TestAuthHelper};
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
 
     #[tokio::test]
     async fn test_get_settings_default() {
-        let (app, _container) = create_test_app().await;
-        let user = create_test_user(&app).await;
-        let token = login_user(&app, &user.username, "password123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let user = auth_helper.create_test_user().await;
+        let token = auth_helper.login_user(&user.username, "password123").await;
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
@@ -40,9 +41,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_settings() {
-        let (app, _container) = create_test_app().await;
-        let user = create_test_user(&app).await;
-        let token = login_user(&app, &user.username, "password123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let user = auth_helper.create_test_user().await;
+        let token = auth_helper.login_user(&user.username, "password123").await;
 
         let update_data = UpdateSettings {
             ocr_language: Some("spa".to_string()),
@@ -96,7 +98,7 @@ mod tests {
             webdav_sync_interval_minutes: None,
         };
 
-        let response = app
+        let response = ctx.app
             .clone()
             .oneshot(
                 axum::http::Request::builder()
@@ -117,7 +119,7 @@ mod tests {
 
         if status == StatusCode::OK {
             // Verify the update
-            let response = app
+            let response = ctx.app
                 .oneshot(
                     axum::http::Request::builder()
                         .method("GET")
@@ -140,11 +142,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_settings_isolated_per_user() {
-        let (app, _container) = create_test_app().await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
         
         // Create two users
-        let user1 = create_test_user(&app).await;
-        let token1 = login_user(&app, &user1.username, "password123").await;
+        let user1 = auth_helper.create_test_user().await;
+        let token1 = auth_helper.login_user(&user1.username, "password123").await;
         
         let user2_data = json!({
             "username": "testuser2",
@@ -152,7 +155,7 @@ mod tests {
             "password": "password456"
         });
         
-        let response = app
+        let response = ctx.app
             .clone()
             .oneshot(
                 axum::http::Request::builder()
@@ -166,7 +169,7 @@ mod tests {
             .unwrap();
         
         assert_eq!(response.status(), StatusCode::OK);
-        let token2 = login_user(&app, "testuser2", "password456").await;
+        let token2 = auth_helper.login_user("testuser2", "password456").await;
 
         // Update user1's settings
         let update_data = UpdateSettings {
@@ -221,7 +224,7 @@ mod tests {
             webdav_sync_interval_minutes: None,
         };
 
-        let response = app
+        let response = ctx.app
             .clone()
             .oneshot(
                 axum::http::Request::builder()
@@ -242,7 +245,7 @@ mod tests {
 
         if status == StatusCode::OK {
             // Check user2's settings are still default
-            let response = app
+            let response = ctx.app
                 .oneshot(
                     axum::http::Request::builder()
                         .method("GET")
@@ -267,9 +270,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_settings_requires_auth() {
-        let (app, _container) = create_test_app().await;
+        let ctx = TestContext::new().await;
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")

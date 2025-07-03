@@ -1,9 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import Login from '../Login';
-import { AuthProvider } from '../../../contexts/AuthContext';
-import { ThemeProvider } from '../../../contexts/ThemeContext';
+import { renderWithProviders, setupTestEnvironment } from '../../../test/test-utils';
 
 // Mock the API
 vi.mock('../../../services/api', () => ({
@@ -27,15 +25,6 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-// Mock localStorage
-Object.defineProperty(window, 'localStorage', {
-  value: {
-    setItem: vi.fn(),
-    getItem: vi.fn(() => null),
-    removeItem: vi.fn()
-  }
-});
-
 // Mock window.location
 Object.defineProperty(window, 'location', {
   value: {
@@ -44,58 +33,14 @@ Object.defineProperty(window, 'location', {
   writable: true
 });
 
-
-// Mock AuthContext
-const mockAuthContextValue = {
-  user: null,
-  loading: false,
-  login: vi.fn(),
-  register: vi.fn(),
-  logout: vi.fn()
-};
-
-const MockAuthProvider = ({ children }: { children: React.ReactNode }) => (
-  <AuthProvider>
-    {children}
-  </AuthProvider>
-);
-
-const MockThemeProvider = ({ children }: { children: React.ReactNode }) => (
-  <ThemeProvider>
-    {children}
-  </ThemeProvider>
-);
-
 describe('Login - OIDC Features', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
-    // Mock window.matchMedia
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: vi.fn().mockImplementation(query => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
+    setupTestEnvironment();
   });
 
   const renderLogin = () => {
-    return render(
-      <BrowserRouter>
-        <MockThemeProvider>
-          <MockAuthProvider>
-            <Login />
-          </MockAuthProvider>
-        </MockThemeProvider>
-      </BrowserRouter>
-    );
+    return renderWithProviders(<Login />);
   };
 
   it('renders OIDC login button', () => {

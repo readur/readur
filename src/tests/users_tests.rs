@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::models::{CreateUser, UpdateUser, UserResponse, AuthProvider, UserRole};
-    use crate::test_utils::{create_test_app, create_test_user, create_admin_user, login_user};
+    use crate::test_utils::{TestContext, TestAuthHelper};
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
@@ -9,9 +9,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_users() {
-        let (app, _container) = create_test_app().await;
-        let admin = create_admin_user(&app).await;
-        let token = login_user(&app, &admin.username, "adminpass123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
         // Create another user
         let user2_data = json!({
@@ -20,7 +21,7 @@ mod tests {
             "password": "password456"
         });
         
-        app.clone()
+        ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("POST")
@@ -32,7 +33,7 @@ mod tests {
             .await
             .unwrap();
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
@@ -58,15 +59,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_by_id() {
-        let (app, _container) = create_test_app().await;
-        let admin = create_admin_user(&app).await;
-        let token = login_user(&app, &admin.username, "adminpass123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
-                    .uri(format!("/api/users/{}", admin.id))
+                    .uri(format!("/api/users/{}", admin.id()))
                     .header("Authorization", format!("Bearer {}", token))
                     .body(axum::body::Body::empty())
                     .unwrap(),
@@ -81,16 +83,17 @@ mod tests {
             .unwrap();
         let fetched_user: UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(fetched_user.id, admin.id);
+        assert_eq!(fetched_user.id.to_string(), admin.id());
         assert_eq!(fetched_user.username, admin.username);
-        assert_eq!(fetched_user.email, admin.email);
+        assert_eq!(fetched_user.email, admin.user_response.email);
     }
 
     #[tokio::test]
     async fn test_create_user_via_api() {
-        let (app, _container) = create_test_app().await;
-        let admin = create_admin_user(&app).await;
-        let token = login_user(&app, &admin.username, "adminpass123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
         let new_user_data = CreateUser {
             username: "newuser".to_string(),
@@ -99,7 +102,7 @@ mod tests {
             role: Some(crate::models::UserRole::User),
         };
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("POST")
@@ -125,12 +128,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_user() {
-        let (app, _container) = create_test_app().await;
-        let admin = create_admin_user(&app).await;
-        let token = login_user(&app, &admin.username, "adminpass123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
         
         // Create a regular user to update
-        let user = create_test_user(&app).await;
+        let user = auth_helper.create_test_user().await;
 
         let update_data = UpdateUser {
             username: Some("updateduser".to_string()),
@@ -138,11 +142,11 @@ mod tests {
             password: None,
         };
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("PUT")
-                    .uri(format!("/api/users/{}", user.id))
+                    .uri(format!("/api/users/{}", user.id()))
                     .header("Authorization", format!("Bearer {}", token))
                     .header("Content-Type", "application/json")
                     .body(axum::body::Body::from(serde_json::to_vec(&update_data).unwrap()))
@@ -164,12 +168,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_user_password() {
-        let (app, _container) = create_test_app().await;
-        let admin = create_admin_user(&app).await;
-        let token = login_user(&app, &admin.username, "adminpass123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
         
         // Create a regular user to update
-        let user = create_test_user(&app).await;
+        let user = auth_helper.create_test_user().await;
 
         let update_data = UpdateUser {
             username: None,
@@ -177,12 +182,12 @@ mod tests {
             password: Some("newpassword456".to_string()),
         };
 
-        let response = app
+        let response = ctx.app
             .clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("PUT")
-                    .uri(format!("/api/users/{}", user.id))
+                    .uri(format!("/api/users/{}", user.id()))
                     .header("Authorization", format!("Bearer {}", token))
                     .header("Content-Type", "application/json")
                     .body(axum::body::Body::from(serde_json::to_vec(&update_data).unwrap()))
@@ -194,15 +199,16 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Verify new password works
-        let new_token = login_user(&app, "testuser", "newpassword456").await;
+        let new_token = auth_helper.login_user("testuser", "newpassword456").await;
         assert!(!new_token.is_empty());
     }
 
     #[tokio::test]
     async fn test_delete_user() {
-        let (app, _container) = create_test_app().await;
-        let admin = create_admin_user(&app).await;
-        let token = login_user(&app, &admin.username, "adminpass123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
         // Create another user to delete
         let user2_data = json!({
@@ -211,7 +217,7 @@ mod tests {
             "password": "password456"
         });
         
-        let response = app
+        let response = ctx.app
             .clone()
             .oneshot(
                 axum::http::Request::builder()
@@ -230,7 +236,7 @@ mod tests {
         let user2: UserResponse = serde_json::from_slice(&body).unwrap();
 
         // Delete the user
-        let response = app
+        let response = ctx.app
             .clone()
             .oneshot(
                 axum::http::Request::builder()
@@ -246,7 +252,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
         // Verify user is deleted
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
@@ -263,15 +269,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_cannot_delete_self() {
-        let (app, _container) = create_test_app().await;
-        let admin = create_admin_user(&app).await;
-        let token = login_user(&app, &admin.username, "adminpass123").await;
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("DELETE")
-                    .uri(format!("/api/users/{}", admin.id))
+                    .uri(format!("/api/users/{}", admin.id()))
                     .header("Authorization", format!("Bearer {}", token))
                     .body(axum::body::Body::empty())
                     .unwrap(),
@@ -284,9 +291,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_users_require_auth() {
-        let (app, _container) = create_test_app().await;
+        let ctx = TestContext::new().await;
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
@@ -303,10 +310,8 @@ mod tests {
     // OIDC Database Tests
     #[tokio::test]
     async fn test_create_oidc_user() {
-        let (_app, container) = create_test_app().await;
-        let port = container.get_host_port_ipv4(5432).await.unwrap();
-        let database_url = format!("postgresql://test:test@localhost:{}/test", port);
-        let db = crate::db::Database::new(&database_url).await.unwrap();
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
 
         // Generate random identifiers to avoid test interference
         let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
@@ -339,10 +344,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_by_oidc_subject() {
-        let (_app, container) = create_test_app().await;
-        let port = container.get_host_port_ipv4(5432).await.unwrap();
-        let database_url = format!("postgresql://test:test@localhost:{}/test", port);
-        let db = crate::db::Database::new(&database_url).await.unwrap();
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
 
         // Generate random identifiers to avoid test interference
         let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
@@ -379,10 +382,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_by_oidc_subject_not_found() {
-        let (_app, container) = create_test_app().await;
-        let port = container.get_host_port_ipv4(5432).await.unwrap();
-        let database_url = format!("postgresql://test:test@localhost:{}/test", port);
-        let db = crate::db::Database::new(&database_url).await.unwrap();
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
 
         // Generate random subject that definitely doesn't exist
         let test_id = uuid::Uuid::new_v4().to_string();
@@ -398,10 +399,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_oidc_user_different_issuer() {
-        let (_app, container) = create_test_app().await;
-        let port = container.get_host_port_ipv4(5432).await.unwrap();
-        let database_url = format!("postgresql://test:test@localhost:{}/test", port);
-        let db = crate::db::Database::new(&database_url).await.unwrap();
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
 
         // Generate random identifiers to avoid test interference
         let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
@@ -435,10 +434,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_local_user_login_works() {
-        let (app, container) = create_test_app().await;
-        let port = container.get_host_port_ipv4(5432).await.unwrap();
-        let database_url = format!("postgresql://test:test@localhost:{}/test", port);
-        let db = crate::db::Database::new(&database_url).await.unwrap();
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
 
         // Create regular local user
         let create_user = CreateUser {
@@ -460,7 +457,7 @@ mod tests {
             "password": "password123"
         });
 
-        let response = app
+        let response = ctx.app
             .oneshot(
                 axum::http::Request::builder()
                     .method("POST")

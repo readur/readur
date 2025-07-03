@@ -3,10 +3,12 @@ import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import GlobalSearchBar from '../GlobalSearchBar';
-import { renderWithProviders, createMockApiServices } from '../../../test/test-utils';
+import { renderWithProviders, createMockApiServices, setupTestEnvironment, createMockLocalStorage } from '../../../test/test-utils';
 
 // Use centralized API mocking
 const mockServices = createMockApiServices();
+const mockDocumentService = mockServices.documentService;
+const localStorageMock = createMockLocalStorage();
 
 // Mock useNavigate
 const mockNavigate = vi.fn();
@@ -43,6 +45,7 @@ const mockSearchResponse = {
 describe('GlobalSearchBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setupTestEnvironment();
     localStorageMock.getItem.mockReturnValue(null);
     mockDocumentService.enhancedSearch.mockResolvedValue(mockSearchResponse);
   });

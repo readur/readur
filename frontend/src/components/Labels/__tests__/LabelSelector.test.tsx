@@ -1,50 +1,15 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import LabelSelector from '../LabelSelector';
 import { type LabelData } from '../Label';
+import { renderWithProviders } from '../../../test/test-utils';
+import { 
+  setupTestEnvironment,
+  testDataBuilders 
+} from '../../../test/label-test-utils';
 
-const theme = createTheme();
-
-const mockLabels: LabelData[] = [
-  {
-    id: 'label-1',
-    name: 'Important',
-    description: 'High priority items',
-    color: '#d73a49',
-    icon: 'star',
-    is_system: true,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-    document_count: 10,
-    source_count: 2,
-  },
-  {
-    id: 'label-2',
-    name: 'Work',
-    description: 'Work-related documents',
-    color: '#0969da',
-    icon: 'work',
-    is_system: true,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-    document_count: 5,
-    source_count: 1,
-  },
-  {
-    id: 'label-3',
-    name: 'Personal Project',
-    description: 'My personal project files',
-    color: '#28a745',
-    icon: 'folder',
-    is_system: false,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-    document_count: 3,
-    source_count: 0,
-  },
-];
+const mockLabels = testDataBuilders.createTypicalLabelSet();
 
 const renderLabelSelector = (props: Partial<React.ComponentProps<typeof LabelSelector>> = {}) => {
   const defaultProps = {
@@ -54,17 +19,14 @@ const renderLabelSelector = (props: Partial<React.ComponentProps<typeof LabelSel
     ...props,
   };
 
-  return render(
-    <ThemeProvider theme={theme}>
-      <LabelSelector {...defaultProps} />
-    </ThemeProvider>
-  );
+  return renderWithProviders(<LabelSelector {...defaultProps} />);
 };
 
 describe('LabelSelector Component', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
+    setupTestEnvironment();
     user = userEvent.setup();
   });
 

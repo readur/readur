@@ -1,25 +1,22 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import LabelCreateDialog from '../LabelCreateDialog';
 import { type LabelData } from '../Label';
+import { renderWithProviders } from '../../../test/test-utils';
+import { 
+  createMockLabel, 
+  setupTestEnvironment,
+  labelValidationScenarios 
+} from '../../../test/label-test-utils';
 
-const theme = createTheme();
-
-const mockEditingLabel: LabelData = {
-  id: 'edit-label-1',
+const mockEditingLabel = createMockLabel({
   name: 'Existing Label',
   description: 'An existing label',
   color: '#ff0000',
-  background_color: undefined,
-  icon: 'star',
-  is_system: false,
-  created_at: '2024-01-01T00:00:00Z',
-  updated_at: '2024-01-01T00:00:00Z',
   document_count: 5,
   source_count: 2,
-};
+});
 
 const renderLabelCreateDialog = (props: Partial<React.ComponentProps<typeof LabelCreateDialog>> = {}) => {
   const defaultProps = {
@@ -29,17 +26,14 @@ const renderLabelCreateDialog = (props: Partial<React.ComponentProps<typeof Labe
     ...props,
   };
 
-  return render(
-    <ThemeProvider theme={theme}>
-      <LabelCreateDialog {...defaultProps} />
-    </ThemeProvider>
-  );
+  return renderWithProviders(<LabelCreateDialog {...defaultProps} />);
 };
 
 describe('LabelCreateDialog Component', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
+    setupTestEnvironment();
     user = userEvent.setup();
   });
 

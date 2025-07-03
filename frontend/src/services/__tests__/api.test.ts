@@ -1,31 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { type OcrResponse, type Document } from '../api';
+import { createMockApiServices, setupTestEnvironment } from '../../test/test-utils';
 
-// Create mock functions for the documentService
-const mockGetOcrText = vi.fn();
-const mockList = vi.fn();
-const mockUpload = vi.fn();
-const mockDownload = vi.fn();
-const mockDeleteLowConfidence = vi.fn();
-const mockGetFailedOcrDocuments = vi.fn();
-const mockGetFailedDocuments = vi.fn();
-const mockRetryOcr = vi.fn();
+// Use centralized API mocking
+const mockServices = createMockApiServices();
+const mockDocumentService = mockServices.documentService;
 
-// Mock the entire api module
+// Mock the entire api module with centralized mocks
 vi.mock('../api', async () => {
   const actual = await vi.importActual('../api');
   return {
     ...actual,
-    documentService: {
-      getOcrText: mockGetOcrText,
-      list: mockList,
-      upload: mockUpload,
-      download: mockDownload,
-      deleteLowConfidence: mockDeleteLowConfidence,
-      getFailedOcrDocuments: mockGetFailedOcrDocuments,
-      getFailedDocuments: mockGetFailedDocuments,
-      retryOcr: mockRetryOcr,
-    },
+    documentService: mockDocumentService,
   };
 });
 
@@ -35,6 +21,7 @@ const { documentService } = await import('../api');
 describe('documentService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setupTestEnvironment();
   });
 
   describe('getOcrText', () => {
@@ -60,7 +47,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockGetOcrText.mockResolvedValue(mockResponse);
+      mockDocumentService.getOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-123');
 
@@ -94,7 +81,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockGetOcrText.mockResolvedValue(mockResponse);
+      mockDocumentService.getOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-456');
 
@@ -126,7 +113,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockGetOcrText.mockResolvedValue(mockResponse);
+      mockDocumentService.getOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-789');
 

@@ -1,8 +1,8 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
 import OidcCallback from '../OidcCallback';
-import { AuthProvider } from '../../../contexts/AuthContext';
+import { renderWithProviders, setupTestEnvironment } from '../../../test/test-utils';
 import { api } from '../../../services/api';
 
 // Mock the API
@@ -28,15 +28,6 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-// Mock localStorage
-Object.defineProperty(window, 'localStorage', {
-  value: {
-    setItem: vi.fn(),
-    getItem: vi.fn(),
-    removeItem: vi.fn()
-  }
-});
-
 // Mock window.location
 Object.defineProperty(window, 'location', {
   value: {
@@ -45,56 +36,24 @@ Object.defineProperty(window, 'location', {
   writable: true
 });
 
-
-// Mock AuthContext
-const mockAuthContextValue = {
-  user: null,
-  loading: false,
-  login: vi.fn(),
-  register: vi.fn(),
-  logout: vi.fn()
-};
-
-const MockAuthProvider = ({ children }: { children: React.ReactNode }) => (
-  <AuthProvider>
-    {children}
-  </AuthProvider>
-);
-
 describe('OidcCallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setupTestEnvironment();
     window.location.href = '';
     // Clear API mocks
     (api.get as any).mockClear();
     // Reset API mocks to default implementation
     (api.get as any).mockResolvedValue({ data: { token: 'default-token' } });
-    
-    // Mock window.matchMedia
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: vi.fn().mockImplementation(query => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
   });
 
   const renderOidcCallback = (search = '') => {
-    return render(
+    return renderWithProviders(
       <MemoryRouter initialEntries={[`/auth/oidc/callback${search}`]}>
-        <MockAuthProvider>
-          <Routes>
-            <Route path="/auth/oidc/callback" element={<OidcCallback />} />
-            <Route path="/login" element={<div>Login Page</div>} />
-          </Routes>
-        </MockAuthProvider>
+        <Routes>
+          <Route path="/auth/oidc/callback" element={<OidcCallback />} />
+          <Route path="/login" element={<div>Login Page</div>} />
+        </Routes>
       </MemoryRouter>
     );
   };

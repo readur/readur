@@ -330,100 +330,29 @@ mod tests {
 #[cfg(test)]
 mod document_deletion_tests {
     use super::*;
-    use crate::db::Database;
-    use crate::models::{UserRole, User, Document, AuthProvider};
+    use crate::test_utils::TestContext;
+    use crate::models::{UserRole, User, Document, AuthProvider, CreateUser};
     use chrono::Utc;
-    use sqlx::PgPool;
-    use std::env;
     use uuid::Uuid;
 
-    async fn create_test_db_pool() -> PgPool {
-        let database_url = env::var("TEST_DATABASE_URL")
-            .expect("TEST_DATABASE_URL must be set for database tests");
-        PgPool::connect(&database_url)
-            .await
-            .expect("Failed to connect to test database")
-    }
-
-    async fn create_test_user(pool: &PgPool, role: UserRole) -> User {
-        let user_id = Uuid::new_v4();
-        let user = User {
-            id: user_id,
-            username: format!("testuser_{}", user_id),
-            email: format!("test_{}@example.com", user_id),
-            password_hash: Some("hashed_password".to_string()),
-            role,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            oidc_subject: None,
-            oidc_issuer: None,
-            oidc_email: None,
-            auth_provider: AuthProvider::Local,
-        };
-
-        // Insert user into database
-        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at, oidc_subject, oidc_issuer, oidc_email, auth_provider) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
-            .bind(user.id)
-            .bind(&user.username)
-            .bind(&user.email)
-            .bind(&user.password_hash)
-            .bind(user.role.to_string())
-            .bind(user.created_at)
-            .bind(user.updated_at)
-            .bind(&user.oidc_subject)
-            .bind(&user.oidc_issuer)
-            .bind(&user.oidc_email)
-            .bind(user.auth_provider.to_string())
-            .execute(pool)
-            .await
-            .expect("Failed to insert test user");
-
-        user
-    }
-
-    async fn create_and_insert_test_document(pool: &PgPool, user_id: Uuid) -> Document {
-        let document = super::create_test_document(user_id);
-        
-        // Insert document into database
-        sqlx::query("INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)")
-            .bind(document.id)
-            .bind(&document.filename)
-            .bind(&document.original_filename)
-            .bind(&document.file_path)
-            .bind(document.file_size as i64)
-            .bind(&document.mime_type)
-            .bind(&document.content)
-            .bind(&document.ocr_text)
-            .bind(document.ocr_confidence)
-            .bind(document.ocr_word_count.map(|x| x as i32))
-            .bind(document.ocr_processing_time_ms.map(|x| x as i32))
-            .bind(&document.ocr_status)
-            .bind(&document.ocr_error)
-            .bind(document.ocr_completed_at)
-            .bind(&document.tags)
-            .bind(document.created_at)
-            .bind(document.updated_at)
-            .bind(document.user_id)
-            .bind(&document.file_hash)
-            .execute(pool)
-            .await
-            .expect("Failed to insert test document");
-
-        document
-    }
-
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_document_as_owner() {
-        let pool = create_test_db_pool().await;
-        let documents_db = Database { pool: pool.clone() };
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         
         // Create test user and document
-        let user = create_test_user(&pool, UserRole::User).await;
-        let document = create_and_insert_test_document(&pool, user.id).await;
+        let user_data = CreateUser {
+            username: format!("testuser_{}", Uuid::new_v4()),
+            email: format!("test_{}@example.com", Uuid::new_v4()),
+            password: "password123".to_string(),
+            role: Some(UserRole::User),
+        };
+        let user = db.create_user(user_data).await.expect("Failed to create user");
+        let document = super::create_test_document(user.id);
+        let document = db.create_document(document).await.expect("Failed to create document");
 
         // Delete document as owner
-        let result = documents_db
+        let result = db
             .delete_document(document.id, user.id, user.role)
             .await
             .expect("Failed to delete document");
@@ -435,7 +364,7 @@ mod document_deletion_tests {
         assert_eq!(deleted_doc.user_id, user.id);
 
         // Verify document no longer exists in database
-        let found_doc = documents_db
+        let found_doc = db
             .get_document_by_id(document.id, user.id, user.role)
             .await
             .expect("Database query failed");
@@ -443,20 +372,32 @@ mod document_deletion_tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_document_as_admin() {
-        let pool = create_test_db_pool().await;
-        let documents_db = Database { pool: pool.clone() };
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         
         // Create regular user and their document
-        let user = create_test_user(&pool, UserRole::User).await;
-        let document = create_and_insert_test_document(&pool, user.id).await;
+        let user_data = CreateUser {
+            username: format!("testuser_{}", Uuid::new_v4()),
+            email: format!("test_{}@example.com", Uuid::new_v4()),
+            password: "password123".to_string(),
+            role: Some(UserRole::User),
+        };
+        let user = db.create_user(user_data).await.expect("Failed to create user");
+        let document = super::create_test_document(user.id);
+        let document = db.create_document(document).await.expect("Failed to create document");
         
         // Create admin user
-        let admin = create_test_user(&pool, UserRole::Admin).await;
+        let admin_data = CreateUser {
+            username: format!("adminuser_{}", Uuid::new_v4()),
+            email: format!("admin_{}@example.com", Uuid::new_v4()),
+            password: "adminpass123".to_string(),
+            role: Some(UserRole::Admin),
+        };
+        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
 
         // Delete document as admin
-        let result = documents_db
+        let result = db
             .delete_document(document.id, admin.id, admin.role)
             .await
             .expect("Failed to delete document as admin");
@@ -469,20 +410,33 @@ mod document_deletion_tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_delete_document_unauthorized() {
-        let pool = create_test_db_pool().await;
-        let documents_db = Database { pool: pool.clone() };
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         
         // Create two regular users
-        let user1 = create_test_user(&pool, UserRole::User).await;
-        let user2 = create_test_user(&pool, UserRole::User).await;
+        let user1_data = CreateUser {
+            username: format!("testuser1_{}", Uuid::new_v4()),
+            email: format!("test1_{}@example.com", Uuid::new_v4()),
+            password: "password123".to_string(),
+            role: Some(UserRole::User),
+        };
+        let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+        
+        let user2_data = CreateUser {
+            username: format!("testuser2_{}", Uuid::new_v4()),
+            email: format!("test2_{}@example.com", Uuid::new_v4()),
+            password: "password123".to_string(),
+            role: Some(UserRole::User),
+        };
+        let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
         
         // Create document owned by user1
-        let document = create_and_insert_test_document(&pool, user1.id).await;
+        let document = super::create_test_document(user1.id);
+        let document = db.create_document(document).await.expect("Failed to create document");
 
         // Try to delete document as user2 (should fail)
-        let result = documents_db
+        let result = db
             .delete_document(document.id, user2.id, user2.role)
             .await
             .expect("Database query failed");
@@ -491,7 +445,7 @@ mod document_deletion_tests {
         assert!(result.is_none());
 
         // Verify document still exists
-        let found_doc = documents_db
+        let found_doc = db
             .get_document_by_id(document.id, user1.id, user1.role)
             .await
             .expect("Database query failed");
@@ -707,97 +661,27 @@ mod document_deletion_tests {
 #[cfg(test)]
 mod rbac_deletion_tests {
     use super::*;
-    use crate::db::Database;
-    use crate::models::{UserRole, User, Document, AuthProvider};
-    use chrono::Utc;
-    use sqlx::PgPool;
-    use std::env;
+    use crate::test_utils::TestContext;
+    use crate::models::{UserRole, CreateUser};
     use uuid::Uuid;
 
-    async fn create_test_db_pool() -> PgPool {
-        let database_url = env::var("TEST_DATABASE_URL")
-            .expect("TEST_DATABASE_URL must be set for database tests");
-        PgPool::connect(&database_url)
-            .await
-            .expect("Failed to connect to test database")
-    }
-
-    async fn create_test_user(pool: &PgPool, role: UserRole) -> User {
-        let user_id = Uuid::new_v4();
-        let user = User {
-            id: user_id,
-            username: format!("testuser_{}", user_id),
-            email: format!("test_{}@example.com", user_id),
-            password_hash: Some("hashed_password".to_string()),
-            role,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            oidc_subject: None,
-            oidc_issuer: None,
-            oidc_email: None,
-            auth_provider: AuthProvider::Local,
-        };
-
-        sqlx::query("INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at, oidc_subject, oidc_issuer, oidc_email, auth_provider) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
-            .bind(user.id)
-            .bind(&user.username)
-            .bind(&user.email)
-            .bind(&user.password_hash)
-            .bind(user.role.to_string())
-            .bind(user.created_at)
-            .bind(user.updated_at)
-            .bind(&user.oidc_subject)
-            .bind(&user.oidc_issuer)
-            .bind(&user.oidc_email)
-            .bind(user.auth_provider.to_string())
-            .execute(pool)
-            .await
-            .expect("Failed to insert test user");
-
-        user
-    }
-
-    async fn create_and_insert_test_document(pool: &PgPool, user_id: Uuid) -> Document {
-        let document = super::create_test_document(user_id);
-        
-        sqlx::query("INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, tags, created_at, updated_at, user_id, file_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)")
-            .bind(document.id)
-            .bind(&document.filename)
-            .bind(&document.original_filename)
-            .bind(&document.file_path)
-            .bind(document.file_size as i64)
-            .bind(&document.mime_type)
-            .bind(&document.content)
-            .bind(&document.ocr_text)
-            .bind(document.ocr_confidence)
-            .bind(document.ocr_word_count.map(|x| x as i32))
-            .bind(document.ocr_processing_time_ms.map(|x| x as i32))
-            .bind(&document.ocr_status)
-            .bind(&document.ocr_error)
-            .bind(document.ocr_completed_at)
-            .bind(&document.tags)
-            .bind(document.created_at)
-            .bind(document.updated_at)
-            .bind(document.user_id)
-            .bind(&document.file_hash)
-            .execute(pool)
-            .await
-            .expect("Failed to insert test document");
-
-        document
-    }
-
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_user_can_delete_own_document() {
-        let pool = create_test_db_pool().await;
-        let documents_db = Database { pool: pool.clone() };
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         
-        let user = create_test_user(&pool, UserRole::User).await;
-        let document = create_and_insert_test_document(&pool, user.id).await;
+        let user_data = CreateUser {
+            username: format!("testuser_{}", Uuid::new_v4()),
+            email: format!("test_{}@example.com", Uuid::new_v4()),
+            password: "password123".to_string(),
+            role: Some(UserRole::User),
+        };
+        let user = db.create_user(user_data).await.expect("Failed to create user");
+        let document = super::create_test_document(user.id);
+        let document = db.create_document(document).await.expect("Failed to create document");
 
         // User should be able to delete their own document
-        let result = documents_db
+        let result = db
             .delete_document(document.id, user.id, user.role)
             .await
             .expect("Failed to delete document");
