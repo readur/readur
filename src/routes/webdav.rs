@@ -106,7 +106,7 @@ async fn test_webdav_connection(
     // Create WebDAV service and test connection
     match WebDAVService::new(webdav_config) {
         Ok(webdav_service) => {
-            match WebDAVService::test_connection_with_config(test_config).await {
+            match WebDAVService::test_connection_with_config(&test_config).await {
                 Ok(result) => {
                     info!("WebDAV connection test completed: {}", result.message);
                     Ok(Json(result))

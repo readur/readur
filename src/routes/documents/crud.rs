@@ -462,7 +462,7 @@ pub async fn get_user_duplicates(
     let limit = query.limit.unwrap_or(25);
     let offset = query.offset.unwrap_or(0);
 
-    let (duplicates, total_count) = state
+    let duplicates = state
         .db
         .get_user_duplicates(auth_user.user.id, auth_user.user.role, limit, offset)
         .await
@@ -470,6 +470,8 @@ pub async fn get_user_duplicates(
             error!("Failed to get user duplicates: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+    
+    let total_count = duplicates.len() as i64;
 
     let response = serde_json::json!({
         "duplicates": duplicates,

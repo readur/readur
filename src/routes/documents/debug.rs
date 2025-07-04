@@ -46,12 +46,12 @@ pub async fn get_document_debug_info(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.clone());
+    let file_service = FileService::new(state.config.upload_path.clone());
     
     // Check file existence and readability
-    let file_exists = file_service.document_file_exists(&document).await.unwrap_or(false);
+    let file_exists = tokio::fs::metadata(&document.file_path).await.is_ok();
     let readable = if file_exists {
-        file_service.read_document_file(&document).await.is_ok()
+        file_service.read_file(&document.file_path).await.is_ok()
     } else {
         false
     };
@@ -135,16 +135,18 @@ pub async fn get_document_thumbnail(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.clone());
+    let file_service = FileService::new(state.config.upload_path.clone());
     
-    match file_service.get_document_thumbnail(&document).await {
-        Ok(thumbnail_data) => {
+    // Try to read thumbnail from the thumbnails directory
+    let thumbnail_path = format!("{}/thumbnails/{}.jpg", state.config.upload_path, document.id);
+    match file_service.read_file(&thumbnail_path).await {
+        Ok(data) => {
             let response = axum::response::Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "image/jpeg")
-                .header("Content-Length", thumbnail_data.len().to_string())
+                .header("Content-Length", data.len().to_string())
                 .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
-                .body(axum::body::Body::from(thumbnail_data))
+                .body(axum::body::Body::from(data))
                 .map_err(|e| {
                     error!("Failed to build thumbnail response: {}", e);
                     StatusCode::INTERNAL_SERVER_ERROR
@@ -198,9 +200,11 @@ pub async fn get_processed_image(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let file_service = FileService::new(state.config.clone());
+    let file_service = FileService::new(state.config.upload_path.clone());
     
-    match file_service.get_processed_image(&document).await {
+    // Try to read processed image from the processed directory
+    let processed_path = format!("{}/processed/{}.png", state.config.upload_path, document.id);
+    match file_service.read_file(&processed_path).await {
         Ok(image_data) => {
             let response = axum::response::Response::builder()
                 .status(StatusCode::OK)
@@ -294,19 +298,19 @@ pub async fn validate_document_integrity(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.clone());
+    let file_service = FileService::new(state.config.upload_path.clone());
     let mut issues = Vec::new();
     let mut checks = Vec::new();
 
     // Check file existence
     checks.push("file_existence".to_string());
-    if !file_service.document_file_exists(&document).await.unwrap_or(false) {
+    if tokio::fs::metadata(&document.file_path).await.is_err() {
         issues.push("File does not exist on disk".to_string());
     }
 
     // Check file readability
     checks.push("file_readability".to_string());
-    match file_service.read_document_file(&document).await {
+    match file_service.read_file(&document.file_path).await {
         Ok(data) => {
             // Verify file size matches
             if data.len() as i64 != document.file_size {
@@ -350,7 +354,7 @@ pub async fn validate_document_integrity(
         "checks_performed": checks,
         "issues": issues,
         "summary": if is_valid {
-            "Document integrity is good"
+            "Document integrity is good".to_string()
         } else {
             format!("Found {} integrity issues", issues.len())
         }

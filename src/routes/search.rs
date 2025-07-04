@@ -42,11 +42,13 @@ async fn search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, StatusCode> {
-    let (documents, total) = state
+    let documents = state
         .db
-        .search_documents(auth_user.user.id, search_request)
+        .search_documents(auth_user.user.id, &search_request)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let total = documents.len() as i64;
 
     let response = SearchResponse {
         documents: documents.into_iter().map(|doc| EnhancedDocumentResponse {
@@ -101,12 +103,12 @@ async fn enhanced_search_documents(
     let start_time = std::time::Instant::now();
     let documents = state
         .db
-        .enhanced_search_documents_with_role(auth_user.user.id, auth_user.user.role, search_request)
+        .enhanced_search_documents_with_role(auth_user.user.id, auth_user.user.role, &search_request)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
     let query_time = start_time.elapsed().as_millis() as u64;
-    let total = documents.len() as u64;
+    let total = documents.len() as i64;
 
     let response = SearchResponse {
         documents,

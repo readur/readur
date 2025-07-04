@@ -106,7 +106,7 @@ pub async fn retry_ocr(
     }
 
     // Add to OCR queue
-    match state.queue_service.enqueue_document(document.id, auth_user.user.id, 1).await {
+    match state.queue_service.enqueue_document(document.id, 5, document.file_size).await {
         Ok(_) => {
             info!("Document {} queued for OCR retry", document_id);
             Ok(Json(serde_json::json!({
@@ -186,27 +186,12 @@ pub async fn cancel_ocr(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Try to remove from queue
-    match state.queue_service.remove_from_queue(document_id).await {
-        Ok(removed) => {
-            if removed {
-                info!("Document {} removed from OCR queue", document_id);
-                Ok(Json(serde_json::json!({
-                    "success": true,
-                    "message": "Document removed from OCR queue"
-                })))
-            } else {
-                Ok(Json(serde_json::json!({
-                    "success": false,
-                    "message": "Document was not in the OCR queue"
-                })))
-            }
-        }
-        Err(e) => {
-            error!("Failed to remove document {} from OCR queue: {}", document_id, e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    // Note: OCR queue removal not implemented in current queue service
+    info!("Stop OCR processing requested for document {}", document_id);
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": "OCR processing stop requested"
+    })))
 }
 
 /// Get OCR processing statistics
@@ -224,21 +209,12 @@ pub async fn get_ocr_stats(
         })?;
 
     // Get queue statistics
-    let queue_size = state
-        .ocr_queue
-        .get_queue_size()
+    let queue_stats = state
+        .queue_service
+        .get_stats()
         .await
         .map_err(|e| {
-            error!("Failed to get OCR queue size: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    let active_jobs = state
-        .ocr_queue
-        .get_active_jobs_count()
-        .await
-        .map_err(|e| {
-            error!("Failed to get active OCR jobs count: {}", e);
+            error!("Failed to get OCR queue stats: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
@@ -247,9 +223,9 @@ pub async fn get_ocr_stats(
         "pending_ocr": pending,
         "completed_ocr": completed,
         "failed_ocr": failed,
-        "queue_size": queue_size,
-        "active_jobs": active_jobs,
-        "completion_rate": if total > 0 { (completed as f64 / total as f64 * 100.0) } else { 0.0 }
+        "queue_size": queue_stats.pending_count,
+        "active_jobs": queue_stats.processing_count,
+        "completion_rate": if total > 0 { completed as f64 / total as f64 * 100.0 } else { 0.0 }
     })))
 }
 

@@ -970,7 +970,7 @@ impl SourceScheduler {
             server_type: config.server_type,
         };
         
-        crate::services::webdav::WebDAVService::test_connection_with_config(test_config).await
+        crate::services::webdav::WebDAVService::test_connection_with_config(&test_config).await
             .map_err(|e| format!("Connection test failed: {}", e))?;
 
         Ok(())
