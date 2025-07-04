@@ -151,12 +151,11 @@ mod tests {
             search_mode: None,
         };
         
-        let result = db.search_documents(user.id, search_request).await;
+        let result = db.search_documents(user.id, &search_request).await;
         assert!(result.is_ok());
         
-        let (documents, total) = result.unwrap();
+        let documents = result.unwrap();
         assert_eq!(documents.len(), 1);
-        assert_eq!(total, 1);
     }
 
     #[tokio::test]
@@ -170,7 +169,7 @@ mod tests {
         let created_doc = db.create_document(document).await.unwrap();
         
         let new_ocr_text = "Updated OCR text";
-        let result = db.update_document_ocr(created_doc.id, new_ocr_text).await;
+        let result = db.update_document_ocr(created_doc.id, Some(new_ocr_text.to_string()), None, None, None, None).await;
         assert!(result.is_ok());
         
         // Verify the update by searching

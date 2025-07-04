@@ -384,6 +384,41 @@ impl WebDAVService {
     pub fn get_concurrency_config(&self) -> &ConcurrencyConfig {
         &self.concurrency_config
     }
+
+    /// Tests if the server supports recursive ETag scanning
+    pub async fn test_recursive_etag_support(&self) -> Result<bool> {
+        debug!("🔍 Testing recursive ETag support");
+        
+        // Get server capabilities to check ETag support
+        let capabilities = self.get_server_capabilities().await?;
+        
+        // Check if server supports ETags at all
+        if !capabilities.supports_etag {
+            debug!("❌ Server does not support ETags");
+            return Ok(false);
+        }
+
+        // Check server type for known recursive ETag support
+        if let Some(server_software) = &capabilities.server_software {
+            let server_lower = server_software.to_lowercase();
+            
+            // Nextcloud and ownCloud support recursive ETags
+            if server_lower.contains("nextcloud") || server_lower.contains("owncloud") {
+                debug!("✅ Server supports recursive ETags (Nextcloud/ownCloud)");
+                return Ok(true);
+            }
+            
+            // Apache mod_dav typically supports recursive ETags
+            if server_lower.contains("apache") && capabilities.dav_compliance.contains("1") {
+                debug!("✅ Server likely supports recursive ETags (Apache WebDAV)");
+                return Ok(true);
+            }
+        }
+
+        // For unknown servers, assume basic ETag support but not recursive
+        debug!("⚠️ Unknown server type, assuming no recursive ETag support");
+        Ok(false)
+    }
 }
 
 // Implement Clone to allow sharing the service

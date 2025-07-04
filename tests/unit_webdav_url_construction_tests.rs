@@ -1,4 +1,4 @@
-use readur::services::webdav_service::{WebDAVService, WebDAVConfig};
+use readur::services::webdav::{WebDAVService, WebDAVConfig};
 
 // Helper function to create test WebDAV service for Nextcloud
 fn create_nextcloud_webdav_service() -> WebDAVService {

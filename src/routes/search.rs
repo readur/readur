@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::{
     auth::AuthUser,
-    models::{SearchRequest, SearchResponse, EnhancedDocumentResponse, SearchFacetsResponse, FacetItem},
+    models::{SearchRequest, SearchResponse, EnhancedDocumentResponse, SearchFacetsResponse},
     AppState,
 };
 

@@ -4,7 +4,7 @@ use axum::{
     response::Json,
 };
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::{
     auth::AuthUser,

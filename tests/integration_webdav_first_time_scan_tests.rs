@@ -3,7 +3,7 @@ use uuid::Uuid;
 use chrono::Utc;
 use anyhow::Result;
 use readur::models::{FileInfo, CreateWebDAVDirectory, CreateUser, UserRole};
-use readur::services::webdav_service::{WebDAVService, WebDAVConfig};
+use readur::services::webdav::{WebDAVService, WebDAVConfig};
 use readur::db::Database;
 
 // Helper function to create test WebDAV service

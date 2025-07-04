@@ -3,7 +3,7 @@ use uuid::Uuid;
 use chrono::Utc;
 use std::collections::HashMap;
 use readur::models::FileInfo;
-use readur::services::webdav_service::{WebDAVService, WebDAVConfig};
+use readur::services::webdav::{WebDAVService, WebDAVConfig};
 
 // Helper function to create test WebDAV service for smart scanning
 fn create_nextcloud_webdav_service() -> WebDAVService {

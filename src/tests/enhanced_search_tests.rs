@@ -949,13 +949,11 @@ mod tests {
             search_mode: Some(SearchMode::Simple),
         };
         
-        let result = ctx.state.db.enhanced_search_documents(user.user_response.id, search_request).await;
+        let result = ctx.state.db.enhanced_search_documents(user.user_response.id, &search_request).await;
         assert!(result.is_ok());
         
-        let (documents, total, query_time) = result.unwrap();
-        assert_eq!(total, 1);
+        let documents = result.unwrap();
         assert_eq!(documents.len(), 1);
-        assert!(query_time > 0);
         
         let doc = &documents[0];
         assert!(!doc.snippets.is_empty());

@@ -359,10 +359,7 @@ mod document_deletion_tests {
             .expect("Failed to delete document");
 
         // Verify document was deleted
-        assert!(result.is_some());
-        let deleted_doc = result.unwrap();
-        assert_eq!(deleted_doc.id, document.id);
-        assert_eq!(deleted_doc.user_id, user.id);
+        assert!(result);
 
         // Verify document no longer exists in database
         let found_doc = db
@@ -404,10 +401,7 @@ mod document_deletion_tests {
             .expect("Failed to delete document as admin");
 
         // Verify document was deleted
-        assert!(result.is_some());
-        let deleted_doc = result.unwrap();
-        assert_eq!(deleted_doc.id, document.id);
-        assert_eq!(deleted_doc.user_id, user.id); // Original owner
+        assert!(result);
     }
 
     #[tokio::test]
@@ -443,7 +437,7 @@ mod document_deletion_tests {
             .expect("Database query failed");
 
         // Verify document was not deleted
-        assert!(result.is_none());
+        assert!(!result);
 
         // Verify document still exists
         let found_doc = db
@@ -468,7 +462,7 @@ mod document_deletion_tests {
             .expect("Database query failed");
 
         // Verify nothing was deleted
-        assert!(result.is_none());
+        assert!(!result);
     }
 
     #[tokio::test]
@@ -494,8 +488,9 @@ mod document_deletion_tests {
             .expect("Failed to bulk delete documents");
 
         // Verify all documents were deleted
-        assert_eq!(result.len(), 3);
-        let deleted_ids: Vec<Uuid> = result.iter().map(|d| d.id).collect();
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 3);
+        assert_eq!(failed_ids.len(), 0);
         assert!(deleted_ids.contains(&doc1.id));
         assert!(deleted_ids.contains(&doc2.id));
         assert!(deleted_ids.contains(&doc3.id));
@@ -534,7 +529,9 @@ mod document_deletion_tests {
             .expect("Failed to bulk delete documents as admin");
 
         // Verify all documents were deleted
-        assert_eq!(result.len(), 2);
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 2);
+        assert_eq!(failed_ids.len(), 0);
     }
 
     #[tokio::test]
@@ -576,11 +573,12 @@ mod document_deletion_tests {
             .expect("Failed to bulk delete documents");
 
         // Verify only user1's documents were deleted
-        assert_eq!(result.len(), 2);
-        let deleted_ids: Vec<Uuid> = result.iter().map(|d| d.id).collect();
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 2);
+        assert_eq!(failed_ids.len(), 1);
         assert!(deleted_ids.contains(&doc1_user1.id));
         assert!(deleted_ids.contains(&doc2_user1.id));
-        assert!(!deleted_ids.contains(&doc1_user2.id));
+        assert!(failed_ids.contains(&doc1_user2.id));
 
         // Verify user2's document still exists
         let found_doc = ctx.state.db
@@ -605,7 +603,9 @@ mod document_deletion_tests {
             .expect("Failed to bulk delete empty list");
 
         // Verify empty result
-        assert_eq!(result.len(), 0);
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 0);
+        assert_eq!(failed_ids.len(), 0);
     }
 
     #[tokio::test]
@@ -629,8 +629,10 @@ mod document_deletion_tests {
             .expect("Failed to bulk delete documents");
 
         // Verify only the real document was deleted
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, real_doc.id);
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 1);
+        assert_eq!(failed_ids.len(), 2);
+        assert!(deleted_ids.contains(&real_doc.id));
     }
 
     #[tokio::test]
@@ -656,7 +658,9 @@ mod document_deletion_tests {
             .await
             .expect("Failed to bulk delete documents as admin");
 
-        assert_eq!(result.len(), 2);
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 2);
+        assert_eq!(failed_ids.len(), 0);
         
         // Recreate documents for user test
         let user_doc2_doc = create_test_document(user.user_response.id);
@@ -672,8 +676,10 @@ mod document_deletion_tests {
             .await
             .expect("Failed to bulk delete documents as user");
 
-        assert_eq!(result2.len(), 1);
-        assert_eq!(result2[0].id, user_doc2.id);
+        let (deleted_ids2, failed_ids2) = result2;
+        assert_eq!(deleted_ids2.len(), 1);
+        assert_eq!(failed_ids2.len(), 1);
+        assert!(deleted_ids2.contains(&user_doc2.id));
     }
 }
 
@@ -705,10 +711,7 @@ mod rbac_deletion_tests {
             .await
             .expect("Failed to delete document");
 
-        assert!(result.is_some());
-        let deleted_doc = result.unwrap();
-        assert_eq!(deleted_doc.id, document.id);
-        assert_eq!(deleted_doc.user_id, user.id);
+        assert!(result);
     }
 
     #[tokio::test]
@@ -742,7 +745,7 @@ mod rbac_deletion_tests {
             .await
             .expect("Database query failed");
 
-        assert!(result.is_none());
+        assert!(!result);
 
         // Verify document still exists
         let found_doc = ctx.state.db
@@ -785,8 +788,7 @@ mod rbac_deletion_tests {
             .await
             .expect("Failed to delete user document as admin");
 
-        assert!(result1.is_some());
-        assert_eq!(result1.unwrap().user_id, user.id); // Original owner
+        assert!(result1);
 
         // Admin should be able to delete their own document
         let result2 = ctx.state.db
@@ -794,8 +796,7 @@ mod rbac_deletion_tests {
             .await
             .expect("Failed to delete admin document as admin");
 
-        assert!(result2.is_some());
-        assert_eq!(result2.unwrap().user_id, admin.id);
+        assert!(result2);
     }
 
     #[tokio::test]
@@ -845,12 +846,13 @@ mod rbac_deletion_tests {
             .expect("Failed to bulk delete documents");
 
         // Should only delete user1's documents
-        assert_eq!(result.len(), 2);
-        let deleted_ids: Vec<Uuid> = result.iter().map(|d| d.id).collect();
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 2);
+        assert_eq!(failed_ids.len(), 3);
         assert!(deleted_ids.contains(&user1_doc1.id));
         assert!(deleted_ids.contains(&user1_doc2.id));
-        assert!(!deleted_ids.contains(&user2_doc1.id));
-        assert!(!deleted_ids.contains(&user2_doc2.id));
+        assert!(failed_ids.contains(&user2_doc1.id));
+        assert!(failed_ids.contains(&user2_doc2.id));
 
         // Verify user2's documents still exist
         let user2_doc1_exists = ctx.state.db
@@ -914,8 +916,9 @@ mod rbac_deletion_tests {
             .expect("Failed to bulk delete documents as admin");
 
         // Should delete all documents
-        assert_eq!(result.len(), 3);
-        let deleted_ids: Vec<Uuid> = result.iter().map(|d| d.id).collect();
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 3);
+        assert_eq!(failed_ids.len(), 0);
         assert!(deleted_ids.contains(&user1_doc.id));
         assert!(deleted_ids.contains(&user2_doc.id));
         assert!(deleted_ids.contains(&admin_doc.id));
@@ -954,7 +957,7 @@ mod rbac_deletion_tests {
             .await
             .expect("Database query failed");
 
-        assert!(result.is_none());
+        assert!(!result);
 
         // Verify admin's document still exists
         let found_doc = ctx.state.db
@@ -1019,26 +1022,26 @@ mod rbac_deletion_tests {
             .delete_document(tenant2_doc1.id, tenant1_user1.id, tenant1_user1.role)
             .await
             .expect("Database query failed");
-        assert!(result1.is_none());
+        assert!(!result1);
 
         let result2 = ctx.state.db
             .delete_document(tenant2_doc2.id, tenant1_user2.id, tenant1_user2.role)
             .await
             .expect("Database query failed");
-        assert!(result2.is_none());
+        assert!(!result2);
 
         // Tenant2 user should not be able to delete tenant1 documents
         let result3 = ctx.state.db
             .delete_document(tenant1_doc1.id, tenant2_user1.id, tenant2_user1.role)
             .await
             .expect("Database query failed");
-        assert!(result3.is_none());
+        assert!(!result3);
 
         let result4 = ctx.state.db
             .delete_document(tenant1_doc2.id, tenant2_user2.id, tenant2_user2.role)
             .await
             .expect("Database query failed");
-        assert!(result4.is_none());
+        assert!(!result4);
 
         // Verify all documents still exist
         for (doc_id, owner_id, owner_role) in [
@@ -1088,7 +1091,7 @@ mod rbac_deletion_tests {
             .delete_document(user2_doc.id, user1.id, user1.role)
             .await
             .expect("Database query failed");
-        assert!(single_delete_result.is_none()); // Should fail
+        assert!(!single_delete_result); // Should fail
 
         // Test bulk deletion permissions with same document
         let user2_doc2_doc = create_test_document(user2.id);
@@ -1097,7 +1100,9 @@ mod rbac_deletion_tests {
             .bulk_delete_documents(&vec![user2_doc2.id], user1.id, user1.role)
             .await
             .expect("Database query failed");
-        assert_eq!(bulk_delete_result.len(), 0); // Should delete nothing
+        let (deleted_ids, failed_ids) = bulk_delete_result;
+        assert_eq!(deleted_ids.len(), 0); // Should delete nothing
+        assert_eq!(failed_ids.len(), 1);
 
         // Verify both documents still exist
         let doc1_exists = ctx.state.db
@@ -1145,7 +1150,7 @@ mod rbac_deletion_tests {
             .delete_document(user_doc.id, admin.id, admin.role)
             .await
             .expect("Failed to delete as admin");
-        assert!(admin_delete_result.is_some());
+        assert!(admin_delete_result);
 
         // Create another document to test admin's own document deletion
         let admin_doc_doc = create_test_document(admin.id);
@@ -1154,7 +1159,7 @@ mod rbac_deletion_tests {
             .delete_document(admin_doc.id, admin.id, admin.role)
             .await
             .expect("Failed to delete admin's own document");
-        assert!(admin_own_delete_result.is_some());
+        assert!(admin_own_delete_result);
     }
 
     #[test]
@@ -1214,7 +1219,7 @@ mod deletion_error_handling_tests {
             .expect("Database query should not fail for invalid UUID");
 
         // Should return None for non-existent document
-        assert!(result.is_none());
+        assert!(!result);
     }
 
     #[tokio::test]
@@ -1241,7 +1246,7 @@ mod deletion_error_handling_tests {
             .await
             .expect("Query should execute safely");
 
-        assert!(result.is_some());
+        assert!(result);
     }
 
     #[tokio::test]
@@ -1271,8 +1276,10 @@ mod deletion_error_handling_tests {
             .expect("Bulk delete should handle duplicates");
 
         // Should only delete the document once
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, document.id);
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 1);
+        assert_eq!(failed_ids.len(), 0);
+        assert!(deleted_ids.contains(&document.id));
     }
 
     #[tokio::test]
@@ -1301,8 +1308,10 @@ mod deletion_error_handling_tests {
             .expect("Should handle large requests");
 
         // Should only delete the one real document
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, real_document.id);
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 1);
+        assert_eq!(failed_ids.len(), 999);
+        assert!(deleted_ids.contains(&real_document.id));
     }
 
     #[tokio::test]
@@ -1334,8 +1343,8 @@ mod deletion_error_handling_tests {
         let result1 = task1.await.unwrap().expect("First deletion should succeed");
         let result2 = task2.await.unwrap().expect("Second deletion should not error");
         
-        // One should succeed, one should return None
-        let success_count = [result1.is_some(), result2.is_some()]
+        // One should succeed, one should return false
+        let success_count = [result1, result2]
             .iter()
             .filter(|&&x| x)
             .count();
@@ -1361,7 +1370,7 @@ mod deletion_error_handling_tests {
             .await
             .expect("Deletion should handle foreign key constraints");
 
-        assert!(result.is_some());
+        assert!(result);
         
         // Verify related records are also deleted (if any exist)
         // This would depend on the actual schema relationships
@@ -1405,8 +1414,10 @@ mod deletion_error_handling_tests {
             .expect("Should handle mixed permissions gracefully");
 
         // Should only delete user1's document
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].id, user1_doc.id);
+        let (deleted_ids, failed_ids) = result;
+        assert_eq!(deleted_ids.len(), 1);
+        assert_eq!(failed_ids.len(), 2);
+        assert!(deleted_ids.contains(&user1_doc.id));
         
         // Verify user2's document still exists
         let user2_doc_exists = ctx.state.db
@@ -1485,10 +1496,10 @@ mod deletion_error_handling_tests {
         // - If RESTRICT: document still exists but operation might fail
         // Test should verify consistent behavior
         match result {
-            Ok(Some(_)) => {
+            Ok(true) => {
                 // Document was deleted successfully
             },
-            Ok(None) => {
+            Ok(false) => {
                 // Document not found (possibly already cascade deleted)
             },
             Err(_) => {
@@ -1510,7 +1521,9 @@ mod deletion_error_handling_tests {
             .bulk_delete_documents(&vec![], user.user_response.id, user.user_response.role)
             .await
             .expect("Empty list should be handled gracefully");
-        assert_eq!(empty_result.len(), 0);
+        let (deleted_ids, failed_ids) = empty_result;
+        assert_eq!(deleted_ids.len(), 0);
+        assert_eq!(failed_ids.len(), 0);
         
         // Test with only nil UUIDs
         let nil_uuids = vec![Uuid::nil(), Uuid::nil()];
@@ -1518,7 +1531,9 @@ mod deletion_error_handling_tests {
             .bulk_delete_documents(&nil_uuids, user.user_response.id, user.user_response.role)
             .await
             .expect("Nil UUIDs should be handled gracefully");
-        assert_eq!(nil_result.len(), 0);
+        let (deleted_ids, failed_ids) = nil_result;
+        assert_eq!(deleted_ids.len(), 0);
+        assert_eq!(failed_ids.len(), 2);
     }
 
 
@@ -1543,7 +1558,7 @@ mod deletion_error_handling_tests {
             .delete_document(document.id, user.user_response.id, user.user_response.role)
             .await
             .expect("Deletion should succeed");
-        assert!(deletion_result.is_some());
+        assert!(deletion_result);
         
         // Verify document no longer exists
         let exists_after = ctx.state.db
@@ -1886,7 +1901,7 @@ mod deletion_error_handling_tests {
 
         // Test as regular user
         let failed_docs = database
-            .find_failed_ocr_documents(user_id, crate::models::UserRole::User)
+            .find_failed_ocr_documents(user_id, crate::models::UserRole::User, 100, 0)
             .await
             .unwrap();
 
@@ -1902,7 +1917,7 @@ mod deletion_error_handling_tests {
 
         // Test as admin
         let admin_failed_docs = database
-            .find_failed_ocr_documents(admin_user_id, crate::models::UserRole::Admin)
+            .find_failed_ocr_documents(admin_user_id, crate::models::UserRole::Admin, 100, 0)
             .await
             .unwrap();
 
@@ -1960,7 +1975,7 @@ mod deletion_error_handling_tests {
 
         // Test with threshold of 50% - should include low confidence and failed only
         let threshold_50_docs = database
-            .find_low_confidence_and_failed_documents(50.0, user_id, crate::models::UserRole::User)
+            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -1975,7 +1990,7 @@ mod deletion_error_handling_tests {
 
         // Test with threshold of 70% - should include low and medium confidence and failed only
         let threshold_70_docs = database
-            .find_low_confidence_and_failed_documents(70.0, user_id, crate::models::UserRole::User)
+            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 70.0, 100, 0)
             .await
             .unwrap();
 
@@ -1990,7 +2005,7 @@ mod deletion_error_handling_tests {
 
         // Test with threshold of 100% - should include all confidence levels and failed only
         let threshold_100_docs = database
-            .find_low_confidence_and_failed_documents(100.0, user_id, crate::models::UserRole::User)
+            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 100.0, 100, 0)
             .await
             .unwrap();
 
@@ -2005,7 +2020,7 @@ mod deletion_error_handling_tests {
 
         // Test with threshold of 0% - should only include failed documents
         let threshold_0_docs = database
-            .find_low_confidence_and_failed_documents(0.0, user_id, crate::models::UserRole::User)
+            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 0.0, 100, 0)
             .await
             .unwrap();
 
@@ -2054,7 +2069,7 @@ mod deletion_error_handling_tests {
 
         // Test original method - should only find documents with explicit confidence below threshold
         let original_results = database
-            .find_documents_by_confidence_threshold(50.0, user_id, crate::models::UserRole::User)
+            .find_documents_by_confidence_threshold(user_id, crate::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -2108,7 +2123,7 @@ mod deletion_error_handling_tests {
 
         // Test ordering in combined query
         let results = database
-            .find_low_confidence_and_failed_documents(50.0, user_id, crate::models::UserRole::User)
+            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -2181,7 +2196,7 @@ mod deletion_error_handling_tests {
 
         // Test user1 can only see their documents
         let user1_results = database
-            .find_low_confidence_and_failed_documents(50.0, user1_id, crate::models::UserRole::User)
+            .find_low_confidence_and_failed_documents(user1_id, crate::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -2194,7 +2209,7 @@ mod deletion_error_handling_tests {
 
         // Test user2 can only see their documents
         let user2_results = database
-            .find_low_confidence_and_failed_documents(50.0, user2_id, crate::models::UserRole::User)
+            .find_low_confidence_and_failed_documents(user2_id, crate::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -2207,7 +2222,7 @@ mod deletion_error_handling_tests {
 
         // Test admin can see all documents
         let admin_results = database
-            .find_low_confidence_and_failed_documents(50.0, user1_id, crate::models::UserRole::Admin)
+            .find_low_confidence_and_failed_documents(user1_id, crate::models::UserRole::Admin, 50.0, 100, 0)
             .await
             .unwrap();
 

@@ -4,7 +4,7 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use readur::{
-    services::webdav_service::{WebDAVService, WebDAVConfig, RetryConfig},
+    services::webdav::{WebDAVService, WebDAVConfig, RetryConfig},
     scheduling::webdav_scheduler::WebDAVScheduler,
     models::*,
     db::Database,
