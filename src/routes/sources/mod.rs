@@ -18,20 +18,20 @@ pub fn router() -> Router<Arc<AppState>> {
         // CRUD operations
         .route("/", get(list_sources))
         .route("/", post(create_source))
-        .route("/:id", get(get_source))
-        .route("/:id", put(update_source))
-        .route("/:id", delete(delete_source))
+        .route("/{id}", get(get_source))
+        .route("/{id}", put(update_source))
+        .route("/{id}", delete(delete_source))
         
         // Sync operations
-        .route("/:id/sync", post(trigger_sync))
-        .route("/:id/sync/stop", post(stop_sync))
-        .route("/:id/deep-scan", post(trigger_deep_scan))
+        .route("/{id}/sync", post(trigger_sync))
+        .route("/{id}/sync/stop", post(stop_sync))
+        .route("/{id}/deep-scan", post(trigger_deep_scan))
         
         // Validation operations
-        .route("/:id/validate", post(validate_source))
+        .route("/{id}/validate", post(validate_source))
         .route("/test", post(test_connection_with_config))
         
         // Estimation operations
-        .route("/:id/estimate", get(estimate_crawl))
+        .route("/{id}/estimate", get(estimate_crawl))
         .route("/estimate", post(estimate_crawl_with_config))
 }
