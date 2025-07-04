@@ -126,8 +126,8 @@ impl SourceSyncService {
                 let service = webdav_service.clone();
                 let state_clone = self.state.clone();
                 async move { 
-                    info!("🚀 Using optimized WebDAV discovery for: {}", folder_path);
-                    let result = service.discover_files_in_folder_optimized(&folder_path, source.user_id, &state_clone).await;
+                    info!("🚀 Using WebDAV discovery for: {}", folder_path);
+                    let result = service.discover_files_in_directory(&folder_path, true).await;
                     match &result {
                         Ok(files) => {
                             if files.is_empty() {

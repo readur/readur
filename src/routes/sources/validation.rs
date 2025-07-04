@@ -57,16 +57,17 @@ pub async fn test_connection(
             let config: crate::models::WebDAVSourceConfig = serde_json::from_value(source.config)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-            match crate::services::webdav::test_webdav_connection(
-                &config.server_url,
-                &config.username,
-                &config.password,
-            )
-            .await
-            {
-                Ok(success) => Ok(Json(serde_json::json!({
-                    "success": success,
-                    "message": if success { "Connection successful" } else { "Connection failed" }
+            let test_config = crate::models::WebDAVTestConnection {
+                server_url: config.server_url,
+                username: config.username,
+                password: config.password,
+                server_type: config.server_type,
+            };
+            
+            match crate::services::webdav::test_webdav_connection(&test_config).await {
+                Ok(result) => Ok(Json(serde_json::json!({
+                    "success": result.success,
+                    "message": result.message
                 }))),
                 Err(e) => Ok(Json(serde_json::json!({
                     "success": false,
@@ -152,16 +153,17 @@ pub async fn test_connection_with_config(
             let config: crate::models::WebDAVSourceConfig = serde_json::from_value(request.config)
                 .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-            match crate::services::webdav::test_webdav_connection(
-                &config.server_url,
-                &config.username,
-                &config.password,
-            )
-            .await
-            {
-                Ok(success) => Ok(Json(serde_json::json!({
-                    "success": success,
-                    "message": if success { "WebDAV connection successful" } else { "WebDAV connection failed" }
+            let test_config = crate::models::WebDAVTestConnection {
+                server_url: config.server_url,
+                username: config.username,
+                password: config.password,
+                server_type: config.server_type,
+            };
+            
+            match crate::services::webdav::test_webdav_connection(&test_config).await {
+                Ok(result) => Ok(Json(serde_json::json!({
+                    "success": result.success,
+                    "message": result.message
                 }))),
                 Err(e) => Ok(Json(serde_json::json!({
                     "success": false,

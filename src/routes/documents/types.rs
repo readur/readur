@@ -1,14 +1,14 @@
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{ToSchema, IntoParams};
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, IntoParams)]
 pub struct PaginationQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub ocr_status: Option<String>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, IntoParams)]
 pub struct FailedDocumentsQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,

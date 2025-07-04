@@ -678,7 +678,7 @@ impl SourceScheduler {
             let source_clone = source.clone();
             let state_clone = state.clone();
             tokio::spawn(async move {
-                match webdav_service.deep_scan_with_guaranteed_completeness(source_clone.user_id, &state_clone).await {
+                match webdav_service.discover_all_files().await {
                     Ok(files) => {
                         info!("🎉 Automatic deep scan completed for {}: {} files found", source_clone.name, files.len());
                         
@@ -970,7 +970,7 @@ impl SourceScheduler {
             server_type: config.server_type,
         };
         
-        webdav_service.test_connection(test_config).await
+        crate::services::webdav::WebDAVService::test_connection_with_config(test_config).await
             .map_err(|e| format!("Connection test failed: {}", e))?;
 
         Ok(())

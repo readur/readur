@@ -98,11 +98,15 @@ async fn enhanced_search_documents(
     // Generate suggestions before moving search_request
     let suggestions = generate_search_suggestions(&search_request.query);
     
-    let (documents, total, query_time) = state
+    let start_time = std::time::Instant::now();
+    let documents = state
         .db
         .enhanced_search_documents_with_role(auth_user.user.id, auth_user.user.role, search_request)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    let query_time = start_time.elapsed().as_millis() as u64;
+    let total = documents.len() as u64;
 
     let response = SearchResponse {
         documents,
@@ -173,14 +177,8 @@ async fn get_search_facets(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let response = SearchFacetsResponse {
-        mime_types: mime_type_facets
-            .into_iter()
-            .map(|(value, count)| FacetItem { value, count })
-            .collect(),
-        tags: tag_facets
-            .into_iter()
-            .map(|(value, count)| FacetItem { value, count })
-            .collect(),
+        mime_types: mime_type_facets,
+        tags: tag_facets,
     };
 
     Ok(Json(response))

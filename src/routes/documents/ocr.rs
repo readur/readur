@@ -106,7 +106,7 @@ pub async fn retry_ocr(
     }
 
     // Add to OCR queue
-    match state.ocr_queue.enqueue_document(document.id, auth_user.user.id, 1).await {
+    match state.queue_service.enqueue_document(document.id, auth_user.user.id, 1).await {
         Ok(_) => {
             info!("Document {} queued for OCR retry", document_id);
             Ok(Json(serde_json::json!({
@@ -187,7 +187,7 @@ pub async fn cancel_ocr(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // Try to remove from queue
-    match state.ocr_queue.remove_from_queue(document_id).await {
+    match state.queue_service.remove_from_queue(document_id).await {
         Ok(removed) => {
             if removed {
                 info!("Document {} removed from OCR queue", document_id);

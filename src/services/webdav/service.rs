@@ -150,8 +150,39 @@ impl WebDAVService {
         self.discovery.discover_files(directory_path, recursive).await
     }
 
-    /// Downloads a file from WebDAV server
-    pub async fn download_file(&self, file_info: &FileInfo) -> Result<Vec<u8>> {
+    /// Downloads a file from WebDAV server by path
+    pub async fn download_file(&self, file_path: &str) -> Result<Vec<u8>> {
+        let _permit = self.download_semaphore.acquire().await?;
+        
+        debug!("⬇️ Downloading file: {}", file_path);
+        
+        let url = self.connection.get_url_for_path(file_path);
+        
+        let response = self.connection
+            .authenticated_request(
+                reqwest::Method::GET,
+                &url,
+                None,
+                None,
+            )
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Failed to download file '{}': HTTP {}",
+                file_path,
+                response.status()
+            ));
+        }
+
+        let content = response.bytes().await?;
+        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_path);
+        
+        Ok(content.to_vec())
+    }
+
+    /// Downloads a file from WebDAV server using FileInfo
+    pub async fn download_file_info(&self, file_info: &FileInfo) -> Result<Vec<u8>> {
         let _permit = self.download_semaphore.acquire().await?;
         
         debug!("⬇️ Downloading file: {}", file_info.path);
@@ -190,7 +221,7 @@ impl WebDAVService {
             let service_clone = self.clone();
             
             async move {
-                let result = service_clone.download_file(&file_clone).await;
+                let result = service_clone.download_file_info(&file_clone).await;
                 (file_clone, result)
             }
         });
@@ -285,7 +316,7 @@ impl WebDAVService {
             .map(|s| s.to_string());
 
         Ok(ServerCapabilities {
-            dav_compliance: dav_header,
+            dav_compliance: dav_header.clone(),
             allowed_methods: allow_header,
             server_software: server_header,
             supports_etag: dav_header.contains("1") || dav_header.contains("2"),

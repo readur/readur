@@ -43,7 +43,7 @@ pub async fn list_sources(
     // Get document counts for all sources in one query
     let counts = state
         .db
-        .count_documents_for_sources(&source_ids)
+        .count_documents_for_sources(auth_user.user.id, &source_ids)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
@@ -145,14 +145,14 @@ pub async fn get_source(
     // Get recent documents for this source
     let recent_documents = state
         .db
-        .get_recent_documents_for_source(source_id, 10)
+        .get_recent_documents_for_source(auth_user.user.id, source_id, 10)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Get document counts
     let (total_documents, total_documents_ocr) = state
         .db
-        .count_documents_for_source(source_id)
+        .count_documents_for_source(auth_user.user.id, source_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -237,7 +237,7 @@ pub async fn update_source(
     // Get document counts
     let (total_documents, total_documents_ocr) = state
         .db
-        .count_documents_for_source(source_id)
+        .count_documents_for_source(auth_user.user.id, source_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

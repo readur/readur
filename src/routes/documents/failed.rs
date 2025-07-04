@@ -7,6 +7,7 @@ use axum::{
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use std::collections::HashMap;
+use sqlx::Row;
 
 use crate::{
     auth::AuthUser,

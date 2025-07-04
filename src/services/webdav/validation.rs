@@ -24,7 +24,7 @@ pub struct ValidationIssue {
     pub detected_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum ValidationIssueType {
     /// Directory exists on server but not in our tracking
     Untracked,

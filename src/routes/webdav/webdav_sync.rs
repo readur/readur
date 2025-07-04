@@ -115,7 +115,7 @@ async fn perform_sync_internal(
         }
         
         // Discover files in the folder
-        match webdav_service.discover_files_in_folder(folder_path).await {
+        match webdav_service.discover_files_in_directory(folder_path, true).await {
             Ok(files) => {
                 info!("Found {} files in folder {}", files.len(), folder_path);
                 

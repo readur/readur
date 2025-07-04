@@ -75,21 +75,28 @@ pub async fn upload_document(
     info!("Uploading document: {} ({} bytes)", filename, data.len());
     
     // Create ingestion service
-    let file_service = FileService::new(state.config.clone());
+    let file_service = FileService::new(state.config.upload_path.clone());
     let ingestion_service = DocumentIngestionService::new(
         state.db.clone(),
         file_service,
-        state.config.clone(),
     );
     
-    match ingestion_service.ingest_document(
-        data,
-        &filename,
-        &content_type,
-        auth_user.user.id,
-        "web_upload".to_string(),
-    ).await {
-        Ok(IngestionResult::Success(document)) => {
+    let request = crate::ingestion::document_ingestion::DocumentIngestionRequest {
+        file_data: data,
+        filename: filename.clone(),
+        original_filename: filename,
+        mime_type: content_type,
+        user_id: auth_user.user.id,
+        source_type: Some("web_upload".to_string()),
+        source_id: None,
+        deduplication_policy: crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,
+        original_created_at: None,
+        original_modified_at: None,
+        source_metadata: None,
+    };
+    
+    match ingestion_service.ingest_document(request).await {
+        Ok(IngestionResult::Created(document)) => {
             info!("Document uploaded successfully: {}", document.id);
             Ok(Json(DocumentUploadResponse {
                 document_id: document.id,
@@ -100,7 +107,7 @@ pub async fn upload_document(
                 message: "Document uploaded successfully".to_string(),
             }))
         }
-        Ok(IngestionResult::Duplicate(existing_doc)) => {
+        Ok(IngestionResult::ExistingDocument(existing_doc)) => {
             warn!("Duplicate document upload attempted: {}", existing_doc.id);
             Ok(Json(DocumentUploadResponse {
                 document_id: existing_doc.id,
@@ -111,9 +118,13 @@ pub async fn upload_document(
                 message: "Document already exists".to_string(),
             }))
         }
-        Ok(IngestionResult::Failed(failed_doc)) => {
-            error!("Document ingestion failed: {}", failed_doc.error_message.as_deref().unwrap_or("Unknown error"));
-            Err(StatusCode::UNPROCESSABLE_ENTITY)
+        Ok(IngestionResult::Skipped { existing_document_id, reason }) => {
+            info!("Document upload skipped - {}: {}", reason, existing_document_id);
+            Err(StatusCode::CONFLICT)
+        }
+        Ok(IngestionResult::TrackedAsDuplicate { existing_document_id }) => {
+            info!("Document tracked as duplicate: {}", existing_document_id);
+            Err(StatusCode::CONFLICT)
         }
         Err(e) => {
             error!("Failed to ingest document: {}", e);
@@ -303,7 +314,7 @@ pub async fn delete_document(
     }
 
     // Delete associated files
-    let file_service = FileService::new(state.config.clone());
+    let file_service = FileService::new(state.config.upload_path.clone());
     if let Err(e) = file_service.delete_document_files(&document).await {
         warn!("Failed to delete files for document {}: {}", document_id, e);
         // Continue anyway - database deletion succeeded
@@ -346,9 +357,9 @@ pub async fn download_document(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.clone());
+    let file_service = FileService::new(state.config.upload_path.clone());
     let file_data = file_service
-        .read_document_file(&document)
+        .read_file(&document.file_path)
         .await
         .map_err(|e| {
             error!("Failed to read document file {}: {}", document_id, e);
@@ -403,9 +414,9 @@ pub async fn view_document(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.clone());
+    let file_service = FileService::new(state.config.upload_path.clone());
     let file_data = file_service
-        .read_document_file(&document)
+        .read_file(&document.file_path)
         .await
         .map_err(|e| {
             error!("Failed to read document file {}: {}", document_id, e);

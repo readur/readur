@@ -154,25 +154,27 @@ impl WebDAVDiscovery {
             .await?;
 
         let body = response.text().await?;
-        let (files, directories) = parse_propfind_response_with_directories(&body)?;
+        let all_items = parse_propfind_response_with_directories(&body)?;
         
-        // Filter files by supported extensions
-        let filtered_files: Vec<FileInfo> = files
-            .into_iter()
-            .filter(|file| self.config.is_supported_extension(&file.name))
-            .collect();
-
-        // Convert directory paths to full paths
-        let full_dir_paths: Vec<String> = directories
-            .into_iter()
-            .map(|dir| {
-                if directory_path == "/" {
-                    format!("/{}", dir.trim_start_matches('/'))
+        // Separate files and directories
+        let mut filtered_files = Vec::new();
+        let mut subdirectory_paths = Vec::new();
+        
+        for item in all_items {
+            if item.is_directory {
+                // Convert directory path to full path
+                let full_path = if directory_path == "/" {
+                    format!("/{}", item.path.trim_start_matches('/'))
                 } else {
-                    format!("{}/{}", directory_path.trim_end_matches('/'), dir.trim_start_matches('/'))
-                }
-            })
-            .collect();
+                    format!("{}/{}", directory_path.trim_end_matches('/'), item.path.trim_start_matches('/'))
+                };
+                subdirectory_paths.push(full_path);
+            } else if self.config.is_supported_extension(&item.name) {
+                filtered_files.push(item);
+            }
+        }
+        
+        let full_dir_paths = subdirectory_paths;
 
         debug!("Directory '{}': {} files, {} subdirectories", 
             directory_path, filtered_files.len(), full_dir_paths.len());
@@ -294,9 +296,16 @@ impl WebDAVDiscovery {
             .await?;
 
         let body = response.text().await?;
-        let (_, directories) = parse_propfind_response_with_directories(&body)?;
+        let all_items = parse_propfind_response_with_directories(&body)?;
         
-        Ok(directories)
+        // Filter out only directories and extract their paths
+        let directory_paths: Vec<String> = all_items
+            .into_iter()
+            .filter(|item| item.is_directory)
+            .map(|item| item.path)
+            .collect();
+        
+        Ok(directory_paths)
     }
 
     /// Calculates the ratio of supported files in a sample

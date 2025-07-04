@@ -100,7 +100,7 @@ async fn estimate_webdav_crawl_internal(
     // Create WebDAV service and estimate crawl
     match crate::services::webdav::WebDAVService::new(webdav_config) {
         Ok(webdav_service) => {
-            match webdav_service.estimate_crawl(&config.watch_folders).await {
+            match webdav_service.estimate_crawl().await {
                 Ok(estimate) => Ok(Json(serde_json::to_value(estimate).unwrap())),
                 Err(e) => Ok(Json(serde_json::json!({
                     "error": format!("Crawl estimation failed: {}", e),

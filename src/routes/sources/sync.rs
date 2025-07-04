@@ -271,7 +271,7 @@ pub async fn trigger_deep_scan(
                 let start_time = chrono::Utc::now();
                 
                 // Use guaranteed completeness deep scan method
-                match webdav_service.deep_scan_with_guaranteed_completeness(user_id, &state_clone).await {
+                match webdav_service.discover_all_files().await {
                     Ok(all_discovered_files) => {
                         info!("Deep scan with guaranteed completeness discovered {} files", all_discovered_files.len());
                         

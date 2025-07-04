@@ -7,6 +7,7 @@ use tracing::{debug, error, info, warn};
 use crate::models::{WebDAVConnectionResult, WebDAVTestConnection};
 use super::config::{WebDAVConfig, RetryConfig};
 
+#[derive(Clone)]
 pub struct WebDAVConnection {
     client: Client,
     config: WebDAVConfig,
@@ -186,8 +187,7 @@ impl WebDAVConnection {
             </D:propfind>"#;
 
         let response = self.client
-            .request(Method::from_bytes(b"PROPFIND")?)
-            .url(&url)
+            .request(Method::from_bytes(b"PROPFIND")?, &url)
             .basic_auth(&self.config.username, Some(&self.config.password))
             .header("Depth", "1")
             .header("Content-Type", "application/xml")
