@@ -15,3 +15,9 @@ pub use validation::{
     ValidationSeverity, ValidationRecommendation, ValidationAction, ValidationSummary
 };
 pub use service::{WebDAVService, ServerCapabilities, HealthStatus, test_webdav_connection};
+
+// Test modules
+#[cfg(test)]
+mod url_construction_tests;
+#[cfg(test)]
+mod subdirectory_edge_cases_tests;

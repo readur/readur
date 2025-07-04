@@ -1,8 +1,10 @@
-use readur::services::webdav::{WebDAVService, WebDAVConfig};
-use readur::models::FileInfo;
-use tokio;
-use chrono::Utc;
-use std::collections::BTreeSet;
+#[cfg(test)]
+mod tests {
+    use super::super::{WebDAVService, WebDAVConfig};
+    use crate::models::FileInfo;
+    use tokio;
+    use chrono::Utc;
+    use std::collections::BTreeSet;
 
 // Helper function to create test WebDAV service
 fn create_test_webdav_service() -> WebDAVService {
@@ -280,7 +282,7 @@ async fn test_first_time_scan_scenario_logic() {
     let parent_path = "/FullerDocuments/JonDocuments";
     
     // Simulate an empty list of known directories (first-time scan scenario)
-    let known_directories: Vec<readur::models::WebDAVDirectory> = vec![];
+    let known_directories: Vec<crate::models::WebDAVDirectory> = vec![];
     
     // Filter to subdirectories of this parent (this was returning empty)
     let subdirectories: Vec<_> = known_directories.iter()
@@ -515,4 +517,6 @@ async fn test_bug_scenario_file_count_verification() {
     println!("✅ Bug scenario file count verification passed");
     println!("✅ Would discover {} total files under parent path", files_under_parent.len());
     println!("✅ Full scan would find {} total entries", discovered_files.len());
+}
+
 }

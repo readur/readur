@@ -1,12 +1,11 @@
-#[cfg(test)]
 mod tests {
-    use crate::models::{AuthProvider, CreateUser, UserRole};
+    use readur::models::{AuthProvider, CreateUser, UserRole};
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
     use wiremock::{matchers::{method, path, query_param, header}, Mock, MockServer, ResponseTemplate};
     use std::sync::Arc;
-    use crate::{AppState, oidc::OidcClient};
+    use readur::{AppState, oidc::OidcClient};
     use uuid;
 
     async fn create_test_app_simple() -> (axum::Router, ()) {

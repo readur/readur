@@ -1,7 +1,6 @@
-#[cfg(test)]
 mod tests {
-    use crate::auth::{create_jwt, verify_jwt};
-    use crate::models::User;
+    use readur::auth::{create_jwt, verify_jwt};
+    use readur::models::User;
     use chrono::Utc;
     use uuid::Uuid;
 

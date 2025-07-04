@@ -419,6 +419,54 @@ impl WebDAVService {
         debug!("⚠️ Unknown server type, assuming no recursive ETag support");
         Ok(false)
     }
+
+    /// Checks if a path is a direct child of a parent directory
+    pub fn is_direct_child(&self, file_path: &str, parent_path: &str) -> bool {
+        // Normalize paths by removing trailing slashes
+        let normalized_parent = parent_path.trim_end_matches('/');
+        let normalized_file = file_path.trim_end_matches('/');
+        
+        // Handle root case
+        if normalized_parent.is_empty() || normalized_parent == "/" {
+            return !normalized_file.is_empty() && normalized_file.matches('/').count() == 1;
+        }
+        
+        // Check if file path starts with parent path
+        if !normalized_file.starts_with(normalized_parent) {
+            return false;
+        }
+        
+        // Get the remainder after the parent path
+        let remainder = &normalized_file[normalized_parent.len()..];
+        
+        // Should start with '/' and contain no additional '/' characters
+        remainder.starts_with('/') && remainder[1..].find('/').is_none()
+    }
+
+    /// Converts a full WebDAV path to a relative path by removing server-specific prefixes
+    pub fn convert_to_relative_path(&self, full_webdav_path: &str) -> String {
+        // For Nextcloud/ownCloud, remove the /remote.php/dav/files/username prefix
+        if let Some(server_type) = &self.config.server_type {
+            if server_type == "nextcloud" || server_type == "owncloud" {
+                let username = &self.config.username;
+                let prefix = format!("/remote.php/dav/files/{}", username);
+                
+                if full_webdav_path.starts_with(&prefix) {
+                    let relative = &full_webdav_path[prefix.len()..];
+                    return if relative.is_empty() { "/" } else { relative }.to_string();
+                }
+            } else if server_type == "generic" {
+                // For generic servers, remove the /webdav prefix if present
+                if full_webdav_path.starts_with("/webdav") {
+                    let relative = &full_webdav_path[7..]; // Remove "/webdav"
+                    return if relative.is_empty() { "/" } else { relative }.to_string();
+                }
+            }
+        }
+        
+        // For other servers, return as-is
+        full_webdav_path.to_string()
+    }
 }
 
 // Implement Clone to allow sharing the service

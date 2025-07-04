@@ -1,4 +1,6 @@
-use readur::services::webdav::{WebDAVService, WebDAVConfig};
+#[cfg(test)]
+mod tests {
+    use super::super::{WebDAVService, WebDAVConfig};
 
 // Helper function to create test WebDAV service for Nextcloud
 fn create_nextcloud_webdav_service() -> WebDAVService {
@@ -251,4 +253,6 @@ async fn test_fix_prevents_original_bug() {
     
     // Most importantly, they should be different (proving the bug was fixed)
     assert_ne!(old_buggy_url, fixed_url, "The fix should produce different URLs than the buggy version");
+}
+
 }
