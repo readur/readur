@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { screen, act } from '@testing-library/react';
 import { NotificationProvider, useNotifications } from '../NotificationContext';
+import { renderWithProviders, setupTestEnvironment } from '../../test/test-utils';
 import React from 'react';
 
 // Simple test component
@@ -52,7 +53,7 @@ const SimpleTestComponent: React.FC = () => {
 };
 
 const renderWithProvider = () => {
-  return render(
+  return renderWithProviders(
     <NotificationProvider>
       <SimpleTestComponent />
     </NotificationProvider>
@@ -61,6 +62,7 @@ const renderWithProvider = () => {
 
 describe('NotificationContext - Simple Tests', () => {
   beforeEach(() => {
+    setupTestEnvironment();
     vi.useFakeTimers();
   });
 
@@ -162,7 +164,7 @@ describe('NotificationContext - Simple Tests', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     
     expect(() => {
-      render(<SimpleTestComponent />);
+      renderWithProviders(<SimpleTestComponent />);
     }).toThrow('useNotifications must be used within NotificationProvider');
     
     consoleSpy.mockRestore();
@@ -196,6 +198,7 @@ describe('NotificationContext - Types', () => {
   };
 
   beforeEach(() => {
+    setupTestEnvironment();
     vi.useFakeTimers();
   });
 
@@ -204,7 +207,7 @@ describe('NotificationContext - Types', () => {
   });
 
   test.each(['success', 'error', 'info', 'warning'] as const)('should handle %s notification type', (type) => {
-    render(
+    renderWithProviders(
       <NotificationProvider>
         <TypeTestComponent type={type} />
       </NotificationProvider>

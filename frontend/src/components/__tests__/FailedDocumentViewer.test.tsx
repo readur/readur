@@ -1,8 +1,8 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { screen, waitFor } from '@testing-library/react';
 import FailedDocumentViewer from '../FailedDocumentViewer';
 import { api } from '../../services/api';
+import { renderWithProviders, setupTestEnvironment } from '../../test/test-utils';
 
 // Mock the API
 vi.mock('../../services/api', () => ({
@@ -11,7 +11,6 @@ vi.mock('../../services/api', () => ({
   },
 }));
 
-const theme = createTheme();
 
 const defaultProps = {
   failedDocumentId: 'test-failed-doc-id',
@@ -22,10 +21,8 @@ const defaultProps = {
 const renderFailedDocumentViewer = (props = {}) => {
   const combinedProps = { ...defaultProps, ...props };
   
-  return render(
-    <ThemeProvider theme={theme}>
-      <FailedDocumentViewer {...combinedProps} />
-    </ThemeProvider>
+  return renderWithProviders(
+    <FailedDocumentViewer {...combinedProps} />
   );
 };
 
@@ -44,6 +41,7 @@ global.URL = {
 
 describe('FailedDocumentViewer', () => {
   beforeEach(() => {
+    setupTestEnvironment();
     vi.clearAllMocks();
   });
 

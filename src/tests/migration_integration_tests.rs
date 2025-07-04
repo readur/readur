@@ -1,14 +1,29 @@
-use sqlx::{PgPool, Row};
+use crate::test_utils::TestContext;
+use sqlx::Row;
 use uuid::Uuid;
 
 #[cfg(test)]
 mod migration_integration_tests {
     use super::*;
 
-    #[sqlx::test]
-    async fn test_full_migration_workflow(pool: PgPool) {
-        // Setup: Create sample documents with various OCR failure reasons
+    #[tokio::test]
+    async fn test_full_migration_workflow() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
+        // Setup: Create a test user first
         let user_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (id, username, email, password_hash, role) 
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(user_id)
+        .bind("test_migration_user")
+        .bind("test_migration@example.com")
+        .bind("hash")
+        .bind("user")
+        .execute(pool)
+        .await
+        .unwrap();
         
         // Create test documents with different failure scenarios
         let test_documents = vec![
@@ -37,7 +52,7 @@ mod migration_integration_tests {
             .bind(filename)
             .bind(*failure_reason)
             .bind(error_msg)
-            .execute(&pool)
+            .execute(pool)
             .await
             .expect("Failed to insert test document");
         }
@@ -46,7 +61,7 @@ mod migration_integration_tests {
         let before_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed'"
         )
-        .fetch_one(&pool)
+        .fetch_one(pool)
         .await
         .expect("Failed to count documents");
 
@@ -57,7 +72,7 @@ mod migration_integration_tests {
             r#"
             INSERT INTO failed_documents (
                 user_id, filename, original_filename, file_path, file_size,
-                mime_type, ocr_error, failure_reason, failure_stage, ingestion_source,
+                mime_type, error_message, failure_reason, failure_stage, ingestion_source,
                 created_at, updated_at
             )
             SELECT 
@@ -80,16 +95,19 @@ mod migration_integration_tests {
             WHERE d.ocr_status = 'failed'
             "#
         )
-        .execute(&pool)
+        .execute(pool)
         .await;
 
-        assert!(migration_result.is_ok(), "Migration should succeed");
+        match migration_result {
+            Ok(_) => {},
+            Err(e) => panic!("Migration failed: {:?}", e),
+        }
 
         // Verify all documents were migrated
         let migrated_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM failed_documents WHERE ingestion_source = 'migration'"
         )
-        .fetch_one(&pool)
+        .fetch_one(pool)
         .await
         .expect("Failed to count migrated documents");
 
@@ -110,7 +128,7 @@ mod migration_integration_tests {
                 "SELECT failure_reason FROM failed_documents WHERE filename = $1"
             )
             .bind(filename)
-            .fetch_one(&pool)
+            .fetch_one(pool)
             .await
             .expect("Failed to fetch failure reason");
 
@@ -126,7 +144,7 @@ mod migration_integration_tests {
         let delete_result = sqlx::query(
             "DELETE FROM documents WHERE ocr_status = 'failed'"
         )
-        .execute(&pool)
+        .execute(pool)
         .await;
 
         assert!(delete_result.is_ok(), "Delete should succeed");
@@ -135,7 +153,7 @@ mod migration_integration_tests {
         let remaining_failed: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed'"
         )
-        .fetch_one(&pool)
+        .fetch_one(pool)
         .await
         .expect("Failed to count remaining documents");
 
@@ -145,7 +163,7 @@ mod migration_integration_tests {
         let failed_docs = sqlx::query(
             "SELECT filename, failure_reason, failure_stage FROM failed_documents ORDER BY filename"
         )
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await
         .expect("Failed to fetch failed documents");
 
@@ -166,10 +184,25 @@ mod migration_integration_tests {
         }
     }
 
-    #[sqlx::test]
-    async fn test_migration_with_edge_cases(pool: PgPool) {
-        // Test migration with edge cases that previously caused issues
+    #[tokio::test]
+    async fn test_migration_with_edge_cases() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
+        
+        // Create a test user first
         let user_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (id, username, email, password_hash, role) 
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(user_id)
+        .bind("test_edge_user")
+        .bind("test_edge@example.com")
+        .bind("hash")
+        .bind("user")
+        .execute(pool)
+        .await
+        .unwrap();
 
         // Edge cases that might break migration
         let edge_cases = vec![
@@ -195,7 +228,7 @@ mod migration_integration_tests {
             .bind(filename)
             .bind(*failure_reason)
             .bind(error_msg)
-            .execute(&pool)
+            .execute(pool)
             .await
             .expect("Failed to insert edge case document");
         }
@@ -224,7 +257,7 @@ mod migration_integration_tests {
             WHERE d.ocr_status = 'failed'
             "#
         )
-        .execute(&pool)
+        .execute(pool)
         .await;
 
         assert!(migration_result.is_ok(), "Migration should handle edge cases");
@@ -233,7 +266,7 @@ mod migration_integration_tests {
         let edge_case_mappings = sqlx::query(
             "SELECT filename, failure_reason FROM failed_documents WHERE ingestion_source = 'migration_edge_test'"
         )
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await
         .expect("Failed to fetch edge case mappings");
 
@@ -245,10 +278,25 @@ mod migration_integration_tests {
         }
     }
 
-    #[sqlx::test]
-    async fn test_constraint_enforcement_during_migration(pool: PgPool) {
-        // This test ensures that if we accidentally introduce invalid data
-        // during migration, the constraints will catch it
+    #[tokio::test]
+    async fn test_constraint_enforcement_during_migration() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
+        
+        // Create a test user first to avoid foreign key constraint violations
+        let user_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (id, username, email, password_hash, role) 
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(user_id)
+        .bind("test_constraint_user")
+        .bind("test_constraint@example.com")
+        .bind("hash")
+        .bind("user")
+        .execute(pool)
+        .await
+        .unwrap();
 
         // Try to insert data that violates constraints
         let invalid_insert = sqlx::query(
@@ -256,11 +304,12 @@ mod migration_integration_tests {
             INSERT INTO failed_documents (
                 user_id, filename, failure_reason, failure_stage, ingestion_source
             ) VALUES (
-                gen_random_uuid(), 'invalid_test.pdf', 'migration_completed', 'migration', 'test'
+                $1, 'invalid_test.pdf', 'migration_completed', 'migration', 'test'
             )
             "#
         )
-        .execute(&pool)
+        .bind(user_id)
+        .execute(pool)
         .await;
 
         // This should fail due to constraint violation

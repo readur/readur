@@ -168,6 +168,7 @@ impl TestContext {
     /// Create a test context with custom configuration
     pub async fn with_config(config_builder: TestConfigBuilder) -> Self {
         let postgres_image = Postgres::default()
+            .with_tag("15")  // Use PostgreSQL 15 which has gen_random_uuid() built-in
             .with_env_var("POSTGRES_USER", "test")
             .with_env_var("POSTGRES_PASSWORD", "test")
             .with_env_var("POSTGRES_DB", "test");
@@ -178,7 +179,10 @@ impl TestContext {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .unwrap_or_else(|_| format!("postgresql://test:test@localhost:{}/test", port));
         let db = crate::db::Database::new(&database_url).await.unwrap();
-        db.migrate().await.unwrap();
+        
+        // Run proper SQLx migrations (PostgreSQL 15+ has gen_random_uuid() built-in)
+        let migrations = sqlx::migrate!("./migrations");
+        migrations.run(&db.pool).await.unwrap();
         
         let config = config_builder.build(database_url);
         let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
@@ -374,6 +378,11 @@ impl TestAuthHelper {
             password: password.to_string(),
             token: None,
         }
+    }
+    
+    /// Create an admin test user (alias for create_admin_user for backward compatibility)
+    pub async fn create_test_admin(&self) -> TestUser {
+        self.create_admin_user().await
     }
     
     /// Login a user and return their authentication token
