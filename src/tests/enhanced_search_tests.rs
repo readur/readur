@@ -901,22 +901,11 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires PostgreSQL database for integration testing"]
     async fn test_enhanced_search_integration() {
-        // This would test the actual database integration
-        // Similar to existing db_tests but for enhanced search
-        let db_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string());
+        use crate::test_utils::{TestContext, TestAuthHelper};
         
-        let db = Database::new(&db_url).await.expect("Failed to connect to test database");
-        db.migrate().await.expect("Failed to migrate test database");
-        
-        // Create test user
-        let user_data = CreateUser {
-            username: "test_enhanced_search".to_string(),
-            email: "enhanced@test.com".to_string(),
-            password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
-        };
-        let user = db.create_user(user_data).await.unwrap();
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let user = auth_helper.create_test_user().await;
         
         // Create test document with rich content
         let document = Document {
@@ -937,7 +926,7 @@ mod tests {
             tags: vec!["enhanced".to_string(), "search".to_string(), "test".to_string()],
             created_at: Utc::now(),
             updated_at: Utc::now(),
-            user_id: user.id,
+            user_id: user.user_response.id,
             file_hash: Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
             original_created_at: None,
             original_modified_at: None,
@@ -946,7 +935,7 @@ mod tests {
             ocr_failure_reason: None,
         };
         
-        db.create_document(document).await.unwrap();
+        ctx.state.db.create_document(document).await.unwrap();
         
         // Test enhanced search with snippets
         let search_request = SearchRequest {
@@ -960,7 +949,7 @@ mod tests {
             search_mode: Some(SearchMode::Simple),
         };
         
-        let result = db.enhanced_search_documents(user.id, search_request).await;
+        let result = ctx.state.db.enhanced_search_documents(user.user_response.id, search_request).await;
         assert!(result.is_ok());
         
         let (documents, total, query_time) = result.unwrap();

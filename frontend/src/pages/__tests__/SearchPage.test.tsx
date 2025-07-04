@@ -1,7 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { screen } from '@testing-library/react';
 import SearchPage from '../SearchPage';
+import { renderWithAuthenticatedUser, createMockUser, setupTestEnvironment } from '../../test/test-utils';
 
 // Mock API functions
 vi.mock('../../services/api', () => ({
@@ -14,21 +14,14 @@ vi.mock('../../services/api', () => ({
   getSettings: vi.fn(() => Promise.resolve({})),
 }));
 
-const SearchPageWrapper = ({ children }: { children: React.ReactNode }) => {
-  return <BrowserRouter>{children}</BrowserRouter>;
-};
-
 describe('SearchPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setupTestEnvironment();
   });
 
   test('renders search page structure', () => {
-    render(
-      <SearchPageWrapper>
-        <SearchPage />
-      </SearchPageWrapper>
-    );
+    renderWithAuthenticatedUser(<SearchPage />);
 
     // Check for page title
     expect(screen.getByText('Search Documents')).toBeInTheDocument();
@@ -38,11 +31,7 @@ describe('SearchPage', () => {
   });
 
   test('renders search input', () => {
-    render(
-      <SearchPageWrapper>
-        <SearchPage />
-      </SearchPageWrapper>
-    );
+    renderWithAuthenticatedUser(<SearchPage />);
 
     const searchInput = screen.getByPlaceholderText(/search/i);
     expect(searchInput).toBeInTheDocument();
@@ -142,11 +131,7 @@ describe('SearchPage', () => {
   // });
 
   test('renders main search container', () => {
-    const { container } = render(
-      <SearchPageWrapper>
-        <SearchPage />
-      </SearchPageWrapper>
-    );
+    const { container } = renderWithAuthenticatedUser(<SearchPage />);
 
     expect(container.firstChild).toBeInTheDocument();
   });

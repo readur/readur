@@ -1,12 +1,10 @@
-import { test, expect } from '@playwright/test';
-import { TEST_USERS, TIMEOUTS } from './utils/test-data';
+import { test, expect, AuthHelper, TEST_CREDENTIALS, TIMEOUTS } from './fixtures/auth';
 import { TestHelpers } from './utils/test-helpers';
 
 test.describe('Authentication', () => {
-  let helpers: TestHelpers;
-
   test.beforeEach(async ({ page }) => {
-    helpers = new TestHelpers(page);
+    const authHelper = new AuthHelper(page);
+    await authHelper.ensureLoggedOut();
   });
 
   test('should display login form on initial visit', async ({ page }) => {
@@ -19,22 +17,12 @@ test.describe('Authentication', () => {
   });
 
   test('should login with valid credentials', async ({ page }) => {
-    await page.goto('/');
+    const authHelper = new AuthHelper(page);
     
-    // Fill login form with demo credentials
-    await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[name="password"]', 'readur2024');
-    
-    // Wait for login API call
-    const loginResponse = helpers.waitForApiCall('/auth/login');
-    
-    await page.click('button[type="submit"]');
-    
-    // Verify login was successful
-    await loginResponse;
+    await authHelper.loginAs(TEST_CREDENTIALS.admin);
     
     // Should redirect to dashboard or main page
-    await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.medium });
+    await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.navigation });
     
     // Verify we're no longer on login page
     await expect(page.locator('input[name="username"]')).not.toBeVisible();
@@ -49,20 +37,19 @@ test.describe('Authentication', () => {
     await page.click('button[type="submit"]');
     
     // Should show error message (Material-UI Alert)
-    await expect(page.locator('.MuiAlert-root, [role="alert"]')).toBeVisible({ timeout: TIMEOUTS.short });
+    await expect(page.locator('.MuiAlert-root, [role="alert"]')).toBeVisible({ timeout: TIMEOUTS.api });
     
     // Should remain on login page
     await expect(page.locator('input[name="username"]')).toBeVisible();
   });
 
   test.skip('should logout successfully', async ({ page }) => {
-    // First login
-    await page.goto('/');
-    await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[name="password"]', 'readur2024');
-    await page.click('button[type="submit"]');
+    const authHelper = new AuthHelper(page);
     
-    await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.medium });
+    // First login
+    await authHelper.loginAs(TEST_CREDENTIALS.admin);
+    
+    await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.navigation });
     
     // Find and click profile/account button in the top app bar (has AccountIcon)
     const profileButton = page.locator('button:has([data-testid="AccountCircleIcon"])');
@@ -73,18 +60,17 @@ test.describe('Authentication', () => {
     await logoutMenuItem.click();
     
     // Should redirect back to login
-    await page.waitForURL(/\/login|\//, { timeout: TIMEOUTS.medium });
+    await page.waitForURL(/\/login|\//, { timeout: TIMEOUTS.navigation });
     await expect(page.locator('input[name="username"]')).toBeVisible();
   });
 
   test.skip('should persist session on page reload', async ({ page }) => {
-    // Login first
-    await page.goto('/');
-    await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[name="password"]', 'readur2024');
-    await page.click('button[type="submit"]');
+    const authHelper = new AuthHelper(page);
     
-    await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.medium });
+    // Login first
+    await authHelper.loginAs(TEST_CREDENTIALS.admin);
+    
+    await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.navigation });
     
     // Reload the page
     await page.reload();
@@ -93,7 +79,7 @@ test.describe('Authentication', () => {
     await page.waitForLoadState('networkidle');
     
     // Should still be logged in (either on dashboard or main page, but not login)
-    await page.waitForURL(/\/dashboard|\/(?!login)/, { timeout: TIMEOUTS.medium });
+    await page.waitForURL(/\/dashboard|\/(?!login)/, { timeout: TIMEOUTS.navigation });
     await expect(page.locator('input[name="username"]')).not.toBeVisible();
   });
 

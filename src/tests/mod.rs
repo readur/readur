@@ -1,4 +1,3 @@
-mod helpers;
 mod auth_tests;
 mod config_oidc_tests;
 mod db_tests;

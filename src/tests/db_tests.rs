@@ -1,23 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::db::Database;
+    use crate::test_utils::TestContext;
     use crate::models::{CreateUser, Document, SearchRequest};
     use chrono::Utc;
     use uuid::Uuid;
-
-    async fn create_test_db() -> Database {
-        // Use an in-memory database URL for testing
-        // This will require PostgreSQL to be running for integration tests
-        let db_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string());
-        
-        let db = Database::new(&db_url).await.expect("Failed to connect to test database");
-        
-        // Run migrations for test database
-        db.migrate().await.expect("Failed to migrate test database");
-        
-        db
-    }
 
     fn create_test_user_data(suffix: &str) -> CreateUser {
         CreateUser {
@@ -48,7 +34,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             user_id,
-            file_hash: Some("abcd1234567890123456789012345678901234567890123456789012345678".to_string()),
+            file_hash: Some(format!("{:x}", Uuid::new_v4().as_u128())), // Generate unique file hash
             original_created_at: None,
             original_modified_at: None,
             source_metadata: None,
@@ -58,9 +44,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_create_user() {
-        let db = create_test_db().await;
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         let user_data = create_test_user_data("1");
         
         let result = db.create_user(user_data).await;
@@ -68,15 +54,15 @@ mod tests {
         
         let user = result.unwrap();
         assert_eq!(user.username, "testuser_1");
-        assert_eq!(user.email, "test@example.com");
+        assert_eq!(user.email, "test_1@example.com");
         assert!(user.password_hash.is_some());
         assert_ne!(user.password_hash.as_ref().unwrap(), "password123"); // Should be hashed
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_get_user_by_username() {
-        let db = create_test_db().await;
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         let user_data = create_test_user_data("1");
         
         let created_user = db.create_user(user_data).await.unwrap();
@@ -93,9 +79,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_get_user_by_username_not_found() {
-        let db = create_test_db().await;
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         
         let result = db.get_user_by_username("nonexistent").await;
         assert!(result.is_ok());
@@ -105,9 +91,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_create_document() {
-        let db = create_test_db().await;
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         let user_data = create_test_user_data("1");
         let user = db.create_user(user_data).await.unwrap();
         
@@ -122,9 +108,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_get_documents_by_user() {
-        let db = create_test_db().await;
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         let user_data = create_test_user_data("1");
         let user = db.create_user(user_data).await.unwrap();
         
@@ -142,9 +128,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_search_documents() {
-        let db = create_test_db().await;
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         let user_data = create_test_user_data("1");
         let user = db.create_user(user_data).await.unwrap();
         
@@ -174,9 +160,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL database"]
     async fn test_update_document_ocr() {
-        let db = create_test_db().await;
+        let ctx = TestContext::new().await;
+        let db = &ctx.state.db;
         let user_data = create_test_user_data("1");
         let user = db.create_user(user_data).await.unwrap();
         

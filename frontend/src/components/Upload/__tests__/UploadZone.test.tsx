@@ -1,29 +1,25 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { screen, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UploadZone from '../UploadZone';
-import { NotificationProvider } from '../../../contexts/NotificationContext';
+import { renderWithProviders, setupTestEnvironment, createMockApiServices } from '../../../test/test-utils';
+import { createMockLabel } from '../../../test/label-test-utils';
 
-// Mock axios directly
+// Setup centralized API mocks for this component
+const mockApiServices = createMockApiServices();
+
+// Mock axios directly with our mock labels
 vi.mock('axios', () => ({
   default: {
     create: vi.fn(() => ({
       get: vi.fn().mockResolvedValue({ 
         status: 200, 
-        data: [
-          {
-            id: 'mock-label-1',
-            name: 'Test Label',
-            description: 'A test label',
-            color: '#0969da',
-            icon: undefined,
-            is_system: false,
-            created_at: '2024-01-01T00:00:00Z',
-            updated_at: '2024-01-01T00:00:00Z',
-            document_count: 0,
-            source_count: 0,
-          }
-        ] 
+        data: [createMockLabel({
+          name: 'Test Label',
+          color: '#0969da',
+          document_count: 0,
+          source_count: 0,
+        })]
       }),
       post: vi.fn().mockResolvedValue({ status: 201, data: {} }),
       put: vi.fn().mockResolvedValue({ status: 200, data: {} }),
@@ -31,19 +27,6 @@ vi.mock('axios', () => ({
     })),
   },
 }));
-
-// Helper function to render with NotificationProvider
-const renderWithProvider = async (component: React.ReactElement) => {
-  let renderResult;
-  await act(async () => {
-    renderResult = render(
-      <NotificationProvider>
-        {component}
-      </NotificationProvider>
-    );
-  });
-  return renderResult;
-};
 
 const mockProps = {
   onUploadComplete: vi.fn(),
@@ -54,6 +37,7 @@ describe('UploadZone', () => {
   
   beforeEach(() => {
     vi.clearAllMocks();
+    setupTestEnvironment();
     // Suppress console.error for "Failed to fetch labels" during tests
     originalConsoleError = console.error;
     console.error = vi.fn().mockImplementation((message, ...args) => {
@@ -70,7 +54,9 @@ describe('UploadZone', () => {
   });
 
   test('renders upload zone with default text', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await act(async () => {
+      renderWithProviders(<UploadZone {...mockProps} />);
+    });
     
     // Wait for async operations to complete
     await waitFor(() => {

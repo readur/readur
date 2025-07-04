@@ -1,11 +1,30 @@
-use sqlx::PgPool;
+use crate::test_utils::TestContext;
+use uuid;
 
 #[cfg(test)]
 mod migration_constraint_tests {
     use super::*;
 
-    #[sqlx::test]
-    async fn test_failed_documents_constraint_validation(pool: PgPool) {
+    #[tokio::test]
+    async fn test_failed_documents_constraint_validation() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
+        
+        // Create a test user first to avoid foreign key constraint violations
+        let user_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (id, username, email, password_hash, role) 
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(user_id)
+        .bind("test_constraint_user")
+        .bind("test_constraint@example.com")
+        .bind("hash")
+        .bind("user")
+        .execute(pool)
+        .await
+        .unwrap();
+        
         // Test that all allowed failure_reason values work
         let valid_reasons = vec![
             "duplicate_content", "duplicate_filename", "unsupported_format",
@@ -22,21 +41,40 @@ mod migration_constraint_tests {
                 INSERT INTO failed_documents (
                     user_id, filename, failure_reason, failure_stage, ingestion_source
                 ) VALUES (
-                    gen_random_uuid(), $1, $2, 'validation', 'test'
+                    $1, $2, $3, 'validation', 'test'
                 )
                 "#
             )
+            .bind(user_id)
             .bind(format!("test_file_{}.txt", reason))
             .bind(reason)
-            .execute(&pool)
+            .execute(pool)
             .await;
 
             assert!(result.is_ok(), "Valid failure_reason '{}' should be accepted", reason);
         }
     }
 
-    #[sqlx::test]
-    async fn test_failed_documents_invalid_constraint_rejection(pool: PgPool) {
+    #[tokio::test]
+    async fn test_failed_documents_invalid_constraint_rejection() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
+        
+        // Create a test user first to avoid foreign key constraint violations
+        let user_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (id, username, email, password_hash, role) 
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(user_id)
+        .bind("test_invalid_user")
+        .bind("test_invalid@example.com")
+        .bind("hash")
+        .bind("user")
+        .execute(pool)
+        .await
+        .unwrap();
+        
         // Test that invalid failure_reason values are rejected
         let invalid_reasons = vec![
             "invalid_reason", "unknown", "timeout", "memory_limit", 
@@ -49,21 +87,40 @@ mod migration_constraint_tests {
                 INSERT INTO failed_documents (
                     user_id, filename, failure_reason, failure_stage, ingestion_source
                 ) VALUES (
-                    gen_random_uuid(), $1, $2, 'validation', 'test'
+                    $1, $2, $3, 'validation', 'test'
                 )
                 "#
             )
+            .bind(user_id)
             .bind(format!("test_file_{}.txt", reason))
             .bind(reason)
-            .execute(&pool)
+            .execute(pool)
             .await;
 
             assert!(result.is_err(), "Invalid failure_reason '{}' should be rejected", reason);
         }
     }
 
-    #[sqlx::test]
-    async fn test_failed_documents_stage_constraint_validation(pool: PgPool) {
+    #[tokio::test]
+    async fn test_failed_documents_stage_constraint_validation() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
+        
+        // Create a test user first to avoid foreign key constraint violations
+        let user_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (id, username, email, password_hash, role) 
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(user_id)
+        .bind("test_stage_user")
+        .bind("test_stage@example.com")
+        .bind("hash")
+        .bind("user")
+        .execute(pool)
+        .await
+        .unwrap();
+        
         // Test that all allowed failure_stage values work
         let valid_stages = vec![
             "ingestion", "validation", "ocr", "storage", "processing", "sync"
@@ -75,21 +132,40 @@ mod migration_constraint_tests {
                 INSERT INTO failed_documents (
                     user_id, filename, failure_reason, failure_stage, ingestion_source
                 ) VALUES (
-                    gen_random_uuid(), $1, 'other', $2, 'test'
+                    $1, $2, 'other', $3, 'test'
                 )
                 "#
             )
+            .bind(user_id)
             .bind(format!("test_file_{}.txt", stage))
             .bind(stage)
-            .execute(&pool)
+            .execute(pool)
             .await;
 
             assert!(result.is_ok(), "Valid failure_stage '{}' should be accepted", stage);
         }
     }
 
-    #[sqlx::test]
-    async fn test_migration_mapping_compatibility(pool: PgPool) {
+    #[tokio::test]
+    async fn test_migration_mapping_compatibility() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
+        
+        // Create a test user first to avoid foreign key constraint violations
+        let user_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (id, username, email, password_hash, role) 
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(user_id)
+        .bind("test_migration_user")
+        .bind("test_migration@example.com")
+        .bind("hash")
+        .bind("user")
+        .execute(pool)
+        .await
+        .unwrap();
+        
         // Test that the migration mapping logic matches our constraints
         let migration_mappings = vec![
             ("low_ocr_confidence", "low_ocr_confidence"),
@@ -127,13 +203,14 @@ mod migration_constraint_tests {
                 INSERT INTO failed_documents (
                     user_id, filename, failure_reason, failure_stage, ingestion_source
                 ) VALUES (
-                    gen_random_uuid(), $1, $2, 'ocr', 'migration'
+                    $1, $2, $3, 'ocr', 'migration'
                 )
                 "#
             )
+            .bind(user_id)
             .bind(format!("migration_test_{}.txt", input_reason.replace("/", "_")))
             .bind(mapped_reason)
-            .execute(&pool)
+            .execute(pool)
             .await;
 
             assert!(result.is_ok(), 

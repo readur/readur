@@ -6,23 +6,14 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::db::Database;
+    use crate::test_utils::TestContext;
     use sqlx::Row;
     use uuid::Uuid;
 
-    async fn create_test_db() -> Database {
-        let db_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string());
-        
-        let db = Database::new(&db_url).await.expect("Failed to connect to test database");
-        db.migrate().await.expect("Failed to migrate test database");
-        db
-    }
-
     #[tokio::test]
     async fn test_row_trait_import_is_available() {
-        let db = create_test_db().await;
-        let pool = db.get_pool();
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
         
         // This test ensures Row trait is imported and available
         // The .get() method would fail to compile if Row trait is missing
@@ -39,8 +30,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sum_aggregate_type_safety() {
-        let db = create_test_db().await;
-        let pool = db.get_pool();
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
         
         // Create test data
         let user_id = Uuid::new_v4();
@@ -103,8 +94,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_group_by_aggregate_type_safety() {
-        let db = create_test_db().await;
-        let pool = db.get_pool();
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
         
         // Test the exact SQL pattern from ignored_files.rs GROUP BY query
         let results = sqlx::query(
@@ -132,8 +123,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_numeric_vs_bigint_difference() {
-        let db = create_test_db().await;
-        let pool = db.get_pool();
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
         
         // Demonstrate the difference between NUMERIC and BIGINT return types
         
@@ -162,8 +153,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_ignored_files_aggregate_queries() {
-        let db = create_test_db().await;
-        let pool = db.get_pool();
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
         
         // Create test user
         let user_id = Uuid::new_v4();
@@ -185,18 +176,20 @@ mod tests {
             let file_id = Uuid::new_v4();
             sqlx::query(
                 r#"
-                INSERT INTO ignored_files (id, ignored_by, filename, file_path, file_size, mime_type, source_type, reason)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                INSERT INTO ignored_files (id, ignored_by, filename, original_filename, file_path, file_size, mime_type, source_type, reason, file_hash)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 "#
             )
             .bind(file_id)
             .bind(user_id)
             .bind(format!("ignored_{}.pdf", i))
+            .bind(format!("ignored_{}.pdf", i)) // Add original_filename
             .bind(format!("/test/ignored_{}.pdf", i))
             .bind(1024i64 * (i + 1) as i64)
             .bind("application/pdf")
             .bind("source_sync")
             .bind(Some("Test reason"))
+            .bind(format!("{:x}", Uuid::new_v4().as_u128())) // Add unique file_hash
             .execute(pool)
             .await
             .unwrap();
@@ -255,8 +248,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_queue_enqueue_pending_sql_patterns() {
-        let db = create_test_db().await;
-        let pool = db.get_pool();
+        let ctx = TestContext::new().await;
+        let pool = ctx.state.db.get_pool();
         
         // Test the SQL patterns from queue.rs that need Row trait
         let pending_documents = sqlx::query(

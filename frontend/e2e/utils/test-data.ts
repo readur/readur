@@ -1,8 +1,7 @@
+import { TEST_CREDENTIALS } from '../fixtures/auth';
+
 export const TEST_USERS = {
-  valid: {
-    username: 'admin',
-    password: 'readur2024'
-  },
+  valid: TEST_CREDENTIALS.admin,
   invalid: {
     username: 'invaliduser',
     password: 'wrongpassword'
