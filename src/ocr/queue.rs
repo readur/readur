@@ -837,28 +837,34 @@ impl OcrQueueService {
             let file_hash: Option<String> = row.get("file_hash");
             
             // Create failed document record directly
-            if let Err(e) = self.db.create_failed_document(
+            let failed_document = crate::models::FailedDocument {
+                id: Uuid::new_v4(),
                 user_id,
                 filename,
-                Some(original_filename),
-                None, // original_path
-                Some(file_path),
-                Some(file_size),
+                original_filename: Some(original_filename),
+                original_path: None,
+                file_path: Some(file_path),
+                file_size: Some(file_size),
                 file_hash,
-                Some(mime_type),
-                None, // content
-                Vec::new(), // tags
-                None, // ocr_text
-                None, // ocr_confidence
-                None, // ocr_word_count
-                None, // ocr_processing_time_ms
-                failure_reason.to_string(),
-                "ocr".to_string(),
-                None, // existing_document_id
-                "ocr_queue".to_string(),
-                Some(error_message.to_string()),
-                Some(retry_count),
-            ).await {
+                mime_type: Some(mime_type),
+                content: None,
+                tags: Vec::new(),
+                ocr_text: None,
+                ocr_confidence: None,
+                ocr_word_count: None,
+                ocr_processing_time_ms: None,
+                failure_reason: failure_reason.to_string(),
+                failure_stage: "ocr".to_string(),
+                existing_document_id: None,
+                ingestion_source: "ocr_queue".to_string(),
+                error_message: Some(error_message.to_string()),
+                retry_count: Some(retry_count),
+                last_retry_at: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            };
+            
+            if let Err(e) = self.db.create_failed_document(failed_document).await {
                 error!("Failed to create failed document record: {}", e);
             }
         }

@@ -1,0 +1,17 @@
+// WebDAV service modules organized by functionality
+
+pub mod config;
+pub mod connection;
+pub mod discovery;
+pub mod validation;
+pub mod service;
+
+// Re-export main types for convenience
+pub use config::{WebDAVConfig, RetryConfig, ConcurrencyConfig};
+pub use connection::WebDAVConnection;
+pub use discovery::WebDAVDiscovery;
+pub use validation::{
+    WebDAVValidator, ValidationReport, ValidationIssue, ValidationIssueType, 
+    ValidationSeverity, ValidationRecommendation, ValidationAction, ValidationSummary
+};
+pub use service::{WebDAVService, ServerCapabilities, HealthStatus, test_webdav_connection};

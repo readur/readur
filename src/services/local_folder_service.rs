@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::fs;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 use sha2::{Sha256, Digest};

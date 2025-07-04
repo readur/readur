@@ -1,11 +1,10 @@
 use std::sync::Arc;
 use std::path::Path;
 use anyhow::{anyhow, Result};
-use chrono::Utc;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use futures::stream::{FuturesUnordered, StreamExt};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::{
@@ -15,7 +14,7 @@ use crate::{
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::local_folder_service::LocalFolderService,
     services::s3_service::S3Service,
-    services::webdav_service::{WebDAVService, WebDAVConfig},
+    services::webdav::{WebDAVService, WebDAVConfig},
 };
 
 #[derive(Clone)]
@@ -127,8 +126,8 @@ impl SourceSyncService {
                 let service = webdav_service.clone();
                 let state_clone = self.state.clone();
                 async move { 
-                    info!("🚀 Using optimized WebDAV discovery for: {}", folder_path);
-                    let result = service.discover_files_in_folder_optimized(&folder_path, source.user_id, &state_clone).await;
+                    info!("🚀 Using WebDAV discovery for: {}", folder_path);
+                    let result = service.discover_files_in_directory(&folder_path, true).await;
                     match &result {
                         Ok(files) => {
                             if files.is_empty() {

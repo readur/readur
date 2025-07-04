@@ -9,8 +9,8 @@
 use uuid::Uuid;
 use sha2::{Digest, Sha256};
 use tracing::{debug, info, warn};
-use chrono::Utc;
 use serde_json;
+use chrono::Utc;
 
 use crate::models::{Document, FileInfo};
 use crate::db::Database;
@@ -165,28 +165,34 @@ impl DocumentIngestionService {
                     warn!("Failed to save file {}: {}", request.filename, e);
                     
                     // Create failed document record for storage failure
-                    if let Err(failed_err) = self.db.create_failed_document(
-                        request.user_id,
-                        request.filename.clone(),
-                        Some(request.original_filename.clone()),
-                        None, // original_path
-                        None, // file_path (couldn't save)
-                        Some(file_size),
-                        Some(file_hash.clone()),
-                        Some(request.mime_type.clone()),
-                        None, // content
-                        Vec::new(), // tags
-                        None, // ocr_text
-                        None, // ocr_confidence
-                        None, // ocr_word_count
-                        None, // ocr_processing_time_ms
-                        "storage_error".to_string(),
-                        "storage".to_string(),
-                        None, // existing_document_id
-                        request.source_type.unwrap_or_else(|| "upload".to_string()),
-                        Some(e.to_string()),
-                        None, // retry_count
-                    ).await {
+                    let failed_document = crate::models::FailedDocument {
+                        id: Uuid::new_v4(),
+                        user_id: request.user_id,
+                        filename: request.filename.clone(),
+                        original_filename: Some(request.original_filename.clone()),
+                        original_path: None,
+                        file_path: None, // couldn't save
+                        file_size: Some(file_size),
+                        file_hash: Some(file_hash.clone()),
+                        mime_type: Some(request.mime_type.clone()),
+                        content: None,
+                        tags: Vec::new(),
+                        ocr_text: None,
+                        ocr_confidence: None,
+                        ocr_word_count: None,
+                        ocr_processing_time_ms: None,
+                        failure_reason: "storage_error".to_string(),
+                        failure_stage: "storage".to_string(),
+                        existing_document_id: None,
+                        ingestion_source: request.source_type.unwrap_or_else(|| "upload".to_string()),
+                        error_message: Some(e.to_string()),
+                        retry_count: Some(0),
+                        last_retry_at: None,
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    };
+                    
+                    if let Err(failed_err) = self.db.create_failed_document(failed_document).await {
                         warn!("Failed to create failed document record for storage error: {}", failed_err);
                     }
                     
@@ -239,28 +245,34 @@ impl DocumentIngestionService {
                           request.filename, &file_hash[..8], e);
                     
                     // Create failed document record for database creation failure
-                    if let Err(failed_err) = self.db.create_failed_document(
-                        request.user_id,
-                        request.filename.clone(),
-                        Some(request.original_filename.clone()),
-                        None, // original_path
-                        Some(file_path.clone()), // file was saved successfully
-                        Some(file_size),
-                        Some(file_hash.clone()),
-                        Some(request.mime_type.clone()),
-                        None, // content
-                        Vec::new(), // tags
-                        None, // ocr_text
-                        None, // ocr_confidence
-                        None, // ocr_word_count
-                        None, // ocr_processing_time_ms
-                        "database_error".to_string(),
-                        "ingestion".to_string(),
-                        None, // existing_document_id
-                        request.source_type.unwrap_or_else(|| "upload".to_string()),
-                        Some(e.to_string()),
-                        None, // retry_count
-                    ).await {
+                    let failed_document = crate::models::FailedDocument {
+                        id: Uuid::new_v4(),
+                        user_id: request.user_id,
+                        filename: request.filename.clone(),
+                        original_filename: Some(request.original_filename.clone()),
+                        original_path: None,
+                        file_path: Some(file_path.clone()), // file was saved successfully
+                        file_size: Some(file_size),
+                        file_hash: Some(file_hash.clone()),
+                        mime_type: Some(request.mime_type.clone()),
+                        content: None,
+                        tags: Vec::new(),
+                        ocr_text: None,
+                        ocr_confidence: None,
+                        ocr_word_count: None,
+                        ocr_processing_time_ms: None,
+                        failure_reason: "database_error".to_string(),
+                        failure_stage: "ingestion".to_string(),
+                        existing_document_id: None,
+                        ingestion_source: request.source_type.unwrap_or_else(|| "upload".to_string()),
+                        error_message: Some(e.to_string()),
+                        retry_count: Some(0),
+                        last_retry_at: None,
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    };
+                    
+                    if let Err(failed_err) = self.db.create_failed_document(failed_document).await {
                         warn!("Failed to create failed document record for database error: {}", failed_err);
                     }
                     

@@ -10,7 +10,7 @@ use crate::{
     models::{CreateWebDAVFile, UpdateWebDAVSyncState},
     services::file_service::FileService,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
-    services::webdav_service::{WebDAVConfig, WebDAVService},
+    services::webdav::{WebDAVConfig, WebDAVService},
 };
 
 pub async fn perform_webdav_sync_with_tracking(
@@ -115,7 +115,7 @@ async fn perform_sync_internal(
         }
         
         // Discover files in the folder
-        match webdav_service.discover_files_in_folder(folder_path).await {
+        match webdav_service.discover_files_in_directory(folder_path, true).await {
             Ok(files) => {
                 info!("Found {} files in folder {}", files.len(), folder_path);
                 
