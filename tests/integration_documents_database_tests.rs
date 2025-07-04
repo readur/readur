@@ -330,8 +330,8 @@ mod tests {
 #[cfg(test)]
 mod document_deletion_tests {
     use super::*;
-    use crate::test_utils::TestContext;
-    use crate::models::{UserRole, User, Document, AuthProvider, CreateUser};
+    use readur::test_utils::TestContext;
+    use readur::models::{UserRole, User, Document, AuthProvider, CreateUser};
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -685,8 +685,8 @@ mod document_deletion_tests {
 #[cfg(test)]
 mod rbac_deletion_tests {
     use super::*;
-    use crate::test_utils::TestContext;
-    use crate::models::{UserRole, CreateUser};
+    use readur::test_utils::TestContext;
+    use readur::models::{UserRole, CreateUser};
     use uuid::Uuid;
 
     #[tokio::test]
@@ -1201,11 +1201,11 @@ mod deletion_error_handling_tests {
         let db = &ctx.state.db;
         
         // Create user using direct database approach
-        let user_data = crate::models::CreateUser {
+        let user_data = readur::models::CreateUser {
             username: format!("testuser_{}", Uuid::new_v4()),
             email: format!("test_{}@example.com", Uuid::new_v4()),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
         let user = db.create_user(user_data).await.expect("Failed to create user");
         
@@ -1228,11 +1228,11 @@ mod deletion_error_handling_tests {
         let db = &ctx.state.db;
         
         // Create user using direct database approach
-        let user_data = crate::models::CreateUser {
+        let user_data = readur::models::CreateUser {
             username: format!("testuser_{}", Uuid::new_v4()),
             email: format!("test_{}@example.com", Uuid::new_v4()),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
         let user = db.create_user(user_data).await.expect("Failed to create user");
         
@@ -1255,11 +1255,11 @@ mod deletion_error_handling_tests {
         let db = &ctx.state.db;
         
         // Create user using direct database approach
-        let user_data = crate::models::CreateUser {
+        let user_data = readur::models::CreateUser {
             username: format!("testuser_{}", Uuid::new_v4()),
             email: format!("test_{}@example.com", Uuid::new_v4()),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
         let user = db.create_user(user_data).await.expect("Failed to create user");
         
@@ -1381,19 +1381,19 @@ mod deletion_error_handling_tests {
         let ctx = TestContext::new().await;
         
         // Create users using direct database approach
-        let user1_data = crate::models::CreateUser {
+        let user1_data = readur::models::CreateUser {
             username: format!("testuser1_{}", Uuid::new_v4()),
             email: format!("test1_{}@example.com", Uuid::new_v4()),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
         let user1 = ctx.state.db.create_user(user1_data).await.expect("Failed to create user1");
         
-        let user2_data = crate::models::CreateUser {
+        let user2_data = readur::models::CreateUser {
             username: format!("testuser2_{}", Uuid::new_v4()),
             email: format!("test2_{}@example.com", Uuid::new_v4()),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
         let user2 = ctx.state.db.create_user(user2_data).await.expect("Failed to create user2");
         
@@ -1572,7 +1572,7 @@ mod deletion_error_handling_tests {
 
     mod low_confidence_deletion_db_tests {
         use super::*;
-        use crate::models::UserRole;
+        use readur::models::UserRole;
 
         #[cfg(test)]
         fn create_test_document_with_confidence(user_id: Uuid, confidence: f32) -> Document {
@@ -1900,7 +1900,7 @@ mod deletion_error_handling_tests {
 
         // Test as regular user
         let failed_docs = database
-            .find_failed_ocr_documents(user_id, crate::models::UserRole::User, 100, 0)
+            .find_failed_ocr_documents(user_id, readur::models::UserRole::User, 100, 0)
             .await
             .unwrap();
 
@@ -1916,7 +1916,7 @@ mod deletion_error_handling_tests {
 
         // Test as admin
         let admin_failed_docs = database
-            .find_failed_ocr_documents(admin_user_id, crate::models::UserRole::Admin, 100, 0)
+            .find_failed_ocr_documents(admin_user_id, readur::models::UserRole::Admin, 100, 0)
             .await
             .unwrap();
 
@@ -1974,7 +1974,7 @@ mod deletion_error_handling_tests {
 
         // Test with threshold of 50% - should include low confidence and failed only
         let threshold_50_docs = database
-            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 50.0, 100, 0)
+            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -1989,7 +1989,7 @@ mod deletion_error_handling_tests {
 
         // Test with threshold of 70% - should include low and medium confidence and failed only
         let threshold_70_docs = database
-            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 70.0, 100, 0)
+            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 70.0, 100, 0)
             .await
             .unwrap();
 
@@ -2004,7 +2004,7 @@ mod deletion_error_handling_tests {
 
         // Test with threshold of 100% - should include all confidence levels and failed only
         let threshold_100_docs = database
-            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 100.0, 100, 0)
+            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 100.0, 100, 0)
             .await
             .unwrap();
 
@@ -2019,7 +2019,7 @@ mod deletion_error_handling_tests {
 
         // Test with threshold of 0% - should only include failed documents
         let threshold_0_docs = database
-            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 0.0, 100, 0)
+            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 0.0, 100, 0)
             .await
             .unwrap();
 
@@ -2068,7 +2068,7 @@ mod deletion_error_handling_tests {
 
         // Test original method - should only find documents with explicit confidence below threshold
         let original_results = database
-            .find_documents_by_confidence_threshold(user_id, crate::models::UserRole::User, 50.0, 100, 0)
+            .find_documents_by_confidence_threshold(user_id, readur::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -2088,11 +2088,11 @@ mod deletion_error_handling_tests {
         let database = &ctx.state.db;
         
         // Create user using direct database approach
-        let user_data = crate::models::CreateUser {
+        let user_data = readur::models::CreateUser {
             username: format!("testuser_{}", Uuid::new_v4()),
             email: format!("test_{}@example.com", Uuid::new_v4()),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
         let user = database.create_user(user_data).await.expect("Failed to create user");
         let user_id = user.id;
@@ -2122,7 +2122,7 @@ mod deletion_error_handling_tests {
 
         // Test ordering in combined query
         let results = database
-            .find_low_confidence_and_failed_documents(user_id, crate::models::UserRole::User, 50.0, 100, 0)
+            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -2153,20 +2153,20 @@ mod deletion_error_handling_tests {
         let database = &ctx.state.db;
         
         // Create users using direct database approach
-        let user1_data = crate::models::CreateUser {
+        let user1_data = readur::models::CreateUser {
             username: format!("testuser1_{}", Uuid::new_v4()),
             email: format!("test1_{}@example.com", Uuid::new_v4()),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
         let user1 = database.create_user(user1_data).await.expect("Failed to create user1");
         let user1_id = user1.id;
         
-        let user2_data = crate::models::CreateUser {
+        let user2_data = readur::models::CreateUser {
             username: format!("testuser2_{}", Uuid::new_v4()),
             email: format!("test2_{}@example.com", Uuid::new_v4()),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
         let user2 = database.create_user(user2_data).await.expect("Failed to create user2");
         let user2_id = user2.id;
@@ -2195,7 +2195,7 @@ mod deletion_error_handling_tests {
 
         // Test user1 can only see their documents
         let user1_results = database
-            .find_low_confidence_and_failed_documents(user1_id, crate::models::UserRole::User, 50.0, 100, 0)
+            .find_low_confidence_and_failed_documents(user1_id, readur::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -2208,7 +2208,7 @@ mod deletion_error_handling_tests {
 
         // Test user2 can only see their documents
         let user2_results = database
-            .find_low_confidence_and_failed_documents(user2_id, crate::models::UserRole::User, 50.0, 100, 0)
+            .find_low_confidence_and_failed_documents(user2_id, readur::models::UserRole::User, 50.0, 100, 0)
             .await
             .unwrap();
 
@@ -2221,7 +2221,7 @@ mod deletion_error_handling_tests {
 
         // Test admin can see all documents
         let admin_results = database
-            .find_low_confidence_and_failed_documents(user1_id, crate::models::UserRole::Admin, 50.0, 100, 0)
+            .find_low_confidence_and_failed_documents(user1_id, readur::models::UserRole::Admin, 50.0, 100, 0)
             .await
             .unwrap();
 

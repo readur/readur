@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::config::Config;
+    use readur::config::Config;
     use std::env;
     use std::sync::Mutex;
     

@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests {
-    use crate::db::ignored_files::{
+    use readur::db::ignored_files::{
         create_ignored_file, list_ignored_files, get_ignored_file_by_id, delete_ignored_file,
         is_file_ignored, count_ignored_files, bulk_delete_ignored_files,
         create_ignored_file_from_document
     };
-    use crate::models::{CreateIgnoredFile, IgnoredFilesQuery, User, UserRole, Document, AuthProvider};
-    use crate::test_utils::{TestContext, TestAuthHelper};
+    use readur::models::{CreateIgnoredFile, IgnoredFilesQuery, User, UserRole, Document, AuthProvider};
+    use readur::test_utils::{TestContext, TestAuthHelper};
     use uuid::Uuid;
     use chrono::Utc;
 
@@ -197,7 +197,7 @@ mod tests {
         let ctx = TestContext::new().await;
         let auth_helper = TestAuthHelper::new(ctx.app.clone());
         let user = auth_helper.create_test_user().await;
-        let document = ctx.state.db.create_document(crate::models::Document {
+        let document = ctx.state.db.create_document(readur::models::Document {
             id: Uuid::new_v4(),
             filename: "test_document.pdf".to_string(),
             original_filename: "test_document.pdf".to_string(),

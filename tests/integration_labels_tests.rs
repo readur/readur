@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::UserRole;
-    use crate::routes::labels::{CreateLabel, UpdateLabel, LabelAssignment, Label};
-    use crate::test_utils::{TestContext, TestAuthHelper};
+    use readur::models::UserRole;
+    use readur::routes::labels::{CreateLabel, UpdateLabel, LabelAssignment, Label};
+    use readur::test_utils::{TestContext, TestAuthHelper};
     use axum::http::StatusCode;
     use chrono::Utc;
     use serde_json::json;

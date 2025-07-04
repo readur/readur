@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::db::Database;
-    use crate::models::{
+    use readur::db::Database;
+    use readur::models::{
         CreateUser, Document, SearchRequest, SearchMode, 
         EnhancedDocumentResponse, SearchSnippet, HighlightRange
     };
@@ -901,7 +901,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires PostgreSQL database for integration testing"]
     async fn test_enhanced_search_integration() {
-        use crate::test_utils::{TestContext, TestAuthHelper};
+        use readur::test_utils::{TestContext, TestAuthHelper};
         
         let ctx = TestContext::new().await;
         let auth_helper = TestAuthHelper::new(ctx.app.clone());

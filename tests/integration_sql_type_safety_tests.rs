@@ -6,7 +6,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::TestContext;
+    use readur::test_utils::TestContext;
     use sqlx::Row;
     use uuid::Uuid;
 

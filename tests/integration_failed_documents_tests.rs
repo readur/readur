@@ -1,4 +1,4 @@
-use crate::db::constraint_validation::ConstraintValidator;
+use readur::db::constraint_validation::ConstraintValidator;
 
 /// Simple unit tests for failed_documents functionality
 /// These tests focus on business logic and constraint validation

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod document_routes_deletion_tests {
-    use crate::models::{UserRole, User, Document, AuthProvider};
-    use crate::routes::documents::{BulkDeleteRequest};
+    use readur::models::{UserRole, User, Document, AuthProvider};
+    use readur::routes::documents::{BulkDeleteRequest};
     use axum::http::StatusCode;
     use chrono::Utc;
     use serde_json::json;
@@ -376,7 +376,7 @@ mod document_routes_deletion_tests {
     // Low confidence deletion tests
     mod low_confidence_deletion_tests {
         use super::*;
-        use crate::routes::documents::DeleteLowConfidenceRequest;
+        use readur::routes::documents::DeleteLowConfidenceRequest;
 
         fn create_low_confidence_document(user_id: Uuid, confidence: f32) -> Document {
             Document {

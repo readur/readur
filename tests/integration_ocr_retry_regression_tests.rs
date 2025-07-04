@@ -4,7 +4,7 @@ mod ocr_retry_regression_tests {
     use testcontainers::{runners::AsyncRunner, ContainerAsync};
     use testcontainers_modules::postgres::Postgres;
     use uuid::Uuid;
-    use crate::routes::documents_ocr_retry::DocumentInfo;
+    use readur::routes::documents_ocr_retry::DocumentInfo;
 
     async fn setup_test_db() -> (ContainerAsync<Postgres>, PgPool) {
         let postgres_image = Postgres::default();

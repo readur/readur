@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::models::UpdateSettings;
-    use crate::test_utils::{TestContext, TestAuthHelper};
+    use readur::models::UpdateSettings;
+    use readur::test_utils::{TestContext, TestAuthHelper};
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::models::{CreateUser, UpdateUser, UserResponse, AuthProvider, UserRole};
-    use crate::test_utils::{TestContext, TestAuthHelper};
+    use readur::models::{CreateUser, UpdateUser, UserResponse, AuthProvider, UserRole};
+    use readur::test_utils::{TestContext, TestAuthHelper};
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
@@ -110,7 +110,7 @@ mod tests {
             username: "newuser".to_string(),
             email: "new@example.com".to_string(),
             password: "newpassword".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         };
 
         let response = ctx.app

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::ocr::enhanced::{EnhancedOcrService, OcrResult, ImageQualityStats};
-    use crate::models::Settings;
+    use readur::ocr::enhanced::{EnhancedOcrService, OcrResult, ImageQualityStats};
+    use readur::models::Settings;
     use std::fs;
     use tempfile::{NamedTempFile, TempDir};
 

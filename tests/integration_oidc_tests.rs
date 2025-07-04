@@ -14,7 +14,7 @@ mod tests {
             .or_else(|_| std::env::var("DATABASE_URL"))
             .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
         
-        let config = crate::config::Config {
+        let config = readur::config::Config {
             database_url: database_url.clone(),
             server_address: "127.0.0.1:0".to_string(),
             jwt_secret: "test-secret".to_string(),
@@ -37,7 +37,7 @@ mod tests {
             oidc_redirect_uri: None,
         };
 
-        let db = crate::db::Database::new(&config.database_url).await.unwrap();
+        let db = readur::db::Database::new(&config.database_url).await.unwrap();
         
         // Retry migration up to 3 times to handle concurrent test execution
         for attempt in 1..=3 {
@@ -53,13 +53,13 @@ mod tests {
         }
         
         let app = axum::Router::new()
-            .nest("/api/auth", crate::routes::auth::router())
+            .nest("/api/auth", readur::routes::auth::router())
             .with_state(Arc::new(AppState {
                 db: db.clone(),
                 config,
                 webdav_scheduler: None,
                 source_scheduler: None,
-                queue_service: Arc::new(crate::ocr::queue::OcrQueueService::new(
+                queue_service: Arc::new(readur::ocr::queue::OcrQueueService::new(
                     db.clone(),
                     db.pool.clone(),
                     2
@@ -93,7 +93,7 @@ mod tests {
             .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
         
         // Update the app state to include OIDC client
-        let config = crate::config::Config {
+        let config = readur::config::Config {
             database_url: database_url.clone(),
             server_address: "127.0.0.1:0".to_string(),
             jwt_secret: "test-secret".to_string(),
@@ -124,7 +124,7 @@ mod tests {
         };
         
         // Connect to the database and run migrations with retry logic for concurrency
-        let db = crate::db::Database::new(&config.database_url).await.unwrap();
+        let db = readur::db::Database::new(&config.database_url).await.unwrap();
         
         // Retry migration up to 3 times to handle concurrent test execution
         for attempt in 1..=3 {
@@ -141,13 +141,13 @@ mod tests {
         
         // Create app with OIDC configuration
         let app = axum::Router::new()
-            .nest("/api/auth", crate::routes::auth::router())
+            .nest("/api/auth", readur::routes::auth::router())
             .with_state(Arc::new(AppState {
                 db: db.clone(),
                 config,
                 webdav_scheduler: None,
                 source_scheduler: None,
-                queue_service: Arc::new(crate::ocr::queue::OcrQueueService::new(
+                queue_service: Arc::new(readur::ocr::queue::OcrQueueService::new(
                     db.clone(),
                     db.pool.clone(),
                     2
@@ -249,7 +249,7 @@ mod tests {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
             .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-        let db = crate::db::Database::new(&database_url).await.unwrap();
+        let db = readur::db::Database::new(&database_url).await.unwrap();
         
         // Delete any existing user with the test username or OIDC subject
         let _ = sqlx::query("DELETE FROM users WHERE username = $1 OR oidc_subject = $2")
@@ -377,7 +377,7 @@ mod tests {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
             .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-        let db = crate::db::Database::new(&database_url).await.unwrap();
+        let db = readur::db::Database::new(&database_url).await.unwrap();
         
         // Delete any existing user that might conflict
         let _ = sqlx::query("DELETE FROM users WHERE username = $1 OR oidc_subject = $2")

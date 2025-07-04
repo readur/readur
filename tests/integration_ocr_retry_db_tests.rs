@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::db::ocr_retry::*;
-    use crate::test_utils::{TestContext, TestAuthHelper};
+    use readur::db::ocr_retry::*;
+    use readur::test_utils::{TestContext, TestAuthHelper};
     use sqlx::Row;
     use uuid::Uuid;
 

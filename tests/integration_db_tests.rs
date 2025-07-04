@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::TestContext;
-    use crate::models::{CreateUser, Document, SearchRequest};
+    use readur::test_utils::TestContext;
+    use readur::models::{CreateUser, Document, SearchRequest};
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -10,7 +10,7 @@ mod tests {
             username: format!("testuser_{}", suffix),
             email: format!("test_{}@example.com", suffix),
             password: "password123".to_string(),
-            role: Some(crate::models::UserRole::User),
+            role: Some(readur::models::UserRole::User),
         }
     }
 

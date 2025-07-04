@@ -1,7 +1,7 @@
 #[cfg(test)]
-use crate::services::file_service::FileService;
+use readur::services::file_service::FileService;
 #[cfg(test)]
-use crate::models::Document;
+use readur::models::Document;
 #[cfg(test)]
 use std::fs;
 #[cfg(test)]
