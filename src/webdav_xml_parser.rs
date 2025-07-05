@@ -538,7 +538,7 @@ pub fn normalize_etag(etag: &str) -> String {
     
     // Handle empty ETags or whitespace-only ETags
     if result.trim().is_empty() {
-        return "empty".to_string(); // Provide a consistent fallback
+        return "".to_string(); // Return empty string for empty ETags
     }
     
     result

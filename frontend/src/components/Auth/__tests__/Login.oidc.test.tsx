@@ -1,4 +1,5 @@
 import { describe, test, expect } from 'vitest';
+import Login from '../Login';
 
 // Basic existence test for Login component
 // More complex auth tests require comprehensive context mocking which 
@@ -10,10 +11,9 @@ describe('Login - OIDC Features - Simplified', () => {
     expect(true).toBe(true);
   });
 
-  test('Component module structure is valid', async () => {
-    // Test that the module can be imported dynamically
-    const module = await import('../Login');
-    expect(module).toBeDefined();
-    expect(module.default).toBeDefined();
+  test('Component module structure is valid', () => {
+    // Test that the module can be imported statically
+    expect(Login).toBeDefined();
+    expect(typeof Login).toBe('function');
   });
 });
