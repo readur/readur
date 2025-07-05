@@ -3767,6 +3767,7 @@ dependencies = [
  "pdf-extract",
  "quick-xml",
  "raw-cpuid",
+ "readur",
  "regex",
  "reqwest 0.12.22",
  "serde",

@@ -511,12 +511,196 @@ fn parse_http_date(date_str: &str) -> Option<DateTime<Utc>> {
 /// - `"abc123"` → `abc123`
 /// - `W/"abc123"` → `abc123`
 /// - `abc123` → `abc123`
+/// Comprehensive ETag parser that handles all the weird edge cases found in real WebDAV servers
 pub fn normalize_etag(etag: &str) -> String {
-    etag.trim()
-        .trim_start_matches("W/")
-        .trim()
-        .trim_matches('"')
-        .to_string()
+    let mut result = etag.trim().to_string();
+    
+    // Handle multiple weak indicators (malformed but seen in the wild)
+    while result.starts_with("W/") || result.starts_with("w/") {
+        if result.starts_with("W/") {
+            result = result[2..].trim().to_string();
+        } else if result.starts_with("w/") {
+            result = result[2..].trim().to_string();
+        }
+    }
+    
+    // Handle quoted ETags - be careful with escaped quotes
+    if result.starts_with('"') && result.ends_with('"') && result.len() > 1 {
+        result = result[1..result.len()-1].to_string();
+    }
+    
+    // Handle some edge cases where quotes might be escaped inside
+    // This handles cases like: "etag-with-\"internal\"-quotes"
+    if result.contains("\\\"") {
+        // For display purposes, we keep the escaped quotes as-is
+        // The server will handle the proper interpretation
+    }
+    
+    // Handle empty ETags or whitespace-only ETags
+    if result.trim().is_empty() {
+        return "empty".to_string(); // Provide a consistent fallback
+    }
+    
+    result
+}
+
+/// Advanced ETag parser with detailed information about the ETag format
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParsedETag {
+    pub original: String,
+    pub normalized: String,
+    pub is_weak: bool,
+    pub format_type: ETagFormat,
+    pub has_internal_quotes: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ETagFormat {
+    Simple,           // "abc123"
+    Weak,            // W/"abc123"
+    Hash,            // MD5/SHA1/SHA256 hashes
+    UUID,            // UUID format
+    Timestamp,       // Contains timestamp
+    Versioned,       // Version information
+    Encoded,         // Base64 or URL encoded
+    Complex,         // Microsoft/SharePoint complex formats
+    PathBased,       // Contains path information
+    JSONLike,        // Contains JSON-like data
+    XMLLike,         // Contains XML-like data
+    Unknown,         // Unrecognized format
+}
+
+impl ParsedETag {
+    pub fn parse(etag: &str) -> Self {
+        let original = etag.to_string();
+        let normalized = normalize_etag(etag);
+        
+        // Detect if it's a weak ETag
+        let is_weak = etag.trim().starts_with("W/") || etag.trim().starts_with("w/");
+        
+        // Detect internal quotes
+        let has_internal_quotes = normalized.contains('"') || normalized.contains("\\'");
+        
+        // Classify the ETag format
+        let format_type = classify_etag_format(&normalized);
+        
+        ParsedETag {
+            original,
+            normalized,
+            is_weak,
+            format_type,
+            has_internal_quotes,
+        }
+    }
+    
+    /// Check if two ETags are equivalent (ignoring weak/strong differences)
+    pub fn is_equivalent(&self, other: &ParsedETag) -> bool {
+        self.normalized == other.normalized
+    }
+    
+    /// Get a safe string for comparison that handles edge cases
+    pub fn comparison_string(&self) -> String {
+        // For comparison, we normalize further by removing internal quotes and whitespace
+        self.normalized
+            .replace("\\\"", "")
+            .replace('"', "")
+            .trim()
+            .to_string()
+    }
+}
+
+fn classify_etag_format(etag: &str) -> ETagFormat {
+    let lower = etag.to_lowercase();
+    
+    // Check for UUIDs (with or without dashes/braces)
+    if is_uuid_like(etag) {
+        return ETagFormat::UUID;
+    }
+    
+    // Check for hash formats (MD5, SHA1, SHA256)
+    if is_hash_like(etag) {
+        return ETagFormat::Hash;
+    }
+    
+    // Check for timestamp formats
+    if contains_timestamp(etag) {
+        return ETagFormat::Timestamp;
+    }
+    
+    // Check for version information
+    if contains_version_info(etag) {
+        return ETagFormat::Versioned;
+    }
+    
+    // Check for encoding indicators
+    if is_encoded_format(etag) {
+        return ETagFormat::Encoded;
+    }
+    
+    // Check for Microsoft/SharePoint formats
+    if is_microsoft_format(etag) {
+        return ETagFormat::Complex;
+    }
+    
+    // Check for path-like ETags
+    if contains_path_info(etag) {
+        return ETagFormat::PathBased;
+    }
+    
+    // Check for JSON-like content
+    if etag.contains('{') && etag.contains('}') {
+        return ETagFormat::JSONLike;
+    }
+    
+    // Check for XML-like content
+    if etag.contains('<') && etag.contains('>') {
+        return ETagFormat::XMLLike;
+    }
+    
+    // Simple format for everything else
+    if etag.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        ETagFormat::Simple
+    } else {
+        ETagFormat::Unknown
+    }
+}
+
+fn is_uuid_like(s: &str) -> bool {
+    // UUID patterns: 8-4-4-4-12 hex digits
+    let uuid_regex = regex::Regex::new(r"^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$").unwrap();
+    uuid_regex.is_match(s) || s.contains("GUID") || (s.starts_with('{') && s.ends_with('}') && s.len() > 30)
+}
+
+fn is_hash_like(s: &str) -> bool {
+    // MD5 (32 hex), SHA1 (40 hex), SHA256 (64 hex)
+    let hex_only = s.chars().all(|c| c.is_ascii_hexdigit());
+    hex_only && (s.len() == 32 || s.len() == 40 || s.len() == 64)
+}
+
+fn contains_timestamp(s: &str) -> bool {
+    s.contains("timestamp") || s.contains("mtime") || s.contains("ts:") || 
+    s.contains("epoch") || s.contains("T") && s.contains("Z") ||
+    s.contains("1648") || s.contains("202") // Common timestamp prefixes
+}
+
+fn contains_version_info(s: &str) -> bool {
+    s.contains("version") || s.contains("rev:") || s.contains("v1.") || 
+    s.contains("revision") || s.contains("commit") || s.contains("branch")
+}
+
+fn is_encoded_format(s: &str) -> bool {
+    s.contains("base64:") || s.contains("gzip:") || s.contains("url-encoded:") ||
+    (s.ends_with("==") || s.ends_with("=")) && s.len() > 10 // Base64-like
+}
+
+fn is_microsoft_format(s: &str) -> bool {
+    s.contains("SP") && (s.contains("Replication") || s.contains("FileVersion")) ||
+    s.contains("ChangeKey") || s.contains("#ReplDigest") ||
+    s.contains("CQA") // Common in Exchange ETags
+}
+
+fn contains_path_info(s: &str) -> bool {
+    s.contains("/") && (s.contains(".") || s.contains("file://") || s.contains("./"))
 }
 
 #[cfg(test)]

@@ -74,6 +74,9 @@ futures = "0.3"
 testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
 
+# Enable test-utils feature for all tests
+readur = { path = ".", features = ["test-utils"] }
+
 [profile.test]
 incremental = false
 debug = false

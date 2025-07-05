@@ -1,8 +1,8 @@
 use readur::services::webdav::{WebDAVService, WebDAVConfig, RetryConfig};
+use readur::webdav_xml_parser::parse_propfind_response;
 use readur::models::FileInfo;
 use readur::models::*;
-use tokio;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use uuid::Uuid;
 
 // Mock WebDAV responses for comprehensive testing
@@ -217,7 +217,7 @@ fn test_webdav_response_parsing_comprehensive() {
     
     // Test Nextcloud response parsing
     let nextcloud_response = mock_nextcloud_propfind_response();
-    let files = service.parse_webdav_response(&nextcloud_response);
+    let files = parse_propfind_response(&nextcloud_response);
     assert!(files.is_ok());
 
     let files = files.unwrap();
@@ -271,7 +271,7 @@ fn test_empty_folder_parsing() {
     let service = WebDAVService::new(config).unwrap();
     let response = mock_empty_folder_response();
     
-    let files = service.parse_webdav_response(&response);
+    let files = parse_propfind_response(&response);
     assert!(files.is_ok());
     
     let files = files.unwrap();
@@ -294,7 +294,7 @@ fn test_malformed_xml_handling() {
     let response = mock_malformed_xml_response();
     
     // Current simple parser might still extract some data from malformed XML
-    let result = service.parse_webdav_response(&response);
+    let result = parse_propfind_response(&response);
     // It might succeed or fail depending on how robust the parser is
     assert!(result.is_ok() || result.is_err());
 }
