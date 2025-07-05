@@ -2,7 +2,7 @@
 // This file is automatically loaded before all tests
 
 import '@testing-library/jest-dom'
-import { vi } from 'vitest'
+import { vi, beforeEach, afterEach } from 'vitest'
 import { setupTestEnvironment } from './test-utils.tsx'
 
 // Setup global test environment
