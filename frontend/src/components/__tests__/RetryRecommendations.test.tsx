@@ -1,19 +1,33 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { RetryRecommendations } from '../RetryRecommendations';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../test/comprehensive-mocks';
 
-// Create unique mock functions for this test file
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
+
+// Create mock functions for this specific test
 const mockGetRetryRecommendations = vi.fn();
 const mockBulkRetryOcr = vi.fn();
 
-// Mock the API module with a unique namespace for this test
-vi.mock('../../services/api', () => ({
-  documentService: {
-    getRetryRecommendations: mockGetRetryRecommendations,
-    bulkRetryOcr: mockBulkRetryOcr,
-  },
-}));
+// Mock the API module with comprehensive mocking
+vi.mock('../../services/api', async () => {
+  const actual = await vi.importActual('../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    ...apiMocks,
+    documentService: {
+      ...apiMocks.documentService,
+      getRetryRecommendations: mockGetRetryRecommendations,
+      bulkRetryOcr: mockBulkRetryOcr,
+    },
+  };
+});
+
+// Import after mocking
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { RetryRecommendations } from '../RetryRecommendations';
 
 describe('RetryRecommendations', () => {
   const mockProps = {

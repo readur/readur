@@ -1,20 +1,46 @@
-import { screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
-import OidcCallback from '../OidcCallback';
-import { renderWithProviders, setupTestEnvironment } from '../../../test/test-utils';
-import { api } from '../../../services/api';
+import React from 'react';
 
-// Mock the API
-vi.mock('../../../services/api', () => ({
-  api: {
-    get: vi.fn(),
-    defaults: {
-      headers: {
-        common: {}
-      }
+// Create stable mock functions
+const mockLogin = vi.fn().mockResolvedValue({});
+const mockRegister = vi.fn().mockResolvedValue({});
+const mockLogout = vi.fn();
+
+// Mock the auth context module completely
+vi.mock('../../../contexts/AuthContext', () => ({
+  useAuth: vi.fn(() => ({
+    user: null,
+    loading: false,
+    login: mockLogin,
+    register: mockRegister,
+    logout: mockLogout,
+  })),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => React.createElement('div', null, children),
+}));
+
+// Mock axios comprehensively to prevent any real HTTP requests
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../../test/comprehensive-mocks';
+
+vi.mock('axios', () => createComprehensiveAxiosMock());
+
+// Create the mock API object
+const mockApi = {
+  get: vi.fn().mockResolvedValue({ data: { token: 'default-token' } }),
+  post: vi.fn().mockResolvedValue({ data: { success: true } }),
+  put: vi.fn().mockResolvedValue({ data: { success: true } }),
+  delete: vi.fn().mockResolvedValue({ data: { success: true } }),
+  patch: vi.fn().mockResolvedValue({ data: { success: true } }),
+  defaults: {
+    headers: {
+      common: {}
     }
   }
+};
+
+// Mock the services/api file
+vi.mock('../../../services/api', () => ({
+  api: mockApi,
+  default: mockApi,
 }));
 
 // Mock useNavigate
@@ -28,6 +54,11 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// Now import after mocks
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { renderWithProviders } from '../../../test/test-utils';
+import OidcCallback from '../OidcCallback';
+
 // Mock window.location
 Object.defineProperty(window, 'location', {
   value: {
@@ -39,28 +70,29 @@ Object.defineProperty(window, 'location', {
 describe('OidcCallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setupTestEnvironment();
+    vi.resetModules();
     window.location.href = '';
     // Clear API mocks
-    (api.get as any).mockClear();
+    mockApi.get.mockClear();
     // Reset API mocks to default implementation
-    (api.get as any).mockResolvedValue({ data: { token: 'default-token' } });
+    mockApi.get.mockResolvedValue({ data: { token: 'default-token' } });
   });
 
   const renderOidcCallback = (search = '') => {
-    return renderWithProviders(
-      <MemoryRouter initialEntries={[`/auth/oidc/callback${search}`]}>
-        <Routes>
-          <Route path="/auth/oidc/callback" element={<OidcCallback />} />
-          <Route path="/login" element={<div>Login Page</div>} />
-        </Routes>
-      </MemoryRouter>
-    );
+    // Mock the URL search params for the component
+    const url = new URL(`http://localhost/auth/oidc/callback${search}`);
+    Object.defineProperty(window, 'location', {
+      value: { search: url.search },
+      writable: true
+    });
+    
+    // Use renderWithProviders to get auth context
+    return renderWithProviders(<OidcCallback />);
   };
 
   it('shows loading state initially', async () => {
     // Mock the API call to delay so we can see the loading state
-    (api.get as any).mockImplementation(() => new Promise(() => {})); // Never resolves
+    mockApi.get.mockImplementation(() => new Promise(() => {})); // Never resolves
     
     renderOidcCallback('?code=test-code&state=test-state');
     
@@ -80,12 +112,12 @@ describe('OidcCallback', () => {
       }
     };
 
-    (api.get as any).mockResolvedValueOnce(mockResponse);
+    mockApi.get.mockResolvedValueOnce(mockResponse);
 
     renderOidcCallback('?code=test-code&state=test-state');
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/auth/oidc/callback?code=test-code&state=test-state');
+      expect(mockApi.get).toHaveBeenCalledWith('/auth/oidc/callback?code=test-code&state=test-state');
     });
 
     expect(localStorage.setItem).toHaveBeenCalledWith('token', 'test-jwt-token');
@@ -114,7 +146,7 @@ describe('OidcCallback', () => {
         }
       }
     };
-    (api.get as any).mockRejectedValueOnce(error);
+    mockApi.get.mockRejectedValueOnce(error);
 
     renderOidcCallback('?code=test-code&state=test-state');
 
@@ -125,7 +157,7 @@ describe('OidcCallback', () => {
   });
 
   it('handles invalid response from server', async () => {
-    (api.get as any).mockResolvedValueOnce({
+    mockApi.get.mockResolvedValueOnce({
       data: {
         // Missing token
         user: { id: '123' }
@@ -141,7 +173,7 @@ describe('OidcCallback', () => {
   });
 
   it('provides return to login button on error', async () => {
-    (api.get as any).mockRejectedValueOnce(new Error('Network error'));
+    mockApi.get.mockRejectedValueOnce(new Error('Network error'));
 
     renderOidcCallback('?code=test-code&state=test-state');
 

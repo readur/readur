@@ -1,7 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, act } from '@testing-library/react';
+import { screen, act, render } from '@testing-library/react';
 import { NotificationProvider, useNotifications } from '../NotificationContext';
-import { renderWithProviders, setupTestEnvironment } from '../../test/test-utils';
+import { renderWithProviders } from '../../test/test-utils';
 import React from 'react';
 
 // Simple test component
@@ -62,7 +62,6 @@ const renderWithProvider = () => {
 
 describe('NotificationContext - Simple Tests', () => {
   beforeEach(() => {
-    setupTestEnvironment();
     vi.useFakeTimers();
   });
 
@@ -164,7 +163,7 @@ describe('NotificationContext - Simple Tests', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     
     expect(() => {
-      renderWithProviders(<SimpleTestComponent />);
+      render(<SimpleTestComponent />);
     }).toThrow('useNotifications must be used within NotificationProvider');
     
     consoleSpy.mockRestore();
@@ -198,7 +197,6 @@ describe('NotificationContext - Types', () => {
   };
 
   beforeEach(() => {
-    setupTestEnvironment();
     vi.useFakeTimers();
   });
 

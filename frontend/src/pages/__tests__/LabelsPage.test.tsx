@@ -3,7 +3,8 @@ import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LabelsPage from '../LabelsPage';
 import * as useApiModule from '../../hooks/useApi';
-import { renderWithAuthenticatedUser, setupTestEnvironment } from '../../test/test-utils';\nimport { createMockLabel } from '../../test/label-test-utils';
+import { renderWithAuthenticatedUser } from '../../test/test-utils';
+import { createMockLabel } from '../../test/label-test-utils';
 
 const mockLabels = [
   createMockLabel({
@@ -66,7 +67,6 @@ describe('LabelsPage Component', () => {
   };
 
   beforeEach(() => {
-    setupTestEnvironment();
     user = userEvent.setup();
     
     mockApi = {

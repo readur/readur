@@ -1,8 +1,8 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
+import { renderWithProviders } from '../../../test/test-utils';
 import NotificationPanel from '../NotificationPanel';
 import { NotificationProvider } from '../../../contexts/NotificationContext';
-import { renderWithProviders, setupTestEnvironment } from '../../../test/test-utils';
 import React from 'react';
 
 // Mock date-fns
@@ -28,7 +28,6 @@ const createMockAnchorEl = () => {
 
 describe('NotificationPanel - Simple Tests', () => {
   beforeEach(() => {
-    setupTestEnvironment();
   });
   test('should not render when anchorEl is null', () => {
     const { container } = renderWithProviders(

@@ -2,6 +2,7 @@ import React from 'react'
 import { render, RenderOptions } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { vi } from 'vitest'
+import { NotificationProvider } from '../contexts/NotificationContext'
 
 interface User {
   id: string
@@ -38,12 +39,46 @@ export const createMockAdminUser = (overrides: Partial<User> = {}): User => ({
 // Centralized API mocking to eliminate per-file duplication
 export const createMockApiServices = () => {
   const mockDocumentService = {
-    enhancedSearch: vi.fn().mockResolvedValue({ documents: [], total: 0 }),
+    enhancedSearch: vi.fn().mockResolvedValue({ 
+      data: { 
+        documents: [], 
+        total: 0, 
+        query_time_ms: 0, 
+        suggestions: [] 
+      } 
+    }),
+    search: vi.fn().mockResolvedValue({ 
+      data: { 
+        documents: [], 
+        total: 0, 
+        query_time_ms: 0, 
+        suggestions: [] 
+      } 
+    }),
     bulkRetryOcr: vi.fn().mockResolvedValue({ success: true }),
     getDocument: vi.fn().mockResolvedValue({}),
-    uploadDocument: vi.fn().mockResolvedValue({}),
-    deleteDocument: vi.fn().mockResolvedValue({}),
-    updateDocument: vi.fn().mockResolvedValue({}),
+    getById: vi.fn().mockResolvedValue({ data: {} }),
+    upload: vi.fn().mockResolvedValue({ data: {} }),
+    list: vi.fn().mockResolvedValue({ data: [] }),
+    listWithPagination: vi.fn().mockResolvedValue({ data: { documents: [], pagination: { total: 0, limit: 20, offset: 0, has_more: false } } }),
+    delete: vi.fn().mockResolvedValue({}),
+    bulkDelete: vi.fn().mockResolvedValue({}),
+    retryOcr: vi.fn().mockResolvedValue({}),
+    getFacets: vi.fn().mockResolvedValue({ data: { mime_types: [], tags: [] } }),
+    getOcrText: vi.fn().mockResolvedValue({ data: {} }),
+    download: vi.fn().mockResolvedValue({ data: new Blob() }),
+    getFailedOcrDocuments: vi.fn().mockResolvedValue({ data: [] }),
+    getFailedDocuments: vi.fn().mockResolvedValue({ data: [] }),
+    deleteLowConfidence: vi.fn().mockResolvedValue({ data: {} }),
+    deleteFailedOcr: vi.fn().mockResolvedValue({ data: {} }),
+    view: vi.fn().mockResolvedValue({ data: new Blob() }),
+    getThumbnail: vi.fn().mockResolvedValue({ data: new Blob() }),
+    getProcessedImage: vi.fn().mockResolvedValue({ data: new Blob() }),
+    downloadFile: vi.fn().mockResolvedValue(undefined),
+    getDuplicates: vi.fn().mockResolvedValue({ data: [] }),
+    getRetryStats: vi.fn().mockResolvedValue({ data: {} }),
+    getRetryRecommendations: vi.fn().mockResolvedValue({ data: [] }),
+    getDocumentRetryHistory: vi.fn().mockResolvedValue({ data: [] }),
   }
 
   const mockAuthService = {
@@ -77,24 +112,11 @@ export const createMockApiServices = () => {
 }
 
 // Setup global API mocks (call this in setup files)
+// Note: Individual test files should handle their own vi.mock() calls
 export const setupApiMocks = () => {
-  const mockServices = createMockApiServices()
-  
-  vi.mock('../../services/api', () => ({
-    documentService: mockServices.documentService,
-    authService: mockServices.authService,
-    sourceService: mockServices.sourceService,
-    labelService: mockServices.labelService,
-    api: {
-      defaults: {
-        headers: {
-          common: {}
-        }
-      }
-    }
-  }))
-
-  return mockServices
+  // Just return the mock services for use in tests
+  // The actual vi.mock() should be done in individual test files
+  return createMockApiServices()
 }
 
 // Create a mock AuthProvider for testing
@@ -136,9 +158,11 @@ const AllTheProviders = ({
 }) => {
   return (
     <BrowserRouter {...routerProps}>
-      <MockAuthProvider mockValues={authValues}>
-        {children}
-      </MockAuthProvider>
+      <NotificationProvider>
+        <MockAuthProvider mockValues={authValues}>
+          {children}
+        </MockAuthProvider>
+      </NotificationProvider>
     </BrowserRouter>
   )
 }

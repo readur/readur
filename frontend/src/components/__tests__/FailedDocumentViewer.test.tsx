@@ -1,16 +1,48 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
-import FailedDocumentViewer from '../FailedDocumentViewer';
-import { api } from '../../services/api';
-import { renderWithProviders, setupTestEnvironment } from '../../test/test-utils';
 
-// Mock the API
+// Create mock function before imports
+const mockApiGet = vi.fn();
+
+// Mock the api module before importing anything else
 vi.mock('../../services/api', () => ({
   api: {
-    get: vi.fn(),
-  },
+    get: mockApiGet,
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    patch: vi.fn(),
+    defaults: { headers: { common: {} } },
+    create: vi.fn(),
+    interceptors: {
+      request: { use: vi.fn(), eject: vi.fn() },
+      response: { use: vi.fn(), eject: vi.fn() }
+    }
+  }
 }));
 
+// Import after mocking
+import { screen, waitFor } from '@testing-library/react';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import FailedDocumentViewer from '../FailedDocumentViewer';
+import { renderWithProviders } from '../../test/test-utils';
+const theme = createTheme();
+
+// Mock URL constructor with static methods
+const mockCreateObjectURL = vi.fn(() => 'mock-object-url');
+const mockRevokeObjectURL = vi.fn();
+
+global.URL = class URL {
+  constructor(url) {
+    this.href = url;
+    this.protocol = 'http:';
+    this.hostname = 'localhost';
+    this.pathname = '/';
+    this.search = '';
+  }
+  
+  static createObjectURL = mockCreateObjectURL;
+  static revokeObjectURL = mockRevokeObjectURL;
+} as any;
 
 const defaultProps = {
   failedDocumentId: 'test-failed-doc-id',
@@ -26,23 +58,19 @@ const renderFailedDocumentViewer = (props = {}) => {
   );
 };
 
-// Mock Blob and URL.createObjectURL
+// Mock Blob
 const mockBlob = vi.fn(() => ({
   text: () => Promise.resolve('mock text content'),
 }));
 global.Blob = mockBlob as any;
 
-const mockCreateObjectURL = vi.fn(() => 'mock-object-url');
-const mockRevokeObjectURL = vi.fn();
-global.URL = {
-  createObjectURL: mockCreateObjectURL,
-  revokeObjectURL: mockRevokeObjectURL,
-} as any;
-
 describe('FailedDocumentViewer', () => {
   beforeEach(() => {
-    setupTestEnvironment();
     vi.clearAllMocks();
+    // Set default mock response
+    mockApiGet.mockResolvedValue({
+      data: new Blob(['mock document content'], { type: 'application/pdf' })
+    });
   });
 
   afterEach(() => {
@@ -52,7 +80,7 @@ describe('FailedDocumentViewer', () => {
   describe('Loading State', () => {
     test('should show loading spinner initially', () => {
       // Mock API to never resolve
-      vi.mocked(api.get).mockImplementation(() => new Promise(() => {}));
+      mockApiGet.mockImplementation(() => new Promise(() => {}));
       
       renderFailedDocumentViewer();
       
@@ -60,7 +88,7 @@ describe('FailedDocumentViewer', () => {
     });
 
     test('should show loading spinner with correct styling', () => {
-      vi.mocked(api.get).mockImplementation(() => new Promise(() => {}));
+      mockApiGet.mockImplementation(() => new Promise(() => {}));
       
       renderFailedDocumentViewer();
       
@@ -79,12 +107,12 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock pdf content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer();
 
       await waitFor(() => {
-        expect(api.get).toHaveBeenCalledWith('/documents/failed/test-failed-doc-id/view', {
+        expect(mockApiGet).toHaveBeenCalledWith('/documents/failed/test-failed-doc-id/view', {
           responseType: 'blob'
         });
       });
@@ -102,7 +130,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock image content'], { type: 'image/jpeg' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         filename: 'test-image.jpg',
@@ -125,7 +153,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock text content'], { type: 'text/plain' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         filename: 'test-file.txt',
@@ -143,7 +171,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/unknown' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         filename: 'test-file.unknown',
@@ -163,7 +191,7 @@ describe('FailedDocumentViewer', () => {
       const error = {
         response: { status: 404 }
       };
-      vi.mocked(api.get).mockRejectedValueOnce(error);
+      mockApiGet.mockRejectedValueOnce(error);
 
       renderFailedDocumentViewer();
 
@@ -175,7 +203,7 @@ describe('FailedDocumentViewer', () => {
 
     test('should show generic error for other failures', async () => {
       const error = new Error('Network error');
-      vi.mocked(api.get).mockRejectedValueOnce(error);
+      mockApiGet.mockRejectedValueOnce(error);
 
       renderFailedDocumentViewer();
 
@@ -189,7 +217,7 @@ describe('FailedDocumentViewer', () => {
       const error = {
         response: { status: 500 }
       };
-      vi.mocked(api.get).mockRejectedValueOnce(error);
+      mockApiGet.mockRejectedValueOnce(error);
 
       renderFailedDocumentViewer();
 
@@ -204,7 +232,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer();
 
@@ -222,34 +250,29 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValue(mockResponse);
+      mockApiGet.mockResolvedValue(mockResponse);
 
       const { rerender } = renderFailedDocumentViewer();
 
       await waitFor(() => {
-        expect(api.get).toHaveBeenCalledWith('/documents/failed/test-failed-doc-id/view', {
+        expect(mockApiGet).toHaveBeenCalledWith('/documents/failed/test-failed-doc-id/view', {
           responseType: 'blob'
         });
       });
 
       // Change the failedDocumentId
+      const newProps = { ...defaultProps, failedDocumentId: "new-doc-id" };
       rerender(
-        <ThemeProvider theme={theme}>
-          <FailedDocumentViewer
-            failedDocumentId="new-doc-id"
-            filename="test-document.pdf"
-            mimeType="application/pdf"
-          />
-        </ThemeProvider>
+        <FailedDocumentViewer {...newProps} />
       );
 
       await waitFor(() => {
-        expect(api.get).toHaveBeenCalledWith('/documents/failed/new-doc-id/view', {
+        expect(mockApiGet).toHaveBeenCalledWith('/documents/failed/new-doc-id/view', {
           responseType: 'blob'
         });
       });
 
-      expect(api.get).toHaveBeenCalledTimes(2);
+      expect(mockApiGet).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -258,7 +281,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock pdf content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         mimeType: 'application/pdf'
@@ -278,7 +301,7 @@ describe('FailedDocumentViewer', () => {
         const mockResponse = {
           data: new Blob(['mock image content'], { type: mimeType }),
         };
-        vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+        mockApiGet.mockResolvedValueOnce(mockResponse);
 
         const filename = `test.${mimeType.split('/')[1]}`;
         renderFailedDocumentViewer({
@@ -304,7 +327,7 @@ describe('FailedDocumentViewer', () => {
         const mockResponse = {
           data: new Blob(['mock text content'], { type: mimeType }),
         };
-        vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+        mockApiGet.mockResolvedValueOnce(mockResponse);
 
         const filename = `test.${mimeType.split('/')[1]}`;
         renderFailedDocumentViewer({
@@ -329,7 +352,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer();
 
@@ -343,7 +366,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock image content'], { type: 'image/jpeg' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         mimeType: 'image/jpeg'
@@ -363,12 +386,12 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer();
 
       await waitFor(() => {
-        expect(api.get).toHaveBeenCalledWith('/documents/failed/test-failed-doc-id/view', {
+        expect(mockApiGet).toHaveBeenCalledWith('/documents/failed/test-failed-doc-id/view', {
           responseType: 'blob'
         });
       });
@@ -378,14 +401,14 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         failedDocumentId: 'different-doc-id'
       });
 
       await waitFor(() => {
-        expect(api.get).toHaveBeenCalledWith('/documents/failed/different-doc-id/view', {
+        expect(mockApiGet).toHaveBeenCalledWith('/documents/failed/different-doc-id/view', {
           responseType: 'blob'
         });
       });
@@ -397,7 +420,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob([], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer();
 
@@ -413,7 +436,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         filename: longFilename
@@ -429,7 +452,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         filename: specialFilename
@@ -444,7 +467,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: '' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         mimeType: undefined as any
@@ -462,7 +485,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock content'], { type: 'application/pdf' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer();
 
@@ -476,7 +499,7 @@ describe('FailedDocumentViewer', () => {
       const mockResponse = {
         data: new Blob(['mock image content'], { type: 'image/jpeg' }),
       };
-      vi.mocked(api.get).mockResolvedValueOnce(mockResponse);
+      mockApiGet.mockResolvedValueOnce(mockResponse);
 
       renderFailedDocumentViewer({
         mimeType: 'image/jpeg'

@@ -1,23 +1,26 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
+import { renderWithAuthenticatedUser } from '../../test/test-utils';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../test/comprehensive-mocks';
 import SearchPage from '../SearchPage';
-import { renderWithAuthenticatedUser, createMockUser, setupTestEnvironment } from '../../test/test-utils';
 
-// Mock API functions
-vi.mock('../../services/api', () => ({
-  searchDocuments: vi.fn(() => Promise.resolve({ 
-    results: [], 
-    total: 0, 
-    page: 1, 
-    page_size: 20 
-  })),
-  getSettings: vi.fn(() => Promise.resolve({})),
-}));
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
+
+// Mock API services comprehensively
+vi.mock('../../services/api', async () => {
+  const actual = await vi.importActual('../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    ...apiMocks,
+  };
+});
 
 describe('SearchPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setupTestEnvironment();
   });
 
   test('renders search page structure', () => {

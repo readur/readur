@@ -3,7 +3,7 @@
 
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
-import { setupTestEnvironment } from './test-utils'
+import { setupTestEnvironment } from './test-utils.tsx'
 
 // Setup global test environment
 setupTestEnvironment()

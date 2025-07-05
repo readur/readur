@@ -1,32 +1,29 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../../test/comprehensive-mocks';
+
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
+
+// Mock API services comprehensively
+vi.mock('../../../services/api', async () => {
+  const actual = await vi.importActual('../../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    ...apiMocks,
+  };
+});
+
+// Import after mocking
 import { screen, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UploadZone from '../UploadZone';
-import { renderWithProviders, setupTestEnvironment, createMockApiServices } from '../../../test/test-utils';
+import { renderWithProviders, createMockApiServices } from '../../../test/test-utils';
 import { createMockLabel } from '../../../test/label-test-utils';
 
 // Setup centralized API mocks for this component
 const mockApiServices = createMockApiServices();
-
-// Mock axios directly with our mock labels
-vi.mock('axios', () => ({
-  default: {
-    create: vi.fn(() => ({
-      get: vi.fn().mockResolvedValue({ 
-        status: 200, 
-        data: [createMockLabel({
-          name: 'Test Label',
-          color: '#0969da',
-          document_count: 0,
-          source_count: 0,
-        })]
-      }),
-      post: vi.fn().mockResolvedValue({ status: 201, data: {} }),
-      put: vi.fn().mockResolvedValue({ status: 200, data: {} }),
-      delete: vi.fn().mockResolvedValue({ status: 204 }),
-    })),
-  },
-}));
 
 const mockProps = {
   onUploadComplete: vi.fn(),
@@ -37,7 +34,6 @@ describe('UploadZone', () => {
   
   beforeEach(() => {
     vi.clearAllMocks();
-    setupTestEnvironment();
     // Suppress console.error for "Failed to fetch labels" during tests
     originalConsoleError = console.error;
     console.error = vi.fn().mockImplementation((message, ...args) => {
@@ -67,7 +63,7 @@ describe('UploadZone', () => {
   });
 
   test('shows accepted file types in UI', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     // Wait for component to load
     await waitFor(() => {
@@ -79,7 +75,7 @@ describe('UploadZone', () => {
   });
 
   test('displays max file size limit', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     await waitFor(() => {
       expect(screen.getByText(/maximum file size/i)).toBeInTheDocument();
@@ -89,7 +85,7 @@ describe('UploadZone', () => {
   });
 
   test('shows browse files button', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     await waitFor(() => {
       const browseButton = screen.getByRole('button', { name: /choose files/i });
@@ -161,7 +157,7 @@ describe('UploadZone', () => {
 
   test('handles click to browse files', async () => {
     const user = userEvent.setup();
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     await waitFor(() => {
       const browseButton = screen.getByRole('button', { name: /choose files/i });
@@ -178,7 +174,7 @@ describe('UploadZone', () => {
   });
 
   test('renders upload zone structure correctly', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     // Wait for component to load
     await waitFor(() => {

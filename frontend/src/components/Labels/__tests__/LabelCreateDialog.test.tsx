@@ -1,14 +1,16 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import LabelCreateDialog from '../LabelCreateDialog';
 import { type LabelData } from '../Label';
 import { renderWithProviders } from '../../../test/test-utils';
 import { 
   createMockLabel, 
-  setupTestEnvironment,
   labelValidationScenarios 
 } from '../../../test/label-test-utils';
+
+const theme = createTheme();
 
 const mockEditingLabel = createMockLabel({
   name: 'Existing Label',
@@ -33,7 +35,6 @@ describe('LabelCreateDialog Component', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
-    setupTestEnvironment();
     user = userEvent.setup();
   });
 

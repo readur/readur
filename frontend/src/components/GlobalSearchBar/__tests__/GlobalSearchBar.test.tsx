@@ -1,14 +1,19 @@
-import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import GlobalSearchBar from '../GlobalSearchBar';
-import { renderWithProviders, createMockApiServices, setupTestEnvironment, createMockLocalStorage } from '../../../test/test-utils';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../../test/comprehensive-mocks';
 
-// Use centralized API mocking
-const mockServices = createMockApiServices();
-const mockDocumentService = mockServices.documentService;
-const localStorageMock = createMockLocalStorage();
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
+
+// Mock API services comprehensively
+vi.mock('../../../services/api', async () => {
+  const actual = await vi.importActual('../../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    ...apiMocks,
+  };
+});
 
 // Mock useNavigate
 const mockNavigate = vi.fn();
@@ -19,6 +24,18 @@ vi.mock('react-router-dom', async () => {
     useNavigate: () => mockNavigate,
   };
 });
+
+// Import after mocking
+import React from 'react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import GlobalSearchBar from '../GlobalSearchBar';
+import { renderWithProviders, createMockApiServices, createMockLocalStorage } from '../../../test/test-utils';
+
+// Use centralized API mocking
+const mockServices = createMockApiServices();
+const mockDocumentService = mockServices.documentService;
+const localStorageMock = createMockLocalStorage();
 
 // Mock data
 const mockSearchResponse = {
@@ -45,7 +62,6 @@ const mockSearchResponse = {
 describe('GlobalSearchBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setupTestEnvironment();
     localStorageMock.getItem.mockReturnValue(null);
     mockDocumentService.enhancedSearch.mockResolvedValue(mockSearchResponse);
   });

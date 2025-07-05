@@ -1,8 +1,8 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProviders } from '../../test/test-utils';
 import TestNotification from '../TestNotification';
 import { NotificationProvider } from '../../contexts/NotificationContext';
-import { renderWithProviders, setupTestEnvironment } from '../../test/test-utils';
 import React from 'react';
 
 const renderTestNotification = () => {
@@ -15,7 +15,6 @@ const renderTestNotification = () => {
 
 describe('TestNotification', () => {
   beforeEach(() => {
-    setupTestEnvironment();
     vi.clearAllMocks();
   });
 

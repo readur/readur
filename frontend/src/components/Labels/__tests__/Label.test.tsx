@@ -4,8 +4,7 @@ import Label, { type LabelData } from '../Label';
 import { renderWithProviders } from '../../../test/test-utils';
 import { 
   createMockLabel, 
-  createMockSystemLabel,
-  setupTestEnvironment 
+  createMockSystemLabel
 } from '../../../test/label-test-utils';
 
 const mockLabel = createMockLabel({
@@ -31,7 +30,7 @@ const renderLabel = (props: Partial<React.ComponentProps<typeof Label>> = {}) =>
 
 describe('Label Component', () => {
   beforeEach(() => {
-    setupTestEnvironment();
+    // Test setup is handled globally
   });
 
   describe('Basic Rendering', () => {

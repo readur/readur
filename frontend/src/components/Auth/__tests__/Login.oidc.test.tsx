@@ -1,7 +1,23 @@
-import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
-import Login from '../Login';
-import { renderWithProviders, setupTestEnvironment } from '../../../test/test-utils';
+
+// Mock AuthContext to work with the test setup
+vi.mock('../../../contexts/AuthContext', () => ({
+  useAuth: vi.fn(() => ({
+    user: null,
+    loading: false,
+    login: vi.fn().mockResolvedValue({}),
+    register: vi.fn().mockResolvedValue({}),
+    logout: vi.fn(),
+  })),
+}));
+
+// Mock ThemeContext
+vi.mock('../../../contexts/ThemeContext', () => ({
+  useTheme: () => ({ 
+    darkMode: false, 
+    toggleDarkMode: vi.fn() 
+  }),
+}));
 
 // Mock the API
 vi.mock('../../../services/api', () => ({
@@ -25,6 +41,11 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// Now import after all mocks are set up
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders, createMockUser } from '../../../test/test-utils';
+import Login from '../Login';
+
 // Mock window.location
 Object.defineProperty(window, 'location', {
   value: {
@@ -36,7 +57,6 @@ Object.defineProperty(window, 'location', {
 describe('Login - OIDC Features', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setupTestEnvironment();
   });
 
   const renderLogin = () => {

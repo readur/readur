@@ -5,7 +5,6 @@ import LabelSelector from '../LabelSelector';
 import { type LabelData } from '../Label';
 import { renderWithProviders } from '../../../test/test-utils';
 import { 
-  setupTestEnvironment,
   testDataBuilders 
 } from '../../../test/label-test-utils';
 
@@ -26,7 +25,6 @@ describe('LabelSelector Component', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
-    setupTestEnvironment();
     user = userEvent.setup();
   });
 
@@ -81,7 +79,7 @@ describe('LabelSelector Component', () => {
       
       await waitFor(() => {
         expect(screen.getByText('Work')).toBeInTheDocument();
-        expect(screen.getByText('Personal Project')).toBeInTheDocument();
+        expect(screen.getByText('Project Alpha')).toBeInTheDocument();
       });
       
       // Important should not appear in the dropdown options (but may appear in selected tags)
@@ -141,7 +139,7 @@ describe('LabelSelector Component', () => {
     test('should remove label when delete button is clicked', async () => {
       const onLabelsChange = vi.fn();
       // Use only non-system labels since system labels don't have delete buttons
-      const selectedLabels = [mockLabels[2]]; // Personal Project (non-system)
+      const selectedLabels = [mockLabels[3]]; // Project Alpha (non-system)
       
       renderLabelSelector({ 
         selectedLabels,
@@ -149,7 +147,7 @@ describe('LabelSelector Component', () => {
       });
       
       // Find the chip with the delete button
-      const personalProjectChip = screen.getByText('Personal Project').closest('.MuiChip-root');
+      const personalProjectChip = screen.getByText('Project Alpha').closest('.MuiChip-root');
       expect(personalProjectChip).toBeInTheDocument();
       
       // Find the delete button within that specific chip
@@ -164,7 +162,7 @@ describe('LabelSelector Component', () => {
     });
 
     test('should not show delete buttons when disabled', () => {
-      const selectedLabels = [mockLabels[2]]; // Non-system label
+      const selectedLabels = [mockLabels[3]]; // Non-system label
       
       renderLabelSelector({ 
         selectedLabels,
@@ -186,7 +184,7 @@ describe('LabelSelector Component', () => {
         // Check that labels appear in the dropdown
         expect(screen.getByText('Important')).toBeInTheDocument();
         expect(screen.getByText('Work')).toBeInTheDocument();
-        expect(screen.getByText('Personal Project')).toBeInTheDocument();
+        expect(screen.getByText('Project Alpha')).toBeInTheDocument();
       });
     });
 
@@ -200,7 +198,7 @@ describe('LabelSelector Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
         expect(screen.getByText('Work')).toBeInTheDocument();
-        expect(screen.queryByText('Personal Project')).not.toBeInTheDocument();
+        expect(screen.queryByText('Project Alpha')).not.toBeInTheDocument();
       });
     });
   });
@@ -215,7 +213,7 @@ describe('LabelSelector Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Work')).toBeInTheDocument();
         expect(screen.queryByText('Important')).not.toBeInTheDocument();
-        expect(screen.queryByText('Personal Project')).not.toBeInTheDocument();
+        expect(screen.queryByText('Project Alpha')).not.toBeInTheDocument();
       });
     });
 
@@ -376,10 +374,10 @@ describe('LabelSelector Component', () => {
       await user.click(input);
       
       await waitFor(() => {
-        expect(screen.getByText('Personal Project')).toBeInTheDocument();
+        expect(screen.getByText('Project Alpha')).toBeInTheDocument();
       });
       
-      await user.click(screen.getByText('Personal Project'));
+      await user.click(screen.getByText('Project Alpha'));
       
       // Should not add the third label due to maxTags limit
       expect(onLabelsChange).not.toHaveBeenCalled();

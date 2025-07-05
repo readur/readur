@@ -2,11 +2,26 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import api from '../../services/api';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../test/comprehensive-mocks';
 
-// Mock the API
-vi.mock('../../services/api');
-const mockedApi = vi.mocked(api);
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
+
+// Mock API services comprehensively
+vi.mock('../../services/api', async () => {
+  const actual = await vi.importActual('../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    default: apiMocks.api, // Since this file imports `api` as default
+    ...apiMocks,
+  };
+});
+
+// Get references to the mocked modules using dynamic import
+const { default: api } = await import('../../services/api');
+const mockedApi = api;
 
 // Mock settings with WebDAV configuration
 const mockSettings = {
