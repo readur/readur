@@ -67,7 +67,7 @@ async fn test_discover_files_in_folder_shallow() {
     </d:multistatus>"#;
     
     // Test that shallow parsing works correctly
-    let files = service.parse_webdav_response_with_directories(mock_response).unwrap();
+    let files = readur::webdav_xml_parser::parse_propfind_response_with_directories(mock_response).unwrap();
     
     // Debug print to see what files we actually got
     for file in &files {

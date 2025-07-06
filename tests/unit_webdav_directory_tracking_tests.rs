@@ -205,7 +205,8 @@ async fn test_parse_directory_etag() {
     
     // Test parsing a simple directory ETag response
     let xml_response = mock_directory_etag_response("test-etag-123");
-    let etag = service.parse_directory_etag(&xml_response).unwrap();
+    let files = readur::webdav_xml_parser::parse_propfind_response_with_directories(&xml_response).unwrap();
+    let etag = files.iter().find(|f| f.is_directory).unwrap().etag.clone();
     
     assert_eq!(etag, "test-etag-123");
 }
@@ -228,7 +229,8 @@ async fn test_parse_directory_etag_with_quotes() {
         </d:response>
     </d:multistatus>"#;
     
-    let etag = service.parse_directory_etag(xml_response).unwrap();
+    let files = readur::webdav_xml_parser::parse_propfind_response_with_directories(xml_response).unwrap();
+    let etag = files.iter().find(|f| f.is_directory).unwrap().etag.clone();
     assert_eq!(etag, "quoted-etag-456");
 }
 
@@ -250,7 +252,8 @@ async fn test_parse_directory_etag_weak_etag() {
         </d:response>
     </d:multistatus>"#;
     
-    let etag = service.parse_directory_etag(xml_response).unwrap();
+    let files = readur::webdav_xml_parser::parse_propfind_response_with_directories(xml_response).unwrap();
+    let etag = files.iter().find(|f| f.is_directory).unwrap().etag.clone();
     assert_eq!(etag, "weak-etag-789");
 }
 
