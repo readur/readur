@@ -36,17 +36,25 @@ export class AuthHelper {
     await this.page.goto('/');
     await this.page.waitForLoadState('networkidle');
     
-    // Check if already logged in
-    const usernameInput = await this.page.locator('input[name="username"]').isVisible().catch(() => false);
+    // Check if already logged in by looking for dashboard content
+    const welcomeText = await this.page.locator('h4:has-text("Welcome back,")').isVisible().catch(() => false);
     
-    if (!usernameInput) {
-      console.log('Already logged in or no login form found');
+    if (welcomeText) {
+      console.log('Already logged in - found welcome message');
       return;
     }
     
+    // Look for login form - Material-UI TextFields with labels
+    const usernameField = this.page.locator('input[data-testid="username"], input[label="Username"], input[placeholder="Username"], input[type="text"]').first();
+    const passwordField = this.page.locator('input[data-testid="password"], input[label="Password"], input[placeholder="Password"], input[type="password"]').first();
+    
+    // Wait for login form to be visible
+    await usernameField.waitFor({ state: 'visible', timeout: TIMEOUTS.login });
+    await passwordField.waitFor({ state: 'visible', timeout: TIMEOUTS.login });
+    
     // Fill login form
-    await this.page.fill('input[name="username"]', credentials.username);
-    await this.page.fill('input[name="password"]', credentials.password);
+    await usernameField.fill(credentials.username);
+    await passwordField.fill(credentials.password);
     
     // Wait for login API response
     const loginPromise = this.page.waitForResponse(response => 
@@ -54,17 +62,18 @@ export class AuthHelper {
       { timeout: TIMEOUTS.login }
     );
     
+    // Click submit button
     await this.page.click('button[type="submit"]');
     
     try {
       await loginPromise;
       console.log(`Login as ${credentials.username} successful`);
       
-      // Wait for navigation away from login page
-      await this.page.waitForFunction(() => 
-        !window.location.pathname.includes('/login'),
-        { timeout: TIMEOUTS.navigation }
-      );
+      // Wait for navigation to dashboard
+      await this.page.waitForURL(/.*\/dashboard.*/, { timeout: TIMEOUTS.navigation });
+      
+      // Verify login by checking for welcome message
+      await this.page.waitForSelector('h4:has-text("Welcome back,")', { timeout: TIMEOUTS.navigation });
       
       console.log('Navigation completed to:', this.page.url());
     } catch (error) {
@@ -93,7 +102,7 @@ export class AuthHelper {
     await this.page.waitForLoadState('networkidle');
     
     // If we see a login form, we're already logged out
-    const usernameInput = await this.page.locator('input[name="username"]').isVisible().catch(() => false);
+    const usernameInput = await this.page.locator('input[type="text"], input[data-testid="username"]').isVisible().catch(() => false);
     if (usernameInput) {
       return;
     }
