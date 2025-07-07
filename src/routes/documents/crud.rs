@@ -98,6 +98,16 @@ pub async fn upload_document(
     match ingestion_service.ingest_document(request).await {
         Ok(IngestionResult::Created(document)) => {
             info!("Document uploaded successfully: {}", document.id);
+            
+            // Auto-enqueue document for OCR processing
+            let priority = 5; // Normal priority for direct uploads
+            if let Err(e) = state.queue_service.enqueue_document(document.id, priority, document.file_size).await {
+                error!("Failed to enqueue document {} for OCR: {}", document.id, e);
+                // Don't fail the upload if OCR queueing fails, just log the error
+            } else {
+                info!("Document {} enqueued for OCR processing", document.id);
+            }
+            
             Ok(Json(DocumentUploadResponse {
                 document_id: document.id,
                 filename: document.filename,

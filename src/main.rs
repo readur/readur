@@ -362,8 +362,11 @@ async fn main() -> anyhow::Result<()> {
     // Start OCR queue worker on dedicated OCR runtime using shared queue service
     let queue_worker = shared_queue_service.clone();
     ocr_runtime.spawn(async move {
+        info!("🚀 Starting OCR queue worker...");
         if let Err(e) = queue_worker.start_worker().await {
-            error!("OCR queue worker error: {}", e);
+            error!("❌ OCR queue worker error: {}", e);
+        } else {
+            info!("✅ OCR queue worker started successfully");
         }
     });
     

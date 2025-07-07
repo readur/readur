@@ -146,8 +146,18 @@ impl OcrQueueService {
 
     /// Get the next item from the queue with atomic job claiming and retry logic
     pub async fn dequeue(&self) -> Result<Option<OcrQueueItem>> {
+        crate::debug_log!("OCR_QUEUE", 
+            "worker_id" => &self.worker_id,
+            "message" => "Starting dequeue operation"
+        );
+        
         // Retry up to 3 times for race condition scenarios
         for attempt in 1..=3 {
+            crate::debug_log!("OCR_QUEUE", 
+                "worker_id" => &self.worker_id,
+                "attempt" => attempt,
+                "message" => "Attempting to dequeue job"
+            );
             // Use a transaction to ensure atomic job claiming
             let mut tx = self.pool.begin().await?;
         
@@ -169,8 +179,24 @@ impl OcrQueueService {
         .await?;
 
         let job_id = match job_row {
-            Some(ref row) => row.get::<Uuid, _>("id"),
+            Some(ref row) => {
+                let job_id = row.get::<Uuid, _>("id");
+                let document_id = row.get::<Uuid, _>("document_id");
+                crate::debug_log!("OCR_QUEUE", 
+                    "worker_id" => &self.worker_id,
+                    "job_id" => job_id,
+                    "document_id" => document_id,
+                    "attempt" => attempt,
+                    "message" => "Found pending job in queue"
+                );
+                job_id
+            },
             None => {
+                crate::debug_log!("OCR_QUEUE", 
+                    "worker_id" => &self.worker_id,
+                    "attempt" => attempt,
+                    "message" => "No pending jobs found in queue"
+                );
                 // No jobs available
                 tx.rollback().await?;
                 return Ok(None);
@@ -196,10 +222,24 @@ impl OcrQueueService {
 
         if updated_rows.rows_affected() != 1 {
             // Job was claimed by another worker between SELECT and UPDATE
+            crate::debug_log!("OCR_QUEUE", 
+                "worker_id" => &self.worker_id,
+                "job_id" => job_id,
+                "attempt" => attempt,
+                "rows_affected" => updated_rows.rows_affected(),
+                "message" => "Job was claimed by another worker, retrying"
+            );
             tx.rollback().await?;
             warn!("Job {} was claimed by another worker, retrying", job_id);
-            return Ok(None);
+            continue; // Continue to next attempt instead of returning
         }
+        
+        crate::debug_log!("OCR_QUEUE", 
+            "worker_id" => &self.worker_id,
+            "job_id" => job_id,
+            "attempt" => attempt,
+            "message" => "Successfully claimed job, updating to processing state"
+        );
 
         // Step 3: Get the updated job details
         let row = sqlx::query(
@@ -566,18 +606,41 @@ impl OcrQueueService {
             "Starting OCR worker {} with {} concurrent jobs",
             self.worker_id, self.max_concurrent_jobs
         );
+        
+        crate::debug_log!("OCR_WORKER", 
+            "worker_id" => &self.worker_id,
+            "max_concurrent_jobs" => self.max_concurrent_jobs,
+            "message" => "OCR worker loop starting"
+        );
 
         loop {
             // Check if processing is paused
             if self.is_paused() {
+                crate::debug_log!("OCR_WORKER", 
+                    "worker_id" => &self.worker_id,
+                    "message" => "OCR processing is paused, waiting..."
+                );
                 info!("OCR processing is paused, waiting...");
                 sleep(Duration::from_secs(5)).await;
                 continue;
             }
+            
+            crate::debug_log!("OCR_WORKER", 
+                "worker_id" => &self.worker_id,
+                "message" => "Worker loop iteration - checking for items to process"
+            );
 
             // Check for items to process
             match self.dequeue().await {
                 Ok(Some(item)) => {
+                    crate::debug_log!("OCR_WORKER", 
+                        "worker_id" => &self.worker_id,
+                        "job_id" => item.id,
+                        "document_id" => item.document_id,
+                        "priority" => item.priority,
+                        "message" => "Dequeued job, spawning processing task"
+                    );
+                    
                     let permit = semaphore.clone().acquire_owned().await?;
                     let self_clone = self.clone();
                     let ocr_service_clone = ocr_service.clone();
@@ -605,6 +668,10 @@ impl OcrQueueService {
                     });
                 }
                 Ok(None) => {
+                    crate::debug_log!("OCR_WORKER", 
+                        "worker_id" => &self.worker_id,
+                        "message" => "No items in queue, sleeping for 5 seconds"
+                    );
                     // No items in queue or all jobs were claimed by other workers
                     // Use exponential backoff to reduce database load when queue is empty
                     sleep(Duration::from_secs(5)).await;
