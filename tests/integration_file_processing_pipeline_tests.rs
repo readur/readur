@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
 use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
@@ -376,8 +376,7 @@ End of test document."#;
     // Validate initial document properties
     assert_eq!(document.mime_type, "text/plain");
     assert!(document.file_size > 0);
-    assert_eq!(document.original_filename, "test_pipeline.txt");
-    assert!(document.ocr_status.is_some());
+    assert_eq!(document.filename, "test_pipeline.txt");
     
     // Wait for processing to complete
     let processed_doc = client.wait_for_processing(&document_id).await
@@ -475,7 +474,7 @@ async fn test_multiple_file_format_support() {
         
         match client.upload_file(content, filename, mime_type).await {
             Ok(document) => {
-                println!("✅ Uploaded {}: {}", filename, document.id);
+                println!("✅ Uploaded {}: {}", filename, document.document_id);
                 uploaded_documents.push((document, mime_type, filename, content));
             }
             Err(e) => {
@@ -491,7 +490,7 @@ async fn test_multiple_file_format_support() {
     for (document, mime_type, filename, original_content) in &uploaded_documents {
         println!("🔄 Processing {} ({})...", filename, mime_type);
         
-        let document_id = document.id.to_string();
+        let document_id = document.document_id.to_string();
         
         // Wait for processing (with shorter timeout for multiple files)
         match client.wait_for_processing(&document_id).await {
@@ -558,13 +557,13 @@ async fn test_image_processing_pipeline() {
     let document = client.upload_binary_file(png_data.clone(), "test_image.png", "image/png").await
         .expect("Failed to upload PNG image");
     
-    let document_id = document.id.to_string();
+    let document_id = document.document_id.to_string();
     println!("✅ PNG image uploaded: {}", document_id);
     
     // Validate image document properties
     assert_eq!(document.mime_type, "image/png");
     assert!(document.file_size > 0);
-    assert_eq!(document.original_filename, "test_image.png");
+    assert_eq!(document.filename, "test_image.png");
     
     // Wait for processing - note that minimal images might fail OCR
     let processed_result = client.wait_for_processing(&document_id).await;
@@ -689,7 +688,7 @@ async fn test_processing_error_recovery() {
     
     match large_result {
         Ok(document) => {
-            println!("✅ Large file uploaded: {} (size: {} bytes)", document.id, document.file_size);
+            println!("✅ Large file uploaded: {} (size: {} bytes)", document.document_id, document.file_size);
             
             // Give more time for large file processing
             let start = Instant::now();
@@ -707,7 +706,7 @@ async fn test_processing_error_recovery() {
                         if let Ok(docs) = serde_json::from_value::<Vec<DocumentResponse>>(
                             response_json["documents"].clone()
                         ) {
-                    if let Some(doc) = docs.iter().find(|d| d.id == document.id) {
+                    if let Some(doc) = docs.iter().find(|d| d.id.to_string() == document.document_id.to_string()) {
                         match doc.ocr_status.as_deref() {
                             Some("completed") => {
                                 println!("✅ Large file processing completed");
@@ -769,7 +768,7 @@ async fn test_processing_error_recovery() {
     match special_result {
         Ok(document) => {
             println!("✅ File with special characters uploaded: {}", document.document_id);
-            println!("✅ Original filename preserved: {}", document.original_filename);
+            println!("✅ Filename preserved: {}", document.filename);
             
             match client.wait_for_processing(&document.document_id.to_string()).await {
                 Ok(_) => println!("✅ Special filename file processed successfully"),
@@ -983,7 +982,7 @@ async fn test_concurrent_file_processing() {
     for document in uploaded_documents {
         let token = client.token.clone().unwrap();
         let client_clone = client.client.clone();
-        let document_id = document.id.to_string();
+        let document_id = document.document_id.to_string();
         
         let handle = tokio::spawn(async move {
             let start = Instant::now();
@@ -1150,7 +1149,7 @@ async fn test_real_test_images_processing() {
                     test_image.filename, processing_time, processed_doc.ocr_status);
                 
                 // Get OCR results and verify content
-                if let Ok(ocr_results) = client.get_ocr_results(&document.id.to_string()).await {
+                if let Ok(ocr_results) = client.get_ocr_results(&document.document_id.to_string()).await {
                     if let Some(ocr_text) = ocr_results["ocr_text"].as_str() {
                         let normalized_ocr = ocr_text.trim().to_lowercase();
                         let normalized_expected = test_image.expected_content.as_ref().map(|s| s.trim().to_lowercase()).unwrap_or_default();

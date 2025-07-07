@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
 use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
@@ -432,7 +432,7 @@ async fn test_concurrent_ocr_processing() {
     
     // Collect document IDs
     let document_ids: Vec<String> = documents.iter()
-        .map(|d| d.id.to_string())
+        .map(|d| d.document_id.to_string())
         .collect();
     
     // Monitor queue stats during processing
