@@ -19,7 +19,8 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -137,7 +138,7 @@ impl FileProcessingTestClient {
     }
     
     /// Upload a file with specific content and MIME type
-    async fn upload_file(&self, content: &str, filename: &str, mime_type: &str) -> Result<DocumentResponse, Box<dyn std::error::Error>> {
+    async fn upload_file(&self, content: &str, filename: &str, mime_type: &str) -> Result<DocumentUploadResponse, Box<dyn std::error::Error>> {
         println!("🔍 DEBUG: Uploading file: {} with MIME type: {}", filename, mime_type);
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
@@ -164,13 +165,13 @@ impl FileProcessingTestClient {
         let response_text = response.text().await?;
         println!("🟢 DEBUG: Upload response: {}", response_text);
         
-        let document: DocumentResponse = serde_json::from_str(&response_text)?;
-        println!("✅ DEBUG: Successfully parsed document: {}", document.id);
+        let document: DocumentUploadResponse = serde_json::from_str(&response_text)?;
+        println!("✅ DEBUG: Successfully parsed document: {}", document.document_id);
         Ok(document)
     }
     
     /// Upload binary file content
-    async fn upload_binary_file(&self, content: Vec<u8>, filename: &str, mime_type: &str) -> Result<DocumentResponse, Box<dyn std::error::Error>> {
+    async fn upload_binary_file(&self, content: Vec<u8>, filename: &str, mime_type: &str) -> Result<DocumentUploadResponse, Box<dyn std::error::Error>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let part = reqwest::multipart::Part::bytes(content)
@@ -196,8 +197,8 @@ impl FileProcessingTestClient {
         let response_text = response.text().await?;
         println!("🟢 DEBUG: Binary upload response: {}", response_text);
         
-        let document: DocumentResponse = serde_json::from_str(&response_text)?;
-        println!("✅ DEBUG: Successfully parsed binary document: {}", document.id);
+        let document: DocumentUploadResponse = serde_json::from_str(&response_text)?;
+        println!("✅ DEBUG: Successfully parsed binary document: {}", document.document_id);
         Ok(document)
     }
     
@@ -369,7 +370,7 @@ End of test document."#;
     let document = client.upload_file(text_content, "test_pipeline.txt", "text/plain").await
         .expect("Failed to upload text file");
     
-    let document_id = document.id.to_string();
+    let document_id = document.document_id.to_string();
     println!("✅ Text file uploaded: {}", document_id);
     
     // Validate initial document properties
@@ -663,10 +664,10 @@ async fn test_processing_error_recovery() {
     let empty_result = client.upload_file("", "empty.txt", "text/plain").await;
     match empty_result {
         Ok(document) => {
-            println!("✅ Empty file uploaded: {}", document.id);
+            println!("✅ Empty file uploaded: {}", document.document_id);
             
             // Try to process empty file
-            match client.wait_for_processing(&document.id.to_string()).await {
+            match client.wait_for_processing(&document.document_id.to_string()).await {
                 Ok(processed) => {
                     println!("✅ Empty file processing completed: {:?}", processed.ocr_status);
                 }
@@ -742,10 +743,10 @@ async fn test_processing_error_recovery() {
     
     match corrupted_result {
         Ok(document) => {
-            println!("✅ Corrupted file uploaded: {}", document.id);
+            println!("✅ Corrupted file uploaded: {}", document.document_id);
             
             // Processing should handle the mismatch gracefully
-            match client.wait_for_processing(&document.id.to_string()).await {
+            match client.wait_for_processing(&document.document_id.to_string()).await {
                 Ok(processed) => {
                     println!("✅ Corrupted file processed: {:?}", processed.ocr_status);
                 }
@@ -767,10 +768,10 @@ async fn test_processing_error_recovery() {
     
     match special_result {
         Ok(document) => {
-            println!("✅ File with special characters uploaded: {}", document.id);
+            println!("✅ File with special characters uploaded: {}", document.document_id);
             println!("✅ Original filename preserved: {}", document.original_filename);
             
-            match client.wait_for_processing(&document.id.to_string()).await {
+            match client.wait_for_processing(&document.document_id.to_string()).await {
                 Ok(_) => println!("✅ Special filename file processed successfully"),
                 Err(e) => println!("⚠️  Special filename file processing failed: {}", e),
             }
@@ -816,12 +817,12 @@ async fn test_pipeline_performance_monitoring() {
         println!("✅ {} uploaded in {:?}", filename, upload_time);
         
         // Wait for processing and measure time
-        match client.wait_for_processing(&document.id.to_string()).await {
+        match client.wait_for_processing(&document.document_id.to_string()).await {
             Ok(processed_doc) => {
                 let total_processing_time = processing_start.elapsed();
                 
                 // Get OCR results to check reported processing time
-                if let Ok(ocr_results) = client.get_ocr_results(&document.id.to_string()).await {
+                if let Ok(ocr_results) = client.get_ocr_results(&document.document_id.to_string()).await {
                     let reported_time = ocr_results["ocr_processing_time_ms"]
                         .as_i64()
                         .map(|ms| Duration::from_millis(ms as u64));
@@ -948,8 +949,8 @@ async fn test_concurrent_file_processing() {
             if response.status().is_success() {
                 let response_text = response.text().await
                     .expect("Should get response text");
-                let document: DocumentResponse = serde_json::from_str(&response_text)
-                    .expect("Should parse document response");
+                let document: DocumentUploadResponse = serde_json::from_str(&response_text)
+                    .expect("Should parse document upload response");
                 Ok((i, document, upload_time))
             } else {
                 Err((i, response.text().await.unwrap_or_default()))
@@ -964,7 +965,7 @@ async fn test_concurrent_file_processing() {
     for handle in upload_handles {
         match handle.await.expect("Upload task should complete") {
             Ok((index, document, upload_time)) => {
-                println!("✅ Document {} uploaded in {:?}: {}", index + 1, upload_time, document.id);
+                println!("✅ Document {} uploaded in {:?}: {}", index + 1, upload_time, document.document_id);
                 uploaded_documents.push(document);
             }
             Err((index, error)) => {
@@ -1138,11 +1139,11 @@ async fn test_real_test_images_processing() {
         };
         
         let upload_time = upload_start.elapsed();
-        println!("✅ {} uploaded in {:?}: {}", test_image.filename, upload_time, document.id);
+        println!("✅ {} uploaded in {:?}: {}", test_image.filename, upload_time, document.document_id);
         
         // Wait for OCR processing
         let processing_start = std::time::Instant::now();
-        match client.wait_for_processing(&document.id.to_string()).await {
+        match client.wait_for_processing(&document.document_id.to_string()).await {
             Ok(processed_doc) => {
                 let processing_time = processing_start.elapsed();
                 println!("✅ {} processed in {:?}: status = {:?}", 

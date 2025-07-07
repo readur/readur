@@ -21,7 +21,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 use chrono;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -194,7 +195,7 @@ impl LoadTestClient {
     }
     
     /// Perform a timed document upload
-    async fn timed_upload(&self, content: &str, filename: &str) -> Result<(DocumentResponse, Duration), Box<dyn std::error::Error + Send + Sync>> {
+    async fn timed_upload(&self, content: &str, filename: &str) -> Result<(DocumentUploadResponse, Duration), Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
@@ -217,12 +218,12 @@ impl LoadTestClient {
             return Err(format!("Upload failed: {}", response.text().await?).into());
         }
         
-        let document: DocumentResponse = response.json().await?;
+        let document: DocumentUploadResponse = response.json().await?;
         Ok((document, elapsed))
     }
     
     /// Perform a timed document list request
-    async fn timed_list_documents(&self) -> Result<(Vec<DocumentResponse>, Duration), Box<dyn std::error::Error + Send + Sync>> {
+    async fn timed_list_documents(&self) -> Result<(Vec<Value>, Duration), Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
@@ -239,9 +240,9 @@ impl LoadTestClient {
         }
         
         let response_json: serde_json::Value = response.json().await?;
-        let documents: Vec<DocumentResponse> = serde_json::from_value(
-            response_json["documents"].clone()
-        )?;
+        let documents = response_json["documents"].as_array()
+            .ok_or("Invalid response format: missing documents array")?
+            .clone();
         Ok((documents, elapsed))
     }
     
@@ -319,7 +320,7 @@ async fn test_high_volume_document_uploads() {
             let result = client_clone.timed_upload(&content, &filename).await;
             
             match result {
-                Ok((document, duration)) => (i, true, duration, Some(document.id.to_string())),
+                Ok((document, duration)) => (i, true, duration, Some(document.document_id.to_string())),
                 Err(_) => (i, false, Duration::ZERO, None),
             }
         });
@@ -694,7 +695,7 @@ async fn test_system_stability_under_sustained_load() {
                 let content = format!("Stability test document {}", operation_counter);
                 let filename = format!("stability_{}.txt", operation_counter);
                 client.timed_upload(&content, &filename).await
-                    .map(|(doc, duration)| (format!("upload({})", doc.id), duration))
+                    .map(|(doc, duration)| (format!("upload({})", doc.document_id), duration))
             }
             _ => {
                 // Search operation

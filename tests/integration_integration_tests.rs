@@ -10,7 +10,8 @@ use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -95,7 +96,7 @@ impl TestClient {
     }
     
     /// Upload a test document
-    async fn upload_document(&self, content: &str, filename: &str) -> Result<DocumentResponse, Box<dyn std::error::Error>> {
+    async fn upload_document(&self, content: &str, filename: &str) -> Result<DocumentUploadResponse, Box<dyn std::error::Error>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let part = reqwest::multipart::Part::text(content.to_string())
@@ -115,7 +116,7 @@ impl TestClient {
             return Err(format!("Upload failed: {}", response.text().await?).into());
         }
         
-        let document: DocumentResponse = response.json().await?;
+        let document: DocumentUploadResponse = response.json().await?;
         Ok(document)
     }
     
@@ -212,7 +213,7 @@ Technology: Rust + Axum + SQLx"#;
     let document = client.upload_document(test_content, "rust_test.txt").await
         .expect("Failed to upload document");
     
-    println!("✅ Document uploaded: {}", document.id);
+    println!("✅ Document uploaded: {}", document.document_id);
     
     // Validate document response structure using our types
     assert!(!document.filename.is_empty());
