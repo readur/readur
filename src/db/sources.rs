@@ -286,7 +286,8 @@ impl Database {
         let rows = sqlx::query(
             r#"SELECT id, user_id, name, source_type, enabled, config, status, 
                last_sync_at, last_error, last_error_at, total_files_synced, 
-               total_files_pending, total_size_bytes, created_at, updated_at
+               total_files_pending, total_size_bytes, created_at, updated_at,
+               validation_status, last_validation_at, validation_score, validation_issues
                FROM sources 
                WHERE enabled = true AND status != 'syncing'
                ORDER BY last_sync_at ASC NULLS FIRST"#

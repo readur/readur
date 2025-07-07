@@ -168,6 +168,17 @@ impl SourceScheduler {
         let sources = self.state.db.get_sources_for_sync().await?;
         
         for source in sources {
+            // Skip sources that are already in error status due to configuration issues
+            if source.status == crate::models::SourceStatus::Error &&
+               source.last_error.as_ref().map(|e| e.contains("Configuration error")).unwrap_or(false) {
+                // Only log this once every hour to reduce spam
+                if source.last_error_at.map(|t| chrono::Utc::now() - t > chrono::Duration::hours(1)).unwrap_or(true) {
+                    warn!("⚠️ Skipping source '{}' (ID: {}) due to persistent configuration error: {}", 
+                          source.name, source.id, source.last_error.as_ref().unwrap_or(&"Unknown error".to_string()));
+                }
+                continue;
+            }
+            
             // Validate source configuration before checking if sync is due
             if let Err(e) = self.validate_source_config(&source) {
                 error!("❌ CONFIGURATION ERROR during background sync check for source '{}' (ID: {}): {}", 

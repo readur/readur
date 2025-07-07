@@ -6,9 +6,9 @@ use reqwest::Client;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use uuid::Uuid;
 
-use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -131,22 +131,29 @@ async fn debug_ocr_content() {
         panic!("Document 2 upload failed with status {}: {}", status, error_text);
     }
     
-    let doc1: DocumentResponse = doc1_response.json().await.expect("Valid JSON for doc1");
-    let doc2: DocumentResponse = doc2_response.json().await.expect("Valid JSON for doc2");
+    let doc1: DocumentUploadResponse = doc1_response.json().await.expect("Valid JSON for doc1");
+    let doc2: DocumentUploadResponse = doc2_response.json().await.expect("Valid JSON for doc2");
     
-    println!("📄 Document 1: {}", doc1.id);
-    println!("📄 Document 2: {}", doc2.id);
+    println!("📄 Document 1: {}", doc1.document_id);
+    println!("📄 Document 2: {}", doc2.document_id);
     
     // Wait for OCR to complete
     let start = Instant::now();
     let mut doc1_completed = false;
     let mut doc2_completed = false;
+    let mut last_status_print = Instant::now();
     
     while start.elapsed() < TIMEOUT && (!doc1_completed || !doc2_completed) {
+        // Print progress every 10 seconds
+        if last_status_print.elapsed() >= Duration::from_secs(10) {
+            println!("⏳ OCR processing... elapsed: {:?}, Doc1: {}, Doc2: {}", 
+                start.elapsed(), doc1_completed, doc2_completed);
+            last_status_print = Instant::now();
+        }
         // Check document 1
         if !doc1_completed {
             let response = client
-                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.id))
+                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.document_id))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await
@@ -154,17 +161,21 @@ async fn debug_ocr_content() {
             
             if response.status().is_success() {
                 let ocr_data: Value = response.json().await.expect("Valid JSON");
-                if ocr_data["ocr_status"].as_str() == Some("completed") {
+                let current_status = ocr_data["ocr_status"].as_str().unwrap_or("unknown");
+                println!("📊 Document 1 OCR status: {}", current_status);
+                if current_status == "completed" {
                     doc1_completed = true;
                     println!("✅ Document 1 OCR completed");
                 }
+            } else {
+                println!("❌ Document 1 OCR endpoint returned: {}", response.status());
             }
         }
         
         // Check document 2
         if !doc2_completed {
             let response = client
-                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.id))
+                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.document_id))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await
@@ -172,10 +183,14 @@ async fn debug_ocr_content() {
             
             if response.status().is_success() {
                 let ocr_data: Value = response.json().await.expect("Valid JSON");
-                if ocr_data["ocr_status"].as_str() == Some("completed") {
+                let current_status = ocr_data["ocr_status"].as_str().unwrap_or("unknown");
+                println!("📊 Document 2 OCR status: {}", current_status);
+                if current_status == "completed" {
                     doc2_completed = true;
                     println!("✅ Document 2 OCR completed");
                 }
+            } else {
+                println!("❌ Document 2 OCR endpoint returned: {}", response.status());
             }
         }
         
@@ -183,19 +198,23 @@ async fn debug_ocr_content() {
     }
     
     if !doc1_completed || !doc2_completed {
+        println!("❌ OCR TIMEOUT DETAILS:");
+        println!("  ⏱️  Total elapsed time: {:?}", start.elapsed());
+        println!("  📄 Document 1 completed: {}", doc1_completed);
+        println!("  📄 Document 2 completed: {}", doc2_completed);
         panic!("OCR did not complete within timeout");
     }
     
     // Now get the actual OCR content and analyze it
     let doc1_ocr_response = client
-        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.id))
+        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.document_id))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
         .expect("OCR endpoint should work");
     
     let doc2_ocr_response = client
-        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.id))
+        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.document_id))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
