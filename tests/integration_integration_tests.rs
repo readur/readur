@@ -134,9 +134,15 @@ impl TestClient {
             
             if response.status().is_success() {
                 let response_json: serde_json::Value = response.json().await?;
-                let documents = response_json.get("documents")
-                    .and_then(|docs| docs.as_array())
-                    .ok_or("Invalid response format: missing documents array")?;
+                let documents = if let Some(docs_array) = response_json.get("documents").and_then(|d| d.as_array()) {
+                    // Documents are in a "documents" key
+                    docs_array
+                } else if let Some(docs_array) = response_json.as_array() {
+                    // Response is directly an array of documents
+                    docs_array
+                } else {
+                    return Err("Invalid response format: missing documents array".into());
+                };
                 
                 for doc_value in documents {
                     let doc: DocumentResponse = serde_json::from_value(doc_value.clone())?;
@@ -341,9 +347,15 @@ async fn test_document_list_structure() {
     let response_json: serde_json::Value = response.json().await
         .expect("Failed to parse response JSON");
     
-    let documents_array = response_json.get("documents")
-        .and_then(|docs| docs.as_array())
-        .expect("Failed to find documents array in response");
+    let documents_array = if let Some(docs_array) = response_json.get("documents").and_then(|d| d.as_array()) {
+        // Documents are in a "documents" key
+        docs_array
+    } else if let Some(docs_array) = response_json.as_array() {
+        // Response is directly an array of documents
+        docs_array
+    } else {
+        panic!("Failed to find documents array in response");
+    };
     
     let documents: Vec<DocumentResponse> = documents_array.iter()
         .map(|doc_value| serde_json::from_value(doc_value.clone()))

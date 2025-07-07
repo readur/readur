@@ -178,7 +178,7 @@ impl FailedOcrTestClient {
     /// Retry OCR for a document
     async fn retry_ocr(&self, document_id: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let response = self.client
-            .post(&format!("{}/api/documents/{}/retry-ocr", get_base_url(), document_id))
+            .post(&format!("{}/api/documents/{}/ocr/retry", get_base_url(), document_id))
             .header("Authorization", self.get_auth_header())
             .timeout(TIMEOUT)
             .send()
@@ -370,7 +370,7 @@ async fn test_retry_ocr_endpoint_with_invalid_document() {
     // Try to retry OCR for non-existent document
     let fake_document_id = Uuid::new_v4().to_string();
     let response = client.client
-        .post(&format!("{}/api/documents/{}/retry-ocr", get_base_url(), fake_document_id))
+        .post(&format!("{}/api/documents/{}/ocr/retry", get_base_url(), fake_document_id))
         .header("Authorization", client.get_auth_header())
         .timeout(TIMEOUT)
         .send()
@@ -426,7 +426,7 @@ async fn test_retry_ocr_endpoint_authorization() {
     // Try to retry OCR without authentication
     let fake_document_id = Uuid::new_v4().to_string();
     let response = client.client
-        .post(&format!("{}/api/documents/{}/retry-ocr", get_base_url(), fake_document_id))
+        .post(&format!("{}/api/documents/{}/ocr/retry", get_base_url(), fake_document_id))
         .timeout(TIMEOUT)
         .send()
         .await
