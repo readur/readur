@@ -5,10 +5,17 @@ mod tests {
     use chrono::Utc;
     use uuid::Uuid;
 
-    fn create_test_user_data(suffix: &str) -> CreateUser {
+    fn create_test_user_data() -> CreateUser {
+        let test_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let unique_suffix = &test_id[test_id.len().saturating_sub(8)..];
+        
         CreateUser {
-            username: format!("testuser_{}", suffix),
-            email: format!("test_{}@example.com", suffix),
+            username: format!("testuser_{}", unique_suffix),
+            email: format!("test_{}@example.com", unique_suffix),
             password: "password123".to_string(),
             role: Some(readur::models::UserRole::User),
         }
@@ -47,14 +54,14 @@ mod tests {
     async fn test_create_user() {
         let ctx = TestContext::new().await;
         let db = &ctx.state.db;
-        let user_data = create_test_user_data("1");
+        let user_data = create_test_user_data();
         
         let result = db.create_user(user_data).await;
         assert!(result.is_ok());
         
         let user = result.unwrap();
-        assert_eq!(user.username, "testuser_1");
-        assert_eq!(user.email, "test_1@example.com");
+        assert!(user.username.starts_with("testuser_"));
+        assert!(user.email.starts_with("test_") && user.email.ends_with("@example.com"));
         assert!(user.password_hash.is_some());
         assert_ne!(user.password_hash.as_ref().unwrap(), "password123"); // Should be hashed
     }
@@ -63,11 +70,11 @@ mod tests {
     async fn test_get_user_by_username() {
         let ctx = TestContext::new().await;
         let db = &ctx.state.db;
-        let user_data = create_test_user_data("1");
+        let user_data = create_test_user_data();
         
         let created_user = db.create_user(user_data).await.unwrap();
         
-        let result = db.get_user_by_username("testuser_1").await;
+        let result = db.get_user_by_username(&created_user.username).await;
         assert!(result.is_ok());
         
         let found_user = result.unwrap();
@@ -75,7 +82,7 @@ mod tests {
         
         let user = found_user.unwrap();
         assert_eq!(user.id, created_user.id);
-        assert_eq!(user.username, "testuser_1");
+        assert_eq!(user.username, created_user.username);
     }
 
     #[tokio::test]
@@ -94,7 +101,7 @@ mod tests {
     async fn test_create_document() {
         let ctx = TestContext::new().await;
         let db = &ctx.state.db;
-        let user_data = create_test_user_data("1");
+        let user_data = create_test_user_data();
         let user = db.create_user(user_data).await.unwrap();
         
         let document = create_test_document(user.id);
@@ -111,7 +118,7 @@ mod tests {
     async fn test_get_documents_by_user() {
         let ctx = TestContext::new().await;
         let db = &ctx.state.db;
-        let user_data = create_test_user_data("1");
+        let user_data = create_test_user_data();
         let user = db.create_user(user_data).await.unwrap();
         
         let document1 = create_test_document(user.id);
@@ -131,7 +138,7 @@ mod tests {
     async fn test_search_documents() {
         let ctx = TestContext::new().await;
         let db = &ctx.state.db;
-        let user_data = create_test_user_data("1");
+        let user_data = create_test_user_data();
         let user = db.create_user(user_data).await.unwrap();
         
         let mut document = create_test_document(user.id);
@@ -162,7 +169,7 @@ mod tests {
     async fn test_update_document_ocr() {
         let ctx = TestContext::new().await;
         let db = &ctx.state.db;
-        let user_data = create_test_user_data("1");
+        let user_data = create_test_user_data();
         let user = db.create_user(user_data).await.unwrap();
         
         let document = create_test_document(user.id);
