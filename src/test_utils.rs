@@ -340,7 +340,32 @@ impl TestAuthHelper {
         });
         
         let response = self.make_request("POST", "/api/auth/register", Some(user_data), None).await;
-        let user_response: UserResponse = serde_json::from_slice(&response).unwrap();
+        
+        // Debug logging to understand CI vs local differences
+        let response_str = String::from_utf8_lossy(&response);
+        println!("DEBUG: Register response body: {}", response_str);
+        println!("DEBUG: Register response length: {} bytes", response.len());
+        
+        // Try to parse as JSON first to see what we actually got
+        let user_response = match serde_json::from_slice::<serde_json::Value>(&response) {
+            Ok(json_value) => {
+                println!("DEBUG: Parsed JSON structure: {:#}", json_value);
+                // Now try to parse as UserResponse
+                match serde_json::from_value::<UserResponse>(json_value) {
+                    Ok(user_response) => user_response,
+                    Err(e) => {
+                        eprintln!("ERROR: Failed to parse UserResponse from JSON: {}", e);
+                        eprintln!("ERROR: Expected fields: id (UUID), username (String), email (String), role (UserRole)");
+                        panic!("Failed to parse UserResponse: {}", e);
+                    }
+                }
+            },
+            Err(e) => {
+                eprintln!("ERROR: Response is not valid JSON: {}", e);
+                eprintln!("ERROR: Raw response: {:?}", response);
+                panic!("Invalid JSON response from register endpoint: {}", e);
+            }
+        };
         
         TestUser {
             user_response,
@@ -370,7 +395,32 @@ impl TestAuthHelper {
         });
         
         let response = self.make_request("POST", "/api/auth/register", Some(admin_data), None).await;
-        let user_response: UserResponse = serde_json::from_slice(&response).unwrap();
+        
+        // Debug logging to understand CI vs local differences
+        let response_str = String::from_utf8_lossy(&response);
+        println!("DEBUG: Admin register response body: {}", response_str);
+        println!("DEBUG: Admin register response length: {} bytes", response.len());
+        
+        // Try to parse as JSON first to see what we actually got
+        let user_response = match serde_json::from_slice::<serde_json::Value>(&response) {
+            Ok(json_value) => {
+                println!("DEBUG: Admin parsed JSON structure: {:#}", json_value);
+                // Now try to parse as UserResponse
+                match serde_json::from_value::<UserResponse>(json_value) {
+                    Ok(user_response) => user_response,
+                    Err(e) => {
+                        eprintln!("ERROR: Failed to parse admin UserResponse from JSON: {}", e);
+                        eprintln!("ERROR: Expected fields: id (UUID), username (String), email (String), role (UserRole)");
+                        panic!("Failed to parse admin UserResponse: {}", e);
+                    }
+                }
+            },
+            Err(e) => {
+                eprintln!("ERROR: Admin response is not valid JSON: {}", e);
+                eprintln!("ERROR: Raw admin response: {:?}", response);
+                panic!("Invalid JSON response from admin register endpoint: {}", e);
+            }
+        };
         
         TestUser {
             user_response,
