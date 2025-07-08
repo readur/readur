@@ -795,6 +795,31 @@ impl OcrQueueService {
     pub async fn get_stats(&self) -> Result<QueueStats> {
         tracing::debug!("OCR Queue: Starting get_stats() call");
         
+        // First, let's check if the function exists and what it returns
+        let function_exists = sqlx::query_scalar::<_, bool>(
+            r#"
+            SELECT EXISTS (
+                SELECT 1 FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = 'public' AND p.proname = 'get_ocr_queue_stats'
+            )
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("OCR Queue: Failed to check if function exists: {}", e);
+            e
+        })?;
+        
+        if !function_exists {
+            tracing::error!("OCR Queue: Function get_ocr_queue_stats() does not exist");
+            return Err(anyhow::anyhow!("Function get_ocr_queue_stats() does not exist"));
+        }
+        
+        tracing::debug!("OCR Queue: Function get_ocr_queue_stats() exists, attempting to call it");
+        
+        // Call the function
         let stats = sqlx::query(
             r#"
             SELECT * FROM get_ocr_queue_stats()
@@ -809,10 +834,13 @@ impl OcrQueueService {
 
         tracing::debug!("OCR Queue: Successfully fetched stats row");
         
-        // Debug: Print all column names and their types
+        // Debug: Print all column names, their types, and their values
         let columns = stats.columns();
         for (i, column) in columns.iter().enumerate() {
-            tracing::debug!("OCR Queue: Column {}: name='{}', type='{:?}'", i, column.name(), column.type_info());
+            let column_name = column.name();
+            let column_type = column.type_info();
+            
+            tracing::debug!("OCR Queue: Column {}: name='{}', type='{:?}'", i, column_name, column_type);
         }
 
         // Try to extract each field with detailed error handling
