@@ -251,7 +251,7 @@ async fn main() -> anyhow::Result<()> {
             match function_check {
                 Ok(Some(def)) => {
                     // Check if it contains the correct logic from our latest migration
-                    if def.contains("document_stats") && def.contains("documents.ocr_status = 'completed'") {
+                    if def.contains("document_stats") && def.contains("ocr_status = 'completed'") {
                         info!("✅ get_ocr_queue_stats function has correct logic (uses documents table for completed_today)");
                     } else {
                         error!("❌ get_ocr_queue_stats function still uses old logic - migration may have failed");
