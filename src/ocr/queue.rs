@@ -946,9 +946,9 @@ impl OcrQueueService {
     /// Helper function to map OCR error strings to standardized failure reasons
     fn classify_ocr_error(error_str: &str) -> (&'static str, bool) {
         if error_str.contains("font encoding") || error_str.contains("missing unicode map") {
-            ("pdf_font_encoding", true)
+            ("pdf_parsing_error", true)  // Font encoding issues are PDF parsing problems
         } else if error_str.contains("corrupted internal structure") || error_str.contains("corrupted") {
-            ("pdf_corruption", true)
+            ("file_corrupted", true)     // Corrupted files should use file_corrupted
         } else if error_str.contains("timeout") || error_str.contains("timed out") {
             ("ocr_timeout", false)
         } else if error_str.contains("memory") || error_str.contains("out of memory") {

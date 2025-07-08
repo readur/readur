@@ -2,7 +2,6 @@ use axum::{
     routing::get,
     Router,
 };
-use sqlx::Row;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
 use tracing::{info, error, warn};
