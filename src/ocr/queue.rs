@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool, Row, Column};
+use sqlx::{FromRow, PgPool, Row};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Semaphore;
@@ -793,33 +793,6 @@ impl OcrQueueService {
 
     /// Get queue statistics
     pub async fn get_stats(&self) -> Result<QueueStats> {
-        tracing::debug!("OCR Queue: Starting get_stats() call");
-        
-        // First, let's check if the function exists and what it returns
-        let function_exists = sqlx::query_scalar::<_, bool>(
-            r#"
-            SELECT EXISTS (
-                SELECT 1 FROM pg_proc p
-                JOIN pg_namespace n ON p.pronamespace = n.oid
-                WHERE n.nspname = 'public' AND p.proname = 'get_ocr_queue_stats'
-            )
-            "#
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("OCR Queue: Failed to check if function exists: {}", e);
-            e
-        })?;
-        
-        if !function_exists {
-            tracing::error!("OCR Queue: Function get_ocr_queue_stats() does not exist");
-            return Err(anyhow::anyhow!("Function get_ocr_queue_stats() does not exist"));
-        }
-        
-        tracing::debug!("OCR Queue: Function get_ocr_queue_stats() exists, attempting to call it");
-        
-        // Call the function
         let stats = sqlx::query(
             r#"
             SELECT * FROM get_ocr_queue_stats()
@@ -828,97 +801,17 @@ impl OcrQueueService {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
-            tracing::error!("OCR Queue: Failed to execute get_ocr_queue_stats(): {}", e);
+            tracing::error!("Failed to get OCR queue stats: {}", e);
             e
         })?;
 
-        tracing::debug!("OCR Queue: Successfully fetched stats row");
-        
-        // Debug: Print all column names, their types, and their values
-        let columns = stats.columns();
-        for (i, column) in columns.iter().enumerate() {
-            let column_name = column.name();
-            let column_type = column.type_info();
-            
-            tracing::debug!("OCR Queue: Column {}: name='{}', type='{:?}'", i, column_name, column_type);
-        }
-
-        // Try to extract each field with detailed error handling
-        let pending_count = match stats.try_get::<i64, _>("pending_count") {
-            Ok(val) => {
-                tracing::debug!("OCR Queue: pending_count = {}", val);
-                val
-            }
-            Err(e) => {
-                tracing::error!("OCR Queue: Failed to get pending_count: {}", e);
-                return Err(anyhow::anyhow!("Failed to get pending_count: {}", e));
-            }
-        };
-
-        let processing_count = match stats.try_get::<i64, _>("processing_count") {
-            Ok(val) => {
-                tracing::debug!("OCR Queue: processing_count = {}", val);
-                val
-            }
-            Err(e) => {
-                tracing::error!("OCR Queue: Failed to get processing_count: {}", e);
-                return Err(anyhow::anyhow!("Failed to get processing_count: {}", e));
-            }
-        };
-
-        let failed_count = match stats.try_get::<i64, _>("failed_count") {
-            Ok(val) => {
-                tracing::debug!("OCR Queue: failed_count = {}", val);
-                val
-            }
-            Err(e) => {
-                tracing::error!("OCR Queue: Failed to get failed_count: {}", e);
-                return Err(anyhow::anyhow!("Failed to get failed_count: {}", e));
-            }
-        };
-
-        let completed_today = match stats.try_get::<i64, _>("completed_today") {
-            Ok(val) => {
-                tracing::debug!("OCR Queue: completed_today = {}", val);
-                val
-            }
-            Err(e) => {
-                tracing::error!("OCR Queue: Failed to get completed_today: {}", e);
-                return Err(anyhow::anyhow!("Failed to get completed_today: {}", e));
-            }
-        };
-
-        let avg_wait_time_minutes = match stats.try_get::<Option<f64>, _>("avg_wait_time_minutes") {
-            Ok(val) => {
-                tracing::debug!("OCR Queue: avg_wait_time_minutes = {:?}", val);
-                val
-            }
-            Err(e) => {
-                tracing::error!("OCR Queue: Failed to get avg_wait_time_minutes: {}", e);
-                return Err(anyhow::anyhow!("Failed to get avg_wait_time_minutes: {}", e));
-            }
-        };
-
-        let oldest_pending_minutes = match stats.try_get::<Option<f64>, _>("oldest_pending_minutes") {
-            Ok(val) => {
-                tracing::debug!("OCR Queue: oldest_pending_minutes = {:?}", val);
-                val
-            }
-            Err(e) => {
-                tracing::error!("OCR Queue: Failed to get oldest_pending_minutes: {}", e);
-                return Err(anyhow::anyhow!("Failed to get oldest_pending_minutes: {}", e));
-            }
-        };
-
-        tracing::debug!("OCR Queue: Successfully extracted all stats fields");
-
         Ok(QueueStats {
-            pending_count,
-            processing_count,
-            failed_count,
-            completed_today,
-            avg_wait_time_minutes,
-            oldest_pending_minutes,
+            pending_count: stats.get("pending_count"),
+            processing_count: stats.get("processing_count"),
+            failed_count: stats.get("failed_count"),
+            completed_today: stats.get("completed_today"),
+            avg_wait_time_minutes: stats.get("avg_wait_time_minutes"),
+            oldest_pending_minutes: stats.get("oldest_pending_minutes"),
         })
     }
 

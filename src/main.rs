@@ -173,29 +173,36 @@ async fn main() -> anyhow::Result<()> {
     // Run SQLx migrations
     info!("Running SQLx migrations...");
     let migrations = sqlx::migrate!("./migrations");
-    info!("Found {} migrations", migrations.migrations.len());
+    let total_migrations = migrations.migrations.len();
     
-    for migration in migrations.migrations.iter() {
-        info!("Migration available: {} - {}", migration.version, migration.description);
-    }
-    
-    // Check current migration status
-    let applied_result = sqlx::query("SELECT version, description FROM _sqlx_migrations ORDER BY version")
-        .fetch_all(web_db.get_pool())
-        .await;
-    
-    match applied_result {
-        Ok(rows) => {
-            info!("Currently applied migrations:");
-            for row in rows {
-                let version: i64 = row.get("version");
-                let description: String = row.get("description");
-                info!("  - {} {}", version, description);
+    if total_migrations > 0 {
+        // Verify migrations are in correct chronological order
+        let mut is_ordered = true;
+        let mut prev_version = 0i64;
+        
+        for migration in migrations.migrations.iter() {
+            if migration.version <= prev_version {
+                error!("❌ Migration {} is out of order (previous: {})", migration.version, prev_version);
+                is_ordered = false;
             }
+            prev_version = migration.version;
         }
-        Err(e) => {
-            info!("No existing migrations found (this is normal for first run): {}", e);
+        
+        if is_ordered {
+            info!("✅ {} migrations found in correct chronological order", total_migrations);
+        } else {
+            error!("❌ Migrations are not in chronological order - this may cause issues");
         }
+        
+        // Log first and last migration for reference
+        let first_migration = &migrations.migrations[0];
+        let last_migration = &migrations.migrations[total_migrations - 1];
+        
+        info!("Migration range: {} ({}) → {} ({})", 
+              first_migration.version, first_migration.description,
+              last_migration.version, last_migration.description);
+    } else {
+        info!("No migrations found");
     }
     
     // Check if ocr_error column exists
@@ -226,7 +233,35 @@ async fn main() -> anyhow::Result<()> {
     
     let result = migrations.run(web_db.get_pool()).await;
     match result {
-        Ok(_) => info!("SQLx migrations completed successfully"),
+        Ok(_) => {
+            info!("✅ SQLx migrations completed successfully");
+            
+            // Verify the get_ocr_queue_stats function has the correct implementation
+            let function_check = sqlx::query_scalar::<_, Option<String>>(
+                r#"
+                SELECT pg_get_functiondef(p.oid)
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = 'public' AND p.proname = 'get_ocr_queue_stats'
+                "#
+            )
+            .fetch_one(web_db.get_pool())
+            .await;
+            
+            match function_check {
+                Ok(Some(def)) => {
+                    // Check if it contains the correct logic from our latest migration
+                    if def.contains("document_stats") && def.contains("documents.ocr_status = 'completed'") {
+                        info!("✅ get_ocr_queue_stats function has correct logic (uses documents table for completed_today)");
+                    } else {
+                        error!("❌ get_ocr_queue_stats function still uses old logic - migration may have failed");
+                        info!("Function uses ocr_queue table instead of documents table for completed_today count");
+                    }
+                }
+                Ok(None) => error!("❌ get_ocr_queue_stats function does not exist after migration"),
+                Err(e) => error!("❌ Failed to verify get_ocr_queue_stats function: {}", e),
+            }
+        }
         Err(e) => {
             error!("Failed to run SQLx migrations: {}", e);
             return Err(e.into());
