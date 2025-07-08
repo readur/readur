@@ -94,6 +94,7 @@ jobs:
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch
+          DEBUG: 1
 
       - name: Wait for server to be ready
         run: |
