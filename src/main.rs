@@ -206,10 +206,53 @@ async fn main() -> anyhow::Result<()> {
         info!("No migrations found");
     }
     
+    // Enhanced migration execution with detailed logging
+    info!("🔄 Starting migration execution...");
+    
+    // Check current database migration state
+    let applied_migrations = sqlx::query_scalar::<_, i64>(
+        "SELECT version FROM _sqlx_migrations ORDER BY version"
+    )
+    .fetch_all(web_db.get_pool())
+    .await
+    .unwrap_or_default();
+    
+    if !applied_migrations.is_empty() {
+        info!("📋 {} migrations already applied in database", applied_migrations.len());
+        info!("📋 Latest applied migration: {}", applied_migrations.last().unwrap_or(&0));
+    } else {
+        info!("📋 No migrations previously applied - fresh database");
+    }
+    
+    // List all migrations that will be processed
+    info!("📝 Migrations to process:");
+    for (i, migration) in migrations.migrations.iter().enumerate() {
+        let status = if applied_migrations.contains(&migration.version) {
+            "✅ APPLIED"
+        } else {
+            "⏳ PENDING"
+        };
+        info!("  {}: {} ({}) [{}]", 
+              i + 1, migration.version, migration.description, status);
+    }
+    
     let result = migrations.run(web_db.get_pool()).await;
     match result {
         Ok(_) => {
             info!("✅ SQLx migrations completed successfully");
+            
+            // Verify final migration state
+            let final_applied = sqlx::query_scalar::<_, i64>(
+                "SELECT version FROM _sqlx_migrations ORDER BY version"
+            )
+            .fetch_all(web_db.get_pool())
+            .await
+            .unwrap_or_default();
+            
+            info!("📊 Final migration state: {} total applied", final_applied.len());
+            if let Some(latest) = final_applied.last() {
+                info!("📊 Latest migration now: {}", latest);
+            }
             
             // Verify the get_ocr_queue_stats function has the correct implementation
             let function_check = sqlx::query_scalar::<_, Option<String>>(
@@ -232,11 +275,23 @@ async fn main() -> anyhow::Result<()> {
                           def.chars().take(500).collect::<String>());
                     
                     // Check if it contains the correct logic from our latest migration
-                    if def.contains("document_stats") && def.contains("ocr_status = 'completed'") {
-                        info!("✅ get_ocr_queue_stats function has correct logic (uses documents table for completed_today)");
+                    let has_documents_subquery = def.contains("FROM documents") && def.contains("ocr_status = 'completed'");
+                    let has_old_cte_logic = def.contains("document_stats") || def.contains("queue_stats");
+                    let has_old_completed_logic = def.contains("completed_at >= CURRENT_DATE");
+                    
+                    info!("🔍 Function content analysis:");
+                    info!("  Has documents subquery: {}", has_documents_subquery);
+                    info!("  Has old CTE logic: {}", has_old_cte_logic);
+                    info!("  Has old completed_at logic: {}", has_old_completed_logic);
+                    
+                    if has_documents_subquery && !has_old_completed_logic {
+                        info!("✅ get_ocr_queue_stats function has correct NEW logic (uses documents table subquery)");
+                    } else if has_old_cte_logic {
+                        error!("❌ get_ocr_queue_stats function still uses CTE logic - should use simple subquery");
+                    } else if has_old_completed_logic {
+                        error!("❌ get_ocr_queue_stats function still uses old completed_at logic from ocr_queue table");
                     } else {
-                        error!("❌ get_ocr_queue_stats function still uses old logic - migration may have failed");
-                        info!("Function uses ocr_queue table instead of documents table for completed_today count");
+                        error!("❌ get_ocr_queue_stats function has unexpected structure");
                     }
                     
                     // Test the function execution at startup
@@ -260,7 +315,25 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Err(e) => {
-            error!("Failed to run SQLx migrations: {}", e);
+            error!("❌ CRITICAL: SQLx migrations failed!");
+            error!("Migration error: {}", e);
+            
+            // Get detailed error information
+            error!("🔍 Migration failure details:");
+            error!("  Error type: {}", std::any::type_name_of_val(&e));
+            error!("  Error message: {}", e);
+            
+            // Try to get the current migration state even after failure
+            match sqlx::query_scalar::<_, i64>(
+                "SELECT version FROM _sqlx_migrations ORDER BY version DESC LIMIT 1"
+            )
+            .fetch_optional(web_db.get_pool())
+            .await {
+                Ok(Some(latest)) => error!("  Last successful migration: {}", latest),
+                Ok(None) => error!("  No migrations were applied successfully"),
+                Err(table_err) => error!("  Could not read migration table: {}", table_err),
+            }
+            
             return Err(e.into());
         }
     }
