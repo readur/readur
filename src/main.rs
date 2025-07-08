@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
 use tracing::{info, error, warn};
 use anyhow;
+use sqlx::{Row, Column};
 
 use readur::{config::Config, db::Database, AppState, *};
 
@@ -224,12 +225,34 @@ async fn main() -> anyhow::Result<()> {
             
             match function_check {
                 Ok(Some(def)) => {
+                    info!("📋 get_ocr_queue_stats function definition retrieved");
+                    
+                    // Debug: print the actual function definition
+                    info!("🔍 Function definition (first 500 chars): {}", 
+                          def.chars().take(500).collect::<String>());
+                    
                     // Check if it contains the correct logic from our latest migration
                     if def.contains("document_stats") && def.contains("ocr_status = 'completed'") {
                         info!("✅ get_ocr_queue_stats function has correct logic (uses documents table for completed_today)");
                     } else {
                         error!("❌ get_ocr_queue_stats function still uses old logic - migration may have failed");
                         info!("Function uses ocr_queue table instead of documents table for completed_today count");
+                    }
+                    
+                    // Test the function execution at startup
+                    info!("🧪 Testing function execution at startup...");
+                    match sqlx::query("SELECT * FROM get_ocr_queue_stats()").fetch_one(web_db.get_pool()).await {
+                        Ok(test_result) => {
+                            info!("✅ Function executes successfully at startup");
+                            let columns = test_result.columns();
+                            info!("🔍 Function returns {} columns at startup:", columns.len());
+                            for (i, column) in columns.iter().enumerate() {
+                                info!("  Column {}: name='{}', type='{:?}'", i, column.name(), column.type_info());
+                            }
+                        }
+                        Err(e) => {
+                            error!("❌ Function fails to execute at startup: {}", e);
+                        }
                     }
                 }
                 Ok(None) => error!("❌ get_ocr_queue_stats function does not exist after migration"),
