@@ -1,6 +1,8 @@
--- Simplify get_ocr_queue_stats function to avoid CTE structure issues
--- Use a simple SELECT with subqueries instead of CTEs and cross joins
+-- Force recreation of get_ocr_queue_stats function to clear PostgreSQL cache
+-- DROP and CREATE instead of CREATE OR REPLACE to ensure function cache invalidation
+
 DROP FUNCTION IF EXISTS get_ocr_queue_stats();
+
 CREATE FUNCTION get_ocr_queue_stats()
 RETURNS TABLE (
     pending_count BIGINT,
