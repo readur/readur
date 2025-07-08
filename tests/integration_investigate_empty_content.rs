@@ -6,10 +6,10 @@ use reqwest::Client;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use uuid::Uuid;
 use futures;
 
-use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -63,7 +63,7 @@ impl Investigator {
         Self { client, token }
     }
     
-    async fn upload_document(&self, content: &str, filename: &str) -> DocumentResponse {
+    async fn upload_document(&self, content: &str, filename: &str) -> DocumentUploadResponse {
         let part = reqwest::multipart::Part::text(content.to_string())
             .file_name(filename.to_string())
             .mime_str("text/plain")
@@ -160,7 +160,7 @@ async fn investigate_empty_content_issue() {
             let mut sample_results = Vec::new();
             
             for (i, doc) in uploaded_docs.iter().enumerate().take(3) { // Sample first 3 docs
-                let details = investigator.get_document_details(&doc.id.to_string()).await;
+                let details = investigator.get_document_details(&doc.document_id.to_string()).await;
                 let status = details["ocr_status"].as_str().unwrap_or("unknown");
                 let ocr_text = details["ocr_text"].as_str().unwrap_or("");
                 let expected = &documents[i].0;
@@ -169,7 +169,7 @@ async fn investigate_empty_content_issue() {
                     current_completed += 1;
                 }
                 
-                sample_results.push((doc.id.to_string(), status.to_string(), expected.clone(), ocr_text.to_string()));
+                sample_results.push((doc.document_id.to_string(), status.to_string(), expected.clone(), ocr_text.to_string()));
             }
             
             // Estimate total completed (this is rough but gives us an idea)
@@ -207,7 +207,7 @@ async fn investigate_empty_content_issue() {
         let mut other_corruption = 0;
         
         for (i, doc) in uploaded_docs.iter().enumerate() {
-            let details = investigator.get_document_details(&doc.id.to_string()).await;
+            let details = investigator.get_document_details(&doc.document_id.to_string()).await;
             let status = details["ocr_status"].as_str().unwrap_or("unknown");
             let ocr_text = details["ocr_text"].as_str().unwrap_or("");
             let expected = &documents[i].0;

@@ -223,10 +223,7 @@ impl RBACTestClient {
             return Err(format!("Get documents failed: {}", response.text().await?).into());
         }
         
-        let response_json: Value = response.json().await?;
-        let documents: Vec<Value> = serde_json::from_value(
-            response_json["documents"].clone()
-        )?;
+        let documents: Vec<Value> = response.json().await?;
         Ok(documents)
     }
     

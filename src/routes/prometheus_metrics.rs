@@ -29,10 +29,14 @@ pub fn router() -> Router<Arc<AppState>> {
 pub async fn get_prometheus_metrics(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, StatusCode> {
+    tracing::debug!("Prometheus: get_prometheus_metrics endpoint called");
+    
     let mut output = String::new();
     
     // Get current timestamp
     let timestamp = chrono::Utc::now().timestamp_millis();
+    
+    tracing::debug!("Prometheus: Starting to collect all metrics");
     
     // Collect all metrics
     let (document_metrics, ocr_metrics, user_metrics, database_metrics, system_metrics, storage_metrics, security_metrics) = tokio::try_join!(
@@ -43,7 +47,12 @@ pub async fn get_prometheus_metrics(
         collect_system_metrics(&state),
         collect_storage_metrics(&state),
         collect_security_metrics(&state)
-    )?;
+    ).map_err(|e| {
+        tracing::error!("Prometheus: Failed to collect metrics: {:?}", e);
+        e
+    })?;
+    
+    tracing::debug!("Prometheus: Successfully collected all metrics, formatting output");
     
     // Write Prometheus formatted metrics
     
@@ -299,19 +308,26 @@ async fn collect_document_metrics(state: &Arc<AppState>) -> Result<DocumentMetri
 async fn collect_ocr_metrics(state: &Arc<AppState>) -> Result<OcrMetrics, StatusCode> {
     use crate::ocr::queue::OcrQueueService;
     
+    tracing::debug!("Prometheus: Starting collect_ocr_metrics");
+    
     let queue_service = OcrQueueService::new(
         state.db.clone(),
         state.db.pool.clone(),
         state.config.concurrent_ocr_jobs
     );
     
+    tracing::debug!("Prometheus: Created OCR queue service, calling get_stats()");
+    
     let stats = queue_service
         .get_stats()
         .await
         .map_err(|e| {
-            tracing::error!("Failed to get OCR stats: {}", e);
+            tracing::error!("Prometheus: Failed to get OCR stats: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+    
+    tracing::debug!("Prometheus: Successfully got OCR stats: pending={}, processing={}, failed={}, completed_today={}", 
+                    stats.pending_count, stats.processing_count, stats.failed_count, stats.completed_today);
     
     // Get additional OCR metrics
     let stuck_jobs = sqlx::query_scalar::<_, i64>(

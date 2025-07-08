@@ -216,10 +216,7 @@ impl FileProcessingTestClient {
                 .await?;
             
             if response.status().is_success() {
-                let response_json: serde_json::Value = response.json().await?;
-                let documents: Vec<DocumentResponse> = serde_json::from_value(
-                    response_json["documents"].clone()
-                )?;
+                let documents: Vec<DocumentResponse> = response.json().await?;
                 
                 if let Some(doc) = documents.iter().find(|d| d.id.to_string() == document_id) {
                     println!("📄 DEBUG: Found document with OCR status: {:?}", doc.ocr_status);
@@ -582,11 +579,8 @@ async fn test_image_processing_pipeline() {
                 .await
                 .expect("Failed to get documents");
             
-            let response_json: serde_json::Value = response.json().await
+            let documents: Vec<DocumentResponse> = response.json().await
                 .expect("Failed to parse response");
-            let documents: Vec<DocumentResponse> = serde_json::from_value(
-                response_json["documents"].clone()
-            ).expect("Failed to parse documents");
             
             documents.into_iter()
                 .find(|d| d.id.to_string() == document_id)
@@ -702,26 +696,22 @@ async fn test_processing_error_recovery() {
                     .await;
                     
                 if let Ok(resp) = response {
-                    if let Ok(response_json) = resp.json::<serde_json::Value>().await {
-                        if let Ok(docs) = serde_json::from_value::<Vec<DocumentResponse>>(
-                            response_json["documents"].clone()
-                        ) {
-                    if let Some(doc) = docs.iter().find(|d| d.id.to_string() == document.document_id.to_string()) {
-                        match doc.ocr_status.as_deref() {
-                            Some("completed") => {
-                                println!("✅ Large file processing completed");
-                                break;
+                    if let Ok(docs) = resp.json::<Vec<DocumentResponse>>().await {
+                        if let Some(doc) = docs.iter().find(|d| d.id.to_string() == document.document_id.to_string()) {
+                            match doc.ocr_status.as_deref() {
+                                Some("completed") => {
+                                    println!("✅ Large file processing completed");
+                                    break;
+                                }
+                                Some("failed") => {
+                                    println!("ℹ️  Large file processing failed (may be expected for very large files)");
+                                    break;
+                                }
+                                _ => {
+                                    sleep(Duration::from_secs(2)).await;
+                                    continue;
+                                }
                             }
-                            Some("failed") => {
-                                println!("ℹ️  Large file processing failed (may be expected for very large files)");
-                                break;
-                            }
-                            _ => {
-                                sleep(Duration::from_secs(2)).await;
-                                continue;
-                            }
-                        }
-                    }
                         }
                     }
                 }
@@ -997,11 +987,8 @@ async fn test_concurrent_file_processing() {
                     .expect("Should get documents");
                 
                 if response.status().is_success() {
-                    let response_json: serde_json::Value = response.json().await
+                    let documents: Vec<DocumentResponse> = response.json().await
                         .expect("Should parse response");
-                    let documents: Vec<DocumentResponse> = serde_json::from_value(
-                        response_json["documents"].clone()
-                    ).expect("Should parse documents");
                     
                     if let Some(doc) = documents.iter().find(|d| d.id.to_string() == document_id) {
                         match doc.ocr_status.as_deref() {

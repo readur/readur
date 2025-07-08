@@ -397,7 +397,7 @@ async fn test_document_label_assignment() -> Result<(), Box<dyn std::error::Erro
     println!("Uploading test document...");
     let document_content = b"This is a test document for label assignment testing.";
     let document = client.upload_document(document_content, "test_document.txt").await?;
-    let document_id = document["id"].as_str().unwrap();
+    let document_id = document["document_id"].as_str().unwrap();
 
     // Test: Assign single label
     println!("Testing single label assignment...");
@@ -501,7 +501,7 @@ async fn test_system_labels_access() -> Result<(), Box<dyn std::error::Error>> {
     println!("Testing system label assignment...");
     let document_content = b"This is a test document for system label assignment.";
     let document = client.upload_document(document_content, "system_label_test.txt").await?;
-    let document_id = document["id"].as_str().unwrap();
+    let document_id = document["document_id"].as_str().unwrap();
 
     // Find a system label to assign
     let important_label = system_labels.iter()

@@ -247,7 +247,7 @@ impl OcrRetryTestHelper {
         }
         
         let upload_result: Value = response.json().await?;
-        let doc_id = upload_result["id"].as_str()
+        let doc_id = upload_result["document_id"].as_str()
             .ok_or("No document ID in upload response")?
             .to_string();
             

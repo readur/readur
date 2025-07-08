@@ -14,6 +14,8 @@ use axum::Router;
 #[cfg(any(test, feature = "test-utils"))]
 use serde_json::json;
 #[cfg(any(test, feature = "test-utils"))]
+use uuid;
+#[cfg(any(test, feature = "test-utils"))]
 use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
 #[cfg(any(test, feature = "test-utils"))]
 use testcontainers_modules::postgres::Postgres;
@@ -323,12 +325,15 @@ impl TestAuthHelper {
     
     /// Create a regular test user with unique credentials
     pub async fn create_test_user(&self) -> TestUser {
-        let test_id = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-            .to_string()[..8]
-            .to_string();
+        // Generate a more unique ID using process ID, thread ID (as debug string), and nanoseconds
+        let test_id = format!("{}_{}_{}", 
+            std::process::id(),
+            format!("{:?}", std::thread::current().id()).replace("ThreadId(", "").replace(")", ""),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
         let username = format!("testuser_{}", test_id);
         let email = format!("test_{}@example.com", test_id);
         let password = "password123";
@@ -350,7 +355,51 @@ impl TestAuthHelper {
         let user_response = match serde_json::from_slice::<serde_json::Value>(&response) {
             Ok(json_value) => {
                 println!("DEBUG: Parsed JSON structure: {:#}", json_value);
-                // Now try to parse as UserResponse
+                
+                // Check if this is an error response due to username collision
+                if let Some(error_msg) = json_value.get("error").and_then(|e| e.as_str()) {
+                    if error_msg.contains("Username already exists") {
+                        println!("DEBUG: Username collision detected, retrying with UUID suffix");
+                        // Retry with a UUID suffix for guaranteed uniqueness
+                        let retry_username = format!("{}_{}",
+                            username,
+                            uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
+                        );
+                        let retry_email = format!("test_{}@example.com", 
+                            uuid::Uuid::new_v4().to_string().replace('-', "")[..16].to_string()
+                        );
+                        
+                        let retry_user_data = json!({
+                            "username": retry_username,
+                            "email": retry_email,
+                            "password": password
+                        });
+                        
+                        let retry_response = self.make_request("POST", "/api/auth/register", Some(retry_user_data), None).await;
+                        let retry_response_str = String::from_utf8_lossy(&retry_response);
+                        println!("DEBUG: Retry register response body: {}", retry_response_str);
+                        
+                        let retry_json_value = serde_json::from_slice::<serde_json::Value>(&retry_response)
+                            .expect("Retry response should be valid JSON");
+                        
+                        match serde_json::from_value::<UserResponse>(retry_json_value) {
+                            Ok(user_response) => {
+                                return TestUser {
+                                    user_response,
+                                    username: retry_username,
+                                    password: password.to_string(),
+                                    token: None,
+                                };
+                            },
+                            Err(e) => {
+                                eprintln!("ERROR: Failed to parse UserResponse from retry JSON: {}", e);
+                                panic!("Failed to parse UserResponse from retry: {}", e);
+                            }
+                        }
+                    }
+                }
+                
+                // Try to parse as UserResponse
                 match serde_json::from_value::<UserResponse>(json_value) {
                     Ok(user_response) => user_response,
                     Err(e) => {
@@ -377,12 +426,15 @@ impl TestAuthHelper {
     
     /// Create an admin test user with unique credentials
     pub async fn create_admin_user(&self) -> TestUser {
-        let test_id = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-            .to_string()[..8]
-            .to_string();
+        // Generate a more unique ID using process ID, thread ID (as debug string), and nanoseconds
+        let test_id = format!("{}_{}_{}", 
+            std::process::id(),
+            format!("{:?}", std::thread::current().id()).replace("ThreadId(", "").replace(")", ""),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
         let username = format!("adminuser_{}", test_id);
         let email = format!("admin_{}@example.com", test_id);
         let password = "adminpass123";
@@ -405,7 +457,52 @@ impl TestAuthHelper {
         let user_response = match serde_json::from_slice::<serde_json::Value>(&response) {
             Ok(json_value) => {
                 println!("DEBUG: Admin parsed JSON structure: {:#}", json_value);
-                // Now try to parse as UserResponse
+                
+                // Check if this is an error response due to username collision
+                if let Some(error_msg) = json_value.get("error").and_then(|e| e.as_str()) {
+                    if error_msg.contains("Username already exists") {
+                        println!("DEBUG: Admin username collision detected, retrying with UUID suffix");
+                        // Retry with a UUID suffix for guaranteed uniqueness
+                        let retry_username = format!("{}_{}",
+                            username,
+                            uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
+                        );
+                        let retry_email = format!("admin_{}@example.com", 
+                            uuid::Uuid::new_v4().to_string().replace('-', "")[..16].to_string()
+                        );
+                        
+                        let retry_admin_data = json!({
+                            "username": retry_username,
+                            "email": retry_email,
+                            "password": password,
+                            "role": "admin"
+                        });
+                        
+                        let retry_response = self.make_request("POST", "/api/auth/register", Some(retry_admin_data), None).await;
+                        let retry_response_str = String::from_utf8_lossy(&retry_response);
+                        println!("DEBUG: Retry admin register response body: {}", retry_response_str);
+                        
+                        let retry_json_value = serde_json::from_slice::<serde_json::Value>(&retry_response)
+                            .expect("Retry admin response should be valid JSON");
+                        
+                        match serde_json::from_value::<UserResponse>(retry_json_value) {
+                            Ok(user_response) => {
+                                return TestUser {
+                                    user_response,
+                                    username: retry_username,
+                                    password: password.to_string(),
+                                    token: None,
+                                };
+                            },
+                            Err(e) => {
+                                eprintln!("ERROR: Failed to parse UserResponse from retry admin JSON: {}", e);
+                                panic!("Failed to parse UserResponse from retry admin: {}", e);
+                            }
+                        }
+                    }
+                }
+                
+                // Try to parse as UserResponse
                 match serde_json::from_value::<UserResponse>(json_value) {
                     Ok(user_response) => user_response,
                     Err(e) => {

@@ -239,11 +239,8 @@ impl LoadTestClient {
             return Err(format!("List documents failed: {}", response.text().await?).into());
         }
         
-        let response_json: serde_json::Value = response.json().await?;
-        let documents = response_json["documents"].as_array()
-            .ok_or("Invalid response format: missing documents array")?
-            .clone();
-        Ok((documents, elapsed))
+        let documents_array: Vec<serde_json::Value> = response.json().await?;
+        Ok((documents_array, elapsed))
     }
     
     /// Perform a timed search request
