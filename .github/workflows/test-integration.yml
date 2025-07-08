@@ -146,6 +146,7 @@ jobs:
           WATCH_FOLDER: ./watch
           RUST_LOG: debug
           RUST_BACKTRACE: 1
+          DEBUG: 1
 
       - name: Print server logs on failure
         if: failure()
