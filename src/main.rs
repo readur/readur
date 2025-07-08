@@ -52,17 +52,18 @@ fn determine_static_files_path() -> std::path::PathBuf {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging with custom filters to reduce spam from pdf_extract crate
+    // Initialize logging with custom filters to reduce spam from noisy crates
     // Users can override with RUST_LOG environment variable, e.g.:
-    // RUST_LOG=debug cargo run                    (enable debug for all)
-    // RUST_LOG=readur=debug,pdf_extract=error     (debug for readur, suppress pdf_extract)
-    // RUST_LOG=pdf_extract=off                    (completely silence pdf_extract)
+    // RUST_LOG=debug cargo run                                          (enable debug for all)
+    // RUST_LOG=readur=debug,pdf_extract=error,sqlx::postgres::notice=off (debug for readur, suppress spam)
+    // RUST_LOG=sqlx::postgres::notice=debug                             (show PostgreSQL notices for debugging)
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| {
             // Default filter when RUST_LOG is not set
             tracing_subscriber::EnvFilter::new("info")
-                .add_directive("pdf_extract=error".parse().unwrap()) // Suppress pdf_extract WARN spam
-                .add_directive("readur=info".parse().unwrap())       // Keep our app logs at info
+                .add_directive("pdf_extract=error".parse().unwrap())           // Suppress pdf_extract WARN spam
+                .add_directive("sqlx::postgres::notice=warn".parse().unwrap()) // Suppress PostgreSQL NOTICE spam  
+                .add_directive("readur=info".parse().unwrap())                 // Keep our app logs at info
         });
     
     tracing_subscriber::fmt()
@@ -205,32 +206,6 @@ async fn main() -> anyhow::Result<()> {
         info!("No migrations found");
     }
     
-    // Check if ocr_error column exists
-    let check_column = sqlx::query("SELECT column_name FROM information_schema.columns WHERE table_name = 'documents' AND column_name = 'ocr_error'")
-        .fetch_optional(web_db.get_pool())
-        .await;
-    
-    match check_column {
-        Ok(Some(_)) => info!("✅ ocr_error column exists"),
-        Ok(None) => {
-            error!("❌ ocr_error column is missing! Migration 006 may not have been applied.");
-            // Try to add the column manually as a fallback
-            info!("Attempting to add missing columns...");
-            if let Err(e) = sqlx::query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_error TEXT")
-                .execute(web_db.get_pool())
-                .await {
-                error!("Failed to add ocr_error column: {}", e);
-            }
-            if let Err(e) = sqlx::query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_completed_at TIMESTAMPTZ")
-                .execute(web_db.get_pool())
-                .await {
-                error!("Failed to add ocr_completed_at column: {}", e);
-            }
-            info!("Fallback column addition completed");
-        }
-        Err(e) => error!("Failed to check for ocr_error column: {}", e),
-    }
-    
     let result = migrations.run(web_db.get_pool()).await;
     match result {
         Ok(_) => {
@@ -265,28 +240,6 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => {
             error!("Failed to run SQLx migrations: {}", e);
             return Err(e.into());
-        }
-    }
-    
-    // Debug: Check what columns exist in documents table
-    let columns_result = sqlx::query(
-        "SELECT column_name FROM information_schema.columns 
-         WHERE table_name = 'documents' AND table_schema = 'public'
-         ORDER BY ordinal_position"
-    )
-    .fetch_all(web_db.get_pool())
-    .await;
-    
-    match columns_result {
-        Ok(rows) => {
-            info!("Columns in documents table:");
-            for row in rows {
-                let column_name: String = row.get("column_name");
-                info!("  - {}", column_name);
-            }
-        }
-        Err(e) => {
-            error!("Failed to check columns: {}", e);
         }
     }
     
