@@ -221,11 +221,11 @@ mod document_routes_deletion_tests {
             "deleted_count": 2,
             "deleted_documents": [
                 {
-                    "id": doc1.id,
+                    "id": doc1.id.to_string(),
                     "filename": doc1.filename
                 },
                 {
-                    "id": doc2.id,
+                    "id": doc2.id.to_string(),
                     "filename": doc2.filename
                 }
             ]
@@ -244,7 +244,7 @@ mod document_routes_deletion_tests {
             "requested_count": 2,
             "deleted_documents": [
                 {
-                    "id": doc1.id,
+                    "id": doc1.id.to_string(),
                     "filename": doc1.filename
                 }
             ]
