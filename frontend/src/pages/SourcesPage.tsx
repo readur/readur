@@ -765,6 +765,7 @@ const SourcesPage: React.FC = () => {
   const renderSourceCard = (source: Source) => (
     <Fade in={true} key={source.id}>
       <Card 
+        data-testid="source-item"
         sx={{ 
           position: 'relative',
           overflow: 'hidden',
@@ -1088,6 +1089,7 @@ const SourcesPage: React.FC = () => {
             size="large"
             startIcon={<AddIcon />}
             onClick={handleCreateSource}
+            data-testid="add-source"
             sx={{
               borderRadius: 3,
               px: 4,
@@ -1240,7 +1242,7 @@ const SourcesPage: React.FC = () => {
           </Button>
         </Paper>
       ) : (
-        <Grid container spacing={4}>
+        <Grid container spacing={4} data-testid="sources-list">
           {sources.map(renderSourceCard)}
         </Grid>
       )}
