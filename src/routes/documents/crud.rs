@@ -109,7 +109,7 @@ pub async fn upload_document(
             }
             
             Ok(Json(DocumentUploadResponse {
-                document_id: document.id,
+                id: document.id,
                 filename: document.filename,
                 file_size: document.file_size,
                 mime_type: document.mime_type,
@@ -120,7 +120,7 @@ pub async fn upload_document(
         Ok(IngestionResult::ExistingDocument(existing_doc)) => {
             warn!("Duplicate document upload attempted: {}", existing_doc.id);
             Ok(Json(DocumentUploadResponse {
-                document_id: existing_doc.id,
+                id: existing_doc.id,
                 filename: existing_doc.filename,
                 file_size: existing_doc.file_size,
                 mime_type: existing_doc.mime_type,

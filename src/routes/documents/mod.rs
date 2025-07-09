@@ -33,6 +33,12 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/ocr/stats", get(get_ocr_stats))
         .route("/{id}/ocr/stop", post(cancel_ocr))
         
+        // OCR retry operations
+        .route("/ocr/retry-stats", get(crate::routes::documents_ocr_retry::get_ocr_retry_stats))
+        .route("/ocr/retry-recommendations", get(crate::routes::documents_ocr_retry::get_retry_recommendations))
+        .route("/ocr/bulk-retry", post(crate::routes::documents_ocr_retry::bulk_retry_ocr))
+        .route("/{id}/ocr/retry-history", get(crate::routes::documents_ocr_retry::get_document_retry_history))
+        
         // Bulk operations
         .route("/bulk/delete", post(bulk_delete_documents))
         .route("/cleanup/low-confidence", delete(delete_low_confidence_documents))

@@ -239,11 +239,8 @@ impl LoadTestClient {
             return Err(format!("List documents failed: {}", response.text().await?).into());
         }
         
-        let response_json: serde_json::Value = response.json().await?;
-        let documents = response_json["documents"].as_array()
-            .ok_or("Invalid response format: missing documents array")?
-            .clone();
-        Ok((documents, elapsed))
+        let documents_array: Vec<serde_json::Value> = response.json().await?;
+        Ok((documents_array, elapsed))
     }
     
     /// Perform a timed search request
@@ -320,7 +317,7 @@ async fn test_high_volume_document_uploads() {
             let result = client_clone.timed_upload(&content, &filename).await;
             
             match result {
-                Ok((document, duration)) => (i, true, duration, Some(document.document_id.to_string())),
+                Ok((document, duration)) => (i, true, duration, Some(document.id.to_string())),
                 Err(_) => (i, false, Duration::ZERO, None),
             }
         });
@@ -494,7 +491,7 @@ async fn test_search_performance_with_load() {
         
         match client.timed_upload(&content, &filename).await {
             Ok((document, _)) => {
-                document_ids.push(document.document_id.to_string());
+                document_ids.push(document.id.to_string());
             }
             Err(e) => {
                 println!("⚠️  Failed to upload document {}: {}", i, e);
@@ -695,7 +692,7 @@ async fn test_system_stability_under_sustained_load() {
                 let content = format!("Stability test document {}", operation_counter);
                 let filename = format!("stability_{}.txt", operation_counter);
                 client.timed_upload(&content, &filename).await
-                    .map(|(doc, duration)| (format!("upload({})", doc.document_id), duration))
+                    .map(|(doc, duration)| (format!("upload({})", doc.id), duration))
             }
             _ => {
                 // Search operation

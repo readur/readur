@@ -110,7 +110,7 @@ impl OcrTestClient {
         }
         
         let document: DocumentUploadResponse = response.json().await?;
-        Ok((document.document_id, content.to_string()))
+        Ok((document.id, content.to_string()))
     }
     
     /// Get document details including OCR status
@@ -197,7 +197,7 @@ impl OcrTestClient {
                     }
                     
                     let document: DocumentUploadResponse = response.json().await?;
-                    Ok::<(Uuid, String), Box<dyn std::error::Error>>((document.document_id, content_owned))
+                    Ok::<(Uuid, String), Box<dyn std::error::Error>>((document.id, content_owned))
                 }
             })
             .collect();

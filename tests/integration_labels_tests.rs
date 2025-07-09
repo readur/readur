@@ -210,7 +210,8 @@ mod tests {
         let auth_helper = TestAuthHelper::new(ctx.app.clone());
         let user = auth_helper.create_test_user().await;
 
-        // Create system label
+        // Create system label with unique name
+        let unique_label_name = format!("System Label {}", uuid::Uuid::new_v4());
         let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
             r#"
             INSERT INTO labels (user_id, name, color, is_system)
@@ -219,7 +220,7 @@ mod tests {
             "#,
         )
         .bind(None::<Uuid>) // System labels have NULL user_id
-        .bind("System Label")
+        .bind(&unique_label_name)
         .bind("#ff0000")
         .bind(true)
         .fetch_one(&ctx.state.db.pool)
@@ -247,6 +248,13 @@ mod tests {
         .await;
 
         assert!(system_label.is_ok());
+        
+        // Cleanup: Remove the test system label
+        sqlx::query("DELETE FROM labels WHERE id = $1")
+            .bind(label_id)
+            .execute(&ctx.state.db.pool)
+            .await
+            .expect("Failed to cleanup test system label");
     }
 
     #[tokio::test]

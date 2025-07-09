@@ -181,7 +181,7 @@ impl OCRQueueTestClient {
         
         let document: DocumentUploadResponse = response.json().await?;
         println!("📄 Document uploaded: {} (filename: {}, size: {})", 
-                 document.document_id, filename, document.file_size);
+                 document.id, filename, document.file_size);
         Ok(document)
     }
     
@@ -227,10 +227,7 @@ impl OCRQueueTestClient {
                 .await?;
             
             if response.status().is_success() {
-                let response_json: serde_json::Value = response.json().await?;
-                let documents: Vec<DocumentResponse> = serde_json::from_value(
-                    response_json["documents"].clone()
-                )?;
+                let documents: Vec<DocumentResponse> = response.json().await?;
                 
                 for (i, doc_id) in document_ids.iter().enumerate() {
                     if !completed_status[i] {
@@ -278,10 +275,7 @@ impl OCRQueueTestClient {
             return Err(format!("Get documents failed: {}", response.text().await?).into());
         }
         
-        let response_json: serde_json::Value = response.json().await?;
-        let documents: Vec<DocumentResponse> = serde_json::from_value(
-            response_json["documents"].clone()
-        )?;
+        let documents: Vec<DocumentResponse> = response.json().await?;
         Ok(documents)
     }
 }
@@ -328,7 +322,7 @@ async fn test_queue_stats_monitoring() {
     let document = client.upload_document("Test document for queue monitoring", "queue_test.txt").await
         .expect("Failed to upload document");
     
-    println!("✅ Document uploaded: {}", document.document_id);
+    println!("✅ Document uploaded: {}", document.id);
     
     // Wait a moment for queue to update
     sleep(Duration::from_secs(2)).await;
@@ -432,7 +426,7 @@ async fn test_concurrent_ocr_processing() {
     
     // Collect document IDs
     let document_ids: Vec<String> = documents.iter()
-        .map(|d| d.document_id.to_string())
+        .map(|d| d.id.to_string())
         .collect();
     
     // Monitor queue stats during processing

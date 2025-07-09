@@ -29,7 +29,7 @@ pub struct DeleteLowConfidenceRequest {
 
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct DocumentUploadResponse {
-    pub document_id: uuid::Uuid,
+    pub id: uuid::Uuid,
     pub filename: String,
     pub file_size: i64,
     pub mime_type: String,

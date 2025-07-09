@@ -6,10 +6,10 @@ use reqwest::Client;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use uuid::Uuid;
 use futures;
 
-use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -63,7 +63,7 @@ impl Investigator {
         Self { client, token }
     }
     
-    async fn upload_document(&self, content: &str, filename: &str) -> DocumentResponse {
+    async fn upload_document(&self, content: &str, filename: &str) -> DocumentUploadResponse {
         let part = reqwest::multipart::Part::text(content.to_string())
             .file_name(filename.to_string())
             .mime_str("text/plain")

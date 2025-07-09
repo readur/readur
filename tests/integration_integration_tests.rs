@@ -134,9 +134,15 @@ impl TestClient {
             
             if response.status().is_success() {
                 let response_json: serde_json::Value = response.json().await?;
-                let documents = response_json.get("documents")
-                    .and_then(|docs| docs.as_array())
-                    .ok_or("Invalid response format: missing documents array")?;
+                let documents = if let Some(docs_array) = response_json.get("documents").and_then(|d| d.as_array()) {
+                    // Documents are in a "documents" key
+                    docs_array
+                } else if let Some(docs_array) = response_json.as_array() {
+                    // Response is directly an array of documents
+                    docs_array
+                } else {
+                    return Err("Invalid response format: missing documents array".into());
+                };
                 
                 for doc_value in documents {
                     let doc: DocumentResponse = serde_json::from_value(doc_value.clone())?;
@@ -213,7 +219,7 @@ Technology: Rust + Axum + SQLx"#;
     let document = client.upload_document(test_content, "rust_test.txt").await
         .expect("Failed to upload document");
     
-    println!("✅ Document uploaded: {}", document.document_id);
+    println!("✅ Document uploaded: {}", document.id);
     
     // Validate document response structure using our types
     assert!(!document.filename.is_empty());
@@ -221,18 +227,18 @@ Technology: Rust + Axum + SQLx"#;
     assert_eq!(document.mime_type, "text/plain");
     
     // Wait for OCR processing
-    let ocr_completed = client.wait_for_ocr_completion(&document.document_id.to_string()).await
+    let ocr_completed = client.wait_for_ocr_completion(&document.id.to_string()).await
         .expect("Failed to wait for OCR completion");
     
     assert!(ocr_completed, "OCR processing did not complete within timeout");
     println!("✅ OCR processing completed");
     
     // Retrieve OCR text
-    let ocr_data = client.get_ocr_text(&document.document_id.to_string()).await
+    let ocr_data = client.get_ocr_text(&document.id.to_string()).await
         .expect("Failed to retrieve OCR text");
     
     // Validate OCR response structure
-    assert_eq!(ocr_data["document_id"], document.document_id.to_string());
+    assert_eq!(ocr_data["id"], document.id.to_string());
     assert_eq!(ocr_data["filename"], document.filename);
     assert!(ocr_data["has_ocr_text"].as_bool().unwrap_or(false));
     
@@ -341,9 +347,15 @@ async fn test_document_list_structure() {
     let response_json: serde_json::Value = response.json().await
         .expect("Failed to parse response JSON");
     
-    let documents_array = response_json.get("documents")
-        .and_then(|docs| docs.as_array())
-        .expect("Failed to find documents array in response");
+    let documents_array = if let Some(docs_array) = response_json.get("documents").and_then(|d| d.as_array()) {
+        // Documents are in a "documents" key
+        docs_array
+    } else if let Some(docs_array) = response_json.as_array() {
+        // Response is directly an array of documents
+        docs_array
+    } else {
+        panic!("Failed to find documents array in response");
+    };
     
     let documents: Vec<DocumentResponse> = documents_array.iter()
         .map(|doc_value| serde_json::from_value(doc_value.clone()))
@@ -351,7 +363,7 @@ async fn test_document_list_structure() {
         .expect("Failed to parse documents as DocumentResponse");
     
     // Find our uploaded document
-    let found_doc = documents.iter().find(|d| d.id.to_string() == document.document_id.to_string())
+    let found_doc = documents.iter().find(|d| d.id.to_string() == document.id.to_string())
         .expect("Uploaded document should be in list");
     
     // Validate structure matches our types

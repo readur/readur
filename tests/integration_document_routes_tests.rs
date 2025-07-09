@@ -196,7 +196,7 @@ mod document_routes_deletion_tests {
 
         assert_eq!(success_response["success"], true);
         assert!(success_response["message"].is_string());
-        assert_eq!(success_response["document_id"], document.id.to_string());
+        assert_eq!(success_response["id"], document.id.to_string());
 
         // Test error response format
         let error_response = json!({
