@@ -150,7 +150,7 @@ impl DocumentDeletionTestClient {
             return Ok(serde_json::json!({
                 "success": true, 
                 "message": "Document deleted", 
-                "document_id": document_id, 
+                "id": document_id, 
                 "filename": "deleted"
             }));
         }
