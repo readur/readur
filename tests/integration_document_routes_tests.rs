@@ -191,7 +191,7 @@ mod document_routes_deletion_tests {
         let success_response = json!({
             "success": true,
             "message": "Document deleted successfully",
-            "document_id": document.id
+            "id": document.id.to_string()
         });
 
         assert_eq!(success_response["success"], true);
