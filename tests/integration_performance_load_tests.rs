@@ -692,7 +692,7 @@ async fn test_system_stability_under_sustained_load() {
                 let content = format!("Stability test document {}", operation_counter);
                 let filename = format!("stability_{}.txt", operation_counter);
                 client.timed_upload(&content, &filename).await
-                    .map(|(doc, duration)| (format!("upload({})", doc.document_id), duration))
+                    .map(|(doc, duration)| (format!("upload({})", doc.id), duration))
             }
             _ => {
                 // Search operation

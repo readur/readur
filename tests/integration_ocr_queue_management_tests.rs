@@ -426,7 +426,7 @@ async fn test_concurrent_ocr_processing() {
     
     // Collect document IDs
     let document_ids: Vec<String> = documents.iter()
-        .map(|d| d.document_id.to_string())
+        .map(|d| d.id.to_string())
         .collect();
     
     // Monitor queue stats during processing

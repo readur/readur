@@ -139,8 +139,8 @@ async fn debug_ocr_content() {
     let doc1: DocumentUploadResponse = doc1_response.json().await.expect("Valid JSON for doc1");
     let doc2: DocumentUploadResponse = doc2_response.json().await.expect("Valid JSON for doc2");
     
-    println!("📄 Document 1: {}", doc1.document_id);
-    println!("📄 Document 2: {}", doc2.document_id);
+    println!("📄 Document 1: {}", doc1.id);
+    println!("📄 Document 2: {}", doc2.id);
     
     // Wait for OCR to complete
     let start = Instant::now();
@@ -158,7 +158,7 @@ async fn debug_ocr_content() {
         // Check document 1
         if !doc1_completed {
             let response = client
-                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.document_id))
+                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.id))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await
@@ -180,7 +180,7 @@ async fn debug_ocr_content() {
         // Check document 2
         if !doc2_completed {
             let response = client
-                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.document_id))
+                .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.id))
                 .header("Authorization", format!("Bearer {}", token))
                 .send()
                 .await
@@ -212,14 +212,14 @@ async fn debug_ocr_content() {
     
     // Now get the actual OCR content and analyze it
     let doc1_ocr_response = client
-        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.document_id))
+        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc1.id))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
         .expect("OCR endpoint should work");
     
     let doc2_ocr_response = client
-        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.document_id))
+        .get(&format!("{}/api/documents/{}/ocr", get_base_url(), doc2.id))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
