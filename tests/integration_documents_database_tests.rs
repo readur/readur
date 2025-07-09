@@ -150,7 +150,7 @@ mod tests {
         });
         
         assert!(ocr_response.is_object());
-        assert_eq!(ocr_response["document_id"], document.id.to_string());
+        assert_eq!(ocr_response["id"], document.id.to_string());
         assert_eq!(ocr_response["filename"], document.filename);
         assert_eq!(ocr_response["has_ocr_text"], true);
         assert_eq!(ocr_response["ocr_text"], document.ocr_text.unwrap());

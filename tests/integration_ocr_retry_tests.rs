@@ -247,7 +247,7 @@ impl OcrRetryTestHelper {
         }
         
         let upload_result: Value = response.json().await?;
-        let doc_id = upload_result["document_id"].as_str()
+        let doc_id = upload_result["id"].as_str()
             .ok_or("No document ID in upload response")?
             .to_string();
             
@@ -411,7 +411,7 @@ async fn test_document_retry_history() {
             println!("✅ Document retry history endpoint working");
             
             // Verify response structure
-            assert!(history["document_id"].is_string(), "Should have document_id");
+            assert!(history["id"].is_string(), "Should have document_id");
             assert!(history["retry_history"].is_array(), "Should have retry_history array");
             assert!(history["total_retries"].is_number(), "Should have total_retries count");
             

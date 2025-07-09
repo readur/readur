@@ -409,7 +409,7 @@ async fn test_document_ownership_isolation() {
         "user1_private.txt"
     ).await.expect("Failed to upload User1 document");
     
-    let user1_doc_id = user1_doc["id"].as_str().expect("Document should have ID");
+    let user1_doc_id = user1_doc["id"].as_str().expect("Document should have document_id");
     println!("✅ User1 uploaded document: {}", user1_doc_id);
     
     // User2 uploads a document
@@ -419,7 +419,7 @@ async fn test_document_ownership_isolation() {
         "user2_private.txt"
     ).await.expect("Failed to upload User2 document");
     
-    let user2_doc_id = user2_doc["id"].as_str().expect("Document should have ID");
+    let user2_doc_id = user2_doc["id"].as_str().expect("Document should have document_id");
     println!("✅ User2 uploaded document: {}", user2_doc_id);
     
     // Test document list isolation

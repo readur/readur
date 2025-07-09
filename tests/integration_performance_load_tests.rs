@@ -317,7 +317,7 @@ async fn test_high_volume_document_uploads() {
             let result = client_clone.timed_upload(&content, &filename).await;
             
             match result {
-                Ok((document, duration)) => (i, true, duration, Some(document.document_id.to_string())),
+                Ok((document, duration)) => (i, true, duration, Some(document.id.to_string())),
                 Err(_) => (i, false, Duration::ZERO, None),
             }
         });
@@ -491,7 +491,7 @@ async fn test_search_performance_with_load() {
         
         match client.timed_upload(&content, &filename).await {
             Ok((document, _)) => {
-                document_ids.push(document.document_id.to_string());
+                document_ids.push(document.id.to_string());
             }
             Err(e) => {
                 println!("⚠️  Failed to upload document {}: {}", i, e);

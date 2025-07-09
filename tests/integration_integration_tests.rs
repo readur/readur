@@ -219,7 +219,7 @@ Technology: Rust + Axum + SQLx"#;
     let document = client.upload_document(test_content, "rust_test.txt").await
         .expect("Failed to upload document");
     
-    println!("✅ Document uploaded: {}", document.document_id);
+    println!("✅ Document uploaded: {}", document.id);
     
     // Validate document response structure using our types
     assert!(!document.filename.is_empty());
@@ -227,18 +227,18 @@ Technology: Rust + Axum + SQLx"#;
     assert_eq!(document.mime_type, "text/plain");
     
     // Wait for OCR processing
-    let ocr_completed = client.wait_for_ocr_completion(&document.document_id.to_string()).await
+    let ocr_completed = client.wait_for_ocr_completion(&document.id.to_string()).await
         .expect("Failed to wait for OCR completion");
     
     assert!(ocr_completed, "OCR processing did not complete within timeout");
     println!("✅ OCR processing completed");
     
     // Retrieve OCR text
-    let ocr_data = client.get_ocr_text(&document.document_id.to_string()).await
+    let ocr_data = client.get_ocr_text(&document.id.to_string()).await
         .expect("Failed to retrieve OCR text");
     
     // Validate OCR response structure
-    assert_eq!(ocr_data["document_id"], document.document_id.to_string());
+    assert_eq!(ocr_data["id"], document.id.to_string());
     assert_eq!(ocr_data["filename"], document.filename);
     assert!(ocr_data["has_ocr_text"].as_bool().unwrap_or(false));
     
@@ -363,7 +363,7 @@ async fn test_document_list_structure() {
         .expect("Failed to parse documents as DocumentResponse");
     
     // Find our uploaded document
-    let found_doc = documents.iter().find(|d| d.id.to_string() == document.document_id.to_string())
+    let found_doc = documents.iter().find(|d| d.id.to_string() == document.id.to_string())
         .expect("Uploaded document should be in list");
     
     // Validate structure matches our types

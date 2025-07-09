@@ -381,25 +381,25 @@ async fn test_single_document_deletion_success() {
     let document = client.upload_document(test_content, "test_deletion.txt")
         .await.expect("Failed to upload document");
     
-    println!("Uploaded document: {}", document.document_id);
+    println!("Uploaded document: {}", document.id);
     
     // Verify document exists
-    let retrieved_doc = client.get_document(&document.document_id.to_string())
+    let retrieved_doc = client.get_document(&document.id.to_string())
         .await.expect("Failed to get document");
     assert!(retrieved_doc.is_some(), "Document should exist before deletion");
     
     // Delete the document
-    let delete_result = client.delete_document(&document.document_id.to_string())
+    let delete_result = client.delete_document(&document.id.to_string())
         .await.expect("Failed to delete document");
     
     // Verify deletion response (server returns 204 No Content, so we get our fallback response)
     assert_eq!(delete_result["success"], true);
-    assert_eq!(delete_result["document_id"], document.document_id.to_string());
+    assert_eq!(delete_result["id"], document.id.to_string());
     // Note: filename is "deleted" because server returns empty response
     assert_eq!(delete_result["filename"], "deleted");
     
     // Verify document no longer exists
-    let retrieved_doc_after = client.get_document(&document.document_id.to_string())
+    let retrieved_doc_after = client.get_document(&document.id.to_string())
         .await.expect("Failed to check document existence");
     assert!(retrieved_doc_after.is_none(), "Document should not exist after deletion");
     
@@ -425,7 +425,7 @@ async fn test_bulk_document_deletion_success() {
         let test_content = format!("This is test document number {}", i);
         let document = client.upload_document(test_content.as_bytes(), &format!("test_bulk_{}.txt", i))
             .await.expect("Failed to upload document");
-        document_ids.push(document.document_id.to_string());
+        document_ids.push(document.id.to_string());
     }
     
     println!("Uploaded {} documents for bulk deletion", document_ids.len());
@@ -536,7 +536,7 @@ async fn test_bulk_delete_mixed_existing_nonexistent() {
     
     // Create a list with real and fake IDs
     let fake_id = Uuid::new_v4().to_string();
-    let mixed_ids = vec![real_document.document_id.to_string(), fake_id];
+    let mixed_ids = vec![real_document.id.to_string(), fake_id];
     
     // Perform bulk deletion
     let delete_result = client.bulk_delete_documents(&mixed_ids)
@@ -554,10 +554,10 @@ async fn test_bulk_delete_mixed_existing_nonexistent() {
         .collect();
     
     assert_eq!(deleted_ids.len(), 1);
-    assert_eq!(deleted_ids[0], real_document.document_id.to_string());
+    assert_eq!(deleted_ids[0], real_document.id.to_string());
     
     // Verify real document was deleted
-    let retrieved_doc = client.get_document(&real_document.document_id.to_string())
+    let retrieved_doc = client.get_document(&real_document.id.to_string())
         .await.expect("Failed to check document existence");
     assert!(retrieved_doc.is_none(), "Real document should be deleted");
     
@@ -613,7 +613,7 @@ async fn test_cross_user_deletion_protection() {
         .await.expect("Failed to upload document as user 1");
     
     // User 2 tries to delete user 1's document
-    let delete_result = client2.delete_document(&user1_document.document_id.to_string()).await;
+    let delete_result = client2.delete_document(&user1_document.id.to_string()).await;
     
     // Should return 404 (document not found for user 2)
     assert!(delete_result.is_err(), "Cross-user deletion should fail");
@@ -621,7 +621,7 @@ async fn test_cross_user_deletion_protection() {
     assert!(error_msg.contains("404"), "Should return 404 for document not owned by user");
     
     // Verify user 1's document still exists
-    let retrieved_doc = client1.get_document(&user1_document.document_id.to_string())
+    let retrieved_doc = client1.get_document(&user1_document.id.to_string())
         .await.expect("Failed to check document existence");
     assert!(retrieved_doc.is_some(), "User 1's document should still exist after failed cross-user deletion");
     
@@ -659,15 +659,15 @@ async fn test_admin_can_delete_any_document() {
         .await.expect("Failed to upload document as user");
     
     // Admin deletes user's document
-    let delete_result = admin_client.delete_document(&user_document.document_id.to_string())
+    let delete_result = admin_client.delete_document(&user_document.id.to_string())
         .await.expect("Admin should be able to delete any document");
     
     // Verify deletion response
     assert_eq!(delete_result["success"], true);
-    assert_eq!(delete_result["document_id"], user_document.document_id.to_string());
+    assert_eq!(delete_result["id"], user_document.id.to_string());
     
     // Verify document no longer exists
-    let retrieved_doc = user_client.get_document(&user_document.document_id.to_string())
+    let retrieved_doc = user_client.get_document(&user_document.id.to_string())
         .await.expect("Failed to check document existence");
     assert!(retrieved_doc.is_none(), "Document should be deleted by admin");
     
@@ -711,8 +711,8 @@ async fn test_document_count_updates_after_deletion() {
         let test_content = format!("Test document {}", i);
         let document = client.upload_document(test_content.as_bytes(), &format!("count_test_{}.txt", i))
             .await.expect("Failed to upload document");
-        document_ids.push(document.document_id.to_string());
-        println!("📤 Uploaded document {}: {}", i, document.document_id);
+        document_ids.push(document.id.to_string());
+        println!("📤 Uploaded document {}: {}", i, document.id);
     }
     
     // Wait a moment for documents to be indexed

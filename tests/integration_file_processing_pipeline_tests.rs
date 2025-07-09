@@ -166,7 +166,7 @@ impl FileProcessingTestClient {
         println!("🟢 DEBUG: Upload response: {}", response_text);
         
         let document: DocumentUploadResponse = serde_json::from_str(&response_text)?;
-        println!("✅ DEBUG: Successfully parsed document: {}", document.document_id);
+        println!("✅ DEBUG: Successfully parsed document: {}", document.id);
         Ok(document)
     }
     
@@ -198,7 +198,7 @@ impl FileProcessingTestClient {
         println!("🟢 DEBUG: Binary upload response: {}", response_text);
         
         let document: DocumentUploadResponse = serde_json::from_str(&response_text)?;
-        println!("✅ DEBUG: Successfully parsed binary document: {}", document.document_id);
+        println!("✅ DEBUG: Successfully parsed binary document: {}", document.id);
         Ok(document)
     }
     
@@ -367,7 +367,7 @@ End of test document."#;
     let document = client.upload_file(text_content, "test_pipeline.txt", "text/plain").await
         .expect("Failed to upload text file");
     
-    let document_id = document.document_id.to_string();
+    let document_id = document.id.to_string();
     println!("✅ Text file uploaded: {}", document_id);
     
     // Validate initial document properties
@@ -402,7 +402,7 @@ End of test document."#;
     let ocr_results = client.get_ocr_results(&document_id).await
         .expect("Failed to get OCR results");
     
-    assert_eq!(ocr_results["document_id"], document_id);
+    assert_eq!(ocr_results["id"], document_id);
     assert_eq!(ocr_results["has_ocr_text"], true);
     
     if let Some(ocr_text) = ocr_results["ocr_text"].as_str() {
@@ -471,7 +471,7 @@ async fn test_multiple_file_format_support() {
         
         match client.upload_file(content, filename, mime_type).await {
             Ok(document) => {
-                println!("✅ Uploaded {}: {}", filename, document.document_id);
+                println!("✅ Uploaded {}: {}", filename, document.id);
                 uploaded_documents.push((document, mime_type, filename, content));
             }
             Err(e) => {
@@ -487,7 +487,7 @@ async fn test_multiple_file_format_support() {
     for (document, mime_type, filename, original_content) in &uploaded_documents {
         println!("🔄 Processing {} ({})...", filename, mime_type);
         
-        let document_id = document.document_id.to_string();
+        let document_id = document.id.to_string();
         
         // Wait for processing (with shorter timeout for multiple files)
         match client.wait_for_processing(&document_id).await {
@@ -496,7 +496,7 @@ async fn test_multiple_file_format_support() {
                 
                 // Test OCR results
                 if let Ok(ocr_results) = client.get_ocr_results(&document_id).await {
-                    assert_eq!(ocr_results["document_id"], document_id);
+                    assert_eq!(ocr_results["id"], document_id);
                     
                     if ocr_results["has_ocr_text"] == true {
                         if let Some(ocr_text) = ocr_results["ocr_text"].as_str() {
@@ -554,7 +554,7 @@ async fn test_image_processing_pipeline() {
     let document = client.upload_binary_file(png_data.clone(), "test_image.png", "image/png").await
         .expect("Failed to upload PNG image");
     
-    let document_id = document.document_id.to_string();
+    let document_id = document.id.to_string();
     println!("✅ PNG image uploaded: {}", document_id);
     
     // Validate image document properties
@@ -621,7 +621,7 @@ async fn test_image_processing_pipeline() {
     let ocr_results = client.get_ocr_results(&document_id).await
         .expect("Failed to get OCR results for image");
     
-    assert_eq!(ocr_results["document_id"], document_id);
+    assert_eq!(ocr_results["id"], document_id);
     
     // Image might not have text, so OCR could be empty
     if ocr_results["has_ocr_text"] == true {
@@ -657,10 +657,10 @@ async fn test_processing_error_recovery() {
     let empty_result = client.upload_file("", "empty.txt", "text/plain").await;
     match empty_result {
         Ok(document) => {
-            println!("✅ Empty file uploaded: {}", document.document_id);
+            println!("✅ Empty file uploaded: {}", document.id);
             
             // Try to process empty file
-            match client.wait_for_processing(&document.document_id.to_string()).await {
+            match client.wait_for_processing(&document.id.to_string()).await {
                 Ok(processed) => {
                     println!("✅ Empty file processing completed: {:?}", processed.ocr_status);
                 }
@@ -682,7 +682,7 @@ async fn test_processing_error_recovery() {
     
     match large_result {
         Ok(document) => {
-            println!("✅ Large file uploaded: {} (size: {} bytes)", document.document_id, document.file_size);
+            println!("✅ Large file uploaded: {} (size: {} bytes)", document.id, document.file_size);
             
             // Give more time for large file processing
             let start = Instant::now();
@@ -697,7 +697,7 @@ async fn test_processing_error_recovery() {
                     
                 if let Ok(resp) = response {
                     if let Ok(docs) = resp.json::<Vec<DocumentResponse>>().await {
-                        if let Some(doc) = docs.iter().find(|d| d.id.to_string() == document.document_id.to_string()) {
+                        if let Some(doc) = docs.iter().find(|d| d.id.to_string() == document.id.to_string()) {
                             match doc.ocr_status.as_deref() {
                                 Some("completed") => {
                                     println!("✅ Large file processing completed");
@@ -732,10 +732,10 @@ async fn test_processing_error_recovery() {
     
     match corrupted_result {
         Ok(document) => {
-            println!("✅ Corrupted file uploaded: {}", document.document_id);
+            println!("✅ Corrupted file uploaded: {}", document.id);
             
             // Processing should handle the mismatch gracefully
-            match client.wait_for_processing(&document.document_id.to_string()).await {
+            match client.wait_for_processing(&document.id.to_string()).await {
                 Ok(processed) => {
                     println!("✅ Corrupted file processed: {:?}", processed.ocr_status);
                 }
@@ -757,10 +757,10 @@ async fn test_processing_error_recovery() {
     
     match special_result {
         Ok(document) => {
-            println!("✅ File with special characters uploaded: {}", document.document_id);
+            println!("✅ File with special characters uploaded: {}", document.id);
             println!("✅ Filename preserved: {}", document.filename);
             
-            match client.wait_for_processing(&document.document_id.to_string()).await {
+            match client.wait_for_processing(&document.id.to_string()).await {
                 Ok(_) => println!("✅ Special filename file processed successfully"),
                 Err(e) => println!("⚠️  Special filename file processing failed: {}", e),
             }
@@ -806,12 +806,12 @@ async fn test_pipeline_performance_monitoring() {
         println!("✅ {} uploaded in {:?}", filename, upload_time);
         
         // Wait for processing and measure time
-        match client.wait_for_processing(&document.document_id.to_string()).await {
+        match client.wait_for_processing(&document.id.to_string()).await {
             Ok(processed_doc) => {
                 let total_processing_time = processing_start.elapsed();
                 
                 // Get OCR results to check reported processing time
-                if let Ok(ocr_results) = client.get_ocr_results(&document.document_id.to_string()).await {
+                if let Ok(ocr_results) = client.get_ocr_results(&document.id.to_string()).await {
                     let reported_time = ocr_results["ocr_processing_time_ms"]
                         .as_i64()
                         .map(|ms| Duration::from_millis(ms as u64));
@@ -954,7 +954,7 @@ async fn test_concurrent_file_processing() {
     for handle in upload_handles {
         match handle.await.expect("Upload task should complete") {
             Ok((index, document, upload_time)) => {
-                println!("✅ Document {} uploaded in {:?}: {}", index + 1, upload_time, document.document_id);
+                println!("✅ Document {} uploaded in {:?}: {}", index + 1, upload_time, document.id);
                 uploaded_documents.push(document);
             }
             Err((index, error)) => {
@@ -972,7 +972,7 @@ async fn test_concurrent_file_processing() {
     for document in uploaded_documents {
         let token = client.token.clone().unwrap();
         let client_clone = client.client.clone();
-        let document_id = document.document_id.to_string();
+        let document_id = document.id.to_string();
         
         let handle = tokio::spawn(async move {
             let start = Instant::now();
@@ -1125,18 +1125,18 @@ async fn test_real_test_images_processing() {
         };
         
         let upload_time = upload_start.elapsed();
-        println!("✅ {} uploaded in {:?}: {}", test_image.filename, upload_time, document.document_id);
+        println!("✅ {} uploaded in {:?}: {}", test_image.filename, upload_time, document.id);
         
         // Wait for OCR processing
         let processing_start = std::time::Instant::now();
-        match client.wait_for_processing(&document.document_id.to_string()).await {
+        match client.wait_for_processing(&document.id.to_string()).await {
             Ok(processed_doc) => {
                 let processing_time = processing_start.elapsed();
                 println!("✅ {} processed in {:?}: status = {:?}", 
                     test_image.filename, processing_time, processed_doc.ocr_status);
                 
                 // Get OCR results and verify content
-                if let Ok(ocr_results) = client.get_ocr_results(&document.document_id.to_string()).await {
+                if let Ok(ocr_results) = client.get_ocr_results(&document.id.to_string()).await {
                     if let Some(ocr_text) = ocr_results["ocr_text"].as_str() {
                         let normalized_ocr = ocr_text.trim().to_lowercase();
                         let normalized_expected = test_image.expected_content.as_ref().map(|s| s.trim().to_lowercase()).unwrap_or_default();
