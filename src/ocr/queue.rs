@@ -804,7 +804,7 @@ impl OcrQueueService {
                 pg_get_function_arguments(p.oid) as arguments
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
-            WHERE n.nspname = 'public' AND p.proname = 'get_ocr_queue_stats'
+            WHERE n.nspname = 'public' AND p.proname = 'get_queue_statistics'
             "#
         )
         .fetch_optional(&self.pool)
@@ -820,15 +820,15 @@ impl OcrQueueService {
             let arguments: String = info.get("arguments");
             tracing::debug!("Function info - name: {}, return_type: {}, arguments: {}", function_name, return_type, arguments);
         } else {
-            tracing::error!("get_ocr_queue_stats function not found!");
-            return Err(anyhow::anyhow!("get_ocr_queue_stats function not found"));
+            tracing::error!("get_queue_statistics function not found!");
+            return Err(anyhow::anyhow!("get_queue_statistics function not found"));
         }
 
-        tracing::debug!("OCR Queue: Calling get_ocr_queue_stats() function");
+        tracing::debug!("OCR Queue: Calling get_queue_statistics() function");
         
         let stats = sqlx::query(
             r#"
-            SELECT * FROM get_ocr_queue_stats()
+            SELECT * FROM get_queue_statistics()
             "#
         )
         .fetch_one(&self.pool)

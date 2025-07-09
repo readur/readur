@@ -254,13 +254,13 @@ async fn main() -> anyhow::Result<()> {
                 info!("📊 Latest migration now: {}", latest);
             }
             
-            // Verify the get_ocr_queue_stats function has the correct implementation
+            // Verify the get_queue_statistics function has the correct implementation
             let function_check = sqlx::query_scalar::<_, Option<String>>(
                 r#"
                 SELECT pg_get_functiondef(p.oid)
                 FROM pg_proc p
                 JOIN pg_namespace n ON p.pronamespace = n.oid
-                WHERE n.nspname = 'public' AND p.proname = 'get_ocr_queue_stats'
+                WHERE n.nspname = 'public' AND p.proname = 'get_queue_statistics'
                 "#
             )
             .fetch_one(web_db.get_pool())
@@ -268,7 +268,7 @@ async fn main() -> anyhow::Result<()> {
             
             match function_check {
                 Ok(Some(def)) => {
-                    info!("📋 get_ocr_queue_stats function definition retrieved");
+                    info!("📋 get_queue_statistics function definition retrieved");
                     
                     // Debug: print the actual function definition
                     info!("🔍 Function definition (first 500 chars): {}", 
@@ -276,27 +276,21 @@ async fn main() -> anyhow::Result<()> {
                     
                     // Check if it contains the correct logic from our latest migration
                     let has_documents_subquery = def.contains("FROM documents") && def.contains("ocr_status = 'completed'");
-                    let has_old_cte_logic = def.contains("document_stats") || def.contains("queue_stats");
-                    let has_old_completed_logic = def.contains("completed_at >= CURRENT_DATE");
+                    let has_cast_statements = def.contains("CAST(");
                     
                     info!("🔍 Function content analysis:");
                     info!("  Has documents subquery: {}", has_documents_subquery);
-                    info!("  Has old CTE logic: {}", has_old_cte_logic);
-                    info!("  Has old completed_at logic: {}", has_old_completed_logic);
+                    info!("  Has CAST statements: {}", has_cast_statements);
                     
-                    if has_documents_subquery && !has_old_completed_logic {
-                        info!("✅ get_ocr_queue_stats function has correct NEW logic (uses documents table subquery)");
-                    } else if has_old_cte_logic {
-                        error!("❌ get_ocr_queue_stats function still uses CTE logic - should use simple subquery");
-                    } else if has_old_completed_logic {
-                        error!("❌ get_ocr_queue_stats function still uses old completed_at logic from ocr_queue table");
+                    if has_documents_subquery && has_cast_statements {
+                        info!("✅ get_queue_statistics function has correct logic (uses documents table subquery with CAST)");
                     } else {
-                        error!("❌ get_ocr_queue_stats function has unexpected structure");
+                        error!("❌ get_queue_statistics function has unexpected structure");
                     }
                     
                     // Test the function execution at startup
                     info!("🧪 Testing function execution at startup...");
-                    match sqlx::query("SELECT * FROM get_ocr_queue_stats()").fetch_one(web_db.get_pool()).await {
+                    match sqlx::query("SELECT * FROM get_queue_statistics()").fetch_one(web_db.get_pool()).await {
                         Ok(test_result) => {
                             info!("✅ Function executes successfully at startup");
                             let columns = test_result.columns();
@@ -310,8 +304,8 @@ async fn main() -> anyhow::Result<()> {
                         }
                     }
                 }
-                Ok(None) => error!("❌ get_ocr_queue_stats function does not exist after migration"),
-                Err(e) => error!("❌ Failed to verify get_ocr_queue_stats function: {}", e),
+                Ok(None) => error!("❌ get_queue_statistics function does not exist after migration"),
+                Err(e) => error!("❌ Failed to verify get_queue_statistics function: {}", e),
             }
         }
         Err(e) => {
