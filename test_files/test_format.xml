@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="test">
+  <metadata>
+    <title>XML Test Document</title>
+    <format>xml</format>
+    <word_count>15</word_count>
+  </metadata>
+  <content>
+    <section>This XML document should be detected as XML format.</section>
+    <section>It contains structured markup for testing.</section>
+  </content>
+</document>

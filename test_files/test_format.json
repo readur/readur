@@ -1,0 +1,15 @@
+{
+  "document": {
+    "title": "Test JSON Document",
+    "type": "metadata_test",
+    "properties": {
+      "word_count": 25,
+      "format": "json",
+      "encoding": "utf-8"
+    },
+    "content": [
+      "This JSON should be detected as JSON format",
+      "It contains structured data in JSON format"
+    ]
+  }
+}

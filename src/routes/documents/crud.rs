@@ -78,7 +78,7 @@ pub async fn upload_document(
     use crate::models::FileIngestionInfo;
     use chrono::Utc;
     
-    let file_info = FileIngestionInfo {
+    let mut file_info = FileIngestionInfo {
         path: format!("upload/{}", filename), // Virtual path for web uploads
         name: filename.clone(),
         size: data.len() as i64,
@@ -90,8 +90,13 @@ pub async fn upload_document(
         permissions: None, // Web uploads don't have filesystem permissions
         owner: Some(auth_user.user.username.clone()), // Uploader as owner
         group: None, // Web uploads don't have filesystem groups
-        metadata: None, // Could extract EXIF/PDF metadata in the future
+        metadata: None, // Will be populated with extracted metadata below
     };
+    
+    // Extract content-based metadata from uploaded file
+    if let Ok(Some(content_metadata)) = crate::metadata_extraction::extract_content_metadata(&data, &content_type, &filename).await {
+        file_info.metadata = Some(content_metadata);
+    }
     
     // Create ingestion service
     let file_service = FileService::new(state.config.upload_path.clone());

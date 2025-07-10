@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document>
+  <title>Sample XML Document</title>
+  <content>
+    <paragraph>This is a sample XML file for testing.</paragraph>
+    <paragraph>It should be detected as XML format.</paragraph>
+  </content>
+  <metadata>
+    <author>Test User</author>
+    <created>2024-01-01</created>
+  </metadata>
+</document>

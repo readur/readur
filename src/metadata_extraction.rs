@@ -1,6 +1,5 @@
 use anyhow::Result;
 use serde_json::{Map, Value};
-use std::collections::HashMap;
 
 /// Extract metadata from file content based on file type
 pub async fn extract_content_metadata(file_data: &[u8], mime_type: &str, filename: &str) -> Result<Option<Value>> {
@@ -177,3 +176,6 @@ async fn extract_text_metadata(file_data: &[u8]) -> Result<Map<String, Value>> {
     
     Ok(metadata)
 }
+
+#[cfg(test)]
+mod tests;

@@ -230,8 +230,8 @@ async fn process_single_file(
     user_id: Uuid,
     db: Database,
 ) -> Result<Option<(Uuid, i64)>> {
-    // Extract file info with metadata
-    let file_info = extract_file_info_from_path(&path).await?;
+    // Extract basic file info first
+    let mut file_info = extract_file_info_from_path(&path).await?;
     
     // Skip very large files (> 100MB)
     if file_info.size > 100 * 1024 * 1024 {
@@ -241,6 +241,11 @@ async fn process_single_file(
     
     // Read file data
     let file_data = fs::read(&path).await?;
+    
+    // Extract content-based metadata
+    if let Ok(Some(content_metadata)) = crate::metadata_extraction::extract_content_metadata(&file_data, &file_info.mime_type, &file_info.name).await {
+        file_info.metadata = Some(content_metadata);
+    }
     
     // Use the unified ingestion service with full metadata support
     let ingestion_service = DocumentIngestionService::new(db, file_service);

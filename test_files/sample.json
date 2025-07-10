@@ -1,0 +1,12 @@
+{
+  "name": "Test Document",
+  "type": "sample",
+  "metadata": {
+    "created": "2024-01-01",
+    "author": "Test User"
+  },
+  "content": [
+    "This is a JSON file",
+    "Used for testing text format detection"
+  ]
+}

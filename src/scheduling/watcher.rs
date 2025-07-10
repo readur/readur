@@ -337,8 +337,13 @@ async fn process_file(
         }
     }
     
-    // Extract file info with metadata
-    let file_info = extract_file_info_from_path(path).await?;
+    // Extract basic file info first
+    let mut file_info = extract_file_info_from_path(path).await?;
+    
+    // Extract content-based metadata
+    if let Ok(Some(content_metadata)) = crate::metadata_extraction::extract_content_metadata(&file_data, &file_info.mime_type, &file_info.name).await {
+        file_info.metadata = Some(content_metadata);
+    }
     
     // Use the unified ingestion service for consistent deduplication
     let ingestion_service = DocumentIngestionService::new(db.clone(), file_service.clone());
