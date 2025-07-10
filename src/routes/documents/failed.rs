@@ -149,7 +149,7 @@ pub async fn get_failed_documents(
             "file_size": row.get::<Option<i64>, _>("file_size"),
             "mime_type": row.get::<Option<String>, _>("mime_type"),
             "content": row.get::<Option<String>, _>("content"),
-            "tags": row.get::<Vec<String>, _>("tags"),
+            "tags": row.get::<Option<Vec<String>>, _>("tags").unwrap_or_default(),
             "ocr_text": row.get::<Option<String>, _>("ocr_text"),
             "ocr_confidence": row.get::<Option<f32>, _>("ocr_confidence"),
             "ocr_word_count": row.get::<Option<i32>, _>("ocr_word_count"),

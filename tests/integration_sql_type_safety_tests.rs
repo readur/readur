@@ -33,15 +33,22 @@ mod tests {
         let ctx = TestContext::new().await;
         let pool = ctx.state.db.get_pool();
         
-        // Create test data
+        // Create test data with unique username
         let user_id = Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_aggregate_user_{}", unique_suffix);
+        let email = format!("test_agg_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_aggregate_user")
-        .bind("test_agg@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("user")
         .execute(pool)
@@ -158,13 +165,20 @@ mod tests {
         
         // Create test user
         let user_id = Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_ignored_user_{}", unique_suffix);
+        let email = format!("test_ignored_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_ignored_user")
-        .bind("test_ignored@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("admin")
         .execute(pool)
