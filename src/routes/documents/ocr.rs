@@ -46,7 +46,7 @@ pub async fn get_document_ocr(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let response = DocumentOcrResponse {
-        document_id: document.id,
+        id: document.id,
         filename: document.original_filename,
         has_ocr_text: document.ocr_text.is_some(),
         ocr_text: document.ocr_text,

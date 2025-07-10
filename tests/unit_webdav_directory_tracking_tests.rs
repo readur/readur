@@ -27,6 +27,9 @@ fn mock_directory_etag_response(etag: &str) -> String {
             <d:propstat>
                 <d:prop>
                     <d:getetag>"{}"</d:getetag>
+                    <d:resourcetype>
+                        <d:collection />
+                    </d:resourcetype>
                 </d:prop>
                 <d:status>HTTP/1.1 200 OK</d:status>
             </d:propstat>
@@ -223,6 +226,9 @@ async fn test_parse_directory_etag_with_quotes() {
             <d:propstat>
                 <d:prop>
                     <d:getetag>"quoted-etag-456"</d:getetag>
+                    <d:resourcetype>
+                        <d:collection />
+                    </d:resourcetype>
                 </d:prop>
                 <d:status>HTTP/1.1 200 OK</d:status>
             </d:propstat>
@@ -246,6 +252,9 @@ async fn test_parse_directory_etag_weak_etag() {
             <d:propstat>
                 <d:prop>
                     <d:getetag>W/"weak-etag-789"</d:getetag>
+                    <d:resourcetype>
+                        <d:collection />
+                    </d:resourcetype>
                 </d:prop>
                 <d:status>HTTP/1.1 200 OK</d:status>
             </d:propstat>

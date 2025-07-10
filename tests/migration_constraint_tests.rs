@@ -12,13 +12,20 @@ mod migration_constraint_tests {
         
         // Create a test user first to avoid foreign key constraint violations
         let user_id = uuid::Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_constraint_user_{}", unique_suffix);
+        let email = format!("test_constraint_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_constraint_user")
-        .bind("test_constraint@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("user")
         .execute(pool)
@@ -62,13 +69,20 @@ mod migration_constraint_tests {
         
         // Create a test user first to avoid foreign key constraint violations
         let user_id = uuid::Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_invalid_user_{}", unique_suffix);
+        let email = format!("test_invalid_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_invalid_user")
-        .bind("test_invalid@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("user")
         .execute(pool)
@@ -108,13 +122,20 @@ mod migration_constraint_tests {
         
         // Create a test user first to avoid foreign key constraint violations
         let user_id = uuid::Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_stage_user_{}", unique_suffix);
+        let email = format!("test_stage_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_stage_user")
-        .bind("test_stage@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("user")
         .execute(pool)
@@ -153,13 +174,20 @@ mod migration_constraint_tests {
         
         // Create a test user first to avoid foreign key constraint violations
         let user_id = uuid::Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_migration_user_{}", unique_suffix);
+        let email = format!("test_migration_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_migration_user")
-        .bind("test_migration@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("user")
         .execute(pool)

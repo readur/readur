@@ -10,39 +10,14 @@ mod tests {
     #[tokio::test]
     async fn test_list_users() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create admin user using direct database approach
-        let admin_data = CreateUser {
-            username: "adminuser".to_string(),
-            email: "admin@example.com".to_string(),
-            password: "adminpass123".to_string(),
-            role: Some(UserRole::Admin),
-        };
-        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
-        
-        // Login using TestAuthHelper for token generation
+        // Create admin user using TestAuthHelper for unique credentials
         let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
-        // Create another user
-        let user2_data = json!({
-            "username": "testuser2",
-            "email": "test2@example.com",
-            "password": "password456"
-        });
-        
-        ctx.app.clone()
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("POST")
-                    .uri("/api/auth/register")
-                    .header("Content-Type", "application/json")
-                    .body(axum::body::Body::from(serde_json::to_vec(&user2_data).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        // Create another user using TestAuthHelper for unique credentials
+        let user2 = auth_helper.create_test_user().await;
 
         let response = ctx.app
             .oneshot(
@@ -63,9 +38,10 @@ mod tests {
             .unwrap();
         let users: Vec<UserResponse> = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(users.len(), 2);
-        assert!(users.iter().any(|u| u.username == "adminuser"));
-        assert!(users.iter().any(|u| u.username == "testuser2"));
+        // Ensure we have at least our 2 created users
+        assert!(users.len() >= 2);
+        assert!(users.iter().any(|u| u.username == admin.username));
+        assert!(users.iter().any(|u| u.username == user2.username));
     }
 
     #[tokio::test]
@@ -106,9 +82,16 @@ mod tests {
         let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("newuser_{}", unique_suffix);
+        let email = format!("new_{}@example.com", unique_suffix);
+        
         let new_user_data = CreateUser {
-            username: "newuser".to_string(),
-            email: "new@example.com".to_string(),
+            username: username.clone(),
+            email: email.clone(),
             password: "newpassword".to_string(),
             role: Some(readur::models::UserRole::User),
         };
@@ -133,40 +116,32 @@ mod tests {
             .unwrap();
         let created_user: UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(created_user.username, "newuser");
-        assert_eq!(created_user.email, "new@example.com");
+        assert_eq!(created_user.username, username);
+        assert_eq!(created_user.email, email);
     }
 
     #[tokio::test]
     async fn test_update_user() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create admin user using direct database approach
-        let admin_data = CreateUser {
-            username: "adminuser".to_string(),
-            email: "admin@example.com".to_string(),
-            password: "adminpass123".to_string(),
-            role: Some(UserRole::Admin),
-        };
-        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
-        
-        // Login using TestAuthHelper for token generation
+        // Create admin user using TestAuthHelper for unique credentials
         let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
         
-        // Create a regular user using direct database approach
-        let user_data = CreateUser {
-            username: "testuser".to_string(),
-            email: "test@example.com".to_string(),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
+        // Create a regular user using TestAuthHelper for unique credentials
+        let user = auth_helper.create_test_user().await;
 
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let updated_username = format!("updateduser_{}", unique_suffix);
+        let updated_email = format!("updated_{}@example.com", unique_suffix);
+        
         let update_data = UpdateUser {
-            username: Some("updateduser".to_string()),
-            email: Some("updated@example.com".to_string()),
+            username: Some(updated_username.clone()),
+            email: Some(updated_email.clone()),
             password: None,
         };
 
@@ -174,7 +149,7 @@ mod tests {
             .oneshot(
                 axum::http::Request::builder()
                     .method("PUT")
-                    .uri(format!("/api/users/{}", user.id))
+                    .uri(format!("/api/users/{}", user.user_response.id))
                     .header("Authorization", format!("Bearer {}", token))
                     .header("Content-Type", "application/json")
                     .body(axum::body::Body::from(serde_json::to_vec(&update_data).unwrap()))
@@ -190,36 +165,21 @@ mod tests {
             .unwrap();
         let updated_user: UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(updated_user.username, "updateduser");
-        assert_eq!(updated_user.email, "updated@example.com");
+        assert_eq!(updated_user.username, updated_username);
+        assert_eq!(updated_user.email, updated_email);
     }
 
     #[tokio::test]
     async fn test_update_user_password() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create admin user using direct database approach
-        let admin_data = CreateUser {
-            username: "adminuser".to_string(),
-            email: "admin@example.com".to_string(),
-            password: "adminpass123".to_string(),
-            role: Some(UserRole::Admin),
-        };
-        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
-        
-        // Login using TestAuthHelper for token generation
+        // Create admin user using TestAuthHelper for unique credentials
         let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
         
-        // Create a regular user using direct database approach
-        let user_data = CreateUser {
-            username: "testuser".to_string(),
-            email: "test@example.com".to_string(),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
+        // Create a regular user using TestAuthHelper for unique credentials
+        let user = auth_helper.create_test_user().await;
 
         let update_data = UpdateUser {
             username: None,
@@ -232,7 +192,7 @@ mod tests {
             .oneshot(
                 axum::http::Request::builder()
                     .method("PUT")
-                    .uri(format!("/api/users/{}", user.id))
+                    .uri(format!("/api/users/{}", user.user_response.id))
                     .header("Authorization", format!("Bearer {}", token))
                     .header("Content-Type", "application/json")
                     .body(axum::body::Body::from(serde_json::to_vec(&update_data).unwrap()))
@@ -244,7 +204,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Verify new password works
-        let new_token = auth_helper.login_user("testuser", "newpassword456").await;
+        let new_token = auth_helper.login_user(&user.username, "newpassword456").await;
         assert!(!new_token.is_empty());
     }
 
@@ -482,10 +442,17 @@ mod tests {
         let ctx = TestContext::new().await;
         let db = &ctx.state.db;
 
-        // Create regular local user
+        // Create regular local user with unique credentials
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("localuser_{}", unique_suffix);
+        let email = format!("local_{}@example.com", unique_suffix);
+        
         let create_user = CreateUser {
-            username: "localuser".to_string(),
-            email: "local@example.com".to_string(),
+            username: username.clone(),
+            email: email.clone(),
             password: "password123".to_string(),
             role: Some(UserRole::User),
         };
@@ -498,7 +465,7 @@ mod tests {
 
         // Test login still works
         let login_data = json!({
-            "username": "localuser",
+            "username": username,
             "password": "password123"
         });
 

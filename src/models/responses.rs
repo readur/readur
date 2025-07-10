@@ -134,7 +134,8 @@ pub struct DocumentListResponse {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct DocumentOcrResponse {
     /// Document ID
-    pub document_id: Uuid,
+    #[serde(rename = "id", with = "uuid_as_string")]
+    pub id: Uuid,
     /// Original filename
     pub filename: String,
     /// Whether the document has OCR text available
@@ -271,5 +272,25 @@ impl From<crate::models::document::IgnoredFile> for IgnoredFileResponse {
             reason: ignored_file.reason,
             created_at: ignored_file.created_at,
         }
+    }
+}
+
+mod uuid_as_string {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use uuid::Uuid;
+
+    pub fn serialize<S>(uuid: &Uuid, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&uuid.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Uuid, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Uuid::parse_str(&s).map_err(serde::de::Error::custom)
     }
 }

@@ -10,15 +10,22 @@ mod migration_integration_tests {
     async fn test_full_migration_workflow() {
         let ctx = TestContext::new().await;
         let pool = ctx.state.db.get_pool();
-        // Setup: Create a test user first
+        // Setup: Create a test user first with unique username
         let user_id = Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_migration_user_{}", unique_suffix);
+        let email = format!("test_migration_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_migration_user")
-        .bind("test_migration@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("user")
         .execute(pool)
@@ -57,10 +64,11 @@ mod migration_integration_tests {
             .expect("Failed to insert test document");
         }
 
-        // Count documents before migration
+        // Count documents before migration (only for this test's user)
         let before_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed'"
+            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed' AND user_id = $1"
         )
+        .bind(user_id)
         .fetch_one(pool)
         .await
         .expect("Failed to count documents");
@@ -92,9 +100,10 @@ mod migration_integration_tests {
                 'migration' as ingestion_source,
                 d.created_at, d.updated_at
             FROM documents d
-            WHERE d.ocr_status = 'failed'
+            WHERE d.ocr_status = 'failed' AND d.user_id = $1
             "#
         )
+        .bind(user_id)
         .execute(pool)
         .await;
 
@@ -103,10 +112,11 @@ mod migration_integration_tests {
             Err(e) => panic!("Migration failed: {:?}", e),
         }
 
-        // Verify all documents were migrated
+        // Verify all documents were migrated (only for this test's user)
         let migrated_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM failed_documents WHERE ingestion_source = 'migration'"
+            "SELECT COUNT(*) FROM failed_documents WHERE ingestion_source = 'migration' AND user_id = $1"
         )
+        .bind(user_id)
         .fetch_one(pool)
         .await
         .expect("Failed to count migrated documents");
@@ -125,9 +135,10 @@ mod migration_integration_tests {
 
         for (filename, expected_reason) in mapping_tests {
             let actual_reason: String = sqlx::query_scalar(
-                "SELECT failure_reason FROM failed_documents WHERE filename = $1"
+                "SELECT failure_reason FROM failed_documents WHERE filename = $1 AND user_id = $2"
             )
             .bind(filename)
+            .bind(user_id)
             .fetch_one(pool)
             .await
             .expect("Failed to fetch failure reason");
@@ -140,29 +151,32 @@ mod migration_integration_tests {
             );
         }
 
-        // Test deletion of original failed documents
+        // Test deletion of original failed documents (only for this test's user)
         let delete_result = sqlx::query(
-            "DELETE FROM documents WHERE ocr_status = 'failed'"
+            "DELETE FROM documents WHERE ocr_status = 'failed' AND user_id = $1"
         )
+        .bind(user_id)
         .execute(pool)
         .await;
 
         assert!(delete_result.is_ok(), "Delete should succeed");
 
-        // Verify cleanup
+        // Verify cleanup (only for this test's user)
         let remaining_failed: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed'"
+            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed' AND user_id = $1"
         )
+        .bind(user_id)
         .fetch_one(pool)
         .await
         .expect("Failed to count remaining documents");
 
         assert_eq!(remaining_failed, 0);
 
-        // Verify failed_documents table integrity
+        // Verify failed_documents table integrity (only for this test's user)
         let failed_docs = sqlx::query(
-            "SELECT filename, failure_reason, failure_stage FROM failed_documents ORDER BY filename"
+            "SELECT filename, failure_reason, failure_stage FROM failed_documents WHERE user_id = $1 ORDER BY filename"
         )
+        .bind(user_id)
         .fetch_all(pool)
         .await
         .expect("Failed to fetch failed documents");
@@ -189,15 +203,22 @@ mod migration_integration_tests {
         let ctx = TestContext::new().await;
         let pool = ctx.state.db.get_pool();
         
-        // Create a test user first
+        // Create a test user first with unique username
         let user_id = Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_edge_user_{}", unique_suffix);
+        let email = format!("test_edge_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_edge_user")
-        .bind("test_edge@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("user")
         .execute(pool)
@@ -206,7 +227,7 @@ mod migration_integration_tests {
 
         // Edge cases that might break migration
         let edge_cases = vec![
-            ("empty_reason.pdf", Some(""), "Empty reason"),
+            ("empty.txt", Some(""), "Empty reason"),
             ("null_like.pdf", Some("null"), "Null-like value"),
             ("special_chars.pdf", Some("special!@#$%"), "Special characters"),
             ("very_long_reason.pdf", Some("this_is_a_very_long_failure_reason_that_might_cause_issues"), "Long reason"),
@@ -254,9 +275,10 @@ mod migration_integration_tests {
                 'ocr' as failure_stage,
                 'migration_edge_test' as ingestion_source
             FROM documents d
-            WHERE d.ocr_status = 'failed'
+            WHERE d.ocr_status = 'failed' AND d.user_id = $1
             "#
         )
+        .bind(user_id)
         .execute(pool)
         .await;
 
@@ -264,8 +286,9 @@ mod migration_integration_tests {
 
         // Verify all edge cases mapped to 'other' (since they're not in our mapping)
         let edge_case_mappings = sqlx::query(
-            "SELECT filename, failure_reason FROM failed_documents WHERE ingestion_source = 'migration_edge_test'"
+            "SELECT filename, failure_reason FROM failed_documents WHERE ingestion_source = 'migration_edge_test' AND user_id = $1"
         )
+        .bind(user_id)
         .fetch_all(pool)
         .await
         .expect("Failed to fetch edge case mappings");
@@ -285,13 +308,20 @@ mod migration_integration_tests {
         
         // Create a test user first to avoid foreign key constraint violations
         let user_id = Uuid::new_v4();
+        let unique_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let username = format!("test_constraint_user_{}", unique_suffix);
+        let email = format!("test_constraint_{}@example.com", unique_suffix);
+        
         sqlx::query(
             "INSERT INTO users (id, username, email, password_hash, role) 
              VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(user_id)
-        .bind("test_constraint_user")
-        .bind("test_constraint@example.com")
+        .bind(&username)
+        .bind(&email)
         .bind("hash")
         .bind("user")
         .execute(pool)
