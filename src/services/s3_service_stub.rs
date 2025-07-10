@@ -2,7 +2,7 @@
 use anyhow::{anyhow, Result};
 use tracing::warn;
 
-use crate::models::{FileInfo, S3SourceConfig};
+use crate::models::{FileIngestionInfo, S3SourceConfig};
 
 #[derive(Debug, Clone)]
 pub struct S3Service {
@@ -14,7 +14,7 @@ impl S3Service {
         Err(anyhow!("S3 support not compiled in. Enable the 's3' feature to use S3 sources."))
     }
 
-    pub async fn discover_files_in_folder(&self, _folder_path: &str) -> Result<Vec<FileInfo>> {
+    pub async fn discover_files_in_folder(&self, _folder_path: &str) -> Result<Vec<FileIngestionInfo>> {
         warn!("S3 support not compiled in");
         Ok(Vec::new())
     }

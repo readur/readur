@@ -1,5 +1,5 @@
 use readur::services::webdav::{WebDAVService, WebDAVConfig};
-use readur::models::FileInfo;
+use readur::models::FileIngestionInfo;
 use tokio;
 use chrono::Utc;
 
@@ -23,7 +23,7 @@ async fn test_empty_directory_tracking() {
     let service = create_test_webdav_service();
     
     // Test completely empty directory
-    let empty_files: Vec<FileInfo> = vec![];
+    let empty_files: Vec<FileIngestionInfo> = vec![];
     
     // Test the directory extraction logic that happens in track_subdirectories_recursively
     let mut all_directories = std::collections::BTreeSet::new();
@@ -57,7 +57,7 @@ async fn test_directory_only_structure() {
     
     // Test structure with only directories, no files
     let directory_only_files = vec![
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -71,7 +71,7 @@ async fn test_directory_only_structure() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Empty1".to_string(),
             name: "Empty1".to_string(),
             size: 0,
@@ -85,7 +85,7 @@ async fn test_directory_only_structure() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Empty2".to_string(),
             name: "Empty2".to_string(),
             size: 0,
@@ -136,7 +136,7 @@ async fn test_very_deep_nesting() {
     
     let deep_files = vec![
         // All directories in the path
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -151,7 +151,7 @@ async fn test_very_deep_nesting() {
             metadata: None,
         },
         // All intermediate directories from L1 to L10
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/L1".to_string(),
             name: "L1".to_string(),
             size: 0,
@@ -165,7 +165,7 @@ async fn test_very_deep_nesting() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/L1/L2".to_string(),
             name: "L2".to_string(),
             size: 0,
@@ -179,7 +179,7 @@ async fn test_very_deep_nesting() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/L1/L2/L3".to_string(),
             name: "L3".to_string(),
             size: 0,
@@ -193,7 +193,7 @@ async fn test_very_deep_nesting() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: deep_path.to_string(),
             name: "L10".to_string(),
             size: 0,
@@ -208,7 +208,7 @@ async fn test_very_deep_nesting() {
             metadata: None,
         },
         // File at the deepest level
-        FileInfo {
+        FileIngestionInfo {
             path: file_path.clone(),
             name: "deep-file.pdf".to_string(),
             size: 1024000,
@@ -266,7 +266,7 @@ async fn test_special_characters_in_paths() {
     
     // Test paths with special characters, spaces, unicode
     let special_files = vec![
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Folder with spaces".to_string(),
             name: "Folder with spaces".to_string(),
             size: 0,
@@ -280,7 +280,7 @@ async fn test_special_characters_in_paths() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Folder-with-dashes".to_string(),
             name: "Folder-with-dashes".to_string(),
             size: 0,
@@ -294,7 +294,7 @@ async fn test_special_characters_in_paths() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Документы".to_string(), // Cyrillic
             name: "Документы".to_string(),
             size: 0,
@@ -308,7 +308,7 @@ async fn test_special_characters_in_paths() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Folder with spaces/file with spaces.pdf".to_string(),
             name: "file with spaces.pdf".to_string(),
             size: 1024000,
@@ -686,7 +686,7 @@ async fn test_large_directory_structures() {
     let mut large_files = Vec::new();
     
     // Add root directory
-    large_files.push(FileInfo {
+    large_files.push(FileIngestionInfo {
         path: "/Documents".to_string(),
         name: "Documents".to_string(),
         size: 0,
@@ -706,7 +706,7 @@ async fn test_large_directory_structures() {
         let level1_path = format!("/Documents/Dir{:03}", i);
         
         // Add level-1 directory
-        large_files.push(FileInfo {
+        large_files.push(FileIngestionInfo {
             path: level1_path.clone(),
             name: format!("Dir{:03}", i),
             size: 0,
@@ -724,7 +724,7 @@ async fn test_large_directory_structures() {
         // Add 10 subdirectories
         for j in 0..10 {
             let level2_path = format!("{}/SubDir{:02}", level1_path, j);
-            large_files.push(FileInfo {
+            large_files.push(FileIngestionInfo {
                 path: level2_path.clone(),
                 name: format!("SubDir{:02}", j),
                 size: 0,
@@ -741,7 +741,7 @@ async fn test_large_directory_structures() {
             
             // Add 5 files in each subdirectory
             for k in 0..5 {
-                large_files.push(FileInfo {
+                large_files.push(FileIngestionInfo {
                     path: format!("{}/file{:02}.pdf", level2_path, k),
                     name: format!("file{:02}.pdf", k),
                     size: 1024 * (k + 1) as i64,

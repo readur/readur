@@ -8,7 +8,7 @@ use readur::{
     AppState,
     db::Database,
     config::Config,
-    models::{FileInfo, CreateWebDAVFile, Document},
+    models::{FileIngestionInfo, CreateWebDAVFile, Document},
 };
 
 // Helper function to calculate file hash
@@ -20,8 +20,8 @@ fn calculate_file_hash(data: &[u8]) -> String {
 }
 
 // Helper function to create test file info
-fn create_test_file_info(name: &str, path: &str, size: i64) -> FileInfo {
-    FileInfo {
+fn create_test_file_info(name: &str, path: &str, size: i64) -> FileIngestionInfo {
+    FileIngestionInfo {
         name: name.to_string(),
         path: path.to_string(),
         size,
@@ -282,7 +282,7 @@ async fn test_webdav_sync_etag_change_detection() -> Result<()> {
     assert_eq!(existing_file.etag, old_etag);
     
     // Simulate file with new ETag (indicating change)
-    let file_info = FileInfo {
+    let file_info = FileIngestionInfo {
         name: "updated.pdf".to_string(),
         path: webdav_path.to_string(),
         size: 1024,

@@ -15,7 +15,7 @@ use crate::{
     services::file_service::FileService, 
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult, DeduplicationPolicy},
     ocr::queue::OcrQueueService,
-    models::FileInfo,
+    models::FileIngestionInfo,
 };
 
 pub async fn start_folder_watcher(config: Config, db: Database) -> Result<()> {
@@ -372,8 +372,8 @@ async fn process_file(
     Ok(())
 }
 
-/// Extract FileInfo from filesystem path and metadata (for watcher)
-async fn extract_file_info_from_path(path: &Path) -> Result<FileInfo> {
+/// Extract FileIngestionInfo from filesystem path and metadata (for watcher)
+async fn extract_file_info_from_path(path: &Path) -> Result<FileIngestionInfo> {
     let metadata = tokio::fs::metadata(path).await?;
     let filename = path
         .file_name()
@@ -411,7 +411,7 @@ async fn extract_file_info_from_path(path: &Path) -> Result<FileInfo> {
     #[cfg(not(unix))]
     let (permissions, owner, group) = (None, None, None);
     
-    Ok(FileInfo {
+    Ok(FileIngestionInfo {
         path: path.to_string_lossy().to_string(),
         name: filename,
         size: file_size,

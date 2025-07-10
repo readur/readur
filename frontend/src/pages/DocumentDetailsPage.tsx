@@ -52,7 +52,6 @@ import DocumentViewer from '../components/DocumentViewer';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { type LabelData } from '../components/Labels/Label';
 import MetadataDisplay from '../components/MetadataDisplay';
-import MetadataParser from '../components/MetadataParser';
 import FileIntegrityDisplay from '../components/FileIntegrityDisplay';
 import ProcessingTimeline from '../components/ProcessingTimeline';
 import { RetryHistoryModal } from '../components/RetryHistoryModal';
@@ -700,6 +699,14 @@ const DocumentDetailsPage: React.FC = () => {
                 updatedAt={document.updated_at}
                 userId={document.user_id}
                 username={document.username}
+                sourceType={document.source_type}
+                sourcePath={document.source_path}
+                filePermissions={document.file_permissions}
+                fileOwner={document.file_owner}
+                fileGroup={document.file_group}
+                originalCreatedAt={document.original_created_at}
+                originalModifiedAt={document.original_modified_at}
+                sourceMetadata={document.source_metadata}
                 />
               </Box>
             </Grid>
@@ -890,122 +897,6 @@ const DocumentDetailsPage: React.FC = () => {
                   ocrCompletedAt={ocrData?.ocr_completed_at}
                   ocrError={ocrData?.ocr_error}
                 />
-                
-                {/* Source Information */}
-                {(document.source_type || document.file_permissions || document.file_owner || document.file_group) && (
-                  <Card 
-                    sx={{ 
-                      backgroundColor: theme.palette.background.paper,
-                      backdropFilter: 'blur(10px)',
-                    }}
-                  >
-                    <CardContent sx={{ p: 4 }}>
-                      <Typography variant="h5" sx={{ mb: 3, fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                        <SourceIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
-                        Source Information
-                      </Typography>
-                      
-                      <Grid container spacing={3}>
-                        {document.source_type && (
-                          <Grid item xs={12} sm={6}>
-                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
-                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                                Source Type
-                              </Typography>
-                              <Chip 
-                                label={document.source_type.replace('_', ' ').toUpperCase()}
-                                color="primary"
-                                variant="outlined"
-                              />
-                            </Box>
-                          </Grid>
-                        )}
-
-                        {document.file_permissions && (
-                          <Grid item xs={12} sm={6}>
-                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
-                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                                File Permissions
-                              </Typography>
-                              <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
-                                {document.file_permissions.toString(8)} ({document.file_permissions})
-                              </Typography>
-                            </Box>
-                          </Grid>
-                        )}
-
-                        {document.file_owner && (
-                          <Grid item xs={12} sm={6}>
-                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
-                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                                File Owner
-                              </Typography>
-                              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                {document.file_owner}
-                              </Typography>
-                            </Box>
-                          </Grid>
-                        )}
-
-                        {document.file_group && (
-                          <Grid item xs={12} sm={6}>
-                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
-                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                                File Group
-                              </Typography>
-                              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                {document.file_group}
-                              </Typography>
-                            </Box>
-                          </Grid>
-                        )}
-
-                        {document.source_path && (
-                          <Grid item xs={12}>
-                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
-                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                                Original Source Path
-                              </Typography>
-                              <Typography 
-                                variant="body1" 
-                                sx={{ 
-                                  fontFamily: 'monospace',
-                                  fontWeight: 600,
-                                  wordBreak: 'break-all',
-                                  backgroundColor: theme.palette.background.default,
-                                  p: 1,
-                                  borderRadius: 1,
-                                }}
-                              >
-                                {document.source_path}
-                              </Typography>
-                            </Box>
-                          </Grid>
-                        )}
-                      </Grid>
-                    </CardContent>
-                  </Card>
-                )}
-                
-                {/* Enhanced Metadata Display */}
-                {document.source_metadata && Object.keys(document.source_metadata).length > 0 && (
-                  <Card 
-                    sx={{ 
-                      backgroundColor: theme.palette.background.paper,
-                      backdropFilter: 'blur(10px)',
-                    }}
-                  >
-                    <CardContent sx={{ p: 4 }}>
-                      <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
-                        📊 Rich Metadata Analysis
-                      </Typography>
-                      <MetadataParser 
-                        metadata={document.source_metadata}
-                        fileType={document.mime_type}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
                 
                 {/* Tags and Labels */}
                 <Card 

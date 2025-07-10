@@ -31,6 +31,15 @@ interface FileIntegrityDisplayProps {
   updatedAt: string;
   userId?: string;
   username?: string;
+  // Additional metadata fields
+  sourceType?: string;
+  sourcePath?: string;
+  filePermissions?: number;
+  fileOwner?: string;
+  fileGroup?: string;
+  originalCreatedAt?: string;
+  originalModifiedAt?: string;
+  sourceMetadata?: any;
   compact?: boolean;
 }
 
@@ -43,6 +52,14 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
   updatedAt,
   userId,
   username,
+  sourceType,
+  sourcePath,
+  filePermissions,
+  fileOwner,
+  fileGroup,
+  originalCreatedAt,
+  originalModifiedAt,
+  sourceMetadata,
   compact = false,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -203,7 +220,7 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
             }} 
           />
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            File Integrity & Verification
+            Document Details
           </Typography>
         </Box>
         
@@ -340,8 +357,146 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
               }}
             />
           </Box>
+          
+          {fileOwner && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                Owner
+              </Typography>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 500 }}>
+                {fileOwner}
+              </Typography>
+            </Box>
+          )}
+          
+          {sourcePath && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                Source Path
+              </Typography>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem', maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
+                {sourcePath}
+              </Typography>
+            </Box>
+          )}
         </Stack>
       </Box>
+
+      {/* Additional Source Information */}
+      {(sourceType || fileGroup || filePermissions) && (
+        <Box sx={{ pt: 3, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+            <InfoIcon sx={{ mr: 1, fontSize: 18, color: theme.palette.info.main }} />
+            Additional Source Details
+          </Typography>
+          
+          <Stack spacing={2}>
+            {sourceType && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Source Type:</Typography>
+                <Chip 
+                  label={sourceType} 
+                  size="small"
+                  sx={{ 
+                    fontSize: '0.75rem',
+                    backgroundColor: theme.palette.info.light,
+                    color: theme.palette.info.dark,
+                  }}
+                />
+              </Box>
+            )}
+            
+            {fileGroup && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">File Group:</Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                  {fileGroup}
+                </Typography>
+              </Box>
+            )}
+            
+            {filePermissions && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Permissions:</Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                  {filePermissions.toString(8)} ({filePermissions})
+                </Typography>
+              </Box>
+            )}
+          </Stack>
+        </Box>
+      )}
+
+      {/* Timestamps */}
+      {(originalCreatedAt || originalModifiedAt) && (
+        <Box sx={{ pt: 3, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+            <InfoIcon sx={{ mr: 1, fontSize: 18, color: theme.palette.secondary.main }} />
+            Original Timestamps
+          </Typography>
+          
+          <Stack spacing={2}>
+            {originalCreatedAt && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Original Created:</Typography>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                  {new Date(originalCreatedAt).toLocaleString()}
+                </Typography>
+              </Box>
+            )}
+            
+            {originalModifiedAt && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Original Modified:</Typography>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                  {new Date(originalModifiedAt).toLocaleString()}
+                </Typography>
+              </Box>
+            )}
+          </Stack>
+        </Box>
+      )}
+
+      {/* Source Metadata - displayed as simple key-value pairs */}
+      {sourceMetadata && Object.keys(sourceMetadata).length > 0 && (
+        <Box sx={{ pt: 3, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+            <InfoIcon sx={{ mr: 1, fontSize: 18, color: theme.palette.secondary.main }} />
+            Source Metadata
+          </Typography>
+          
+          <Stack spacing={2}>
+            {Object.entries(sourceMetadata).map(([key, value]) => {
+              // Skip null/undefined values and complex objects
+              if (value === null || value === undefined || typeof value === 'object') return null;
+              
+              // Format the key to be more readable
+              const formattedKey = key
+                .replace(/_/g, ' ')
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/^./, str => str.toUpperCase())
+                .trim();
+              
+              // Format the value
+              const formattedValue = typeof value === 'boolean' 
+                ? (value ? 'Yes' : 'No')
+                : String(value);
+              
+              return (
+                <Box key={key} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {formattedKey}:
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontSize: '0.8rem', fontWeight: 500, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {formattedValue}
+                  </Typography>
+                </Box>
+              );
+            }).filter(Boolean)}
+          </Stack>
+        </Box>
+      )}
+
     </Paper>
   );
 };

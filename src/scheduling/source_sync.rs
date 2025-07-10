@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    models::{FileInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
+    models::{FileIngestionInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
     services::file_service::FileService,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::local_folder_service::LocalFolderService,
@@ -227,7 +227,7 @@ impl SourceSyncService {
     where
         F: Fn(String) -> Fut1,
         D: Fn(String) -> Fut2 + Clone,
-        Fut1: std::future::Future<Output = Result<Vec<FileInfo>>>,
+        Fut1: std::future::Future<Output = Result<Vec<FileIngestionInfo>>>,
         Fut2: std::future::Future<Output = Result<Vec<u8>>>,
     {
         let mut total_files_processed = 0;
@@ -328,7 +328,7 @@ impl SourceSyncService {
     where
         F: Fn(String) -> Fut1,
         D: Fn(String) -> Fut2 + Clone,
-        Fut1: std::future::Future<Output = Result<Vec<FileInfo>>>,
+        Fut1: std::future::Future<Output = Result<Vec<FileIngestionInfo>>>,
         Fut2: std::future::Future<Output = Result<Vec<u8>>>,
     {
         let mut total_files_processed = 0;
@@ -514,7 +514,7 @@ impl SourceSyncService {
         state: Arc<AppState>,
         user_id: Uuid,
         source_id: Uuid,
-        file_info: &FileInfo,
+        file_info: &FileIngestionInfo,
         enable_background_ocr: bool,
         semaphore: Arc<Semaphore>,
         download_file: D,
@@ -593,7 +593,7 @@ impl SourceSyncService {
         state: Arc<AppState>,
         user_id: Uuid,
         source_id: Uuid,
-        file_info: &FileInfo,
+        file_info: &FileIngestionInfo,
         enable_background_ocr: bool,
         semaphore: Arc<Semaphore>,
         download_file: D,

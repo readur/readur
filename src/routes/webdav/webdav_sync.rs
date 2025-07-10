@@ -230,7 +230,7 @@ async fn process_single_file(
     state: Arc<AppState>,
     user_id: uuid::Uuid,
     webdav_service: &WebDAVService,
-    file_info: &crate::models::FileInfo,
+    file_info: &crate::models::FileIngestionInfo,
     enable_background_ocr: bool,
     semaphore: Arc<Semaphore>,
     webdav_source_id: Option<uuid::Uuid>,
@@ -384,7 +384,7 @@ pub async fn process_files_for_deep_scan(
     state: Arc<AppState>,
     user_id: uuid::Uuid,
     webdav_service: &WebDAVService,
-    files_to_process: &[crate::models::FileInfo],
+    files_to_process: &[crate::models::FileIngestionInfo],
     enable_background_ocr: bool,
     webdav_source_id: Option<uuid::Uuid>,
 ) -> Result<usize, anyhow::Error> {

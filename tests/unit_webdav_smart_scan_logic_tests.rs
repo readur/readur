@@ -2,7 +2,7 @@ use tokio;
 use uuid::Uuid;
 use chrono::Utc;
 use std::collections::HashMap;
-use readur::models::FileInfo;
+use readur::models::FileIngestionInfo;
 use readur::services::webdav::{WebDAVService, WebDAVConfig};
 
 // Helper function to create test WebDAV service for smart scanning
@@ -35,10 +35,10 @@ fn create_generic_webdav_service() -> WebDAVService {
 }
 
 // Mock directory structure with subdirectories for testing
-fn create_mock_directory_structure() -> Vec<FileInfo> {
+fn create_mock_directory_structure() -> Vec<FileIngestionInfo> {
     vec![
         // Root directory
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -53,7 +53,7 @@ fn create_mock_directory_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // Subdirectory 1 - Changed
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Projects".to_string(),
             name: "Projects".to_string(),
             size: 0,
@@ -68,7 +68,7 @@ fn create_mock_directory_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // File in changed subdirectory
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Projects/report.pdf".to_string(),
             name: "report.pdf".to_string(),
             size: 1024000,
@@ -83,7 +83,7 @@ fn create_mock_directory_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // Subdirectory 2 - Unchanged
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Archive".to_string(),
             name: "Archive".to_string(),
             size: 0,

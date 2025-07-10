@@ -5,7 +5,7 @@ use tokio::sync::Semaphore;
 use futures_util::stream::{self, StreamExt};
 use tracing::{debug, info, warn};
 
-use crate::models::{FileInfo, WebDAVCrawlEstimate, WebDAVFolderInfo};
+use crate::models::{FileIngestionInfo, WebDAVCrawlEstimate, WebDAVFolderInfo};
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use super::config::{WebDAVConfig, ConcurrencyConfig};
 use super::connection::WebDAVConnection;
@@ -30,7 +30,7 @@ impl WebDAVDiscovery {
     }
 
     /// Discovers files in a directory with support for pagination and filtering
-    pub async fn discover_files(&self, directory_path: &str, recursive: bool) -> Result<Vec<FileInfo>> {
+    pub async fn discover_files(&self, directory_path: &str, recursive: bool) -> Result<Vec<FileIngestionInfo>> {
         info!("🔍 Discovering files in directory: {}", directory_path);
         
         if recursive {
@@ -41,7 +41,7 @@ impl WebDAVDiscovery {
     }
 
     /// Discovers files in a single directory (non-recursive)
-    async fn discover_files_single_directory(&self, directory_path: &str) -> Result<Vec<FileInfo>> {
+    async fn discover_files_single_directory(&self, directory_path: &str) -> Result<Vec<FileIngestionInfo>> {
         let url = self.connection.get_url_for_path(directory_path);
         
         let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -72,7 +72,7 @@ impl WebDAVDiscovery {
         let files = parse_propfind_response(&body)?;
         
         // Filter files based on supported extensions
-        let filtered_files: Vec<FileInfo> = files
+        let filtered_files: Vec<FileIngestionInfo> = files
             .into_iter()
             .filter(|file| {
                 !file.is_directory && self.config.is_supported_extension(&file.name)
@@ -84,7 +84,7 @@ impl WebDAVDiscovery {
     }
 
     /// Discovers files recursively in directory tree
-    async fn discover_files_recursive(&self, root_directory: &str) -> Result<Vec<FileInfo>> {
+    async fn discover_files_recursive(&self, root_directory: &str) -> Result<Vec<FileIngestionInfo>> {
         let mut all_files = Vec::new();
         let mut directories_to_scan = vec![root_directory.to_string()];
         let semaphore = Semaphore::new(self.concurrency_config.max_concurrent_scans);
@@ -126,7 +126,7 @@ impl WebDAVDiscovery {
     }
 
     /// Scans a directory and returns both files and subdirectories
-    async fn scan_directory_with_subdirs(&self, directory_path: &str) -> Result<(Vec<FileInfo>, Vec<String>)> {
+    async fn scan_directory_with_subdirs(&self, directory_path: &str) -> Result<(Vec<FileIngestionInfo>, Vec<String>)> {
         let url = self.connection.get_url_for_path(directory_path);
         
         let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -309,7 +309,7 @@ impl WebDAVDiscovery {
     }
 
     /// Calculates the ratio of supported files in a sample
-    fn calculate_support_ratio(&self, sample_files: &[FileInfo]) -> f64 {
+    fn calculate_support_ratio(&self, sample_files: &[FileIngestionInfo]) -> f64 {
         if sample_files.is_empty() {
             return 1.0; // Assume all files are supported if no sample
         }
@@ -323,7 +323,7 @@ impl WebDAVDiscovery {
     }
 
     /// Filters files by last modified date (for incremental syncs)
-    pub fn filter_files_by_date(&self, files: Vec<FileInfo>, since: chrono::DateTime<chrono::Utc>) -> Vec<FileInfo> {
+    pub fn filter_files_by_date(&self, files: Vec<FileIngestionInfo>, since: chrono::DateTime<chrono::Utc>) -> Vec<FileIngestionInfo> {
         files
             .into_iter()
             .filter(|file| {
@@ -335,7 +335,7 @@ impl WebDAVDiscovery {
     }
 
     /// Deduplicates files by ETag or path
-    pub fn deduplicate_files(&self, files: Vec<FileInfo>) -> Vec<FileInfo> {
+    pub fn deduplicate_files(&self, files: Vec<FileIngestionInfo>) -> Vec<FileIngestionInfo> {
         let mut seen_etags = HashSet::new();
         let mut seen_paths = HashSet::new();
         let mut deduplicated = Vec::new();

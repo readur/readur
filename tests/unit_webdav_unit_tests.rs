@@ -1,5 +1,5 @@
 use readur::services::webdav::{WebDAVService, WebDAVConfig};
-use readur::models::FileInfo;
+use readur::models::FileIngestionInfo;
 use readur::models::*;
 use tokio;
 

@@ -8,7 +8,7 @@ use readur::{
     AppState,
     db::Database,
     config::Config,
-    models::{FileInfo, Document, Source, SourceType, SourceStatus},
+    models::{FileIngestionInfo, Document, Source, SourceType, SourceStatus},
 };
 
 // Helper function to calculate file hash
@@ -20,8 +20,8 @@ fn calculate_file_hash(data: &[u8]) -> String {
 }
 
 // Helper function to create test file info
-fn create_test_file_info(name: &str, path: &str, content: &[u8]) -> FileInfo {
-    FileInfo {
+fn create_test_file_info(name: &str, path: &str, content: &[u8]) -> FileIngestionInfo {
+    FileIngestionInfo {
         name: name.to_string(),
         path: path.to_string(),
         size: content.len() as i64,

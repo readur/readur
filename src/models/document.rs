@@ -253,7 +253,7 @@ pub struct CreateIgnoredFile {
 }
 
 #[derive(Debug, Clone)]
-pub struct FileInfo {
+pub struct FileIngestionInfo {
     pub path: String,
     pub name: String,
     pub size: i64,

@@ -5,7 +5,7 @@ use quick_xml::reader::Reader;
 use std::str;
 use serde_json;
 
-use crate::models::FileInfo;
+use crate::models::FileIngestionInfo;
 
 #[derive(Debug, Default)]
 struct PropFindResponse {
@@ -24,7 +24,7 @@ struct PropFindResponse {
     metadata: Option<serde_json::Value>,
 }
 
-pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
+pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>> {
     let mut reader = Reader::from_str(xml_text);
     reader.config_mut().trim_text(true);
     
@@ -200,7 +200,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                                 // Use the metadata collected during parsing
                                 let metadata = resp.metadata;
                                 
-                                let file_info = FileInfo {
+                                let file_info = FileIngestionInfo {
                                     path: resp.href.clone(),
                                     name,
                                     size: resp.content_length.unwrap_or(0),
@@ -248,7 +248,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
 
 /// Parse PROPFIND response including both files and directories
 /// This is used for shallow directory scans where we need to track directory structure
-pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<FileInfo>> {
+pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<FileIngestionInfo>> {
     let mut reader = Reader::from_str(xml_text);
     reader.config_mut().trim_text(true);
     
@@ -415,7 +415,7 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
                                         }
                                     });
                                 
-                                let file_info = FileInfo {
+                                let file_info = FileIngestionInfo {
                                     path: resp.href.clone(),
                                     name,
                                     size: resp.content_length.unwrap_or(0),

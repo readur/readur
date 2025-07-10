@@ -74,6 +74,25 @@ pub async fn upload_document(
     
     info!("Uploading document: {} ({} bytes)", filename, data.len());
     
+    // Create FileIngestionInfo from uploaded data
+    use crate::models::FileIngestionInfo;
+    use chrono::Utc;
+    
+    let file_info = FileIngestionInfo {
+        path: format!("upload/{}", filename), // Virtual path for web uploads
+        name: filename.clone(),
+        size: data.len() as i64,
+        mime_type: content_type.clone(),
+        last_modified: Some(Utc::now()), // Upload time as last modified
+        etag: format!("{}-{}", data.len(), Utc::now().timestamp()),
+        is_directory: false,
+        created_at: Some(Utc::now()), // Upload time as creation time
+        permissions: None, // Web uploads don't have filesystem permissions
+        owner: Some(auth_user.user.username.clone()), // Uploader as owner
+        group: None, // Web uploads don't have filesystem groups
+        metadata: None, // Could extract EXIF/PDF metadata in the future
+    };
+    
     // Create ingestion service
     let file_service = FileService::new(state.config.upload_path.clone());
     let ingestion_service = DocumentIngestionService::new(
@@ -81,25 +100,14 @@ pub async fn upload_document(
         file_service,
     );
     
-    let request = crate::ingestion::document_ingestion::DocumentIngestionRequest {
-        file_data: data,
-        filename: filename.clone(),
-        original_filename: filename,
-        mime_type: content_type,
-        user_id: auth_user.user.id,
-        source_type: Some("web_upload".to_string()),
-        source_id: None,
-        deduplication_policy: crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,
-        original_created_at: None,
-        original_modified_at: None,
-        source_path: None, // Web uploads don't have a source path
-        file_permissions: None, // Web uploads don't preserve permissions
-        file_owner: None, // Web uploads don't preserve owner
-        file_group: None, // Web uploads don't preserve group
-        source_metadata: None,
-    };
-    
-    match ingestion_service.ingest_document(request).await {
+    match ingestion_service.ingest_from_file_info(
+        &file_info, 
+        data, 
+        auth_user.user.id, 
+        crate::ingestion::document_ingestion::DeduplicationPolicy::Skip, 
+        "web_upload", 
+        None
+    ).await {
         Ok(IngestionResult::Created(document)) => {
             info!("Document uploaded successfully: {}", document.id);
             

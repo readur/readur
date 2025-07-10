@@ -12,7 +12,7 @@ use tracing::{debug, info, warn};
 use serde_json;
 use chrono::Utc;
 
-use crate::models::{Document, FileInfo};
+use crate::models::{Document, FileIngestionInfo};
 use crate::db::Database;
 use crate::services::file_service::FileService;
 
@@ -76,8 +76,8 @@ impl DocumentIngestionService {
         Self { db, file_service }
     }
 
-    /// Extract metadata from FileInfo for storage in document
-    fn extract_metadata_from_file_info(file_info: &FileInfo) -> (Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, Option<serde_json::Value>) {
+    /// Extract metadata from FileIngestionInfo for storage in document
+    fn extract_metadata_from_file_info(file_info: &FileIngestionInfo) -> (Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, Option<serde_json::Value>) {
         let original_created_at = file_info.created_at;
         let original_modified_at = file_info.last_modified;
         
@@ -315,10 +315,10 @@ impl DocumentIngestionService {
         format!("{:x}", result)
     }
 
-    /// Ingest document from source with FileInfo metadata
+    /// Ingest document from source with FileIngestionInfo metadata
     pub async fn ingest_from_file_info(
         &self,
-        file_info: &FileInfo,
+        file_info: &FileIngestionInfo,
         file_data: Vec<u8>,
         user_id: Uuid,
         deduplication_policy: DeduplicationPolicy,
