@@ -21,6 +21,7 @@ export interface Document {
   created_at: string
   updated_at: string
   user_id: string
+  username?: string
   file_hash?: string
   original_created_at?: string
   original_modified_at?: string

@@ -189,8 +189,20 @@ pub async fn get_document_by_id(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    // Get username for the document owner
+    let username = state
+        .db
+        .get_user_by_id(document.user_id)
+        .await
+        .map_err(|e| {
+            error!("Failed to get user for document {}: {}", document_id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .map(|user| user.username);
+
     let mut response = DocumentResponse::from(document);
     response.labels = labels;
+    response.username = username;
 
     Ok(Json(response))
 }

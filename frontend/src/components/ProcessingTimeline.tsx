@@ -39,6 +39,7 @@ interface ProcessingTimelineProps {
   createdAt: string;
   updatedAt: string;
   userId: string;
+  username?: string;
   ocrStatus?: string;
   ocrCompletedAt?: string;
   ocrRetryCount?: number;
@@ -62,6 +63,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
   createdAt,
   updatedAt,
   userId,
+  username,
   ocrStatus,
   ocrCompletedAt,
   ocrRetryCount = 0,
@@ -114,7 +116,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
       title: 'Document Uploaded',
       description: `File "${fileName}" was uploaded successfully`,
       status: 'success',
-      metadata: { userId },
+      metadata: { userId, username },
     });
 
     // OCR processing events
@@ -352,7 +354,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                   <PersonIcon sx={{ fontSize: 14, mr: 0.5, color: theme.palette.text.secondary }} />
                   <Typography variant="caption" color="text.secondary">
-                    User: {event.metadata.userId.substring(0, 8)}...
+                    {event.metadata.username || `User: ${event.metadata.userId.substring(0, 8)}...`}
                   </Typography>
                 </Box>
               )}

@@ -51,6 +51,9 @@ pub struct DocumentResponse {
     pub updated_at: DateTime<Utc>,
     /// User who uploaded/owns the document
     pub user_id: Uuid,
+    /// Username of the user who uploaded/owns the document
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub username: Option<String>,
     /// SHA256 hash of the file content
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub file_hash: Option<String>,
@@ -271,6 +274,7 @@ impl From<Document> for DocumentResponse {
             created_at: doc.created_at,
             updated_at: doc.updated_at,
             user_id: doc.user_id,
+            username: None, // Username will be populated separately where needed
             file_hash: doc.file_hash,
             has_ocr_text: doc.ocr_text.is_some(),
             ocr_confidence: doc.ocr_confidence,

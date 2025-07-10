@@ -699,6 +699,7 @@ const DocumentDetailsPage: React.FC = () => {
                 createdAt={document.created_at}
                 updatedAt={document.updated_at}
                 userId={document.user_id}
+                username={document.username}
                 />
               </Box>
             </Grid>
@@ -884,6 +885,7 @@ const DocumentDetailsPage: React.FC = () => {
                   createdAt={document.created_at}
                   updatedAt={document.updated_at}
                   userId={document.user_id}
+                  username={document.username}
                   ocrStatus={document.has_ocr_text ? 'completed' : 'pending'}
                   ocrCompletedAt={ocrData?.ocr_completed_at}
                   ocrError={ocrData?.ocr_error}
