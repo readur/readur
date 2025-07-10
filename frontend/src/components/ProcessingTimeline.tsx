@@ -29,7 +29,8 @@ import {
   Schedule as ScheduleIcon,
   Person as PersonIcon,
 } from '@mui/icons-material';
-import { modernTokens } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { documentService } from '../services/api';
 
 interface ProcessingTimelineProps {
@@ -70,6 +71,8 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
   const [expanded, setExpanded] = useState(!compact);
   const [retryHistory, setRetryHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const { modernTokens } = useTheme();
+  const theme = useMuiTheme();
 
   const getStatusIcon = (type: string, status: string) => {
     switch (type) {
@@ -90,13 +93,13 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'success':
-        return modernTokens.colors.success[500];
+        return theme.palette.success.main;
       case 'error':
-        return modernTokens.colors.error[500];
+        return theme.palette.error.main;
       case 'warning':
-        return modernTokens.colors.warning[500];
+        return theme.palette.warning.main;
       default:
-        return modernTokens.colors.info[500];
+        return theme.palette.info.main;
     }
   };
 
@@ -213,8 +216,8 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
       <Paper 
         sx={{ 
           p: 2,
-          background: `linear-gradient(135deg, ${modernTokens.colors.neutral[50]} 0%, ${modernTokens.colors.info[50]} 100%)`,
-          border: `1px solid ${modernTokens.colors.neutral[200]}`,
+          backgroundColor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.divider}`,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -223,7 +226,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
               sx={{ 
                 fontSize: 18, 
                 mr: 1, 
-                color: modernTokens.colors.primary[500] 
+                color: theme.palette.primary.main 
               }} 
             />
             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
@@ -274,8 +277,8 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
     <Paper 
       sx={{ 
         p: 3,
-        background: `linear-gradient(135deg, ${modernTokens.colors.neutral[50]} 0%, ${modernTokens.colors.info[50]} 100%)`,
-        border: `1px solid ${modernTokens.colors.neutral[200]}`,
+        backgroundColor: theme.palette.background.paper,
+        border: `1px solid ${theme.palette.divider}`,
       }}
     >
       {/* Header */}
@@ -297,7 +300,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
           <Chip 
             label={`${events.length} events`}
             size="small"
-            sx={{ backgroundColor: modernTokens.colors.neutral[100] }}
+            sx={{ backgroundColor: theme.palette.action.hover }}
           />
           {ocrRetryCount > 0 && (
             <Chip 
@@ -324,7 +327,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
               </TimelineDot>
               {index < events.length - 1 && (
                 <TimelineConnector 
-                  sx={{ backgroundColor: modernTokens.colors.neutral[300] }}
+                  sx={{ backgroundColor: theme.palette.action.selected }}
                 />
               )}
             </TimelineSeparator>
@@ -347,7 +350,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
               
               {event.metadata?.userId && (
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                  <PersonIcon sx={{ fontSize: 14, mr: 0.5, color: modernTokens.colors.neutral[500] }} />
+                  <PersonIcon sx={{ fontSize: 14, mr: 0.5, color: theme.palette.text.secondary }} />
                   <Typography variant="caption" color="text.secondary">
                     User: {event.metadata.userId.substring(0, 8)}...
                   </Typography>
@@ -366,7 +369,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
 
       {/* Retry History Section */}
       {ocrRetryCount > 0 && (
-        <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${modernTokens.colors.neutral[200]}` }}>
+        <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
           <Button
             onClick={() => setExpanded(!expanded)}
             endIcon={<ExpandIcon sx={{ transform: expanded ? 'rotate(180deg)' : 'none' }} />}
@@ -390,8 +393,8 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
                     key={retry.id} 
                     sx={{ 
                       p: 2, 
-                      backgroundColor: modernTokens.colors.neutral[50],
-                      border: `1px solid ${modernTokens.colors.neutral[200]}`,
+                      backgroundColor: theme.palette.background.default,
+                      border: `1px solid ${theme.palette.divider}`,
                     }}
                   >
                     <Typography variant="subtitle2">

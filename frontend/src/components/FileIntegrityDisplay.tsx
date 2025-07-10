@@ -19,7 +19,8 @@ import {
   Error as ErrorIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import { modernTokens } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTheme as useMuiTheme } from '@mui/material/styles';
 
 interface FileIntegrityDisplayProps {
   fileHash?: string;
@@ -43,6 +44,8 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
   compact = false,
 }) => {
   const [copied, setCopied] = useState(false);
+  const { modernTokens } = useTheme();
+  const theme = useMuiTheme();
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -60,7 +63,7 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
       return {
         status: 'unknown',
         icon: <InfoIcon />,
-        color: modernTokens.colors.neutral[500],
+        color: theme.palette.text.secondary,
         message: 'Hash not available',
       };
     }
@@ -70,7 +73,7 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
       return {
         status: 'verified',
         icon: <CheckIcon />,
-        color: modernTokens.colors.success[500],
+        color: theme.palette.success.main,
         message: 'File integrity verified',
       };
     }
@@ -78,7 +81,7 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
     return {
       status: 'warning',
       icon: <WarningIcon />,
-      color: modernTokens.colors.warning[500],
+      color: theme.palette.warning.main,
       message: 'Hash format unusual',
     };
   };
@@ -107,8 +110,8 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
       <Paper 
         sx={{ 
           p: 2, 
-          background: `linear-gradient(135deg, ${modernTokens.colors.neutral[50]} 0%, ${modernTokens.colors.primary[50]} 100%)`,
-          border: `1px solid ${modernTokens.colors.neutral[200]}`,
+          backgroundColor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.divider}`,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -183,8 +186,8 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
     <Paper 
       sx={{ 
         p: 3,
-        background: `linear-gradient(135deg, ${modernTokens.colors.neutral[50]} 0%, ${modernTokens.colors.primary[50]} 100%)`,
-        border: `1px solid ${modernTokens.colors.neutral[200]}`,
+        backgroundColor: theme.palette.background.paper,
+        border: `1px solid ${theme.palette.divider}`,
       }}
     >
       {/* Header */}
@@ -194,7 +197,7 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
             sx={{ 
               fontSize: 24, 
               mr: 1.5, 
-              color: modernTokens.colors.primary[500] 
+              color: theme.palette.primary.main 
             }} 
           />
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -221,7 +224,7 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
             sx={{ 
               fontSize: 18, 
               mr: 1, 
-              color: modernTokens.colors.neutral[600] 
+              color: theme.palette.text.secondary 
             }} 
           />
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
@@ -235,9 +238,9 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
               display: 'flex', 
               alignItems: 'center', 
               p: 2, 
-              backgroundColor: modernTokens.colors.neutral[100],
+              backgroundColor: theme.palette.action.hover,
               borderRadius: 1,
-              border: `1px solid ${modernTokens.colors.neutral[200]}`,
+              border: `1px solid ${theme.palette.divider}`,
             }}
           >
             <Typography 
@@ -247,7 +250,7 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
                 flex: 1, 
                 wordBreak: 'break-all',
                 fontSize: '0.8rem',
-                color: modernTokens.colors.neutral[700],
+                color: theme.palette.text.primary,
               }}
             >
               {fileHash}
@@ -294,8 +297,8 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
               size="small"
               sx={{ 
                 fontSize: '0.75rem',
-                backgroundColor: modernTokens.colors.neutral[100],
-                border: `1px solid ${modernTokens.colors.neutral[300]}`,
+                backgroundColor: theme.palette.action.hover,
+                border: `1px solid ${theme.palette.divider}`,
               }}
             />
           </Box>
@@ -329,9 +332,9 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
               size="small"
               sx={{ 
                 fontSize: '0.75rem',
-                backgroundColor: modernTokens.colors.primary[50],
-                color: modernTokens.colors.primary[700],
-                border: `1px solid ${modernTokens.colors.primary[200]}`,
+                backgroundColor: theme.palette.primary.light,
+                color: theme.palette.primary.dark,
+                border: `1px solid ${theme.palette.primary.main}`,
               }}
             />
           </Box>

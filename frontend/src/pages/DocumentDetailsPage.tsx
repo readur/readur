@@ -56,12 +56,15 @@ import MetadataParser from '../components/MetadataParser';
 import FileIntegrityDisplay from '../components/FileIntegrityDisplay';
 import ProcessingTimeline from '../components/ProcessingTimeline';
 import { RetryHistoryModal } from '../components/RetryHistoryModal';
-import { modernTokens, glassEffect } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTheme as useMuiTheme } from '@mui/material/styles';
 import api from '../services/api';
 
 const DocumentDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { mode, modernTokens, glassEffect } = useTheme();
+  const theme = useMuiTheme();
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -335,7 +338,7 @@ const DocumentDetailsPage: React.FC = () => {
     <Box 
       sx={{ 
         minHeight: '100vh',
-        background: `linear-gradient(135deg, ${modernTokens.colors.primary[50]} 0%, ${modernTokens.colors.secondary[50]} 100%)`,
+        backgroundColor: theme.palette.background.default,
       }}
     >
       <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -347,9 +350,9 @@ const DocumentDetailsPage: React.FC = () => {
               onClick={() => navigate('/documents')}
               sx={{ 
                 mb: 3,
-                color: modernTokens.colors.neutral[600],
+                color: theme.palette.text.secondary,
                 '&:hover': {
-                  backgroundColor: modernTokens.colors.neutral[100],
+                  backgroundColor: theme.palette.action.hover,
                 },
               }}
             >
@@ -358,10 +361,10 @@ const DocumentDetailsPage: React.FC = () => {
             
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
               <Typography 
-                variant="h2" 
+                variant="h4" 
                 sx={{ 
-                  fontWeight: 800,
-                  background: `linear-gradient(135deg, ${modernTokens.colors.primary[600]} 0%, ${modernTokens.colors.secondary[600]} 100%)`,
+                  fontWeight: 700,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
                   backgroundClip: 'text',
                   WebkitBackgroundClip: 'text',
                   color: 'transparent',
@@ -377,11 +380,12 @@ const DocumentDetailsPage: React.FC = () => {
                   <IconButton
                     onClick={handleDownload}
                     sx={{
-                      ...glassEffect(0.2),
-                      color: modernTokens.colors.primary[600],
+                      backgroundColor: theme.palette.action.hover,
+                      backdropFilter: 'blur(10px)',
+                      color: theme.palette.primary.main,
                       '&:hover': {
                         transform: 'scale(1.05)',
-                        backgroundColor: modernTokens.colors.primary[100],
+                        backgroundColor: theme.palette.primary.light,
                       },
                     }}
                   >
@@ -393,11 +397,12 @@ const DocumentDetailsPage: React.FC = () => {
                   <IconButton
                     onClick={handleViewDocument}
                     sx={{
-                      ...glassEffect(0.2),
-                      color: modernTokens.colors.primary[600],
+                      backgroundColor: theme.palette.action.hover,
+                      backdropFilter: 'blur(10px)',
+                      color: theme.palette.primary.main,
                       '&:hover': {
                         transform: 'scale(1.05)',
-                        backgroundColor: modernTokens.colors.primary[100],
+                        backgroundColor: theme.palette.primary.light,
                       },
                     }}
                   >
@@ -410,11 +415,12 @@ const DocumentDetailsPage: React.FC = () => {
                     <IconButton
                       onClick={handleViewOcr}
                       sx={{
-                        ...glassEffect(0.2),
-                        color: modernTokens.colors.secondary[600],
+                        backgroundColor: theme.palette.action.hover,
+                        backdropFilter: 'blur(10px)',
+                        color: theme.palette.secondary.main,
                         '&:hover': {
                           transform: 'scale(1.05)',
-                          backgroundColor: modernTokens.colors.secondary[100],
+                          backgroundColor: theme.palette.secondary.light,
                         },
                       }}
                     >
@@ -438,9 +444,9 @@ const DocumentDetailsPage: React.FC = () => {
             <Grid item xs={12} lg={5}>
               <Card 
                 sx={{ 
-                  ...glassEffect(0.3),
+                  backgroundColor: theme.palette.background.paper,
+                  backdropFilter: 'blur(10px)',
                   height: 'fit-content',
-                  background: `linear-gradient(135deg, ${modernTokens.colors.neutral[0]} 0%, ${modernTokens.colors.primary[50]} 100%)`,
                 }}
               >
                 <CardContent sx={{ p: 4 }}>
@@ -452,7 +458,7 @@ const DocumentDetailsPage: React.FC = () => {
                       justifyContent: 'center',
                       mb: 4,
                       p: 4,
-                      background: `linear-gradient(135deg, ${modernTokens.colors.primary[100]} 0%, ${modernTokens.colors.secondary[100]} 100%)`,
+                      background: `linear-gradient(135deg, ${theme.palette.primary.light} 0%, ${theme.palette.secondary.light} 100%)`,
                       borderRadius: 3,
                       minHeight: 280,
                       position: 'relative',
@@ -481,15 +487,15 @@ const DocumentDetailsPage: React.FC = () => {
                           objectFit: 'contain',
                           cursor: 'pointer',
                           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                          boxShadow: modernTokens.shadows.lg,
+                          boxShadow: theme.shadows[8],
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.transform = 'scale(1.05) rotateY(5deg)';
-                          e.currentTarget.style.boxShadow = modernTokens.shadows.xl;
+                          e.currentTarget.style.boxShadow = theme.shadows[12];
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = 'scale(1) rotateY(0deg)';
-                          e.currentTarget.style.boxShadow = modernTokens.shadows.lg;
+                          e.currentTarget.style.boxShadow = theme.shadows[8];
                         }}
                       />
                     ) : (
@@ -503,7 +509,7 @@ const DocumentDetailsPage: React.FC = () => {
                           }
                         }}
                       >
-                        <Box sx={{ fontSize: 120, color: modernTokens.colors.primary[400], display: 'flex' }}>
+                        <Box sx={{ fontSize: 120, color: theme.palette.primary.main, display: 'flex' }}>
                           {getFileIcon(document.mime_type)}
                         </Box>
                       </Box>
@@ -515,10 +521,10 @@ const DocumentDetailsPage: React.FC = () => {
                     <Chip 
                       label={document.mime_type}
                       sx={{
-                        backgroundColor: modernTokens.colors.primary[100],
-                        color: modernTokens.colors.primary[700],
+                        backgroundColor: theme.palette.primary.light,
+                        color: theme.palette.primary.dark,
                         fontWeight: 600,
-                        border: `1px solid ${modernTokens.colors.primary[300]}`,
+                        border: `1px solid ${theme.palette.primary.main}`,
                       }}
                     />
                   </Box>
@@ -566,10 +572,10 @@ const DocumentDetailsPage: React.FC = () => {
                           onClick={handleViewProcessedImage}
                           disabled={processedImageLoading}
                           sx={{
-                            backgroundColor: modernTokens.colors.secondary[100],
-                            color: modernTokens.colors.secondary[600],
+                            backgroundColor: theme.palette.secondary.light,
+                            color: theme.palette.secondary.dark,
                             '&:hover': {
-                              backgroundColor: modernTokens.colors.secondary[200],
+                              backgroundColor: theme.palette.secondary[200],
                               transform: 'scale(1.1)',
                             },
                           }}
@@ -588,10 +594,10 @@ const DocumentDetailsPage: React.FC = () => {
                         onClick={handleRetryOcr}
                         disabled={retryingOcr}
                         sx={{
-                          backgroundColor: modernTokens.colors.warning[100],
-                          color: modernTokens.colors.warning[600],
+                          backgroundColor: theme.palette.warning.light,
+                          color: theme.palette.warning.dark,
                           '&:hover': {
-                            backgroundColor: modernTokens.colors.warning[200],
+                            backgroundColor: theme.palette.warning[200],
                             transform: 'scale(1.1)',
                           },
                         }}
@@ -608,10 +614,10 @@ const DocumentDetailsPage: React.FC = () => {
                       <IconButton
                         onClick={handleShowRetryHistory}
                         sx={{
-                          backgroundColor: modernTokens.colors.info[100],
-                          color: modernTokens.colors.info[600],
+                          backgroundColor: theme.palette.info.light,
+                          color: theme.palette.info.dark,
                           '&:hover': {
-                            backgroundColor: modernTokens.colors.info[200],
+                            backgroundColor: theme.palette.info[200],
                             transform: 'scale(1.1)',
                           },
                         }}
@@ -622,21 +628,194 @@ const DocumentDetailsPage: React.FC = () => {
                   </Stack>
                 </CardContent>
               </Card>
+              
+              {/* File Integrity Display - Moved here */}
+              <Box sx={{ mt: 3 }}>
+                <FileIntegrityDisplay
+                fileHash={document.file_hash}
+                fileName={document.original_filename}
+                fileSize={document.file_size}
+                mimeType={document.mime_type}
+                createdAt={document.created_at}
+                updatedAt={document.updated_at}
+                userId={document.user_id}
+                />
+              </Box>
             </Grid>
 
             {/* Main Content Area */}
             <Grid item xs={12} lg={7}>
-              <Stack spacing={4}>
-                {/* File Integrity Display */}
-                <FileIntegrityDisplay
-                  fileHash={document.file_hash}
-                  fileName={document.original_filename}
-                  fileSize={document.file_size}
-                  mimeType={document.mime_type}
-                  createdAt={document.created_at}
-                  updatedAt={document.updated_at}
-                  userId={document.user_id}
-                />
+              <Stack spacing={4}>                
+                {/* OCR Text Section - Moved higher */}
+                {document.has_ocr_text && (
+                  <Card 
+                    sx={{ 
+                      backgroundColor: theme.palette.background.paper,
+                      backdropFilter: 'blur(10px)',
+                    }}
+                  >
+                    <CardContent sx={{ p: 4 }}>
+                      <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
+                        🔍 Extracted Text (OCR)
+                      </Typography>
+                      
+                      {ocrLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6 }}>
+                          <CircularProgress size={32} sx={{ mr: 2 }} />
+                          <Typography variant="h6" color="text.secondary">
+                            Loading OCR analysis...
+                          </Typography>
+                        </Box>
+                      ) : ocrData ? (
+                        <>
+                          {/* Enhanced OCR Stats */}
+                          <Box sx={{ mb: 4, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                            {ocrData.ocr_confidence && (
+                              <Box 
+                                sx={{ 
+                                  p: 2, 
+                                  borderRadius: 2,
+                                  backgroundColor: mode === 'light' ? modernTokens.colors.primary[100] : modernTokens.colors.primary[800],
+                                  border: `1px solid ${mode === 'light' ? modernTokens.colors.primary[300] : modernTokens.colors.primary[600]}`,
+                                  textAlign: 'center',
+                                  minWidth: 120,
+                                }}
+                              >
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: mode === 'light' ? modernTokens.colors.primary[700] : modernTokens.colors.primary[300] }}>
+                                  {Math.round(ocrData.ocr_confidence)}%
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Confidence
+                                </Typography>
+                              </Box>
+                            )}
+                            {ocrData.ocr_word_count && (
+                              <Box 
+                                sx={{ 
+                                  p: 2, 
+                                  borderRadius: 2,
+                                  backgroundColor: mode === 'light' ? modernTokens.colors.secondary[100] : modernTokens.colors.secondary[800],
+                                  border: `1px solid ${mode === 'light' ? modernTokens.colors.secondary[300] : modernTokens.colors.secondary[600]}`,
+                                  textAlign: 'center',
+                                  minWidth: 120,
+                                }}
+                              >
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: mode === 'light' ? modernTokens.colors.secondary[700] : modernTokens.colors.secondary[300] }}>
+                                  {ocrData.ocr_word_count.toLocaleString()}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Words
+                                </Typography>
+                              </Box>
+                            )}
+                            {ocrData.ocr_processing_time_ms && (
+                              <Box 
+                                sx={{ 
+                                  p: 2, 
+                                  borderRadius: 2,
+                                  backgroundColor: mode === 'light' ? modernTokens.colors.info[100] : modernTokens.colors.info[800],
+                                  border: `1px solid ${mode === 'light' ? modernTokens.colors.info[300] : modernTokens.colors.info[600]}`,
+                                  textAlign: 'center',
+                                  minWidth: 120,
+                                }}
+                              >
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: mode === 'light' ? modernTokens.colors.info[700] : modernTokens.colors.info[300] }}>
+                                  {ocrData.ocr_processing_time_ms}ms
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Processing Time
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
+
+                          {/* OCR Error Display */}
+                          {ocrData.ocr_error && (
+                            <Alert 
+                              severity="error" 
+                              sx={{ 
+                                mb: 3,
+                                borderRadius: 2,
+                              }}
+                            >
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                OCR Processing Error
+                              </Typography>
+                              <Typography variant="body2">{ocrData.ocr_error}</Typography>
+                            </Alert>
+                          )}
+
+                          {/* Full OCR Text Display */}
+                          <Paper
+                            sx={{
+                              p: 4,
+                              backgroundColor: theme.palette.background.default,
+                              borderRadius: 3,
+                              maxHeight: 400,
+                              overflow: 'auto',
+                              // Custom scrollbar styling
+                              '&::-webkit-scrollbar': {
+                                width: '8px',
+                              },
+                              '&::-webkit-scrollbar-track': {
+                                backgroundColor: mode === 'light' ? modernTokens.colors.neutral[100] : modernTokens.colors.neutral[800],
+                                borderRadius: '4px',
+                              },
+                              '&::-webkit-scrollbar-thumb': {
+                                backgroundColor: mode === 'light' ? modernTokens.colors.neutral[300] : modernTokens.colors.neutral[600],
+                                borderRadius: '4px',
+                                '&:hover': {
+                                  backgroundColor: mode === 'light' ? modernTokens.colors.neutral[400] : modernTokens.colors.neutral[500],
+                                },
+                              },
+                              // Firefox scrollbar styling
+                              scrollbarWidth: 'thin',
+                              scrollbarColor: mode === 'light' 
+                                ? `${modernTokens.colors.neutral[300]} ${modernTokens.colors.neutral[100]}`
+                                : `${modernTokens.colors.neutral[600]} ${modernTokens.colors.neutral[800]}`,
+                            }}
+                          >
+                            {ocrData.ocr_text ? (
+                              <Typography
+                                variant="body1"
+                                sx={{
+                                  fontFamily: '"Inter", monospace',
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.8,
+                                  fontSize: '0.95rem',
+                                }}
+                              >
+                                {ocrData.ocr_text}
+                              </Typography>
+                            ) : (
+                              <Typography variant="body1" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', py: 4 }}>
+                                No OCR text available for this document.
+                              </Typography>
+                            )}
+                          </Paper>
+
+                          {/* Processing Info */}
+                          {ocrData.ocr_completed_at && (
+                            <Box sx={{ mt: 3, pt: 3, borderTop: `1px solid ${theme.palette.divider}` }}>
+                              <Typography variant="body2" color="text.secondary">
+                                ✅ Processing completed: {new Date(ocrData.ocr_completed_at).toLocaleString()}
+                              </Typography>
+                            </Box>
+                          )}
+                        </>
+                      ) : (
+                        <Alert 
+                          severity="info"
+                          sx={{
+                            borderRadius: 2,
+                          }}
+                        >
+                          OCR text is available but failed to load. Please try refreshing the page.
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
                 
                 {/* Processing Timeline */}
                 <ProcessingTimeline
@@ -654,8 +833,8 @@ const DocumentDetailsPage: React.FC = () => {
                 {document.source_metadata && Object.keys(document.source_metadata).length > 0 && (
                   <Card 
                     sx={{ 
-                      ...glassEffect(0.2),
-                      background: `linear-gradient(135deg, ${modernTokens.colors.neutral[0]} 0%, ${modernTokens.colors.info[50]} 100%)`,
+                      backgroundColor: theme.palette.background.paper,
+                      backdropFilter: 'blur(10px)',
                     }}
                   >
                     <CardContent sx={{ p: 4 }}>
@@ -673,8 +852,8 @@ const DocumentDetailsPage: React.FC = () => {
                 {/* Tags and Labels */}
                 <Card 
                   sx={{ 
-                    ...glassEffect(0.2),
-                    background: `linear-gradient(135deg, ${modernTokens.colors.neutral[0]} 0%, ${modernTokens.colors.secondary[50]} 100%)`,
+                    backgroundColor: theme.palette.background.paper,
+                    backdropFilter: 'blur(10px)',
                   }}
                 >
                   <CardContent sx={{ p: 4 }}>
@@ -686,10 +865,10 @@ const DocumentDetailsPage: React.FC = () => {
                         startIcon={<EditIcon />}
                         onClick={() => setShowLabelDialog(true)}
                         sx={{
-                          backgroundColor: modernTokens.colors.secondary[100],
-                          color: modernTokens.colors.secondary[700],
+                          backgroundColor: theme.palette.secondary.light,
+                          color: theme.palette.secondary.dark,
                           '&:hover': {
-                            backgroundColor: modernTokens.colors.secondary[200],
+                            backgroundColor: theme.palette.secondary[200],
                           },
                         }}
                       >
@@ -709,9 +888,9 @@ const DocumentDetailsPage: React.FC = () => {
                               key={index}
                               label={tag} 
                               sx={{
-                                backgroundColor: modernTokens.colors.primary[100],
-                                color: modernTokens.colors.primary[700],
-                                border: `1px solid ${modernTokens.colors.primary[300]}`,
+                                backgroundColor: theme.palette.primary.light,
+                                color: theme.palette.primary.dark,
+                                border: `1px solid ${theme.palette.primary.main}`,
                                 fontWeight: 500,
                               }}
                             />
@@ -753,212 +932,6 @@ const DocumentDetailsPage: React.FC = () => {
           </Grid>
         </Fade>
 
-        {/* OCR Text Section */}
-        {document.has_ocr_text && (
-          <Fade in timeout={1000}>
-            <Card 
-              sx={{ 
-                mt: 4,
-                ...glassEffect(0.2),
-                background: `linear-gradient(135deg, ${modernTokens.colors.neutral[0]} 0%, ${modernTokens.colors.success[50]} 100%)`,
-              }}
-            >
-              <CardContent sx={{ p: 4 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                    🔍 Extracted Text (OCR)
-                  </Typography>
-                  <Button
-                    startIcon={<SpeedIcon />}
-                    onClick={handleViewOcr}
-                    sx={{
-                      backgroundColor: modernTokens.colors.success[100],
-                      color: modernTokens.colors.success[700],
-                      '&:hover': {
-                        backgroundColor: modernTokens.colors.success[200],
-                      },
-                    }}
-                  >
-                    View Full Text
-                  </Button>
-                </Box>
-                
-                {ocrLoading ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6 }}>
-                    <CircularProgress size={32} sx={{ mr: 2 }} />
-                    <Typography variant="h6" color="text.secondary">
-                      Loading OCR analysis...
-                    </Typography>
-                  </Box>
-                ) : ocrData ? (
-                  <>
-                    {/* Enhanced OCR Stats */}
-                    <Box sx={{ mb: 4, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                      {ocrData.ocr_confidence && (
-                        <Box 
-                          sx={{ 
-                            p: 2, 
-                            borderRadius: 2,
-                            backgroundColor: modernTokens.colors.primary[100],
-                            border: `1px solid ${modernTokens.colors.primary[300]}`,
-                            textAlign: 'center',
-                            minWidth: 120,
-                          }}
-                        >
-                          <Typography variant="h5" sx={{ fontWeight: 700, color: modernTokens.colors.primary[700] }}>
-                            {Math.round(ocrData.ocr_confidence)}%
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Confidence
-                          </Typography>
-                        </Box>
-                      )}
-                      {ocrData.ocr_word_count && (
-                        <Box 
-                          sx={{ 
-                            p: 2, 
-                            borderRadius: 2,
-                            backgroundColor: modernTokens.colors.secondary[100],
-                            border: `1px solid ${modernTokens.colors.secondary[300]}`,
-                            textAlign: 'center',
-                            minWidth: 120,
-                          }}
-                        >
-                          <Typography variant="h5" sx={{ fontWeight: 700, color: modernTokens.colors.secondary[700] }}>
-                            {ocrData.ocr_word_count.toLocaleString()}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Words
-                          </Typography>
-                        </Box>
-                      )}
-                      {ocrData.ocr_processing_time_ms && (
-                        <Box 
-                          sx={{ 
-                            p: 2, 
-                            borderRadius: 2,
-                            backgroundColor: modernTokens.colors.info[100],
-                            border: `1px solid ${modernTokens.colors.info[300]}`,
-                            textAlign: 'center',
-                            minWidth: 120,
-                          }}
-                        >
-                          <Typography variant="h5" sx={{ fontWeight: 700, color: modernTokens.colors.info[700] }}>
-                            {ocrData.ocr_processing_time_ms}ms
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Processing Time
-                          </Typography>
-                        </Box>
-                      )}
-                    </Box>
-
-                    {/* OCR Error Display */}
-                    {ocrData.ocr_error && (
-                      <Alert 
-                        severity="error" 
-                        sx={{ 
-                          mb: 3,
-                          borderRadius: 2,
-                          backgroundColor: modernTokens.colors.error[50],
-                          border: `1px solid ${modernTokens.colors.error[200]}`,
-                        }}
-                      >
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                          OCR Processing Error
-                        </Typography>
-                        <Typography variant="body2">{ocrData.ocr_error}</Typography>
-                      </Alert>
-                    )}
-
-                    {/* OCR Text Preview */}
-                    <Paper
-                      sx={{
-                        p: 4,
-                        background: `linear-gradient(135deg, ${modernTokens.colors.neutral[50]} 0%, ${modernTokens.colors.neutral[100]} 100%)`,
-                        border: `1px solid ${modernTokens.colors.neutral[300]}`,
-                        borderRadius: 3,
-                        maxHeight: 300,
-                        overflow: 'auto',
-                        position: 'relative',
-                      }}
-                    >
-                      {ocrData.ocr_text ? (
-                        <Typography
-                          variant="body1"
-                          sx={{
-                            fontFamily: '"Inter", monospace',
-                            whiteSpace: 'pre-wrap',
-                            lineHeight: 1.8,
-                            color: modernTokens.colors.neutral[800],
-                            fontSize: '0.95rem',
-                          }}
-                        >
-                          {ocrData.ocr_text.length > 500 
-                            ? `${ocrData.ocr_text.substring(0, 500)}...` 
-                            : ocrData.ocr_text
-                          }
-                        </Typography>
-                      ) : (
-                        <Typography variant="body1" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', py: 4 }}>
-                          No OCR text available for this document.
-                        </Typography>
-                      )}
-                      
-                      {ocrData.ocr_text && ocrData.ocr_text.length > 500 && (
-                        <Box 
-                          sx={{ 
-                            position: 'absolute',
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            height: 60,
-                            background: `linear-gradient(transparent, ${modernTokens.colors.neutral[100]})`,
-                            display: 'flex',
-                            alignItems: 'end',
-                            justifyContent: 'center',
-                            pb: 2,
-                          }}
-                        >
-                          <Button 
-                            onClick={handleViewOcr}
-                            size="small"
-                            sx={{ 
-                              backgroundColor: modernTokens.colors.neutral[0],
-                              boxShadow: modernTokens.shadows.sm,
-                            }}
-                          >
-                            View Full Text
-                          </Button>
-                        </Box>
-                      )}
-                    </Paper>
-
-                    {/* Processing Info */}
-                    {ocrData.ocr_completed_at && (
-                      <Box sx={{ mt: 3, pt: 3, borderTop: `1px solid ${modernTokens.colors.neutral[200]}` }}>
-                        <Typography variant="body2" color="text.secondary">
-                          ✅ Processing completed: {new Date(ocrData.ocr_completed_at).toLocaleString()}
-                        </Typography>
-                      </Box>
-                    )}
-                  </>
-                ) : (
-                  <Alert 
-                    severity="info"
-                    sx={{
-                      borderRadius: 2,
-                      backgroundColor: modernTokens.colors.info[50],
-                      border: `1px solid ${modernTokens.colors.info[200]}`,
-                    }}
-                  >
-                    OCR text is available but failed to load. Try clicking the "View Full Text" button above.
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </Fade>
-        )}
       </Container>
 
       {/* OCR Text Dialog */}
