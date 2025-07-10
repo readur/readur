@@ -3,7 +3,6 @@ mod tests {
     use readur::models::UpdateSettings;
     use readur::test_utils::{TestContext, TestAuthHelper};
     use axum::http::StatusCode;
-    use serde_json::json;
     use tower::util::ServiceExt;
 
     #[tokio::test]
@@ -149,27 +148,8 @@ mod tests {
         let user1 = auth_helper.create_test_user().await;
         let token1 = auth_helper.login_user(&user1.username, "password123").await;
         
-        let user2_data = json!({
-            "username": "testuser2",
-            "email": "test2@example.com",
-            "password": "password456"
-        });
-        
-        let response = ctx.app
-            .clone()
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("POST")
-                    .uri("/api/auth/register")
-                    .header("Content-Type", "application/json")
-                    .body(axum::body::Body::from(serde_json::to_vec(&user2_data).unwrap()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        
-        assert_eq!(response.status(), StatusCode::OK);
-        let token2 = auth_helper.login_user("testuser2", "password456").await;
+        let user2 = auth_helper.create_test_user().await;
+        let token2 = auth_helper.login_user(&user2.username, "password123").await;
 
         // Update user1's settings
         let update_data = UpdateSettings {

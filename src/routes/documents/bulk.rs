@@ -159,7 +159,7 @@ pub async fn delete_low_confidence_documents(
             .iter()
             .take(10) // Show max 10 in preview
             .map(|doc| serde_json::json!({
-                "id": doc.id,
+                "id": doc.id.to_string(),
                 "filename": doc.original_filename,
                 "ocr_confidence": doc.ocr_confidence,
                 "created_at": doc.created_at
@@ -350,7 +350,7 @@ pub async fn get_cleanup_preview(
     for doc in low_confidence_docs {
         total_size += doc.file_size;
         cleanup_candidates.push(serde_json::json!({
-            "id": doc.id,
+            "id": doc.id.to_string(),
             "filename": doc.original_filename,
             "file_size": doc.file_size,
             "ocr_confidence": doc.ocr_confidence,
@@ -378,7 +378,7 @@ pub async fn get_cleanup_preview(
         for doc in failed_docs {
             total_size += doc.file_size;
             cleanup_candidates.push(serde_json::json!({
-                "id": doc.id,
+                "id": doc.id.to_string(),
                 "filename": doc.original_filename,
                 "file_size": doc.file_size,
                 "ocr_status": doc.ocr_status,

@@ -137,7 +137,7 @@ mod tests {
         
         // Test that OCR response fields match expected structure
         let ocr_response = serde_json::json!({
-            "document_id": document.id,
+            "id": document.id.to_string(),
             "filename": document.filename,
             "has_ocr_text": document.ocr_text.is_some(),
             "ocr_text": document.ocr_text,

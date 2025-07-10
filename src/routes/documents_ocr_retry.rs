@@ -333,7 +333,7 @@ pub async fn get_document_retry_history(
     let history_items: Vec<serde_json::Value> = history.into_iter()
         .map(|h| {
             serde_json::json!({
-                "id": h.id,
+                "id": h.id.to_string(),
                 "retry_reason": h.retry_reason,
                 "previous_status": h.previous_status,
                 "previous_failure_reason": h.previous_failure_reason,
@@ -346,7 +346,7 @@ pub async fn get_document_retry_history(
         .collect();
     
     Ok(Json(serde_json::json!({
-        "document_id": document_id,
+        "document_id": document_id.to_string(),
         "retry_history": history_items,
         "total_retries": history_items.len(),
     })))

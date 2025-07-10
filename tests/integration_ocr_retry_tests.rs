@@ -411,7 +411,7 @@ async fn test_document_retry_history() {
             println!("✅ Document retry history endpoint working");
             
             // Verify response structure
-            assert!(history["id"].is_string(), "Should have document_id");
+            assert!(history["document_id"].is_string(), "Should have document_id");
             assert!(history["retry_history"].is_array(), "Should have retry_history array");
             assert!(history["total_retries"].is_number(), "Should have total_retries count");
             
