@@ -159,6 +159,12 @@ impl FileService {
         file_hash: Option<String>,
         original_created_at: Option<chrono::DateTime<chrono::Utc>>,
         original_modified_at: Option<chrono::DateTime<chrono::Utc>>,
+        source_path: Option<String>,
+        source_type: Option<String>,
+        source_id: Option<Uuid>,
+        file_permissions: Option<i32>,
+        file_owner: Option<String>,
+        file_group: Option<String>,
         source_metadata: Option<serde_json::Value>,
     ) -> Document {
         Document {
@@ -185,6 +191,12 @@ impl FileService {
             file_hash,
             original_created_at,
             original_modified_at,
+            source_path,
+            source_type,
+            source_id,
+            file_permissions,
+            file_owner,
+            file_group,
             source_metadata,
         }
     }

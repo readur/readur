@@ -548,6 +548,66 @@ const DocumentDetailsPage: React.FC = () => {
                         {formatDate(document.created_at)}
                       </Typography>
                     </Box>
+
+                    {document.source_type && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Source Type
+                        </Typography>
+                        <Chip 
+                          label={document.source_type.replace('_', ' ').toUpperCase()}
+                          size="small"
+                          sx={{
+                            backgroundColor: theme.palette.info.light,
+                            color: theme.palette.info.dark,
+                            fontWeight: 600,
+                          }}
+                        />
+                      </Box>
+                    )}
+
+                    {document.source_path && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Original Path
+                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            fontWeight: 600,
+                            maxWidth: '200px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={document.source_path}
+                        >
+                          {document.source_path}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {document.original_created_at && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Original Created
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatDate(document.original_created_at)}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {document.original_modified_at && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Original Modified
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatDate(document.original_modified_at)}
+                        </Typography>
+                      </Box>
+                    )}
                     
                     {document.has_ocr_text && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -828,6 +888,102 @@ const DocumentDetailsPage: React.FC = () => {
                   ocrCompletedAt={ocrData?.ocr_completed_at}
                   ocrError={ocrData?.ocr_error}
                 />
+                
+                {/* Source Information */}
+                {(document.source_type || document.file_permissions || document.file_owner || document.file_group) && (
+                  <Card 
+                    sx={{ 
+                      backgroundColor: theme.palette.background.paper,
+                      backdropFilter: 'blur(10px)',
+                    }}
+                  >
+                    <CardContent sx={{ p: 4 }}>
+                      <Typography variant="h5" sx={{ mb: 3, fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                        <SourceIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
+                        Source Information
+                      </Typography>
+                      
+                      <Grid container spacing={3}>
+                        {document.source_type && (
+                          <Grid item xs={12} sm={6}>
+                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
+                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                                Source Type
+                              </Typography>
+                              <Chip 
+                                label={document.source_type.replace('_', ' ').toUpperCase()}
+                                color="primary"
+                                variant="outlined"
+                              />
+                            </Box>
+                          </Grid>
+                        )}
+
+                        {document.file_permissions && (
+                          <Grid item xs={12} sm={6}>
+                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
+                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                                File Permissions
+                              </Typography>
+                              <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                                {document.file_permissions.toString(8)} ({document.file_permissions})
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        )}
+
+                        {document.file_owner && (
+                          <Grid item xs={12} sm={6}>
+                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
+                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                                File Owner
+                              </Typography>
+                              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                {document.file_owner}
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        )}
+
+                        {document.file_group && (
+                          <Grid item xs={12} sm={6}>
+                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
+                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                                File Group
+                              </Typography>
+                              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                {document.file_group}
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        )}
+
+                        {document.source_path && (
+                          <Grid item xs={12}>
+                            <Box sx={{ p: 2, borderRadius: 2, backgroundColor: theme.palette.action.hover }}>
+                              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                                Original Source Path
+                              </Typography>
+                              <Typography 
+                                variant="body1" 
+                                sx={{ 
+                                  fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                  wordBreak: 'break-all',
+                                  backgroundColor: theme.palette.background.default,
+                                  p: 1,
+                                  borderRadius: 1,
+                                }}
+                              >
+                                {document.source_path}
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                )}
                 
                 {/* Enhanced Metadata Display */}
                 {document.source_metadata && Object.keys(document.source_metadata).length > 0 && (

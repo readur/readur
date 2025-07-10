@@ -9,7 +9,8 @@ pub const DOCUMENT_FIELDS: &str = r#"
     content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, 
     ocr_status, ocr_error, ocr_completed_at, ocr_retry_count, ocr_failure_reason, 
     tags, created_at, updated_at, user_id, file_hash, original_created_at, 
-    original_modified_at, source_metadata
+    original_modified_at, source_path, source_type, source_id, file_permissions, 
+    file_owner, file_group, source_metadata
 "#;
 
 /// Maps a database row to a Document struct
@@ -39,6 +40,12 @@ pub fn map_row_to_document(row: &sqlx::postgres::PgRow) -> Document {
         file_hash: row.get("file_hash"),
         original_created_at: row.get("original_created_at"),
         original_modified_at: row.get("original_modified_at"),
+        source_path: row.get("source_path"),
+        source_type: row.get("source_type"),
+        source_id: row.get("source_id"),
+        file_permissions: row.get("file_permissions"),
+        file_owner: row.get("file_owner"),
+        file_group: row.get("file_group"),
         source_metadata: row.get("source_metadata"),
     }
 }

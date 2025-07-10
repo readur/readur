@@ -54,6 +54,15 @@ pub struct DocumentIngestionRequest {
     /// Optional metadata from source file system
     pub original_created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub original_modified_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Original file path in source system
+    pub source_path: Option<String>,
+    /// File permissions from source system (Unix mode bits)
+    pub file_permissions: Option<i32>,
+    /// File owner from source system
+    pub file_owner: Option<String>,
+    /// File group from source system
+    pub file_group: Option<String>,
+    /// Additional metadata from source system (EXIF, PDF metadata, etc.)
     pub source_metadata: Option<serde_json::Value>,
 }
 
@@ -112,6 +121,9 @@ impl DocumentIngestionService {
     pub async fn ingest_document(&self, request: DocumentIngestionRequest) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
         let file_hash = self.calculate_file_hash(&request.file_data);
         let file_size = request.file_data.len() as i64;
+        
+        // Clone source_type early for error handling
+        let source_type_for_error = request.source_type.clone();
 
         debug!(
             "Ingesting document: {} for user {} (hash: {}, size: {} bytes, policy: {:?})",
@@ -184,7 +196,7 @@ impl DocumentIngestionService {
                         failure_reason: "storage_error".to_string(),
                         failure_stage: "storage".to_string(),
                         existing_document_id: None,
-                        ingestion_source: request.source_type.unwrap_or_else(|| "upload".to_string()),
+                        ingestion_source: source_type_for_error.clone().unwrap_or_else(|| "upload".to_string()),
                         error_message: Some(e.to_string()),
                         retry_count: Some(0),
                         last_retry_at: None,
@@ -211,6 +223,12 @@ impl DocumentIngestionService {
             Some(file_hash.clone()),
             request.original_created_at,
             request.original_modified_at,
+            request.source_path,
+            request.source_type,
+            request.source_id,
+            request.file_permissions,
+            request.file_owner,
+            request.file_group,
             request.source_metadata,
         );
 
@@ -264,7 +282,7 @@ impl DocumentIngestionService {
                         failure_reason: "database_error".to_string(),
                         failure_stage: "ingestion".to_string(),
                         existing_document_id: None,
-                        ingestion_source: request.source_type.unwrap_or_else(|| "upload".to_string()),
+                        ingestion_source: source_type_for_error.clone().unwrap_or_else(|| "upload".to_string()),
                         error_message: Some(e.to_string()),
                         retry_count: Some(0),
                         last_retry_at: None,
@@ -321,6 +339,10 @@ impl DocumentIngestionService {
             source_id,
             original_created_at,
             original_modified_at,
+            source_path: Some(file_info.path.clone()),
+            file_permissions: file_info.permissions.map(|p| p as i32),
+            file_owner: file_info.owner.clone(),
+            file_group: file_info.group.clone(),
             source_metadata,
         };
 
@@ -346,6 +368,10 @@ impl DocumentIngestionService {
             source_id: None,
             original_created_at: None,
             original_modified_at: None,
+            source_path: None, // Direct uploads don't have a source path
+            file_permissions: None, // Direct uploads don't preserve permissions
+            file_owner: None, // Direct uploads don't preserve owner
+            file_group: None, // Direct uploads don't preserve group
             source_metadata: None,
         };
 
@@ -373,6 +399,10 @@ impl DocumentIngestionService {
             source_id: Some(source_id),
             original_created_at: None,
             original_modified_at: None,
+            source_path: None, // Source sync files don't have a source path
+            file_permissions: None, // Source sync files don't preserve permissions
+            file_owner: None, // Source sync files don't preserve owner
+            file_group: None, // Source sync files don't preserve group
             source_metadata: None,
         };
 
@@ -399,6 +429,10 @@ impl DocumentIngestionService {
             source_id: Some(webdav_source_id),
             original_created_at: None,
             original_modified_at: None,
+            source_path: None, // WebDAV files don't have a source path in this method
+            file_permissions: None, // WebDAV files don't preserve permissions in this method
+            file_owner: None, // WebDAV files don't preserve owner in this method
+            file_group: None, // WebDAV files don't preserve group in this method
             source_metadata: None,
         };
 
@@ -424,6 +458,10 @@ impl DocumentIngestionService {
             source_id: None,
             original_created_at: None,
             original_modified_at: None,
+            source_path: None, // Batch files don't have a source path
+            file_permissions: None, // Batch files don't preserve permissions
+            file_owner: None, // Batch files don't preserve owner
+            file_group: None, // Batch files don't preserve group
             source_metadata: None,
         };
 

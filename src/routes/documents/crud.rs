@@ -92,6 +92,10 @@ pub async fn upload_document(
         deduplication_policy: crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,
         original_created_at: None,
         original_modified_at: None,
+        source_path: None, // Web uploads don't have a source path
+        file_permissions: None, // Web uploads don't preserve permissions
+        file_owner: None, // Web uploads don't preserve owner
+        file_group: None, // Web uploads don't preserve group
         source_metadata: None,
     };
     
