@@ -28,7 +28,7 @@ interface FileIntegrityDisplayProps {
   mimeType: string;
   createdAt: string;
   updatedAt: string;
-  userId: string;
+  userId?: string;
   compact?: boolean;
 }
 
@@ -325,7 +325,7 @@ const FileIntegrityDisplay: React.FC<FileIntegrityDisplayProps> = ({
               Uploaded By
             </Typography>
             <Chip 
-              label={`User: ${userId.substring(0, 8)}...`} 
+              label={`User: ${userId ? userId.substring(0, 8) + '...' : 'Unknown'}`} 
               size="small"
               sx={{ 
                 fontSize: '0.75rem',
