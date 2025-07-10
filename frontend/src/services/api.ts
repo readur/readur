@@ -66,10 +66,24 @@ export interface EnhancedDocument {
   id: string
   filename: string
   original_filename: string
+  file_path: string
   file_size: number
   mime_type: string
   tags: string[]
   created_at: string
+  updated_at: string
+  user_id: string
+  username?: string
+  file_hash?: string
+  original_created_at?: string
+  original_modified_at?: string
+  source_path?: string
+  source_type?: string
+  source_id?: string
+  file_permissions?: number
+  file_owner?: string
+  file_group?: string
+  source_metadata?: Record<string, any>
   has_ocr_text: boolean
   ocr_confidence?: number
   ocr_word_count?: number
