@@ -64,6 +64,20 @@ pub struct DocumentDebugInfo {
     pub permissions: Option<String>,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct DocumentPaginationInfo {
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+    pub has_more: bool,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct PaginatedDocumentsResponse {
+    pub documents: Vec<crate::models::DocumentResponse>,
+    pub pagination: DocumentPaginationInfo,
+}
+
 impl Default for PaginationQuery {
     fn default() -> Self {
         Self {

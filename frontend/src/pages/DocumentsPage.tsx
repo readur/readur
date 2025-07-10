@@ -153,6 +153,7 @@ const DocumentsPage: React.FC = () => {
         pagination.offset, 
         ocrFilter || undefined
       );
+      // Backend returns wrapped object with documents and pagination
       setDocuments(response.data.documents || []);
       setPagination(response.data.pagination || { total: 0, limit: 20, offset: 0, has_more: false });
     } catch (err) {

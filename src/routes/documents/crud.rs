@@ -14,7 +14,7 @@ use crate::{
     models::DocumentResponse,
     AppState,
 };
-use super::types::{PaginationQuery, DocumentUploadResponse};
+use super::types::{PaginationQuery, DocumentUploadResponse, PaginatedDocumentsResponse, DocumentPaginationInfo};
 
 /// Upload a new document
 #[utoipa::path(
@@ -201,7 +201,7 @@ pub async fn get_document_by_id(
     ),
     params(PaginationQuery),
     responses(
-        (status = 200, description = "List of documents", body = Vec<DocumentResponse>),
+        (status = 200, description = "Paginated list of documents", body = PaginatedDocumentsResponse),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
     )
@@ -210,9 +210,33 @@ pub async fn list_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Query(query): Query<PaginationQuery>,
-) -> Result<Json<Vec<DocumentResponse>>, StatusCode> {
+) -> Result<Json<PaginatedDocumentsResponse>, StatusCode> {
     let limit = query.limit.unwrap_or(25);
     let offset = query.offset.unwrap_or(0);
+
+    // Get total count for pagination
+    let total_count = if let Some(ocr_status) = query.ocr_status.as_deref() {
+        state
+            .db
+            .count_documents_by_user_with_role_and_filter(
+                auth_user.user.id,
+                auth_user.user.role,
+                Some(ocr_status),
+            )
+            .await
+    } else {
+        state
+            .db
+            .count_documents_by_user_with_role(
+                auth_user.user.id,
+                auth_user.user.role,
+            )
+            .await
+    }
+    .map_err(|e| {
+        error!("Database error counting documents: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let documents = if let Some(ocr_status) = query.ocr_status.as_deref() {
         state
@@ -272,7 +296,18 @@ pub async fn list_documents(
         })
         .collect();
 
-    Ok(Json(responses))
+    // Create pagination info
+    let pagination = DocumentPaginationInfo {
+        total: total_count,
+        limit,
+        offset,
+        has_more: offset + limit < total_count,
+    };
+
+    Ok(Json(PaginatedDocumentsResponse {
+        documents: responses,
+        pagination,
+    }))
 }
 
 /// Delete a specific document
