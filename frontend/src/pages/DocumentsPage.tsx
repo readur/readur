@@ -141,9 +141,11 @@ const DocumentsPage: React.FC = () => {
   useEffect(() => {
     fetchDocuments();
     fetchLabels();
-  }, [pagination.limit, pagination.offset, ocrFilter]);
+  }, [pagination?.limit, pagination?.offset, ocrFilter]);
 
   const fetchDocuments = async (): Promise<void> => {
+    if (!pagination) return;
+    
     try {
       setLoading(true);
       const response = await documentService.listWithPagination(
@@ -151,8 +153,8 @@ const DocumentsPage: React.FC = () => {
         pagination.offset, 
         ocrFilter || undefined
       );
-      setDocuments(response.data.documents);
-      setPagination(response.data.pagination);
+      setDocuments(response.data.documents || []);
+      setPagination(response.data.pagination || { total: 0, limit: 20, offset: 0, has_more: false });
     } catch (err) {
       setError('Failed to load documents');
       console.error(err);
@@ -258,7 +260,7 @@ const DocumentsPage: React.FC = () => {
     });
   };
 
-  const filteredDocuments = documents.filter(doc =>
+  const filteredDocuments = (documents || []).filter(doc =>
     doc.original_filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
     doc.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
   );

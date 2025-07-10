@@ -170,7 +170,7 @@ const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({
     setLoadingHistory(true);
     try {
       // Note: This endpoint might not exist yet, it's for future implementation
-      const response = await documentService.getRetryHistory?.(documentId);
+      const response = await documentService.getDocumentRetryHistory(documentId);
       if (response?.data?.retry_history) {
         setRetryHistory(response.data.retry_history);
       }

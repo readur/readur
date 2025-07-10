@@ -5,7 +5,6 @@ import {
   Chip,
   Stack,
   Paper,
-  Grid,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -13,6 +12,7 @@ import {
   IconButton,
   Tooltip,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   ExpandMore as ExpandMoreIcon,
   PhotoCamera as CameraIcon,
@@ -341,9 +341,9 @@ const MetadataParser: React.FC<MetadataParserProps> = ({
         {parsedSections.slice(0, 2).map((section, index) => (
           <Box key={index} sx={{ mb: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              {React.cloneElement(section.icon, { 
-                sx: { fontSize: 16, mr: 1, color: modernTokens.colors.primary[500] } 
-              })}
+              <Box sx={{ fontSize: 16, mr: 1, color: modernTokens.colors.primary[500], display: 'inline-flex' }}>
+                {section.icon}
+              </Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                 {section.category}
               </Typography>
@@ -393,9 +393,9 @@ const MetadataParser: React.FC<MetadataParserProps> = ({
               },
             }}
           >
-            {React.cloneElement(section.icon, { 
-              sx: { fontSize: 20, mr: 1, color: modernTokens.colors.primary[500] } 
-            })}
+            <Box sx={{ fontSize: 20, mr: 1, color: modernTokens.colors.primary[500], display: 'inline-flex' }}>
+              {section.icon}
+            </Box>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
               {section.category}
             </Typography>

@@ -18,6 +18,9 @@ export interface Document {
   mime_type: string
   tags: string[]
   created_at: string
+  updated_at?: string
+  user_id?: string
+  file_hash?: string
   has_ocr_text: boolean
   ocr_confidence?: number
   ocr_word_count?: number

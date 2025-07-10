@@ -47,7 +47,7 @@ import {
   Speed as SpeedIcon,
   MoreVert as MoreIcon,
 } from '@mui/icons-material';
-import { documentService, OcrResponse } from '../services/api';
+import { documentService, OcrResponse, type Document } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { type LabelData } from '../components/Labels/Label';
@@ -58,23 +58,6 @@ import ProcessingTimeline from '../components/ProcessingTimeline';
 import { RetryHistoryModal } from '../components/RetryHistoryModal';
 import { modernTokens, glassEffect } from '../theme';
 import api from '../services/api';
-
-interface Document {
-  id: string;
-  original_filename: string;
-  filename?: string;
-  file_size: number;
-  mime_type: string;
-  created_at: string;
-  updated_at: string;
-  user_id: string;
-  file_hash?: string;
-  has_ocr_text?: boolean;
-  tags?: string[];
-  original_created_at?: string;
-  original_modified_at?: string;
-  source_metadata?: any;
-}
 
 const DocumentDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -520,9 +503,9 @@ const DocumentDetailsPage: React.FC = () => {
                           }
                         }}
                       >
-                        {React.cloneElement(getFileIcon(document.mime_type), {
-                          sx: { fontSize: 120, color: modernTokens.colors.primary[400] }
-                        })}
+                        <Box sx={{ fontSize: 120, color: modernTokens.colors.primary[400], display: 'flex' }}>
+                          {getFileIcon(document.mime_type)}
+                        </Box>
                       </Box>
                     )}
                   </Box>
@@ -664,7 +647,6 @@ const DocumentDetailsPage: React.FC = () => {
                   userId={document.user_id}
                   ocrStatus={document.has_ocr_text ? 'completed' : 'pending'}
                   ocrCompletedAt={ocrData?.ocr_completed_at}
-                  ocrRetryCount={ocrData?.ocr_retry_count}
                   ocrError={ocrData?.ocr_error}
                 />
                 

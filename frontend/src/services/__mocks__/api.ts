@@ -41,11 +41,18 @@ export interface Document {
   mime_type: string
   tags: string[]
   created_at: string
+  updated_at?: string
+  user_id?: string
+  file_hash?: string
   has_ocr_text: boolean
   ocr_confidence?: number
   ocr_word_count?: number
   ocr_processing_time_ms?: number
   ocr_status?: string
+  // New metadata fields
+  original_created_at?: string
+  original_modified_at?: string
+  source_metadata?: Record<string, any>
 }
 
 export interface SearchRequest {
