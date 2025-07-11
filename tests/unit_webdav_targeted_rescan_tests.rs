@@ -1,5 +1,5 @@
 use readur::services::webdav::{WebDAVService, WebDAVConfig};
-use readur::models::FileInfo;
+use readur::models::FileIngestionInfo;
 use tokio;
 use chrono::Utc;
 
@@ -98,7 +98,7 @@ async fn test_update_single_directory_tracking() {
     
     // Create mock files representing a shallow directory scan
     let files = vec![
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -112,7 +112,7 @@ async fn test_update_single_directory_tracking() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/file1.pdf".to_string(),
             name: "file1.pdf".to_string(),
             size: 1024000,
@@ -126,7 +126,7 @@ async fn test_update_single_directory_tracking() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/file2.pdf".to_string(),
             name: "file2.pdf".to_string(),
             size: 2048000,
@@ -140,7 +140,7 @@ async fn test_update_single_directory_tracking() {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/SubFolder".to_string(),
             name: "SubFolder".to_string(),
             size: 0,

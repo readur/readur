@@ -14,7 +14,7 @@ use crate::{
     models::DocumentResponse,
     AppState,
 };
-use super::types::{PaginationQuery, DocumentUploadResponse};
+use super::types::{PaginationQuery, DocumentUploadResponse, PaginatedDocumentsResponse, DocumentPaginationInfo};
 
 /// Upload a new document
 #[utoipa::path(
@@ -74,6 +74,30 @@ pub async fn upload_document(
     
     info!("Uploading document: {} ({} bytes)", filename, data.len());
     
+    // Create FileIngestionInfo from uploaded data
+    use crate::models::FileIngestionInfo;
+    use chrono::Utc;
+    
+    let mut file_info = FileIngestionInfo {
+        path: format!("upload/{}", filename), // Virtual path for web uploads
+        name: filename.clone(),
+        size: data.len() as i64,
+        mime_type: content_type.clone(),
+        last_modified: Some(Utc::now()), // Upload time as last modified
+        etag: format!("{}-{}", data.len(), Utc::now().timestamp()),
+        is_directory: false,
+        created_at: Some(Utc::now()), // Upload time as creation time
+        permissions: None, // Web uploads don't have filesystem permissions
+        owner: Some(auth_user.user.username.clone()), // Uploader as owner
+        group: None, // Web uploads don't have filesystem groups
+        metadata: None, // Will be populated with extracted metadata below
+    };
+    
+    // Extract content-based metadata from uploaded file
+    if let Ok(Some(content_metadata)) = crate::metadata_extraction::extract_content_metadata(&data, &content_type, &filename).await {
+        file_info.metadata = Some(content_metadata);
+    }
+    
     // Create ingestion service
     let file_service = FileService::new(state.config.upload_path.clone());
     let ingestion_service = DocumentIngestionService::new(
@@ -81,21 +105,14 @@ pub async fn upload_document(
         file_service,
     );
     
-    let request = crate::ingestion::document_ingestion::DocumentIngestionRequest {
-        file_data: data,
-        filename: filename.clone(),
-        original_filename: filename,
-        mime_type: content_type,
-        user_id: auth_user.user.id,
-        source_type: Some("web_upload".to_string()),
-        source_id: None,
-        deduplication_policy: crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,
-        original_created_at: None,
-        original_modified_at: None,
-        source_metadata: None,
-    };
-    
-    match ingestion_service.ingest_document(request).await {
+    match ingestion_service.ingest_from_file_info(
+        &file_info, 
+        data, 
+        auth_user.user.id, 
+        crate::ingestion::document_ingestion::DeduplicationPolicy::Skip, 
+        "web_upload", 
+        None
+    ).await {
         Ok(IngestionResult::Created(document)) => {
             info!("Document uploaded successfully: {}", document.id);
             
@@ -185,8 +202,20 @@ pub async fn get_document_by_id(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    // Get username for the document owner
+    let username = state
+        .db
+        .get_user_by_id(document.user_id)
+        .await
+        .map_err(|e| {
+            error!("Failed to get user for document {}: {}", document_id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .map(|user| user.username);
+
     let mut response = DocumentResponse::from(document);
     response.labels = labels;
+    response.username = username;
 
     Ok(Json(response))
 }
@@ -201,7 +230,7 @@ pub async fn get_document_by_id(
     ),
     params(PaginationQuery),
     responses(
-        (status = 200, description = "List of documents", body = Vec<DocumentResponse>),
+        (status = 200, description = "Paginated list of documents", body = PaginatedDocumentsResponse),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
     )
@@ -210,9 +239,33 @@ pub async fn list_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Query(query): Query<PaginationQuery>,
-) -> Result<Json<Vec<DocumentResponse>>, StatusCode> {
+) -> Result<Json<PaginatedDocumentsResponse>, StatusCode> {
     let limit = query.limit.unwrap_or(25);
     let offset = query.offset.unwrap_or(0);
+
+    // Get total count for pagination
+    let total_count = if let Some(ocr_status) = query.ocr_status.as_deref() {
+        state
+            .db
+            .count_documents_by_user_with_role_and_filter(
+                auth_user.user.id,
+                auth_user.user.role,
+                Some(ocr_status),
+            )
+            .await
+    } else {
+        state
+            .db
+            .count_documents_by_user_with_role(
+                auth_user.user.id,
+                auth_user.user.role,
+            )
+            .await
+    }
+    .map_err(|e| {
+        error!("Database error counting documents: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let documents = if let Some(ocr_status) = query.ocr_status.as_deref() {
         state
@@ -272,7 +325,18 @@ pub async fn list_documents(
         })
         .collect();
 
-    Ok(Json(responses))
+    // Create pagination info
+    let pagination = DocumentPaginationInfo {
+        total: total_count,
+        limit,
+        offset,
+        has_more: offset + limit < total_count,
+    };
+
+    Ok(Json(PaginatedDocumentsResponse {
+        documents: responses,
+        pagination,
+    }))
 }
 
 /// Delete a specific document

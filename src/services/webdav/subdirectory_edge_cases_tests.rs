@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::{WebDAVService, WebDAVConfig};
-    use crate::models::FileInfo;
+    use crate::models::FileIngestionInfo;
     use tokio;
     use chrono::Utc;
     use std::collections::BTreeSet;
@@ -22,10 +22,10 @@ fn create_test_webdav_service() -> WebDAVService {
 }
 
 // Test scenario that matches the real-world bug: deep nested structure with various file types
-fn create_complex_nested_structure() -> Vec<FileInfo> {
+fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
     vec![
         // Root directories at different levels
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments".to_string(),
             name: "FullerDocuments".to_string(),
             size: 0,
@@ -39,7 +39,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments".to_string(),
             name: "JonDocuments".to_string(),
             size: 0,
@@ -54,7 +54,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // Multiple levels of nesting
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Work".to_string(),
             name: "Work".to_string(),
             size: 0,
@@ -68,7 +68,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Personal".to_string(),
             name: "Personal".to_string(),
             size: 0,
@@ -82,7 +82,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Work/Projects".to_string(),
             name: "Projects".to_string(),
             size: 0,
@@ -96,7 +96,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Work/Reports".to_string(),
             name: "Reports".to_string(),
             size: 0,
@@ -110,7 +110,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Work/Projects/WebApp".to_string(),
             name: "WebApp".to_string(),
             size: 0,
@@ -125,7 +125,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // Files at various nesting levels - this is the key part that was failing
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/index.txt".to_string(),
             name: "index.txt".to_string(),
             size: 1500,
@@ -139,7 +139,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Work/schedule.pdf".to_string(),
             name: "schedule.pdf".to_string(),
             size: 2048000,
@@ -153,7 +153,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Work/Projects/proposal.docx".to_string(),
             name: "proposal.docx".to_string(),
             size: 1024000,
@@ -167,7 +167,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Work/Projects/WebApp/design.pdf".to_string(),
             name: "design.pdf".to_string(),
             size: 3072000,
@@ -181,7 +181,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Work/Reports/monthly.pdf".to_string(),
             name: "monthly.pdf".to_string(),
             size: 4096000,
@@ -195,7 +195,7 @@ fn create_complex_nested_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Personal/diary.txt".to_string(),
             name: "diary.txt".to_string(),
             size: 5120,

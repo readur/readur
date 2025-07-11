@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 use sha2::{Sha256, Digest};
 use serde_json;
 
-use crate::models::{FileInfo, LocalFolderSourceConfig};
+use crate::models::{FileIngestionInfo, LocalFolderSourceConfig};
 
 #[derive(Debug, Clone)]
 pub struct LocalFolderService {
@@ -31,13 +31,13 @@ impl LocalFolderService {
     }
 
     /// Discover files in a specific folder
-    pub async fn discover_files_in_folder(&self, folder_path: &str) -> Result<Vec<FileInfo>> {
+    pub async fn discover_files_in_folder(&self, folder_path: &str) -> Result<Vec<FileIngestionInfo>> {
         let path = Path::new(folder_path);
         if !path.exists() {
             return Err(anyhow!("Folder does not exist: {}", folder_path));
         }
 
-        let mut files: Vec<FileInfo> = Vec::new();
+        let mut files: Vec<FileIngestionInfo> = Vec::new();
         
         info!("Scanning local folder: {} (recursive: {})", folder_path, self.config.recursive);
 
@@ -45,8 +45,8 @@ impl LocalFolderService {
         let folder_path_clone = folder_path.to_string();
         let config = self.config.clone();
         
-        let discovered_files = tokio::task::spawn_blocking(move || -> Result<Vec<FileInfo>> {
-            let mut files: Vec<FileInfo> = Vec::new();
+        let discovered_files = tokio::task::spawn_blocking(move || -> Result<Vec<FileIngestionInfo>> {
+            let mut files: Vec<FileIngestionInfo> = Vec::new();
             
             let walker = if config.recursive {
                 WalkDir::new(&folder_path_clone)
@@ -137,7 +137,7 @@ impl LocalFolderService {
                                 // Add file attributes
                                 additional_metadata.insert("readonly".to_string(), serde_json::Value::Bool(metadata.permissions().readonly()));
                                 
-                                let file_info = FileInfo {
+                                let file_info = FileIngestionInfo {
                                     path: path.to_string_lossy().to_string(),
                                     name: file_name,
                                     size: metadata.len() as i64,

@@ -2,7 +2,7 @@ use tokio;
 use uuid::Uuid;
 use chrono::Utc;
 use anyhow::Result;
-use readur::models::{FileInfo, CreateWebDAVDirectory, CreateUser, UserRole};
+use readur::models::{FileIngestionInfo, CreateWebDAVDirectory, CreateUser, UserRole};
 use readur::services::webdav::{WebDAVService, WebDAVConfig};
 use readur::db::Database;
 
@@ -22,10 +22,10 @@ fn create_test_webdav_service() -> WebDAVService {
 }
 
 // Mock files structure that represents a real directory with subdirectories
-fn mock_realistic_directory_structure() -> Vec<FileInfo> {
+fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
     vec![
         // Parent root directory
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments".to_string(),
             name: "FullerDocuments".to_string(),
             size: 0,
@@ -40,7 +40,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // Root directory
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments".to_string(),
             name: "JonDocuments".to_string(),
             size: 0,
@@ -55,7 +55,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // Subdirectory level 1
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Projects".to_string(),
             name: "Projects".to_string(),
             size: 0,
@@ -69,7 +69,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Archive".to_string(),
             name: "Archive".to_string(),
             size: 0,
@@ -84,7 +84,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // Subdirectory level 2
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Projects/WebDev".to_string(),
             name: "WebDev".to_string(),
             size: 0,
@@ -98,7 +98,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Projects/Mobile".to_string(),
             name: "Mobile".to_string(),
             size: 0,
@@ -113,7 +113,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             metadata: None,
         },
         // Files in various directories
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/readme.txt".to_string(),
             name: "readme.txt".to_string(),
             size: 1024,
@@ -127,7 +127,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Projects/project-overview.pdf".to_string(),
             name: "project-overview.pdf".to_string(),
             size: 2048000,
@@ -141,7 +141,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Projects/WebDev/website-specs.docx".to_string(),
             name: "website-specs.docx".to_string(),
             size: 512000,
@@ -155,7 +155,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Projects/Mobile/app-design.pdf".to_string(),
             name: "app-design.pdf".to_string(),
             size: 1536000,
@@ -169,7 +169,7 @@ fn mock_realistic_directory_structure() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/FullerDocuments/JonDocuments/Archive/old-notes.txt".to_string(),
             name: "old-notes.txt".to_string(),
             size: 256,

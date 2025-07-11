@@ -34,6 +34,8 @@ pub struct DocumentResponse {
     pub filename: String,
     /// Original filename when uploaded
     pub original_filename: String,
+    /// File path where the document is stored
+    pub file_path: String,
     /// File size in bytes
     pub file_size: i64,
     /// MIME type of the file
@@ -45,6 +47,16 @@ pub struct DocumentResponse {
     pub labels: Vec<crate::routes::labels::Label>,
     /// When the document was created
     pub created_at: DateTime<Utc>,
+    /// When the document was last updated
+    pub updated_at: DateTime<Utc>,
+    /// User who uploaded/owns the document
+    pub user_id: Uuid,
+    /// Username of the user who uploaded/owns the document
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub username: Option<String>,
+    /// SHA256 hash of the file content
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub file_hash: Option<String>,
     /// Whether OCR text has been extracted
     pub has_ocr_text: bool,
     /// OCR confidence score (0-100, higher is better)
@@ -61,7 +73,25 @@ pub struct DocumentResponse {
     /// Original file modification timestamp from source system
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub original_modified_at: Option<DateTime<Utc>>,
-    /// Additional metadata from source system (permissions, attributes, etc.)
+    /// Original path where the file was located (from source system)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_path: Option<String>,
+    /// Type of source where file was ingested from
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_type: Option<String>,
+    /// UUID of the source system/configuration
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_id: Option<Uuid>,
+    /// File permissions from source system (Unix mode bits)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub file_permissions: Option<i32>,
+    /// File owner from source system
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub file_owner: Option<String>,
+    /// File group from source system
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub file_group: Option<String>,
+    /// Additional metadata from source system (EXIF data, PDF metadata, custom attributes, etc.)
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub source_metadata: Option<serde_json::Value>,
 }
@@ -236,11 +266,16 @@ impl From<Document> for DocumentResponse {
             id: doc.id,
             filename: doc.filename,
             original_filename: doc.original_filename,
+            file_path: doc.file_path,
             file_size: doc.file_size,
             mime_type: doc.mime_type,
             tags: doc.tags,
             labels: Vec::new(), // Labels will be populated separately where needed
             created_at: doc.created_at,
+            updated_at: doc.updated_at,
+            user_id: doc.user_id,
+            username: None, // Username will be populated separately where needed
+            file_hash: doc.file_hash,
             has_ocr_text: doc.ocr_text.is_some(),
             ocr_confidence: doc.ocr_confidence,
             ocr_word_count: doc.ocr_word_count,
@@ -248,6 +283,12 @@ impl From<Document> for DocumentResponse {
             ocr_status: doc.ocr_status,
             original_created_at: doc.original_created_at,
             original_modified_at: doc.original_modified_at,
+            source_path: doc.source_path,
+            source_type: doc.source_type,
+            source_id: doc.source_id,
+            file_permissions: doc.file_permissions,
+            file_owner: doc.file_owner,
+            file_group: doc.file_group,
             source_metadata: doc.source_metadata,
         }
     }

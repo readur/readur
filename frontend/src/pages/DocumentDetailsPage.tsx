@@ -18,6 +18,9 @@ import {
   DialogContent,
   DialogTitle,
   DialogActions,
+  Container,
+  Fade,
+  Skeleton,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -41,32 +44,26 @@ import {
   Info as InfoIcon,
   Refresh as RefreshIcon,
   History as HistoryIcon,
+  Speed as SpeedIcon,
+  MoreVert as MoreIcon,
 } from '@mui/icons-material';
-import { documentService, OcrResponse } from '../services/api';
+import { documentService, OcrResponse, type Document } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { type LabelData } from '../components/Labels/Label';
 import MetadataDisplay from '../components/MetadataDisplay';
+import FileIntegrityDisplay from '../components/FileIntegrityDisplay';
+import ProcessingTimeline from '../components/ProcessingTimeline';
 import { RetryHistoryModal } from '../components/RetryHistoryModal';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTheme as useMuiTheme } from '@mui/material/styles';
 import api from '../services/api';
-
-interface Document {
-  id: string;
-  original_filename: string;
-  filename?: string;
-  file_size: number;
-  mime_type: string;
-  created_at: string;
-  has_ocr_text?: boolean;
-  tags?: string[];
-  original_created_at?: string;
-  original_modified_at?: string;
-  source_metadata?: any;
-}
 
 const DocumentDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { mode, modernTokens, glassEffect } = useTheme();
+  const theme = useMuiTheme();
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -337,487 +334,654 @@ const DocumentDetailsPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Button
-          startIcon={<BackIcon />}
-          onClick={() => navigate('/documents')}
-          sx={{ mb: 2 }}
-        >
-          Back to Documents
-        </Button>
-        
-        <Typography 
-          variant="h4" 
-          sx={{ 
-            fontWeight: 800,
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            color: 'transparent',
-            mb: 1,
-          }}
-        >
-          Document Details
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          View and manage document information
-        </Typography>
-      </Box>
-
-      <Grid container spacing={3}>
-        {/* Document Preview */}
-        <Grid item xs={12} md={4}>
-          <Card sx={{ height: 'fit-content' }}>
-            <CardContent sx={{ textAlign: 'center', py: 4 }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  mb: 3,
-                  p: 3,
-                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
-                  borderRadius: 2,
-                  minHeight: 200,
+    <Box 
+      sx={{ 
+        minHeight: '100vh',
+        backgroundColor: theme.palette.background.default,
+      }}
+    >
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        {/* Modern Header */}
+        <Fade in timeout={600}>
+          <Box sx={{ mb: 6 }}>
+            <Button
+              startIcon={<BackIcon />}
+              onClick={() => navigate('/documents')}
+              sx={{ 
+                mb: 3,
+                color: theme.palette.text.secondary,
+                '&:hover': {
+                  backgroundColor: theme.palette.action.hover,
+                },
+              }}
+            >
+              Back to Documents
+            </Button>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography 
+                variant="h4" 
+                sx={{ 
+                  fontWeight: 700,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  color: 'transparent',
+                  letterSpacing: '-0.02em',
                 }}
               >
-                {thumbnailUrl ? (
-                  <img
-                    src={thumbnailUrl}
-                    alt={document.original_filename}
-                    onClick={handleViewDocument}
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: '200px',
-                      borderRadius: '8px',
-                      objectFit: 'contain',
-                      cursor: 'pointer',
-                      transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                {document?.original_filename || 'Document Details'}
+              </Typography>
+              
+              {/* Floating Action Menu */}
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title="Download">
+                  <IconButton
+                    onClick={handleDownload}
+                    sx={{
+                      backgroundColor: theme.palette.action.hover,
+                      backdropFilter: 'blur(10px)',
+                      color: theme.palette.primary.main,
+                      '&:hover': {
+                        transform: 'scale(1.05)',
+                        backgroundColor: theme.palette.primary.light,
+                      },
                     }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'scale(1.02)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'scale(1)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  />
-                ) : (
-                  <Box
+                  >
+                    <DownloadIcon />
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title="View Document">
+                  <IconButton
                     onClick={handleViewDocument}
                     sx={{
-                      cursor: 'pointer',
-                      transition: 'transform 0.2s ease-in-out',
+                      backgroundColor: theme.palette.action.hover,
+                      backdropFilter: 'blur(10px)',
+                      color: theme.palette.primary.main,
                       '&:hover': {
-                        transform: 'scale(1.02)',
-                      }
+                        transform: 'scale(1.05)',
+                        backgroundColor: theme.palette.primary.light,
+                      },
                     }}
                   >
-                    {getFileIcon(document.mime_type)}
-                  </Box>
+                    <ViewIcon />
+                  </IconButton>
+                </Tooltip>
+                
+                {document?.has_ocr_text && (
+                  <Tooltip title="View OCR Text">
+                    <IconButton
+                      onClick={handleViewOcr}
+                      sx={{
+                        backgroundColor: theme.palette.action.hover,
+                        backdropFilter: 'blur(10px)',
+                        color: theme.palette.secondary.main,
+                        '&:hover': {
+                          transform: 'scale(1.05)',
+                          backgroundColor: theme.palette.secondary.light,
+                        },
+                      }}
+                    >
+                      <SearchIcon />
+                    </IconButton>
+                  </Tooltip>
                 )}
               </Box>
-              
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                {document.original_filename}
-              </Typography>
-              
-              <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 3, flexWrap: 'wrap' }}>
-                <Button
-                  variant="contained"
-                  startIcon={<ViewIcon />}
-                  onClick={handleViewDocument}
-                  sx={{ borderRadius: 2 }}
-                >
-                  View
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<DownloadIcon />}
-                  onClick={handleDownload}
-                  sx={{ borderRadius: 2 }}
-                >
-                  Download
-                </Button>
-                {document.has_ocr_text && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<SearchIcon />}
-                    onClick={handleViewOcr}
-                    sx={{ borderRadius: 2 }}
+            </Box>
+            
+            <Typography variant="body1" color="text.secondary" sx={{ fontSize: '1.1rem' }}>
+              Comprehensive document analysis and metadata viewer
+            </Typography>
+          </Box>
+        </Fade>
+
+        {/* Modern Content Layout */}
+        <Fade in timeout={800}>
+          <Grid container spacing={4}>
+            {/* Hero Document Preview */}
+            <Grid item xs={12} lg={5}>
+              <Card 
+                sx={{ 
+                  backgroundColor: theme.palette.background.paper,
+                  backdropFilter: 'blur(10px)',
+                  height: 'fit-content',
+                }}
+              >
+                <CardContent sx={{ p: 4 }}>
+                  {/* Document Preview */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      mb: 4,
+                      p: 4,
+                      background: `linear-gradient(135deg, ${theme.palette.primary.light} 0%, ${theme.palette.secondary.light} 100%)`,
+                      borderRadius: 3,
+                      minHeight: 280,
+                      position: 'relative',
+                      overflow: 'hidden',
+                      '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.3) 0%, transparent 50%)',
+                        pointerEvents: 'none',
+                      },
+                    }}
                   >
-                    OCR Text
-                  </Button>
-                )}
-                {document.mime_type?.includes('image') && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<ProcessedImageIcon />}
-                    onClick={handleViewProcessedImage}
-                    disabled={processedImageLoading}
-                    sx={{ borderRadius: 2 }}
-                  >
-                    {processedImageLoading ? 'Loading...' : 'Processed Image'}
-                  </Button>
-                )}
-                <Button
-                  variant="outlined"
-                  startIcon={retryingOcr ? <CircularProgress size={16} /> : <RefreshIcon />}
-                  onClick={handleRetryOcr}
-                  disabled={retryingOcr}
-                  sx={{ borderRadius: 2 }}
-                >
-                  {retryingOcr ? 'Retrying...' : 'Retry OCR'}
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<HistoryIcon />}
-                  onClick={handleShowRetryHistory}
-                  sx={{ borderRadius: 2 }}
-                >
-                  Retry History
-                </Button>
-              </Stack>
-              
-              {document.has_ocr_text && (
-                <Chip 
-                  label="OCR Processed" 
-                  color="success"
-                  variant="outlined"
-                  icon={<TextIcon />}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Document Information */}
-        <Grid item xs={12} md={8}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-                Document Information
-              </Typography>
-
-              <Grid container spacing={3}>
-                <Grid item xs={12} sm={6}>
-                  <Paper sx={{ p: 2, height: '100%' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <DocIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Filename
-                      </Typography>
-                    </Box>
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {document.original_filename}
-                    </Typography>
-                  </Paper>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Paper sx={{ p: 2, height: '100%' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <SizeIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="subtitle2" color="text.secondary">
+                    {thumbnailUrl ? (
+                      <img
+                        src={thumbnailUrl}
+                        alt={document.original_filename}
+                        onClick={handleViewDocument}
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: '250px',
+                          borderRadius: '12px',
+                          objectFit: 'contain',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          boxShadow: theme.shadows[8],
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.05) rotateY(5deg)';
+                          e.currentTarget.style.boxShadow = theme.shadows[12];
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'scale(1) rotateY(0deg)';
+                          e.currentTarget.style.boxShadow = theme.shadows[8];
+                        }}
+                      />
+                    ) : (
+                      <Box
+                        onClick={handleViewDocument}
+                        sx={{
+                          cursor: 'pointer',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          '&:hover': {
+                            transform: 'scale(1.1) rotateY(10deg)',
+                          }
+                        }}
+                      >
+                        <Box sx={{ fontSize: 120, color: theme.palette.primary.main, display: 'flex' }}>
+                          {getFileIcon(document.mime_type)}
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                  
+                  {/* File Type Badge */}
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+                    <Chip 
+                      label={document.mime_type}
+                      sx={{
+                        backgroundColor: theme.palette.primary.light,
+                        color: theme.palette.primary.dark,
+                        fontWeight: 600,
+                        border: `1px solid ${theme.palette.primary.main}`,
+                      }}
+                    />
+                  </Box>
+                  
+                  {/* Quick Stats */}
+                  <Stack spacing={2}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
                         File Size
                       </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {formatFileSize(document.file_size)}
+                      </Typography>
                     </Box>
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {formatFileSize(document.file_size)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Paper sx={{ p: 2, height: '100%' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <DateIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="subtitle2" color="text.secondary">
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
                         Upload Date
                       </Typography>
-                    </Box>
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {formatDate(document.created_at)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Paper sx={{ p: 2, height: '100%' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <ViewIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="subtitle2" color="text.secondary">
-                        File Type
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {formatDate(document.created_at)}
                       </Typography>
                     </Box>
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {document.mime_type}
-                    </Typography>
-                  </Paper>
-                </Grid>
 
-                {/* Source Metadata Section */}
-                {(document.original_created_at || document.original_modified_at || document.source_metadata) && (
-                  <>
+                    {document.source_type && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Source Type
+                        </Typography>
+                        <Chip 
+                          label={document.source_type.replace('_', ' ').toUpperCase()}
+                          size="small"
+                          sx={{
+                            backgroundColor: theme.palette.info.light,
+                            color: theme.palette.info.dark,
+                            fontWeight: 600,
+                          }}
+                        />
+                      </Box>
+                    )}
+
+                    {document.source_path && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Original Path
+                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            fontWeight: 600,
+                            maxWidth: '200px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={document.source_path}
+                        >
+                          {document.source_path}
+                        </Typography>
+                      </Box>
+                    )}
+
                     {document.original_created_at && (
-                      <Grid item xs={12} sm={6}>
-                        <Paper sx={{ p: 2, height: '100%' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                            <CreateIcon color="primary" sx={{ mr: 1 }} />
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Original Created
-                            </Typography>
-                          </Box>
-                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                            {formatDate(document.original_created_at)}
-                          </Typography>
-                        </Paper>
-                      </Grid>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Original Created
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatDate(document.original_created_at)}
+                        </Typography>
+                      </Box>
                     )}
 
                     {document.original_modified_at && (
-                      <Grid item xs={12} sm={6}>
-                        <Paper sx={{ p: 2, height: '100%' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                            <AccessTimeIcon color="primary" sx={{ mr: 1 }} />
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Original Modified
-                            </Typography>
-                          </Box>
-                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                            {formatDate(document.original_modified_at)}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Original Modified
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatDate(document.original_modified_at)}
+                        </Typography>
+                      </Box>
+                    )}
+                    
+                    {document.has_ocr_text && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          OCR Status
+                        </Typography>
+                        <Chip 
+                          label="Text Extracted" 
+                          color="success"
+                          size="small"
+                          icon={<TextIcon sx={{ fontSize: 16 }} />}
+                        />
+                      </Box>
+                    )}
+                  </Stack>
+                  
+                  {/* Action Buttons */}
+                  <Stack direction="row" spacing={1} sx={{ mt: 4 }} justifyContent="center">
+                    {document.mime_type?.includes('image') && (
+                      <Tooltip title="View Processed Image">
+                        <IconButton
+                          onClick={handleViewProcessedImage}
+                          disabled={processedImageLoading}
+                          sx={{
+                            backgroundColor: theme.palette.secondary.light,
+                            color: theme.palette.secondary.dark,
+                            '&:hover': {
+                              backgroundColor: theme.palette.secondary[200],
+                              transform: 'scale(1.1)',
+                            },
+                          }}
+                        >
+                          {processedImageLoading ? (
+                            <CircularProgress size={20} />
+                          ) : (
+                            <ProcessedImageIcon />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    
+                    <Tooltip title="Retry OCR">
+                      <IconButton
+                        onClick={handleRetryOcr}
+                        disabled={retryingOcr}
+                        sx={{
+                          backgroundColor: theme.palette.warning.light,
+                          color: theme.palette.warning.dark,
+                          '&:hover': {
+                            backgroundColor: theme.palette.warning[200],
+                            transform: 'scale(1.1)',
+                          },
+                        }}
+                      >
+                        {retryingOcr ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <RefreshIcon />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    
+                    <Tooltip title="Retry History">
+                      <IconButton
+                        onClick={handleShowRetryHistory}
+                        sx={{
+                          backgroundColor: theme.palette.info.light,
+                          color: theme.palette.info.dark,
+                          '&:hover': {
+                            backgroundColor: theme.palette.info[200],
+                            transform: 'scale(1.1)',
+                          },
+                        }}
+                      >
+                        <HistoryIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </CardContent>
+              </Card>
+              
+              {/* File Integrity Display - Moved here */}
+              <Box sx={{ mt: 3 }}>
+                <FileIntegrityDisplay
+                fileHash={document.file_hash}
+                fileName={document.original_filename}
+                fileSize={document.file_size}
+                mimeType={document.mime_type}
+                createdAt={document.created_at}
+                updatedAt={document.updated_at}
+                userId={document.user_id}
+                username={document.username}
+                sourceType={document.source_type}
+                sourcePath={document.source_path}
+                filePermissions={document.file_permissions}
+                fileOwner={document.file_owner}
+                fileGroup={document.file_group}
+                originalCreatedAt={document.original_created_at}
+                originalModifiedAt={document.original_modified_at}
+                sourceMetadata={document.source_metadata}
+                />
+              </Box>
+            </Grid>
+
+            {/* Main Content Area */}
+            <Grid item xs={12} lg={7}>
+              <Stack spacing={4}>                
+                {/* OCR Text Section - Moved higher */}
+                {document.has_ocr_text && (
+                  <Card 
+                    sx={{ 
+                      backgroundColor: theme.palette.background.paper,
+                      backdropFilter: 'blur(10px)',
+                    }}
+                  >
+                    <CardContent sx={{ p: 4 }}>
+                      <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
+                        🔍 Extracted Text (OCR)
+                      </Typography>
+                      
+                      {ocrLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6 }}>
+                          <CircularProgress size={32} sx={{ mr: 2 }} />
+                          <Typography variant="h6" color="text.secondary">
+                            Loading OCR analysis...
                           </Typography>
-                        </Paper>
-                      </Grid>
-                    )}
+                        </Box>
+                      ) : ocrData ? (
+                        <>
+                          {/* Enhanced OCR Stats */}
+                          <Box sx={{ mb: 4, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                            {ocrData.ocr_confidence && (
+                              <Box 
+                                sx={{ 
+                                  p: 2, 
+                                  borderRadius: 2,
+                                  backgroundColor: mode === 'light' ? modernTokens.colors.primary[100] : modernTokens.colors.primary[800],
+                                  border: `1px solid ${mode === 'light' ? modernTokens.colors.primary[300] : modernTokens.colors.primary[600]}`,
+                                  textAlign: 'center',
+                                  minWidth: 120,
+                                }}
+                              >
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: mode === 'light' ? modernTokens.colors.primary[700] : modernTokens.colors.primary[300] }}>
+                                  {Math.round(ocrData.ocr_confidence)}%
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Confidence
+                                </Typography>
+                              </Box>
+                            )}
+                            {ocrData.ocr_word_count && (
+                              <Box 
+                                sx={{ 
+                                  p: 2, 
+                                  borderRadius: 2,
+                                  backgroundColor: mode === 'light' ? modernTokens.colors.secondary[100] : modernTokens.colors.secondary[800],
+                                  border: `1px solid ${mode === 'light' ? modernTokens.colors.secondary[300] : modernTokens.colors.secondary[600]}`,
+                                  textAlign: 'center',
+                                  minWidth: 120,
+                                }}
+                              >
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: mode === 'light' ? modernTokens.colors.secondary[700] : modernTokens.colors.secondary[300] }}>
+                                  {ocrData.ocr_word_count.toLocaleString()}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Words
+                                </Typography>
+                              </Box>
+                            )}
+                            {ocrData.ocr_processing_time_ms && (
+                              <Box 
+                                sx={{ 
+                                  p: 2, 
+                                  borderRadius: 2,
+                                  backgroundColor: mode === 'light' ? modernTokens.colors.info[100] : modernTokens.colors.info[800],
+                                  border: `1px solid ${mode === 'light' ? modernTokens.colors.info[300] : modernTokens.colors.info[600]}`,
+                                  textAlign: 'center',
+                                  minWidth: 120,
+                                }}
+                              >
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: mode === 'light' ? modernTokens.colors.info[700] : modernTokens.colors.info[300] }}>
+                                  {ocrData.ocr_processing_time_ms}ms
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Processing Time
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
 
-                    {document.source_metadata && Object.keys(document.source_metadata).length > 0 && (
-                      <Grid item xs={12}>
-                        <Paper sx={{ p: 2 }}>
-                          <MetadataDisplay 
-                            metadata={document.source_metadata} 
-                            title="Source Metadata"
-                            compact={false}
-                          />
-                        </Paper>
-                      </Grid>
-                    )}
-                  </>
+                          {/* OCR Error Display */}
+                          {ocrData.ocr_error && (
+                            <Alert 
+                              severity="error" 
+                              sx={{ 
+                                mb: 3,
+                                borderRadius: 2,
+                              }}
+                            >
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                OCR Processing Error
+                              </Typography>
+                              <Typography variant="body2">{ocrData.ocr_error}</Typography>
+                            </Alert>
+                          )}
+
+                          {/* Full OCR Text Display */}
+                          <Paper
+                            sx={{
+                              p: 4,
+                              backgroundColor: theme.palette.background.default,
+                              borderRadius: 3,
+                              maxHeight: 400,
+                              overflow: 'auto',
+                              // Custom scrollbar styling
+                              '&::-webkit-scrollbar': {
+                                width: '8px',
+                              },
+                              '&::-webkit-scrollbar-track': {
+                                backgroundColor: mode === 'light' ? modernTokens.colors.neutral[100] : modernTokens.colors.neutral[800],
+                                borderRadius: '4px',
+                              },
+                              '&::-webkit-scrollbar-thumb': {
+                                backgroundColor: mode === 'light' ? modernTokens.colors.neutral[300] : modernTokens.colors.neutral[600],
+                                borderRadius: '4px',
+                                '&:hover': {
+                                  backgroundColor: mode === 'light' ? modernTokens.colors.neutral[400] : modernTokens.colors.neutral[500],
+                                },
+                              },
+                              // Firefox scrollbar styling
+                              scrollbarWidth: 'thin',
+                              scrollbarColor: mode === 'light' 
+                                ? `${modernTokens.colors.neutral[300]} ${modernTokens.colors.neutral[100]}`
+                                : `${modernTokens.colors.neutral[600]} ${modernTokens.colors.neutral[800]}`,
+                            }}
+                          >
+                            {ocrData.ocr_text ? (
+                              <Typography
+                                variant="body1"
+                                sx={{
+                                  fontFamily: '"Inter", monospace',
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.8,
+                                  fontSize: '0.95rem',
+                                }}
+                              >
+                                {ocrData.ocr_text}
+                              </Typography>
+                            ) : (
+                              <Typography variant="body1" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', py: 4 }}>
+                                No OCR text available for this document.
+                              </Typography>
+                            )}
+                          </Paper>
+
+                          {/* Processing Info */}
+                          {ocrData.ocr_completed_at && (
+                            <Box sx={{ mt: 3, pt: 3, borderTop: `1px solid ${theme.palette.divider}` }}>
+                              <Typography variant="body2" color="text.secondary">
+                                ✅ Processing completed: {new Date(ocrData.ocr_completed_at).toLocaleString()}
+                              </Typography>
+                            </Box>
+                          )}
+                        </>
+                      ) : (
+                        <Alert 
+                          severity="info"
+                          sx={{
+                            borderRadius: 2,
+                          }}
+                        >
+                          OCR text is available but failed to load. Please try refreshing the page.
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </Card>
                 )}
-
-                {document.tags && document.tags.length > 0 && (
-                  <Grid item xs={12}>
-                    <Paper sx={{ p: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <TagIcon color="primary" sx={{ mr: 1 }} />
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Tags
-                        </Typography>
-                      </Box>
-                      <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
-                        {document.tags.map((tag, index) => (
-                          <Chip 
-                            key={index}
-                            label={tag} 
-                            color="primary"
-                            variant="outlined"
-                          />
-                        ))}
-                      </Stack>
-                    </Paper>
-                  </Grid>
-                )}
-
-                {/* Labels Section */}
-                <Grid item xs={12}>
-                  <Paper sx={{ p: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <LabelIcon color="primary" sx={{ mr: 1 }} />
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Labels
-                        </Typography>
-                      </Box>
+                
+                {/* Processing Timeline */}
+                <ProcessingTimeline
+                  documentId={document.id}
+                  fileName={document.original_filename}
+                  createdAt={document.created_at}
+                  updatedAt={document.updated_at}
+                  userId={document.user_id}
+                  username={document.username}
+                  ocrStatus={document.has_ocr_text ? 'completed' : 'pending'}
+                  ocrCompletedAt={ocrData?.ocr_completed_at}
+                  ocrError={ocrData?.ocr_error}
+                />
+                
+                {/* Tags and Labels */}
+                <Card 
+                  sx={{ 
+                    backgroundColor: theme.palette.background.paper,
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                      <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                        🏷️ Tags & Labels
+                      </Typography>
                       <Button
-                        size="small"
                         startIcon={<EditIcon />}
                         onClick={() => setShowLabelDialog(true)}
-                        sx={{ borderRadius: 2 }}
+                        sx={{
+                          backgroundColor: theme.palette.secondary.light,
+                          color: theme.palette.secondary.dark,
+                          '&:hover': {
+                            backgroundColor: theme.palette.secondary[200],
+                          },
+                        }}
                       >
                         Edit Labels
                       </Button>
                     </Box>
-                    {documentLabels.length > 0 ? (
-                      <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
-                        {documentLabels.map((label) => (
-                          <Chip
-                            key={label.id}
-                            label={label.name}
-                            sx={{
-                              backgroundColor: label.background_color || label.color + '20',
-                              color: label.color,
-                              borderColor: label.color,
-                              border: '1px solid',
-                            }}
-                          />
-                        ))}
-                      </Stack>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                        No labels assigned to this document
-                      </Typography>
-                    )}
-                  </Paper>
-                </Grid>
-              </Grid>
-
-              <Divider sx={{ my: 3 }} />
-
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                Processing Status
-              </Typography>
-              
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box
-                      sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: '50%',
-                        backgroundColor: 'success.main',
-                        mr: 2,
-                      }}
-                    />
-                    <Typography variant="body2">
-                      Document uploaded successfully
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box
-                      sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: '50%',
-                        backgroundColor: document.has_ocr_text ? 'success.main' : 'warning.main',
-                        mr: 2,
-                      }}
-                    />
-                    <Typography variant="body2">
-                      {document.has_ocr_text ? 'OCR processing completed' : 'OCR processing pending'}
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* OCR Text Section */}
-        {document.has_ocr_text && (
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-                  Extracted Text (OCR)
-                </Typography>
-                
-                {ocrLoading ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
-                    <CircularProgress size={24} sx={{ mr: 2 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Loading OCR text...
-                    </Typography>
-                  </Box>
-                ) : ocrData ? (
-                  <>
-                    {/* OCR Stats */}
-                    <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      {ocrData.ocr_confidence && (
-                        <Chip 
-                          label={`${Math.round(ocrData.ocr_confidence)}% confidence`} 
-                          color="primary" 
-                          size="small" 
-                        />
-                      )}
-                      {ocrData.ocr_word_count && (
-                        <Chip 
-                          label={`${ocrData.ocr_word_count} words`} 
-                          color="secondary" 
-                          size="small" 
-                        />
-                      )}
-                      {ocrData.ocr_processing_time_ms && (
-                        <Chip 
-                          label={`${ocrData.ocr_processing_time_ms}ms processing`} 
-                          color="info" 
-                          size="small" 
-                        />
-                      )}
-                    </Box>
-
-                    {/* OCR Error Display */}
-                    {ocrData.ocr_error && (
-                      <Alert severity="error" sx={{ mb: 3 }}>
-                        OCR Error: {ocrData.ocr_error}
-                      </Alert>
-                    )}
-
-                    {/* OCR Text Content */}
-                    <Paper
-                      sx={{
-                        p: 3,
-                        backgroundColor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : 'grey.900',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        maxHeight: 400,
-                        overflow: 'auto',
-                        position: 'relative',
-                      }}
-                    >
-                      {ocrData.ocr_text ? (
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontFamily: 'monospace',
-                            whiteSpace: 'pre-wrap',
-                            lineHeight: 1.6,
-                            color: 'text.primary',
-                          }}
-                        >
-                          {ocrData.ocr_text}
+                    
+                    {/* Tags */}
+                    {document.tags && document.tags.length > 0 && (
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
+                          Tags
                         </Typography>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                          No OCR text available for this document.
-                        </Typography>
-                      )}
-                    </Paper>
-
-                    {/* Processing Info */}
-                    {ocrData.ocr_completed_at && (
-                      <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                        <Typography variant="caption" color="text.secondary">
-                          Processing completed: {new Date(ocrData.ocr_completed_at).toLocaleString()}
-                        </Typography>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+                          {document.tags.map((tag, index) => (
+                            <Chip 
+                              key={index}
+                              label={tag} 
+                              sx={{
+                                backgroundColor: theme.palette.primary.light,
+                                color: theme.palette.primary.dark,
+                                border: `1px solid ${theme.palette.primary.main}`,
+                                fontWeight: 500,
+                              }}
+                            />
+                          ))}
+                        </Stack>
                       </Box>
                     )}
-                  </>
-                ) : (
-                  <Alert severity="info">
-                    OCR text is available but failed to load. Try clicking the "View OCR" button above.
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
+                    
+                    {/* Labels */}
+                    <Box>
+                      <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
+                        Labels
+                      </Typography>
+                      {documentLabels.length > 0 ? (
+                        <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+                          {documentLabels.map((label) => (
+                            <Chip
+                              key={label.id}
+                              label={label.name}
+                              sx={{
+                                backgroundColor: label.background_color || `${label.color}20`,
+                                color: label.color,
+                                border: `1px solid ${label.color}`,
+                                fontWeight: 500,
+                              }}
+                            />
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                          No labels assigned to this document
+                        </Typography>
+                      )}
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Stack>
+            </Grid>
           </Grid>
-        )}
-      </Grid>
+        </Fade>
+
+      </Container>
 
       {/* OCR Text Dialog */}
       <Dialog

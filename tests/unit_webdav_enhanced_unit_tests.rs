@@ -1,6 +1,6 @@
 use readur::services::webdav::{WebDAVService, WebDAVConfig, RetryConfig};
 use readur::webdav_xml_parser::parse_propfind_response;
-use readur::models::FileInfo;
+use readur::models::FileIngestionInfo;
 use readur::models::*;
 use chrono::Utc;
 use uuid::Uuid;
@@ -607,7 +607,7 @@ fn test_special_characters_in_paths() {
     ];
 
     for path in test_paths {
-        let file_info = FileInfo {
+        let file_info = FileIngestionInfo {
             path: path.to_string(),
             name: std::path::Path::new(path)
                 .file_name()

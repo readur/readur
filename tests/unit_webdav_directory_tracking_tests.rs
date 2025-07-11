@@ -1,5 +1,5 @@
 use readur::services::webdav::{WebDAVService, WebDAVConfig};
-use readur::models::FileInfo;
+use readur::models::FileIngestionInfo;
 use tokio;
 use chrono::Utc;
 
@@ -38,10 +38,10 @@ fn mock_directory_etag_response(etag: &str) -> String {
 }
 
 // Mock complex nested directory structure
-fn mock_nested_directory_files() -> Vec<FileInfo> {
+fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
     vec![
         // Root directory
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -56,7 +56,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             metadata: None,
         },
         // Level 1 directories
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/2024".to_string(),
             name: "2024".to_string(),
             size: 0,
@@ -70,7 +70,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Archive".to_string(),
             name: "Archive".to_string(),
             size: 0,
@@ -85,7 +85,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             metadata: None,
         },
         // Level 2 directories
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/2024/Q1".to_string(),
             name: "Q1".to_string(),
             size: 0,
@@ -99,7 +99,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/2024/Q2".to_string(),
             name: "Q2".to_string(),
             size: 0,
@@ -114,7 +114,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             metadata: None,
         },
         // Level 3 directory
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/2024/Q1/Reports".to_string(),
             name: "Reports".to_string(),
             size: 0,
@@ -129,7 +129,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             metadata: None,
         },
         // Files at various levels
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/root-file.pdf".to_string(),
             name: "root-file.pdf".to_string(),
             size: 1024000,
@@ -143,7 +143,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/2024/annual-report.pdf".to_string(),
             name: "annual-report.pdf".to_string(),
             size: 2048000,
@@ -157,7 +157,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/2024/Q1/q1-summary.pdf".to_string(),
             name: "q1-summary.pdf".to_string(),
             size: 512000,
@@ -171,7 +171,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/2024/Q1/Reports/detailed-report.pdf".to_string(),
             name: "detailed-report.pdf".to_string(),
             size: 4096000,
@@ -185,7 +185,7 @@ fn mock_nested_directory_files() -> Vec<FileInfo> {
             group: Some("admin".to_string()),
             metadata: None,
         },
-        FileInfo {
+        FileIngestionInfo {
             path: "/Documents/Archive/old-document.pdf".to_string(),
             name: "old-document.pdf".to_string(),
             size: 256000,

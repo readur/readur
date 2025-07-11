@@ -32,7 +32,19 @@ pub struct Document {
     pub original_created_at: Option<DateTime<Utc>>,
     /// Original file modification timestamp from source system
     pub original_modified_at: Option<DateTime<Utc>>,
-    /// Additional metadata from source system (permissions, attributes, EXIF data, etc.)
+    /// Original path where the file was located (from source system)
+    pub source_path: Option<String>,
+    /// Type of source where file was ingested from (e.g., "web_upload", "filesystem", "webdav")
+    pub source_type: Option<String>,
+    /// UUID of the source system/configuration
+    pub source_id: Option<Uuid>,
+    /// File permissions from source system (Unix mode bits)
+    pub file_permissions: Option<i32>,
+    /// File owner from source system (username or uid)
+    pub file_owner: Option<String>,
+    /// File group from source system (groupname or gid)
+    pub file_group: Option<String>,
+    /// Additional metadata from source system (EXIF data, PDF metadata, custom attributes, etc.)
     pub source_metadata: Option<serde_json::Value>,
 }
 
@@ -241,7 +253,7 @@ pub struct CreateIgnoredFile {
 }
 
 #[derive(Debug, Clone)]
-pub struct FileInfo {
+pub struct FileIngestionInfo {
     pub path: String,
     pub name: String,
     pub size: i64,

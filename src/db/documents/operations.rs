@@ -271,4 +271,31 @@ impl Database {
             row.get("failed"),
         ))
     }
+
+    /// Counts total documents for a user with role-based access control
+    pub async fn count_documents_by_user_with_role(&self, user_id: Uuid, user_role: UserRole) -> Result<i64> {
+        let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) as total FROM documents WHERE 1=1");
+        apply_role_based_filter(&mut query, user_id, user_role);
+        let row = query.build().fetch_one(&self.pool).await?;
+        Ok(row.get("total"))
+    }
+
+    /// Counts documents for a user with role-based access control and OCR status filtering
+    pub async fn count_documents_by_user_with_role_and_filter(
+        &self, 
+        user_id: Uuid, 
+        user_role: UserRole, 
+        ocr_status: Option<&str>
+    ) -> Result<i64> {
+        let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) as total FROM documents WHERE 1=1");
+        apply_role_based_filter(&mut query, user_id, user_role);
+        
+        if let Some(status) = ocr_status {
+            query.push(" AND ocr_status = ");
+            query.push_bind(status);
+        }
+        
+        let row = query.build().fetch_one(&self.pool).await?;
+        Ok(row.get("total"))
+    }
 }

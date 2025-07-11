@@ -1,0 +1,8 @@
+This is a sample text file for testing metadata extraction.
+It contains multiple lines and various words.
+The quick brown fox jumps over the lazy dog.
+This file is used to test character count, word count, and line count extraction.
+
+Some special characters: áéíóú, çñ, and emojis 🎉✨
+
+This should help test Unicode detection as well.

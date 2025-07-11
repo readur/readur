@@ -4,7 +4,7 @@ use tokio::sync::Semaphore;
 use tracing::{debug, error, info};
 
 use crate::models::{
-    FileInfo, WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVTestConnection,
+    FileIngestionInfo, WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVTestConnection,
 };
 
 use super::config::{WebDAVConfig, RetryConfig, ConcurrencyConfig};
@@ -107,7 +107,7 @@ impl WebDAVService {
     }
 
     /// Discovers all files in watch folders
-    pub async fn discover_all_files(&self) -> Result<Vec<FileInfo>> {
+    pub async fn discover_all_files(&self) -> Result<Vec<FileIngestionInfo>> {
         info!("🔍 Discovering all files in watch folders");
         let mut all_files = Vec::new();
 
@@ -134,7 +134,7 @@ impl WebDAVService {
     }
 
     /// Discovers files changed since a specific date (for incremental syncs)
-    pub async fn discover_changed_files(&self, since: chrono::DateTime<chrono::Utc>) -> Result<Vec<FileInfo>> {
+    pub async fn discover_changed_files(&self, since: chrono::DateTime<chrono::Utc>) -> Result<Vec<FileIngestionInfo>> {
         info!("🔍 Discovering files changed since: {}", since);
         
         let all_files = self.discover_all_files().await?;
@@ -145,7 +145,7 @@ impl WebDAVService {
     }
 
     /// Discovers files in a specific directory
-    pub async fn discover_files_in_directory(&self, directory_path: &str, recursive: bool) -> Result<Vec<FileInfo>> {
+    pub async fn discover_files_in_directory(&self, directory_path: &str, recursive: bool) -> Result<Vec<FileIngestionInfo>> {
         info!("🔍 Discovering files in directory: {} (recursive: {})", directory_path, recursive);
         self.discovery.discover_files(directory_path, recursive).await
     }
@@ -181,8 +181,8 @@ impl WebDAVService {
         Ok(content.to_vec())
     }
 
-    /// Downloads a file from WebDAV server using FileInfo
-    pub async fn download_file_info(&self, file_info: &FileInfo) -> Result<Vec<u8>> {
+    /// Downloads a file from WebDAV server using FileIngestionInfo
+    pub async fn download_file_info(&self, file_info: &FileIngestionInfo) -> Result<Vec<u8>> {
         let _permit = self.download_semaphore.acquire().await?;
         
         debug!("⬇️ Downloading file: {}", file_info.path);
@@ -213,7 +213,7 @@ impl WebDAVService {
     }
 
     /// Downloads multiple files concurrently
-    pub async fn download_files(&self, files: &[FileInfo]) -> Result<Vec<(FileInfo, Result<Vec<u8>>)>> {
+    pub async fn download_files(&self, files: &[FileIngestionInfo]) -> Result<Vec<(FileIngestionInfo, Result<Vec<u8>>)>> {
         info!("⬇️ Downloading {} files concurrently", files.len());
         
         let tasks = files.iter().map(|file| {
@@ -237,7 +237,7 @@ impl WebDAVService {
     }
 
     /// Gets file metadata without downloading content
-    pub async fn get_file_metadata(&self, file_path: &str) -> Result<FileInfo> {
+    pub async fn get_file_metadata(&self, file_path: &str) -> Result<FileIngestionInfo> {
         debug!("📋 Getting metadata for file: {}", file_path);
         
         let url = self.connection.get_url_for_path(file_path);
