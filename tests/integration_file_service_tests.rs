@@ -84,6 +84,12 @@ mod tests {
             Some("abcd1234hash".to_string()),
             None, // original_created_at
             None, // original_modified_at
+            None, // source_path
+            None, // source_type
+            None, // source_id
+            None, // file_permissions
+            None, // file_owner
+            None, // file_group
             None, // source_metadata
         );
         
@@ -194,6 +200,12 @@ mod file_deletion_tests {
             file_hash: Some("hash123".to_string()),
             original_created_at: None,
             original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
             source_metadata: None,
             ocr_retry_count: None,
             ocr_failure_reason: None,
@@ -237,7 +249,7 @@ mod file_deletion_tests {
         let (service, temp_dir) = create_test_file_service();
         let user_id = uuid::Uuid::new_v4();
         
-        let (mut document, main_path, thumb_path, processed_path) = 
+        let (document, main_path, thumb_path, processed_path) = 
             create_test_document_with_files(&service, &temp_dir, user_id);
         
         // Delete main file manually before test
@@ -334,6 +346,12 @@ mod file_deletion_tests {
             file_hash: None,
             original_created_at: None,
             original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
             source_metadata: None,
             ocr_retry_count: None,
             ocr_failure_reason: None,
@@ -390,6 +408,12 @@ mod file_deletion_tests {
             file_hash: Some("imagehash456".to_string()),
             original_created_at: None,
             original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
             source_metadata: None,
             ocr_retry_count: None,
             ocr_failure_reason: None,
@@ -450,6 +474,12 @@ mod file_deletion_tests {
             file_hash: Some("hash789".to_string()),
             original_created_at: None,
             original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
             source_metadata: None,
             ocr_retry_count: None,
             ocr_failure_reason: None,
@@ -501,6 +531,12 @@ mod file_deletion_tests {
             file_hash: Some("texthash".to_string()),
             original_created_at: None,
             original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
             source_metadata: None,
             ocr_retry_count: None,
             ocr_failure_reason: None,

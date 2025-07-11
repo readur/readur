@@ -64,6 +64,12 @@ fn create_test_document(user_id: Uuid, filename: &str, file_hash: Option<String>
         original_created_at: None,
         original_modified_at: None,
         source_metadata: None,
+        source_path: None,
+        source_type: None,
+        source_id: None,
+        file_permissions: None,
+        file_owner: None,
+        file_group: None,
     }
 }
 
@@ -255,6 +261,12 @@ async fn test_file_service_create_document_with_hash() {
         Some(test_hash.to_string()),
         None, // original_created_at
         None, // original_modified_at
+        None, // source_path
+        None, // source_type
+        None, // source_id
+        None, // file_permissions
+        None, // file_owner
+        None, // file_group
         None, // source_metadata
     );
 
@@ -281,6 +293,12 @@ async fn test_file_service_create_document_without_hash() {
         None,
         None, // original_created_at
         None, // original_modified_at
+        None, // source_path
+        None, // source_type
+        None, // source_id
+        None, // file_permissions
+        None, // file_owner
+        None, // file_group
         None, // source_metadata
     );
 
