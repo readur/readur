@@ -36,65 +36,77 @@ mod comprehensive_migration_tests {
         // Create comprehensive test data covering all edge cases
         let user_id = create_test_user(pool).await;
         
+        // Use unique test identifier to avoid conflicts with other tests
+        let test_id = Uuid::new_v4().to_string()[..8].to_string();
+        
+        // Pre-create the filenames to avoid borrowing issues
+        let normal_success_filename = format!("data_integrity_test_{}_normal_success.pdf", test_id);
+        let low_confidence_filename = format!("data_integrity_test_{}_low_confidence_fail.pdf", test_id);
+        let timeout_filename = format!("data_integrity_test_{}_timeout_fail.pdf", test_id);
+        let memory_filename = format!("data_integrity_test_{}_memory_fail.pdf", test_id);
+        let corrupted_filename = format!("data_integrity_test_{}_corrupted_file.pdf", test_id);
+        let unsupported_filename = format!("data_integrity_test_{}_unsupported.xyz", test_id);
+        let pending_filename = format!("data_integrity_test_{}_pending_ocr.pdf", test_id);
+        
         // Insert various types of documents
         let document_scenarios = vec![
             DocumentScenario {
-                filename: "normal_success.pdf",
-                ocr_status: "completed",
+                filename: normal_success_filename,
+                ocr_status: "completed".to_string(),
                 ocr_failure_reason: None,
                 ocr_error: None,
                 ocr_confidence: Some(0.95),
-                ocr_text: Some("This is a successful OCR"),
+                ocr_text: Some("This is a successful OCR".to_string()),
                 file_size: 1024,
             },
             DocumentScenario {
-                filename: "low_confidence_fail.pdf",
-                ocr_status: "failed",
-                ocr_failure_reason: Some("low_ocr_confidence"),
-                ocr_error: Some("OCR confidence below threshold"),
+                filename: low_confidence_filename,
+                ocr_status: "failed".to_string(),
+                ocr_failure_reason: Some("low_ocr_confidence".to_string()),
+                ocr_error: Some("OCR confidence below threshold".to_string()),
                 ocr_confidence: Some(0.3),
-                ocr_text: Some("Partially recognized text"),
+                ocr_text: Some("Partially recognized text".to_string()),
                 file_size: 2048,
             },
             DocumentScenario {
-                filename: "timeout_fail.pdf",
-                ocr_status: "failed",
-                ocr_failure_reason: Some("timeout"),
-                ocr_error: Some("OCR processing timed out after 60 seconds"),
+                filename: timeout_filename,
+                ocr_status: "failed".to_string(),
+                ocr_failure_reason: Some("timeout".to_string()),
+                ocr_error: Some("OCR processing timed out after 60 seconds".to_string()),
                 ocr_confidence: None,
                 ocr_text: None,
                 file_size: 10485760, // 10MB
             },
             DocumentScenario {
-                filename: "memory_fail.pdf",
-                ocr_status: "failed",
-                ocr_failure_reason: Some("memory_limit"),
-                ocr_error: Some("Memory limit exceeded"),
+                filename: memory_filename,
+                ocr_status: "failed".to_string(),
+                ocr_failure_reason: Some("memory_limit".to_string()),
+                ocr_error: Some("Memory limit exceeded".to_string()),
                 ocr_confidence: None,
                 ocr_text: None,
                 file_size: 52428800, // 50MB
             },
             DocumentScenario {
-                filename: "corrupted_file.pdf",
-                ocr_status: "failed",
-                ocr_failure_reason: Some("file_corrupted"),
-                ocr_error: Some("PDF file appears to be corrupted"),
+                filename: corrupted_filename,
+                ocr_status: "failed".to_string(),
+                ocr_failure_reason: Some("file_corrupted".to_string()),
+                ocr_error: Some("PDF file appears to be corrupted".to_string()),
                 ocr_confidence: None,
                 ocr_text: None,
                 file_size: 512,
             },
             DocumentScenario {
-                filename: "unsupported.xyz",
-                ocr_status: "failed",
-                ocr_failure_reason: Some("unsupported_format"),
-                ocr_error: Some("File format not supported"),
+                filename: unsupported_filename,
+                ocr_status: "failed".to_string(),
+                ocr_failure_reason: Some("unsupported_format".to_string()),
+                ocr_error: Some("File format not supported".to_string()),
                 ocr_confidence: None,
                 ocr_text: None,
                 file_size: 256,
             },
             DocumentScenario {
-                filename: "pending_ocr.pdf",
-                ocr_status: "pending",
+                filename: pending_filename,
+                ocr_status: "pending".to_string(),
                 ocr_failure_reason: None,
                 ocr_error: None,
                 ocr_confidence: None,
@@ -107,20 +119,22 @@ mod comprehensive_migration_tests {
         let mut document_ids = HashMap::new();
         for scenario in &document_scenarios {
             let doc_id = insert_test_document(pool, user_id, scenario).await;
-            document_ids.insert(scenario.filename, doc_id);
+            document_ids.insert(scenario.filename.clone(), doc_id);
         }
         
-        // Count documents before migration
+        // Count documents before migration (only our test documents)
         let failed_count_before: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed'"
+            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed' AND filename LIKE $1"
         )
+        .bind(format!("data_integrity_test_{}_%%", test_id))
         .fetch_one(pool)
         .await
         .unwrap();
         
         let successful_count_before: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'completed'"
+            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'completed' AND filename LIKE $1"
         )
+        .bind(format!("data_integrity_test_{}_%%", test_id))
         .fetch_one(pool)
         .await
         .unwrap();
@@ -170,7 +184,9 @@ mod comprehensive_migration_tests {
         
         // Verify that successful and pending documents are not affected
         assert_eq!(successful_count_before, 1, "Should have 1 successful document");
+        // It should have greater or equal to 5 failed documents
         assert_eq!(failed_count_before, 5, "Should have 5 failed documents");
+
     }
 
     #[tokio::test]
@@ -310,7 +326,8 @@ mod comprehensive_migration_tests {
         
         let user_id = create_test_user(pool).await;
         
-        // Insert a large number of failed documents
+        // Insert a large number of failed documents with unique naming
+        let test_id = Uuid::new_v4().to_string()[..8].to_string();
         let batch_size = 100;
         let start_time = std::time::Instant::now();
         
@@ -322,7 +339,7 @@ mod comprehensive_migration_tests {
             
             for i in 0..batch_size {
                 let doc_num = batch * batch_size + i;
-                let filename = format!("bulk_doc_{}.pdf", doc_num);
+                let filename = format!("perf_migration_test_{}_bulk_doc_{}.pdf", test_id, doc_num);
                 let reason = match doc_num % 5 {
                     0 => "low_ocr_confidence",
                     1 => "timeout",
@@ -352,8 +369,9 @@ mod comprehensive_migration_tests {
         let migration_start = std::time::Instant::now();
         
         let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed'"
+            "SELECT COUNT(*) FROM documents WHERE ocr_status = 'failed' AND filename LIKE $1"
         )
+        .bind(format!("perf_migration_test_{}_bulk_doc_%", test_id))
         .fetch_one(pool)
         .await
         .unwrap();
@@ -363,9 +381,10 @@ mod comprehensive_migration_tests {
         // Simulate the migration SELECT
         let _migration_data = sqlx::query(
             r#"
-            SELECT * FROM documents WHERE ocr_status = 'failed'
+            SELECT * FROM documents WHERE ocr_status = 'failed' AND filename LIKE $1
             "#
         )
+        .bind(format!("perf_migration_test_{}_bulk_doc_%", test_id))
         .fetch_all(pool)
         .await
         .unwrap();
@@ -386,12 +405,12 @@ mod comprehensive_migration_tests {
     }
     
     struct DocumentScenario {
-        filename: &'static str,
-        ocr_status: &'static str,
-        ocr_failure_reason: Option<&'static str>,
-        ocr_error: Option<&'static str>,
+        filename: String,
+        ocr_status: String,
+        ocr_failure_reason: Option<String>,
+        ocr_error: Option<String>,
         ocr_confidence: Option<f32>,
-        ocr_text: Option<&'static str>,
+        ocr_text: Option<String>,
         file_size: i64,
     }
     
@@ -435,14 +454,14 @@ mod comprehensive_migration_tests {
         )
         .bind(doc_id)
         .bind(user_id)
-        .bind(scenario.filename)
+        .bind(&scenario.filename)
         .bind(scenario.file_size)
         .bind(if scenario.filename.ends_with(".pdf") { "application/pdf" } else { "application/octet-stream" })
-        .bind(scenario.ocr_status)
-        .bind(scenario.ocr_failure_reason)
-        .bind(scenario.ocr_error)
+        .bind(&scenario.ocr_status)
+        .bind(scenario.ocr_failure_reason.as_ref())
+        .bind(scenario.ocr_error.as_ref())
         .bind(scenario.ocr_confidence)
-        .bind(scenario.ocr_text)
+        .bind(scenario.ocr_text.as_ref())
         .execute(pool)
         .await
         .unwrap();
@@ -454,11 +473,14 @@ mod comprehensive_migration_tests {
         let user_id = create_test_user(pool).await;
         let mut document_ids = HashMap::new();
         
+        // Use unique test identifier to avoid conflicts with other tests
+        let test_id = Uuid::new_v4().to_string()[..8].to_string();
+        
         let failure_scenarios = vec![
-            ("timeout_doc.pdf".to_string(), "timeout".to_string(), "OCR processing timed out".to_string()),
-            ("memory_doc.pdf".to_string(), "memory_limit".to_string(), "Memory limit exceeded".to_string()),
-            ("corrupt_doc.pdf".to_string(), "file_corrupted".to_string(), "File is corrupted".to_string()),
-            ("low_conf_doc.pdf".to_string(), "low_ocr_confidence".to_string(), "Confidence too low".to_string()),
+            (format!("comp_migration_test_{}_timeout_doc.pdf", test_id), "timeout".to_string(), "OCR processing timed out".to_string()),
+            (format!("comp_migration_test_{}_memory_doc.pdf", test_id), "memory_limit".to_string(), "Memory limit exceeded".to_string()),
+            (format!("comp_migration_test_{}_corrupt_doc.pdf", test_id), "file_corrupted".to_string(), "File is corrupted".to_string()),
+            (format!("comp_migration_test_{}_low_conf_doc.pdf", test_id), "low_ocr_confidence".to_string(), "Confidence too low".to_string()),
         ];
         
         // Insert test documents
@@ -496,7 +518,7 @@ mod comprehensive_migration_tests {
     
     async fn verify_prefilled_data(pool: &PgPool, test_data: &TestData) {
         let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM documents WHERE user_id = $1 AND ocr_status = 'failed'"
+            "SELECT COUNT(*) FROM documents WHERE user_id = $1 AND ocr_status = 'failed' AND filename LIKE 'comp_migration_test_%'"
         )
         .bind(test_data.user_id)
         .fetch_one(pool)
@@ -594,13 +616,18 @@ mod comprehensive_migration_tests {
     }
     
     async fn verify_data_consistency_after_migration(pool: &PgPool, test_data: &TestData) {
-        // Verify specific failure reason mappings
-        let mappings = vec![
-            ("timeout_doc.pdf", "ocr_timeout"),
-            ("memory_doc.pdf", "ocr_memory_limit"),
-            ("corrupt_doc.pdf", "file_corrupted"),
-            ("low_conf_doc.pdf", "low_ocr_confidence"),
-        ];
+        // Create mappings based on the actual filenames in test_data
+        let mut mappings = Vec::new();
+        for (filename, reason, _) in &test_data.failure_scenarios {
+            let expected_reason = match reason.as_str() {
+                "timeout" => "ocr_timeout",
+                "memory_limit" => "ocr_memory_limit", 
+                "file_corrupted" => "file_corrupted",
+                "low_ocr_confidence" => "low_ocr_confidence",
+                _ => reason.as_str(),
+            };
+            mappings.push((filename.as_str(), expected_reason));
+        }
         
         for (filename, expected_reason) in mappings {
             let result = sqlx::query(
