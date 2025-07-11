@@ -2,6 +2,9 @@
 
 A powerful, modern document management system built with Rust and React. Readur provides intelligent document processing with OCR capabilities, full-text search, and a beautiful web interface designed for 2026 tech standards.
 
+![](./docs/images/readur_dashboard.png)
+
+
 ## ✨ Features
 
 - 🔐 **Secure Authentication**: JWT-based user authentication with bcrypt password hashing
@@ -100,6 +103,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Axum](https://github.com/tokio-rs/axum) for the web framework
 - [Material-UI](https://mui.com/) for the beautiful frontend components
 - [PostgreSQL](https://www.postgresql.org/) for robust full-text search
+
+## Screenshots
+
+![](./docs/images/readur_search.png)
 
 ## 📞 Support
 
