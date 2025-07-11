@@ -218,20 +218,18 @@ test.describe('Source Management', () => {
   });
 
   test('should display source status and statistics', async ({ adminPage: page }) => {
-    const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
+    const firstSource = page.locator('[data-testid="source-item"]').first();
     
     if (await firstSource.isVisible()) {
-      // Should show source status information
-      await expect(firstSource.locator('[data-testid="source-status"], .source-status, .status')).toBeVisible();
+      // Should show source status information - check for status chip with icons
+      const statusChip = firstSource.locator('.MuiChip-root').filter({ hasText: /^(Idle|Syncing|Error)$/i });
+      await expect(statusChip).toBeVisible();
       
-      // Click to view details
-      await firstSource.click();
-      
-      // Should show detailed statistics if available
-      const statsSection = page.locator('[data-testid="source-stats"], .source-statistics, .stats-section');
-      if (await statsSection.isVisible()) {
-        await expect(statsSection.locator(':has-text("Documents"), :has-text("Files"), :has-text("Size")')).toBeVisible();
-      }
+      // Should show statistics cards within the source item
+      await expect(firstSource.locator(':has-text("Documents Stored")')).toBeVisible();
+      await expect(firstSource.locator(':has-text("OCR Processed")')).toBeVisible();
+      await expect(firstSource.locator(':has-text("Last Sync")')).toBeVisible();
+      await expect(firstSource.locator(':has-text("Total Size")')).toBeVisible();
     }
   });
 

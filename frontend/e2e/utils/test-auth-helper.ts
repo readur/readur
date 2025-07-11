@@ -137,9 +137,9 @@ export class E2ETestAuthHelper {
         return true;
       }
       
-      // Look for login form - Material-UI TextFields with labels
-      const usernameField = this.page.locator('input[data-testid="username"], input[label="Username"], input[placeholder="Username"], input[type="text"]').first();
-      const passwordField = this.page.locator('input[data-testid="password"], input[label="Password"], input[placeholder="Password"], input[type="password"]').first();
+      // Look for login form - Material-UI TextFields with labels (based on react-hook-form register)
+      const usernameField = this.page.locator('input[name="username"]').first();
+      const passwordField = this.page.locator('input[name="password"]').first();
       
       // Wait for login form to be visible
       await usernameField.waitFor({ state: 'visible', timeout: E2E_TIMEOUTS.login });
@@ -247,7 +247,7 @@ export class E2ETestAuthHelper {
     await this.page.waitForLoadState('networkidle');
     
     // If we see a login form, we're already logged out
-    const usernameInput = await this.page.locator('input[type="text"], input[data-testid="username"]').isVisible().catch(() => false);
+    const usernameInput = await this.page.locator('input[name="username"]').isVisible().catch(() => false);
     if (usernameInput) {
       console.log('Already logged out - login form visible');
       return;
