@@ -108,8 +108,10 @@ async fn main() -> anyhow::Result<()> {
         } else {
             "unknown"
         };
+        // if we get the username, let's now mask it to get just the first and last character
+        let masked_username = format!("{}{}", &username[..1], &username[username.len() - 1..]);
         
-        format!("{}://{}:***@{}", protocol, username, host_part)
+        format!("{}://{}:***@{}", protocol, masked_username, host_part)
     } else {
         "Invalid database URL format".to_string()
     };

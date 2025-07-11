@@ -59,7 +59,9 @@ impl Config {
                             let credentials = &credentials_part[username_start + 3..];
                             if let Some(colon_pos) = credentials.find(':') {
                                 let username = &credentials[..colon_pos];
-                                format!("{}{}:***@{}", protocol, username, remaining_part)
+                                // Show first and last character of the username
+                                let masked_username = format!("{}{}", &username[..1], &username[username.len() - 1..]);
+                                format!("{}{}:***@{}", protocol, masked_username, remaining_part)
                             } else {
                                 format!("{}***@{}", protocol, remaining_part)
                             }

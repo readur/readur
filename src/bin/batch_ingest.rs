@@ -70,7 +70,9 @@ async fn main() -> Result<()> {
     let ingester = BatchIngester::new(db, queue_service, file_service, config);
     
     println!("Starting batch ingestion from: {}", directory);
-    println!("User ID: {}", user_id);
+    // Only show the first and last character of the user ID
+    let masked_user_id = format!("{}{}", &user_id.to_string()[..1], &user_id.to_string()[user_id.to_string().len() - 1..]);
+    println!("User ID: {}", masked_user_id);
     
     // Start ingestion
     if let Err(e) = ingester.ingest_directory(dir_path, user_id).await {
