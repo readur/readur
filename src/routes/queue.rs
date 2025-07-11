@@ -66,7 +66,7 @@ async fn get_queue_stats(
 
 #[utoipa::path(
     post,
-    path = "/api/queue/requeue-failed",
+    path = "/api/queue/requeue/failed",
     tag = "queue",
     security(
         ("bearer_auth" = [])

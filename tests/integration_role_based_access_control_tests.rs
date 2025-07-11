@@ -343,7 +343,7 @@ impl RBACTestClient {
             }
             AdminOperation::RequeueFailedJobs => {
                 self.client
-                    .post(&format!("{}/api/queue/requeue-failed", get_base_url()))
+                    .post(&format!("{}/api/queue/requeue/failed", get_base_url()))
                     .header("Authorization", format!("Bearer {}", token))
                     .send()
                     .await?

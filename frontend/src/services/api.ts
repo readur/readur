@@ -410,7 +410,7 @@ export const queueService = {
   },
 
   requeueFailed: () => {
-    return api.post('/queue/requeue-failed')
+    return api.post('/queue/requeue/failed')
   },
 
   getOcrStatus: () => {

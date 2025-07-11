@@ -475,7 +475,7 @@ Response:
 #### Requeue Failed Items
 
 ```bash
-POST /api/queue/requeue-failed
+POST /api/queue/requeue/failed
 Authorization: Bearer <jwt_token>
 ```
 

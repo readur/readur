@@ -82,7 +82,7 @@ Returns:
 
 ### Requeue Failed Jobs
 ```
-POST /api/queue/requeue-failed
+POST /api/queue/requeue/failed
 ```
 Requeues all failed jobs that haven't exceeded max attempts.
 
