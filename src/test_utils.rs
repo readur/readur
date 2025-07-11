@@ -634,3 +634,191 @@ pub async fn login_user(app: &Router, username: &str, password: &str) -> String 
     let auth_helper = TestAuthHelper::new(app.clone());
     auth_helper.login_user(username, password).await
 }
+
+/// Centralized test Document helpers to reduce duplication across test files
+#[cfg(any(test, feature = "test-utils"))]
+pub mod document_helpers {
+    use uuid::Uuid;
+    use chrono::Utc;
+    use crate::models::Document;
+
+    /// Create a basic test document with all required fields
+    pub fn create_test_document(user_id: Uuid) -> Document {
+        Document {
+            id: Uuid::new_v4(),
+            filename: "test_document.pdf".to_string(),
+            original_filename: "test_document.pdf".to_string(),
+            file_path: "/path/to/test_document.pdf".to_string(),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            content: Some("Test document content".to_string()),
+            ocr_text: Some("This is extracted OCR text".to_string()),
+            ocr_confidence: Some(95.5),
+            ocr_word_count: Some(150),
+            ocr_processing_time_ms: Some(1200),
+            ocr_status: Some("completed".to_string()),
+            ocr_error: None,
+            ocr_completed_at: Some(Utc::now()),
+            tags: vec!["test".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some("hash123".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
+            source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
+        }
+    }
+
+    /// Create a test document with custom filename and hash
+    pub fn create_test_document_with_hash(user_id: Uuid, filename: &str, file_hash: String) -> Document {
+        Document {
+            id: Uuid::new_v4(),
+            filename: filename.to_string(),
+            original_filename: filename.to_string(),
+            file_path: format!("/tmp/{}", filename),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            content: None,
+            ocr_text: None,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            ocr_status: Some("pending".to_string()),
+            ocr_error: None,
+            ocr_completed_at: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
+            tags: Vec::new(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some(file_hash),
+            original_created_at: None,
+            original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
+            source_metadata: None,
+        }
+    }
+
+    /// Create a test document with low OCR confidence
+    pub fn create_low_confidence_document(user_id: Uuid, confidence: f32) -> Document {
+        Document {
+            id: Uuid::new_v4(),
+            filename: format!("low_conf_{}.pdf", confidence),
+            original_filename: format!("low_conf_{}.pdf", confidence),
+            file_path: format!("/uploads/low_conf_{}.pdf", confidence),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            content: Some("Test document content".to_string()),
+            ocr_text: Some("Low quality OCR text".to_string()),
+            ocr_confidence: Some(confidence),
+            ocr_word_count: Some(10),
+            ocr_processing_time_ms: Some(500),
+            ocr_status: Some("completed".to_string()),
+            ocr_error: None,
+            ocr_completed_at: Some(Utc::now()),
+            tags: vec!["low-confidence".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
+            source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
+        }
+    }
+
+    /// Create a document without OCR data
+    pub fn create_document_without_ocr(user_id: Uuid) -> Document {
+        Document {
+            id: Uuid::new_v4(),
+            filename: "no_ocr_document.pdf".to_string(),
+            original_filename: "no_ocr_document.pdf".to_string(),
+            file_path: "/path/to/no_ocr_document.pdf".to_string(),
+            file_size: 2048,
+            mime_type: "application/pdf".to_string(),
+            content: Some("Document content without OCR".to_string()),
+            ocr_text: None,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            ocr_status: Some("pending".to_string()),
+            ocr_error: None,
+            ocr_completed_at: None,
+            tags: vec!["no-ocr".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some("noocrhash456".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
+            source_metadata: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
+        }
+    }
+
+    /// Create a document with OCR error
+    pub fn create_document_with_ocr_error(user_id: Uuid) -> Document {
+        Document {
+            id: Uuid::new_v4(),
+            filename: "ocr_error_document.pdf".to_string(),
+            original_filename: "ocr_error_document.pdf".to_string(),
+            file_path: "/path/to/ocr_error_document.pdf".to_string(),
+            file_size: 1536,
+            mime_type: "application/pdf".to_string(),
+            content: Some("Document that failed OCR".to_string()),
+            ocr_text: None,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: Some(300),
+            ocr_status: Some("failed".to_string()),
+            ocr_error: Some("OCR processing failed".to_string()),
+            ocr_completed_at: Some(Utc::now()),
+            tags: vec!["failed-ocr".to_string()],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id,
+            file_hash: Some("errorhash789".to_string()),
+            original_created_at: None,
+            original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
+            source_metadata: None,
+            ocr_retry_count: Some(3),
+            ocr_failure_reason: Some("OCR engine timeout".to_string()),
+        }
+    }
+}

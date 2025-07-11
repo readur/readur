@@ -44,6 +44,12 @@ mod tests {
             file_hash: Some(format!("{:x}", Uuid::new_v4().as_u128())), // Generate unique file hash
             original_created_at: None,
             original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
             source_metadata: None,
             ocr_retry_count: None,
             ocr_failure_reason: None,
