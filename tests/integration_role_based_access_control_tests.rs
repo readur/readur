@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::routes::documents::types::PaginatedDocumentsResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -223,7 +224,11 @@ impl RBACTestClient {
             return Err(format!("Get documents failed: {}", response.text().await?).into());
         }
         
-        let documents: Vec<Value> = response.json().await?;
+        let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+        let documents: Vec<Value> = paginated_response.documents
+            .into_iter()
+            .map(|doc| serde_json::to_value(doc).unwrap())
+            .collect();
         Ok(documents)
     }
     
@@ -343,7 +348,7 @@ impl RBACTestClient {
             }
             AdminOperation::RequeueFailedJobs => {
                 self.client
-                    .post(&format!("{}/api/queue/requeue/failed", get_base_url()))
+                    .post(&format!("{}/api/queue/requeue-failed", get_base_url()))
                     .header("Authorization", format!("Bearer {}", token))
                     .send()
                     .await?
