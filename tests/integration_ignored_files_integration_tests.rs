@@ -360,6 +360,12 @@ async fn test_create_ignored_file_from_document() -> Result<()> {
         file_hash: Some("document_hash_123".to_string()),
         original_created_at: None,
         original_modified_at: None,
+        source_path: None,
+        source_type: None,
+        source_id: None,
+        file_permissions: None,
+        file_owner: None,
+        file_group: None,
         source_metadata: None,
     };
     
