@@ -20,6 +20,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
+use readur::routes::documents::types::PaginatedDocumentsResponse;
 use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
@@ -216,7 +217,8 @@ impl FileProcessingTestClient {
                 .await?;
             
             if response.status().is_success() {
-                let documents: Vec<DocumentResponse> = response.json().await?;
+                let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+                let documents = paginated_response.documents;
                 
                 if let Some(doc) = documents.iter().find(|d| d.id.to_string() == document_id) {
                     println!("📄 DEBUG: Found document with OCR status: {:?}", doc.ocr_status);
@@ -590,8 +592,9 @@ async fn test_image_processing_pipeline() {
                 .await
                 .expect("Failed to get documents");
             
-            let documents: Vec<DocumentResponse> = response.json().await
+            let paginated_response: PaginatedDocumentsResponse = response.json().await
                 .expect("Failed to parse response");
+            let documents = paginated_response.documents;
             
             documents.into_iter()
                 .find(|d| d.id.to_string() == document_id)
@@ -707,7 +710,8 @@ async fn test_processing_error_recovery() {
                     .await;
                     
                 if let Ok(resp) = response {
-                    if let Ok(docs) = resp.json::<Vec<DocumentResponse>>().await {
+                    if let Ok(paginated_response) = resp.json::<PaginatedDocumentsResponse>().await {
+                        let docs = paginated_response.documents;
                         if let Some(doc) = docs.iter().find(|d| d.id.to_string() == document.id.to_string()) {
                             match doc.ocr_status.as_deref() {
                                 Some("completed") => {
@@ -998,8 +1002,9 @@ async fn test_concurrent_file_processing() {
                     .expect("Should get documents");
                 
                 if response.status().is_success() {
-                    let documents: Vec<DocumentResponse> = response.json().await
+                    let paginated_response: PaginatedDocumentsResponse = response.json().await
                         .expect("Should parse response");
+                    let documents = paginated_response.documents;
                     
                     if let Some(doc) = documents.iter().find(|d| d.id.to_string() == document_id) {
                         match doc.ocr_status.as_deref() {

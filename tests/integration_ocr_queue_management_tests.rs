@@ -17,7 +17,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
-use readur::routes::documents::types::DocumentUploadResponse;
+use readur::routes::documents::types::{DocumentUploadResponse, PaginatedDocumentsResponse};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -227,7 +227,8 @@ impl OCRQueueTestClient {
                 .await?;
             
             if response.status().is_success() {
-                let documents: Vec<DocumentResponse> = response.json().await?;
+                let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+                let documents = paginated_response.documents;
                 
                 for (i, doc_id) in document_ids.iter().enumerate() {
                     if !completed_status[i] {
@@ -275,7 +276,8 @@ impl OCRQueueTestClient {
             return Err(format!("Get documents failed: {}", response.text().await?).into());
         }
         
-        let documents: Vec<DocumentResponse> = response.json().await?;
+        let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+        let documents = paginated_response.documents;
         Ok(documents)
     }
 }

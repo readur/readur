@@ -64,7 +64,7 @@ pub struct DocumentDebugInfo {
     pub permissions: Option<String>,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct DocumentPaginationInfo {
     pub total: i64,
     pub limit: i64,
@@ -72,7 +72,7 @@ pub struct DocumentPaginationInfo {
     pub has_more: bool,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct PaginatedDocumentsResponse {
     pub documents: Vec<crate::models::DocumentResponse>,
     pub pagination: DocumentPaginationInfo,

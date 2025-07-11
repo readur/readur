@@ -22,7 +22,7 @@ use uuid::Uuid;
 use chrono;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
-use readur::routes::documents::types::DocumentUploadResponse;
+use readur::routes::documents::types::{DocumentUploadResponse, PaginatedDocumentsResponse};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -239,7 +239,11 @@ impl LoadTestClient {
             return Err(format!("List documents failed: {}", response.text().await?).into());
         }
         
-        let documents_array: Vec<serde_json::Value> = response.json().await?;
+        let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+        let documents_array: Vec<serde_json::Value> = paginated_response.documents
+            .into_iter()
+            .map(|doc| serde_json::to_value(doc).unwrap())
+            .collect();
         Ok((documents_array, elapsed))
     }
     
