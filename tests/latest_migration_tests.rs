@@ -349,11 +349,16 @@ mod latest_migration_tests {
         let mut documents = Vec::new();
         let mut failed_documents = Vec::new();
         
-        // Create test users
+        // Create test users with unique timestamps to avoid conflicts
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        
         for i in 0..5 {
             let user_id = Uuid::new_v4();
-            let username = format!("previous_state_user_{}", i);
-            let email = format!("previous_{}@test.com", i);
+            let username = format!("previous_state_user_{}_{}", i, timestamp);
+            let email = format!("previous_{}_{}@test.com", i, timestamp);
             
             sqlx::query(
                 "INSERT INTO users (id, username, email, password_hash, role) VALUES ($1, $2, $3, $4, $5)"
@@ -495,20 +500,28 @@ mod latest_migration_tests {
         let mut documents = Vec::new();
         let mut failed_documents = Vec::new();
         
-        // Create edge case users
-        let long_string = "a".repeat(50);
+        // Create edge case users with unique timestamps
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        
+        let long_string_email = format!("{}_{}@test.com", "a".repeat(30), timestamp);
+        let special_email = format!("user_{}@domain.com", timestamp);
+        let unicode_email = format!("test_ñäme_{}@tëst.com", timestamp);
+        
         let edge_cases = vec![
             ("edge_empty_", ""),
-            ("edge_special_", "user@domain.com"),
-            ("edge_unicode_", "test_ñäme@tëst.com"),
-            ("edge_long_", long_string.as_str()),
+            ("edge_special_", special_email.as_str()),
+            ("edge_unicode_", unicode_email.as_str()),
+            ("edge_long_", long_string_email.as_str()),
         ];
         
         for (prefix, suffix) in edge_cases {
             let user_id = Uuid::new_v4();
-            let username = format!("{}{}", prefix, user_id.to_string().split('-').next().unwrap());
+            let username = format!("{}{}_{}", prefix, user_id.to_string().split('-').next().unwrap(), timestamp);
             let email = if suffix.is_empty() {
-                format!("{}@test.com", username)
+                format!("{}_{}@test.com", user_id.to_string().split('-').next().unwrap(), timestamp)
             } else {
                 suffix.to_string()
             };
@@ -709,10 +722,15 @@ mod latest_migration_tests {
     async fn create_performance_test_data(pool: &PgPool, user_count: usize) {
         println!("   📊 Creating {} users for performance testing...", user_count);
         
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        
         for i in 0..user_count {
             let user_id = Uuid::new_v4();
-            let username = format!("perf_user_{}", i);
-            let email = format!("perf_{}@test.com", i);
+            let username = format!("perf_user_{}_{}", i, timestamp);
+            let email = format!("perf_{}_{}@test.com", i, timestamp);
             
             sqlx::query(
                 "INSERT INTO users (id, username, email, password_hash, role) VALUES ($1, $2, $3, $4, $5)"
