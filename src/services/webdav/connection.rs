@@ -301,7 +301,9 @@ impl WebDAVConnection {
         if clean_path.is_empty() {
             base_url
         } else {
-            format!("{}/{}", base_url.trim_end_matches('/'), clean_path)
+            // Ensure no double slashes by normalizing the base URL
+            let normalized_base = base_url.trim_end_matches('/');
+            format!("{}/{}", normalized_base, clean_path)
         }
     }
 }

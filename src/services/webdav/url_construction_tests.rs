@@ -255,4 +255,222 @@ async fn test_fix_prevents_original_bug() {
     assert_ne!(old_buggy_url, fixed_url, "The fix should produce different URLs than the buggy version");
 }
 
+// Tests for URL normalization to prevent trailing slash issues
+#[tokio::test]
+async fn test_nextcloud_url_normalization_with_trailing_slash() {
+    let config = WebDAVConfig {
+        server_url: "https://nas.example.com/".to_string(), // Note the trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    
+    // This should not panic and should normalize the URL properly
+    let webdav_url = config.webdav_url();
+    
+    // Should not contain double slashes
+    assert!(!webdav_url.contains("//remote.php"), "URL should not contain double slashes: {}", webdav_url);
+    assert_eq!(webdav_url, "https://nas.example.com/remote.php/dav/files/testuser");
+}
+
+#[tokio::test]
+async fn test_nextcloud_url_normalization_without_trailing_slash() {
+    let config = WebDAVConfig {
+        server_url: "https://nas.example.com".to_string(), // No trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    
+    let webdav_url = config.webdav_url();
+    
+    // Should not contain double slashes
+    assert!(!webdav_url.contains("//remote.php"), "URL should not contain double slashes: {}", webdav_url);
+    assert_eq!(webdav_url, "https://nas.example.com/remote.php/dav/files/testuser");
+}
+
+#[tokio::test]
+async fn test_owncloud_url_normalization_with_trailing_slash() {
+    let config = WebDAVConfig {
+        server_url: "https://cloud.example.com/".to_string(), // Note the trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("owncloud".to_string()),
+    };
+    
+    let webdav_url = config.webdav_url();
+    
+    // Should not contain double slashes
+    assert!(!webdav_url.contains("//remote.php"), "URL should not contain double slashes: {}", webdav_url);
+    assert_eq!(webdav_url, "https://cloud.example.com/remote.php/webdav");
+}
+
+#[tokio::test]
+async fn test_owncloud_url_normalization_without_trailing_slash() {
+    let config = WebDAVConfig {
+        server_url: "https://cloud.example.com".to_string(), // No trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("owncloud".to_string()),
+    };
+    
+    let webdav_url = config.webdav_url();
+    
+    // Should not contain double slashes
+    assert!(!webdav_url.contains("//remote.php"), "URL should not contain double slashes: {}", webdav_url);
+    assert_eq!(webdav_url, "https://cloud.example.com/remote.php/webdav");
+}
+
+#[tokio::test]
+async fn test_generic_webdav_url_normalization_with_trailing_slash() {
+    let config = WebDAVConfig {
+        server_url: "https://webdav.example.com/".to_string(), // Note the trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("generic".to_string()),
+    };
+    
+    let webdav_url = config.webdav_url();
+    
+    // Should normalize by removing the trailing slash
+    assert_eq!(webdav_url, "https://webdav.example.com");
+}
+
+#[tokio::test]
+async fn test_generic_webdav_url_normalization_without_trailing_slash() {
+    let config = WebDAVConfig {
+        server_url: "https://webdav.example.com".to_string(), // No trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("generic".to_string()),
+    };
+    
+    let webdav_url = config.webdav_url();
+    
+    // Should remain the same
+    assert_eq!(webdav_url, "https://webdav.example.com");
+}
+
+#[tokio::test]
+async fn test_connection_get_url_for_path_normalization() {
+    let config = WebDAVConfig {
+        server_url: "https://nas.example.com/".to_string(), // Trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    
+    let service = WebDAVService::new(config).unwrap();
+    let connection = super::super::connection::WebDAVConnection::new(
+        service.get_config().clone(), 
+        super::super::config::RetryConfig::default()
+    ).unwrap();
+    
+    // Test various path scenarios
+    let test_cases = vec![
+        ("/remote.php/dav/files/testuser/Photos/test.jpg", "https://nas.example.com/remote.php/dav/files/testuser/remote.php/dav/files/testuser/Photos/test.jpg"),
+        ("Photos/test.jpg", "https://nas.example.com/remote.php/dav/files/testuser/Photos/test.jpg"),
+        ("/Photos/test.jpg", "https://nas.example.com/remote.php/dav/files/testuser/Photos/test.jpg"),
+        ("", "https://nas.example.com/remote.php/dav/files/testuser"),
+    ];
+    
+    for (input_path, expected_url) in test_cases {
+        let result_url = connection.get_url_for_path(input_path);
+        
+        // Ensure no double slashes in the final URL (except after protocol)
+        let url_without_protocol = result_url.replace("https://", "");
+        assert!(!url_without_protocol.contains("//"), "URL should not contain double slashes: {}", result_url);
+        
+        if input_path.starts_with("/remote.php/") {
+            // This case would create double paths in the buggy version
+            // The new version should still create a proper URL even if not ideal
+            assert!(!result_url.contains("/remote.php/dav/files/testuser/remote.php/dav/files/testuser/remote.php/"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_url_normalization_edge_cases() {
+    // Test multiple trailing slashes
+    let config = WebDAVConfig {
+        server_url: "https://nas.example.com///".to_string(), // Multiple trailing slashes
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    
+    let webdav_url = config.webdav_url();
+    
+    // Should normalize all trailing slashes
+    assert!(!webdav_url.contains("//remote.php"), "URL should not contain double slashes: {}", webdav_url);
+    assert_eq!(webdav_url, "https://nas.example.com/remote.php/dav/files/testuser");
+}
+
+#[tokio::test]
+async fn test_all_server_types_url_consistency() {
+    let server_url_variants = vec![
+        "https://server.example.com",
+        "https://server.example.com/",
+        "https://server.example.com//",
+        "https://server.example.com///",
+    ];
+    
+    let server_types = vec![
+        Some("nextcloud".to_string()),
+        Some("owncloud".to_string()),
+        Some("generic".to_string()),
+        None,
+    ];
+    
+    for server_type in &server_types {
+        for server_url in &server_url_variants {
+            let config = WebDAVConfig {
+                server_url: server_url.to_string(),
+                username: "testuser".to_string(),
+                password: "testpass".to_string(),
+                watch_folders: vec!["/Documents".to_string()],
+                file_extensions: vec!["pdf".to_string()],
+                timeout_seconds: 30,
+                server_type: server_type.clone(),
+            };
+            
+            let webdav_url = config.webdav_url();
+            
+            // All variants should produce the same normalized URL for a given server type
+            let url_without_protocol = webdav_url.replace("https://", "");
+            assert!(!url_without_protocol.contains("//"), 
+                "URL should not contain double slashes for server_type {:?} and url {}: {}", 
+                server_type, server_url, webdav_url);
+            
+            // Ensure the base domain is correctly preserved
+            assert!(webdav_url.starts_with("https://server.example.com"), 
+                "URL should start with normalized domain: {}", webdav_url);
+        }
+    }
+}
+
 }

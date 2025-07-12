@@ -101,26 +101,30 @@ impl WebDAVConfig {
 
     /// Returns the base URL for WebDAV operations
     pub fn webdav_url(&self) -> String {
-        let mut url = self.server_url.trim_end_matches('/').to_string();
+        // Normalize the server URL by removing trailing slashes
+        let normalized_url = self.server_url.trim_end_matches('/').to_string();
         
         // Add WebDAV path based on server type
         match self.server_type.as_deref() {
             Some("nextcloud") => {
-                if !url.contains("/remote.php/dav/files/") {
-                    url.push_str(&format!("/remote.php/dav/files/{}", self.username));
+                if !normalized_url.contains("/remote.php/dav/files/") {
+                    format!("{}/remote.php/dav/files/{}", normalized_url, self.username)
+                } else {
+                    normalized_url
                 }
             }
             Some("owncloud") => {
-                if !url.contains("/remote.php/webdav") {
-                    url.push_str("/remote.php/webdav");
+                if !normalized_url.contains("/remote.php/webdav") {
+                    format!("{}/remote.php/webdav", normalized_url)
+                } else {
+                    normalized_url
                 }
             }
             _ => {
-                // Generic WebDAV - use the URL as provided
+                // Generic WebDAV - use the normalized URL as provided
+                normalized_url
             }
         }
-        
-        url
     }
 
     /// Checks if a file extension is supported
