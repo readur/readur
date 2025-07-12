@@ -217,7 +217,7 @@ async fn test_different_usernames() {
 async fn test_fix_prevents_original_bug() {
     // Create service with the same username as in the problematic path
     let config = WebDAVConfig {
-        server_url: "https://nas.jonathonfuller.com".to_string(),
+        server_url: "https://storage.example.com".to_string(),
         username: "perf3ct".to_string(),
         password: "testpass".to_string(),
         watch_folders: vec!["/Documents".to_string()],
@@ -231,7 +231,7 @@ async fn test_fix_prevents_original_bug() {
     let problematic_path = "/remote.php/dav/files/perf3ct/FullerDocuments/NicoleDocuments/Melanie%20Martinez%20June%207%202023/";
     
     // Before fix: This would have been used directly, causing double path construction
-    let base_url = "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct";
+    let base_url = "https://storage.example.com/remote.php/dav/files/perf3ct";
     let old_buggy_url = format!("{}{}", base_url, problematic_path);
     
     // After fix: Convert to relative path first
@@ -248,7 +248,7 @@ async fn test_fix_prevents_original_bug() {
     assert!(old_buggy_url.contains("/remote.php/dav/files/perf3ct/remote.php/dav/files/perf3ct/"));
     
     // The new URL should be properly formed
-    assert_eq!(fixed_url, "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/FullerDocuments/NicoleDocuments/Melanie%20Martinez%20June%207%202023/");
+    assert_eq!(fixed_url, "https://storage.example.com/remote.php/dav/files/perf3ct/FullerDocuments/NicoleDocuments/Melanie%20Martinez%20June%207%202023/");
     assert!(!fixed_url.contains("/remote.php/dav/files/perf3ct/remote.php/dav/files/perf3ct/"));
     
     // Most importantly, they should be different (proving the bug was fixed)
@@ -477,7 +477,7 @@ async fn test_all_server_types_url_consistency() {
 #[tokio::test]
 async fn test_service_download_file_url_construction() {
     let config = WebDAVConfig {
-        server_url: "https://nas.jonathonfuller.com/".to_string(), // Note trailing slash (user input)
+        server_url: "https://storage.example.com/".to_string(), // Note trailing slash (user input)
         username: "perf3ct".to_string(),
         password: "testpass".to_string(),
         watch_folders: vec!["/Documents".to_string()],
@@ -501,10 +501,10 @@ async fn test_service_download_file_url_construction() {
     ];
     
     let expected_urls = vec![
-        "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/Photos/PC%20Screenshots/zjoQcWqldv.png",
-        "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/FullerDocuments/NicoleDocuments/Melanie%20Martinez%20June%207%202023/document.pdf",
-        "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/FullerDocuments/JonDocuments/project.pdf",
-        "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/Documents/work/report.pdf",
+        "https://storage.example.com/remote.php/dav/files/perf3ct/Photos/PC%20Screenshots/zjoQcWqldv.png",
+        "https://storage.example.com/remote.php/dav/files/perf3ct/FullerDocuments/NicoleDocuments/Melanie%20Martinez%20June%207%202023/document.pdf",
+        "https://storage.example.com/remote.php/dav/files/perf3ct/FullerDocuments/JonDocuments/project.pdf",
+        "https://storage.example.com/remote.php/dav/files/perf3ct/Documents/work/report.pdf",
     ];
     
     for (xml_path, expected_url) in xml_parser_paths.iter().zip(expected_urls.iter()) {
@@ -527,7 +527,7 @@ async fn test_service_download_file_url_construction() {
             "URL should not contain double path construction: {}", constructed_url);
         
         // The URL should be properly formed for file download
-        assert!(constructed_url.starts_with("https://nas.jonathonfuller.com/"),
+        assert!(constructed_url.starts_with("https://storage.example.com/"),
             "URL should start with normalized domain: {}", constructed_url);
         
         // Should contain the file path exactly once
@@ -600,7 +600,7 @@ async fn test_file_fetch_url_construction_with_convert_to_relative_path() {
 async fn test_file_fetch_real_world_error_scenario() {
     // This recreates the exact error scenario from the user's logs
     let config = WebDAVConfig {
-        server_url: "https://nas.jonathonfuller.com/".to_string(),
+        server_url: "https://storage.example.com/".to_string(),
         username: "Alex".to_string(), // The username from the error message
         password: "testpass".to_string(),
         watch_folders: vec!["/Photos".to_string()],
@@ -641,7 +641,7 @@ async fn test_file_fetch_real_world_error_scenario() {
     
     // This should be the final correct URL
     assert_eq!(corrected_url, 
-        "https://nas.jonathonfuller.com/remote.php/dav/files/Alex/Photos/PC%20Screenshots/zjoQcWqldv.png");
+        "https://storage.example.com/remote.php/dav/files/Alex/Photos/PC%20Screenshots/zjoQcWqldv.png");
     
     // Connection URL should match when using relative path
     assert_eq!(connection_url, corrected_url, "Connection URL should match corrected URL when using relative path");
