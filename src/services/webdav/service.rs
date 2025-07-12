@@ -156,7 +156,9 @@ impl WebDAVService {
         
         debug!("⬇️ Downloading file: {}", file_path);
         
-        let url = self.connection.get_url_for_path(file_path);
+        // Convert full WebDAV paths to relative paths to prevent double path construction
+        let relative_path = self.convert_to_relative_path(file_path);
+        let url = self.connection.get_url_for_path(&relative_path);
         
         let response = self.connection
             .authenticated_request(
@@ -187,7 +189,9 @@ impl WebDAVService {
         
         debug!("⬇️ Downloading file: {}", file_info.path);
         
-        let url = self.connection.get_url_for_path(&file_info.path);
+        // Convert full WebDAV paths to relative paths to prevent double path construction
+        let relative_path = self.convert_to_relative_path(&file_info.path);
+        let url = self.connection.get_url_for_path(&relative_path);
         
         let response = self.connection
             .authenticated_request(
@@ -240,7 +244,9 @@ impl WebDAVService {
     pub async fn get_file_metadata(&self, file_path: &str) -> Result<FileIngestionInfo> {
         debug!("📋 Getting metadata for file: {}", file_path);
         
-        let url = self.connection.get_url_for_path(file_path);
+        // Convert full WebDAV paths to relative paths to prevent double path construction
+        let relative_path = self.convert_to_relative_path(file_path);
+        let url = self.connection.get_url_for_path(&relative_path);
         
         let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
             <D:propfind xmlns:D="DAV:">
@@ -445,14 +451,20 @@ impl WebDAVService {
 
     /// Converts a full WebDAV path to a relative path by removing server-specific prefixes
     pub fn convert_to_relative_path(&self, full_webdav_path: &str) -> String {
-        // For Nextcloud/ownCloud, remove the /remote.php/dav/files/username prefix
+        // For Nextcloud/ownCloud, remove the server-specific prefixes
         if let Some(server_type) = &self.config.server_type {
-            if server_type == "nextcloud" || server_type == "owncloud" {
+            if server_type == "nextcloud" {
                 let username = &self.config.username;
                 let prefix = format!("/remote.php/dav/files/{}", username);
                 
                 if full_webdav_path.starts_with(&prefix) {
                     let relative = &full_webdav_path[prefix.len()..];
+                    return if relative.is_empty() { "/" } else { relative }.to_string();
+                }
+            } else if server_type == "owncloud" {
+                // ownCloud uses /remote.php/webdav prefix
+                if full_webdav_path.starts_with("/remote.php/webdav") {
+                    let relative = &full_webdav_path[18..]; // Remove "/remote.php/webdav"
                     return if relative.is_empty() { "/" } else { relative }.to_string();
                 }
             } else if server_type == "generic" {

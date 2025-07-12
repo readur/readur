@@ -473,4 +473,294 @@ async fn test_all_server_types_url_consistency() {
     }
 }
 
+// Tests specifically for file fetching scenarios - using actual service methods
+#[tokio::test]
+async fn test_service_download_file_url_construction() {
+    let config = WebDAVConfig {
+        server_url: "https://nas.jonathonfuller.com/".to_string(), // Note trailing slash (user input)
+        username: "perf3ct".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["png".to_string(), "pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    
+    let service = WebDAVService::new(config).unwrap();
+    let connection = super::super::connection::WebDAVConnection::new(
+        service.get_config().clone(), 
+        super::super::config::RetryConfig::default()
+    ).unwrap();
+    
+    // These are the actual paths that would come from XML parser responses
+    let xml_parser_paths = vec![
+        "/remote.php/dav/files/perf3ct/Photos/PC%20Screenshots/zjoQcWqldv.png",
+        "/remote.php/dav/files/perf3ct/FullerDocuments/NicoleDocuments/Melanie%20Martinez%20June%207%202023/document.pdf",
+        "/remote.php/dav/files/perf3ct/FullerDocuments/JonDocuments/project.pdf",
+        "/remote.php/dav/files/perf3ct/Documents/work/report.pdf",
+    ];
+    
+    let expected_urls = vec![
+        "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/Photos/PC%20Screenshots/zjoQcWqldv.png",
+        "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/FullerDocuments/NicoleDocuments/Melanie%20Martinez%20June%207%202023/document.pdf",
+        "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/FullerDocuments/JonDocuments/project.pdf",
+        "https://nas.jonathonfuller.com/remote.php/dav/files/perf3ct/Documents/work/report.pdf",
+    ];
+    
+    for (xml_path, expected_url) in xml_parser_paths.iter().zip(expected_urls.iter()) {
+        // Test the conversion from full XML path to relative path (the correct approach)
+        let relative_path = service.convert_to_relative_path(xml_path);
+        let constructed_url = connection.get_url_for_path(&relative_path);
+        
+        println!("XML path: {}", xml_path);
+        println!("Relative path: {}", relative_path);
+        println!("Constructed URL: {}", constructed_url);
+        println!("Expected URL: {}", expected_url);
+        
+        // Verify no double slashes anywhere (except after protocol)
+        let url_without_protocol = constructed_url.replace("https://", "");
+        assert!(!url_without_protocol.contains("//"), 
+            "URL should not contain double slashes: {}", constructed_url);
+        
+        // Verify no double path construction
+        assert!(!constructed_url.contains("/remote.php/dav/files/perf3ct/remote.php/dav/files/perf3ct/"),
+            "URL should not contain double path construction: {}", constructed_url);
+        
+        // The URL should be properly formed for file download
+        assert!(constructed_url.starts_with("https://nas.jonathonfuller.com/"),
+            "URL should start with normalized domain: {}", constructed_url);
+        
+        // Should contain the file path exactly once
+        let path_occurrences = constructed_url.matches("/remote.php/dav/files/perf3ct/").count();
+        assert_eq!(path_occurrences, 1, 
+            "Path should appear exactly once in URL: {}", constructed_url);
+        
+        // Should match expected URL
+        assert_eq!(constructed_url, *expected_url, "URL should match expected result");
+    }
+}
+
+#[tokio::test]
+async fn test_file_fetch_url_construction_with_convert_to_relative_path() {
+    // This test demonstrates the CORRECT way to handle XML parser paths
+    let config = WebDAVConfig {
+        server_url: "https://nas.example.com/".to_string(), // Trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    
+    let service = WebDAVService::new(config).unwrap();
+    let connection = super::super::connection::WebDAVConnection::new(
+        service.get_config().clone(), 
+        super::super::config::RetryConfig::default()
+    ).unwrap();
+    
+    // XML parser returns this full WebDAV path
+    let xml_full_path = "/remote.php/dav/files/testuser/Documents/TestFolder/file.pdf";
+    
+    // Method 1: Direct concatenation (the old buggy way)
+    let base_webdav_url = service.get_config().webdav_url();
+    let buggy_url = format!("{}{}", base_webdav_url, xml_full_path);
+    
+    // Method 2: Using convert_to_relative_path (the correct way)
+    let relative_path = service.convert_to_relative_path(xml_full_path);
+    let correct_url = format!("{}{}", base_webdav_url, relative_path);
+    
+    // Method 3: Using get_url_for_path with relative path (the correct way)
+    let connection_url = connection.get_url_for_path(&relative_path);
+    
+    println!("XML full path: {}", xml_full_path);
+    println!("Base WebDAV URL: {}", base_webdav_url);
+    println!("Relative path: {}", relative_path);
+    println!("Buggy URL: {}", buggy_url);
+    println!("Correct URL: {}", correct_url);
+    println!("Connection URL: {}", connection_url);
+    
+    // The buggy method creates double paths
+    assert!(buggy_url.contains("/remote.php/dav/files/testuser/remote.php/dav/files/testuser/"));
+    
+    // The correct method doesn't
+    assert!(!correct_url.contains("/remote.php/dav/files/testuser/remote.php/dav/files/testuser/"));
+    
+    // The connection method with relative path should work correctly
+    let url_without_protocol = connection_url.replace("https://", "");
+    assert!(!url_without_protocol.contains("//"), "Connection URL should not contain double slashes: {}", connection_url);
+    assert_eq!(connection_url, correct_url, "Connection URL with relative path should match correct URL");
+    
+    // Expected final URL
+    let expected = "https://nas.example.com/remote.php/dav/files/testuser/Documents/TestFolder/file.pdf";
+    assert_eq!(correct_url, expected);
+}
+
+#[tokio::test]
+async fn test_file_fetch_real_world_error_scenario() {
+    // This recreates the exact error scenario from the user's logs
+    let config = WebDAVConfig {
+        server_url: "https://nas.jonathonfuller.com/".to_string(),
+        username: "Alex".to_string(), // The username from the error message
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Photos".to_string()],
+        file_extensions: vec!["png".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    
+    let service = WebDAVService::new(config).unwrap();
+    let connection = super::super::connection::WebDAVConnection::new(
+        service.get_config().clone(), 
+        super::super::config::RetryConfig::default()
+    ).unwrap();
+    
+    // This is the exact path from the error message
+    let problematic_path = "/remote.php/dav/files/Alex/Photos/PC%20Screenshots/zjoQcWqldv.png";
+    
+    // Test the CORRECT approach: convert to relative path first
+    let relative_path = service.convert_to_relative_path(problematic_path);
+    let base_url = service.get_config().webdav_url();
+    let corrected_url = format!("{}{}", base_url, relative_path);
+    
+    // Also test using connection with relative path
+    let connection_url = connection.get_url_for_path(&relative_path);
+    
+    println!("Problematic path: {}", problematic_path);
+    println!("Relative path: {}", relative_path);
+    println!("Base URL: {}", base_url);
+    println!("Corrected URL: {}", corrected_url);
+    println!("Connection URL: {}", connection_url);
+    
+    // Verify the URL is properly constructed
+    assert!(!corrected_url.contains("//remote.php"), 
+        "URL should not contain //remote.php: {}", corrected_url);
+    
+    assert!(!corrected_url.contains("/remote.php/dav/files/Alex/remote.php/dav/files/Alex/"),
+        "URL should not contain double path construction: {}", corrected_url);
+    
+    // This should be the final correct URL
+    assert_eq!(corrected_url, 
+        "https://nas.jonathonfuller.com/remote.php/dav/files/Alex/Photos/PC%20Screenshots/zjoQcWqldv.png");
+    
+    // Connection URL should match when using relative path
+    assert_eq!(connection_url, corrected_url, "Connection URL should match corrected URL when using relative path");
+    
+    // And it should not contain double paths
+    assert!(!corrected_url.contains("/remote.php/dav/files/Alex/remote.php/dav/files/Alex/"));
+}
+
+#[tokio::test]
+async fn test_file_fetch_different_server_types() {
+    let test_cases = vec![
+        (
+            "nextcloud",
+            "https://cloud.example.com/",
+            "user1",
+            "/remote.php/dav/files/user1/Documents/file.pdf",
+            "https://cloud.example.com/remote.php/dav/files/user1/Documents/file.pdf"
+        ),
+        (
+            "owncloud", 
+            "https://owncloud.example.com/",
+            "user2",
+            "/remote.php/webdav/Documents/file.pdf", // ownCloud uses different path structure
+            "https://owncloud.example.com/remote.php/webdav/Documents/file.pdf"
+        ),
+        (
+            "generic",
+            "https://webdav.example.com/",
+            "user3",
+            "/webdav/Documents/file.pdf",
+            "https://webdav.example.com/webdav/Documents/file.pdf"
+        ),
+    ];
+    
+    for (server_type, server_url, username, xml_path, expected_url) in test_cases {
+        let config = WebDAVConfig {
+            server_url: server_url.to_string(),
+            username: username.to_string(),
+            password: "testpass".to_string(),
+            watch_folders: vec!["/Documents".to_string()],
+            file_extensions: vec!["pdf".to_string()],
+            timeout_seconds: 30,
+            server_type: Some(server_type.to_string()),
+        };
+        
+        let service = WebDAVService::new(config).unwrap();
+        let connection = super::super::connection::WebDAVConnection::new(
+            service.get_config().clone(), 
+            super::super::config::RetryConfig::default()
+        ).unwrap();
+        
+        // Test the CORRECT approach: convert to relative path first
+        let relative_path = service.convert_to_relative_path(xml_path);
+        let download_url = connection.get_url_for_path(&relative_path);
+        
+        println!("Server type: {}", server_type);
+        println!("XML path: {}", xml_path);
+        println!("Relative path: {}", relative_path);
+        println!("Download URL: {}", download_url);
+        println!("Expected: {}", expected_url);
+        
+        // Verify no double slashes
+        let url_without_protocol = download_url.replace("https://", "");
+        assert!(!url_without_protocol.contains("//"), 
+            "URL should not contain double slashes for {}: {}", server_type, download_url);
+        
+        // Verify proper structure
+        assert!(download_url.starts_with(&format!("https://{}", server_url.trim_start_matches("https://").trim_end_matches("/"))));
+        
+        // For Nextcloud and ownCloud, verify no double path construction
+        if server_type == "nextcloud" {
+            assert!(!download_url.contains(&format!("/remote.php/dav/files/{}/remote.php/dav/files/{}/", username, username)), 
+                "Nextcloud URL should not contain double dav path: {}", download_url);
+        } else if server_type == "owncloud" {
+            assert!(!download_url.contains("/remote.php/webdav/remote.php/webdav/"), 
+                "ownCloud URL should not contain double webdav path: {}", download_url);
+        }
+    }
+}
+
+// Test that validates we're using the actual service methods correctly
+#[tokio::test]
+async fn test_webdav_service_methods_use_correct_url_construction() {
+    let config = WebDAVConfig {
+        server_url: "https://nas.example.com/".to_string(), // Trailing slash
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec!["pdf".to_string()],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    
+    let service = WebDAVService::new(config).unwrap();
+    
+    // Test paths that would come from XML parser
+    let xml_paths = vec![
+        "/remote.php/dav/files/testuser/Documents/file1.pdf",
+        "/remote.php/dav/files/testuser/Photos/image.png",
+        "/remote.php/dav/files/testuser/Work/Folder/document.pdf",
+    ];
+    
+    for xml_path in xml_paths {
+        // Test the convert_to_relative_path method (used by service methods)
+        let relative_path = service.convert_to_relative_path(xml_path);
+        
+        println!("XML path: {}", xml_path);
+        println!("Relative path: {}", relative_path);
+        
+        // Verify the relative path doesn't contain server prefixes
+        assert!(!relative_path.contains("/remote.php/dav/files/"), 
+            "Relative path should not contain server prefix: {}", relative_path);
+        
+        // Verify it starts with / but removes the server-specific part
+        assert!(relative_path.starts_with('/'), "Relative path should start with /: {}", relative_path);
+        
+        // For this test, the service methods would use this relative path
+        // which prevents the double path construction issue
+    }
+}
+
 }
