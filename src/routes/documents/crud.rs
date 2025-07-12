@@ -72,6 +72,14 @@ pub async fn upload_document(
         StatusCode::BAD_REQUEST
     })?;
     
+    // Validate file size against configured limit
+    let max_file_size_bytes = state.config.max_file_size_mb as usize * 1024 * 1024;
+    if data.len() > max_file_size_bytes {
+        error!("File '{}' size ({} bytes) exceeds maximum allowed size ({} bytes / {}MB)", 
+               filename, data.len(), max_file_size_bytes, state.config.max_file_size_mb);
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
+    
     info!("Uploading document: {} ({} bytes)", filename, data.len());
     
     // Create FileIngestionInfo from uploaded data

@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     routing::get,
     Router,
 };
@@ -531,6 +532,7 @@ async fn main() -> anyhow::Result<()> {
                 .precompressed_br()
                 .fallback(ServeFile::new(&index_file))
         )
+        .layer(DefaultBodyLimit::max(config.max_file_size_mb as usize * 1024 * 1024))
         .layer(CorsLayer::permissive())
         .with_state(web_state.clone());
 
