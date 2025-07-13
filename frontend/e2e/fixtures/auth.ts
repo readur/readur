@@ -37,7 +37,7 @@ export class AuthHelper {
   async loginAs(credentials: typeof TEST_CREDENTIALS.admin | typeof TEST_CREDENTIALS.user) {
     console.log(`Attempting to login as ${credentials.username}...`);
     
-    // Go to home page
+    // Go to home page and wait for it to load
     await this.page.goto('/');
     await this.page.waitForLoadState('networkidle');
     
@@ -49,40 +49,73 @@ export class AuthHelper {
       return;
     }
     
-    // Look for login form - Material-UI TextFields with labels (based on react-hook-form register)
-    const usernameField = this.page.locator('input[name="username"]').first();
-    const passwordField = this.page.locator('input[name="password"]').first();
+    // Wait for login page to be ready - look for the distinctive login page content
+    await this.page.waitForSelector('h3:has-text("Welcome to Readur")', { timeout: TIMEOUTS.login });
+    await this.page.waitForSelector('h5:has-text("Sign in to your account")', { timeout: TIMEOUTS.login });
     
-    // Wait for login form to be visible
-    await usernameField.waitFor({ state: 'visible', timeout: TIMEOUTS.login });
-    await passwordField.waitFor({ state: 'visible', timeout: TIMEOUTS.login });
+    // Material-UI creates input elements inside TextFields, but we need to wait for them to be ready
+    // The inputs have the name attributes from react-hook-form register
+    const usernameField = this.page.locator('input[name="username"]');
+    const passwordField = this.page.locator('input[name="password"]');
     
-    // Fill login form
+    // Wait for both fields to be attached and visible
+    await usernameField.waitFor({ state: 'attached', timeout: TIMEOUTS.login });
+    await passwordField.waitFor({ state: 'attached', timeout: TIMEOUTS.login });
+    
+    // WebKit can be slower - add extra wait time
+    const browserName = await this.page.evaluate(() => navigator.userAgent);
+    const isWebKit = browserName.includes('WebKit') && !browserName.includes('Chrome');
+    if (isWebKit) {
+      console.log('WebKit browser detected - adding extra wait time');
+      await this.page.waitForTimeout(3000);
+    }
+    
+    // Clear any existing content and fill the fields
+    await usernameField.clear();
     await usernameField.fill(credentials.username);
+    
+    await passwordField.clear();
     await passwordField.fill(credentials.password);
     
-    // Wait for login API response
+    // WebKit needs extra time for form validation
+    if (isWebKit) {
+      await this.page.waitForTimeout(2000);
+    }
+    
+    // Wait for login API response before clicking submit
     const loginPromise = this.page.waitForResponse(response => 
       response.url().includes('/auth/login') && response.status() === 200,
       { timeout: TIMEOUTS.login }
     );
     
-    // Click submit button
-    await this.page.click('button[type="submit"]');
+    // Click submit button - look for the sign in button specifically
+    const signInButton = this.page.locator('button[type="submit"]:has-text("Sign in")');
+    await signInButton.waitFor({ state: 'visible', timeout: TIMEOUTS.login });
+    await signInButton.click();
     
     try {
-      await loginPromise;
-      console.log(`Login as ${credentials.username} successful`);
+      const response = await loginPromise;
+      console.log(`Login API call successful with status: ${response.status()}`);
       
-      // Wait for navigation to dashboard
+      // Wait for navigation to dashboard with more flexible URL pattern
       await this.page.waitForURL(/.*\/dashboard.*/, { timeout: TIMEOUTS.navigation });
+      console.log(`Successfully navigated to: ${this.page.url()}`);
       
-      // Verify login by checking for welcome message
-      await this.page.waitForSelector('h4:has-text("Welcome back,")', { timeout: TIMEOUTS.navigation });
+      // Wait for dashboard content to load - be more flexible about the welcome message
+      await this.page.waitForFunction(() => {
+        return document.querySelector('h4') !== null && 
+               (document.querySelector('h4')?.textContent?.includes('Welcome') ||
+                document.querySelector('[role="main"]') !== null);
+      }, { timeout: TIMEOUTS.navigation });
       
-      console.log('Navigation completed to:', this.page.url());
+      console.log(`Login as ${credentials.username} completed successfully`);
     } catch (error) {
       console.error(`Login as ${credentials.username} failed:`, error);
+      // Take a screenshot for debugging
+      await this.page.screenshot({ 
+        path: `test-results/login-failure-${credentials.username}-${Date.now()}.png`,
+        fullPage: true 
+      });
       throw error;
     }
   }

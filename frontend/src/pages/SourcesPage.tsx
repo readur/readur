@@ -12,6 +12,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   TextField,
   FormControl,
@@ -117,6 +118,9 @@ const SourcesPage: React.FC = () => {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Source | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [sourceToDelete, setSourceToDelete] = useState<Source | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     open: false,
     message: '',
@@ -397,18 +401,30 @@ const SourcesPage: React.FC = () => {
     }
   };
 
-  const handleDeleteSource = async (source: Source) => {
-    if (!confirm(`Are you sure you want to delete "${source.name}"?`)) {
-      return;
-    }
+  const handleDeleteSource = (source: Source) => {
+    setSourceToDelete(source);
+    setDeleteDialogOpen(true);
+  };
 
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setSourceToDelete(null);
+    setDeleteLoading(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!sourceToDelete) return;
+
+    setDeleteLoading(true);
     try {
-      await api.delete(`/sources/${source.id}`);
+      await api.delete(`/sources/${sourceToDelete.id}`);
       showSnackbar('Source deleted successfully', 'success');
       loadSources();
+      handleDeleteCancel();
     } catch (error) {
       console.error('Failed to delete source:', error);
       showSnackbar('Failed to delete source', 'error');
+      setDeleteLoading(false);
     }
   };
 
@@ -2260,6 +2276,41 @@ const SourcesPage: React.FC = () => {
             }}
           >
             {editingSource ? 'Save Changes' : 'Create Source'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog 
+        open={deleteDialogOpen} 
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete Source</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete "{sourceToDelete?.name}"?
+          </DialogContentText>
+          <DialogContentText variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This action cannot be undone. The source configuration and all associated sync history will be permanently removed.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={deleteLoading}
+            sx={{
+              borderRadius: 2,
+              px: 3,
+            }}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>
