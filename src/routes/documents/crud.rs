@@ -39,7 +39,6 @@ pub async fn upload_document(
     mut multipart: Multipart,
 ) -> Result<Json<DocumentUploadResponse>, StatusCode> {
     let mut uploaded_file = None;
-    let mut label_ids: Option<Vec<uuid::Uuid>> = None;
     let mut ocr_language: Option<String> = None;
     
     // First pass: collect all multipart fields
@@ -49,20 +48,7 @@ pub async fn upload_document(
     })? {
         let name = field.name().unwrap_or("").to_string();
         
-        if name == "label_ids" {
-            let label_ids_text = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
-            if !label_ids_text.trim().is_empty() {
-                match serde_json::from_str::<Vec<uuid::Uuid>>(&label_ids_text) {
-                    Ok(ids) => {
-                        label_ids = Some(ids);
-                        info!("Label IDs specified in upload: {:?}", label_ids);
-                    },
-                    Err(e) => {
-                        warn!("Failed to parse label_ids from upload: {} - Error: {}", label_ids_text, e);
-                    }
-                }
-            }
-        } else if name == "ocr_language" {
+        if name == "ocr_language" {
             let language = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
             if !language.trim().is_empty() {
                 // Validate that the language is available
@@ -163,15 +149,6 @@ pub async fn upload_document(
                     warn!("Failed to update user OCR language to {}: {}", lang, e);
                 } else {
                     info!("Updated user {} OCR language to: {}", auth_user.user.id, lang);
-                }
-            }
-            
-            // If label IDs were specified, assign them to the document
-            if let Some(ref ids) = label_ids {
-                if let Err(e) = state.db.update_document_labels(document.id, ids.clone()).await {
-                    warn!("Failed to assign labels to document {}: {}", document.id, e);
-                } else {
-                    info!("Assigned {} labels to document {}", ids.len(), document.id);
                 }
             }
             
