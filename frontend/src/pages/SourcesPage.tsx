@@ -433,11 +433,16 @@ const SourcesPage: React.FC = () => {
     try {
       let response;
       if (formData.source_type === 'webdav') {
-        response = await api.post('/webdav/test-connection', {
-          server_url: formData.server_url,
-          username: formData.username,
-          password: formData.password,
-          server_type: formData.server_type,
+        response = await api.post('/sources/test-connection', {
+          source_type: 'webdav',
+          config: {
+            server_url: formData.server_url,
+            username: formData.username,
+            password: formData.password,
+            server_type: formData.server_type,
+            watch_folders: formData.watch_folders,
+            file_extensions: formData.file_extensions,
+          }
         });
       } else if (formData.source_type === 'local_folder') {
         response = await api.post('/sources/test-connection', {
