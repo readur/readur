@@ -1,7 +1,7 @@
-use readur2::app::AppState;
-use readur2::config::Config;
-use readur2::db::Database;
-use readur2::ocr::health::OcrHealthChecker;
+use readur::app::AppState;
+use readur::config::Config;
+use readur::db::Database;
+use readur::ocr::health::OcrHealthChecker;
 use axum::http::StatusCode;
 use axum_test::TestServer;
 use serde_json::json;
@@ -82,7 +82,7 @@ impl TestHarness {
         });
         
         // Create test server
-        let app = readur2::app::create_app(app_state);
+        let app = readur::app::create_app(app_state);
         let server = TestServer::new(app).expect("Failed to create test server");
         
         // Generate a test token (simplified for testing)
