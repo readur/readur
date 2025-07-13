@@ -9,6 +9,7 @@ import { ocrService } from '../../../services/api';
 vi.mock('../../../services/api', () => ({
   ocrService: {
     getAvailableLanguages: vi.fn(),
+    getHealthStatus: vi.fn(),
     retryWithLanguage: vi.fn(),
   },
 }));
@@ -32,7 +33,16 @@ vi.mock('../../OcrLanguageSelector', () => ({
   ),
 }));
 
-const mockOcrService = vi.mocked(ocrService);
+const mockOcrService = {
+  getAvailableLanguages: vi.fn(),
+  getHealthStatus: vi.fn(),
+  retryWithLanguage: vi.fn(),
+} as any;
+
+// Replace the mocked service
+(ocrService as any).getAvailableLanguages = mockOcrService.getAvailableLanguages;
+(ocrService as any).getHealthStatus = mockOcrService.getHealthStatus;
+(ocrService as any).retryWithLanguage = mockOcrService.retryWithLanguage;
 
 const theme = createTheme();
 
