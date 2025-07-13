@@ -10,7 +10,7 @@ use crate::{
     models::{CreateWebDAVFile, UpdateWebDAVSyncState},
     services::file_service::FileService,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
-    services::webdav_service::{WebDAVConfig, WebDAVService},
+    services::webdav::{WebDAVConfig, WebDAVService},
 };
 
 pub async fn perform_webdav_sync_with_tracking(
@@ -115,7 +115,7 @@ async fn perform_sync_internal(
         }
         
         // Discover files in the folder
-        match webdav_service.discover_files_in_folder(folder_path).await {
+        match webdav_service.discover_files_in_directory(folder_path, true).await {
             Ok(files) => {
                 info!("Found {} files in folder {}", files.len(), folder_path);
                 
@@ -230,7 +230,7 @@ async fn process_single_file(
     state: Arc<AppState>,
     user_id: uuid::Uuid,
     webdav_service: &WebDAVService,
-    file_info: &crate::models::FileInfo,
+    file_info: &crate::models::FileIngestionInfo,
     enable_background_ocr: bool,
     semaphore: Arc<Semaphore>,
     webdav_source_id: Option<uuid::Uuid>,
@@ -377,5 +377,70 @@ async fn process_single_file(
     }
     
     Ok(true) // Successfully processed
+}
+
+/// Process files for deep scan - similar to regular sync but forces processing
+pub async fn process_files_for_deep_scan(
+    state: Arc<AppState>,
+    user_id: uuid::Uuid,
+    webdav_service: &WebDAVService,
+    files_to_process: &[crate::models::FileIngestionInfo],
+    enable_background_ocr: bool,
+    webdav_source_id: Option<uuid::Uuid>,
+) -> Result<usize, anyhow::Error> {
+    info!("Processing {} files for deep scan", files_to_process.len());
+    
+    let concurrent_limit = 5; // Max 5 concurrent downloads
+    let semaphore = Arc::new(Semaphore::new(concurrent_limit));
+    let mut files_processed = 0;
+    let mut sync_errors = Vec::new();
+    
+    // Create futures for processing each file concurrently
+    let mut file_futures = FuturesUnordered::new();
+    
+    for file_info in files_to_process.iter() {
+        let state_clone = state.clone();
+        let webdav_service_clone = webdav_service.clone();
+        let file_info_clone = file_info.clone();
+        let semaphore_clone = semaphore.clone();
+        
+        // Create a future for processing this file
+        let future = async move {
+            process_single_file(
+                state_clone,
+                user_id,
+                &webdav_service_clone,
+                &file_info_clone,
+                enable_background_ocr,
+                semaphore_clone,
+                webdav_source_id,
+            ).await
+        };
+        
+        file_futures.push(future);
+    }
+    
+    // Process files concurrently and collect results
+    while let Some(result) = file_futures.next().await {
+        match result {
+            Ok(processed) => {
+                if processed {
+                    files_processed += 1;
+                    info!("Deep scan: Successfully processed file ({} completed)", files_processed);
+                }
+            }
+            Err(error) => {
+                error!("Deep scan file processing error: {}", error);
+                sync_errors.push(error);
+            }
+        }
+    }
+    
+    if !sync_errors.is_empty() {
+        warn!("Deep scan completed with {} errors: {:?}", sync_errors.len(), sync_errors);
+    }
+    
+    info!("Deep scan file processing completed: {} files processed successfully", files_processed);
+    Ok(files_processed)
 }
 

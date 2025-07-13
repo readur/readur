@@ -1,74 +1,58 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { BrowserRouter } from 'react-router-dom';
 import LabelsPage from '../LabelsPage';
 import * as useApiModule from '../../hooks/useApi';
-
-const theme = createTheme();
+import { renderWithAuthenticatedUser } from '../../test/test-utils';
+import { createMockLabel } from '../../test/label-test-utils';
 
 const mockLabels = [
-  {
+  createMockLabel({
     id: 'label-1',
     name: 'Important',
     description: 'High priority items',
     color: '#d73a49',
     icon: 'star',
     is_system: true,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
     document_count: 10,
     source_count: 2,
-  },
-  {
+  }),
+  createMockLabel({
     id: 'label-2',
     name: 'Work',
     description: 'Work-related documents',
     color: '#0969da',
     icon: 'work',
     is_system: true,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
     document_count: 5,
     source_count: 1,
-  },
-  {
+  }),
+  createMockLabel({
     id: 'label-3',
     name: 'Personal Project',
     description: 'My personal project files',
     color: '#28a745',
     icon: 'folder',
     is_system: false,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
     document_count: 3,
     source_count: 0,
-  },
-  {
+  }),
+  createMockLabel({
     id: 'label-4',
     name: 'Archive',
     description: 'Archived items',
     color: '#6e7781',
     icon: 'archive',
     is_system: true,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
     document_count: 0,
     source_count: 0,
-  },
+  }),
 ];
 
 const renderLabelsPage = async () => {
   let renderResult;
   await act(async () => {
-    renderResult = render(
-      <BrowserRouter>
-        <ThemeProvider theme={theme}>
-          <LabelsPage />
-        </ThemeProvider>
-      </BrowserRouter>
-    );
+    renderResult = renderWithAuthenticatedUser(<LabelsPage />);
   });
   return renderResult;
 };
@@ -412,16 +396,14 @@ describe('LabelsPage Component', () => {
     });
 
     test('should call API when creating new label', async () => {
-      const newLabel = {
+      const newLabel = createMockLabel({
         id: 'new-label',
         name: 'New Label',
         color: '#ff0000',
         is_system: false,
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
         document_count: 0,
         source_count: 0,
-      };
+      });
       
       mockApi.post.mockResolvedValue({ status: 201, data: newLabel });
       
@@ -604,16 +586,14 @@ describe('LabelsPage Component', () => {
 
   describe('Data Refresh', () => {
     test('should refresh labels after successful creation', async () => {
-      const newLabel = {
+      const newLabel = createMockLabel({
         id: 'new-label',
         name: 'New Label',
         color: '#ff0000',
         is_system: false,
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
         document_count: 0,
         source_count: 0,
-      };
+      });
       
       mockApi.post.mockResolvedValue({ status: 201, data: newLabel });
       

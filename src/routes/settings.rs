@@ -2,20 +2,22 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::Json,
-    routing::{get, put},
+    routing::get,
     Router,
 };
 use std::sync::Arc;
 
 use crate::{
     auth::AuthUser,
-    models::{SettingsResponse, UpdateSettings},
+    models::{SettingsResponse, UpdateSettings, UserRole},
     AppState,
 };
+use serde::Serialize;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(get_settings).put(update_settings))
+        .route("/config", get(get_server_configuration))
 }
 
 #[utoipa::path(
@@ -129,4 +131,88 @@ async fn update_settings(
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     Ok(Json(settings.into()))
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+struct ServerConfiguration {
+    max_file_size_mb: u64,
+    concurrent_ocr_jobs: i32,
+    ocr_timeout_seconds: i32,
+    memory_limit_mb: u64,
+    cpu_priority: String,
+    server_host: String,
+    server_port: u16,
+    jwt_secret_set: bool,
+    upload_path: String,
+    watch_folder: Option<String>,
+    ocr_language: String,
+    allowed_file_types: Vec<String>,
+    watch_interval_seconds: Option<u64>,
+    file_stability_check_ms: Option<u64>,
+    max_file_age_hours: Option<u64>,
+    enable_background_ocr: bool,
+    version: String,
+    build_info: Option<String>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/settings/config",
+    tag = "settings",
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Server configuration", body = ServerConfiguration),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Admin access required"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+async fn get_server_configuration(
+    auth_user: AuthUser,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ServerConfiguration>, StatusCode> {
+    // Only allow admin users to view server configuration
+    if auth_user.user.role != UserRole::Admin {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let config = &state.config;
+    
+    // Get default settings for reference
+    let default_settings = crate::models::Settings::default();
+    
+    // Parse server_address to get host and port
+    let (server_host, server_port) = if let Some(colon_pos) = config.server_address.rfind(':') {
+        let host = config.server_address[..colon_pos].to_string();
+        let port = config.server_address[colon_pos + 1..].parse::<u16>().unwrap_or(8000);
+        (host, port)
+    } else {
+        (config.server_address.clone(), 8000)
+    };
+    
+    let server_config = ServerConfiguration {
+        max_file_size_mb: config.max_file_size_mb,
+        concurrent_ocr_jobs: default_settings.concurrent_ocr_jobs,
+        ocr_timeout_seconds: default_settings.ocr_timeout_seconds,
+        memory_limit_mb: default_settings.memory_limit_mb as u64,
+        cpu_priority: default_settings.cpu_priority,
+        server_host,
+        server_port,
+        jwt_secret_set: !config.jwt_secret.is_empty(),
+        upload_path: config.upload_path.clone(),
+        watch_folder: Some(config.watch_folder.clone()),
+        ocr_language: default_settings.ocr_language,
+        allowed_file_types: default_settings.allowed_file_types,
+        watch_interval_seconds: config.watch_interval_seconds,
+        file_stability_check_ms: config.file_stability_check_ms,
+        max_file_age_hours: config.max_file_age_hours,
+        enable_background_ocr: default_settings.enable_background_ocr,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        build_info: option_env!("BUILD_INFO").map(|s| s.to_string()),
+    };
+
+    Ok(Json(server_config))
 }

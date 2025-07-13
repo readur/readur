@@ -12,6 +12,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   TextField,
   FormControl,
@@ -68,6 +69,9 @@ import {
   TextSnippet as DocumentIcon,
   Visibility as OcrIcon,
   Block as BlockIcon,
+  HealthAndSafety as HealthIcon,
+  Warning as WarningIcon,
+  Error as CriticalIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api, { queueService } from '../services/api';
@@ -91,6 +95,11 @@ interface Source {
   total_documents_ocr: number;
   created_at: string;
   updated_at: string;
+  // Validation fields
+  validation_status?: string | null;
+  last_validation_at?: string | null;
+  validation_score?: number | null;
+  validation_issues?: string | null;
 }
 
 interface SnackbarState {
@@ -109,6 +118,9 @@ const SourcesPage: React.FC = () => {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Source | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [sourceToDelete, setSourceToDelete] = useState<Source | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     open: false,
     message: '',
@@ -151,6 +163,7 @@ const SourcesPage: React.FC = () => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [syncingSource, setSyncingSource] = useState<string | null>(null);
   const [stoppingSync, setStoppingSync] = useState<string | null>(null);
+  const [validating, setValidating] = useState<string | null>(null);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
 
   useEffect(() => {
@@ -388,18 +401,30 @@ const SourcesPage: React.FC = () => {
     }
   };
 
-  const handleDeleteSource = async (source: Source) => {
-    if (!confirm(`Are you sure you want to delete "${source.name}"?`)) {
-      return;
-    }
+  const handleDeleteSource = (source: Source) => {
+    setSourceToDelete(source);
+    setDeleteDialogOpen(true);
+  };
 
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setSourceToDelete(null);
+    setDeleteLoading(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!sourceToDelete) return;
+
+    setDeleteLoading(true);
     try {
-      await api.delete(`/sources/${source.id}`);
+      await api.delete(`/sources/${sourceToDelete.id}`);
       showSnackbar('Source deleted successfully', 'success');
       loadSources();
+      handleDeleteCancel();
     } catch (error) {
       console.error('Failed to delete source:', error);
       showSnackbar('Failed to delete source', 'error');
+      setDeleteLoading(false);
     }
   };
 
@@ -408,11 +433,16 @@ const SourcesPage: React.FC = () => {
     try {
       let response;
       if (formData.source_type === 'webdav') {
-        response = await api.post('/webdav/test-connection', {
-          server_url: formData.server_url,
-          username: formData.username,
-          password: formData.password,
-          server_type: formData.server_type,
+        response = await api.post('/sources/test-connection', {
+          source_type: 'webdav',
+          config: {
+            server_url: formData.server_url,
+            username: formData.username,
+            password: formData.password,
+            server_type: formData.server_type,
+            watch_folders: formData.watch_folders,
+            file_extensions: formData.file_extensions,
+          }
         });
       } else if (formData.source_type === 'local_folder') {
         response = await api.post('/sources/test-connection', {
@@ -486,6 +516,83 @@ const SourcesPage: React.FC = () => {
     } finally {
       setStoppingSync(null);
     }
+  };
+
+  const handleValidation = async (sourceId: string) => {
+    setValidating(sourceId);
+    try {
+      const response = await api.post(`/sources/${sourceId}/validate`);
+      if (response.data.success) {
+        showSnackbar(response.data.message || 'Validation check started successfully', 'success');
+        setTimeout(loadSources, 2000); // Reload after 2 seconds to show updated status
+      } else {
+        showSnackbar(response.data.message || 'Failed to start validation check', 'error');
+      }
+    } catch (error: any) {
+      console.error('Failed to trigger validation:', error);
+      const message = error.response?.data?.message || 'Failed to start validation check';
+      showSnackbar(message, 'error');
+    } finally {
+      setValidating(null);
+    }
+  };
+
+  // Helper function to render validation status
+  const renderValidationStatus = (source: Source) => {
+    const validationStatus = source.validation_status;
+    const validationScore = source.validation_score;
+    const lastValidationAt = source.last_validation_at;
+
+    let statusColor = theme.palette.grey[500];
+    let StatusIcon = HealthIcon;
+    let statusText = 'Unknown';
+    let tooltipText = 'Validation status unknown';
+
+    if (validationStatus === 'healthy') {
+      statusColor = theme.palette.success.main;
+      StatusIcon = CheckCircleIcon;
+      statusText = 'Healthy';
+      tooltipText = `Health score: ${validationScore || 'N/A'}`;
+    } else if (validationStatus === 'warning') {
+      statusColor = theme.palette.warning.main;
+      StatusIcon = WarningIcon;
+      statusText = 'Warning';
+      tooltipText = `Health score: ${validationScore || 'N/A'} - Issues detected`;
+    } else if (validationStatus === 'critical') {
+      statusColor = theme.palette.error.main;
+      StatusIcon = CriticalIcon;
+      statusText = 'Critical';
+      tooltipText = `Health score: ${validationScore || 'N/A'} - Critical issues`;
+    } else if (validationStatus === 'validating') {
+      statusColor = theme.palette.info.main;
+      StatusIcon = HealthIcon;
+      statusText = 'Validating';
+      tooltipText = 'Validation check in progress';
+    }
+
+    if (lastValidationAt) {
+      const lastValidation = new Date(lastValidationAt);
+      tooltipText += `\nLast checked: ${formatDistanceToNow(lastValidation)} ago`;
+    }
+
+    return (
+      <Tooltip title={tooltipText}>
+        <Chip
+          icon={<StatusIcon />}
+          label={statusText}
+          size="small"
+          sx={{
+            bgcolor: alpha(statusColor, 0.1),
+            color: statusColor,
+            borderColor: statusColor,
+            border: '1px solid',
+            '& .MuiChip-icon': {
+              color: statusColor,
+            },
+          }}
+        />
+      </Tooltip>
+    );
   };
 
   // Utility functions for folder management
@@ -679,6 +786,7 @@ const SourcesPage: React.FC = () => {
   const renderSourceCard = (source: Source) => (
     <Fade in={true} key={source.id}>
       <Card 
+        data-testid="source-item"
         sx={{ 
           position: 'relative',
           overflow: 'hidden',
@@ -837,6 +945,28 @@ const SourcesPage: React.FC = () => {
                   </span>
                 </Tooltip>
               )}
+              {/* Validation Status Display */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 120 }}>
+                {renderValidationStatus(source)}
+                <Tooltip title="Run Validation Check">
+                  <IconButton
+                    onClick={() => handleValidation(source.id)}
+                    disabled={validating === source.id || source.status === 'syncing' || !source.enabled}
+                    size="small"
+                    sx={{
+                      bgcolor: alpha(theme.palette.info.main, 0.1),
+                      '&:hover': { bgcolor: alpha(theme.palette.info.main, 0.2) },
+                      color: theme.palette.info.main,
+                    }}
+                  >
+                    {validating === source.id ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      <HealthIcon />
+                    )}
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Tooltip title="Edit Source">
                 <IconButton 
                   onClick={() => handleEditSource(source)}
@@ -980,6 +1110,7 @@ const SourcesPage: React.FC = () => {
             size="large"
             startIcon={<AddIcon />}
             onClick={handleCreateSource}
+            data-testid="add-source"
             sx={{
               borderRadius: 3,
               px: 4,
@@ -1132,7 +1263,7 @@ const SourcesPage: React.FC = () => {
           </Button>
         </Paper>
       ) : (
-        <Grid container spacing={4}>
+        <Grid container spacing={4} data-testid="sources-list">
           {sources.map(renderSourceCard)}
         </Grid>
       )}
@@ -2150,6 +2281,41 @@ const SourcesPage: React.FC = () => {
             }}
           >
             {editingSource ? 'Save Changes' : 'Create Source'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog 
+        open={deleteDialogOpen} 
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete Source</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete "{sourceToDelete?.name}"?
+          </DialogContentText>
+          <DialogContentText variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This action cannot be undone. The source configuration and all associated sync history will be permanently removed.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={deleteLoading}
+            sx={{
+              borderRadius: 2,
+              px: 3,
+            }}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

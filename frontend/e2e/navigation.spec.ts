@@ -51,10 +51,14 @@ test.describe('Navigation', () => {
   });
 
   test('should check what elements are on dashboard', async ({ authenticatedPage: page }) => {
-    await page.goto('/');
+    await page.goto('/dashboard');
     await page.waitForLoadState('networkidle', { timeout: 5000 });
     
     console.log('Dashboard URL:', page.url());
+    
+    // Check for welcome message
+    const welcomeMessage = await page.locator('h4:has-text("Welcome back,")').isVisible();
+    console.log('Welcome message present:', welcomeMessage);
     
     // Check for common navigation elements
     const navLinks = await page.locator('a, button').allTextContents();
@@ -68,5 +72,8 @@ test.describe('Navigation', () => {
       const uploadTexts = await page.locator(':has-text("Upload"), :has-text("File")').allTextContents();
       console.log('Upload-related text:', uploadTexts);
     }
+    
+    // Verify we're properly logged in
+    await expect(page.locator('h4:has-text("Welcome back,")')).toBeVisible();
   });
 });

@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use sqlx::Row;
-use std::sync::Arc;
+use std::{sync::Arc, error::Error};
 
 use crate::{auth::AuthUser, ocr::queue::OcrQueueService, AppState, models::UserRole};
 
@@ -66,7 +66,7 @@ async fn get_queue_stats(
 
 #[utoipa::path(
     post,
-    path = "/api/queue/requeue-failed",
+    path = "/api/queue/requeue/failed",
     tag = "queue",
     security(
         ("bearer_auth" = [])
@@ -85,10 +85,28 @@ async fn requeue_failed(
     require_admin(&auth_user)?;
     let queue_service = OcrQueueService::new(state.db.clone(), state.db.get_pool().clone(), 1);
     
-    let count = queue_service
-        .requeue_failed_items()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let count = match queue_service.requeue_failed_items().await {
+        Ok(count) => count,
+        Err(e) => {
+            let error_msg = format!("Failed to requeue failed items: {:?}", e);
+            tracing::error!("{}", error_msg);
+            
+            // Print to stderr so we can see it in test output
+            eprintln!("REQUEUE ERROR: {}", error_msg);
+            
+            // Try to get the source chain
+            eprintln!("Error chain:");
+            let mut source = e.source();
+            let mut depth = 1;
+            while let Some(err) = source {
+                eprintln!("  {}: {}", depth, err);
+                source = err.source();
+                depth += 1;
+            }
+            
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
     
     Ok(Json(serde_json::json!({
         "requeued_count": count,

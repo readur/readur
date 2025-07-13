@@ -11,7 +11,8 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -108,7 +109,7 @@ impl OcrTestClient {
             return Err(format!("Upload failed: {}", response.text().await?).into());
         }
         
-        let document: DocumentResponse = response.json().await?;
+        let document: DocumentUploadResponse = response.json().await?;
         Ok((document.id, content.to_string()))
     }
     
@@ -195,7 +196,7 @@ impl OcrTestClient {
                         return Err(format!("Upload failed: {}", response.text().await?).into());
                     }
                     
-                    let document: DocumentResponse = response.json().await?;
+                    let document: DocumentUploadResponse = response.json().await?;
                     Ok::<(Uuid, String), Box<dyn std::error::Error>>((document.id, content_owned))
                 }
             })

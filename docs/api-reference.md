@@ -137,6 +137,22 @@ GET /api/auth/me
 Authorization: Bearer <jwt_token>
 ```
 
+#### OIDC Login (Redirect)
+
+```bash
+GET /api/auth/oidc/login
+```
+
+Redirects to the configured OIDC provider for authentication.
+
+#### OIDC Callback
+
+```bash
+GET /api/auth/oidc/callback?code=<auth_code>&state=<state>
+```
+
+Handles the callback from the OIDC provider and issues a JWT token.
+
 #### Logout
 
 ```bash
@@ -214,6 +230,128 @@ Content-Type: application/json
 
 {
   "tags": ["invoice", "paid", "2024"]
+}
+```
+
+#### Get Document Debug Information
+
+```bash
+GET /api/documents/{id}/debug
+Authorization: Bearer <jwt_token>
+```
+
+Response:
+```json
+{
+  "document_id": "550e8400-e29b-41d4-a716-446655440000",
+  "processing_pipeline": {
+    "upload": "completed",
+    "ocr_queue": "completed", 
+    "ocr_processing": "completed",
+    "validation": "completed"
+  },
+  "ocr_details": {
+    "confidence": 89.5,
+    "word_count": 342,
+    "processing_time": 4.2
+  },
+  "file_info": {
+    "mime_type": "application/pdf",
+    "size": 1048576,
+    "pages": 3
+  }
+}
+```
+
+#### Get Document Thumbnail
+
+```bash
+GET /api/documents/{id}/thumbnail
+Authorization: Bearer <jwt_token>
+```
+
+#### Get Document OCR Text
+
+```bash
+GET /api/documents/{id}/ocr
+Authorization: Bearer <jwt_token>
+```
+
+#### Get Document Processed Image
+
+```bash
+GET /api/documents/{id}/processed-image
+Authorization: Bearer <jwt_token>
+```
+
+#### View Document in Browser
+
+```bash
+GET /api/documents/{id}/view
+Authorization: Bearer <jwt_token>
+```
+
+#### Get Failed Documents
+
+```bash
+GET /api/documents/failed?limit=50&offset=0
+Authorization: Bearer <jwt_token>
+```
+
+Query parameters:
+- `limit` - Number of results (default: 50)
+- `offset` - Pagination offset
+- `stage` - Filter by failure stage
+- `reason` - Filter by failure reason
+
+#### View Failed Document
+
+```bash
+GET /api/documents/failed/{id}/view
+Authorization: Bearer <jwt_token>
+```
+
+#### Get Duplicate Documents
+
+```bash
+GET /api/documents/duplicates?limit=50&offset=0
+Authorization: Bearer <jwt_token>
+```
+
+#### Delete Low Confidence Documents
+
+```bash
+POST /api/documents/delete-low-confidence
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "confidence_threshold": 70.0,
+  "preview_only": false
+}
+```
+
+#### Delete Failed OCR Documents
+
+```bash
+POST /api/documents/delete-failed-ocr
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "preview_only": false
+}
+```
+
+#### Bulk Delete Documents
+
+```bash
+DELETE /api/documents
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "document_ids": ["550e8400-e29b-41d4-a716-446655440000", "..."]
 }
 ```
 
@@ -301,10 +439,10 @@ Response:
 }
 ```
 
-#### Reprocess Document
+#### Retry OCR Processing
 
 ```bash
-POST /api/documents/{id}/reprocess
+POST /api/documents/{id}/retry-ocr
 Authorization: Bearer <jwt_token>
 ```
 
@@ -312,6 +450,53 @@ Authorization: Bearer <jwt_token>
 
 ```bash
 GET /api/queue/failed
+Authorization: Bearer <jwt_token>
+```
+
+#### Get Queue Statistics
+
+```bash
+GET /api/queue/stats
+Authorization: Bearer <jwt_token>
+```
+
+Response:
+```json
+{
+  "pending_count": 15,
+  "processing_count": 3,
+  "failed_count": 2,
+  "completed_today": 127,
+  "average_processing_time_seconds": 4.5,
+  "queue_health": "healthy"
+}
+```
+
+#### Requeue Failed Items
+
+```bash
+POST /api/queue/requeue/failed
+Authorization: Bearer <jwt_token>
+```
+
+#### Enqueue Pending Documents
+
+```bash
+POST /api/queue/enqueue-pending
+Authorization: Bearer <jwt_token>
+```
+
+#### Pause OCR Processing
+
+```bash
+POST /api/queue/pause
+Authorization: Bearer <jwt_token>
+```
+
+#### Resume OCR Processing
+
+```bash
+POST /api/queue/resume
 Authorization: Bearer <jwt_token>
 ```
 
@@ -388,6 +573,119 @@ Authorization: Bearer <jwt_token>
 
 ```bash
 POST /api/sources/{id}/sync
+Authorization: Bearer <jwt_token>
+```
+
+#### Stop Source Sync
+
+```bash
+POST /api/sources/{id}/sync/stop
+Authorization: Bearer <jwt_token>
+```
+
+#### Test Source Connection
+
+```bash
+POST /api/sources/{id}/test
+Authorization: Bearer <jwt_token>
+```
+
+#### Estimate Source Crawl
+
+```bash
+POST /api/sources/{id}/estimate
+Authorization: Bearer <jwt_token>
+```
+
+#### Estimate Crawl with Configuration
+
+```bash
+POST /api/sources/estimate
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "source_type": "webdav",
+  "config": {
+    "url": "https://example.com/webdav",
+    "username": "user",
+    "password": "pass"
+  }
+}
+```
+
+#### Test Connection with Configuration
+
+```bash
+POST /api/sources/test-connection
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "source_type": "webdav", 
+  "config": {
+    "url": "https://example.com/webdav",
+    "username": "user",
+    "password": "pass"
+  }
+}
+```
+
+### WebDAV Endpoints
+
+#### Test WebDAV Connection
+
+```bash
+POST /api/webdav/test-connection
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "url": "https://example.com/webdav",
+  "username": "user",
+  "password": "pass"
+}
+```
+
+#### Estimate WebDAV Crawl
+
+```bash
+POST /api/webdav/estimate-crawl
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "url": "https://example.com/webdav",
+  "username": "user", 
+  "password": "pass"
+}
+```
+
+#### Get WebDAV Sync Status
+
+```bash
+GET /api/webdav/sync-status
+Authorization: Bearer <jwt_token>
+```
+
+#### Start WebDAV Sync
+
+```bash
+POST /api/webdav/start-sync
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "url": "https://example.com/webdav",
+  "username": "user",
+  "password": "pass"
+}
+```
+
+#### Cancel WebDAV Sync
+
+```bash
+POST /api/webdav/cancel-sync
 Authorization: Bearer <jwt_token>
 ```
 
@@ -469,30 +767,147 @@ DELETE /api/users/{id}
 Authorization: Bearer <jwt_token>
 ```
 
-## WebSocket API
+### Notifications Endpoints
 
-Connect to receive real-time updates:
+#### List Notifications
 
-```javascript
-const ws = new WebSocket('ws://localhost:8000/ws');
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Event:', data);
-};
-
-// Authenticate
-ws.send(JSON.stringify({
-  type: 'auth',
-  token: 'your_jwt_token'
-}));
+```bash
+GET /api/notifications?limit=50&offset=0
+Authorization: Bearer <jwt_token>
 ```
 
-Event types:
-- `document.uploaded` - New document uploaded
-- `ocr.completed` - OCR processing completed
-- `ocr.failed` - OCR processing failed
-- `source.sync.completed` - Source sync finished
+#### Get Notification Summary
+
+```bash
+GET /api/notifications/summary
+Authorization: Bearer <jwt_token>
+```
+
+Response:
+```json
+{
+  "unread_count": 5,
+  "total_count": 23,
+  "latest_notification": {
+    "id": 1,
+    "type": "ocr_completed",
+    "message": "OCR processing completed for document.pdf",
+    "created_at": "2024-01-01T12:00:00Z"
+  }
+}
+```
+
+#### Mark Notification as Read
+
+```bash
+POST /api/notifications/{id}/read
+Authorization: Bearer <jwt_token>
+```
+
+#### Mark All Notifications as Read
+
+```bash
+POST /api/notifications/read-all
+Authorization: Bearer <jwt_token>
+```
+
+#### Delete Notification
+
+```bash
+DELETE /api/notifications/{id}
+Authorization: Bearer <jwt_token>
+```
+
+### Ignored Files Endpoints
+
+#### List Ignored Files
+
+```bash
+GET /api/ignored-files?limit=50&offset=0
+Authorization: Bearer <jwt_token>
+```
+
+Query parameters:
+- `limit` - Number of results (default: 50)
+- `offset` - Pagination offset
+- `filename` - Filter by filename
+- `source_type` - Filter by source type
+
+#### Get Ignored Files Statistics
+
+```bash
+GET /api/ignored-files/stats
+Authorization: Bearer <jwt_token>
+```
+
+Response:
+```json
+{
+  "total_ignored_files": 42,
+  "total_size_bytes": 104857600,
+  "most_recent_ignored_at": "2024-01-01T12:00:00Z"
+}
+```
+
+#### Get Ignored File Details
+
+```bash
+GET /api/ignored-files/{id}
+Authorization: Bearer <jwt_token>
+```
+
+#### Remove File from Ignored List
+
+```bash
+DELETE /api/ignored-files/{id}
+Authorization: Bearer <jwt_token>
+```
+
+#### Bulk Remove Files from Ignored List
+
+```bash
+DELETE /api/ignored-files/bulk-delete
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "ignored_file_ids": [1, 2, 3, 4]
+}
+```
+
+### Metrics Endpoints
+
+#### Get System Metrics
+
+```bash
+GET /api/metrics
+Authorization: Bearer <jwt_token>
+```
+
+#### Get Prometheus Metrics
+
+```bash
+GET /metrics
+```
+
+Returns Prometheus-formatted metrics (no authentication required).
+
+### Health Check
+
+#### Health Check
+
+```bash
+GET /api/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-01T12:00:00Z",
+  "version": "1.0.0"
+}
+```
 
 ## Examples
 
@@ -602,7 +1017,12 @@ curl -X GET http://localhost:8000/api/documents/550e8400-e29b-41d4-a716-44665544
 
 The complete OpenAPI specification is available at:
 ```
-GET /api/openapi.json
+GET /api-docs/openapi.json
+```
+
+Interactive Swagger UI documentation is available at:
+```
+GET /swagger-ui
 ```
 
 You can use this with tools like Swagger UI or to generate client libraries.

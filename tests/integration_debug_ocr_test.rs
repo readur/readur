@@ -6,9 +6,9 @@ use reqwest::Client;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use uuid::Uuid;
 
-use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -82,19 +82,24 @@ async fn debug_ocr_content() {
     
     println!("✅ User logged in successfully");
     
-    // Upload 2 documents with very distinctive content
-    let doc1_content = "DOCUMENT-ONE-UNIQUE-SIGNATURE-12345-ALPHA";
-    let doc2_content = "DOCUMENT-TWO-UNIQUE-SIGNATURE-67890-BETA";
+    // Upload 2 test images that should trigger OCR processing
+    let test_image1_path = "tests/test_images/test1.png";
+    let test_image2_path = "tests/test_images/test2.jpg";
     
-    let part1 = reqwest::multipart::Part::text(doc1_content.to_string())
-        .file_name("debug_doc1.txt".to_string())
-        .mime_str("text/plain")
+    let image1_data = std::fs::read(test_image1_path)
+        .expect("Should be able to read test image 1");
+    let image2_data = std::fs::read(test_image2_path)
+        .expect("Should be able to read test image 2");
+    
+    let part1 = reqwest::multipart::Part::bytes(image1_data)
+        .file_name("test1.png".to_string())
+        .mime_str("image/png")
         .expect("Valid mime type");
     let form1 = reqwest::multipart::Form::new().part("file", part1);
     
-    let part2 = reqwest::multipart::Part::text(doc2_content.to_string())
-        .file_name("debug_doc2.txt".to_string())
-        .mime_str("text/plain")
+    let part2 = reqwest::multipart::Part::bytes(image2_data)
+        .file_name("test2.jpg".to_string())
+        .mime_str("image/jpeg")
         .expect("Valid mime type");
     let form2 = reqwest::multipart::Form::new().part("file", part2);
     
@@ -109,6 +114,13 @@ async fn debug_ocr_content() {
         .await
         .expect("Upload should work");
     
+    println!("📤 Document 1 upload response status: {}", doc1_response.status());
+    if !doc1_response.status().is_success() {
+        let status = doc1_response.status();
+        let error_text = doc1_response.text().await.unwrap_or_else(|_| "No response body".to_string());
+        panic!("Document 1 upload failed with status {}: {}", status, error_text);
+    }
+    
     let doc2_response = client
         .post(&format!("{}/api/documents", get_base_url()))
         .header("Authorization", format!("Bearer {}", token))
@@ -117,8 +129,15 @@ async fn debug_ocr_content() {
         .await
         .expect("Upload should work");
     
-    let doc1: DocumentResponse = doc1_response.json().await.expect("Valid JSON");
-    let doc2: DocumentResponse = doc2_response.json().await.expect("Valid JSON");
+    println!("📤 Document 2 upload response status: {}", doc2_response.status());
+    if !doc2_response.status().is_success() {
+        let status = doc2_response.status();
+        let error_text = doc2_response.text().await.unwrap_or_else(|_| "No response body".to_string());
+        panic!("Document 2 upload failed with status {}: {}", status, error_text);
+    }
+    
+    let doc1: DocumentUploadResponse = doc1_response.json().await.expect("Valid JSON for doc1");
+    let doc2: DocumentUploadResponse = doc2_response.json().await.expect("Valid JSON for doc2");
     
     println!("📄 Document 1: {}", doc1.id);
     println!("📄 Document 2: {}", doc2.id);
@@ -127,8 +146,15 @@ async fn debug_ocr_content() {
     let start = Instant::now();
     let mut doc1_completed = false;
     let mut doc2_completed = false;
+    let mut last_status_print = Instant::now();
     
     while start.elapsed() < TIMEOUT && (!doc1_completed || !doc2_completed) {
+        // Print progress every 10 seconds
+        if last_status_print.elapsed() >= Duration::from_secs(10) {
+            println!("⏳ OCR processing... elapsed: {:?}, Doc1: {}, Doc2: {}", 
+                start.elapsed(), doc1_completed, doc2_completed);
+            last_status_print = Instant::now();
+        }
         // Check document 1
         if !doc1_completed {
             let response = client
@@ -140,10 +166,14 @@ async fn debug_ocr_content() {
             
             if response.status().is_success() {
                 let ocr_data: Value = response.json().await.expect("Valid JSON");
-                if ocr_data["ocr_status"].as_str() == Some("completed") {
+                let current_status = ocr_data["ocr_status"].as_str().unwrap_or("unknown");
+                println!("📊 Document 1 OCR status: {}", current_status);
+                if current_status == "completed" {
                     doc1_completed = true;
                     println!("✅ Document 1 OCR completed");
                 }
+            } else {
+                println!("❌ Document 1 OCR endpoint returned: {}", response.status());
             }
         }
         
@@ -158,10 +188,14 @@ async fn debug_ocr_content() {
             
             if response.status().is_success() {
                 let ocr_data: Value = response.json().await.expect("Valid JSON");
-                if ocr_data["ocr_status"].as_str() == Some("completed") {
+                let current_status = ocr_data["ocr_status"].as_str().unwrap_or("unknown");
+                println!("📊 Document 2 OCR status: {}", current_status);
+                if current_status == "completed" {
                     doc2_completed = true;
                     println!("✅ Document 2 OCR completed");
                 }
+            } else {
+                println!("❌ Document 2 OCR endpoint returned: {}", response.status());
             }
         }
         
@@ -169,6 +203,10 @@ async fn debug_ocr_content() {
     }
     
     if !doc1_completed || !doc2_completed {
+        println!("❌ OCR TIMEOUT DETAILS:");
+        println!("  ⏱️  Total elapsed time: {:?}", start.elapsed());
+        println!("  📄 Document 1 completed: {}", doc1_completed);
+        println!("  📄 Document 2 completed: {}", doc2_completed);
         panic!("OCR did not complete within timeout");
     }
     
@@ -193,54 +231,40 @@ async fn debug_ocr_content() {
     println!("\n🔍 DETAILED OCR ANALYSIS:");
     println!("=====================================");
     
-    println!("\n📋 Document 1 Analysis:");
-    println!("  - Expected content: {}", doc1_content);
+    println!("\n📋 Document 1 Analysis (test1.png):");
     println!("  - OCR status: {}", doc1_ocr["ocr_status"].as_str().unwrap_or("unknown"));
     println!("  - OCR text: {:?}", doc1_ocr["ocr_text"]);
     println!("  - OCR text length: {}", doc1_ocr["ocr_text"].as_str().unwrap_or("").len());
     println!("  - OCR confidence: {:?}", doc1_ocr["ocr_confidence"]);
     println!("  - OCR word count: {:?}", doc1_ocr["ocr_word_count"]);
     
-    println!("\n📋 Document 2 Analysis:");
-    println!("  - Expected content: {}", doc2_content);
+    println!("\n📋 Document 2 Analysis (test2.jpg):");
     println!("  - OCR status: {}", doc2_ocr["ocr_status"].as_str().unwrap_or("unknown"));
     println!("  - OCR text: {:?}", doc2_ocr["ocr_text"]);
     println!("  - OCR text length: {}", doc2_ocr["ocr_text"].as_str().unwrap_or("").len());
     println!("  - OCR confidence: {:?}", doc2_ocr["ocr_confidence"]);
     println!("  - OCR word count: {:?}", doc2_ocr["ocr_word_count"]);
     
-    // Check for corruption
+    // Check for basic OCR functionality
     let doc1_text = doc1_ocr["ocr_text"].as_str().unwrap_or("");
     let doc2_text = doc2_ocr["ocr_text"].as_str().unwrap_or("");
     
-    let doc1_has_own_signature = doc1_text.contains("DOCUMENT-ONE-UNIQUE-SIGNATURE-12345-ALPHA");
-    let doc1_has_other_signature = doc1_text.contains("DOCUMENT-TWO-UNIQUE-SIGNATURE-67890-BETA");
-    let doc2_has_own_signature = doc2_text.contains("DOCUMENT-TWO-UNIQUE-SIGNATURE-67890-BETA");
-    let doc2_has_other_signature = doc2_text.contains("DOCUMENT-ONE-UNIQUE-SIGNATURE-12345-ALPHA");
-    
-    println!("\n🚨 CORRUPTION ANALYSIS:");
-    println!("  Doc1 has own signature: {}", doc1_has_own_signature);
-    println!("  Doc1 has Doc2's signature: {}", doc1_has_other_signature);
-    println!("  Doc2 has own signature: {}", doc2_has_own_signature);
-    println!("  Doc2 has Doc1's signature: {}", doc2_has_other_signature);
+    println!("\n🔍 OCR ANALYSIS:");
+    println!("  Document 1 has OCR text: {}", !doc1_text.is_empty());
+    println!("  Document 2 has OCR text: {}", !doc2_text.is_empty());
+    println!("  Documents have different content: {}", doc1_text != doc2_text);
     
     if doc1_text == doc2_text && !doc1_text.is_empty() {
         println!("❌ IDENTICAL OCR TEXT DETECTED - Documents have the same content!");
+        println!("This suggests potential OCR corruption or cross-contamination.");
     }
     
     if doc1_text.is_empty() && doc2_text.is_empty() {
-        println!("❌ EMPTY OCR TEXT - Both documents have no OCR content!");
+        println!("⚠️  EMPTY OCR TEXT - Both documents have no OCR content!");
+        println!("This might be expected if the test images contain no readable text.");
     }
     
-    if !doc1_has_own_signature || !doc2_has_own_signature {
-        println!("❌ MISSING SIGNATURES - Documents don't contain their expected content!");
-    }
-    
-    if doc1_has_other_signature || doc2_has_other_signature {
-        println!("❌ CROSS-CONTAMINATION - Documents contain each other's content!");
-    }
-    
-    if doc1_has_own_signature && doc2_has_own_signature && !doc1_has_other_signature && !doc2_has_other_signature {
-        println!("✅ NO CORRUPTION DETECTED - All documents have correct content!");
+    if !doc1_text.is_empty() && !doc2_text.is_empty() && doc1_text != doc2_text {
+        println!("✅ OCR PROCESSING SUCCESSFUL - Documents have different content!");
     }
 }

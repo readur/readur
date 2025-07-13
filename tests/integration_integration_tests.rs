@@ -6,11 +6,12 @@
  */
 
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse, DocumentResponse};
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -95,7 +96,7 @@ impl TestClient {
     }
     
     /// Upload a test document
-    async fn upload_document(&self, content: &str, filename: &str) -> Result<DocumentResponse, Box<dyn std::error::Error>> {
+    async fn upload_document(&self, content: &str, filename: &str) -> Result<DocumentUploadResponse, Box<dyn std::error::Error>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let part = reqwest::multipart::Part::text(content.to_string())
@@ -115,7 +116,7 @@ impl TestClient {
             return Err(format!("Upload failed: {}", response.text().await?).into());
         }
         
-        let document: DocumentResponse = response.json().await?;
+        let document: DocumentUploadResponse = response.json().await?;
         Ok(document)
     }
     
@@ -133,9 +134,15 @@ impl TestClient {
             
             if response.status().is_success() {
                 let response_json: serde_json::Value = response.json().await?;
-                let documents = response_json.get("documents")
-                    .and_then(|docs| docs.as_array())
-                    .ok_or("Invalid response format: missing documents array")?;
+                let documents = if let Some(docs_array) = response_json.get("documents").and_then(|d| d.as_array()) {
+                    // Documents are in a "documents" key
+                    docs_array
+                } else if let Some(docs_array) = response_json.as_array() {
+                    // Response is directly an array of documents
+                    docs_array
+                } else {
+                    return Err("Invalid response format: missing documents array".into());
+                };
                 
                 for doc_value in documents {
                     let doc: DocumentResponse = serde_json::from_value(doc_value.clone())?;
@@ -216,10 +223,8 @@ Technology: Rust + Axum + SQLx"#;
     
     // Validate document response structure using our types
     assert!(!document.filename.is_empty());
-    assert!(!document.original_filename.is_empty());
     assert!(document.file_size > 0);
     assert_eq!(document.mime_type, "text/plain");
-    assert!(document.ocr_status.is_some());
     
     // Wait for OCR processing
     let ocr_completed = client.wait_for_ocr_completion(&document.id.to_string()).await
@@ -233,7 +238,7 @@ Technology: Rust + Axum + SQLx"#;
         .expect("Failed to retrieve OCR text");
     
     // Validate OCR response structure
-    assert_eq!(ocr_data["document_id"], document.id.to_string());
+    assert_eq!(ocr_data["id"], document.id.to_string());
     assert_eq!(ocr_data["filename"], document.filename);
     assert!(ocr_data["has_ocr_text"].as_bool().unwrap_or(false));
     
@@ -342,9 +347,15 @@ async fn test_document_list_structure() {
     let response_json: serde_json::Value = response.json().await
         .expect("Failed to parse response JSON");
     
-    let documents_array = response_json.get("documents")
-        .and_then(|docs| docs.as_array())
-        .expect("Failed to find documents array in response");
+    let documents_array = if let Some(docs_array) = response_json.get("documents").and_then(|d| d.as_array()) {
+        // Documents are in a "documents" key
+        docs_array
+    } else if let Some(docs_array) = response_json.as_array() {
+        // Response is directly an array of documents
+        docs_array
+    } else {
+        panic!("Failed to find documents array in response");
+    };
     
     let documents: Vec<DocumentResponse> = documents_array.iter()
         .map(|doc_value| serde_json::from_value(doc_value.clone()))
@@ -352,7 +363,7 @@ async fn test_document_list_structure() {
         .expect("Failed to parse documents as DocumentResponse");
     
     // Find our uploaded document
-    let found_doc = documents.iter().find(|d| d.id == document.id)
+    let found_doc = documents.iter().find(|d| d.id.to_string() == document.id.to_string())
         .expect("Uploaded document should be in list");
     
     // Validate structure matches our types

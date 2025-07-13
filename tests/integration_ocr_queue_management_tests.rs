@@ -17,6 +17,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
+use readur::routes::documents::types::{DocumentUploadResponse, PaginatedDocumentsResponse};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -155,7 +156,7 @@ impl OCRQueueTestClient {
     }
     
     /// Upload a document for OCR processing
-    async fn upload_document(&self, content: &str, filename: &str) -> Result<DocumentResponse, Box<dyn std::error::Error + Send + Sync>> {
+    async fn upload_document(&self, content: &str, filename: &str) -> Result<DocumentUploadResponse, Box<dyn std::error::Error + Send + Sync>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let part = reqwest::multipart::Part::text(content.to_string())
@@ -178,14 +179,14 @@ impl OCRQueueTestClient {
             return Err(format!("Upload failed: {}", text).into());
         }
         
-        let document: DocumentResponse = response.json().await?;
-        println!("📄 Document uploaded: {} (filename: {}, has_ocr_text: {}, ocr_status: {:?})", 
-                 document.id, filename, document.has_ocr_text, document.ocr_status);
+        let document: DocumentUploadResponse = response.json().await?;
+        println!("📄 Document uploaded: {} (filename: {}, size: {})", 
+                 document.id, filename, document.file_size);
         Ok(document)
     }
     
     /// Upload multiple documents concurrently
-    async fn upload_multiple_documents(&self, count: usize, base_content: &str) -> Result<Vec<DocumentResponse>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn upload_multiple_documents(&self, count: usize, base_content: &str) -> Result<Vec<DocumentUploadResponse>, Box<dyn std::error::Error + Send + Sync>> {
         let mut handles = Vec::new();
         
         for i in 0..count {
@@ -226,10 +227,8 @@ impl OCRQueueTestClient {
                 .await?;
             
             if response.status().is_success() {
-                let response_json: serde_json::Value = response.json().await?;
-                let documents: Vec<DocumentResponse> = serde_json::from_value(
-                    response_json["documents"].clone()
-                )?;
+                let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+                let documents = paginated_response.documents;
                 
                 for (i, doc_id) in document_ids.iter().enumerate() {
                     if !completed_status[i] {
@@ -277,10 +276,8 @@ impl OCRQueueTestClient {
             return Err(format!("Get documents failed: {}", response.text().await?).into());
         }
         
-        let response_json: serde_json::Value = response.json().await?;
-        let documents: Vec<DocumentResponse> = serde_json::from_value(
-            response_json["documents"].clone()
-        )?;
+        let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+        let documents = paginated_response.documents;
         Ok(documents)
     }
 }

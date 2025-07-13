@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use tokio::fs;
 use uuid::Uuid;
 use tracing::{info, warn, error};
@@ -9,7 +8,7 @@ use tracing::{info, warn, error};
 use crate::models::Document;
 
 #[cfg(feature = "ocr")]
-use image::{DynamicImage, ImageFormat, imageops::FilterType, Rgb, RgbImage, Rgba, ImageBuffer};
+use image::{DynamicImage, ImageFormat, imageops::FilterType};
 
 #[derive(Clone)]
 pub struct FileService {
@@ -160,6 +159,12 @@ impl FileService {
         file_hash: Option<String>,
         original_created_at: Option<chrono::DateTime<chrono::Utc>>,
         original_modified_at: Option<chrono::DateTime<chrono::Utc>>,
+        source_path: Option<String>,
+        source_type: Option<String>,
+        source_id: Option<Uuid>,
+        file_permissions: Option<i32>,
+        file_owner: Option<String>,
+        file_group: Option<String>,
         source_metadata: Option<serde_json::Value>,
     ) -> Document {
         Document {
@@ -177,6 +182,8 @@ impl FileService {
             ocr_status: Some("pending".to_string()),
             ocr_error: None,
             ocr_completed_at: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
             tags: Vec::new(),
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -184,6 +191,12 @@ impl FileService {
             file_hash,
             original_created_at,
             original_modified_at,
+            source_path,
+            source_type,
+            source_id,
+            file_permissions,
+            file_owner,
+            file_group,
             source_metadata,
         }
     }

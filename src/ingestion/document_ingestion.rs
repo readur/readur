@@ -9,10 +9,10 @@
 use uuid::Uuid;
 use sha2::{Digest, Sha256};
 use tracing::{debug, info, warn};
-use chrono::Utc;
 use serde_json;
+use chrono::Utc;
 
-use crate::models::{Document, FileInfo};
+use crate::models::{Document, FileIngestionInfo};
 use crate::db::Database;
 use crate::services::file_service::FileService;
 
@@ -54,6 +54,15 @@ pub struct DocumentIngestionRequest {
     /// Optional metadata from source file system
     pub original_created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub original_modified_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Original file path in source system
+    pub source_path: Option<String>,
+    /// File permissions from source system (Unix mode bits)
+    pub file_permissions: Option<i32>,
+    /// File owner from source system
+    pub file_owner: Option<String>,
+    /// File group from source system
+    pub file_group: Option<String>,
+    /// Additional metadata from source system (EXIF, PDF metadata, etc.)
     pub source_metadata: Option<serde_json::Value>,
 }
 
@@ -67,8 +76,8 @@ impl DocumentIngestionService {
         Self { db, file_service }
     }
 
-    /// Extract metadata from FileInfo for storage in document
-    fn extract_metadata_from_file_info(file_info: &FileInfo) -> (Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, Option<serde_json::Value>) {
+    /// Extract metadata from FileIngestionInfo for storage in document
+    fn extract_metadata_from_file_info(file_info: &FileIngestionInfo) -> (Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, Option<serde_json::Value>) {
         let original_created_at = file_info.created_at;
         let original_modified_at = file_info.last_modified;
         
@@ -112,6 +121,9 @@ impl DocumentIngestionService {
     pub async fn ingest_document(&self, request: DocumentIngestionRequest) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
         let file_hash = self.calculate_file_hash(&request.file_data);
         let file_size = request.file_data.len() as i64;
+        
+        // Clone source_type early for error handling
+        let source_type_for_error = request.source_type.clone();
 
         debug!(
             "Ingesting document: {} for user {} (hash: {}, size: {} bytes, policy: {:?})",
@@ -165,28 +177,34 @@ impl DocumentIngestionService {
                     warn!("Failed to save file {}: {}", request.filename, e);
                     
                     // Create failed document record for storage failure
-                    if let Err(failed_err) = self.db.create_failed_document(
-                        request.user_id,
-                        request.filename.clone(),
-                        Some(request.original_filename.clone()),
-                        None, // original_path
-                        None, // file_path (couldn't save)
-                        Some(file_size),
-                        Some(file_hash.clone()),
-                        Some(request.mime_type.clone()),
-                        None, // content
-                        Vec::new(), // tags
-                        None, // ocr_text
-                        None, // ocr_confidence
-                        None, // ocr_word_count
-                        None, // ocr_processing_time_ms
-                        "storage_error".to_string(),
-                        "storage".to_string(),
-                        None, // existing_document_id
-                        request.source_type.unwrap_or_else(|| "upload".to_string()),
-                        Some(e.to_string()),
-                        None, // retry_count
-                    ).await {
+                    let failed_document = crate::models::FailedDocument {
+                        id: Uuid::new_v4(),
+                        user_id: request.user_id,
+                        filename: request.filename.clone(),
+                        original_filename: Some(request.original_filename.clone()),
+                        original_path: None,
+                        file_path: None, // couldn't save
+                        file_size: Some(file_size),
+                        file_hash: Some(file_hash.clone()),
+                        mime_type: Some(request.mime_type.clone()),
+                        content: None,
+                        tags: Vec::new(),
+                        ocr_text: None,
+                        ocr_confidence: None,
+                        ocr_word_count: None,
+                        ocr_processing_time_ms: None,
+                        failure_reason: "storage_error".to_string(),
+                        failure_stage: "storage".to_string(),
+                        existing_document_id: None,
+                        ingestion_source: source_type_for_error.clone().unwrap_or_else(|| "upload".to_string()),
+                        error_message: Some(e.to_string()),
+                        retry_count: Some(0),
+                        last_retry_at: None,
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    };
+                    
+                    if let Err(failed_err) = self.db.create_failed_document(failed_document).await {
                         warn!("Failed to create failed document record for storage error: {}", failed_err);
                     }
                     
@@ -205,6 +223,12 @@ impl DocumentIngestionService {
             Some(file_hash.clone()),
             request.original_created_at,
             request.original_modified_at,
+            request.source_path,
+            request.source_type,
+            request.source_id,
+            request.file_permissions,
+            request.file_owner,
+            request.file_group,
             request.source_metadata,
         );
 
@@ -239,28 +263,34 @@ impl DocumentIngestionService {
                           request.filename, &file_hash[..8], e);
                     
                     // Create failed document record for database creation failure
-                    if let Err(failed_err) = self.db.create_failed_document(
-                        request.user_id,
-                        request.filename.clone(),
-                        Some(request.original_filename.clone()),
-                        None, // original_path
-                        Some(file_path.clone()), // file was saved successfully
-                        Some(file_size),
-                        Some(file_hash.clone()),
-                        Some(request.mime_type.clone()),
-                        None, // content
-                        Vec::new(), // tags
-                        None, // ocr_text
-                        None, // ocr_confidence
-                        None, // ocr_word_count
-                        None, // ocr_processing_time_ms
-                        "database_error".to_string(),
-                        "ingestion".to_string(),
-                        None, // existing_document_id
-                        request.source_type.unwrap_or_else(|| "upload".to_string()),
-                        Some(e.to_string()),
-                        None, // retry_count
-                    ).await {
+                    let failed_document = crate::models::FailedDocument {
+                        id: Uuid::new_v4(),
+                        user_id: request.user_id,
+                        filename: request.filename.clone(),
+                        original_filename: Some(request.original_filename.clone()),
+                        original_path: None,
+                        file_path: Some(file_path.clone()), // file was saved successfully
+                        file_size: Some(file_size),
+                        file_hash: Some(file_hash.clone()),
+                        mime_type: Some(request.mime_type.clone()),
+                        content: None,
+                        tags: Vec::new(),
+                        ocr_text: None,
+                        ocr_confidence: None,
+                        ocr_word_count: None,
+                        ocr_processing_time_ms: None,
+                        failure_reason: "database_error".to_string(),
+                        failure_stage: "ingestion".to_string(),
+                        existing_document_id: None,
+                        ingestion_source: source_type_for_error.clone().unwrap_or_else(|| "upload".to_string()),
+                        error_message: Some(e.to_string()),
+                        retry_count: Some(0),
+                        last_retry_at: None,
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    };
+                    
+                    if let Err(failed_err) = self.db.create_failed_document(failed_document).await {
                         warn!("Failed to create failed document record for database error: {}", failed_err);
                     }
                     
@@ -285,10 +315,10 @@ impl DocumentIngestionService {
         format!("{:x}", result)
     }
 
-    /// Ingest document from source with FileInfo metadata
+    /// Ingest document from source with FileIngestionInfo metadata
     pub async fn ingest_from_file_info(
         &self,
-        file_info: &FileInfo,
+        file_info: &FileIngestionInfo,
         file_data: Vec<u8>,
         user_id: Uuid,
         deduplication_policy: DeduplicationPolicy,
@@ -309,6 +339,10 @@ impl DocumentIngestionService {
             source_id,
             original_created_at,
             original_modified_at,
+            source_path: Some(file_info.path.clone()),
+            file_permissions: file_info.permissions.map(|p| p as i32),
+            file_owner: file_info.owner.clone(),
+            file_group: file_info.group.clone(),
             source_metadata,
         };
 
@@ -334,6 +368,10 @@ impl DocumentIngestionService {
             source_id: None,
             original_created_at: None,
             original_modified_at: None,
+            source_path: None, // Direct uploads don't have a source path
+            file_permissions: None, // Direct uploads don't preserve permissions
+            file_owner: None, // Direct uploads don't preserve owner
+            file_group: None, // Direct uploads don't preserve group
             source_metadata: None,
         };
 
@@ -361,6 +399,10 @@ impl DocumentIngestionService {
             source_id: Some(source_id),
             original_created_at: None,
             original_modified_at: None,
+            source_path: None, // Source sync files don't have a source path
+            file_permissions: None, // Source sync files don't preserve permissions
+            file_owner: None, // Source sync files don't preserve owner
+            file_group: None, // Source sync files don't preserve group
             source_metadata: None,
         };
 
@@ -387,6 +429,10 @@ impl DocumentIngestionService {
             source_id: Some(webdav_source_id),
             original_created_at: None,
             original_modified_at: None,
+            source_path: None, // WebDAV files don't have a source path in this method
+            file_permissions: None, // WebDAV files don't preserve permissions in this method
+            file_owner: None, // WebDAV files don't preserve owner in this method
+            file_group: None, // WebDAV files don't preserve group in this method
             source_metadata: None,
         };
 
@@ -412,6 +458,10 @@ impl DocumentIngestionService {
             source_id: None,
             original_created_at: None,
             original_modified_at: None,
+            source_path: None, // Batch files don't have a source path
+            file_permissions: None, // Batch files don't preserve permissions
+            file_owner: None, // Batch files don't preserve owner
+            file_group: None, // Batch files don't preserve group
             source_metadata: None,
         };
 

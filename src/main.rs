@@ -1,12 +1,13 @@
 use axum::{
+    extract::DefaultBodyLimit,
     routing::get,
     Router,
 };
-use sqlx::Row;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
 use tracing::{info, error, warn};
 use anyhow;
+use sqlx::{Row, Column};
 
 use readur::{config::Config, db::Database, AppState, *};
 
@@ -52,17 +53,18 @@ fn determine_static_files_path() -> std::path::PathBuf {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging with custom filters to reduce spam from pdf_extract crate
+    // Initialize logging with custom filters to reduce spam from noisy crates
     // Users can override with RUST_LOG environment variable, e.g.:
-    // RUST_LOG=debug cargo run                    (enable debug for all)
-    // RUST_LOG=readur=debug,pdf_extract=error     (debug for readur, suppress pdf_extract)
-    // RUST_LOG=pdf_extract=off                    (completely silence pdf_extract)
+    // RUST_LOG=debug cargo run                                          (enable debug for all)
+    // RUST_LOG=readur=debug,pdf_extract=error,sqlx::postgres::notice=off (debug for readur, suppress spam)
+    // RUST_LOG=sqlx::postgres::notice=debug                             (show PostgreSQL notices for debugging)
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| {
             // Default filter when RUST_LOG is not set
             tracing_subscriber::EnvFilter::new("info")
-                .add_directive("pdf_extract=error".parse().unwrap()) // Suppress pdf_extract WARN spam
-                .add_directive("readur=info".parse().unwrap())       // Keep our app logs at info
+                .add_directive("pdf_extract=error".parse().unwrap())           // Suppress pdf_extract WARN spam
+                .add_directive("sqlx::postgres::notice=warn".parse().unwrap()) // Suppress PostgreSQL NOTICE spam  
+                .add_directive("readur=info".parse().unwrap())                 // Keep our app logs at info
         });
     
     tracing_subscriber::fmt()
@@ -107,8 +109,10 @@ async fn main() -> anyhow::Result<()> {
         } else {
             "unknown"
         };
+        // if we get the username, let's now mask it to get just the first and last character
+        let masked_username = format!("{}{}", &username[..1], &username[username.len() - 1..]);
         
-        format!("{}://{}:***@{}", protocol, username, host_part)
+        format!("{}://{}:***@{}", protocol, masked_username, host_part)
     } else {
         "Invalid database URL format".to_string()
     };
@@ -173,85 +177,161 @@ async fn main() -> anyhow::Result<()> {
     // Run SQLx migrations
     info!("Running SQLx migrations...");
     let migrations = sqlx::migrate!("./migrations");
-    info!("Found {} migrations", migrations.migrations.len());
+    let total_migrations = migrations.migrations.len();
     
-    for migration in migrations.migrations.iter() {
-        info!("Migration available: {} - {}", migration.version, migration.description);
+    if total_migrations > 0 {
+        // Verify migrations are in correct chronological order
+        let mut is_ordered = true;
+        let mut prev_version = 0i64;
+        
+        for migration in migrations.migrations.iter() {
+            if migration.version <= prev_version {
+                error!("❌ Migration {} is out of order (previous: {})", migration.version, prev_version);
+                is_ordered = false;
+            }
+            prev_version = migration.version;
+        }
+        
+        if is_ordered {
+            info!("✅ {} migrations found in correct chronological order", total_migrations);
+        } else {
+            error!("❌ Migrations are not in chronological order - this may cause issues");
+        }
+        
+        // Log first and last migration for reference
+        let first_migration = &migrations.migrations[0];
+        let last_migration = &migrations.migrations[total_migrations - 1];
+        
+        info!("Migration range: {} ({}) → {} ({})", 
+              first_migration.version, first_migration.description,
+              last_migration.version, last_migration.description);
+    } else {
+        info!("No migrations found");
     }
     
-    // Check current migration status
-    let applied_result = sqlx::query("SELECT version, description FROM _sqlx_migrations ORDER BY version")
-        .fetch_all(web_db.get_pool())
-        .await;
+    // Enhanced migration execution with detailed logging
+    info!("🔄 Starting migration execution...");
     
-    match applied_result {
-        Ok(rows) => {
-            info!("Currently applied migrations:");
-            for row in rows {
-                let version: i64 = row.get("version");
-                let description: String = row.get("description");
-                info!("  - {} {}", version, description);
-            }
-        }
-        Err(e) => {
-            info!("No existing migrations found (this is normal for first run): {}", e);
-        }
+    // Check current database migration state
+    let applied_migrations = sqlx::query_scalar::<_, i64>(
+        "SELECT version FROM _sqlx_migrations ORDER BY version"
+    )
+    .fetch_all(web_db.get_pool())
+    .await
+    .unwrap_or_default();
+    
+    if !applied_migrations.is_empty() {
+        info!("📋 {} migrations already applied in database", applied_migrations.len());
+        info!("📋 Latest applied migration: {}", applied_migrations.last().unwrap_or(&0));
+    } else {
+        info!("📋 No migrations previously applied - fresh database");
     }
     
-    // Check if ocr_error column exists
-    let check_column = sqlx::query("SELECT column_name FROM information_schema.columns WHERE table_name = 'documents' AND column_name = 'ocr_error'")
-        .fetch_optional(web_db.get_pool())
-        .await;
-    
-    match check_column {
-        Ok(Some(_)) => info!("✅ ocr_error column exists"),
-        Ok(None) => {
-            error!("❌ ocr_error column is missing! Migration 006 may not have been applied.");
-            // Try to add the column manually as a fallback
-            info!("Attempting to add missing columns...");
-            if let Err(e) = sqlx::query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_error TEXT")
-                .execute(web_db.get_pool())
-                .await {
-                error!("Failed to add ocr_error column: {}", e);
-            }
-            if let Err(e) = sqlx::query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_completed_at TIMESTAMPTZ")
-                .execute(web_db.get_pool())
-                .await {
-                error!("Failed to add ocr_completed_at column: {}", e);
-            }
-            info!("Fallback column addition completed");
-        }
-        Err(e) => error!("Failed to check for ocr_error column: {}", e),
+    // List all migrations that will be processed
+    info!("📝 Migrations to process:");
+    for (i, migration) in migrations.migrations.iter().enumerate() {
+        let status = if applied_migrations.contains(&migration.version) {
+            "✅ APPLIED"
+        } else {
+            "⏳ PENDING"
+        };
+        info!("  {}: {} ({}) [{}]", 
+              i + 1, migration.version, migration.description, status);
     }
     
     let result = migrations.run(web_db.get_pool()).await;
     match result {
-        Ok(_) => info!("SQLx migrations completed successfully"),
-        Err(e) => {
-            error!("Failed to run SQLx migrations: {}", e);
-            return Err(e.into());
-        }
-    }
-    
-    // Debug: Check what columns exist in documents table
-    let columns_result = sqlx::query(
-        "SELECT column_name FROM information_schema.columns 
-         WHERE table_name = 'documents' AND table_schema = 'public'
-         ORDER BY ordinal_position"
-    )
-    .fetch_all(web_db.get_pool())
-    .await;
-    
-    match columns_result {
-        Ok(rows) => {
-            info!("Columns in documents table:");
-            for row in rows {
-                let column_name: String = row.get("column_name");
-                info!("  - {}", column_name);
+        Ok(_) => {
+            info!("✅ SQLx migrations completed successfully");
+            
+            // Verify final migration state
+            let final_applied = sqlx::query_scalar::<_, i64>(
+                "SELECT version FROM _sqlx_migrations ORDER BY version"
+            )
+            .fetch_all(web_db.get_pool())
+            .await
+            .unwrap_or_default();
+            
+            info!("📊 Final migration state: {} total applied", final_applied.len());
+            if let Some(latest) = final_applied.last() {
+                info!("📊 Latest migration now: {}", latest);
+            }
+            
+            // Verify the get_queue_statistics function has the correct implementation
+            let function_check = sqlx::query_scalar::<_, Option<String>>(
+                r#"
+                SELECT pg_get_functiondef(p.oid)
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = 'public' AND p.proname = 'get_queue_statistics'
+                "#
+            )
+            .fetch_one(web_db.get_pool())
+            .await;
+            
+            match function_check {
+                Ok(Some(def)) => {
+                    info!("📋 get_queue_statistics function definition retrieved");
+                    
+                    // Debug: print the actual function definition
+                    info!("🔍 Function definition (first 500 chars): {}", 
+                          def.chars().take(500).collect::<String>());
+                    
+                    // Check if it contains the correct logic from our latest migration
+                    let has_documents_subquery = def.contains("FROM documents") && def.contains("ocr_status = 'completed'");
+                    let has_cast_statements = def.contains("CAST(");
+                    
+                    info!("🔍 Function content analysis:");
+                    info!("  Has documents subquery: {}", has_documents_subquery);
+                    info!("  Has CAST statements: {}", has_cast_statements);
+                    
+                    if has_documents_subquery && has_cast_statements {
+                        info!("✅ get_queue_statistics function has correct logic (uses documents table subquery with CAST)");
+                    } else {
+                        error!("❌ get_queue_statistics function has unexpected structure");
+                    }
+                    
+                    // Test the function execution at startup
+                    info!("🧪 Testing function execution at startup...");
+                    match sqlx::query("SELECT * FROM get_queue_statistics()").fetch_one(web_db.get_pool()).await {
+                        Ok(test_result) => {
+                            info!("✅ Function executes successfully at startup");
+                            let columns = test_result.columns();
+                            info!("🔍 Function returns {} columns at startup:", columns.len());
+                            for (i, column) in columns.iter().enumerate() {
+                                info!("  Column {}: name='{}', type='{:?}'", i, column.name(), column.type_info());
+                            }
+                        }
+                        Err(e) => {
+                            error!("❌ Function fails to execute at startup: {}", e);
+                        }
+                    }
+                }
+                Ok(None) => error!("❌ get_queue_statistics function does not exist after migration"),
+                Err(e) => error!("❌ Failed to verify get_queue_statistics function: {}", e),
             }
         }
         Err(e) => {
-            error!("Failed to check columns: {}", e);
+            error!("❌ CRITICAL: SQLx migrations failed!");
+            error!("Migration error: {}", e);
+            
+            // Get detailed error information
+            error!("🔍 Migration failure details:");
+            error!("  Error type: {}", std::any::type_name_of_val(&e));
+            error!("  Error message: {}", e);
+            
+            // Try to get the current migration state even after failure
+            match sqlx::query_scalar::<_, i64>(
+                "SELECT version FROM _sqlx_migrations ORDER BY version DESC LIMIT 1"
+            )
+            .fetch_optional(web_db.get_pool())
+            .await {
+                Ok(Some(latest)) => error!("  Last successful migration: {}", latest),
+                Ok(None) => error!("  No migrations were applied successfully"),
+                Err(table_err) => error!("  Could not read migration table: {}", table_err),
+            }
+            
+            return Err(e.into());
         }
     }
     
@@ -362,8 +442,11 @@ async fn main() -> anyhow::Result<()> {
     // Start OCR queue worker on dedicated OCR runtime using shared queue service
     let queue_worker = shared_queue_service.clone();
     ocr_runtime.spawn(async move {
+        info!("🚀 Starting OCR queue worker...");
         if let Err(e) = queue_worker.start_worker().await {
-            error!("OCR queue worker error: {}", e);
+            error!("❌ OCR queue worker error: {}", e);
+        } else {
+            info!("✅ OCR queue worker started successfully");
         }
     });
     
@@ -450,6 +533,7 @@ async fn main() -> anyhow::Result<()> {
                 .precompressed_br()
                 .fallback(ServeFile::new(&index_file))
         )
+        .layer(DefaultBodyLimit::max(config.max_file_size_mb as usize * 1024 * 1024))
         .layer(CorsLayer::permissive())
         .with_state(web_state.clone());
 

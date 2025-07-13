@@ -43,6 +43,10 @@ impl Database {
             total_size_bytes: row.get("total_size_bytes"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            validation_status: row.get("validation_status"),
+            last_validation_at: row.get("last_validation_at"),
+            validation_score: row.get("validation_score"),
+            validation_issues: row.get("validation_issues"),
         })
     }
 
@@ -72,6 +76,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             })),
             None => Ok(None),
         }
@@ -103,6 +111,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             });
         }
 
@@ -164,6 +176,10 @@ impl Database {
             total_size_bytes: row.get("total_size_bytes"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            validation_status: row.get("validation_status"),
+            last_validation_at: row.get("last_validation_at"),
+            validation_score: row.get("validation_score"),
+            validation_issues: row.get("validation_issues"),
         })
     }
 
@@ -254,6 +270,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             });
         }
 
@@ -261,12 +281,13 @@ impl Database {
     }
 
     pub async fn get_sources_for_sync(&self) -> Result<Vec<crate::models::Source>> {
-        info!("🔍 Loading sources from database for sync check...");
+        crate::debug_log!("DB_SOURCES", "🔍 Loading sources from database for sync check...");
         
         let rows = sqlx::query(
             r#"SELECT id, user_id, name, source_type, enabled, config, status, 
                last_sync_at, last_error, last_error_at, total_files_synced, 
-               total_files_pending, total_size_bytes, created_at, updated_at
+               total_files_pending, total_size_bytes, created_at, updated_at,
+               validation_status, last_validation_at, validation_score, validation_issues
                FROM sources 
                WHERE enabled = true AND status != 'syncing'
                ORDER BY last_sync_at ASC NULLS FIRST"#
@@ -278,7 +299,7 @@ impl Database {
             e
         })?;
         
-        info!("📊 Database query returned {} sources for sync processing", rows.len());
+        crate::debug_log!("DB_SOURCES", "📊 Database query returned {} sources for sync processing", rows.len());
 
         let mut sources = Vec::new();
         for (index, row) in rows.iter().enumerate() {
@@ -287,7 +308,7 @@ impl Database {
             let source_type_str: String = row.get("source_type");
             let config_json: serde_json::Value = row.get("config");
             
-            info!("📋 Processing source {}: ID={}, Name='{}', Type={}", 
+            crate::debug_log!("DB_SOURCES", "📋 Processing source {}: ID={}, Name='{}', Type={}", 
                   index + 1, source_id, source_name, source_type_str);
             
             // Log config structure for debugging
@@ -331,6 +352,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             };
             
             sources.push(source);
@@ -343,7 +368,8 @@ impl Database {
         let row = sqlx::query(
             r#"SELECT id, user_id, name, source_type, enabled, config, status, 
                last_sync_at, last_error, last_error_at, total_files_synced, 
-               total_files_pending, total_size_bytes, created_at, updated_at
+               total_files_pending, total_size_bytes, created_at, updated_at,
+               validation_status, last_validation_at, validation_score, validation_issues
                FROM sources WHERE id = $1"#
         )
         .bind(source_id)
@@ -369,6 +395,10 @@ impl Database {
                 total_size_bytes: row.get("total_size_bytes"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+                validation_status: row.get("validation_status"),
+                last_validation_at: row.get("last_validation_at"),
+                validation_score: row.get("validation_score"),
+                validation_issues: row.get("validation_issues"),
             }))
         } else {
             Ok(None)

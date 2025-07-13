@@ -1,22 +1,22 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { screen } from '@testing-library/react';
+import { renderWithAuthenticatedUser } from '../../test/test-utils';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../test/comprehensive-mocks';
 import SearchPage from '../SearchPage';
 
-// Mock API functions
-vi.mock('../../services/api', () => ({
-  searchDocuments: vi.fn(() => Promise.resolve({ 
-    results: [], 
-    total: 0, 
-    page: 1, 
-    page_size: 20 
-  })),
-  getSettings: vi.fn(() => Promise.resolve({})),
-}));
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
 
-const SearchPageWrapper = ({ children }: { children: React.ReactNode }) => {
-  return <BrowserRouter>{children}</BrowserRouter>;
-};
+// Mock API services comprehensively
+vi.mock('../../services/api', async () => {
+  const actual = await vi.importActual('../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    ...apiMocks,
+  };
+});
 
 describe('SearchPage', () => {
   beforeEach(() => {
@@ -24,11 +24,7 @@ describe('SearchPage', () => {
   });
 
   test('renders search page structure', () => {
-    render(
-      <SearchPageWrapper>
-        <SearchPage />
-      </SearchPageWrapper>
-    );
+    renderWithAuthenticatedUser(<SearchPage />);
 
     // Check for page title
     expect(screen.getByText('Search Documents')).toBeInTheDocument();
@@ -38,11 +34,7 @@ describe('SearchPage', () => {
   });
 
   test('renders search input', () => {
-    render(
-      <SearchPageWrapper>
-        <SearchPage />
-      </SearchPageWrapper>
-    );
+    renderWithAuthenticatedUser(<SearchPage />);
 
     const searchInput = screen.getByPlaceholderText(/search/i);
     expect(searchInput).toBeInTheDocument();
@@ -142,11 +134,7 @@ describe('SearchPage', () => {
   // });
 
   test('renders main search container', () => {
-    const { container } = render(
-      <SearchPageWrapper>
-        <SearchPage />
-      </SearchPageWrapper>
-    );
+    const { container } = renderWithAuthenticatedUser(<SearchPage />);
 
     expect(container.firstChild).toBeInTheDocument();
   });

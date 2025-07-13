@@ -94,6 +94,7 @@ jobs:
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch
+          DEBUG: 1
 
       - name: Wait for server to be ready
         run: |
@@ -146,6 +147,7 @@ jobs:
           WATCH_FOLDER: ./watch
           RUST_LOG: debug
           RUST_BACKTRACE: 1
+          DEBUG: 1
 
       - name: Print server logs on failure
         if: failure()

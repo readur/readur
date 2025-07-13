@@ -1,31 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { type OcrResponse, type Document } from '../api';
+import { createMockApiServices } from '../../test/test-utils';
 
-// Create mock functions for the documentService
-const mockGetOcrText = vi.fn();
-const mockList = vi.fn();
-const mockUpload = vi.fn();
-const mockDownload = vi.fn();
-const mockDeleteLowConfidence = vi.fn();
-const mockGetFailedOcrDocuments = vi.fn();
-const mockGetFailedDocuments = vi.fn();
-const mockRetryOcr = vi.fn();
+// Use centralized API mocking
+const mockServices = createMockApiServices();
+const mockDocumentService = mockServices.documentService;
 
-// Mock the entire api module
+// Mock the entire api module with centralized mocks
 vi.mock('../api', async () => {
   const actual = await vi.importActual('../api');
   return {
     ...actual,
-    documentService: {
-      getOcrText: mockGetOcrText,
-      list: mockList,
-      upload: mockUpload,
-      download: mockDownload,
-      deleteLowConfidence: mockDeleteLowConfidence,
-      getFailedOcrDocuments: mockGetFailedOcrDocuments,
-      getFailedDocuments: mockGetFailedDocuments,
-      retryOcr: mockRetryOcr,
-    },
+    documentService: mockDocumentService,
   };
 });
 
@@ -60,7 +46,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockGetOcrText.mockResolvedValue(mockResponse);
+      mockDocumentService.getOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-123');
 
@@ -94,7 +80,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockGetOcrText.mockResolvedValue(mockResponse);
+      mockDocumentService.getOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-456');
 
@@ -126,7 +112,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockGetOcrText.mockResolvedValue(mockResponse);
+      mockDocumentService.getOcrText.mockResolvedValue(mockResponse);
 
       const result = await documentService.getOcrText('doc-789');
 
@@ -137,21 +123,21 @@ describe('documentService', () => {
     });
 
     it('should make correct API call', async () => {
-      mockGetOcrText.mockResolvedValue({ data: mockOcrResponse });
+      mockDocumentService.getOcrText.mockResolvedValue({ data: mockOcrResponse });
 
       await documentService.getOcrText('doc-123');
 
-      expect(mockGetOcrText).toHaveBeenCalledWith('doc-123');
+      expect(mockDocumentService.getOcrText).toHaveBeenCalledWith('doc-123');
     });
 
     it('should handle network errors', async () => {
-      mockGetOcrText.mockRejectedValue(new Error('Network Error'));
+      mockDocumentService.getOcrText.mockRejectedValue(new Error('Network Error'));
 
       await expect(documentService.getOcrText('doc-123')).rejects.toThrow('Network Error');
     });
 
     it('should handle 404 errors for non-existent documents', async () => {
-      mockGetOcrText.mockRejectedValue({
+      mockDocumentService.getOcrText.mockRejectedValue({
         response: {
           status: 404,
           data: { error: 'Document not found' },
@@ -166,7 +152,7 @@ describe('documentService', () => {
     });
 
     it('should handle 401 unauthorized errors', async () => {
-      mockGetOcrText.mockRejectedValue({
+      mockDocumentService.getOcrText.mockRejectedValue({
         response: {
           status: 401,
           data: { error: 'Unauthorized' },
@@ -222,7 +208,7 @@ describe('documentService', () => {
         config: {},
       };
 
-      mockList.mockResolvedValue(mockResponse);
+      mockDocumentService.list.mockResolvedValue(mockResponse);
 
       const result = await documentService.list(50, 0);
 
@@ -249,24 +235,24 @@ describe('documentService', () => {
         ocr_status: 'pending',
       };
 
-      mockUpload.mockResolvedValue({ data: mockUploadResponse });
+      mockDocumentService.upload.mockResolvedValue({ data: mockUploadResponse });
 
       const result = await documentService.upload(mockFile);
 
       expect(result.data).toEqual(mockUploadResponse);
-      expect(mockUpload).toHaveBeenCalledWith(mockFile);
+      expect(mockDocumentService.upload).toHaveBeenCalledWith(mockFile);
     });
   });
 
   describe('download', () => {
     it('should download file as blob', async () => {
       const mockBlob = new Blob(['file content'], { type: 'application/pdf' });
-      mockDownload.mockResolvedValue({ data: mockBlob });
+      mockDocumentService.download.mockResolvedValue({ data: mockBlob });
 
       const result = await documentService.download('doc-123');
 
       expect(result.data).toEqual(mockBlob);
-      expect(mockDownload).toHaveBeenCalledWith('doc-123');
+      expect(mockDocumentService.download).toHaveBeenCalledWith('doc-123');
     });
   });
 });
@@ -338,11 +324,11 @@ describe('documentService.deleteLowConfidence', () => {
       config: {},
     };
 
-    mockDeleteLowConfidence.mockResolvedValue(mockDeleteResponse);
+    mockDocumentService.deleteLowConfidence.mockResolvedValue(mockDeleteResponse);
 
     const result = await documentService.deleteLowConfidence(30.0, false);
 
-    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(30.0, false);
+    expect(mockDocumentService.deleteLowConfidence).toHaveBeenCalledWith(30.0, false);
     expect(result.data.success).toBe(true);
     expect(result.data.deleted_count).toBe(3);
     expect(result.data.matched_count).toBe(3);
@@ -364,11 +350,11 @@ describe('documentService.deleteLowConfidence', () => {
       config: {},
     };
 
-    mockDeleteLowConfidence.mockResolvedValue(mockPreviewResponse);
+    mockDocumentService.deleteLowConfidence.mockResolvedValue(mockPreviewResponse);
 
     const result = await documentService.deleteLowConfidence(50.0, true);
 
-    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(50.0, true);
+    expect(mockDocumentService.deleteLowConfidence).toHaveBeenCalledWith(50.0, true);
     expect(result.data.success).toBe(true);
     expect(result.data.preview).toBe(true);
     expect(result.data.matched_count).toBe(5);
@@ -389,11 +375,11 @@ describe('documentService.deleteLowConfidence', () => {
       config: {},
     };
 
-    mockDeleteLowConfidence.mockResolvedValue(mockEmptyResponse);
+    mockDocumentService.deleteLowConfidence.mockResolvedValue(mockEmptyResponse);
 
     const result = await documentService.deleteLowConfidence(10.0, false);
 
-    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(10.0, false);
+    expect(mockDocumentService.deleteLowConfidence).toHaveBeenCalledWith(10.0, false);
     expect(result.data.success).toBe(true);
     expect(result.data.deleted_count).toBe(0);
   });
@@ -411,23 +397,23 @@ describe('documentService.deleteLowConfidence', () => {
       config: {},
     };
 
-    mockDeleteLowConfidence.mockResolvedValue(mockErrorResponse);
+    mockDocumentService.deleteLowConfidence.mockResolvedValue(mockErrorResponse);
 
     const result = await documentService.deleteLowConfidence(-10.0, false);
 
-    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(-10.0, false);
+    expect(mockDocumentService.deleteLowConfidence).toHaveBeenCalledWith(-10.0, false);
     expect(result.data.success).toBe(false);
     expect(result.data.message).toContain('must be between 0.0 and 100.0');
   });
 
   it('should handle API errors gracefully', async () => {
     const mockError = new Error('Network error');
-    mockDeleteLowConfidence.mockRejectedValue(mockError);
+    mockDocumentService.deleteLowConfidence.mockRejectedValue(mockError);
 
     await expect(documentService.deleteLowConfidence(30.0, false))
       .rejects.toThrow('Network error');
 
-    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(30.0, false);
+    expect(mockDocumentService.deleteLowConfidence).toHaveBeenCalledWith(30.0, false);
   });
 
   it('should use correct default values', async () => {
@@ -439,12 +425,12 @@ describe('documentService.deleteLowConfidence', () => {
       config: {},
     };
 
-    mockDeleteLowConfidence.mockResolvedValue(mockResponse);
+    mockDocumentService.deleteLowConfidence.mockResolvedValue(mockResponse);
 
     // Test with explicit false value (the default)
     await documentService.deleteLowConfidence(40.0, false);
 
-    expect(mockDeleteLowConfidence).toHaveBeenCalledWith(40.0, false);
+    expect(mockDocumentService.deleteLowConfidence).toHaveBeenCalledWith(40.0, false);
   });
 
   it('should handle partial deletion failures', async () => {
@@ -465,7 +451,7 @@ describe('documentService.deleteLowConfidence', () => {
       config: {},
     };
 
-    mockDeleteLowConfidence.mockResolvedValue(mockPartialFailureResponse);
+    mockDocumentService.deleteLowConfidence.mockResolvedValue(mockPartialFailureResponse);
 
     const result = await documentService.deleteLowConfidence(25.0, false);
 
@@ -485,15 +471,15 @@ describe('documentService.deleteLowConfidence', () => {
       config: {},
     };
 
-    mockDeleteLowConfidence.mockResolvedValue(mockResponse);
+    mockDocumentService.deleteLowConfidence.mockResolvedValue(mockResponse);
 
     // Test various confidence values
     const testValues = [0.0, 0.1, 30.5, 50.0, 99.9, 100.0];
     
     for (const confidence of testValues) {
-      mockDeleteLowConfidence.mockClear();
+      mockDocumentService.deleteLowConfidence.mockClear();
       await documentService.deleteLowConfidence(confidence, true);
-      expect(mockDeleteLowConfidence).toHaveBeenCalledWith(confidence, true);
+      expect(mockDocumentService.deleteLowConfidence).toHaveBeenCalledWith(confidence, true);
     }
   });
 });
@@ -542,11 +528,11 @@ describe('documentService.getFailedOcrDocuments', () => {
       config: {},
     };
 
-    mockGetFailedOcrDocuments.mockResolvedValue(mockResponse);
+    mockDocumentService.getFailedOcrDocuments.mockResolvedValue(mockResponse);
 
     const result = await documentService.getFailedOcrDocuments(50, 0);
 
-    expect(mockGetFailedOcrDocuments).toHaveBeenCalledWith(50, 0);
+    expect(mockDocumentService.getFailedOcrDocuments).toHaveBeenCalledWith(50, 0);
     expect(result.data).toEqual(mockFailedOcrResponse);
     expect(result.data.documents).toHaveLength(2);
     expect(result.data.documents[0].failure_stage).toBe('ocr');
@@ -554,19 +540,19 @@ describe('documentService.getFailedOcrDocuments', () => {
   });
 
   it('should handle pagination parameters correctly', async () => {
-    mockGetFailedOcrDocuments.mockResolvedValue({ data: mockFailedOcrResponse });
+    mockDocumentService.getFailedOcrDocuments.mockResolvedValue({ data: mockFailedOcrResponse });
 
     await documentService.getFailedOcrDocuments(25, 10);
 
-    expect(mockGetFailedOcrDocuments).toHaveBeenCalledWith(25, 10);
+    expect(mockDocumentService.getFailedOcrDocuments).toHaveBeenCalledWith(25, 10);
   });
 
   it('should use default pagination when not specified', async () => {
-    mockGetFailedOcrDocuments.mockResolvedValue({ data: mockFailedOcrResponse });
+    mockDocumentService.getFailedOcrDocuments.mockResolvedValue({ data: mockFailedOcrResponse });
 
     await documentService.getFailedOcrDocuments();
 
-    expect(mockGetFailedOcrDocuments).toHaveBeenCalledWith();
+    expect(mockDocumentService.getFailedOcrDocuments).toHaveBeenCalledWith();
   });
 
   it('should handle empty results', async () => {
@@ -576,7 +562,7 @@ describe('documentService.getFailedOcrDocuments', () => {
       statistics: { total_failed: 0, failure_categories: [] }
     };
 
-    mockGetFailedOcrDocuments.mockResolvedValue({ data: emptyResponse });
+    mockDocumentService.getFailedOcrDocuments.mockResolvedValue({ data: emptyResponse });
 
     const result = await documentService.getFailedOcrDocuments();
 
@@ -587,7 +573,7 @@ describe('documentService.getFailedOcrDocuments', () => {
 
   it('should handle API errors', async () => {
     const mockError = new Error('Network error');
-    mockGetFailedOcrDocuments.mockRejectedValue(mockError);
+    mockDocumentService.getFailedOcrDocuments.mockRejectedValue(mockError);
 
     await expect(documentService.getFailedOcrDocuments()).rejects.toThrow('Network error');
   });
@@ -638,11 +624,11 @@ describe('documentService.getFailedDocuments', () => {
   };
 
   it('should fetch failed documents with default parameters', async () => {
-    mockGetFailedDocuments.mockResolvedValue({ data: mockFailedDocumentsResponse });
+    mockDocumentService.getFailedDocuments.mockResolvedValue({ data: mockFailedDocumentsResponse });
 
     const result = await documentService.getFailedDocuments();
 
-    expect(mockGetFailedDocuments).toHaveBeenCalledWith();
+    expect(mockDocumentService.getFailedDocuments).toHaveBeenCalledWith();
     expect(result.data).toEqual(mockFailedDocumentsResponse);
     expect(result.data.documents).toHaveLength(3);
   });
@@ -655,11 +641,11 @@ describe('documentService.getFailedDocuments', () => {
       statistics: { total_failed: 1, failure_categories: [{ reason: 'low_ocr_confidence', display_name: 'Low OCR Confidence', count: 1 }] }
     };
 
-    mockGetFailedDocuments.mockResolvedValue({ data: ocrOnlyResponse });
+    mockDocumentService.getFailedDocuments.mockResolvedValue({ data: ocrOnlyResponse });
 
     const result = await documentService.getFailedDocuments(25, 0, 'ocr');
 
-    expect(mockGetFailedDocuments).toHaveBeenCalledWith(25, 0, 'ocr');
+    expect(mockDocumentService.getFailedDocuments).toHaveBeenCalledWith(25, 0, 'ocr');
     expect(result.data.documents).toHaveLength(1);
     expect(result.data.documents[0].failure_stage).toBe('ocr');
   });
@@ -672,11 +658,11 @@ describe('documentService.getFailedDocuments', () => {
       statistics: { total_failed: 1, failure_categories: [{ reason: 'duplicate_content', display_name: 'Duplicate Content', count: 1 }] }
     };
 
-    mockGetFailedDocuments.mockResolvedValue({ data: duplicateOnlyResponse });
+    mockDocumentService.getFailedDocuments.mockResolvedValue({ data: duplicateOnlyResponse });
 
     const result = await documentService.getFailedDocuments(25, 0, undefined, 'duplicate_content');
 
-    expect(mockGetFailedDocuments).toHaveBeenCalledWith(25, 0, undefined, 'duplicate_content');
+    expect(mockDocumentService.getFailedDocuments).toHaveBeenCalledWith(25, 0, undefined, 'duplicate_content');
     expect(result.data.documents).toHaveLength(1);
     expect(result.data.documents[0].failure_reason).toBe('duplicate_content');
   });
@@ -689,22 +675,22 @@ describe('documentService.getFailedDocuments', () => {
       statistics: { total_failed: 1, failure_categories: [{ reason: 'low_ocr_confidence', display_name: 'Low OCR Confidence', count: 1 }] }
     };
 
-    mockGetFailedDocuments.mockResolvedValue({ data: filteredResponse });
+    mockDocumentService.getFailedDocuments.mockResolvedValue({ data: filteredResponse });
 
     const result = await documentService.getFailedDocuments(25, 0, 'ocr', 'low_ocr_confidence');
 
-    expect(mockGetFailedDocuments).toHaveBeenCalledWith(25, 0, 'ocr', 'low_ocr_confidence');
+    expect(mockDocumentService.getFailedDocuments).toHaveBeenCalledWith(25, 0, 'ocr', 'low_ocr_confidence');
     expect(result.data.documents).toHaveLength(1);
     expect(result.data.documents[0].failure_stage).toBe('ocr');
     expect(result.data.documents[0].failure_reason).toBe('low_ocr_confidence');
   });
 
   it('should handle custom pagination', async () => {
-    mockGetFailedDocuments.mockResolvedValue({ data: mockFailedDocumentsResponse });
+    mockDocumentService.getFailedDocuments.mockResolvedValue({ data: mockFailedDocumentsResponse });
 
     await documentService.getFailedDocuments(10, 20);
 
-    expect(mockGetFailedDocuments).toHaveBeenCalledWith(10, 20);
+    expect(mockDocumentService.getFailedDocuments).toHaveBeenCalledWith(10, 20);
   });
 
   it('should handle empty results', async () => {
@@ -714,7 +700,7 @@ describe('documentService.getFailedDocuments', () => {
       statistics: { total_failed: 0, failure_categories: [] }
     };
 
-    mockGetFailedDocuments.mockResolvedValue({ data: emptyResponse });
+    mockDocumentService.getFailedDocuments.mockResolvedValue({ data: emptyResponse });
 
     const result = await documentService.getFailedDocuments();
 
@@ -737,11 +723,11 @@ describe('documentService.retryOcr', () => {
       config: {},
     };
 
-    mockRetryOcr.mockResolvedValue(mockRetryResponse);
+    mockDocumentService.retryOcr.mockResolvedValue(mockRetryResponse);
 
     const result = await documentService.retryOcr('doc-123');
 
-    expect(mockRetryOcr).toHaveBeenCalledWith('doc-123');
+    expect(mockDocumentService.retryOcr).toHaveBeenCalledWith('doc-123');
     expect(result.data.success).toBe(true);
     expect(result.data.document_id).toBe('doc-123');
   });
@@ -754,7 +740,7 @@ describe('documentService.retryOcr', () => {
       }
     };
 
-    mockRetryOcr.mockRejectedValue(mockError);
+    mockDocumentService.retryOcr.mockRejectedValue(mockError);
 
     await expect(documentService.retryOcr('non-existent-doc')).rejects.toMatchObject({
       response: { status: 404 }
@@ -762,7 +748,7 @@ describe('documentService.retryOcr', () => {
   });
 
   it('should handle network errors', async () => {
-    mockRetryOcr.mockRejectedValue(new Error('Network error'));
+    mockDocumentService.retryOcr.mockRejectedValue(new Error('Network error'));
 
     await expect(documentService.retryOcr('doc-123')).rejects.toThrow('Network error');
   });

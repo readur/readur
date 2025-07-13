@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { screen, act, render } from '@testing-library/react';
 import { NotificationProvider, useNotifications } from '../NotificationContext';
+import { renderWithProviders } from '../../test/test-utils';
 import React from 'react';
 
 // Simple test component
@@ -52,7 +53,7 @@ const SimpleTestComponent: React.FC = () => {
 };
 
 const renderWithProvider = () => {
-  return render(
+  return renderWithProviders(
     <NotificationProvider>
       <SimpleTestComponent />
     </NotificationProvider>
@@ -204,7 +205,7 @@ describe('NotificationContext - Types', () => {
   });
 
   test.each(['success', 'error', 'info', 'warning'] as const)('should handle %s notification type', (type) => {
-    render(
+    renderWithProviders(
       <NotificationProvider>
         <TypeTestComponent type={type} />
       </NotificationProvider>

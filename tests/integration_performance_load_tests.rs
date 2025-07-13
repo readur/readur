@@ -21,7 +21,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 use chrono;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
+use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::routes::documents::types::{DocumentUploadResponse, PaginatedDocumentsResponse};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -194,7 +195,7 @@ impl LoadTestClient {
     }
     
     /// Perform a timed document upload
-    async fn timed_upload(&self, content: &str, filename: &str) -> Result<(DocumentResponse, Duration), Box<dyn std::error::Error + Send + Sync>> {
+    async fn timed_upload(&self, content: &str, filename: &str) -> Result<(DocumentUploadResponse, Duration), Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
@@ -217,12 +218,12 @@ impl LoadTestClient {
             return Err(format!("Upload failed: {}", response.text().await?).into());
         }
         
-        let document: DocumentResponse = response.json().await?;
+        let document: DocumentUploadResponse = response.json().await?;
         Ok((document, elapsed))
     }
     
     /// Perform a timed document list request
-    async fn timed_list_documents(&self) -> Result<(Vec<DocumentResponse>, Duration), Box<dyn std::error::Error + Send + Sync>> {
+    async fn timed_list_documents(&self) -> Result<(Vec<Value>, Duration), Box<dyn std::error::Error + Send + Sync>> {
         let start = Instant::now();
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
@@ -238,11 +239,12 @@ impl LoadTestClient {
             return Err(format!("List documents failed: {}", response.text().await?).into());
         }
         
-        let response_json: serde_json::Value = response.json().await?;
-        let documents: Vec<DocumentResponse> = serde_json::from_value(
-            response_json["documents"].clone()
-        )?;
-        Ok((documents, elapsed))
+        let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+        let documents_array: Vec<serde_json::Value> = paginated_response.documents
+            .into_iter()
+            .map(|doc| serde_json::to_value(doc).unwrap())
+            .collect();
+        Ok((documents_array, elapsed))
     }
     
     /// Perform a timed search request

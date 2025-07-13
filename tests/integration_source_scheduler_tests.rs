@@ -90,6 +90,10 @@ impl MockDatabase {
             total_size_bytes: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
         });
         
         self.sources_for_sync = self.sources.clone();
@@ -148,6 +152,10 @@ impl MockDatabase {
             total_size_bytes: 1024,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
         });
         
         self.sources_for_sync = self.sources.clone();
@@ -235,6 +243,10 @@ async fn test_interrupted_sync_detection_webdav() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
 
     // Test that interrupted sync is detected
@@ -276,6 +288,10 @@ async fn test_interrupted_sync_detection_local_folder() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
 
     // Test config parsing for Local Folder
@@ -317,6 +333,10 @@ async fn test_interrupted_sync_detection_s3() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
 
     // Test config parsing for S3
@@ -357,6 +377,10 @@ async fn test_sync_due_calculation() {
         total_size_bytes: 1024,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
     
     // Test source that should NOT be due for sync
@@ -382,6 +406,10 @@ async fn test_sync_due_calculation() {
         total_size_bytes: 2048,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
 
     // Test that sync due calculation works correctly
@@ -423,6 +451,10 @@ async fn test_auto_sync_disabled() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
 
     // let result = scheduler.is_sync_due(&source_with_auto_sync_disabled).await;
@@ -459,6 +491,10 @@ async fn test_currently_syncing_source() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
 
     // let result = scheduler.is_sync_due(&syncing_source).await;
@@ -495,6 +531,10 @@ async fn test_invalid_sync_interval() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
 
     // let result = scheduler.is_sync_due(&invalid_interval_source).await;
@@ -529,6 +569,10 @@ async fn test_never_synced_source() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
 
     // let result = scheduler.is_sync_due(&never_synced_source).await;
@@ -654,6 +698,10 @@ async fn test_scheduler_timeout_handling() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
     
     // let result = timeout(Duration::from_secs(1), scheduler.is_sync_due(&dummy_source)).await;

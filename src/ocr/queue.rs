@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool, Row};
+use sqlx::{FromRow, PgPool, Row, Column};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Semaphore;
@@ -75,6 +75,13 @@ impl OcrQueueService {
 
     /// Add a document to the OCR queue
     pub async fn enqueue_document(&self, document_id: Uuid, priority: i32, file_size: i64) -> Result<Uuid> {
+        crate::debug_log!("OCR_QUEUE",
+            "document_id" => document_id,
+            "priority" => priority,
+            "file_size" => file_size,
+            "message" => "Enqueueing document"
+        );
+        
         let row = sqlx::query(
             r#"
             INSERT INTO ocr_queue (document_id, priority, file_size)
@@ -86,10 +93,22 @@ impl OcrQueueService {
         .bind(priority)
         .bind(file_size)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            crate::debug_error!("OCR_QUEUE", format!("Failed to insert document {} into queue: {}", document_id, e));
+            e
+        })?;
         
         let id: Uuid = row.get("id");
 
+        crate::debug_log!("OCR_QUEUE",
+            "document_id" => document_id,
+            "queue_id" => id,
+            "priority" => priority,
+            "file_size" => file_size,
+            "message" => "Successfully enqueued document"
+        );
+        
         info!("Enqueued document {} with priority {} for OCR processing", document_id, priority);
         Ok(id)
     }
@@ -127,8 +146,18 @@ impl OcrQueueService {
 
     /// Get the next item from the queue with atomic job claiming and retry logic
     pub async fn dequeue(&self) -> Result<Option<OcrQueueItem>> {
+        crate::debug_log!("OCR_QUEUE", 
+            "worker_id" => &self.worker_id,
+            "message" => "Starting dequeue operation"
+        );
+        
         // Retry up to 3 times for race condition scenarios
         for attempt in 1..=3 {
+            crate::debug_log!("OCR_QUEUE", 
+                "worker_id" => &self.worker_id,
+                "attempt" => attempt,
+                "message" => "Attempting to dequeue job"
+            );
             // Use a transaction to ensure atomic job claiming
             let mut tx = self.pool.begin().await?;
         
@@ -150,8 +179,24 @@ impl OcrQueueService {
         .await?;
 
         let job_id = match job_row {
-            Some(ref row) => row.get::<Uuid, _>("id"),
+            Some(ref row) => {
+                let job_id = row.get::<Uuid, _>("id");
+                let document_id = row.get::<Uuid, _>("document_id");
+                crate::debug_log!("OCR_QUEUE", 
+                    "worker_id" => &self.worker_id,
+                    "job_id" => job_id,
+                    "document_id" => document_id,
+                    "attempt" => attempt,
+                    "message" => "Found pending job in queue"
+                );
+                job_id
+            },
             None => {
+                crate::debug_log!("OCR_QUEUE", 
+                    "worker_id" => &self.worker_id,
+                    "attempt" => attempt,
+                    "message" => "No pending jobs found in queue"
+                );
                 // No jobs available
                 tx.rollback().await?;
                 return Ok(None);
@@ -177,10 +222,24 @@ impl OcrQueueService {
 
         if updated_rows.rows_affected() != 1 {
             // Job was claimed by another worker between SELECT and UPDATE
+            crate::debug_log!("OCR_QUEUE", 
+                "worker_id" => &self.worker_id,
+                "job_id" => job_id,
+                "attempt" => attempt,
+                "rows_affected" => updated_rows.rows_affected(),
+                "message" => "Job was claimed by another worker, retrying"
+            );
             tx.rollback().await?;
             warn!("Job {} was claimed by another worker, retrying", job_id);
-            return Ok(None);
+            continue; // Continue to next attempt instead of returning
         }
+        
+        crate::debug_log!("OCR_QUEUE", 
+            "worker_id" => &self.worker_id,
+            "job_id" => job_id,
+            "attempt" => attempt,
+            "message" => "Successfully claimed job, updating to processing state"
+        );
 
         // Step 3: Get the updated job details
         let row = sqlx::query(
@@ -547,18 +606,41 @@ impl OcrQueueService {
             "Starting OCR worker {} with {} concurrent jobs",
             self.worker_id, self.max_concurrent_jobs
         );
+        
+        crate::debug_log!("OCR_WORKER", 
+            "worker_id" => &self.worker_id,
+            "max_concurrent_jobs" => self.max_concurrent_jobs,
+            "message" => "OCR worker loop starting"
+        );
 
         loop {
             // Check if processing is paused
             if self.is_paused() {
+                crate::debug_log!("OCR_WORKER", 
+                    "worker_id" => &self.worker_id,
+                    "message" => "OCR processing is paused, waiting..."
+                );
                 info!("OCR processing is paused, waiting...");
                 sleep(Duration::from_secs(5)).await;
                 continue;
             }
+            
+            crate::debug_log!("OCR_WORKER", 
+                "worker_id" => &self.worker_id,
+                "message" => "Worker loop iteration - checking for items to process"
+            );
 
             // Check for items to process
             match self.dequeue().await {
                 Ok(Some(item)) => {
+                    crate::debug_log!("OCR_WORKER", 
+                        "worker_id" => &self.worker_id,
+                        "job_id" => item.id,
+                        "document_id" => item.document_id,
+                        "priority" => item.priority,
+                        "message" => "Dequeued job, spawning processing task"
+                    );
+                    
                     let permit = semaphore.clone().acquire_owned().await?;
                     let self_clone = self.clone();
                     let ocr_service_clone = ocr_service.clone();
@@ -586,6 +668,10 @@ impl OcrQueueService {
                     });
                 }
                 Ok(None) => {
+                    crate::debug_log!("OCR_WORKER", 
+                        "worker_id" => &self.worker_id,
+                        "message" => "No items in queue, sleeping for 5 seconds"
+                    );
                     // No items in queue or all jobs were claimed by other workers
                     // Use exponential backoff to reduce database load when queue is empty
                     sleep(Duration::from_secs(5)).await;
@@ -707,26 +793,260 @@ impl OcrQueueService {
 
     /// Get queue statistics
     pub async fn get_stats(&self) -> Result<QueueStats> {
+        tracing::debug!("OCR Queue: Starting get_stats() call");
+        
+        // First, let's check the function signature/return type
+        let function_info = sqlx::query(
+            r#"
+            SELECT 
+                p.proname as function_name,
+                pg_get_function_result(p.oid) as return_type,
+                pg_get_function_arguments(p.oid) as arguments
+            FROM pg_proc p
+            JOIN pg_namespace n ON p.pronamespace = n.oid
+            WHERE n.nspname = 'public' AND p.proname = 'get_queue_statistics'
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get function info: {}", e);
+            e
+        })?;
+
+        if let Some(info) = function_info {
+            let function_name: String = info.get("function_name");
+            let return_type: String = info.get("return_type");
+            let arguments: String = info.get("arguments");
+            tracing::debug!("Function info - name: {}, return_type: {}, arguments: {}", function_name, return_type, arguments);
+        } else {
+            tracing::error!("get_queue_statistics function not found!");
+            return Err(anyhow::anyhow!("get_queue_statistics function not found"));
+        }
+
+        tracing::debug!("OCR Queue: Calling get_queue_statistics() function");
+        
         let stats = sqlx::query(
             r#"
-            SELECT * FROM get_ocr_queue_stats()
+            SELECT * FROM get_queue_statistics()
             "#
         )
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get OCR queue stats: {}", e);
+            tracing::debug!("This indicates a function structure mismatch error");
+            e
+        })?;
+
+        tracing::debug!("OCR Queue: Successfully got result from function, analyzing structure...");
+        
+        // Debug the actual columns returned
+        let columns = stats.columns();
+        tracing::debug!("Function returned {} columns:", columns.len());
+        for (i, column) in columns.iter().enumerate() {
+            let column_name = column.name();
+            let column_type = column.type_info();
+            tracing::debug!("  Column {}: name='{}', type='{:?}'", i, column_name, column_type);
+        }
+
+        // Try to extract values with detailed logging
+        tracing::debug!("Attempting to extract pending_count...");
+        let pending_count = match stats.try_get::<i64, _>("pending_count") {
+            Ok(val) => {
+                tracing::debug!("Successfully got pending_count: {}", val);
+                val
+            }
+            Err(e) => {
+                tracing::error!("Failed to get pending_count: {}", e);
+                tracing::debug!("Trying different type for pending_count...");
+                stats.try_get::<Option<i64>, _>("pending_count")
+                    .map_err(|e2| {
+                        tracing::error!("Also failed with Option<i64>: {}", e2);
+                        e
+                    })?
+                    .unwrap_or(0)
+            }
+        };
+
+        tracing::debug!("Attempting to extract processing_count...");
+        let processing_count = match stats.try_get::<i64, _>("processing_count") {
+            Ok(val) => {
+                tracing::debug!("Successfully got processing_count: {}", val);
+                val
+            }
+            Err(e) => {
+                tracing::error!("Failed to get processing_count: {}", e);
+                stats.try_get::<Option<i64>, _>("processing_count")?.unwrap_or(0)
+            }
+        };
+
+        tracing::debug!("Attempting to extract failed_count...");
+        let failed_count = match stats.try_get::<i64, _>("failed_count") {
+            Ok(val) => {
+                tracing::debug!("Successfully got failed_count: {}", val);
+                val
+            }
+            Err(e) => {
+                tracing::error!("Failed to get failed_count: {}", e);
+                stats.try_get::<Option<i64>, _>("failed_count")?.unwrap_or(0)
+            }
+        };
+
+        tracing::debug!("Attempting to extract completed_today...");
+        let completed_today = match stats.try_get::<i64, _>("completed_today") {
+            Ok(val) => {
+                tracing::debug!("Successfully got completed_today: {}", val);
+                val
+            }
+            Err(e) => {
+                tracing::error!("Failed to get completed_today: {}", e);
+                stats.try_get::<Option<i64>, _>("completed_today")?.unwrap_or(0)
+            }
+        };
+
+        tracing::debug!("Attempting to extract avg_wait_time_minutes...");
+        let avg_wait_time_minutes = match stats.try_get::<Option<f64>, _>("avg_wait_time_minutes") {
+            Ok(val) => {
+                tracing::debug!("Successfully got avg_wait_time_minutes: {:?}", val);
+                val
+            }
+            Err(e) => {
+                tracing::error!("Failed to get avg_wait_time_minutes: {}", e);
+                // Try as string and convert
+                match stats.try_get::<Option<String>, _>("avg_wait_time_minutes") {
+                    Ok(Some(str_val)) => {
+                        let float_val = str_val.parse::<f64>().ok();
+                        tracing::debug!("Converted string '{}' to f64: {:?}", str_val, float_val);
+                        float_val
+                    }
+                    Ok(None) => None,
+                    Err(e2) => {
+                        tracing::error!("Also failed with String: {}", e2);
+                        return Err(anyhow::anyhow!("Failed to get avg_wait_time_minutes: {}", e));
+                    }
+                }
+            }
+        };
+
+        tracing::debug!("Attempting to extract oldest_pending_minutes...");
+        let oldest_pending_minutes = match stats.try_get::<Option<f64>, _>("oldest_pending_minutes") {
+            Ok(val) => {
+                tracing::debug!("Successfully got oldest_pending_minutes: {:?}", val);
+                val
+            }
+            Err(e) => {
+                tracing::error!("Failed to get oldest_pending_minutes: {}", e);
+                // Try as string and convert
+                match stats.try_get::<Option<String>, _>("oldest_pending_minutes") {
+                    Ok(Some(str_val)) => {
+                        let float_val = str_val.parse::<f64>().ok();
+                        tracing::debug!("Converted string '{}' to f64: {:?}", str_val, float_val);
+                        float_val
+                    }
+                    Ok(None) => None,
+                    Err(e2) => {
+                        tracing::error!("Also failed with String: {}", e2);
+                        return Err(anyhow::anyhow!("Failed to get oldest_pending_minutes: {}", e));
+                    }
+                }
+            }
+        };
+
+        tracing::debug!("OCR Queue: Successfully extracted all values, creating QueueStats");
 
         Ok(QueueStats {
-            pending_count: stats.get::<Option<i64>, _>("pending_count").unwrap_or(0),
-            processing_count: stats.get::<Option<i64>, _>("processing_count").unwrap_or(0),
-            failed_count: stats.get::<Option<i64>, _>("failed_count").unwrap_or(0),
-            completed_today: stats.get::<Option<i64>, _>("completed_today").unwrap_or(0),
-            avg_wait_time_minutes: stats.get("avg_wait_time_minutes"),
-            oldest_pending_minutes: stats.get("oldest_pending_minutes"),
+            pending_count,
+            processing_count,
+            failed_count,
+            completed_today,
+            avg_wait_time_minutes,
+            oldest_pending_minutes,
         })
     }
 
     /// Requeue failed items
     pub async fn requeue_failed_items(&self) -> Result<i64> {
+        tracing::debug!("Attempting to requeue failed items");
+        
+        // First check if there are any failed items to requeue
+        let failed_count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM ocr_queue
+            WHERE status = 'failed'
+              AND attempts < max_attempts
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to count failed items: {:?}", e);
+            e
+        })?;
+        
+        tracing::debug!("Found {} failed items eligible for requeue", failed_count);
+        
+        if failed_count == 0 {
+            return Ok(0);
+        }
+        
+        // Check for potential constraint violations
+        let conflict_check: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM ocr_queue q1
+            WHERE q1.status = 'failed'
+              AND q1.attempts < q1.max_attempts
+              AND EXISTS (
+                  SELECT 1 FROM ocr_queue q2
+                  WHERE q2.document_id = q1.document_id
+                    AND q2.id != q1.id
+                    AND q2.status IN ('pending', 'processing')
+              )
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to check for conflicts: {:?}", e);
+            e
+        })?;
+        
+        if conflict_check > 0 {
+            tracing::warn!("Found {} documents with existing pending/processing entries", conflict_check);
+            // Update only items that won't violate the unique constraint
+            let result = sqlx::query(
+                r#"
+                UPDATE ocr_queue
+                SET status = 'pending',
+                    attempts = 0,
+                    error_message = NULL,
+                    started_at = NULL,
+                    worker_id = NULL
+                WHERE status = 'failed'
+                  AND attempts < max_attempts
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ocr_queue q2
+                      WHERE q2.document_id = ocr_queue.document_id
+                        AND q2.id != ocr_queue.id
+                        AND q2.status IN ('pending', 'processing')
+                  )
+                "#
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error in requeue_failed_items (with conflict check): {:?}", e);
+                e
+            })?;
+            
+            let rows_affected = result.rows_affected() as i64;
+            tracing::debug!("Requeued {} failed items (skipped {} due to conflicts)", rows_affected, conflict_check);
+            return Ok(rows_affected);
+        }
+        
+        // No conflicts, proceed with normal update
         let result = sqlx::query(
             r#"
             UPDATE ocr_queue
@@ -740,9 +1060,16 @@ impl OcrQueueService {
             "#
         )
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error in requeue_failed_items: {:?}", e);
+            e
+        })?;
 
-        Ok(result.rows_affected() as i64)
+        let rows_affected = result.rows_affected() as i64;
+        tracing::debug!("Requeued {} failed items", rows_affected);
+        
+        Ok(rows_affected)
     }
 
     /// Clean up old completed items
@@ -818,28 +1145,34 @@ impl OcrQueueService {
             let file_hash: Option<String> = row.get("file_hash");
             
             // Create failed document record directly
-            if let Err(e) = self.db.create_failed_document(
+            let failed_document = crate::models::FailedDocument {
+                id: Uuid::new_v4(),
                 user_id,
                 filename,
-                Some(original_filename),
-                None, // original_path
-                Some(file_path),
-                Some(file_size),
+                original_filename: Some(original_filename),
+                original_path: None,
+                file_path: Some(file_path),
+                file_size: Some(file_size),
                 file_hash,
-                Some(mime_type),
-                None, // content
-                Vec::new(), // tags
-                None, // ocr_text
-                None, // ocr_confidence
-                None, // ocr_word_count
-                None, // ocr_processing_time_ms
-                failure_reason.to_string(),
-                "ocr".to_string(),
-                None, // existing_document_id
-                "ocr_queue".to_string(),
-                Some(error_message.to_string()),
-                Some(retry_count),
-            ).await {
+                mime_type: Some(mime_type),
+                content: None,
+                tags: Vec::new(),
+                ocr_text: None,
+                ocr_confidence: None,
+                ocr_word_count: None,
+                ocr_processing_time_ms: None,
+                failure_reason: failure_reason.to_string(),
+                failure_stage: "ocr".to_string(),
+                existing_document_id: None,
+                ingestion_source: "ocr_queue".to_string(),
+                error_message: Some(error_message.to_string()),
+                retry_count: Some(retry_count),
+                last_retry_at: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            };
+            
+            if let Err(e) = self.db.create_failed_document(failed_document).await {
                 error!("Failed to create failed document record: {}", e);
             }
         }
@@ -850,9 +1183,9 @@ impl OcrQueueService {
     /// Helper function to map OCR error strings to standardized failure reasons
     fn classify_ocr_error(error_str: &str) -> (&'static str, bool) {
         if error_str.contains("font encoding") || error_str.contains("missing unicode map") {
-            ("pdf_font_encoding", true)
+            ("pdf_parsing_error", true)  // Font encoding issues are PDF parsing problems
         } else if error_str.contains("corrupted internal structure") || error_str.contains("corrupted") {
-            ("pdf_corruption", true)
+            ("file_corrupted", true)     // Corrupted files should use file_corrupted
         } else if error_str.contains("timeout") || error_str.contains("timed out") {
             ("ocr_timeout", false)
         } else if error_str.contains("memory") || error_str.contains("out of memory") {

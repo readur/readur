@@ -5,8 +5,11 @@ import { type LabelData } from '../components/Labels/Label';
  * Test utilities for label-related tests
  */
 
+// Counter for generating unique IDs
+let labelIdCounter = 1;
+
 export const createMockLabel = (overrides: Partial<LabelData> = {}): LabelData => ({
-  id: 'test-label-1',
+  id: `test-label-${labelIdCounter++}`,
   name: 'Test Label',
   description: 'A test label',
   color: '#0969da',
@@ -21,12 +24,15 @@ export const createMockLabel = (overrides: Partial<LabelData> = {}): LabelData =
 });
 
 export const createMockSystemLabel = (overrides: Partial<LabelData> = {}): LabelData => ({
-  ...createMockLabel(),
-  id: 'system-label-1',
+  id: `system-label-${labelIdCounter++}`,
   name: 'Important',
+  description: 'A test label',
   color: '#d73a49',
+  background_color: undefined,
   icon: 'star',
   is_system: true,
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
   document_count: 10,
   source_count: 2,
   ...overrides,
@@ -213,12 +219,12 @@ export const testDataBuilders = {
    * Creates a set of labels that represent typical usage patterns
    */
   createTypicalLabelSet: (): LabelData[] => [
-    createMockSystemLabel({ name: 'Important', color: '#d73a49', icon: 'star' }),
-    createMockSystemLabel({ name: 'Work', color: '#0969da', icon: 'work' }),
-    createMockSystemLabel({ name: 'Personal', color: '#28a745', icon: 'person' }),
-    createMockLabel({ name: 'Project Alpha', color: '#8250df', icon: 'folder' }),
-    createMockLabel({ name: 'Invoices', color: '#fb8500', icon: 'receipt' }),
-    createMockLabel({ name: 'Archive', color: '#6e7781', icon: 'archive', document_count: 0 }),
+    createMockSystemLabel({ name: 'Important', description: 'High priority items', color: '#d73a49', icon: 'star' }),
+    createMockSystemLabel({ name: 'Work', description: 'Work-related documents', color: '#0969da', icon: 'work' }),
+    createMockSystemLabel({ name: 'Personal', description: 'Personal documents', color: '#28a745', icon: 'person' }),
+    createMockLabel({ name: 'Project Alpha', description: 'My personal project files', color: '#8250df', icon: 'folder' }),
+    createMockLabel({ name: 'Invoices', description: 'Financial documents', color: '#fb8500', icon: 'receipt' }),
+    createMockLabel({ name: 'Archive', description: 'Archived items', color: '#6e7781', icon: 'archive', document_count: 0 }),
   ],
   
   /**

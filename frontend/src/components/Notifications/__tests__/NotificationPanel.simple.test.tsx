@@ -1,6 +1,6 @@
-import { describe, test, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { screen } from '@testing-library/react';
+import { renderWithProviders } from '../../../test/test-utils';
 import NotificationPanel from '../NotificationPanel';
 import { NotificationProvider } from '../../../contexts/NotificationContext';
 import React from 'react';
@@ -10,7 +10,6 @@ vi.mock('date-fns', () => ({
   formatDistanceToNow: vi.fn(() => '2 minutes ago'),
 }));
 
-const theme = createTheme();
 
 const createMockAnchorEl = () => {
   const mockEl = document.createElement('div');
@@ -28,13 +27,13 @@ const createMockAnchorEl = () => {
 };
 
 describe('NotificationPanel - Simple Tests', () => {
+  beforeEach(() => {
+  });
   test('should not render when anchorEl is null', () => {
-    const { container } = render(
-      <ThemeProvider theme={theme}>
-        <NotificationProvider>
-          <NotificationPanel anchorEl={null} onClose={vi.fn()} />
-        </NotificationProvider>
-      </ThemeProvider>
+    const { container } = renderWithProviders(
+      <NotificationProvider>
+        <NotificationPanel anchorEl={null} onClose={vi.fn()} />
+      </NotificationProvider>
     );
 
     expect(container.firstChild).toBeNull();
@@ -43,12 +42,10 @@ describe('NotificationPanel - Simple Tests', () => {
   test('should render notification panel with header when anchorEl is provided', () => {
     const mockAnchorEl = createMockAnchorEl();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <NotificationProvider>
-          <NotificationPanel anchorEl={mockAnchorEl} onClose={vi.fn()} />
-        </NotificationProvider>
-      </ThemeProvider>
+    renderWithProviders(
+      <NotificationProvider>
+        <NotificationPanel anchorEl={mockAnchorEl} onClose={vi.fn()} />
+      </NotificationProvider>
     );
 
     expect(screen.getByText('Notifications')).toBeInTheDocument();
@@ -57,12 +54,10 @@ describe('NotificationPanel - Simple Tests', () => {
   test('should show empty state when no notifications', () => {
     const mockAnchorEl = createMockAnchorEl();
 
-    render(
-      <ThemeProvider theme={theme}>
-        <NotificationProvider>
-          <NotificationPanel anchorEl={mockAnchorEl} onClose={vi.fn()} />
-        </NotificationProvider>
-      </ThemeProvider>
+    renderWithProviders(
+      <NotificationProvider>
+        <NotificationPanel anchorEl={mockAnchorEl} onClose={vi.fn()} />
+      </NotificationProvider>
     );
 
     expect(screen.getByText('No notifications')).toBeInTheDocument();
@@ -71,12 +66,10 @@ describe('NotificationPanel - Simple Tests', () => {
   test('should render with theme provider correctly', () => {
     const mockAnchorEl = createMockAnchorEl();
 
-    const { container } = render(
-      <ThemeProvider theme={theme}>
-        <NotificationProvider>
-          <NotificationPanel anchorEl={mockAnchorEl} onClose={vi.fn()} />
-        </NotificationProvider>
-      </ThemeProvider>
+    const { container } = renderWithProviders(
+      <NotificationProvider>
+        <NotificationPanel anchorEl={mockAnchorEl} onClose={vi.fn()} />
+      </NotificationProvider>
     );
 
     // Should render without crashing

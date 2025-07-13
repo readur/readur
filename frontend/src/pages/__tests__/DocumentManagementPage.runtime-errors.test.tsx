@@ -1,36 +1,31 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../test/comprehensive-mocks';
+
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
+
+// Mock API services comprehensively  
+vi.mock('../../services/api', async () => {
+  const actual = await vi.importActual('../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    ...apiMocks,
+  };
+});
+
+// Import components AFTER the mocks are set up
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import DocumentManagementPage from '../DocumentManagementPage';
 import userEvent from '@testing-library/user-event';
+import DocumentManagementPage from '../DocumentManagementPage';
 
-// Create mock objects first
-const mockDocumentService = {
-  getFailedDocuments: vi.fn(),
-  getFailedOcrDocuments: vi.fn(),
-  getDuplicates: vi.fn(),
-  retryOcr: vi.fn(),
-  deleteLowConfidence: vi.fn(),
-  deleteFailedOcr: vi.fn(),
-  downloadFile: vi.fn(),
-};
-
-const mockQueueService = {
-  requeueFailed: vi.fn(),
-};
-
-const mockApi = {
-  get: vi.fn(),
-  delete: vi.fn(),
-};
-
-// Mock API with comprehensive responses
-vi.mock('../../services/api', () => ({
-  api: mockApi,
-  documentService: mockDocumentService,
-  queueService: mockQueueService,
-}));
+// Get references to the mocked modules using dynamic import
+const { api, documentService } = await import('../../services/api');
+const mockApi = api;
+const mockDocumentService = documentService;
 
 const theme = createTheme();
 
@@ -47,26 +42,11 @@ const DocumentManagementPageWrapper = ({ children }: { children: React.ReactNode
 describe('DocumentManagementPage - Runtime Error Prevention', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDocumentService.getFailedDocuments.mockClear();
-    mockDocumentService.getFailedOcrDocuments.mockClear();
-    mockDocumentService.getDuplicates.mockClear();
-    mockQueueService.requeueFailed.mockClear();
   });
 
   describe('OCR Confidence Display - Null Safety', () => {
     test('basic rendering test', async () => {
-      // Very basic test first - wait for loading to complete
-      mockDocumentService.getFailedDocuments.mockResolvedValue({
-        data: {
-          documents: [],
-          pagination: { total: 0, limit: 25, offset: 0, total_pages: 0 },
-          statistics: { total_failed: 0, by_reason: {}, by_stage: {} },
-        },
-      });
-      
-      mockApi.get.mockResolvedValue({
-        data: { total_count: 0, total_size: 0 },
-      });
+      // With axios mocked directly, all API calls should return empty data by default
 
       render(
         <DocumentManagementPageWrapper>
@@ -541,9 +521,8 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
   describe('Ignored Files Tab Functionality', () => {
     test('should render ignored files tab without errors', async () => {
-      // Mock ignored files API responses
-      const { api } = await import('../../services/api');
-      vi.mocked(api.get).mockImplementation((url) => {
+      // Setup mock responses using our already defined mocks
+      mockApi.get.mockImplementation((url) => {
         if (url.includes('/ignored-files/stats')) {
           return Promise.resolve({
             data: {
@@ -564,8 +543,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
         return Promise.resolve({ data: {} });
       });
 
-      const { documentService } = await import('../../services/api');
-      vi.mocked(documentService.getFailedDocuments).mockResolvedValueOnce({
+      mockDocumentService.getFailedDocuments.mockResolvedValueOnce({
         data: {
           documents: [],
           pagination: { total: 0, limit: 25, offset: 0, total_pages: 1 },

@@ -5,7 +5,7 @@ use quick_xml::reader::Reader;
 use std::str;
 use serde_json;
 
-use crate::models::FileInfo;
+use crate::models::FileIngestionInfo;
 
 #[derive(Debug, Default)]
 struct PropFindResponse {
@@ -24,7 +24,7 @@ struct PropFindResponse {
     metadata: Option<serde_json::Value>,
 }
 
-pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
+pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>> {
     let mut reader = Reader::from_str(xml_text);
     reader.config_mut().trim_text(true);
     
@@ -200,7 +200,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                                 // Use the metadata collected during parsing
                                 let metadata = resp.metadata;
                                 
-                                let file_info = FileInfo {
+                                let file_info = FileIngestionInfo {
                                     path: resp.href.clone(),
                                     name,
                                     size: resp.content_length.unwrap_or(0),
@@ -213,6 +213,225 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileInfo>> {
                                     owner: resp.owner.or(resp.owner_display_name),
                                     group: resp.group,
                                     metadata,
+                                };
+                                
+                                files.push(file_info);
+                            }
+                        }
+                        in_response = false;
+                        status_ok = false;
+                    }
+                    "propstat" => {
+                        in_propstat = false;
+                    }
+                    "prop" => {
+                        in_prop = false;
+                    }
+                    "resourcetype" => {
+                        in_resourcetype = false;
+                    }
+                    _ => {}
+                }
+                
+                current_element.clear();
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(anyhow!("XML parsing error: {}", e)),
+            _ => {}
+        }
+        
+        buf.clear();
+    }
+    
+    Ok(files)
+}
+
+/// Parse PROPFIND response including both files and directories
+/// This is used for shallow directory scans where we need to track directory structure
+pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<FileIngestionInfo>> {
+    let mut reader = Reader::from_str(xml_text);
+    reader.config_mut().trim_text(true);
+    
+    let mut files = Vec::new();
+    let mut current_response: Option<PropFindResponse> = None;
+    let mut current_element = String::new();
+    let mut in_response = false;
+    let mut in_propstat = false;
+    let mut in_prop = false;
+    let mut in_resourcetype = false;
+    let mut status_ok = false;
+    
+    let mut buf = Vec::new();
+    
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                let name = get_local_name(&e)?;
+                
+                match name.as_str() {
+                    "response" => {
+                        in_response = true;
+                        current_response = Some(PropFindResponse::default());
+                    }
+                    "propstat" => {
+                        in_propstat = true;
+                    }
+                    "prop" => {
+                        in_prop = true;
+                    }
+                    "resourcetype" => {
+                        in_resourcetype = true;
+                    }
+                    "collection" if in_resourcetype => {
+                        if let Some(ref mut resp) = current_response {
+                            resp.is_collection = true;
+                        }
+                    }
+                    _ => {
+                        current_element = name;
+                    }
+                }
+            }
+            Ok(Event::Text(e)) => {
+                let text = e.unescape()?.to_string();
+                
+                if in_response && !text.trim().is_empty() {
+                    if let Some(ref mut resp) = current_response {
+                        match current_element.as_str() {
+                            "href" => {
+                                resp.href = text.trim().to_string();
+                            }
+                            "displayname" => {
+                                resp.displayname = text.trim().to_string();
+                            }
+                            "getcontentlength" => {
+                                resp.content_length = text.trim().parse().ok();
+                            }
+                            "getlastmodified" => {
+                                resp.last_modified = Some(text.trim().to_string());
+                            }
+                            "getcontenttype" => {
+                                resp.content_type = Some(text.trim().to_string());
+                            }
+                            "getetag" => {
+                                resp.etag = Some(normalize_etag(&text));
+                            }
+                            "creationdate" => {
+                                resp.creation_date = Some(text.trim().to_string());
+                            }
+                            "owner" => {
+                                resp.owner = Some(text.trim().to_string());
+                            }
+                            "group" => {
+                                resp.group = Some(text.trim().to_string());
+                            }
+                            "status" if in_propstat => {
+                                // Check if status is 200 OK
+                                if text.contains("200") {
+                                    status_ok = true;
+                                }
+                            }
+                            _ => {
+                                // Store any other properties as generic metadata
+                                if !text.trim().is_empty() && in_prop {
+                                    if resp.metadata.is_none() {
+                                        resp.metadata = Some(serde_json::Value::Object(serde_json::Map::new()));
+                                    }
+                                    
+                                    if let Some(serde_json::Value::Object(ref mut map)) = resp.metadata {
+                                        match current_element.as_str() {
+                                            "permissions" | "oc:permissions" => {
+                                                resp.permissions = Some(text.trim().to_string());
+                                                map.insert("permissions_raw".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "fileid" | "oc:fileid" => {
+                                                map.insert("file_id".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "owner-id" | "oc:owner-id" => {
+                                                map.insert("owner_id".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "owner-display-name" | "oc:owner-display-name" => {
+                                                resp.owner_display_name = Some(text.trim().to_string());
+                                                map.insert("owner_display_name".to_string(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                            "has-preview" | "nc:has-preview" => {
+                                                if let Ok(val) = text.trim().parse::<bool>() {
+                                                    map.insert("has_preview".to_string(), serde_json::Value::Bool(val));
+                                                }
+                                            }
+                                            _ => {
+                                                map.insert(current_element.clone(), serde_json::Value::String(text.trim().to_string()));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::End(e)) => {
+                let name = get_local_name_from_end(&e)?;
+                
+                match name.as_str() {
+                    "response" => {
+                        if let Some(resp) = current_response.take() {
+                            // Include both files AND directories with valid properties
+                            if status_ok && !resp.href.is_empty() {
+                                // Extract name from href
+                                let name = if resp.displayname.is_empty() {
+                                    resp.href
+                                        .split('/')
+                                        .filter(|s| !s.is_empty())
+                                        .last()
+                                        .unwrap_or("")
+                                        .to_string()
+                                } else {
+                                    resp.displayname.clone()
+                                };
+                                
+                                // Decode URL-encoded characters
+                                let name = urlencoding::decode(&name)
+                                    .unwrap_or_else(|_| std::borrow::Cow::Borrowed(&name))
+                                    .to_string();
+                                
+                                // Parse creation date
+                                let created_at = resp.creation_date
+                                    .as_ref()
+                                    .and_then(|d| parse_http_date(d));
+                                
+                                // Parse permissions
+                                let permissions_int = resp.permissions
+                                    .as_ref()
+                                    .and_then(|p| {
+                                        if p.chars().all(|c| c.is_uppercase()) {
+                                            let mut perms = 0u32;
+                                            if p.contains('R') { perms |= 0o444; }
+                                            if p.contains('W') { perms |= 0o222; }
+                                            if p.contains('D') { perms |= 0o111; }
+                                            Some(perms)
+                                        } else {
+                                            p.parse().ok()
+                                        }
+                                    });
+                                
+                                let file_info = FileIngestionInfo {
+                                    path: resp.href.clone(),
+                                    name,
+                                    size: resp.content_length.unwrap_or(0),
+                                    mime_type: if resp.is_collection {
+                                        "".to_string()
+                                    } else {
+                                        resp.content_type.unwrap_or_else(|| "application/octet-stream".to_string())
+                                    },
+                                    last_modified: parse_http_date(&resp.last_modified.unwrap_or_default()),
+                                    etag: resp.etag.unwrap_or_else(|| format!("\"{}\"", uuid::Uuid::new_v4())),
+                                    is_directory: resp.is_collection,
+                                    created_at,
+                                    permissions: permissions_int,
+                                    owner: resp.owner.or(resp.owner_display_name),
+                                    group: resp.group,
+                                    metadata: resp.metadata,
                                 };
                                 
                                 files.push(file_info);
@@ -292,11 +511,196 @@ fn parse_http_date(date_str: &str) -> Option<DateTime<Utc>> {
 /// - `"abc123"` → `abc123`
 /// - `W/"abc123"` → `abc123`
 /// - `abc123` → `abc123`
-fn normalize_etag(etag: &str) -> String {
-    etag.trim()
-        .trim_start_matches("W/")
-        .trim_matches('"')
-        .to_string()
+/// Comprehensive ETag parser that handles all the weird edge cases found in real WebDAV servers
+pub fn normalize_etag(etag: &str) -> String {
+    let mut result = etag.trim().to_string();
+    
+    // Handle multiple weak indicators (malformed but seen in the wild)
+    while result.starts_with("W/") || result.starts_with("w/") {
+        if result.starts_with("W/") {
+            result = result[2..].trim().to_string();
+        } else if result.starts_with("w/") {
+            result = result[2..].trim().to_string();
+        }
+    }
+    
+    // Handle quoted ETags - be careful with escaped quotes
+    if result.starts_with('"') && result.ends_with('"') && result.len() > 1 {
+        result = result[1..result.len()-1].to_string();
+    }
+    
+    // Handle some edge cases where quotes might be escaped inside
+    // This handles cases like: "etag-with-\"internal\"-quotes"
+    if result.contains("\\\"") {
+        // For display purposes, we keep the escaped quotes as-is
+        // The server will handle the proper interpretation
+    }
+    
+    // Handle empty ETags or whitespace-only ETags
+    if result.trim().is_empty() {
+        return "".to_string(); // Return empty string for empty ETags
+    }
+    
+    result
+}
+
+/// Advanced ETag parser with detailed information about the ETag format
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParsedETag {
+    pub original: String,
+    pub normalized: String,
+    pub is_weak: bool,
+    pub format_type: ETagFormat,
+    pub has_internal_quotes: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ETagFormat {
+    Simple,           // "abc123"
+    Weak,            // W/"abc123"
+    Hash,            // MD5/SHA1/SHA256 hashes
+    UUID,            // UUID format
+    Timestamp,       // Contains timestamp
+    Versioned,       // Version information
+    Encoded,         // Base64 or URL encoded
+    Complex,         // Microsoft/SharePoint complex formats
+    PathBased,       // Contains path information
+    JSONLike,        // Contains JSON-like data
+    XMLLike,         // Contains XML-like data
+    Unknown,         // Unrecognized format
+}
+
+impl ParsedETag {
+    pub fn parse(etag: &str) -> Self {
+        let original = etag.to_string();
+        let normalized = normalize_etag(etag);
+        
+        // Detect if it's a weak ETag
+        let is_weak = etag.trim().starts_with("W/") || etag.trim().starts_with("w/");
+        
+        // Detect internal quotes
+        let has_internal_quotes = normalized.contains('"') || normalized.contains("\\'");
+        
+        // Classify the ETag format
+        let format_type = classify_etag_format(&normalized);
+        
+        ParsedETag {
+            original,
+            normalized,
+            is_weak,
+            format_type,
+            has_internal_quotes,
+        }
+    }
+    
+    /// Check if two ETags are equivalent (ignoring weak/strong differences)
+    pub fn is_equivalent(&self, other: &ParsedETag) -> bool {
+        self.normalized == other.normalized
+    }
+    
+    /// Get a safe string for comparison that handles edge cases
+    pub fn comparison_string(&self) -> String {
+        // For comparison, we normalize further by removing internal quotes and whitespace
+        self.normalized
+            .replace("\\\"", "")
+            .replace('"', "")
+            .trim()
+            .to_string()
+    }
+}
+
+fn classify_etag_format(etag: &str) -> ETagFormat {
+    let lower = etag.to_lowercase();
+    
+    // Check for UUIDs (with or without dashes/braces)
+    if is_uuid_like(etag) {
+        return ETagFormat::UUID;
+    }
+    
+    // Check for hash formats (MD5, SHA1, SHA256)
+    if is_hash_like(etag) {
+        return ETagFormat::Hash;
+    }
+    
+    // Check for timestamp formats
+    if contains_timestamp(etag) {
+        return ETagFormat::Timestamp;
+    }
+    
+    // Check for version information
+    if contains_version_info(etag) {
+        return ETagFormat::Versioned;
+    }
+    
+    // Check for encoding indicators
+    if is_encoded_format(etag) {
+        return ETagFormat::Encoded;
+    }
+    
+    // Check for Microsoft/SharePoint formats
+    if is_microsoft_format(etag) {
+        return ETagFormat::Complex;
+    }
+    
+    // Check for path-like ETags
+    if contains_path_info(etag) {
+        return ETagFormat::PathBased;
+    }
+    
+    // Check for JSON-like content
+    if etag.contains('{') && etag.contains('}') {
+        return ETagFormat::JSONLike;
+    }
+    
+    // Check for XML-like content
+    if etag.contains('<') && etag.contains('>') {
+        return ETagFormat::XMLLike;
+    }
+    
+    // Simple format for everything else
+    if etag.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        ETagFormat::Simple
+    } else {
+        ETagFormat::Unknown
+    }
+}
+
+fn is_uuid_like(s: &str) -> bool {
+    // UUID patterns: 8-4-4-4-12 hex digits
+    let uuid_regex = regex::Regex::new(r"^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$").unwrap();
+    uuid_regex.is_match(s) || s.contains("GUID") || (s.starts_with('{') && s.ends_with('}') && s.len() > 30)
+}
+
+fn is_hash_like(s: &str) -> bool {
+    // MD5 (32 hex), SHA1 (40 hex), SHA256 (64 hex)
+    let hex_only = s.chars().all(|c| c.is_ascii_hexdigit());
+    hex_only && (s.len() == 32 || s.len() == 40 || s.len() == 64)
+}
+
+fn contains_timestamp(s: &str) -> bool {
+    s.contains("timestamp") || s.contains("mtime") || s.contains("ts:") || 
+    s.contains("epoch") || s.contains("T") && s.contains("Z") ||
+    s.contains("1648") || s.contains("202") // Common timestamp prefixes
+}
+
+fn contains_version_info(s: &str) -> bool {
+    s.contains("version") || s.contains("rev:") || s.contains("v1.") || 
+    s.contains("revision") || s.contains("commit") || s.contains("branch")
+}
+
+fn is_encoded_format(s: &str) -> bool {
+    s.contains("base64:") || s.contains("gzip:") || s.contains("url-encoded:") ||
+    (s.ends_with("==") || s.ends_with("=")) && s.len() > 10 // Base64-like
+}
+
+fn is_microsoft_format(s: &str) -> bool {
+    s.contains("SP") && (s.contains("Replication") || s.contains("FileVersion")) ||
+    s.contains("ChangeKey") || s.contains("#ReplDigest") ||
+    s.contains("CQA") // Common in Exchange ETags
+}
+
+fn contains_path_info(s: &str) -> bool {
+    s.contains("/") && (s.contains(".") || s.contains("file://") || s.contains("./"))
 }
 
 #[cfg(test)]

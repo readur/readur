@@ -8,7 +8,7 @@ use readur::{
     AppState,
     db::Database,
     config::Config,
-    models::{FileInfo, Document, Source, SourceType, SourceStatus},
+    models::{FileIngestionInfo, Document, Source, SourceType, SourceStatus},
 };
 
 // Helper function to calculate file hash
@@ -20,8 +20,8 @@ fn calculate_file_hash(data: &[u8]) -> String {
 }
 
 // Helper function to create test file info
-fn create_test_file_info(name: &str, path: &str, content: &[u8]) -> FileInfo {
-    FileInfo {
+fn create_test_file_info(name: &str, path: &str, content: &[u8]) -> FileIngestionInfo {
+    FileIngestionInfo {
         name: name.to_string(),
         path: path.to_string(),
         size: content.len() as i64,
@@ -54,6 +54,8 @@ fn create_test_document(user_id: Uuid, filename: &str, file_hash: String) -> Doc
         ocr_status: Some("pending".to_string()),
         ocr_error: None,
         ocr_completed_at: None,
+        ocr_retry_count: None,
+        ocr_failure_reason: None,
         tags: Vec::new(),
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -61,6 +63,12 @@ fn create_test_document(user_id: Uuid, filename: &str, file_hash: String) -> Doc
         file_hash: Some(file_hash),
         original_created_at: None,
         original_modified_at: None,
+        source_path: None,
+        source_type: None,
+        source_id: None,
+        file_permissions: None,
+        file_owner: None,
+        file_group: None,
         source_metadata: None,
     }
 }
@@ -83,6 +91,10 @@ fn create_test_source(user_id: Uuid, source_type: SourceType) -> Source {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     }
 }
 

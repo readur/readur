@@ -4,7 +4,7 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use readur::{
-    services::webdav_service::{WebDAVService, WebDAVConfig, RetryConfig},
+    services::webdav::{WebDAVService, WebDAVConfig, RetryConfig},
     scheduling::webdav_scheduler::WebDAVScheduler,
     models::*,
     db::Database,
@@ -20,7 +20,7 @@ async fn test_retry_config_default() {
     assert_eq!(retry_config.initial_delay_ms, 1000);
     assert_eq!(retry_config.max_delay_ms, 30000);
     assert_eq!(retry_config.backoff_multiplier, 2.0);
-    assert_eq!(retry_config.timeout_seconds, 300);
+    assert_eq!(retry_config.timeout_seconds, 30);
 }
 
 #[tokio::test]
@@ -41,6 +41,7 @@ async fn test_webdav_service_with_custom_retry() {
         max_delay_ms: 10000,
         backoff_multiplier: 1.5,
         timeout_seconds: 60,
+        rate_limit_backoff_ms: 5000,
     };
 
     let result = WebDAVService::new_with_retry(config, retry_config);

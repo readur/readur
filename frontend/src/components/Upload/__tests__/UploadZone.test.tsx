@@ -1,49 +1,29 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../../test/comprehensive-mocks';
+
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
+
+// Mock API services comprehensively
+vi.mock('../../../services/api', async () => {
+  const actual = await vi.importActual('../../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    ...apiMocks,
+  };
+});
+
+// Import after mocking
+import { screen, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UploadZone from '../UploadZone';
-import { NotificationProvider } from '../../../contexts/NotificationContext';
+import { renderWithProviders, createMockApiServices } from '../../../test/test-utils';
+import { createMockLabel } from '../../../test/label-test-utils';
 
-// Mock axios directly
-vi.mock('axios', () => ({
-  default: {
-    create: vi.fn(() => ({
-      get: vi.fn().mockResolvedValue({ 
-        status: 200, 
-        data: [
-          {
-            id: 'mock-label-1',
-            name: 'Test Label',
-            description: 'A test label',
-            color: '#0969da',
-            icon: undefined,
-            is_system: false,
-            created_at: '2024-01-01T00:00:00Z',
-            updated_at: '2024-01-01T00:00:00Z',
-            document_count: 0,
-            source_count: 0,
-          }
-        ] 
-      }),
-      post: vi.fn().mockResolvedValue({ status: 201, data: {} }),
-      put: vi.fn().mockResolvedValue({ status: 200, data: {} }),
-      delete: vi.fn().mockResolvedValue({ status: 204 }),
-    })),
-  },
-}));
-
-// Helper function to render with NotificationProvider
-const renderWithProvider = async (component: React.ReactElement) => {
-  let renderResult;
-  await act(async () => {
-    renderResult = render(
-      <NotificationProvider>
-        {component}
-      </NotificationProvider>
-    );
-  });
-  return renderResult;
-};
+// Setup centralized API mocks for this component
+const mockApiServices = createMockApiServices();
 
 const mockProps = {
   onUploadComplete: vi.fn(),
@@ -70,7 +50,9 @@ describe('UploadZone', () => {
   });
 
   test('renders upload zone with default text', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await act(async () => {
+      renderWithProviders(<UploadZone {...mockProps} />);
+    });
     
     // Wait for async operations to complete
     await waitFor(() => {
@@ -81,7 +63,7 @@ describe('UploadZone', () => {
   });
 
   test('shows accepted file types in UI', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     // Wait for component to load
     await waitFor(() => {
@@ -93,7 +75,7 @@ describe('UploadZone', () => {
   });
 
   test('displays max file size limit', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     await waitFor(() => {
       expect(screen.getByText(/maximum file size/i)).toBeInTheDocument();
@@ -103,7 +85,7 @@ describe('UploadZone', () => {
   });
 
   test('shows browse files button', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     await waitFor(() => {
       const browseButton = screen.getByRole('button', { name: /choose files/i });
@@ -175,7 +157,7 @@ describe('UploadZone', () => {
 
   test('handles click to browse files', async () => {
     const user = userEvent.setup();
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     await waitFor(() => {
       const browseButton = screen.getByRole('button', { name: /choose files/i });
@@ -192,7 +174,7 @@ describe('UploadZone', () => {
   });
 
   test('renders upload zone structure correctly', async () => {
-    await renderWithProvider(<UploadZone {...mockProps} />);
+    await renderWithProviders(<UploadZone {...mockProps} />);
     
     // Wait for component to load
     await waitFor(() => {

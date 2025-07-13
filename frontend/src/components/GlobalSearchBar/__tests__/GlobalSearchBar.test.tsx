@@ -1,18 +1,19 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
-import GlobalSearchBar from '../GlobalSearchBar';
+import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../../../test/comprehensive-mocks';
 
-// Mock the API service
-const mockDocumentService = {
-  enhancedSearch: vi.fn(),
-};
+// Mock axios comprehensively to prevent any real HTTP requests
+vi.mock('axios', () => createComprehensiveAxiosMock());
 
-vi.mock('../../../services/api', () => ({
-  documentService: mockDocumentService,
-}));
+// Mock API services comprehensively
+vi.mock('../../../services/api', async () => {
+  const actual = await vi.importActual('../../../services/api');
+  const apiMocks = createComprehensiveApiMocks();
+  
+  return {
+    ...actual,
+    ...apiMocks,
+  };
+});
 
 // Mock useNavigate
 const mockNavigate = vi.fn();
@@ -24,14 +25,17 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-// Mock localStorage
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-};
-global.localStorage = localStorageMock;
+// Import after mocking
+import React from 'react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import GlobalSearchBar from '../GlobalSearchBar';
+import { renderWithProviders, createMockApiServices, createMockLocalStorage } from '../../../test/test-utils';
+
+// Use centralized API mocking
+const mockServices = createMockApiServices();
+const mockDocumentService = mockServices.documentService;
+const localStorageMock = createMockLocalStorage();
 
 // Mock data
 const mockSearchResponse = {
@@ -53,14 +57,7 @@ const mockSearchResponse = {
   }
 };
 
-// Helper to render component with router
-const renderWithRouter = (component) => {
-  return render(
-    <BrowserRouter>
-      {component}
-    </BrowserRouter>
-  );
-};
+// Using centralized render utility (no custom helper needed)
 
 describe('GlobalSearchBar', () => {
   beforeEach(() => {
@@ -70,7 +67,7 @@ describe('GlobalSearchBar', () => {
   });
 
   test('renders search input with placeholder', () => {
-    renderWithRouter(<GlobalSearchBar />);
+    renderWithProviders(<GlobalSearchBar />);
     
     expect(screen.getByPlaceholderText('Search documents...')).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toBeInTheDocument();
@@ -78,7 +75,7 @@ describe('GlobalSearchBar', () => {
 
   test('accepts user input', async () => {
     const user = userEvent.setup();
-    renderWithRouter(<GlobalSearchBar />);
+    renderWithProviders(<GlobalSearchBar />);
     
     const searchInput = screen.getByPlaceholderText('Search documents...');
     await user.type(searchInput, 'test');
@@ -88,7 +85,7 @@ describe('GlobalSearchBar', () => {
 
   test('clears input when clear button is clicked', async () => {
     const user = userEvent.setup();
-    renderWithRouter(<GlobalSearchBar />);
+    renderWithProviders(<GlobalSearchBar />);
     
     const searchInput = screen.getByPlaceholderText('Search documents...');
     await user.type(searchInput, 'test');
@@ -101,7 +98,7 @@ describe('GlobalSearchBar', () => {
   });
 
   test('shows popular searches when focused', async () => {
-    renderWithRouter(<GlobalSearchBar />);
+    renderWithProviders(<GlobalSearchBar />);
     
     const searchInput = screen.getByPlaceholderText('Search documents...');
     fireEvent.focus(searchInput);
@@ -112,7 +109,7 @@ describe('GlobalSearchBar', () => {
   });
 
   test('handles empty search gracefully', () => {
-    renderWithRouter(<GlobalSearchBar />);
+    renderWithProviders(<GlobalSearchBar />);
     
     const searchInput = screen.getByPlaceholderText('Search documents...');
     fireEvent.change(searchInput, { target: { value: '' } });
@@ -122,7 +119,7 @@ describe('GlobalSearchBar', () => {
 
   test('handles keyboard navigation', async () => {
     const user = userEvent.setup();
-    renderWithRouter(<GlobalSearchBar />);
+    renderWithProviders(<GlobalSearchBar />);
     
     const searchInput = screen.getByPlaceholderText('Search documents...');
     await user.type(searchInput, 'test query');

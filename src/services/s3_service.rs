@@ -1,18 +1,18 @@
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
-use tracing::{debug, error, info, warn};
+use chrono::DateTime;
+use tracing::{debug, info, warn};
 use serde_json;
 
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
 #[cfg(feature = "s3")]
-use aws_config::{BehaviorVersion, load_from_env};
+use aws_config::load_defaults;
 #[cfg(feature = "s3")]
 use aws_credential_types::Credentials;
 #[cfg(feature = "s3")]
 use aws_types::region::Region as AwsRegion;
 
-use crate::models::{FileInfo, S3SourceConfig};
+use crate::models::{FileIngestionInfo, S3SourceConfig};
 
 #[derive(Debug, Clone)]
 pub struct S3Service {
@@ -81,7 +81,7 @@ impl S3Service {
     }
 
     /// Discover files in a specific S3 prefix (folder)
-    pub async fn discover_files_in_folder(&self, folder_path: &str) -> Result<Vec<FileInfo>> {
+    pub async fn discover_files_in_folder(&self, folder_path: &str) -> Result<Vec<FileIngestionInfo>> {
         #[cfg(not(feature = "s3"))]
         {
             return Err(anyhow!("S3 support not compiled in"));
@@ -176,7 +176,7 @@ impl S3Service {
                                 // If we have region info, add it
                                 metadata_map.insert("s3_region".to_string(), serde_json::Value::String(self.config.region.clone()));
                                 
-                                let file_info = FileInfo {
+                                let file_info = FileIngestionInfo {
                                     path: key.clone(),
                                     name: file_name,
                                     size,

@@ -20,6 +20,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, DocumentResponse};
+use readur::routes::documents::types::PaginatedDocumentsResponse;
+use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -137,7 +139,7 @@ impl FileProcessingTestClient {
     }
     
     /// Upload a file with specific content and MIME type
-    async fn upload_file(&self, content: &str, filename: &str, mime_type: &str) -> Result<DocumentResponse, Box<dyn std::error::Error>> {
+    async fn upload_file(&self, content: &str, filename: &str, mime_type: &str) -> Result<DocumentUploadResponse, Box<dyn std::error::Error>> {
         println!("🔍 DEBUG: Uploading file: {} with MIME type: {}", filename, mime_type);
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
@@ -164,13 +166,13 @@ impl FileProcessingTestClient {
         let response_text = response.text().await?;
         println!("🟢 DEBUG: Upload response: {}", response_text);
         
-        let document: DocumentResponse = serde_json::from_str(&response_text)?;
+        let document: DocumentUploadResponse = serde_json::from_str(&response_text)?;
         println!("✅ DEBUG: Successfully parsed document: {}", document.id);
         Ok(document)
     }
     
     /// Upload binary file content
-    async fn upload_binary_file(&self, content: Vec<u8>, filename: &str, mime_type: &str) -> Result<DocumentResponse, Box<dyn std::error::Error>> {
+    async fn upload_binary_file(&self, content: Vec<u8>, filename: &str, mime_type: &str) -> Result<DocumentUploadResponse, Box<dyn std::error::Error>> {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let part = reqwest::multipart::Part::bytes(content)
@@ -196,7 +198,7 @@ impl FileProcessingTestClient {
         let response_text = response.text().await?;
         println!("🟢 DEBUG: Binary upload response: {}", response_text);
         
-        let document: DocumentResponse = serde_json::from_str(&response_text)?;
+        let document: DocumentUploadResponse = serde_json::from_str(&response_text)?;
         println!("✅ DEBUG: Successfully parsed binary document: {}", document.id);
         Ok(document)
     }
@@ -215,10 +217,8 @@ impl FileProcessingTestClient {
                 .await?;
             
             if response.status().is_success() {
-                let response_json: serde_json::Value = response.json().await?;
-                let documents: Vec<DocumentResponse> = serde_json::from_value(
-                    response_json["documents"].clone()
-                )?;
+                let paginated_response: PaginatedDocumentsResponse = response.json().await?;
+                let documents = paginated_response.documents;
                 
                 if let Some(doc) = documents.iter().find(|d| d.id.to_string() == document_id) {
                     println!("📄 DEBUG: Found document with OCR status: {:?}", doc.ocr_status);
@@ -229,19 +229,30 @@ impl FileProcessingTestClient {
                                 id: doc.id,
                                 filename: doc.filename.clone(),
                                 original_filename: doc.original_filename.clone(),
+                                file_path: doc.file_path.clone(),
                                 file_size: doc.file_size,
                                 mime_type: doc.mime_type.clone(),
                                 tags: doc.tags.clone(),
                                 labels: doc.labels.clone(),
                                 created_at: doc.created_at,
+                                updated_at: doc.updated_at,
+                                user_id: doc.user_id,
+                                username: doc.username.clone(),
+                                file_hash: doc.file_hash.clone(),
                                 has_ocr_text: doc.has_ocr_text,
                                 ocr_confidence: doc.ocr_confidence,
                                 ocr_word_count: doc.ocr_word_count,
                                 ocr_processing_time_ms: doc.ocr_processing_time_ms,
                                 ocr_status: doc.ocr_status.clone(),
-                                original_created_at: None,
-                                original_modified_at: None,
-                                source_metadata: None,
+                                original_created_at: doc.original_created_at,
+                                original_modified_at: doc.original_modified_at,
+                                source_path: doc.source_path.clone(),
+                                source_type: doc.source_type.clone(),
+                                source_id: doc.source_id,
+                                file_permissions: doc.file_permissions,
+                                file_owner: doc.file_owner.clone(),
+                                file_group: doc.file_group.clone(),
+                                source_metadata: doc.source_metadata.clone(),
                             };
                             return Ok(doc_copy);
                         }
@@ -375,8 +386,7 @@ End of test document."#;
     // Validate initial document properties
     assert_eq!(document.mime_type, "text/plain");
     assert!(document.file_size > 0);
-    assert_eq!(document.original_filename, "test_pipeline.txt");
-    assert!(document.ocr_status.is_some());
+    assert_eq!(document.filename, "test_pipeline.txt");
     
     // Wait for processing to complete
     let processed_doc = client.wait_for_processing(&document_id).await
@@ -405,7 +415,7 @@ End of test document."#;
     let ocr_results = client.get_ocr_results(&document_id).await
         .expect("Failed to get OCR results");
     
-    assert_eq!(ocr_results["document_id"], document_id);
+    assert_eq!(ocr_results["id"], document_id);
     assert_eq!(ocr_results["has_ocr_text"], true);
     
     if let Some(ocr_text) = ocr_results["ocr_text"].as_str() {
@@ -499,7 +509,7 @@ async fn test_multiple_file_format_support() {
                 
                 // Test OCR results
                 if let Ok(ocr_results) = client.get_ocr_results(&document_id).await {
-                    assert_eq!(ocr_results["document_id"], document_id);
+                    assert_eq!(ocr_results["id"], document_id);
                     
                     if ocr_results["has_ocr_text"] == true {
                         if let Some(ocr_text) = ocr_results["ocr_text"].as_str() {
@@ -563,7 +573,7 @@ async fn test_image_processing_pipeline() {
     // Validate image document properties
     assert_eq!(document.mime_type, "image/png");
     assert!(document.file_size > 0);
-    assert_eq!(document.original_filename, "test_image.png");
+    assert_eq!(document.filename, "test_image.png");
     
     // Wait for processing - note that minimal images might fail OCR
     let processed_result = client.wait_for_processing(&document_id).await;
@@ -582,11 +592,9 @@ async fn test_image_processing_pipeline() {
                 .await
                 .expect("Failed to get documents");
             
-            let response_json: serde_json::Value = response.json().await
+            let paginated_response: PaginatedDocumentsResponse = response.json().await
                 .expect("Failed to parse response");
-            let documents: Vec<DocumentResponse> = serde_json::from_value(
-                response_json["documents"].clone()
-            ).expect("Failed to parse documents");
+            let documents = paginated_response.documents;
             
             documents.into_iter()
                 .find(|d| d.id.to_string() == document_id)
@@ -627,7 +635,7 @@ async fn test_image_processing_pipeline() {
     let ocr_results = client.get_ocr_results(&document_id).await
         .expect("Failed to get OCR results for image");
     
-    assert_eq!(ocr_results["document_id"], document_id);
+    assert_eq!(ocr_results["id"], document_id);
     
     // Image might not have text, so OCR could be empty
     if ocr_results["has_ocr_text"] == true {
@@ -702,26 +710,23 @@ async fn test_processing_error_recovery() {
                     .await;
                     
                 if let Ok(resp) = response {
-                    if let Ok(response_json) = resp.json::<serde_json::Value>().await {
-                        if let Ok(docs) = serde_json::from_value::<Vec<DocumentResponse>>(
-                            response_json["documents"].clone()
-                        ) {
-                    if let Some(doc) = docs.iter().find(|d| d.id == document.id) {
-                        match doc.ocr_status.as_deref() {
-                            Some("completed") => {
-                                println!("✅ Large file processing completed");
-                                break;
+                    if let Ok(paginated_response) = resp.json::<PaginatedDocumentsResponse>().await {
+                        let docs = paginated_response.documents;
+                        if let Some(doc) = docs.iter().find(|d| d.id.to_string() == document.id.to_string()) {
+                            match doc.ocr_status.as_deref() {
+                                Some("completed") => {
+                                    println!("✅ Large file processing completed");
+                                    break;
+                                }
+                                Some("failed") => {
+                                    println!("ℹ️  Large file processing failed (may be expected for very large files)");
+                                    break;
+                                }
+                                _ => {
+                                    sleep(Duration::from_secs(2)).await;
+                                    continue;
+                                }
                             }
-                            Some("failed") => {
-                                println!("ℹ️  Large file processing failed (may be expected for very large files)");
-                                break;
-                            }
-                            _ => {
-                                sleep(Duration::from_secs(2)).await;
-                                continue;
-                            }
-                        }
-                    }
                         }
                     }
                 }
@@ -768,7 +773,7 @@ async fn test_processing_error_recovery() {
     match special_result {
         Ok(document) => {
             println!("✅ File with special characters uploaded: {}", document.id);
-            println!("✅ Original filename preserved: {}", document.original_filename);
+            println!("✅ Filename preserved: {}", document.filename);
             
             match client.wait_for_processing(&document.id.to_string()).await {
                 Ok(_) => println!("✅ Special filename file processed successfully"),
@@ -948,8 +953,8 @@ async fn test_concurrent_file_processing() {
             if response.status().is_success() {
                 let response_text = response.text().await
                     .expect("Should get response text");
-                let document: DocumentResponse = serde_json::from_str(&response_text)
-                    .expect("Should parse document response");
+                let document: DocumentUploadResponse = serde_json::from_str(&response_text)
+                    .expect("Should parse document upload response");
                 Ok((i, document, upload_time))
             } else {
                 Err((i, response.text().await.unwrap_or_default()))
@@ -997,11 +1002,9 @@ async fn test_concurrent_file_processing() {
                     .expect("Should get documents");
                 
                 if response.status().is_success() {
-                    let response_json: serde_json::Value = response.json().await
+                    let paginated_response: PaginatedDocumentsResponse = response.json().await
                         .expect("Should parse response");
-                    let documents: Vec<DocumentResponse> = serde_json::from_value(
-                        response_json["documents"].clone()
-                    ).expect("Should parse documents");
+                    let documents = paginated_response.documents;
                     
                     if let Some(doc) = documents.iter().find(|d| d.id.to_string() == document_id) {
                         match doc.ocr_status.as_deref() {

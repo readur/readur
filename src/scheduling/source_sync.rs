@@ -1,21 +1,20 @@
 use std::sync::Arc;
 use std::path::Path;
 use anyhow::{anyhow, Result};
-use chrono::Utc;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use futures::stream::{FuturesUnordered, StreamExt};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::{
     AppState,
-    models::{FileInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
+    models::{FileIngestionInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
     services::file_service::FileService,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::local_folder_service::LocalFolderService,
     services::s3_service::S3Service,
-    services::webdav_service::{WebDAVService, WebDAVConfig},
+    services::webdav::{WebDAVService, WebDAVConfig},
 };
 
 #[derive(Clone)]
@@ -125,11 +124,18 @@ impl SourceSyncService {
             cancellation_token,
             |folder_path| {
                 let service = webdav_service.clone();
+                let state_clone = self.state.clone();
                 async move { 
-                    debug!("WebDAV discover_files_in_folder called for: {}", folder_path);
-                    let result = service.discover_files_in_folder(&folder_path).await;
+                    info!("🚀 Using WebDAV discovery for: {}", folder_path);
+                    let result = service.discover_files_in_directory(&folder_path, true).await;
                     match &result {
-                        Ok(files) => debug!("WebDAV discovered {} files in folder: {}", files.len(), folder_path),
+                        Ok(files) => {
+                            if files.is_empty() {
+                                info!("✅ Directory {} unchanged, skipped deep scan", folder_path);
+                            } else {
+                                info!("🔄 Directory {} changed, discovered {} files", folder_path, files.len());
+                            }
+                        },
                         Err(e) => error!("WebDAV discovery failed for folder {}: {}", folder_path, e),
                     }
                     result
@@ -221,7 +227,7 @@ impl SourceSyncService {
     where
         F: Fn(String) -> Fut1,
         D: Fn(String) -> Fut2 + Clone,
-        Fut1: std::future::Future<Output = Result<Vec<FileInfo>>>,
+        Fut1: std::future::Future<Output = Result<Vec<FileIngestionInfo>>>,
         Fut2: std::future::Future<Output = Result<Vec<u8>>>,
     {
         let mut total_files_processed = 0;
@@ -322,7 +328,7 @@ impl SourceSyncService {
     where
         F: Fn(String) -> Fut1,
         D: Fn(String) -> Fut2 + Clone,
-        Fut1: std::future::Future<Output = Result<Vec<FileInfo>>>,
+        Fut1: std::future::Future<Output = Result<Vec<FileIngestionInfo>>>,
         Fut2: std::future::Future<Output = Result<Vec<u8>>>,
     {
         let mut total_files_processed = 0;
@@ -508,7 +514,7 @@ impl SourceSyncService {
         state: Arc<AppState>,
         user_id: Uuid,
         source_id: Uuid,
-        file_info: &FileInfo,
+        file_info: &FileIngestionInfo,
         enable_background_ocr: bool,
         semaphore: Arc<Semaphore>,
         download_file: D,
@@ -587,7 +593,7 @@ impl SourceSyncService {
         state: Arc<AppState>,
         user_id: Uuid,
         source_id: Uuid,
-        file_info: &FileInfo,
+        file_info: &FileIngestionInfo,
         enable_background_ocr: bool,
         semaphore: Arc<Semaphore>,
         download_file: D,

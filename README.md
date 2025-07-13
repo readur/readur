@@ -2,13 +2,21 @@
 
 A powerful, modern document management system built with Rust and React. Readur provides intelligent document processing with OCR capabilities, full-text search, and a beautiful web interface designed for 2026 tech standards.
 
+![](./docs/images/readur_dashboard.png)
+
+
 ## ✨ Features
 
-- 🔐 **Secure Authentication**: JWT-based user authentication with bcrypt password hashing
+- 🔐 **Secure Authentication**: JWT-based user authentication with bcrypt password hashing + OIDC/SSO support
+- 👥 **User Management**: Role-based access control with Admin and User roles
 - 📤 **Smart File Upload**: Drag-and-drop support for PDF, images, text files, and Office documents
 - 🔍 **Advanced OCR**: Automatic text extraction using Tesseract for searchable document content
-- 🔎 **Powerful Search**: PostgreSQL full-text search with advanced filtering and ranking
-- 👁️ **Folder Monitoring**: Non-destructive file watching (unlike paperless-ngx, doesn't consume source files)
+- 🔎 **Powerful Search**: PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean)
+- 🔗 **Multi-Source Sync**: WebDAV, Local Folders, and S3-compatible storage integration
+- 🏷️ **Labels & Organization**: Comprehensive tagging system with color-coding and hierarchical structure
+- 👁️ **Folder Monitoring**: Non-destructive file watching with intelligent sync scheduling
+- 📊 **Health Monitoring**: Proactive source validation and system health tracking
+- 🔔 **Notifications**: Real-time alerts for sync events, OCR completion, and system status
 - 🎨 **Modern UI**: Beautiful React frontend with Material-UI components and responsive design
 - 🐳 **Docker Ready**: Complete containerization with production-ready multi-stage builds
 - ⚡ **High Performance**: Rust backend for speed and reliability
@@ -40,6 +48,13 @@ open http://localhost:8000
 - [📦 Installation Guide](docs/installation.md) - Docker & manual installation instructions
 - [🔧 Configuration](docs/configuration.md) - Environment variables and settings
 - [📖 User Guide](docs/user-guide.md) - How to use Readur effectively
+
+### Core Features
+- [🔗 Sources Guide](docs/sources-guide.md) - WebDAV, Local Folders, and S3 integration
+- [👥 User Management](docs/user-management-guide.md) - Authentication, roles, and administration
+- [🏷️ Labels & Organization](docs/labels-and-organization.md) - Document tagging and categorization
+- [🔎 Advanced Search](docs/advanced-search.md) - Search modes, syntax, and optimization
+- [🔐 OIDC Setup](docs/oidc-setup.md) - Single Sign-On integration
 
 ### Deployment & Operations
 - [🚀 Deployment Guide](docs/deployment.md) - Production deployment, SSL, monitoring
@@ -100,6 +115,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Axum](https://github.com/tokio-rs/axum) for the web framework
 - [Material-UI](https://mui.com/) for the beautiful frontend components
 - [PostgreSQL](https://www.postgresql.org/) for robust full-text search
+
+## Screenshots
+
+![](./docs/images/readur_search.png)
 
 ## 📞 Support
 

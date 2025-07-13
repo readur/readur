@@ -19,6 +19,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   Pagination,
   CircularProgress,
@@ -52,12 +53,16 @@ import {
   OpenInNew as OpenInNewIcon,
   Warning as WarningIcon,
   Block as BlockIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { api, documentService, queueService } from '../services/api';
+import { api, documentService, queueService, BulkOcrRetryResponse } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import FailedDocumentViewer from '../components/FailedDocumentViewer';
 import MetadataDisplay from '../components/MetadataDisplay';
+import { BulkRetryModal } from '../components/BulkRetryModal';
+import { RetryRecommendations } from '../components/RetryRecommendations';
+import { RetryHistoryModal } from '../components/RetryHistoryModal';
 
 interface FailedDocument {
   id: string;
@@ -224,6 +229,13 @@ const DocumentManagementPage: React.FC = () => {
   const [bulkDeleteIgnoredDialog, setBulkDeleteIgnoredDialog] = useState(false);
   const [deletingIgnoredFiles, setDeletingIgnoredFiles] = useState(false);
 
+  // Advanced retry functionality state
+  const [bulkRetryModalOpen, setBulkRetryModalOpen] = useState(false);
+  const [retryHistoryModalOpen, setRetryHistoryModalOpen] = useState(false);
+  const [selectedDocumentForHistory, setSelectedDocumentForHistory] = useState<string | null>(null);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [confirmRetryAllOpen, setConfirmRetryAllOpen] = useState(false);
+
   const fetchFailedDocuments = async () => {
     try {
       setLoading(true);
@@ -348,6 +360,42 @@ const DocumentManagementPage: React.FC = () => {
     }
   };
 
+  const handleRetryAllDocuments = async () => {
+    try {
+      setRetryingAll(true);
+      const response = await documentService.bulkRetryOcr({
+        mode: 'all',
+        preview_only: false
+      });
+      
+      if (response.data.queued_count > 0) {
+        setSnackbar({
+          open: true,
+          message: `Successfully queued ${response.data.queued_count} documents for OCR retry. Estimated processing time: ${Math.ceil(response.data.estimated_total_time_minutes)} minutes.`,
+          severity: 'success'
+        });
+        
+        // Refresh all tabs since we're retrying all documents
+        await refreshCurrentTab();
+      } else {
+        setSnackbar({
+          open: true,
+          message: 'No documents found to retry',
+          severity: 'info'
+        });
+      }
+    } catch (error) {
+      console.error('Error retrying all documents:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to retry documents. Please try again.',
+        severity: 'error'
+      });
+    } finally {
+      setRetryingAll(false);
+    }
+  };
+
   const handleRetryAllFailed = async () => {
     try {
       setRetryingAll(true);
@@ -379,6 +427,21 @@ const DocumentManagementPage: React.FC = () => {
     } finally {
       setRetryingAll(false);
     }
+  };
+
+  // Advanced retry functionality handlers
+  const handleBulkRetrySuccess = (result: BulkOcrRetryResponse) => {
+    setSnackbar({
+      open: true,
+      message: `Successfully queued ${result.queued_count} of ${result.matched_count} documents for retry. Estimated processing time: ${Math.round(result.estimated_total_time_minutes)} minutes.`,
+      severity: 'success'
+    });
+    fetchFailedDocuments(); // Refresh the list
+  };
+
+  const handleShowRetryHistory = (documentId: string) => {
+    setSelectedDocumentForHistory(documentId);
+    setRetryHistoryModalOpen(true);
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -582,12 +645,12 @@ const DocumentManagementPage: React.FC = () => {
     if (currentTab === 0) {
       fetchFailedDocuments();
     } else if (currentTab === 1) {
+      // Refresh both low confidence and failed documents for the merged cleanup tab
       handlePreviewLowConfidence();
+      handlePreviewFailedDocuments();
     } else if (currentTab === 2) {
       fetchDuplicates();
     } else if (currentTab === 3) {
-      handlePreviewFailedDocuments();
-    } else if (currentTab === 4) {
       fetchIgnoredFiles();
       fetchIgnoredFilesStats();
     }
@@ -710,14 +773,33 @@ const DocumentManagementPage: React.FC = () => {
         <Typography variant="h4" component="h1">
           Document Management
         </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={refreshCurrentTab}
-          disabled={loading || duplicatesLoading || retryingAll}
-        >
-          Refresh
-        </Button>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="contained"
+            color="primary"
+            size="large"
+            startIcon={retryingAll ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
+            onClick={() => setConfirmRetryAllOpen(true)}
+            disabled={retryingAll}
+            sx={{ 
+              minWidth: 200,
+              boxShadow: 3,
+              '&:hover': {
+                boxShadow: 6,
+              }
+            }}
+          >
+            {retryingAll ? 'Retrying All...' : 'Retry All Documents'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={refreshCurrentTab}
+            disabled={loading || duplicatesLoading || retryingAll}
+          >
+            Refresh
+          </Button>
+        </Box>
       </Box>
 
       <Paper sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
@@ -750,10 +832,10 @@ const DocumentManagementPage: React.FC = () => {
               iconPosition="start"
             />
           </Tooltip>
-          <Tooltip title="Manage documents with low OCR confidence scores - preview and delete documents below a confidence threshold">
+          <Tooltip title="Manage and clean up documents with quality issues - low OCR confidence or failed processing">
             <Tab
-              icon={<FindInPageIcon />}
-              label={`Low Quality Manager${previewData ? ` (${previewData.matched_count})` : ''}`}
+              icon={<DeleteIcon />}
+              label={`Document Cleanup${(previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0) > 0 ? ` (${(previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0)})` : ''}`}
               iconPosition="start"
             />
           </Tooltip>
@@ -761,13 +843,6 @@ const DocumentManagementPage: React.FC = () => {
             <Tab
               icon={<FileCopyIcon />}
               label={`Duplicate Files${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
-              iconPosition="start"
-            />
-          </Tooltip>
-          <Tooltip title="Bulk operations for document cleanup and maintenance">
-            <Tab
-              icon={<DeleteIcon />}
-              label="Bulk Cleanup"
               iconPosition="start"
             />
           </Tooltip>
@@ -807,7 +882,7 @@ const DocumentManagementPage: React.FC = () => {
                     size="small"
                     fullWidth
                   >
-                    {retryingAll ? 'Retrying All...' : 'Retry All Failed OCR'}
+                    {retryingAll ? 'Retrying...' : 'Retry Failed Only'}
                   </Button>
                 </Box>
               </CardContent>
@@ -839,6 +914,33 @@ const DocumentManagementPage: React.FC = () => {
           </Grid>
         </Grid>
       )}
+
+      {/* Advanced Retry Components */}
+      <Grid container spacing={3} mb={3}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h6">Advanced Retry Options</Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => setBulkRetryModalOpen(true)}
+                  disabled={!statistics || statistics.total_failed === 0}
+                  startIcon={<RefreshIcon />}
+                >
+                  Advanced Retry
+                </Button>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Use advanced filtering and selection options to retry specific subsets of failed documents based on file type, failure reason, size, and more.
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <RetryRecommendations onRetrySuccess={handleBulkRetrySuccess} />
+        </Grid>
+      </Grid>
 
       {/* Filter Controls */}
       <Card sx={{ mb: 3 }}>
@@ -980,6 +1082,14 @@ const DocumentManagementPage: React.FC = () => {
                               onClick={() => showDocumentDetails(document)}
                             >
                               <VisibilityIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Retry History">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleShowRetryHistory(document.id)}
+                            >
+                              <HistoryIcon />
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Download Document">
@@ -1373,16 +1483,27 @@ const DocumentManagementPage: React.FC = () => {
         </>
       )}
 
-      {/* Low Quality Manager Tab Content */}
+      {/* Document Cleanup Tab Content - Merged Low Quality Manager and Bulk Cleanup */}
       {currentTab === 1 && (
         <>
           <Alert severity="info" sx={{ mb: 3 }}>
-            <AlertTitle>Low Confidence Document Deletion</AlertTitle>
+            <AlertTitle>Document Cleanup Center</AlertTitle>
             <Typography>
-              This tool allows you to delete documents with OCR confidence below a specified threshold. 
-              Use the preview feature first to see what documents would be affected before deleting.
+              Clean up your document library by removing problematic documents. You can delete:
+            </Typography>
+            <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
+              <li>Documents with low OCR confidence scores (below a threshold you set)</li>
+              <li>Documents where OCR processing failed completely</li>
+            </Box>
+            <Typography sx={{ mt: 1 }}>
+              Always use the preview feature before deleting to see which documents will be affected.
             </Typography>
           </Alert>
+
+          {/* Low Confidence Documents Section */}
+          <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
+            Low Confidence Documents
+          </Typography>
 
           <Card sx={{ mb: 3 }}>
             <CardContent>
@@ -1504,18 +1625,20 @@ const DocumentManagementPage: React.FC = () => {
               <Typography sx={{ ml: 2 }}>Processing request...</Typography>
             </Box>
           )}
-        </>
-      )}
 
-      {/* Delete Failed Documents Tab Content */}
-      {currentTab === 3 && (
-        <>
+          {/* Divider between sections */}
+          <Divider sx={{ my: 4 }} />
+
+          {/* Failed Documents Section */}
+          <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>
+            Failed OCR Documents
+          </Typography>
+
           <Alert severity="warning" sx={{ mb: 3 }}>
             <AlertTitle>Delete Failed OCR Documents</AlertTitle>
             <Typography>
-              This tool allows you to delete all documents where OCR processing failed completely. 
+              This section allows you to delete all documents where OCR processing failed completely. 
               This includes documents with NULL confidence values or explicit failure status.
-              Use the preview feature first to see what documents would be affected before deleting.
             </Typography>
           </Alert>
 
@@ -1549,7 +1672,7 @@ const DocumentManagementPage: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Preview Results */}
+          {/* Preview Results for Failed Documents */}
           {failedPreviewData && (
             <Card sx={{ mb: 3 }}>
               <CardContent>
@@ -1574,7 +1697,7 @@ const DocumentManagementPage: React.FC = () => {
             </Card>
           )}
 
-          {/* Loading State */}
+          {/* Loading State for Failed Documents */}
           {failedDocsLoading && !failedPreviewData && (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
               <CircularProgress />
@@ -1585,7 +1708,7 @@ const DocumentManagementPage: React.FC = () => {
       )}
 
       {/* Ignored Files Tab Content */}
-      {currentTab === 4 && (
+      {currentTab === 3 && (
         <>
           <Alert severity="info" sx={{ mb: 3 }}>
             <AlertTitle>Ignored Files Management</AlertTitle>
@@ -2152,6 +2275,60 @@ const DocumentManagementPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Confirm Retry All Documents Dialog */}
+      <Dialog open={confirmRetryAllOpen} onClose={() => setConfirmRetryAllOpen(false)}>
+        <DialogTitle>
+          <Box display="flex" alignItems="center">
+            <RefreshIcon sx={{ mr: 1, color: 'primary.main' }} />
+            Retry All Documents
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will retry OCR processing for <strong>all documents</strong> in your library, regardless of their current OCR status. 
+            This includes documents that have already been successfully processed.
+          </DialogContentText>
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'warning.light', borderRadius: 1 }}>
+            <Typography variant="body2" color="warning.dark">
+              <strong>Note:</strong> This is a resource-intensive operation that may take a significant amount of time depending on the number of documents.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmRetryAllOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => {
+              setConfirmRetryAllOpen(false);
+              handleRetryAllDocuments();
+            }}
+            variant="contained"
+            color="primary"
+            startIcon={<RefreshIcon />}
+          >
+            Retry All Documents
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Advanced Retry Modal */}
+      <BulkRetryModal
+        open={bulkRetryModalOpen}
+        onClose={() => setBulkRetryModalOpen(false)}
+        onSuccess={handleBulkRetrySuccess}
+        selectedDocumentIds={selectedDocumentIds}
+      />
+
+      {/* Retry History Modal */}
+      <RetryHistoryModal
+        open={retryHistoryModalOpen}
+        onClose={() => setRetryHistoryModalOpen(false)}
+        documentId={selectedDocumentForHistory || ''}
+        documentName={selectedDocumentForHistory ? 
+          documents.find(d => d.id === selectedDocumentForHistory)?.filename : undefined}
+      />
 
       {/* Success/Error Snackbar */}
       <Snackbar

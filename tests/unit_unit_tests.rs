@@ -20,6 +20,8 @@ fn test_document_response_conversion_with_ocr() {
         ocr_status: Some("completed".to_string()),
         ocr_error: None,
         ocr_completed_at: Some(Utc::now()),
+        ocr_retry_count: None,
+        ocr_failure_reason: None,
         tags: vec!["test".to_string()],
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -28,6 +30,12 @@ fn test_document_response_conversion_with_ocr() {
         original_created_at: None,
         original_modified_at: None,
         source_metadata: None,
+        source_path: None,
+        source_type: None,
+        source_id: None,
+        file_permissions: None,
+        file_owner: None,
+        file_group: None,
     };
     
     let response: DocumentResponse = document.clone().into();
@@ -57,6 +65,8 @@ fn test_document_response_conversion_without_ocr() {
         ocr_status: Some("pending".to_string()),
         ocr_error: None,
         ocr_completed_at: None,
+        ocr_retry_count: None,
+        ocr_failure_reason: None,
         tags: vec![],
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -65,6 +75,12 @@ fn test_document_response_conversion_without_ocr() {
         original_created_at: None,
         original_modified_at: None,
         source_metadata: None,
+        source_path: None,
+        source_type: None,
+        source_id: None,
+        file_permissions: None,
+        file_owner: None,
+        file_group: None,
     };
     
     let response: DocumentResponse = document.clone().into();

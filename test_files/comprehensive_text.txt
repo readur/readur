@@ -1,0 +1,15 @@
+This is a comprehensive test document for text metadata extraction.
+
+It contains multiple paragraphs, various types of content, and different characteristics.
+Word count: This sentence has exactly seven words counting properly.
+Line counting: Each line should be counted separately for accurate statistics.
+
+Unicode content: café, naïve, résumé, piñata, Zürich, москва, 東京, 🎉✨🔥
+Numbers and mixed content: 123 ABC def456 GHI789 test@example.com
+
+Special formatting:
+- Bulleted lists
+- Multiple items
+- With various content
+
+The document ends here with a final paragraph.

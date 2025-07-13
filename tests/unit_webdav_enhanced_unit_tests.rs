@@ -1,8 +1,8 @@
-use readur::services::webdav_service::{WebDAVService, WebDAVConfig, RetryConfig};
-use readur::models::FileInfo;
+use readur::services::webdav::{WebDAVService, WebDAVConfig, RetryConfig};
+use readur::webdav_xml_parser::parse_propfind_response;
+use readur::models::FileIngestionInfo;
 use readur::models::*;
-use tokio;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use uuid::Uuid;
 
 // Mock WebDAV responses for comprehensive testing
@@ -217,7 +217,7 @@ fn test_webdav_response_parsing_comprehensive() {
     
     // Test Nextcloud response parsing
     let nextcloud_response = mock_nextcloud_propfind_response();
-    let files = service.parse_webdav_response(&nextcloud_response);
+    let files = parse_propfind_response(&nextcloud_response);
     assert!(files.is_ok());
 
     let files = files.unwrap();
@@ -271,7 +271,7 @@ fn test_empty_folder_parsing() {
     let service = WebDAVService::new(config).unwrap();
     let response = mock_empty_folder_response();
     
-    let files = service.parse_webdav_response(&response);
+    let files = parse_propfind_response(&response);
     assert!(files.is_ok());
     
     let files = files.unwrap();
@@ -294,7 +294,7 @@ fn test_malformed_xml_handling() {
     let response = mock_malformed_xml_response();
     
     // Current simple parser might still extract some data from malformed XML
-    let result = service.parse_webdav_response(&response);
+    let result = parse_propfind_response(&response);
     // It might succeed or fail depending on how robust the parser is
     assert!(result.is_ok() || result.is_err());
 }
@@ -307,6 +307,7 @@ fn test_retry_config_custom_values() {
         max_delay_ms: 15000,
         backoff_multiplier: 1.5,
         timeout_seconds: 90,
+        rate_limit_backoff_ms: 10000,
     };
 
     assert_eq!(custom_retry.max_retries, 5);
@@ -314,6 +315,7 @@ fn test_retry_config_custom_values() {
     assert_eq!(custom_retry.max_delay_ms, 15000);
     assert_eq!(custom_retry.backoff_multiplier, 1.5);
     assert_eq!(custom_retry.timeout_seconds, 90);
+    assert_eq!(custom_retry.rate_limit_backoff_ms, 10000);
 
     let config = WebDAVConfig {
         server_url: "https://cloud.example.com".to_string(),
@@ -605,7 +607,7 @@ fn test_special_characters_in_paths() {
     ];
 
     for path in test_paths {
-        let file_info = FileInfo {
+        let file_info = FileIngestionInfo {
             path: path.to_string(),
             name: std::path::Path::new(path)
                 .file_name()

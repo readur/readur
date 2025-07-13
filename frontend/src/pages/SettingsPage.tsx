@@ -137,6 +137,27 @@ interface WebDAVConnectionResult {
   server_type?: string;
 }
 
+interface ServerConfiguration {
+  max_file_size_mb: number;
+  concurrent_ocr_jobs: number;
+  ocr_timeout_seconds: number;
+  memory_limit_mb: number;
+  cpu_priority: string;
+  server_host: string;
+  server_port: number;
+  jwt_secret_set: boolean;
+  upload_path: string;
+  watch_folder?: string;
+  ocr_language: string;
+  allowed_file_types: string[];
+  watch_interval_seconds?: number;
+  file_stability_check_ms?: number;
+  max_file_age_hours?: number;
+  enable_background_ocr: boolean;
+  version: string;
+  build_info?: string;
+}
+
 
 // Debounce utility function
 function useDebounce<T extends (...args: any[]) => any>(func: T, delay: number): T {
@@ -229,12 +250,17 @@ const SettingsPage: React.FC = () => {
   // OCR Admin Controls State
   const [ocrStatus, setOcrStatus] = useState<{ is_paused: boolean; status: 'paused' | 'running' } | null>(null);
   const [ocrActionLoading, setOcrActionLoading] = useState(false);
+  
+  // Server Configuration State
+  const [serverConfig, setServerConfig] = useState<ServerConfiguration | null>(null);
+  const [configLoading, setConfigLoading] = useState(false);
 
 
   useEffect(() => {
     fetchSettings();
     fetchUsers();
     fetchOcrStatus();
+    fetchServerConfiguration();
   }, []);
 
   const fetchSettings = async (): Promise<void> => {
@@ -450,6 +476,23 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const fetchServerConfiguration = async (): Promise<void> => {
+    setConfigLoading(true);
+    try {
+      const response = await api.get('/settings/config');
+      setServerConfig(response.data);
+    } catch (error: any) {
+      console.error('Error fetching server configuration:', error);
+      if (error.response?.status === 403) {
+        showSnackbar('Admin access required to view server configuration', 'error');
+      } else if (error.response?.status !== 404) {
+        showSnackbar('Failed to load server configuration', 'error');
+      }
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Typography variant="h4" sx={{ mb: 4 }}>
@@ -461,6 +504,7 @@ const SettingsPage: React.FC = () => {
           <Tab label="General" />
           <Tab label="OCR Settings" />
           <Tab label="User Management" />
+          <Tab label="Server Configuration" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
@@ -1078,6 +1122,185 @@ const SettingsPage: React.FC = () => {
                   </TableBody>
                 </Table>
               </TableContainer>
+            </Box>
+          )}
+
+          {tabValue === 3 && (
+            <Box>
+              <Typography variant="h6" sx={{ mb: 3 }}>
+                Server Configuration (Admin Only)
+              </Typography>
+
+              {configLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : serverConfig ? (
+                <>
+                  <Card sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                        File Upload Configuration
+                      </Typography>
+                      <Divider sx={{ mb: 2 }} />
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Max File Size</Typography>
+                          <Typography variant="h6">{serverConfig.max_file_size_mb} MB</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Upload Path</Typography>
+                          <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                            {serverConfig.upload_path}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Allowed File Types</Typography>
+                          <Box sx={{ mt: 1 }}>
+                            {serverConfig.allowed_file_types.map((type) => (
+                              <Chip key={type} label={type} size="small" sx={{ mr: 0.5, mb: 0.5 }} />
+                            ))}
+                          </Box>
+                        </Grid>
+                        {serverConfig.watch_folder && (
+                          <Grid item xs={12} md={6}>
+                            <Typography variant="body2" color="text.secondary">Watch Folder</Typography>
+                            <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                              {serverConfig.watch_folder}
+                            </Typography>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </CardContent>
+                  </Card>
+
+                  <Card sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                        OCR Processing Configuration
+                      </Typography>
+                      <Divider sx={{ mb: 2 }} />
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Concurrent OCR Jobs</Typography>
+                          <Typography variant="h6">{serverConfig.concurrent_ocr_jobs}</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">OCR Timeout</Typography>
+                          <Typography variant="h6">{serverConfig.ocr_timeout_seconds}s</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Memory Limit</Typography>
+                          <Typography variant="h6">{serverConfig.memory_limit_mb} MB</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">OCR Language</Typography>
+                          <Typography variant="h6">{serverConfig.ocr_language}</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">CPU Priority</Typography>
+                          <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>
+                            {serverConfig.cpu_priority}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Background OCR</Typography>
+                          <Chip 
+                            label={serverConfig.enable_background_ocr ? 'Enabled' : 'Disabled'}
+                            color={serverConfig.enable_background_ocr ? 'success' : 'warning'}
+                            size="small"
+                          />
+                        </Grid>
+                      </Grid>
+                    </CardContent>
+                  </Card>
+
+                  <Card sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                        Server Information
+                      </Typography>
+                      <Divider sx={{ mb: 2 }} />
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Server Host</Typography>
+                          <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                            {serverConfig.server_host}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Server Port</Typography>
+                          <Typography variant="h6">{serverConfig.server_port}</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">JWT Secret</Typography>
+                          <Chip 
+                            label={serverConfig.jwt_secret_set ? 'Configured' : 'Not Set'}
+                            color={serverConfig.jwt_secret_set ? 'success' : 'error'}
+                            size="small"
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <Typography variant="body2" color="text.secondary">Version</Typography>
+                          <Typography variant="h6">{serverConfig.version}</Typography>
+                        </Grid>
+                        {serverConfig.build_info && (
+                          <Grid item xs={12}>
+                            <Typography variant="body2" color="text.secondary">Build Information</Typography>
+                            <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                              {serverConfig.build_info}
+                            </Typography>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </CardContent>
+                  </Card>
+
+                  {serverConfig.watch_interval_seconds && (
+                    <Card sx={{ mb: 3 }}>
+                      <CardContent>
+                        <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                          Watch Folder Configuration
+                        </Typography>
+                        <Divider sx={{ mb: 2 }} />
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={6}>
+                            <Typography variant="body2" color="text.secondary">Watch Interval</Typography>
+                            <Typography variant="h6">{serverConfig.watch_interval_seconds}s</Typography>
+                          </Grid>
+                          {serverConfig.file_stability_check_ms && (
+                            <Grid item xs={12} md={6}>
+                              <Typography variant="body2" color="text.secondary">File Stability Check</Typography>
+                              <Typography variant="h6">{serverConfig.file_stability_check_ms}ms</Typography>
+                            </Grid>
+                          )}
+                          {serverConfig.max_file_age_hours && (
+                            <Grid item xs={12} md={6}>
+                              <Typography variant="body2" color="text.secondary">Max File Age</Typography>
+                              <Typography variant="h6">{serverConfig.max_file_age_hours}h</Typography>
+                            </Grid>
+                          )}
+                        </Grid>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <Box sx={{ mt: 2 }}>
+                    <Button
+                      variant="outlined"
+                      onClick={fetchServerConfiguration}
+                      startIcon={<CloudSyncIcon />}
+                      disabled={configLoading}
+                    >
+                      Refresh Configuration
+                    </Button>
+                  </Box>
+                </>
+              ) : (
+                <Alert severity="error">
+                  Failed to load server configuration. Admin access may be required.
+                </Alert>
+              )}
             </Box>
           )}
         </Box>

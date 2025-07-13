@@ -1,19 +1,15 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProviders } from '../../test/test-utils';
 import TestNotification from '../TestNotification';
 import { NotificationProvider } from '../../contexts/NotificationContext';
 import React from 'react';
 
-const theme = createTheme();
-
 const renderTestNotification = () => {
-  return render(
-    <ThemeProvider theme={theme}>
-      <NotificationProvider>
-        <TestNotification />
-      </NotificationProvider>
-    </ThemeProvider>
+  return renderWithProviders(
+    <NotificationProvider>
+      <TestNotification />
+    </NotificationProvider>
   );
 };
 
@@ -126,12 +122,10 @@ describe('TestNotification Integration', () => {
       );
     };
 
-    render(
-      <ThemeProvider theme={theme}>
-        <NotificationProvider>
-          <TestWrapper />
-        </NotificationProvider>
-      </ThemeProvider>
+    renderWithProviders(
+      <NotificationProvider>
+        <TestWrapper />
+      </NotificationProvider>
     );
 
     expect(screen.getByTestId('notification-count')).toHaveTextContent('0');

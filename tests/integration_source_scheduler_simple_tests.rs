@@ -182,6 +182,10 @@ fn test_interrupted_sync_detection() {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
     
     // Test that interrupted sync is detected
@@ -212,6 +216,10 @@ fn test_interrupted_sync_detection() {
         total_size_bytes: 1024,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     };
     
     assert_eq!(completed_source.status, SourceStatus::Idle);

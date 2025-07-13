@@ -8,7 +8,7 @@
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::time::{Duration, Instant};
-use tracing::{warn, info};
+use tracing::info;
 
 /// Request throttler to limit concurrent operations
 #[derive(Clone)]

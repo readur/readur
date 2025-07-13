@@ -17,7 +17,7 @@ use serde_json::json;
 
 use readur::{
     models::{WebDAVSourceConfig, SourceType, WebDAVFile, WebDAVCrawlEstimate, WebDAVFolderInfo},
-    services::webdav_service::{WebDAVService, WebDAVConfig},
+    services::webdav::{WebDAVService, WebDAVConfig},
 };
 
 /// Create a test WebDAV configuration

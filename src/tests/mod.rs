@@ -1,23 +1,5 @@
-mod helpers;
-mod auth_tests;
-mod config_oidc_tests;
-mod db_tests;
-mod documents_tests;
-mod document_routes_tests;
-mod file_service_tests;
-mod ignored_files_tests;
-mod labels_tests;
+// Pure unit tests (no external dependencies)
+mod document_response_serialization_tests;
 mod ocr_tests;
-mod enhanced_ocr_tests;
-mod oidc_tests;
-mod enhanced_search_tests;
 mod regression_tests;
-mod route_compilation_tests;
-mod settings_tests;
-mod sql_type_safety_tests;
-mod users_tests;
-mod generic_migration_tests;
-mod migration_constraint_tests;
-mod migration_integration_tests;
-mod failed_documents_unit_tests;
-mod document_response_serialization_tests; 
+mod route_compilation_tests; 

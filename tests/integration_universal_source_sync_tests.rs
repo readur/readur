@@ -52,6 +52,10 @@ fn create_test_webdav_source() -> Source {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     }
 }
 
@@ -80,6 +84,10 @@ fn create_test_local_source() -> Source {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     }
 }
 
@@ -111,6 +119,10 @@ fn create_test_s3_source() -> Source {
         total_size_bytes: 0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        validation_status: None,
+        last_validation_at: None,
+        validation_score: None,
+        validation_issues: None,
     }
 }
 

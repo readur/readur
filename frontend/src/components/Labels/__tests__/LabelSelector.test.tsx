@@ -1,50 +1,14 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import LabelSelector from '../LabelSelector';
 import { type LabelData } from '../Label';
+import { renderWithProviders } from '../../../test/test-utils';
+import { 
+  testDataBuilders 
+} from '../../../test/label-test-utils';
 
-const theme = createTheme();
-
-const mockLabels: LabelData[] = [
-  {
-    id: 'label-1',
-    name: 'Important',
-    description: 'High priority items',
-    color: '#d73a49',
-    icon: 'star',
-    is_system: true,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-    document_count: 10,
-    source_count: 2,
-  },
-  {
-    id: 'label-2',
-    name: 'Work',
-    description: 'Work-related documents',
-    color: '#0969da',
-    icon: 'work',
-    is_system: true,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-    document_count: 5,
-    source_count: 1,
-  },
-  {
-    id: 'label-3',
-    name: 'Personal Project',
-    description: 'My personal project files',
-    color: '#28a745',
-    icon: 'folder',
-    is_system: false,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-    document_count: 3,
-    source_count: 0,
-  },
-];
+const mockLabels = testDataBuilders.createTypicalLabelSet();
 
 const renderLabelSelector = (props: Partial<React.ComponentProps<typeof LabelSelector>> = {}) => {
   const defaultProps = {
@@ -54,11 +18,7 @@ const renderLabelSelector = (props: Partial<React.ComponentProps<typeof LabelSel
     ...props,
   };
 
-  return render(
-    <ThemeProvider theme={theme}>
-      <LabelSelector {...defaultProps} />
-    </ThemeProvider>
-  );
+  return renderWithProviders(<LabelSelector {...defaultProps} />);
 };
 
 describe('LabelSelector Component', () => {
@@ -119,7 +79,7 @@ describe('LabelSelector Component', () => {
       
       await waitFor(() => {
         expect(screen.getByText('Work')).toBeInTheDocument();
-        expect(screen.getByText('Personal Project')).toBeInTheDocument();
+        expect(screen.getByText('Project Alpha')).toBeInTheDocument();
       });
       
       // Important should not appear in the dropdown options (but may appear in selected tags)
@@ -179,7 +139,7 @@ describe('LabelSelector Component', () => {
     test('should remove label when delete button is clicked', async () => {
       const onLabelsChange = vi.fn();
       // Use only non-system labels since system labels don't have delete buttons
-      const selectedLabels = [mockLabels[2]]; // Personal Project (non-system)
+      const selectedLabels = [mockLabels[3]]; // Project Alpha (non-system)
       
       renderLabelSelector({ 
         selectedLabels,
@@ -187,7 +147,7 @@ describe('LabelSelector Component', () => {
       });
       
       // Find the chip with the delete button
-      const personalProjectChip = screen.getByText('Personal Project').closest('.MuiChip-root');
+      const personalProjectChip = screen.getByText('Project Alpha').closest('.MuiChip-root');
       expect(personalProjectChip).toBeInTheDocument();
       
       // Find the delete button within that specific chip
@@ -202,7 +162,7 @@ describe('LabelSelector Component', () => {
     });
 
     test('should not show delete buttons when disabled', () => {
-      const selectedLabels = [mockLabels[2]]; // Non-system label
+      const selectedLabels = [mockLabels[3]]; // Non-system label
       
       renderLabelSelector({ 
         selectedLabels,
@@ -224,7 +184,7 @@ describe('LabelSelector Component', () => {
         // Check that labels appear in the dropdown
         expect(screen.getByText('Important')).toBeInTheDocument();
         expect(screen.getByText('Work')).toBeInTheDocument();
-        expect(screen.getByText('Personal Project')).toBeInTheDocument();
+        expect(screen.getByText('Project Alpha')).toBeInTheDocument();
       });
     });
 
@@ -238,7 +198,7 @@ describe('LabelSelector Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Important')).toBeInTheDocument();
         expect(screen.getByText('Work')).toBeInTheDocument();
-        expect(screen.queryByText('Personal Project')).not.toBeInTheDocument();
+        expect(screen.queryByText('Project Alpha')).not.toBeInTheDocument();
       });
     });
   });
@@ -253,7 +213,7 @@ describe('LabelSelector Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Work')).toBeInTheDocument();
         expect(screen.queryByText('Important')).not.toBeInTheDocument();
-        expect(screen.queryByText('Personal Project')).not.toBeInTheDocument();
+        expect(screen.queryByText('Project Alpha')).not.toBeInTheDocument();
       });
     });
 
@@ -414,10 +374,10 @@ describe('LabelSelector Component', () => {
       await user.click(input);
       
       await waitFor(() => {
-        expect(screen.getByText('Personal Project')).toBeInTheDocument();
+        expect(screen.getByText('Project Alpha')).toBeInTheDocument();
       });
       
-      await user.click(screen.getByText('Personal Project'));
+      await user.click(screen.getByText('Project Alpha'));
       
       // Should not add the third label due to maxTags limit
       expect(onLabelsChange).not.toHaveBeenCalled();

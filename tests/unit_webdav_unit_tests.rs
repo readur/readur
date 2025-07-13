@@ -1,5 +1,5 @@
-use readur::services::webdav_service::{WebDAVService, WebDAVConfig};
-use readur::models::FileInfo;
+use readur::services::webdav::{WebDAVService, WebDAVConfig};
+use readur::models::FileIngestionInfo;
 use readur::models::*;
 use tokio;
 
@@ -103,7 +103,7 @@ fn test_webdav_response_parsing() {
     let service = WebDAVService::new(config).unwrap();
     let response = mock_propfind_response();
     
-    let files = service.parse_webdav_response(&response);
+    let files = readur::webdav_xml_parser::parse_propfind_response(&response);
     assert!(files.is_ok());
 
     let files = files.unwrap();

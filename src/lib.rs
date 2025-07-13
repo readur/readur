@@ -3,6 +3,7 @@ pub mod config;
 pub mod db;
 pub mod db_guardrails_simple;
 pub mod ingestion;
+pub mod metadata_extraction;
 pub mod models;
 pub mod monitoring;
 pub mod ocr;
@@ -12,6 +13,7 @@ pub mod scheduling;
 pub mod seed;
 pub mod services;
 pub mod swagger;
+pub mod utils;
 pub mod webdav_xml_parser;
 
 #[cfg(test)]

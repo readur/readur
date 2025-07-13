@@ -17,8 +17,8 @@ use crate::{
     },
     AppState,
 };
-use crate::services::webdav_service::WebDAVConfig;
-use crate::services::webdav_service::WebDAVService;
+use crate::services::webdav::WebDAVConfig;
+use crate::services::webdav::WebDAVService;
 
 pub mod webdav_sync;
 use webdav_sync::perform_webdav_sync_with_tracking;
@@ -106,7 +106,7 @@ async fn test_webdav_connection(
     // Create WebDAV service and test connection
     match WebDAVService::new(webdav_config) {
         Ok(webdav_service) => {
-            match webdav_service.test_connection(test_config).await {
+            match WebDAVService::test_connection_with_config(&test_config).await {
                 Ok(result) => {
                     info!("WebDAV connection test completed: {}", result.message);
                     Ok(Json(result))
@@ -182,7 +182,7 @@ async fn estimate_webdav_crawl(
     // Create WebDAV service and estimate crawl
     match WebDAVService::new(webdav_config) {
         Ok(webdav_service) => {
-            match webdav_service.estimate_crawl(&folders).await {
+            match webdav_service.estimate_crawl().await {
                 Ok(estimate) => {
                     info!("Crawl estimation completed: {} total files, {} supported files", 
                         estimate.total_files, estimate.total_supported_files);

@@ -1,0 +1,5 @@
+Pure ASCII text document without any Unicode characters.
+This file contains only standard ASCII characters from the basic set.
+Numbers: 0123456789
+Punctuation: .,;:!?'"()-[]{}
+All characters should be ASCII-only for testing encoding detection.
