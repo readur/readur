@@ -70,7 +70,6 @@ tempfile = "3"
 wiremock = "0.6" 
 tokio-test = "0.4"
 futures = "0.3"
-axum-test = "15"
 # Database testing dependencies
 testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
