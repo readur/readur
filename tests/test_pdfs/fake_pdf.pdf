@@ -1,0 +1,3 @@
+This is not a PDF file at all, just plain text with a PDF extension.
+It should cause pdf-extract to fail when trying to parse it.
+This tests the error handling for files that aren't actually PDFs.
