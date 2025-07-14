@@ -26,6 +26,19 @@ test.describe('WebDAV Workflow (Dynamic Auth)', () => {
       throw new Error('Test is stuck on login page - authentication failed');
     }
     
+    // Wait for loading to complete and sources to be displayed
+    // The Add Source button only appears after the loading state finishes
+    await page.waitForLoadState('networkidle');
+    
+    // Wait for the loading spinner to disappear
+    const loadingSpinner = page.locator('[role="progressbar"], .MuiCircularProgress-root');
+    if (await loadingSpinner.isVisible({ timeout: 2000 })) {
+      await expect(loadingSpinner).not.toBeVisible({ timeout: TIMEOUTS.long });
+    }
+    
+    // Wait a bit more for the page to fully render
+    await page.waitForTimeout(2000);
+    
     // Look for add source button using flexible selectors
     const addSourceSelectors = [
       '[data-testid="add-source"]',
@@ -46,6 +59,9 @@ test.describe('WebDAV Workflow (Dynamic Auth)', () => {
     }
     
     if (!addSourceButton) {
+      // Debug: log what's actually visible on the page
+      const pageContent = await page.textContent('body');
+      console.log('Page content:', pageContent?.substring(0, 500));
       throw new Error('Could not find add source button');
     }
     

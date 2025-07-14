@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import { LanguageInfo } from '../services/api'
+import { LanguageInfo } from '../../services/api'
 
 interface LanguageSelectorProps {
   selectedLanguages: string[]

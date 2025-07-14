@@ -50,7 +50,7 @@ test.describe('OCR Multiple Languages', () => {
     await expect(languageSelector).toBeVisible({ timeout: TIMEOUTS.medium });
 
     // Check for the language selector button
-    const selectButton = page.locator('button:has-text("Select OCR languages")').first();
+    const selectButton = page.locator('button:has-text("Select OCR languages"), button:has-text("Add more languages")').first();
     if (await selectButton.isVisible()) {
       await selectButton.click();
       
@@ -61,9 +61,9 @@ test.describe('OCR Multiple Languages', () => {
       const dropdownPanel = page.locator('text="Available Languages"').first();
       await expect(dropdownPanel).toBeVisible({ timeout: 3000 });
       
-      // Check for Spanish and English options
-      const spanishOption = page.locator('text="Spanish"').first();
-      const englishOption = page.locator('text="English"').first();
+      // Check for Spanish and English options in the dropdown
+      const spanishOption = page.locator('div:has-text("Spanish")').first();
+      const englishOption = page.locator('div:has-text("English")').first();
       
       if (await spanishOption.isVisible({ timeout: 3000 })) {
         console.log('✅ Spanish language option found');
@@ -71,6 +71,9 @@ test.describe('OCR Multiple Languages', () => {
       if (await englishOption.isVisible({ timeout: 3000 })) {
         console.log('✅ English language option found');
       }
+      
+      // Close dropdown
+      await page.keyboard.press('Escape');
     }
   });
 
@@ -79,29 +82,27 @@ test.describe('OCR Multiple Languages', () => {
     await helpers.waitForLoadingToComplete();
 
     // Find the multi-language selector button
-    const selectButton = page.locator('button:has-text("Select OCR languages")').first();
+    const selectButton = page.locator('button:has-text("Select OCR languages"), button:has-text("Add more languages")').first();
     
     if (await selectButton.isVisible()) {
       await selectButton.click();
       await page.waitForTimeout(500);
       
-      // Select Spanish option
-      const spanishOption = page.locator('button:has-text("Spanish")').first();
+      // Select Spanish option using the correct button structure
+      const spanishOption = page.locator('button:has(~ div:has-text("Spanish"))').first();
       if (await spanishOption.isVisible({ timeout: 5000 })) {
         await spanishOption.click();
         await page.waitForTimeout(500);
         
-        // Select English option
-        const englishOption = page.locator('button:has-text("English")').first();
+        // Select English option using the correct button structure
+        const englishOption = page.locator('button:has(~ div:has-text("English"))').first();
         if (await englishOption.isVisible({ timeout: 5000 })) {
           await englishOption.click();
           await page.waitForTimeout(500);
           
           // Close the dropdown
-          const closeButton = page.locator('button:has-text("Close")').first();
-          if (await closeButton.isVisible()) {
-            await closeButton.click();
-          }
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(500);
           
           // Verify both languages are selected and displayed as tags
           await expect(page.locator('text="Spanish"')).toBeVisible({ timeout: 3000 });
@@ -126,16 +127,24 @@ test.describe('OCR Multiple Languages', () => {
   });
 
   test('should upload Spanish document and process with Spanish OCR', async ({ adminPage: page }) => {
-    // First set language to Spanish
+    // First set language to Spanish using the multi-language selector
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
     
-    const languageSelector = page.locator('div:has(label:text("OCR Language")), [data-testid="ocr-language-selector"]').first();
-    if (await languageSelector.isVisible()) {
-      await languageSelector.click();
-      const spanishOption = page.locator('[data-value="spa"], li:has-text("Spanish")').first();
+    const selectButton = page.locator('button:has-text("Select OCR languages"), button:has-text("Add more languages")').first();
+    if (await selectButton.isVisible()) {
+      await selectButton.click();
+      await page.waitForTimeout(500);
+      
+      // Select Spanish option
+      const spanishOption = page.locator('button:has(~ div:has-text("Spanish"))').first();
       if (await spanishOption.isVisible({ timeout: 5000 })) {
         await spanishOption.click();
+        await page.waitForTimeout(500);
+        
+        // Close dropdown and save
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(500);
         
         const saveButton = page.locator('button:has-text("Save")').first();
         if (await saveButton.isVisible()) {
@@ -177,16 +186,24 @@ test.describe('OCR Multiple Languages', () => {
   });
 
   test('should upload English document and process with English OCR', async ({ adminPage: page }) => {
-    // First set language to English
+    // First set language to English using the multi-language selector
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
     
-    const languageSelector = page.locator('div:has(label:text("OCR Language")), [data-testid="ocr-language-selector"]').first();
-    if (await languageSelector.isVisible()) {
-      await languageSelector.click();
-      const englishOption = page.locator('[data-value="eng"], li:has-text("English")').first();
+    const selectButton = page.locator('button:has-text("Select OCR languages"), button:has-text("Add more languages")').first();
+    if (await selectButton.isVisible()) {
+      await selectButton.click();
+      await page.waitForTimeout(500);
+      
+      // Select English option
+      const englishOption = page.locator('button:has(~ div:has-text("English"))').first();
       if (await englishOption.isVisible({ timeout: 5000 })) {
         await englishOption.click();
+        await page.waitForTimeout(500);
+        
+        // Close dropdown and save
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(500);
         
         const saveButton = page.locator('button:has-text("Save")').first();
         if (await saveButton.isVisible()) {
@@ -377,13 +394,20 @@ test.describe('OCR Multiple Languages', () => {
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
     
-    const languageSelector = page.locator('div:has(label:text("OCR Language"))').first();
-    if (await languageSelector.isVisible()) {
-      await languageSelector.click();
+    const selectButton = page.locator('button:has-text("Select OCR languages"), button:has-text("Add more languages")').first();
+    if (await selectButton.isVisible()) {
+      await selectButton.click();
+      await page.waitForTimeout(500);
       
-      const spanishOption = page.locator('[data-value="spa"], li:has-text("Spanish")').first();
+      // Select Spanish option
+      const spanishOption = page.locator('button:has(~ div:has-text("Spanish"))').first();
       if (await spanishOption.isVisible()) {
         await spanishOption.click();
+        await page.waitForTimeout(500);
+        
+        // Close dropdown and save
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(500);
         
         const saveButton = page.locator('button:has-text("Save")').first();
         if (await saveButton.isVisible()) {
@@ -397,9 +421,9 @@ test.describe('OCR Multiple Languages', () => {
     await page.reload();
     await helpers.waitForLoadingToComplete();
     
-    // Check if Spanish is still selected
-    const currentLanguageIndicator = page.locator('text="Spanish", [data-value="spa"]').first();
-    if (await currentLanguageIndicator.isVisible({ timeout: 5000 })) {
+    // Check if Spanish is still selected by looking for the language tag
+    const spanishTag = page.locator('span:has-text("Spanish")').first();
+    if (await spanishTag.isVisible({ timeout: 5000 })) {
       console.log('✅ Language preference persisted across reload');
     } else {
       console.log('ℹ️ Could not verify language persistence');
@@ -418,19 +442,22 @@ test.describe('OCR Multiple Languages', () => {
       console.log('✅ OCR languages API called successfully');
       
       // Check if language selector shows loading then options
-      const languageSelector = page.locator('[data-testid="ocr-language-selector"]').first();
-      if (await languageSelector.isVisible()) {
+      const selectButton = page.locator('button:has-text("Select OCR languages"), button:has-text("Add more languages")').first();
+      if (await selectButton.isVisible()) {
         // Click to see available options
-        await languageSelector.click();
+        await selectButton.click();
         await page.waitForTimeout(1000);
         
-        // Count available language options
-        const languageOptions = page.locator('li[role="option"], option[value]');
+        // Count available language options in the dropdown
+        const languageOptions = page.locator('div:has-text("Spanish"), div:has-text("English"), div:has-text("French")');
         const optionCount = await languageOptions.count();
         
         if (optionCount > 0) {
           console.log(`✅ Found ${optionCount} language options in selector`);
         }
+        
+        // Close dropdown
+        await page.keyboard.press('Escape');
       }
     } catch (error) {
       console.log('ℹ️ Could not capture languages API call');
@@ -526,28 +553,27 @@ test.describe('OCR Multiple Languages', () => {
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
 
-    const selectButton = page.locator('button:has-text("Select OCR languages")').first();
+    const selectButton = page.locator('button:has-text("Select OCR languages"), button:has-text("Add more languages")').first();
     if (await selectButton.isVisible()) {
       await selectButton.click();
+      await page.waitForTimeout(500);
       
-      // Select English and Spanish
-      const englishOption = page.locator('button:has-text("English")').first();
+      // Select English and Spanish using the correct button structure
+      const englishOption = page.locator('button:has(~ div:has-text("English"))').first();
       if (await englishOption.isVisible()) {
         await englishOption.click();
         await page.waitForTimeout(500);
       }
       
-      const spanishOption = page.locator('button:has-text("Spanish")').first();
+      const spanishOption = page.locator('button:has(~ div:has-text("Spanish"))').first();
       if (await spanishOption.isVisible()) {
         await spanishOption.click();
         await page.waitForTimeout(500);
       }
       
-      // Close dropdown and save
-      const closeButton = page.locator('button:has-text("Close")').first();
-      if (await closeButton.isVisible()) {
-        await closeButton.click();
-      }
+      // Close dropdown by clicking outside or pressing escape
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
       
       const saveButton = page.locator('button:has-text("Save")').first();
       if (await saveButton.isVisible()) {
@@ -587,7 +613,7 @@ test.describe('OCR Multiple Languages', () => {
 
     // Upload a test file
     const fileInput = page.locator('input[type="file"]').first();
-    if (await fileInput.isAttached({ timeout: 10000 })) {
+    if (await fileInput.isVisible({ timeout: 10000 })) {
       try {
         await fileInput.setInputFiles(MULTILINGUAL_TEST_FILES.mixed);
         
@@ -632,28 +658,26 @@ test.describe('OCR Multiple Languages', () => {
           // Look for language selector in retry dialog
           const retryLanguageSelector = page.locator('label:has-text("OCR Languages")').first();
           if (await retryLanguageSelector.isVisible()) {
-            const retrySelectButton = page.locator('button:has-text("Select OCR languages")').first();
+            const retrySelectButton = page.locator('button:has-text("Select OCR languages"), button:has-text("Add more languages")').first();
             if (await retrySelectButton.isVisible()) {
               await retrySelectButton.click();
               
               // Select multiple languages for retry
-              const retryEnglishOption = page.locator('button:has-text("English")').first();
+              const retryEnglishOption = page.locator('button:has(~ div:has-text("English"))').first();
               if (await retryEnglishOption.isVisible()) {
                 await retryEnglishOption.click();
                 await page.waitForTimeout(500);
               }
               
-              const retrySpanishOption = page.locator('button:has-text("Spanish")').first();
+              const retrySpanishOption = page.locator('button:has(~ div:has-text("Spanish"))').first();
               if (await retrySpanishOption.isVisible()) {
                 await retrySpanishOption.click();
                 await page.waitForTimeout(500);
               }
               
               // Close language selector
-              const retryCloseButton = page.locator('button:has-text("Close")').first();
-              if (await retryCloseButton.isVisible()) {
-                await retryCloseButton.click();
-              }
+              await page.keyboard.press('Escape');
+              await page.waitForTimeout(500);
             }
           }
           
