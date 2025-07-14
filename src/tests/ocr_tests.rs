@@ -393,4 +393,295 @@ startxref
         assert!(all_updates.contains_key(&doc_id1));
         assert!(all_updates.contains_key(&doc_id2));
     }
+
+    /// Test that malformed PDFs don't crash the OCR system
+    #[tokio::test]
+    async fn test_malformed_pdf_panic_handling() {
+        let ocr_service = OcrService::new();
+        
+        // Create a malformed PDF in memory that will cause pdf-extract to panic
+        let malformed_pdf_content = b"%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 999 >>
+stream
+BT
+/F1 12 Tf
+100 700 Td
+(This is a malformed PDF with invalid content stream) Tj
+ET
+INVALID_CONTENT_STREAM_DATA_THAT_CAUSES_PANIC
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000262 00000 n
+0000000341 00000 n
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+999
+%%EOF";
+
+        // Write to temporary file
+        let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
+        std::fs::write(temp_file.path(), malformed_pdf_content).unwrap();
+        
+        let result = ocr_service.extract_text_from_pdf(temp_file.path().to_str().unwrap()).await;
+        // Should not panic, should return an error instead
+        assert!(result.is_err(), "Expected error for malformed PDF");
+        let error_msg = result.unwrap_err().to_string();
+        println!("Error message: {}", error_msg);
+        // Should contain descriptive error message
+        assert!(
+            error_msg.contains("panic") || 
+            error_msg.contains("invalid content stream") ||
+            error_msg.contains("corrupted") ||
+            error_msg.contains("extract") ||
+            error_msg.contains("Failed to extract")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_corrupted_pdf_structure_handling() {
+        let ocr_service = OcrService::new();
+        
+        // Create a corrupted PDF structure that will cause pdf-extract to fail
+        let corrupted_pdf_content = b"%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 44 >>
+stream
+BT
+/F1 12 Tf
+100 700 Td
+(Corrupted PDF) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000262 00000 n
+0000000341 00000 n
+trailer
+<< /Size 6 /Root 1 0 R /InvalidKey >>
+startxref
+999999
+%%EOF";
+
+        let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
+        std::fs::write(temp_file.path(), corrupted_pdf_content).unwrap();
+        
+        let result = ocr_service.extract_text_from_pdf(temp_file.path().to_str().unwrap()).await;
+        // Should not panic, should return an error instead
+        assert!(result.is_err(), "Expected error for corrupted PDF");
+        let error_msg = result.unwrap_err().to_string();
+        println!("Corrupted PDF error: {}", error_msg);
+        // Should contain descriptive error message
+        assert!(
+            error_msg.contains("panic") || 
+            error_msg.contains("corrupted") ||
+            error_msg.contains("extract") ||
+            error_msg.contains("PDF") ||
+            error_msg.contains("Failed to extract")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_invalid_font_encoding_handling() {
+        let ocr_service = OcrService::new();
+        
+        // Test with invalid font encoding
+        let invalid_font = "tests/test_pdfs/invalid_font_encoding.pdf";
+        if Path::new(invalid_font).exists() {
+            let result = ocr_service.extract_text_from_pdf(invalid_font).await;
+            // Should not panic, should return an error instead
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err().to_string();
+            // Should contain descriptive error message
+            assert!(
+                error_msg.contains("panic") || 
+                error_msg.contains("font") ||
+                error_msg.contains("encoding") ||
+                error_msg.contains("extract")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_fake_pdf_handling() {
+        let ocr_service = OcrService::new();
+        
+        // Create a fake PDF file (not actually a PDF) that will definitely cause an error
+        let fake_pdf_content = b"This is not a PDF file at all, just plain text with a PDF extension.
+It should cause pdf-extract to fail when trying to parse it.
+This tests the error handling for files that aren't actually PDFs.";
+
+        let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
+        std::fs::write(temp_file.path(), fake_pdf_content).unwrap();
+        
+        let result = ocr_service.extract_text_from_pdf(temp_file.path().to_str().unwrap()).await;
+        // Should not panic, should return an error instead
+        assert!(result.is_err(), "Expected error for fake PDF");
+        let error_msg = result.unwrap_err().to_string();
+        println!("Fake PDF error: {}", error_msg);
+        // Should contain descriptive error message about parsing failure
+        assert!(
+            error_msg.contains("extract") ||
+            error_msg.contains("parse") ||
+            error_msg.contains("PDF") ||
+            error_msg.contains("format") ||
+            error_msg.contains("Failed to extract")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_problematic_encoding_pdf_handling() {
+        let ocr_service = OcrService::new();
+        
+        // Test with the existing problematic encoding PDF
+        let problematic_encoding = "tests/test_pdfs/problematic_encoding.pdf";
+        if Path::new(problematic_encoding).exists() {
+            let result = ocr_service.extract_text_from_pdf(problematic_encoding).await;
+            // Should not panic, should return an error instead
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err().to_string();
+            // Should contain descriptive error message
+            assert!(
+                error_msg.contains("panic") || 
+                error_msg.contains("encoding") ||
+                error_msg.contains("extract") ||
+                error_msg.contains("font")
+            );
+        }
+    }
+
+    /// Test that the enhanced OCR service also handles panics correctly
+    #[tokio::test]
+    async fn test_enhanced_ocr_panic_handling() {
+        use crate::ocr::enhanced::EnhancedOcrService;
+        use crate::services::file_service::FileService;
+        use crate::models::Settings;
+        
+        let ocr_service = EnhancedOcrService::new("tests".to_string());
+        let settings = Settings::default();
+        
+        // Test all malformed PDFs with enhanced OCR
+        let test_files = vec![
+            "tests/test_pdfs/malformed_content_stream.pdf",
+            "tests/test_pdfs/corrupted_structure.pdf", 
+            "tests/test_pdfs/invalid_font_encoding.pdf",
+            "tests/test_pdfs/fake_pdf.pdf",
+            "tests/test_pdfs/problematic_encoding.pdf",
+        ];
+        
+        for test_file in test_files {
+            if Path::new(test_file).exists() {
+                let result = ocr_service.extract_text_with_context(
+                    test_file,
+                    "application/pdf",
+                    &Path::new(test_file).file_name().unwrap().to_str().unwrap(),
+                    1024, // file_size
+                    &settings
+                ).await;
+                
+                // Should not panic, should return an error instead
+                assert!(result.is_err(), "Expected error for file: {}", test_file);
+                let error_msg = result.unwrap_err().to_string();
+                
+                // Should contain descriptive error message
+                assert!(
+                    error_msg.contains("panic") || 
+                    error_msg.contains("extract") ||
+                    error_msg.contains("PDF") ||
+                    error_msg.contains("corrupted") ||
+                    error_msg.contains("encoding") ||
+                    error_msg.contains("font"),
+                    "Error message should be descriptive for {}: {}", test_file, error_msg
+                );
+            }
+        }
+    }
+
+    /// Test that panic handling works correctly in concurrent scenarios
+    #[tokio::test]
+    async fn test_concurrent_pdf_panic_handling() {
+        use std::sync::Arc;
+        use futures::future::join_all;
+        
+        let ocr_service = Arc::new(OcrService::new());
+        let mut handles = Vec::new();
+        
+        // Test concurrent processing of malformed PDFs
+        let test_files = vec![
+            "tests/test_pdfs/malformed_content_stream.pdf",
+            "tests/test_pdfs/corrupted_structure.pdf",
+            "tests/test_pdfs/invalid_font_encoding.pdf",
+            "tests/test_pdfs/fake_pdf.pdf",
+        ];
+        
+        for test_file in test_files {
+            if Path::new(test_file).exists() {
+                let ocr_service_clone = Arc::clone(&ocr_service);
+                let test_file_owned = test_file.to_string();
+                
+                let handle = tokio::spawn(async move {
+                    let result = ocr_service_clone.extract_text_from_pdf(&test_file_owned).await;
+                    // Should not panic, should return an error instead
+                    assert!(result.is_err(), "Expected error for file: {}", test_file_owned);
+                    let error_msg = result.unwrap_err().to_string();
+                    
+                    // Should contain descriptive error message
+                    assert!(
+                        error_msg.contains("panic") || 
+                        error_msg.contains("extract") ||
+                        error_msg.contains("PDF") ||
+                        error_msg.contains("corrupted") ||
+                        error_msg.contains("encoding"),
+                        "Error message should be descriptive for {}: {}", test_file_owned, error_msg
+                    );
+                });
+                
+                handles.push(handle);
+            }
+        }
+        
+        // Wait for all concurrent tasks to complete
+        let results = join_all(handles).await;
+        
+        // Verify all tasks completed without panicking
+        for result in results {
+            assert!(result.is_ok(), "Task should complete without panicking");
+        }
+    }
 }
