@@ -116,6 +116,10 @@ use crate::{
         crate::routes::webdav::get_webdav_sync_status,
         crate::routes::webdav::test_webdav_connection,
         crate::routes::webdav::estimate_webdav_crawl,
+        // OCR endpoints
+        crate::routes::ocr::get_available_languages,
+        crate::ocr::api::health_check,
+        crate::ocr::api::perform_ocr,
         // Ignored files endpoints
         crate::routes::ignored_files::list_ignored_files,
         crate::routes::ignored_files::get_ignored_file,
@@ -143,7 +147,10 @@ use crate::{
             Label, CreateLabel, UpdateLabel, LabelAssignment, LabelQuery, LabelBulkUpdateRequest,
             // Document schemas
             BulkDeleteRequest, DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
-            BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse
+            BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
+            // OCR schemas
+            crate::routes::ocr::AvailableLanguagesResponse, crate::routes::ocr::LanguageInfo,
+            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse, crate::ocr::api::OcrRequest
         )
     ),
     tags(
@@ -159,6 +166,7 @@ use crate::{
         (name = "sources", description = "Document source management endpoints"),
         (name = "webdav", description = "WebDAV synchronization endpoints"),
         (name = "ignored_files", description = "Ignored files management endpoints"),
+        (name = "ocr", description = "OCR service management endpoints"),
         (name = "health", description = "Health check endpoint"),
     ),
     modifiers(&SecurityAddon),

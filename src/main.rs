@@ -519,6 +519,7 @@ async fn main() -> anyhow::Result<()> {
         .nest("/api/metrics", readur::routes::metrics::router())
         .nest("/metrics", readur::routes::prometheus_metrics::router())
         .nest("/api/notifications", readur::routes::notifications::router())
+        .nest("/api/ocr", readur::routes::ocr::router())
         .nest("/api/queue", readur::routes::queue::router())
         .nest("/api/search", readur::routes::search::router())
         .nest("/api/settings", readur::routes::settings::router())

@@ -42,6 +42,8 @@ import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon,
          Pause as PauseIcon, Stop as StopIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import api, { queueService } from '../services/api';
+import OcrLanguageSelector from '../components/OcrLanguageSelector';
+import LanguageSelector from '../components/LanguageSelector';
 
 interface User {
   id: string;
@@ -52,6 +54,9 @@ interface User {
 
 interface Settings {
   ocrLanguage: string;
+  preferredLanguages: string[];
+  primaryLanguage: string;
+  autoDetectLanguageCombination: boolean;
   concurrentOcrJobs: number;
   ocrTimeoutSeconds: number;
   maxFileSizeMb: number;
@@ -112,10 +117,6 @@ interface UserFormData {
   password: string;
 }
 
-interface OcrLanguage {
-  code: string;
-  name: string;
-}
 
 interface WebDAVFolderInfo {
   path: string;
@@ -191,6 +192,9 @@ const SettingsPage: React.FC = () => {
   const [tabValue, setTabValue] = useState<number>(0);
   const [settings, setSettings] = useState<Settings>({
     ocrLanguage: 'eng',
+    preferredLanguages: ['eng'],
+    primaryLanguage: 'eng',
+    autoDetectLanguageCombination: false,
     concurrentOcrJobs: 4,
     ocrTimeoutSeconds: 300,
     maxFileSizeMb: 50,
@@ -258,23 +262,6 @@ const SettingsPage: React.FC = () => {
   const [serverConfig, setServerConfig] = useState<ServerConfiguration | null>(null);
   const [configLoading, setConfigLoading] = useState(false);
 
-  const ocrLanguages: OcrLanguage[] = [
-    { code: 'eng', name: 'English' },
-    { code: 'spa', name: 'Spanish' },
-    { code: 'fra', name: 'French' },
-    { code: 'deu', name: 'German' },
-    { code: 'ita', name: 'Italian' },
-    { code: 'por', name: 'Portuguese' },
-    { code: 'rus', name: 'Russian' },
-    { code: 'jpn', name: 'Japanese' },
-    { code: 'chi_sim', name: 'Chinese (Simplified)' },
-    { code: 'chi_tra', name: 'Chinese (Traditional)' },
-    { code: 'kor', name: 'Korean' },
-    { code: 'ara', name: 'Arabic' },
-    { code: 'hin', name: 'Hindi' },
-    { code: 'nld', name: 'Dutch' },
-    { code: 'pol', name: 'Polish' },
-  ];
 
   useEffect(() => {
     fetchSettings();
@@ -288,6 +275,9 @@ const SettingsPage: React.FC = () => {
       const response = await api.get('/settings');
       setSettings({
         ocrLanguage: response.data.ocr_language || 'eng',
+        preferredLanguages: response.data.preferred_languages || ['eng'],
+        primaryLanguage: response.data.primary_language || 'eng',
+        autoDetectLanguageCombination: response.data.auto_detect_language_combination || false,
         concurrentOcrJobs: response.data.concurrent_ocr_jobs || 4,
         ocrTimeoutSeconds: response.data.ocr_timeout_seconds || 300,
         maxFileSizeMb: response.data.max_file_size_mb || 50,
@@ -441,9 +431,6 @@ const SettingsPage: React.FC = () => {
     setTabValue(newValue);
   };
 
-  const handleOcrLanguageChange = (event: SelectChangeEvent<string>): void => {
-    handleSettingsChange('ocrLanguage', event.target.value);
-  };
 
   const handleCpuPriorityChange = (event: SelectChangeEvent<string>): void => {
     handleSettingsChange('cpuPriority', event.target.value);
@@ -451,6 +438,20 @@ const SettingsPage: React.FC = () => {
 
   const handleResultsPerPageChange = (event: SelectChangeEvent<number>): void => {
     handleSettingsChange('searchResultsPerPage', event.target.value);
+  };
+
+  const handleLanguagesChange = (languages: string[], primary?: string) => {
+    // Update multiple fields at once
+    const updates = {
+      preferredLanguages: languages,
+      primaryLanguage: primary || languages[0] || 'eng',
+      ocrLanguage: primary || languages[0] || 'eng', // Backward compatibility
+    };
+    
+    // Update all language-related settings
+    Object.entries(updates).forEach(([key, value]) => {
+      handleSettingsChange(key as keyof Settings, value);
+    });
   };
 
   const fetchOcrStatus = async (): Promise<void> => {
@@ -544,22 +545,34 @@ const SettingsPage: React.FC = () => {
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
                   <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
-                      <FormControl fullWidth>
-                        <InputLabel>OCR Language</InputLabel>
-                        <Select
-                          value={settings.ocrLanguage}
-                          label="OCR Language"
-                          onChange={handleOcrLanguageChange}
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Configure languages for OCR text extraction. Multiple languages help with mixed-language documents.
+                      </Typography>
+                      <Box sx={{ '& > div': { width: '100%' } }}>
+                        <LanguageSelector
+                          selectedLanguages={settings.preferredLanguages}
+                          primaryLanguage={settings.primaryLanguage}
+                          onLanguagesChange={handleLanguagesChange}
                           disabled={loading}
-                        >
-                          {ocrLanguages.map((lang) => (
-                            <MenuItem key={lang.code} value={lang.code}>
-                              {lang.name}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                          showPrimarySelector={true}
+                        />
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={settings.autoDetectLanguageCombination}
+                            onChange={(e) => handleSettingsChange('autoDetectLanguageCombination', e.target.checked)}
+                            disabled={loading}
+                          />
+                        }
+                        label="Auto-detect language combinations"
+                      />
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        Automatically suggest optimal language combinations based on document content analysis
+                      </Typography>
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField

@@ -304,9 +304,24 @@ impl TestConfigBuilder {
     }
 }
 
+/// Create test app with provided AppState
+#[cfg(any(test, feature = "test-utils"))]
+pub fn create_test_app(state: Arc<AppState>) -> Router {
+    Router::new()
+        .nest("/api/auth", crate::routes::auth::router())
+        .nest("/api/documents", crate::routes::documents::router())
+        .nest("/api/search", crate::routes::search::router())
+        .nest("/api/settings", crate::routes::settings::router())
+        .nest("/api/users", crate::routes::users::router())
+        .nest("/api/ignored-files", crate::routes::ignored_files::ignored_files_routes())
+        .nest("/api/ocr", crate::routes::ocr::router())
+        .nest("/api/queue", crate::routes::queue::router())
+        .with_state(state)
+}
+
 /// Legacy function for backward compatibility - will be deprecated
 #[cfg(any(test, feature = "test-utils"))]
-pub async fn create_test_app() -> (Router, ContainerAsync<Postgres>) {
+pub async fn create_test_app_with_container() -> (Router, ContainerAsync<Postgres>) {
     let ctx = TestContext::new().await;
     (ctx.app, ctx.container)
 }

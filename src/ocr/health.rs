@@ -4,11 +4,21 @@ use std::env;
 use std::path::Path;
 use sysinfo::System;
 
-pub struct OcrHealthChecker;
+pub struct OcrHealthChecker {
+    custom_tessdata_path: Option<String>,
+}
 
 impl OcrHealthChecker {
     pub fn new() -> Self {
-        Self
+        Self {
+            custom_tessdata_path: None,
+        }
+    }
+    
+    pub fn new_with_path<P: AsRef<Path>>(custom_tessdata_path: P) -> Self {
+        Self {
+            custom_tessdata_path: Some(custom_tessdata_path.as_ref().to_string_lossy().to_string()),
+        }
     }
     
     pub fn check_tesseract_installation(&self) -> Result<String, OcrError> {
@@ -46,6 +56,17 @@ impl OcrHealthChecker {
     }
     
     pub fn get_tessdata_path(&self) -> Result<String, OcrError> {
+        // Use custom tessdata path if provided
+        if let Some(ref custom_path) = self.custom_tessdata_path {
+            if Path::new(custom_path).exists() {
+                return Ok(custom_path.clone());
+            } else {
+                return Err(OcrError::TessdataPathNotFound { 
+                    path: custom_path.clone() 
+                });
+            }
+        }
+        
         if let Ok(path) = env::var("TESSDATA_PREFIX") {
             if Path::new(&path).exists() {
                 return Ok(path);
@@ -59,6 +80,7 @@ impl OcrHealthChecker {
             "/usr/share/tesseract-ocr/5.00/tessdata",
             "/usr/local/share/tessdata",
             "/opt/homebrew/share/tessdata",
+            "/home/linuxbrew/.linuxbrew/share/tessdata",
             "C:\\Program Files\\Tesseract-OCR\\tessdata",
         ];
         
@@ -73,11 +95,8 @@ impl OcrHealthChecker {
         })
     }
     
-    pub fn get_available_languages(&self) -> Vec<String> {
-        let tessdata_path = match self.get_tessdata_path() {
-            Ok(path) => path,
-            Err(_) => return vec![],
-        };
+    pub fn get_available_languages(&self) -> Result<Vec<String>, OcrError> {
+        let tessdata_path = self.get_tessdata_path()?;
         
         let mut languages = vec![];
         if let Ok(entries) = std::fs::read_dir(&tessdata_path) {
@@ -92,7 +111,97 @@ impl OcrHealthChecker {
         }
         
         languages.sort();
-        languages
+        Ok(languages)
+    }
+    
+    pub fn validate_language(&self, lang: &str) -> Result<(), OcrError> {
+        // Check if language is supported
+        let available_languages = self.get_available_languages()?;
+        if !available_languages.contains(&lang.to_string()) {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: lang.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Validate a language combination (e.g., "eng+spa")
+    pub fn validate_language_combination(&self, lang_combination: &str) -> Result<(), OcrError> {
+        if lang_combination.is_empty() {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: "empty".to_string(),
+            });
+        }
+
+        // Split by '+' to handle multi-language combinations
+        let languages: Vec<&str> = lang_combination.split('+').collect();
+        
+        // Validate each language in the combination
+        for lang in &languages {
+            self.validate_language(lang.trim())?;
+        }
+        
+        // Limit number of languages for performance (max 4)
+        if languages.len() > 4 {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: format!("Too many languages in combination: {}. Maximum is 4.", languages.len()),
+            });
+        }
+        
+        Ok(())
+    }
+
+    /// Validate a list of preferred languages
+    pub fn validate_preferred_languages(&self, languages: &[String]) -> Result<(), OcrError> {
+        if languages.is_empty() {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: "No languages provided".to_string(),
+            });
+        }
+        
+        // Limit number of languages for performance
+        if languages.len() > 4 {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: format!("Too many preferred languages: {}. Maximum is 4.", languages.len()),
+            });
+        }
+        
+        // Validate each language
+        for lang in languages {
+            self.validate_language(lang)?;
+        }
+        
+        Ok(())
+    }
+    
+    pub fn get_language_display_name(&self, lang_code: &str) -> String {
+        match lang_code {
+            "eng" => "English".to_string(),
+            "spa" => "Spanish".to_string(),
+            "fra" => "French".to_string(),
+            "deu" => "German".to_string(),
+            "ita" => "Italian".to_string(),
+            "por" => "Portuguese".to_string(),
+            "rus" => "Russian".to_string(),
+            "chi_sim" => "Chinese (Simplified)".to_string(),
+            "chi_tra" => "Chinese (Traditional)".to_string(),
+            "jpn" => "Japanese".to_string(),
+            "kor" => "Korean".to_string(),
+            "ara" => "Arabic".to_string(),
+            "hin" => "Hindi".to_string(),
+            "nld" => "Dutch".to_string(),
+            "swe" => "Swedish".to_string(),
+            "nor" => "Norwegian".to_string(),
+            "dan" => "Danish".to_string(),
+            "fin" => "Finnish".to_string(),
+            "pol" => "Polish".to_string(),
+            "ces" => "Czech".to_string(),
+            "hun" => "Hungarian".to_string(),
+            "tur" => "Turkish".to_string(),
+            "tha" => "Thai".to_string(),
+            "vie" => "Vietnamese".to_string(),
+            _ => lang_code.to_string(), // Return the code itself for unknown languages
+        }
     }
     
     pub fn check_cpu_features(&self) -> CpuFeatures {
@@ -240,7 +349,7 @@ impl OcrHealthChecker {
     pub fn get_full_diagnostics(&self) -> OcrDiagnostics {
         OcrDiagnostics {
             tesseract_version: self.check_tesseract_installation().ok(),
-            available_languages: self.get_available_languages(),
+            available_languages: self.get_available_languages().unwrap_or_else(|_| vec![]),
             tessdata_path: self.get_tessdata_path().ok(),
             cpu_features: self.check_cpu_features(),
             memory_available_mb: self.check_memory_available(),

@@ -27,6 +27,12 @@ pub struct DeleteLowConfidenceRequest {
     pub preview_only: Option<bool>,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct RetryOcrRequest {
+    pub language: Option<String>,
+    pub languages: Option<Vec<String>>,
+}
+
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct DocumentUploadResponse {
     pub id: uuid::Uuid,

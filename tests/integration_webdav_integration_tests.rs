@@ -21,6 +21,9 @@ use readur::{
 fn create_empty_update_settings() -> UpdateSettings {
     UpdateSettings {
         ocr_language: None,
+        preferred_languages: None,
+        primary_language: None,
+        auto_detect_language_combination: None,
         concurrent_ocr_jobs: None,
         ocr_timeout_seconds: None,
         max_file_size_mb: None,
@@ -154,6 +157,9 @@ async fn setup_webdav_settings(state: &AppState, user_id: Uuid) {
         webdav_auto_sync: Some(true),
         webdav_sync_interval_minutes: Some(60),
         ocr_language: None,
+        preferred_languages: None,
+        primary_language: None,
+        auto_detect_language_combination: None,
         concurrent_ocr_jobs: None,
         ocr_timeout_seconds: None,
         max_file_size_mb: None,

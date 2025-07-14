@@ -32,6 +32,7 @@ import api from '../../services/api';
 import { useNotifications } from '../../contexts/NotificationContext';
 import LabelSelector from '../Labels/LabelSelector';
 import { type LabelData } from '../Labels/Label';
+import LanguageSelector from '../LanguageSelector';
 
 interface UploadedDocument {
   id: string;
@@ -65,6 +66,8 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const [selectedLabels, setSelectedLabels] = useState<LabelData[]>([]);
   const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
   const [labelsLoading, setLabelsLoading] = useState<boolean>(false);
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['eng']);
+  const [primaryLanguage, setPrimaryLanguage] = useState<string>('eng');
 
   useEffect(() => {
     fetchLabels();
@@ -96,6 +99,15 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     } catch (error) {
       console.error('Failed to create label:', error);
       throw error;
+    }
+  };
+
+  const handleLanguagesChange = (languages: string[], primary?: string) => {
+    setSelectedLanguages(languages);
+    if (primary) {
+      setPrimaryLanguage(primary);
+    } else if (languages.length > 0) {
+      setPrimaryLanguage(languages[0]);
     }
   };
 
@@ -149,6 +161,13 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     if (selectedLabels.length > 0) {
       const labelIds = selectedLabels.map(label => label.id);
       formData.append('label_ids', JSON.stringify(labelIds));
+    }
+
+    // Add selected languages to the form data
+    if (selectedLanguages.length > 0) {
+      selectedLanguages.forEach((lang, index) => {
+        formData.append(`ocr_languages[${index}]`, lang);
+      });
     }
 
     try {
@@ -337,6 +356,26 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
           {error}
         </Alert>
       )}
+
+      {/* Language Selection */}
+      <Card elevation={0} sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            🌐 OCR Language Settings
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select languages for optimal OCR text recognition
+          </Typography>
+          <Box sx={{ '& > div': { width: '100%' } }}>
+            <LanguageSelector
+              selectedLanguages={selectedLanguages}
+              primaryLanguage={primaryLanguage}
+              onLanguagesChange={handleLanguagesChange}
+              disabled={uploading}
+            />
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Label Selection */}
       <Card elevation={0} sx={{ mb: 3 }}>
