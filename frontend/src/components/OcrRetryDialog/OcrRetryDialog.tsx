@@ -40,6 +40,56 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
   const [retrying, setRetrying] = useState<boolean>(false);
 
+  // Simple language code to name mapping for display
+  const getLanguageDisplayName = (langCode: string): string => {
+    const languageNames: Record<string, string> = {
+      'eng': 'English',
+      'spa': 'Spanish',  
+      'fra': 'French',
+      'deu': 'German',
+      'ita': 'Italian',
+      'por': 'Portuguese',
+      'rus': 'Russian',
+      'jpn': 'Japanese',
+      'chi_sim': 'Chinese (Simplified)',
+      'chi_tra': 'Chinese (Traditional)',
+      'kor': 'Korean',
+      'ara': 'Arabic',
+      'hin': 'Hindi',
+      'tha': 'Thai',
+      'vie': 'Vietnamese',
+      'pol': 'Polish',
+      'nld': 'Dutch',
+      'dan': 'Danish',
+      'nor': 'Norwegian',
+      'swe': 'Swedish',
+      'fin': 'Finnish',
+      'ces': 'Czech',
+      'hun': 'Hungarian',
+      'tur': 'Turkish',
+      'heb': 'Hebrew',
+      'ukr': 'Ukrainian',
+      'bul': 'Bulgarian',
+      'ron': 'Romanian',
+      'hrv': 'Croatian',
+      'slk': 'Slovak',
+      'slv': 'Slovenian',
+      'est': 'Estonian',
+      'lav': 'Latvian',
+      'lit': 'Lithuanian',
+      'ell': 'Greek',
+      'cat': 'Catalan',
+      'eus': 'Basque',
+      'gla': 'Scottish Gaelic',
+      'gle': 'Irish',
+      'cym': 'Welsh',
+      'isl': 'Icelandic',
+      'mlt': 'Maltese',
+      'afr': 'Afrikaans',
+    };
+    return languageNames[langCode] || langCode;
+  };
+
   const handleRetry = async () => {
     if (!document) return;
 
@@ -52,13 +102,14 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
       
       if (response.data.success) {
         const waitTime = response.data.estimated_wait_minutes || 'Unknown';
-        const languageInfo = selectedLanguage ? ` with language "${selectedLanguage}"` : '';
+        const languageInfo = selectedLanguage ? 
+          ` with language "${getLanguageDisplayName(selectedLanguage)}"` : '';
         onRetrySuccess(
           `OCR retry queued for "${document.filename}"${languageInfo}. Estimated wait time: ${waitTime} minutes.`
         );
         onClose();
       } else {
-        onRetryError(response.data.message || 'Failed to retry OCR');
+        onRetryError(response.data.message || 'Failed to retry OCR processing');
       }
     } catch (error: any) {
       console.error('Failed to retry OCR:', error);

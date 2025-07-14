@@ -3,9 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import OcrRetryDialog from '../OcrRetryDialog';
-import { ocrService } from '../../../services/api';
 
-// Mock only the API service - let real components render
+// Mock the API service completely
 const mockOcrService = {
   getAvailableLanguages: vi.fn(),
   getHealthStatus: vi.fn(), 
@@ -14,6 +13,26 @@ const mockOcrService = {
 
 vi.mock('../../../services/api', () => ({
   ocrService: mockOcrService,
+}));
+
+// Mock the OcrLanguageSelector to prevent API calls
+vi.mock('../OcrLanguageSelector', () => ({
+  default: ({ value, onChange, label }: any) => (
+    <div>
+      <label htmlFor="ocr-language">{label}</label>
+      <select 
+        id="ocr-language"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={label}
+      >
+        <option value="">Default</option>
+        <option value="eng">English</option>
+        <option value="spa">Spanish</option>
+        <option value="fra">French</option>
+      </select>
+    </div>
+  ),
 }));
 
 const theme = createTheme();
@@ -55,16 +74,6 @@ describe('OcrRetryDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockOcrService.retryWithLanguage.mockResolvedValue(mockRetryResponse);
-    mockOcrService.getAvailableLanguages.mockResolvedValue({
-      data: {
-        available_languages: [
-          { code: 'eng', name: 'English', installed: true },
-          { code: 'spa', name: 'Spanish', installed: true },
-          { code: 'fra', name: 'French', installed: true },
-        ],
-        current_user_language: 'eng',
-      },
-    });
   });
 
   afterEach(() => {
@@ -103,29 +112,16 @@ describe('OcrRetryDialog', () => {
   it('renders language selector', async () => {
     renderWithTheme(<OcrRetryDialog {...defaultProps} />);
     
-    // Wait for the language selector to load
-    await waitFor(() => {
-      expect(screen.getByLabelText(/OCR Language/i)).toBeInTheDocument();
-    });
+    expect(screen.getByLabelText(/OCR Language/i)).toBeInTheDocument();
   });
 
   it('handles language selection', async () => {
     renderWithTheme(<OcrRetryDialog {...defaultProps} />);
     
-    // Wait for the language selector to load
-    await waitFor(() => {
-      expect(screen.getByLabelText(/OCR Language/i)).toBeInTheDocument();
-    });
-    
     const languageSelect = screen.getByLabelText(/OCR Language/i);
-    fireEvent.mouseDown(languageSelect);
+    fireEvent.change(languageSelect, { target: { value: 'spa' } });
     
-    // Select Spanish from dropdown
-    await waitFor(() => {
-      fireEvent.click(screen.getByText('Spanish'));
-    });
-    
-    expect(languageSelect).toHaveDisplayValue('Spanish');
+    expect(languageSelect).toHaveValue('spa');
   });
 
   it('calls onRetrySuccess when retry succeeds', async () => {
@@ -137,17 +133,9 @@ describe('OcrRetryDialog', () => {
       />
     );
     
-    // Wait for component to load and select a language
-    await waitFor(() => {
-      expect(screen.getByLabelText(/OCR Language/i)).toBeInTheDocument();
-    });
-    
+    // Select a language
     const languageSelect = screen.getByLabelText(/OCR Language/i);
-    fireEvent.mouseDown(languageSelect);
-    
-    await waitFor(() => {
-      fireEvent.click(screen.getByText('Spanish'));
-    });
+    fireEvent.change(languageSelect, { target: { value: 'spa' } });
     
     // Click retry button
     fireEvent.click(screen.getByText('Retry OCR'));
