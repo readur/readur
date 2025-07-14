@@ -1,4 +1,4 @@
-use readur::app::AppState;
+use readur::AppState;
 use readur::config::Config;
 use readur::db::Database;
 use readur::ocr::health::OcrHealthChecker;
@@ -74,15 +74,25 @@ impl TestHarness {
         .await
         .expect("Failed to create user settings");
         
+        // Create a shared OCR queue service
+        let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
+            db.clone(),
+            db.get_pool().clone(),
+            2
+        ));
+        
         // Create app state
         let app_state = Arc::new(AppState {
             db,
             config,
-            ocr_health_checker: OcrHealthChecker::new(tessdata_path),
+            webdav_scheduler: None,
+            source_scheduler: None,
+            queue_service,
+            oidc_client: None,
         });
         
-        // Create test server
-        let app = readur::app::create_app(app_state);
+        // Create test server with router
+        let app = readur::test_utils::create_test_app(app_state.clone());
         let server = TestServer::new(app).expect("Failed to create test server");
         
         // Generate a test token (simplified for testing)
