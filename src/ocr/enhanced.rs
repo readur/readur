@@ -249,10 +249,32 @@ impl EnhancedOcrService {
         needs_enhancement
     }
     
+    /// Build language combination string for Tesseract (e.g., "eng+spa")
+    fn build_language_combination(&self, settings: &Settings) -> String {
+        if settings.preferred_languages.len() > 1 {
+            // Use preferred_languages with primary_language first
+            let mut languages = settings.preferred_languages.clone();
+            
+            // Ensure primary language is first
+            languages.retain(|lang| lang != &settings.primary_language);
+            languages.insert(0, settings.primary_language.clone());
+            
+            // Join with + for Tesseract multi-language format
+            languages.join("+")
+        } else if !settings.preferred_languages.is_empty() {
+            // Single language from preferred_languages
+            settings.preferred_languages[0].clone()
+        } else {
+            // Fallback to ocr_language field for backward compatibility
+            settings.ocr_language.clone()
+        }
+    }
+
     /// Configure Tesseract with optimal settings
     #[cfg(feature = "ocr")]
     fn configure_tesseract(&self, image_path: &str, settings: &Settings) -> Result<Tesseract> {
-        let mut tesseract = Tesseract::new(None, Some(&settings.ocr_language))?;
+        let language_combination = self.build_language_combination(settings);
+        let mut tesseract = Tesseract::new(None, Some(&language_combination))?;
         
         // Set the image
         tesseract = tesseract.set_image(image_path)?;

@@ -30,6 +30,7 @@ pub struct DeleteLowConfidenceRequest {
 #[derive(Deserialize, ToSchema)]
 pub struct RetryOcrRequest {
     pub language: Option<String>,
+    pub languages: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]

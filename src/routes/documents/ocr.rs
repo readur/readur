@@ -107,9 +107,31 @@ pub async fn retry_ocr(
         }
     }
 
-    // If a language was specified, validate and update the user's OCR language setting
-    if let Some(lang) = &request.language {
-        // Validate that the language is available
+    // Update user's OCR language settings based on what was provided
+    if let Some(languages) = &request.languages {
+        // Multi-language support: validate and update preferred languages
+        let health_checker = crate::ocr::health::OcrHealthChecker::new();
+        match health_checker.validate_preferred_languages(languages) {
+            Ok(_) => {
+                let settings_update = crate::models::UpdateSettings::language_update(
+                    languages.clone(),
+                    languages[0].clone(), // First language as primary
+                    languages[0].clone(), // Backward compatibility
+                );
+                
+                if let Err(e) = state.db.create_or_update_settings(auth_user.user.id, &settings_update).await {
+                    warn!("Failed to update user preferred languages to {:?}: {}", languages, e);
+                } else {
+                    info!("Updated user {} preferred languages to: {:?} for retry", auth_user.user.id, languages);
+                }
+            }
+            Err(e) => {
+                warn!("Invalid language combination provided: {}", e);
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+    } else if let Some(lang) = &request.language {
+        // Single language (backward compatibility)
         let health_checker = crate::ocr::health::OcrHealthChecker::new();
         match health_checker.validate_language(lang) {
             Ok(_) => {

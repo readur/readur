@@ -36,7 +36,7 @@ impl OcrService {
             // Perform health checks first
             self.health_checker.check_tesseract_installation()
                 .map_err(|e: OcrError| anyhow!(e))?;
-            self.health_checker.check_language_data(lang)
+            self.health_checker.validate_language_combination(lang)
                 .map_err(|e: OcrError| anyhow!(e))?;
             
             let mut tesseract = Tesseract::new(None, Some(lang))

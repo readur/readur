@@ -123,6 +123,55 @@ impl OcrHealthChecker {
         }
         Ok(())
     }
+
+    /// Validate a language combination (e.g., "eng+spa")
+    pub fn validate_language_combination(&self, lang_combination: &str) -> Result<(), OcrError> {
+        if lang_combination.is_empty() {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: "empty".to_string(),
+            });
+        }
+
+        // Split by '+' to handle multi-language combinations
+        let languages: Vec<&str> = lang_combination.split('+').collect();
+        
+        // Validate each language in the combination
+        for lang in &languages {
+            self.validate_language(lang.trim())?;
+        }
+        
+        // Limit number of languages for performance (max 4)
+        if languages.len() > 4 {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: format!("Too many languages in combination: {}. Maximum is 4.", languages.len()),
+            });
+        }
+        
+        Ok(())
+    }
+
+    /// Validate a list of preferred languages
+    pub fn validate_preferred_languages(&self, languages: &[String]) -> Result<(), OcrError> {
+        if languages.is_empty() {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: "No languages provided".to_string(),
+            });
+        }
+        
+        // Limit number of languages for performance
+        if languages.len() > 4 {
+            return Err(OcrError::LanguageDataNotFound {
+                lang: format!("Too many preferred languages: {}. Maximum is 4.", languages.len()),
+            });
+        }
+        
+        // Validate each language
+        for lang in languages {
+            self.validate_language(lang)?;
+        }
+        
+        Ok(())
+    }
     
     pub fn get_language_display_name(&self, lang_code: &str) -> String {
         match lang_code {

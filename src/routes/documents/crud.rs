@@ -40,6 +40,7 @@ pub async fn upload_document(
 ) -> Result<Json<DocumentUploadResponse>, StatusCode> {
     let mut uploaded_file = None;
     let mut ocr_language: Option<String> = None;
+    let mut ocr_languages: Vec<String> = Vec::new();
     
     // First pass: collect all multipart fields
     while let Some(field) = multipart.next_field().await.map_err(|e| {
@@ -61,6 +62,22 @@ pub async fn upload_document(
                     Err(e) => {
                         warn!("Invalid OCR language specified '{}': {}", language, e);
                         // Return early with bad request for invalid language
+                        return Err(StatusCode::BAD_REQUEST);
+                    }
+                }
+            }
+        } else if name == "ocr_languages" || name.starts_with("ocr_languages[") {
+            let language = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            if !language.trim().is_empty() {
+                // Validate that the language is available
+                let health_checker = crate::ocr::health::OcrHealthChecker::new();
+                match health_checker.validate_language(language.trim()) {
+                    Ok(_) => {
+                        ocr_languages.push(language.trim().to_string());
+                        info!("OCR language added to list: {}", language);
+                    }
+                    Err(e) => {
+                        warn!("Invalid OCR language specified '{}': {}", language, e);
                         return Err(StatusCode::BAD_REQUEST);
                     }
                 }
@@ -143,8 +160,30 @@ pub async fn upload_document(
         Ok(IngestionResult::Created(document)) => {
             info!("Document uploaded successfully: {}", document.id);
             
-            // If a language was specified, update the user's OCR language setting
-            if let Some(lang) = &ocr_language {
+            // Update user's OCR language settings based on what was provided
+            if !ocr_languages.is_empty() {
+                // Multi-language support: update preferred languages
+                let health_checker = crate::ocr::health::OcrHealthChecker::new();
+                match health_checker.validate_preferred_languages(&ocr_languages) {
+                    Ok(_) => {
+                        let settings_update = crate::models::UpdateSettings::language_update(
+                            ocr_languages.clone(),
+                            ocr_languages[0].clone(), // First language as primary
+                            ocr_languages[0].clone(), // Backward compatibility
+                        );
+                        
+                        if let Err(e) = state.db.create_or_update_settings(auth_user.user.id, &settings_update).await {
+                            warn!("Failed to update user preferred languages to {:?}: {}", ocr_languages, e);
+                        } else {
+                            info!("Updated user {} preferred languages to: {:?}", auth_user.user.id, ocr_languages);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Invalid language combination provided: {}", e);
+                    }
+                }
+            } else if let Some(lang) = &ocr_language {
+                // Single language (backward compatibility)
                 if let Err(e) = state.db.update_user_ocr_language(auth_user.user.id, lang).await {
                     warn!("Failed to update user OCR language to {}: {}", lang, e);
                 } else {

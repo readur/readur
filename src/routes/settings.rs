@@ -49,6 +49,9 @@ async fn get_settings(
             let default = crate::models::Settings::default();
             SettingsResponse {
                 ocr_language: default.ocr_language,
+                preferred_languages: default.preferred_languages,
+                primary_language: default.primary_language,
+                auto_detect_language_combination: default.auto_detect_language_combination,
                 concurrent_ocr_jobs: default.concurrent_ocr_jobs,
                 ocr_timeout_seconds: default.ocr_timeout_seconds,
                 max_file_size_mb: default.max_file_size_mb,
