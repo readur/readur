@@ -28,25 +28,49 @@ test.describe('WebDAV Workflow', () => {
       await expect(loadingSpinner).not.toBeVisible({ timeout: TIMEOUTS.long });
     }
     
-    // Wait a bit more for the page to fully render
-    await page.waitForTimeout(2000);
+    // Wait extra time for WebKit to fully render the page
+    await page.waitForTimeout(5000);
 
-    // Look for add source button (try multiple selectors)
-    const addSourceButton = page.locator('[data-testid="add-source"], button:has-text("Add Source"), button:has-text("Add"), button:has-text("New")').first();
+    // For WebKit, try to wait for specific page elements to be loaded
+    await page.waitForFunction(() => {
+      return document.querySelector('[data-testid="add-source"]') !== null ||
+             document.querySelector('button:has-text("Add Source")') !== null ||
+             document.body.textContent?.includes('Add Source');
+    }, { timeout: TIMEOUTS.long });
+
+    // Look for add source button (try multiple selectors in order of preference)
+    let addSourceButton = page.locator('[data-testid="add-source"]').first();
     
-    if (await addSourceButton.isVisible({ timeout: TIMEOUTS.medium })) {
+    if (!(await addSourceButton.isVisible({ timeout: 5000 }))) {
+      addSourceButton = page.locator('button:has-text("Add Source")').first();
+    }
+    
+    if (!(await addSourceButton.isVisible({ timeout: 5000 }))) {
+      addSourceButton = page.locator('button:has-text("Add")').first();
+    }
+    
+    if (!(await addSourceButton.isVisible({ timeout: 5000 }))) {
+      addSourceButton = page.locator('button[aria-label*="add"], button[title*="add"]').first();
+    }
+    
+    if (await addSourceButton.isVisible({ timeout: 5000 })) {
+      console.log('Found add source button, clicking...');
       await addSourceButton.click();
     } else {
-      // Alternative: look for floating action button or plus button
-      const fabButton = page.locator('button[aria-label*="add"], button[title*="add"], .fab, .add-button').first();
-      if (await fabButton.isVisible({ timeout: TIMEOUTS.medium })) {
-        await fabButton.click();
-      } else {
-        // Debug: log what's actually visible on the page
-        const pageContent = await page.textContent('body');
-        console.log('Page content:', pageContent?.substring(0, 500));
-        throw new Error('Could not find add source button');
-      }
+      // Enhanced debugging for WebKit
+      const pageContent = await page.textContent('body');
+      console.log('Page content (first 500 chars):', pageContent?.substring(0, 500));
+      console.log('Page URL:', page.url());
+      
+      // Check if we're actually on the sources page
+      const pageTitle = await page.title();
+      console.log('Page title:', pageTitle);
+      
+      // Try to find any buttons on the page
+      const allButtons = await page.locator('button').count();
+      console.log('Total buttons found:', allButtons);
+      
+      throw new Error('Could not find add source button');
     }
 
     // Wait for source creation form/modal to appear

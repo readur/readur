@@ -158,9 +158,24 @@ test.describe('OCR Multiple Languages', () => {
     await page.goto('/upload');
     await helpers.waitForLoadingToComplete();
 
-    // Upload Spanish test document
-    const fileInput = page.locator('input[type="file"]').first();
-    await expect(fileInput).toBeAttached({ timeout: 10000 });
+    // Wait for page to be fully loaded and rendered (WebKit needs more time)
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2000);
+
+    // Upload Spanish test document - try multiple selectors for better WebKit compatibility
+    let fileInput = page.locator('input[type="file"]').first();
+    
+    // If file input is not immediately available, try alternative approaches
+    if (!(await fileInput.isVisible({ timeout: 5000 }))) {
+      // Look for the dropzone or upload area that might contain the hidden input
+      const uploadArea = page.locator('[data-testid="dropzone"], .dropzone, .upload-area').first();
+      if (await uploadArea.isVisible({ timeout: 5000 })) {
+        // Try to find file input within the upload area
+        fileInput = uploadArea.locator('input[type="file"]').first();
+      }
+    }
+    
+    await expect(fileInput).toBeAttached({ timeout: 15000 });
     
     try {
       await fileInput.setInputFiles(MULTILINGUAL_TEST_FILES.spanish);
@@ -217,9 +232,24 @@ test.describe('OCR Multiple Languages', () => {
     await page.goto('/upload');
     await helpers.waitForLoadingToComplete();
 
-    // Upload English test document
-    const fileInput = page.locator('input[type="file"]').first();
-    await expect(fileInput).toBeAttached({ timeout: 10000 });
+    // Wait for page to be fully loaded and rendered (WebKit needs more time)
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2000);
+
+    // Upload English test document - try multiple selectors for better WebKit compatibility
+    let fileInput = page.locator('input[type="file"]').first();
+    
+    // If file input is not immediately available, try alternative approaches
+    if (!(await fileInput.isVisible({ timeout: 5000 }))) {
+      // Look for the dropzone or upload area that might contain the hidden input
+      const uploadArea = page.locator('[data-testid="dropzone"], .dropzone, .upload-area').first();
+      if (await uploadArea.isVisible({ timeout: 5000 })) {
+        // Try to find file input within the upload area
+        fileInput = uploadArea.locator('input[type="file"]').first();
+      }
+    }
+    
+    await expect(fileInput).toBeAttached({ timeout: 15000 });
     
     try {
       await fileInput.setInputFiles(MULTILINGUAL_TEST_FILES.english);
