@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { Refresh as RefreshIcon, Language as LanguageIcon } from '@mui/icons-material';
 import OcrLanguageSelector from '../OcrLanguageSelector';
+import LanguageSelector from '../LanguageSelector';
 import { ocrService } from '../../services/api';
 
 interface OcrRetryDialogProps {
@@ -38,7 +39,15 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
   onRetryError,
 }) => {
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+  const [primaryLanguage, setPrimaryLanguage] = useState<string>('');
+  const [useMultiLanguage, setUseMultiLanguage] = useState<boolean>(false);
   const [retrying, setRetrying] = useState<boolean>(false);
+
+  const handleLanguagesChange = (languages: string[], primary?: string) => {
+    setSelectedLanguages(languages);
+    setPrimaryLanguage(primary || languages[0] || '');
+  };
 
   // Simple language code to name mapping for display
   const getLanguageDisplayName = (langCode: string): string => {
@@ -95,15 +104,32 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
 
     try {
       setRetrying(true);
+      
+      // Use multi-language if enabled and languages are selected, otherwise use single language
+      const languagesToUse = useMultiLanguage && selectedLanguages.length > 0 
+        ? selectedLanguages 
+        : undefined;
+      const singleLanguageToUse = !useMultiLanguage && selectedLanguage 
+        ? selectedLanguage 
+        : undefined;
+      
       const response = await ocrService.retryWithLanguage(
         document.id, 
-        selectedLanguage || undefined
+        singleLanguageToUse,
+        languagesToUse
       );
       
       if (response.data.success) {
         const waitTime = response.data.estimated_wait_minutes || 'Unknown';
-        const languageInfo = selectedLanguage ? 
-          ` with language "${getLanguageDisplayName(selectedLanguage)}"` : '';
+        let languageInfo = '';
+        
+        if (languagesToUse && languagesToUse.length > 0) {
+          const langNames = languagesToUse.map(lang => getLanguageDisplayName(lang));
+          languageInfo = ` with languages: ${langNames.join(', ')} (Primary: ${getLanguageDisplayName(primaryLanguage)})`;
+        } else if (singleLanguageToUse) {
+          languageInfo = ` with language "${getLanguageDisplayName(singleLanguageToUse)}"`;
+        }
+        
         onRetrySuccess(
           `OCR retry queued for "${document.filename}"${languageInfo}. Estimated wait time: ${waitTime} minutes.`
         );
@@ -124,6 +150,9 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
   const handleClose = () => {
     if (!retrying) {
       setSelectedLanguage('');
+      setSelectedLanguages([]);
+      setPrimaryLanguage('');
+      setUseMultiLanguage(false);
       onClose();
     }
   };
@@ -170,16 +199,51 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
             OCR Language Selection
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Choose a different language if the previous OCR attempt used the wrong language for this document.
+            Choose a different language or language combination if the previous OCR attempt failed due to incorrect language settings.
           </Typography>
-          <OcrLanguageSelector
-            value={selectedLanguage}
-            onChange={setSelectedLanguage}
-            label="OCR Language (Optional)"
-            size="medium"
-            helperText="Leave empty to use your default language setting"
-            showCurrentIndicator={true}
-          />
+
+          {/* Toggle between single and multi-language */}
+          <Box sx={{ mb: 2 }}>
+            <Button
+              variant={!useMultiLanguage ? "contained" : "outlined"}
+              size="small"
+              onClick={() => setUseMultiLanguage(false)}
+              sx={{ mr: 1 }}
+            >
+              Single Language
+            </Button>
+            <Button
+              variant={useMultiLanguage ? "contained" : "outlined"}
+              size="small"
+              onClick={() => setUseMultiLanguage(true)}
+            >
+              Multiple Languages
+            </Button>
+          </Box>
+
+          {/* Single Language Selector */}
+          {!useMultiLanguage && (
+            <OcrLanguageSelector
+              value={selectedLanguage}
+              onChange={setSelectedLanguage}
+              label="OCR Language (Optional)"
+              size="medium"
+              helperText="Leave empty to use your default language setting"
+              showCurrentIndicator={true}
+            />
+          )}
+
+          {/* Multi-Language Selector */}
+          {useMultiLanguage && (
+            <LanguageSelector
+              selectedLanguages={selectedLanguages}
+              primaryLanguage={primaryLanguage}
+              onLanguagesChange={handleLanguagesChange}
+              disabled={retrying}
+              showPrimarySelector={true}
+              className="w-full"
+            />
+          )}
         </Box>
 
         <Alert severity="info" sx={{ mt: 2 }}>

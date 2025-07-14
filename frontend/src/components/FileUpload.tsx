@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone'
 import { DocumentArrowUpIcon } from '@heroicons/react/24/outline'
 import { Document, documentService } from '../services/api'
 import { useNotifications } from '../contexts/NotificationContext'
+import LanguageSelector from './LanguageSelector'
 
 interface FileUploadProps {
   onUploadSuccess: (document: Document) => void
@@ -11,6 +12,8 @@ interface FileUploadProps {
 function FileUpload({ onUploadSuccess }: FileUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['eng'])
+  const [primaryLanguage, setPrimaryLanguage] = useState<string>('eng')
   const { addBatchNotification } = useNotifications()
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -21,7 +24,7 @@ function FileUpload({ onUploadSuccess }: FileUploadProps) {
     setError(null)
 
     try {
-      const response = await documentService.upload(file)
+      const response = await documentService.upload(file, selectedLanguages.length > 0 ? selectedLanguages : undefined)
       onUploadSuccess(response.data)
       
       // Trigger success notification
@@ -34,7 +37,16 @@ function FileUpload({ onUploadSuccess }: FileUploadProps) {
     } finally {
       setUploading(false)
     }
-  }, [onUploadSuccess, addBatchNotification])
+  }, [onUploadSuccess, addBatchNotification, selectedLanguages])
+
+  const handleLanguagesChange = (languages: string[], primary?: string) => {
+    setSelectedLanguages(languages)
+    if (primary) {
+      setPrimaryLanguage(primary)
+    } else if (languages.length > 0) {
+      setPrimaryLanguage(languages[0])
+    }
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -49,7 +61,16 @@ function FileUpload({ onUploadSuccess }: FileUploadProps) {
   })
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-4">
+      {/* Language Selector */}
+      <LanguageSelector
+        selectedLanguages={selectedLanguages}
+        primaryLanguage={primaryLanguage}
+        onLanguagesChange={handleLanguagesChange}
+        disabled={uploading}
+      />
+      
+      {/* File Upload Area */}
       <div
         {...getRootProps()}
         className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${

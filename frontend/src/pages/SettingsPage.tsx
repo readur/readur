@@ -43,6 +43,7 @@ import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon,
 import { useAuth } from '../contexts/AuthContext';
 import api, { queueService } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
+import LanguageSelector from '../components/LanguageSelector';
 
 interface User {
   id: string;
@@ -53,6 +54,9 @@ interface User {
 
 interface Settings {
   ocrLanguage: string;
+  preferredLanguages: string[];
+  primaryLanguage: string;
+  autoDetectLanguageCombination: boolean;
   concurrentOcrJobs: number;
   ocrTimeoutSeconds: number;
   maxFileSizeMb: number;
@@ -188,6 +192,9 @@ const SettingsPage: React.FC = () => {
   const [tabValue, setTabValue] = useState<number>(0);
   const [settings, setSettings] = useState<Settings>({
     ocrLanguage: 'eng',
+    preferredLanguages: ['eng'],
+    primaryLanguage: 'eng',
+    autoDetectLanguageCombination: false,
     concurrentOcrJobs: 4,
     ocrTimeoutSeconds: 300,
     maxFileSizeMb: 50,
@@ -268,6 +275,9 @@ const SettingsPage: React.FC = () => {
       const response = await api.get('/settings');
       setSettings({
         ocrLanguage: response.data.ocr_language || 'eng',
+        preferredLanguages: response.data.preferred_languages || ['eng'],
+        primaryLanguage: response.data.primary_language || 'eng',
+        autoDetectLanguageCombination: response.data.auto_detect_language_combination || false,
         concurrentOcrJobs: response.data.concurrent_ocr_jobs || 4,
         ocrTimeoutSeconds: response.data.ocr_timeout_seconds || 300,
         maxFileSizeMb: response.data.max_file_size_mb || 50,
@@ -430,6 +440,20 @@ const SettingsPage: React.FC = () => {
     handleSettingsChange('searchResultsPerPage', event.target.value);
   };
 
+  const handleLanguagesChange = (languages: string[], primary?: string) => {
+    // Update multiple fields at once
+    const updates = {
+      preferredLanguages: languages,
+      primaryLanguage: primary || languages[0] || 'eng',
+      ocrLanguage: primary || languages[0] || 'eng', // Backward compatibility
+    };
+    
+    // Update all language-related settings
+    Object.entries(updates).forEach(([key, value]) => {
+      handleSettingsChange(key as keyof Settings, value);
+    });
+  };
+
   const fetchOcrStatus = async (): Promise<void> => {
     try {
       const response = await queueService.getOcrStatus();
@@ -521,14 +545,34 @@ const SettingsPage: React.FC = () => {
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
                   <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
-                      <OcrLanguageSelector
-                        value={settings.ocrLanguage}
-                        onChange={(language) => handleSettingsChange('ocrLanguage', language)}
-                        disabled={loading}
-                        showCurrentIndicator={false}
-                        helperText="Default language for OCR text extraction from your documents"
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Configure languages for OCR text extraction. Multiple languages help with mixed-language documents.
+                      </Typography>
+                      <Box sx={{ '& > div': { width: '100%' } }}>
+                        <LanguageSelector
+                          selectedLanguages={settings.preferredLanguages}
+                          primaryLanguage={settings.primaryLanguage}
+                          onLanguagesChange={handleLanguagesChange}
+                          disabled={loading}
+                          showPrimarySelector={true}
+                        />
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={settings.autoDetectLanguageCombination}
+                            onChange={(e) => handleSettingsChange('autoDetectLanguageCombination', e.target.checked)}
+                            disabled={loading}
+                          />
+                        }
+                        label="Auto-detect language combinations"
                       />
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        Automatically suggest optimal language combinations based on document content analysis
+                      </Typography>
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField

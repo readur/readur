@@ -230,9 +230,17 @@ export interface OcrResponse {
 }
 
 export const documentService = {
-  upload: (file: File) => {
+  upload: (file: File, languages?: string[]) => {
     const formData = new FormData()
     formData.append('file', file)
+    
+    // Add multiple languages if provided
+    if (languages && languages.length > 0) {
+      languages.forEach((lang, index) => {
+        formData.append(`ocr_languages[${index}]`, lang)
+      })
+    }
+    
     return api.post('/documents', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -417,6 +425,7 @@ export interface AvailableLanguagesResponse {
 
 export interface RetryOcrRequest {
   language?: string
+  languages?: string[]
 }
 
 export const queueService = {
@@ -450,9 +459,11 @@ export const ocrService = {
     return api.get('/ocr/health')
   },
 
-  retryWithLanguage: (documentId: string, language?: string) => {
+  retryWithLanguage: (documentId: string, language?: string, languages?: string[]) => {
     const data: RetryOcrRequest = {}
-    if (language) {
+    if (languages && languages.length > 0) {
+      data.languages = languages
+    } else if (language) {
       data.language = language
     }
     return api.post(`/documents/${documentId}/retry-ocr`, data)
