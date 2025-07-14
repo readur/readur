@@ -27,16 +27,12 @@ ALTER TABLE settings
 ADD CONSTRAINT check_max_preferred_languages 
 CHECK (jsonb_array_length(preferred_languages) <= 4);
 
--- Add constraint to ensure valid language codes (3-letter ISO codes)
+-- Add constraint to ensure valid primary language code (3-letter ISO codes)
 ALTER TABLE settings 
-ADD CONSTRAINT check_valid_language_codes 
-CHECK (
-    primary_language ~ '^[a-z]{3}(_[A-Z]{2})?$' AND
-    (
-        SELECT bool_and(value::text ~ '^"[a-z]{3}(_[A-Z]{2})?"$')
-        FROM jsonb_array_elements(preferred_languages)
-    )
-);
+ADD CONSTRAINT check_valid_primary_language_code 
+CHECK (primary_language ~ '^[a-z]{3}(_[A-Z]{2})?$');
+
+-- Note: preferred_languages validation is handled in application code due to PostgreSQL subquery limitations in CHECK constraints
 
 -- Update existing users who don't have settings yet
 INSERT INTO settings (user_id, preferred_languages, primary_language, auto_detect_language_combination)
