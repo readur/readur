@@ -839,6 +839,7 @@ impl EnhancedOcrService {
         let text = match extraction_result {
             Ok(Ok(Ok(Ok(text)))) => text,
             Ok(Ok(Ok(Err(e)))) => {
+                warn!("PDF text extraction failed for file '{}' (size: {} bytes): {}", file_path, file_size, e);
                 return Err(anyhow!(
                     "PDF text extraction failed for file '{}' (size: {} bytes): {}. This may indicate a corrupted or unsupported PDF format.",
                     file_path, file_size, e
@@ -847,8 +848,7 @@ impl EnhancedOcrService {
             Ok(Ok(Err(_panic))) => {
                 // pdf-extract panicked (e.g., missing unicode map, corrupted font encoding)
                 // For now, gracefully handle this common issue
-                use tracing::debug;
-                debug!("PDF text extraction failed for '{}' due to font encoding issues. This is a known limitation with certain PDF files.", file_path);
+                warn!("PDF text extraction panicked for '{}' (size: {} bytes) due to font encoding issues. This is a known limitation with certain PDF files.", file_path, file_size);
                 
                 return Err(anyhow!(
                     "PDF text extraction failed due to font encoding issues in '{}' (size: {} bytes). This PDF uses non-standard fonts or character encoding that cannot be processed. To extract text from this PDF, consider: 1) Converting it to images and uploading those instead, 2) Using a different PDF viewer to re-save the PDF with standard encoding, or 3) Using external tools to convert the PDF to a more compatible format.",
@@ -856,9 +856,11 @@ impl EnhancedOcrService {
                 ));
             }
             Ok(Err(e)) => {
+                warn!("PDF extraction task failed for '{}' (size: {} bytes): {}", file_path, file_size, e);
                 return Err(anyhow!("PDF extraction task failed: {}", e));
             }
             Err(_) => {
+                warn!("PDF extraction timed out after 2 minutes for file '{}' (size: {} bytes). The PDF may be corrupted or too complex.", file_path, file_size);
                 return Err(anyhow!(
                     "PDF extraction timed out after 2 minutes for file '{}' (size: {} bytes). The PDF may be corrupted or too complex.",
                     file_path, file_size
@@ -1019,7 +1021,26 @@ impl EnhancedOcrService {
             let temp_ocr_path = temp_ocr_path.clone();
             move || -> Result<String> {
                 let bytes = std::fs::read(&temp_ocr_path)?;
-                let text = pdf_extract::extract_text_from_mem(&bytes)?;
+                // Catch panics from pdf-extract library (same pattern as used elsewhere)
+                let text = match catch_unwind(AssertUnwindSafe(|| {
+                    pdf_extract::extract_text_from_mem(&bytes)
+                })) {
+                    Ok(Ok(text)) => text,
+                    Ok(Err(e)) => {
+                        warn!("PDF text extraction failed after OCR processing for '{}': {}", temp_ocr_path, e);
+                        return Err(anyhow!(
+                            "PDF text extraction failed after OCR processing: {}. This may indicate a corrupted or unsupported PDF format.",
+                            e
+                        ));
+                    },
+                    Err(_) => {
+                        warn!("PDF extraction panicked after OCR processing for '{}' due to invalid content stream", temp_ocr_path);
+                        return Err(anyhow!(
+                            "PDF extraction panicked after OCR processing due to invalid content stream or corrupted PDF structure. \
+                            This suggests the PDF has malformed internal structure that cannot be parsed safely."
+                        ));
+                    },
+                };
                 Ok(text.trim().to_string())
             }
         }).await??;
