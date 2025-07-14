@@ -80,6 +80,7 @@ impl OcrHealthChecker {
             "/usr/share/tesseract-ocr/5.00/tessdata",
             "/usr/local/share/tessdata",
             "/opt/homebrew/share/tessdata",
+            "/home/linuxbrew/.linuxbrew/share/tessdata",
             "C:\\Program Files\\Tesseract-OCR\\tessdata",
         ];
         
