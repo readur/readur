@@ -21,6 +21,8 @@ import {
   Container,
   Fade,
   Skeleton,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -46,6 +48,8 @@ import {
   History as HistoryIcon,
   Speed as SpeedIcon,
   MoreVert as MoreIcon,
+  OpenInFull as ExpandIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { documentService, OcrResponse, type Document } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
@@ -77,6 +81,7 @@ const DocumentDetailsPage: React.FC = () => {
   const [processedImageLoading, setProcessedImageLoading] = useState<boolean>(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [documentLabels, setDocumentLabels] = useState<LabelData[]>([]);
+  const [ocrSearchTerm, setOcrSearchTerm] = useState<string>('');  const [expandedOcrText, setExpandedOcrText] = useState<boolean>(false);
   const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
   const [showLabelDialog, setShowLabelDialog] = useState<boolean>(false);
   const [labelsLoading, setLabelsLoading] = useState<boolean>(false);
@@ -723,9 +728,32 @@ const DocumentDetailsPage: React.FC = () => {
                     }}
                   >
                     <CardContent sx={{ p: 4 }}>
-                      <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
-                        🔍 Extracted Text (OCR)
-                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                          🔍 Extracted Text (OCR)
+                        </Typography>
+                        {ocrData?.ocr_text && (
+                          <Tooltip title="Expand to view full text with search">
+                            <IconButton
+                              onClick={() => setExpandedOcrText(true)}
+                              sx={{
+                                backgroundColor: theme.palette.primary.main,
+                                color: theme.palette.primary.contrastText,
+                                '&:hover': {
+                                  backgroundColor: theme.palette.primary.dark,
+                                },
+                                borderRadius: 2,
+                                px: 2,
+                              }}
+                            >
+                              <ExpandIcon sx={{ mr: 1 }} />
+                              <Typography variant="button" sx={{ fontSize: '0.75rem' }}>
+                                Expand
+                              </Typography>
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Box>
                       
                       {ocrLoading ? (
                         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6 }}>
@@ -1069,6 +1097,167 @@ const DocumentDetailsPage: React.FC = () => {
             Close
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Expanded OCR Text Dialog with Search */}
+      <Dialog
+        open={expandedOcrText}
+        onClose={() => {
+          setExpandedOcrText(false);
+          setOcrSearchTerm('');
+        }}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { 
+            height: '90vh',
+            backgroundColor: theme.palette.background.paper,
+          }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              🔍 Extracted Text (OCR) - Full View
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {ocrData && (
+                <Stack direction="row" spacing={1}>
+                  {ocrData.ocr_confidence && (
+                    <Chip 
+                      label={`${Math.round(ocrData.ocr_confidence)}% confidence`} 
+                      color="primary" 
+                      size="small" 
+                    />
+                  )}
+                  {ocrData.ocr_word_count && (
+                    <Chip 
+                      label={`${ocrData.ocr_word_count} words`} 
+                      color="secondary" 
+                      size="small" 
+                    />
+                  )}
+                </Stack>
+              )}
+              <IconButton
+                onClick={() => {
+                  setExpandedOcrText(false);
+                  setOcrSearchTerm('');
+                }}
+                sx={{
+                  backgroundColor: theme.palette.action.hover,
+                  '&:hover': {
+                    backgroundColor: theme.palette.action.selected,
+                  },
+                }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          {/* Search Bar */}
+          <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}` }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Search within extracted text..."
+              value={ocrSearchTerm}
+              onChange={(e) => setOcrSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="action" />
+                  </InputAdornment>
+                ),
+                endAdornment: ocrSearchTerm && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={() => setOcrSearchTerm('')}
+                    >
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                },
+              }}
+            />
+            {ocrSearchTerm && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                {(() => {
+                  const text = ocrData?.ocr_text || '';
+                  const matches = text.toLowerCase().split(ocrSearchTerm.toLowerCase()).length - 1;
+                  return matches > 0 ? `${matches} match${matches === 1 ? '' : 'es'} found` : 'No matches found';
+                })()}
+              </Typography>
+            )}
+          </Box>
+
+          {/* OCR Text Content */}
+          <Box sx={{ p: 3, height: 'calc(100% - 120px)', overflow: 'auto' }}>
+            {ocrLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6 }}>
+                <CircularProgress />
+                <Typography variant="body2" sx={{ ml: 2 }}>
+                  Loading OCR text...
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                {ocrData && ocrData.ocr_error && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    OCR Error: {ocrData.ocr_error}
+                  </Alert>
+                )}
+                <Paper
+                  sx={{
+                    p: 3,
+                    backgroundColor: theme.palette.background.default,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 2,
+                    minHeight: 400,
+                  }}
+                >
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      fontFamily: '"Inter", monospace',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: 1.8,
+                      fontSize: '1rem',
+                      color: ocrData?.ocr_text ? 'text.primary' : 'text.secondary',
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: ocrData?.ocr_text ? (
+                        ocrSearchTerm
+                          ? ocrData.ocr_text.replace(
+                              new RegExp(`(${ocrSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                              '<mark style="background-color: #ffeb3b; color: #000; padding: 2px 4px; border-radius: 2px;">$1</mark>'
+                            )
+                          : ocrData.ocr_text
+                      ) : 'No OCR text available for this document.'
+                    }}
+                  />
+                </Paper>
+                {ocrData && (ocrData.ocr_processing_time_ms || ocrData.ocr_completed_at) && (
+                  <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {ocrData.ocr_processing_time_ms && `Processing time: ${ocrData.ocr_processing_time_ms}ms`}
+                      {ocrData.ocr_processing_time_ms && ocrData.ocr_completed_at && ' • '}
+                      {ocrData.ocr_completed_at && `Completed: ${new Date(ocrData.ocr_completed_at).toLocaleString()}`}
+                    </Typography>
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
+        </DialogContent>
       </Dialog>
 
       {/* Document View Dialog */}
