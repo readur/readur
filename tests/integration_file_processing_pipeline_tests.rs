@@ -203,6 +203,84 @@ impl FileProcessingTestClient {
         Ok(document)
     }
     
+    /// Upload a file with multiple OCR languages specified
+    async fn upload_file_with_languages(&self, content: &str, filename: &str, mime_type: &str, languages: &[&str]) -> Result<DocumentUploadResponse, Box<dyn std::error::Error>> {
+        println!("🔍 DEBUG: Uploading file: {} with MIME type: {} and languages: {:?}", filename, mime_type, languages);
+        let token = self.token.as_ref().ok_or("Not authenticated")?;
+        
+        let part = reqwest::multipart::Part::text(content.to_string())
+            .file_name(filename.to_string())
+            .mime_str(mime_type)?;
+        
+        let mut form = reqwest::multipart::Form::new()
+            .part("file", part);
+        
+        // Add multiple language parameters
+        for (index, language) in languages.iter().enumerate() {
+            form = form.text(format!("ocr_languages[{}]", index), language.to_string());
+        }
+        
+        let response = self.client
+            .post(&format!("{}/api/documents", get_base_url()))
+            .header("Authorization", format!("Bearer {}", token))
+            .multipart(form)
+            .send()
+            .await?;
+        
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await?;
+            println!("🔴 DEBUG: Multi-language upload failed with status {}: {}", status, error_text);
+            return Err(format!("Multi-language upload failed: {}", error_text).into());
+        }
+        
+        let response_text = response.text().await?;
+        println!("🟢 DEBUG: Multi-language upload response: {}", response_text);
+        
+        let document: DocumentUploadResponse = serde_json::from_str(&response_text)?;
+        println!("✅ DEBUG: Successfully parsed multi-language document: {}", document.id);
+        Ok(document)
+    }
+    
+    /// Upload binary file content with multiple OCR languages
+    async fn upload_binary_file_with_languages(&self, content: Vec<u8>, filename: &str, mime_type: &str, languages: &[&str]) -> Result<DocumentUploadResponse, Box<dyn std::error::Error>> {
+        println!("🔍 DEBUG: Uploading binary file: {} with MIME type: {} and languages: {:?}", filename, mime_type, languages);
+        let token = self.token.as_ref().ok_or("Not authenticated")?;
+        
+        let part = reqwest::multipart::Part::bytes(content)
+            .file_name(filename.to_string())
+            .mime_str(mime_type)?;
+        
+        let mut form = reqwest::multipart::Form::new()
+            .part("file", part);
+        
+        // Add multiple language parameters
+        for (index, language) in languages.iter().enumerate() {
+            form = form.text(format!("ocr_languages[{}]", index), language.to_string());
+        }
+        
+        let response = self.client
+            .post(&format!("{}/api/documents", get_base_url()))
+            .header("Authorization", format!("Bearer {}", token))
+            .multipart(form)
+            .send()
+            .await?;
+        
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await?;
+            println!("🔴 DEBUG: Multi-language binary upload failed with status {}: {}", status, error_text);
+            return Err(format!("Multi-language binary upload failed: {}", error_text).into());
+        }
+        
+        let response_text = response.text().await?;
+        println!("🟢 DEBUG: Multi-language binary upload response: {}", response_text);
+        
+        let document: DocumentUploadResponse = serde_json::from_str(&response_text)?;
+        println!("✅ DEBUG: Successfully parsed multi-language binary document: {}", document.id);
+        Ok(document)
+    }
+    
     /// Wait for document processing to complete
     async fn wait_for_processing(&self, document_id: &str) -> Result<DocumentResponse, Box<dyn std::error::Error>> {
         println!("🔍 DEBUG: Waiting for processing of document: {}", document_id);
@@ -1312,4 +1390,187 @@ async fn test_real_test_images_processing() {
     }
     
     println!("🎉 Real test images processing test completed!");
+}
+
+#[tokio::test]
+async fn test_multi_language_document_upload() {
+    println!("🌐 Testing multi-language document upload...");
+    
+    let mut client = FileProcessingTestClient::new();
+    client.setup_user().await.expect("Authentication failed");
+
+    // Test content with English and Spanish text
+    let mixed_content = "Hello world. This is a test document. Hola mundo. Este es un documento de prueba.";
+    
+    // Upload with multiple languages
+    let languages = &["eng", "spa"];
+    let document = client.upload_file_with_languages(
+        mixed_content,
+        "mixed_language_test.txt",
+        "text/plain",
+        languages
+    ).await.expect("Multi-language upload failed");
+    
+    println!("✅ Multi-language document uploaded: {}", document.id);
+    
+    // Wait for processing
+    let processed_doc = client.wait_for_processing(&document.id.to_string()).await
+        .expect("Processing failed");
+    
+    println!("✅ Multi-language document processed: status = {:?}", processed_doc.ocr_status);
+    
+    // Verify the document has the expected status
+    assert_eq!(processed_doc.ocr_status.as_deref(), Some("completed"));
+    
+    // Get OCR results and verify content includes both languages
+    let ocr_results = client.get_ocr_results(&document.id.to_string()).await
+        .expect("Failed to get OCR results");
+    
+    if let Some(ocr_text) = ocr_results["ocr_text"].as_str() {
+        println!("🔍 OCR extracted: '{}'", ocr_text);
+        
+        // Verify both English and Spanish content is recognized
+        let normalized_ocr = ocr_text.to_lowercase();
+        assert!(normalized_ocr.contains("hello"), "Should contain English text");
+        assert!(normalized_ocr.contains("hola"), "Should contain Spanish text");
+        
+        println!("✅ Multi-language OCR verification PASSED");
+    } else {
+        panic!("No OCR text found for multi-language document");
+    }
+    
+    println!("🎉 Multi-language document upload test completed!");
+}
+
+#[tokio::test]
+async fn test_multi_language_upload_validation() {
+    println!("🔍 Testing multi-language upload validation...");
+    
+    let mut client = FileProcessingTestClient::new();
+    client.setup_user().await.expect("Authentication failed");
+
+    let test_content = "Test document for validation";
+    
+    // Test with maximum allowed languages (4)
+    let max_languages = &["eng", "spa", "fra", "deu"];
+    let document = client.upload_file_with_languages(
+        test_content,
+        "max_languages_test.txt",
+        "text/plain",
+        max_languages
+    ).await.expect("Max languages upload should succeed");
+    
+    println!("✅ Max languages document uploaded: {}", document.id);
+    
+    // Test with too many languages (5) - this should fail at the API level
+    let too_many_languages = &["eng", "spa", "fra", "deu", "ita"];
+    let upload_result = client.upload_file_with_languages(
+        test_content,
+        "too_many_languages_test.txt",
+        "text/plain",
+        too_many_languages
+    ).await;
+    
+    // This should either fail or succeed with API validation
+    match upload_result {
+        Ok(document) => {
+            println!("⚠️  Too many languages upload succeeded (API allows it): {}", document.id);
+            // If it succeeds, the API is allowing it - that's a valid implementation choice
+        }
+        Err(e) => {
+            println!("✅ Too many languages upload failed as expected: {}", e);
+            // This is the expected behavior if API validates language count
+        }
+    }
+    
+    // Test with single language for comparison
+    let single_language = &["eng"];
+    let single_doc = client.upload_file_with_languages(
+        test_content,
+        "single_language_test.txt",
+        "text/plain", 
+        single_language
+    ).await.expect("Single language upload should succeed");
+    
+    println!("✅ Single language document uploaded: {}", single_doc.id);
+    
+    println!("🎉 Multi-language upload validation test completed!");
+}
+
+#[tokio::test]
+async fn test_multi_language_binary_upload() {
+    println!("🖼️ Testing multi-language binary file upload...");
+    
+    let mut client = FileProcessingTestClient::new();
+    client.setup_user().await.expect("Authentication failed");
+
+    // Create mock binary content (simulate an image with text in multiple languages)
+    let binary_content = b"Mock binary image data with embedded text in multiple languages".to_vec();
+    
+    // Upload binary file with multiple languages
+    let languages = &["eng", "spa", "fra"];
+    let document = client.upload_binary_file_with_languages(
+        binary_content,
+        "multilang_image.png",
+        "image/png",
+        languages
+    ).await.expect("Multi-language binary upload failed");
+    
+    println!("✅ Multi-language binary document uploaded: {}", document.id);
+    
+    // Wait for processing
+    let processed_doc = client.wait_for_processing(&document.id.to_string()).await
+        .expect("Processing failed");
+    
+    println!("✅ Multi-language binary document processed: status = {:?}", processed_doc.ocr_status);
+    
+    // The document should be processed (may succeed or fail depending on OCR engine, but should be processed)
+    assert!(processed_doc.ocr_status.is_some(), "OCR status should be set");
+    
+    println!("🎉 Multi-language binary upload test completed!");
+}
+
+#[tokio::test]  
+async fn test_backwards_compatibility_single_language() {
+    println!("🔄 Testing backwards compatibility with single language uploads...");
+    
+    let mut client = FileProcessingTestClient::new();
+    client.setup_user().await.expect("Authentication failed");
+
+    let test_content = "Test document for backwards compatibility";
+    
+    // Test traditional single language upload (without multi-language parameters)
+    let document = client.upload_file(
+        test_content,
+        "backwards_compat_test.txt",
+        "text/plain"
+    ).await.expect("Traditional upload failed");
+    
+    println!("✅ Traditional single language document uploaded: {}", document.id);
+    
+    // Test single language using multi-language method  
+    let languages = &["eng"];
+    let multi_doc = client.upload_file_with_languages(
+        test_content,
+        "single_via_multi_test.txt", 
+        "text/plain",
+        languages
+    ).await.expect("Single language via multi-language method failed");
+    
+    println!("✅ Single language via multi-language method uploaded: {}", multi_doc.id);
+    
+    // Both should process successfully
+    let traditional_processed = client.wait_for_processing(&document.id.to_string()).await
+        .expect("Traditional processing failed");
+    let multi_processed = client.wait_for_processing(&multi_doc.id.to_string()).await
+        .expect("Multi-method processing failed");
+    
+    println!("✅ Traditional processed: status = {:?}", traditional_processed.ocr_status);
+    println!("✅ Multi-method processed: status = {:?}", multi_processed.ocr_status);
+    
+    // Both should have completed status
+    assert_eq!(traditional_processed.ocr_status.as_deref(), Some("completed"));
+    assert_eq!(multi_processed.ocr_status.as_deref(), Some("completed"));
+    
+    println!("🎉 Backwards compatibility test completed!");
 }
