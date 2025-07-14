@@ -20,6 +20,13 @@ export const TEST_FILES = {
   test8: '../tests/test_images/test8.jpeg',    // "Test 8\nThis is some text from text 8"
   test9: '../tests/test_images/test9.png',     // "Test 9\nThis is some text from text 9"
   
+  // Multilingual test PDFs
+  spanishTest: 'test_data/multilingual/spanish_test.pdf',
+  englishTest: 'test_data/multilingual/english_test.pdf',
+  mixedLanguageTest: 'test_data/multilingual/mixed_language_test.pdf',
+  spanishComplex: 'test_data/multilingual/spanish_complex.pdf',
+  englishComplex: 'test_data/multilingual/english_complex.pdf',
+  
   // Backwards compatibility
   image: '../tests/test_images/test1.png',
   multiline: '../tests/test_images/test2.jpg',
