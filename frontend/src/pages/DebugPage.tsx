@@ -1063,10 +1063,10 @@ const DebugPage: React.FC = () => {
                     <Grid item xs={12} md={6}>
                       <Paper sx={{ p: 2 }}>
                         <Typography variant="subtitle1" gutterBottom>Quality Thresholds</Typography>
-                        <Typography><strong>Brightness:</strong> {debugInfo.user_settings?.quality_thresholds?.brightness || 'N/A'}</Typography>
-                        <Typography><strong>Contrast:</strong> {debugInfo.user_settings?.quality_thresholds?.contrast || 'N/A'}</Typography>
-                        <Typography><strong>Noise:</strong> {debugInfo.user_settings?.quality_thresholds?.noise || 'N/A'}</Typography>
-                        <Typography><strong>Sharpness:</strong> {debugInfo.user_settings?.quality_thresholds?.sharpness || 'N/A'}</Typography>
+                        <Typography><strong>Brightness:</strong> {debugInfo.user_settings?.ocr_quality_threshold_brightness || 'N/A'}</Typography>
+                        <Typography><strong>Contrast:</strong> {debugInfo.user_settings?.ocr_quality_threshold_contrast || 'N/A'}</Typography>
+                        <Typography><strong>Noise:</strong> {debugInfo.user_settings?.ocr_quality_threshold_noise || 'N/A'}</Typography>
+                        <Typography><strong>Sharpness:</strong> {debugInfo.user_settings?.ocr_quality_threshold_sharpness || 'N/A'}</Typography>
                       </Paper>
                     </Grid>
                   </Grid>

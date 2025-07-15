@@ -63,6 +63,17 @@ pub async fn get_document_debug_info(
         None
     };
 
+    // Get user settings
+    let user_settings = state
+        .db
+        .get_user_settings(auth_user.user.id)
+        .await
+        .map_err(|e| {
+            error!("Database error getting user settings: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .map(|settings| settings.into());
+
     // Construct processing steps based on document state
     let mut processing_steps = vec!["uploaded".to_string()];
     
@@ -96,6 +107,7 @@ pub async fn get_document_debug_info(
         file_exists,
         readable,
         permissions,
+        user_settings,
     };
 
     debug!("Debug info generated for document: {}", document_id);

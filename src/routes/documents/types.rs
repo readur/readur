@@ -68,6 +68,7 @@ pub struct DocumentDebugInfo {
     pub file_exists: bool,
     pub readable: bool,
     pub permissions: Option<String>,
+    pub user_settings: Option<crate::models::SettingsResponse>,
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
