@@ -34,7 +34,6 @@ futures = "0.3"
 notify = "8"
 mime_guess = "2"
 tesseract = { version = "0.15", optional = true }
-pdf-extract = { version = "0.9", optional = true }
 image = { version = "0.25", features = ["png", "jpeg", "tiff", "bmp"], optional = true }
 imageproc = { version = "0.25", optional = true }
 thiserror = "2.0"
@@ -61,7 +60,7 @@ testcontainers-modules = { version = "0.12", features = ["postgres"], optional =
 
 [features]
 default = ["ocr", "s3"]
-ocr = ["tesseract", "pdf-extract", "image", "imageproc", "raw-cpuid"]
+ocr = ["tesseract", "image", "imageproc", "raw-cpuid"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types"]
 test-utils = ["testcontainers", "testcontainers-modules"]
 

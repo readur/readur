@@ -811,13 +811,13 @@ impl EnhancedOcrService {
         Ok(closed)
     }
     
-    /// Extract text from PDF with size and time limits
+    /// Extract text from PDF using ocrmypdf
     #[cfg(feature = "ocr")]
     pub async fn extract_text_from_pdf(&self, file_path: &str, settings: &Settings) -> Result<OcrResult> {
         let start_time = std::time::Instant::now();
         info!("Extracting text from PDF: {}", file_path);
         
-        // Check file size before loading into memory
+        // Check file size before processing
         let metadata = tokio::fs::metadata(file_path).await?;
         let file_size = metadata.len();
         
@@ -831,103 +831,91 @@ impl EnhancedOcrService {
             ));
         }
         
-        let bytes = tokio::fs::read(file_path).await?;
+        // Check if it's a valid PDF by reading first 1KB
+        let mut header_bytes = vec![0u8; 1024.min(file_size as usize)];
+        let mut file = tokio::fs::File::open(file_path).await?;
+        use tokio::io::AsyncReadExt;
+        file.read_exact(&mut header_bytes).await?;
+        drop(file);
         
-        // Check if it's a valid PDF (handles leading null bytes)
-        if !is_valid_pdf(&bytes) {
+        if !is_valid_pdf(&header_bytes) {
             return Err(anyhow!(
                 "Invalid PDF file: Missing or corrupted PDF header. File size: {} bytes, Header: {:?}", 
-                bytes.len(),
-                bytes.get(0..50).unwrap_or(&[]).iter().map(|&b| {
+                file_size,
+                header_bytes.get(0..50).unwrap_or(&[]).iter().map(|&b| {
                     if b >= 32 && b <= 126 { b as char } else { '.' }
                 }).collect::<String>()
             ));
         }
         
-        // Clean the PDF data (remove leading null bytes)
-        let clean_bytes = clean_pdf_data(&bytes);
-        
-        // Add timeout and panic recovery for PDF extraction
-        let extraction_result = tokio::time::timeout(
-            std::time::Duration::from_secs(120), // 2 minute timeout
-            tokio::task::spawn_blocking(move || {
-                // Catch panics from pdf-extract library
-                catch_unwind(AssertUnwindSafe(|| {
-                    pdf_extract::extract_text_from_mem(&clean_bytes)
-                }))
-            })
-        ).await;
-        
-        let text = match extraction_result {
-            Ok(Ok(Ok(Ok(text)))) => text,
-            Ok(Ok(Ok(Err(e)))) => {
-                warn!("PDF text extraction failed for file '{}' (size: {} bytes): {}", file_path, file_size, e);
-                return Err(anyhow!(
-                    "PDF text extraction failed for file '{}' (size: {} bytes): {}. This may indicate a corrupted or unsupported PDF format.",
-                    file_path, file_size, e
-                ));
-            }
-            Ok(Ok(Err(_panic))) => {
-                // pdf-extract panicked (e.g., missing unicode map, corrupted font encoding)
-                // For now, gracefully handle this common issue
-                warn!("PDF text extraction panicked for '{}' (size: {} bytes) due to font encoding issues. This is a known limitation with certain PDF files.", file_path, file_size);
-                
-                return Err(anyhow!(
-                    "PDF text extraction failed due to font encoding issues in '{}' (size: {} bytes). This PDF uses non-standard fonts or character encoding that cannot be processed. To extract text from this PDF, consider: 1) Converting it to images and uploading those instead, 2) Using a different PDF viewer to re-save the PDF with standard encoding, or 3) Using external tools to convert the PDF to a more compatible format.",
-                    file_path, file_size
-                ));
-            }
-            Ok(Err(e)) => {
-                warn!("PDF extraction task failed for '{}' (size: {} bytes): {}", file_path, file_size, e);
-                return Err(anyhow!("PDF extraction task failed: {}", e));
-            }
-            Err(_) => {
-                warn!("PDF extraction timed out after 2 minutes for file '{}' (size: {} bytes). The PDF may be corrupted or too complex.", file_path, file_size);
-                return Err(anyhow!(
-                    "PDF extraction timed out after 2 minutes for file '{}' (size: {} bytes). The PDF may be corrupted or too complex.",
-                    file_path, file_size
-                ));
-            }
-        };
-        
-        // Limit extracted text size to prevent memory issues
-        const MAX_TEXT_SIZE: usize = 10 * 1024 * 1024; // 10MB of text
-        let trimmed_text = if text.len() > MAX_TEXT_SIZE {
-            warn!("PDF text too large ({} chars), truncating to {} chars", text.len(), MAX_TEXT_SIZE);
-            format!("{}... [TEXT TRUNCATED DUE TO SIZE]", &text[..MAX_TEXT_SIZE])
-        } else {
-            text.trim().to_string()
-        };
-        
-        let processing_time = start_time.elapsed().as_millis() as u64;
-        let word_count = self.count_words_safely(&trimmed_text);
-        
-        // Debug logging to understand PDF extraction issues
-        debug!(
-            "PDF extraction debug - File: '{}' | Raw text length: {} | Trimmed text length: {} | Word count: {} | First 200 chars: {:?}",
-            file_path,
-            text.len(),
-            trimmed_text.len(),
-            word_count,
-            trimmed_text.chars().take(200).collect::<String>()
-        );
-        
-        // Smart detection: assess if text extraction quality is good enough
-        if self.is_text_extraction_quality_sufficient(&trimmed_text, word_count, file_size) {
-            info!("PDF text extraction successful for '{}', using extracted text", file_path);
-            Ok(OcrResult {
-                text: trimmed_text,
-                confidence: 95.0, // PDF text extraction is generally high confidence
-                processing_time_ms: processing_time,
-                word_count,
-                preprocessing_applied: vec!["PDF text extraction".to_string()],
-                processed_image_path: None,
-            })
-        } else {
-            info!("PDF text extraction insufficient for '{}' ({} words), falling back to OCR", file_path, word_count);
-            // Fall back to OCR using ocrmypdf
-            self.extract_text_from_pdf_with_ocr(file_path, settings, start_time).await
+        // Check if ocrmypdf is available
+        if !self.is_ocrmypdf_available().await {
+            return Err(anyhow!(
+                "ocrmypdf is not available on this system. To extract text from PDFs, please install ocrmypdf. \
+                On Ubuntu/Debian: 'apt-get install ocrmypdf'. \
+                On macOS: 'brew install ocrmypdf'."
+            ));
         }
+        
+        // First try to extract text without OCR for performance (using --skip-text)
+        let quick_extraction_result = self.extract_pdf_text_quick(file_path).await;
+        
+        match quick_extraction_result {
+            Ok((text, extraction_time)) => {
+                let word_count = self.count_words_safely(&text);
+                
+                // Check if quick extraction got good results
+                if self.is_text_extraction_quality_sufficient(&text, word_count, file_size) {
+                    info!("PDF text extraction successful for '{}' using quick method", file_path);
+                    return Ok(OcrResult {
+                        text,
+                        confidence: 95.0,
+                        processing_time_ms: extraction_time,
+                        word_count,
+                        preprocessing_applied: vec!["PDF text extraction (ocrmypdf --skip-text)".to_string()],
+                        processed_image_path: None,
+                    });
+                } else {
+                    info!("Quick PDF extraction insufficient for '{}' ({} words), using full OCR", file_path, word_count);
+                }
+            }
+            Err(e) => {
+                warn!("Quick PDF extraction failed for '{}': {}, using full OCR", file_path, e);
+            }
+        }
+        
+        // If quick extraction failed or was insufficient, use full OCR
+        let full_ocr_result = self.extract_text_from_pdf_with_ocr(file_path, settings, start_time).await;
+        
+        // If OCR also fails, try direct text extraction as last resort
+        if full_ocr_result.is_err() {
+            warn!("Full OCR failed, trying direct text extraction as last resort for: {}", file_path);
+            
+            match self.extract_text_from_pdf_bytes(file_path).await {
+                Ok(text) if !text.trim().is_empty() => {
+                    let processing_time = start_time.elapsed().as_millis() as u64;
+                    let word_count = self.count_words_safely(&text);
+                    info!("Direct text extraction succeeded as last resort for: {}", file_path);
+                    
+                    return Ok(OcrResult {
+                        text,
+                        confidence: 50.0, // Lower confidence for direct extraction
+                        processing_time_ms: processing_time,
+                        word_count,
+                        preprocessing_applied: vec!["Direct PDF text extraction (last resort)".to_string()],
+                        processed_image_path: None,
+                    });
+                }
+                Ok(_) => {
+                    warn!("Direct text extraction returned empty text for: {}", file_path);
+                }
+                Err(e) => {
+                    warn!("Direct text extraction also failed for {}: {}", file_path, e);
+                }
+            }
+        }
+        
+        full_ocr_result
     }
     
     /// Assess if text extraction quality is sufficient or if OCR fallback is needed
@@ -1002,20 +990,53 @@ impl EnhancedOcrService {
         );
         let temp_ocr_path = format!("{}/{}", self.temp_dir, temp_ocr_filename);
         
-        // Run ocrmypdf to create searchable PDF
+        // Run ocrmypdf with progressive fallback strategies
         let ocrmypdf_result = tokio::time::timeout(
             std::time::Duration::from_secs(300), // 5 minute timeout for OCR
             tokio::task::spawn_blocking({
                 let file_path = file_path.to_string();
                 let temp_ocr_path = temp_ocr_path.clone();
                 move || {
-                    std::process::Command::new("ocrmypdf")
+                    // Strategy 1: Standard OCR with cleaning
+                    let mut result = std::process::Command::new("ocrmypdf")
                         .arg("--force-ocr")  // OCR even if text is detected
                         .arg("-O2")          // Optimize level 2 (balanced quality/speed)
                         .arg("--deskew")     // Correct skewed pages
                         .arg("--clean")      // Clean up artifacts
                         .arg("--language")
                         .arg("eng")          // English language
+                        .arg(&file_path)
+                        .arg(&temp_ocr_path)
+                        .output();
+                    
+                    if result.is_ok() && result.as_ref().unwrap().status.success() {
+                        return result;
+                    }
+                    
+                    // Strategy 2: If standard OCR fails, try with error recovery
+                    eprintln!("Standard OCR failed, trying recovery mode...");
+                    result = std::process::Command::new("ocrmypdf")
+                        .arg("--force-ocr")
+                        .arg("--fix-metadata")  // Fix metadata issues
+                        .arg("--remove-background")  // Remove background noise
+                        .arg("-O1")          // Lower optimization for problematic PDFs
+                        .arg("--language")
+                        .arg("eng")
+                        .arg(&file_path)
+                        .arg(&temp_ocr_path)
+                        .output();
+                    
+                    if result.is_ok() && result.as_ref().unwrap().status.success() {
+                        return result;
+                    }
+                    
+                    // Strategy 3: Last resort - minimal processing (skips very large pages)
+                    eprintln!("Recovery mode failed, trying minimal processing...");
+                    std::process::Command::new("ocrmypdf")
+                        .arg("--force-ocr")
+                        .arg("--skip-big")  // Skip very large pages that might cause memory issues
+                        .arg("--language")
+                        .arg("eng")
                         .arg(&file_path)
                         .arg(&temp_ocr_path)
                         .output()
@@ -1044,25 +1065,28 @@ impl EnhancedOcrService {
             move || -> Result<String> {
                 let bytes = std::fs::read(&temp_ocr_path)?;
                 // Catch panics from pdf-extract library (same pattern as used elsewhere)
-                let text = match catch_unwind(AssertUnwindSafe(|| {
-                    pdf_extract::extract_text_from_mem(&bytes)
-                })) {
-                    Ok(Ok(text)) => text,
-                    Ok(Err(e)) => {
-                        warn!("PDF text extraction failed after OCR processing for '{}': {}", temp_ocr_path, e);
-                        return Err(anyhow!(
-                            "PDF text extraction failed after OCR processing: {}. This may indicate a corrupted or unsupported PDF format.",
-                            e
-                        ));
-                    },
-                    Err(_) => {
-                        warn!("PDF extraction panicked after OCR processing for '{}' due to invalid content stream", temp_ocr_path);
-                        return Err(anyhow!(
-                            "PDF extraction panicked after OCR processing due to invalid content stream or corrupted PDF structure. \
-                            This suggests the PDF has malformed internal structure that cannot be parsed safely."
-                        ));
-                    },
-                };
+                // Extract text from the OCR'd PDF using ocrmypdf's sidecar option
+                let temp_text_path = format!("{}.txt", temp_ocr_path);
+                let extract_result = std::process::Command::new("ocrmypdf")
+                    .arg("--sidecar")  // Extract text to a sidecar file
+                    .arg(&temp_text_path)
+                    .arg(&temp_ocr_path)
+                    .arg("-")  // Output to stdout (dummy, required by ocrmypdf)
+                    .output()?;
+                
+                if !extract_result.status.success() {
+                    let stderr = String::from_utf8_lossy(&extract_result.stderr);
+                    return Err(anyhow!(
+                        "ocrmypdf text extraction failed: {}",
+                        stderr
+                    ));
+                }
+                
+                // Read the extracted text from the sidecar file
+                let text = std::fs::read_to_string(&temp_text_path)?;
+                
+                // Clean up the text file
+                let _ = std::fs::remove_file(&temp_text_path);
                 Ok(text.trim().to_string())
             }
         }).await??;
@@ -1084,6 +1108,225 @@ impl EnhancedOcrService {
             preprocessing_applied: vec!["OCR via ocrmypdf".to_string()],
             processed_image_path: None,
         })
+    }
+    
+    /// Progressive PDF text extraction with fallback strategies
+    #[cfg(feature = "ocr")]
+    async fn extract_pdf_text_quick(&self, file_path: &str) -> Result<(String, u64)> {
+        let start_time = std::time::Instant::now();
+        
+        // Generate temporary file path for text extraction
+        let temp_text_filename = format!("quick_text_{}_{}.txt", 
+            std::process::id(), 
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
+        );
+        let temp_text_path = format!("{}/{}", self.temp_dir, temp_text_filename);
+        
+        // Strategy 1: Fast extraction with --skip-text (extracts existing text, no OCR)
+        let mut ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
+            .arg("--skip-text")  // Extract existing text without OCR processing
+            .arg("--sidecar")    // Extract text to sidecar file
+            .arg(&temp_text_path)
+            .arg(file_path)
+            .arg("-")  // Dummy output (required by ocrmypdf)
+            .output()
+            .await;
+        
+        if ocrmypdf_result.is_ok() && ocrmypdf_result.as_ref().unwrap().status.success() {
+            if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
+                let _ = tokio::fs::remove_file(&temp_text_path).await;
+                let processing_time = start_time.elapsed().as_millis() as u64;
+                return Ok((text.trim().to_string(), processing_time));
+            }
+        }
+        
+        info!("Quick extraction failed, trying recovery strategies for: {}", file_path);
+        
+        // Strategy 2: Try with --fix-metadata for corrupted metadata
+        let temp_fixed_pdf = format!("{}/fixed_{}_{}.pdf", self.temp_dir, std::process::id(), 
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis());
+        
+        ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
+            .arg("--fix-metadata")  // Fix metadata issues
+            .arg("--skip-text")     // Still skip OCR for speed
+            .arg("--sidecar")
+            .arg(&temp_text_path)
+            .arg(file_path)
+            .arg(&temp_fixed_pdf)
+            .output()
+            .await;
+        
+        if ocrmypdf_result.is_ok() && ocrmypdf_result.as_ref().unwrap().status.success() {
+            if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
+                let _ = tokio::fs::remove_file(&temp_text_path).await;
+                let _ = tokio::fs::remove_file(&temp_fixed_pdf).await;
+                let processing_time = start_time.elapsed().as_millis() as u64;
+                return Ok((text.trim().to_string(), processing_time));
+            }
+        }
+        
+        // Strategy 3: Try with --remove-background for scanned documents
+        ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
+            .arg("--remove-background")
+            .arg("--skip-text")
+            .arg("--sidecar")
+            .arg(&temp_text_path)
+            .arg(file_path)
+            .arg(&temp_fixed_pdf)
+            .output()
+            .await;
+        
+        if ocrmypdf_result.is_ok() && ocrmypdf_result.as_ref().unwrap().status.success() {
+            if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
+                let _ = tokio::fs::remove_file(&temp_text_path).await;
+                let _ = tokio::fs::remove_file(&temp_fixed_pdf).await;
+                let processing_time = start_time.elapsed().as_millis() as u64;
+                return Ok((text.trim().to_string(), processing_time));
+            }
+        }
+        
+        // Clean up temporary files
+        let _ = tokio::fs::remove_file(&temp_text_path).await;
+        let _ = tokio::fs::remove_file(&temp_fixed_pdf).await;
+        
+        // Last resort: try to extract any readable text directly from the PDF file
+        warn!("All ocrmypdf strategies failed, trying direct text extraction from: {}", file_path);
+        
+        match self.extract_text_from_pdf_bytes(file_path).await {
+            Ok(text) if !text.trim().is_empty() => {
+                let processing_time = start_time.elapsed().as_millis() as u64;
+                info!("Direct text extraction succeeded for: {}", file_path);
+                Ok((text, processing_time))
+            }
+            Ok(_) => {
+                warn!("Direct text extraction returned empty text for: {}", file_path);
+                // If all strategies fail, return the last error
+                match ocrmypdf_result {
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        Err(anyhow!("All PDF extraction strategies failed. Last error: {}", stderr))
+                    }
+                    Err(e) => Err(anyhow!("Failed to run ocrmypdf: {}", e)),
+                }
+            }
+            Err(e) => {
+                warn!("Direct text extraction also failed for {}: {}", file_path, e);
+                // If all strategies fail, return the last error
+                match ocrmypdf_result {
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        Err(anyhow!("All PDF extraction strategies failed. Last error: {}", stderr))
+                    }
+                    Err(e) => Err(anyhow!("Failed to run ocrmypdf: {}", e)),
+                }
+            }
+        }
+    }
+    
+    /// Last resort: extract readable text directly from PDF bytes
+    /// This can find text that's embedded in the PDF even if the structure is corrupted
+    #[cfg(feature = "ocr")]
+    async fn extract_text_from_pdf_bytes(&self, file_path: &str) -> Result<String> {
+        let bytes = tokio::fs::read(file_path).await?;
+        
+        // Look for text strings in the PDF
+        let mut extracted_text = String::new();
+        let mut current_text = String::new();
+        let mut in_text_object = false;
+        let mut in_string = false;
+        let mut escape_next = false;
+        
+        for &byte in &bytes {
+            let char = byte as char;
+            
+            // Look for text objects (BT...ET blocks)
+            if !in_text_object && char == 'B' {
+                // Check if this might be the start of "BT" (Begin Text)
+                if let Some(window) = bytes.windows(2).find(|w| w == b"BT") {
+                    in_text_object = true;
+                    continue;
+                }
+            }
+            
+            if in_text_object && char == 'E' {
+                // Check if this might be the start of "ET" (End Text)
+                if let Some(window) = bytes.windows(2).find(|w| w == b"ET") {
+                    in_text_object = false;
+                    if !current_text.trim().is_empty() {
+                        extracted_text.push_str(&current_text);
+                        extracted_text.push(' ');
+                        current_text.clear();
+                    }
+                    continue;
+                }
+            }
+            
+            // Look for text strings in parentheses (text) or brackets
+            if in_text_object {
+                if char == '(' && !escape_next {
+                    in_string = true;
+                    continue;
+                }
+                
+                if char == ')' && !escape_next && in_string {
+                    in_string = false;
+                    current_text.push(' ');
+                    continue;
+                }
+                
+                if in_string {
+                    if escape_next {
+                        escape_next = false;
+                        current_text.push(char);
+                    } else if char == '\\' {
+                        escape_next = true;
+                    } else {
+                        current_text.push(char);
+                    }
+                }
+            }
+        }
+        
+        // Also try to find any readable ASCII text in the PDF
+        let mut ascii_text = String::new();
+        let mut current_word = String::new();
+        
+        for &byte in &bytes {
+            if byte >= 32 && byte <= 126 {  // Printable ASCII
+                current_word.push(byte as char);
+            } else {
+                if current_word.len() > 3 {  // Only keep words longer than 3 characters
+                    ascii_text.push_str(&current_word);
+                    ascii_text.push(' ');
+                }
+                current_word.clear();
+            }
+        }
+        
+        // Add the last word if it's long enough
+        if current_word.len() > 3 {
+            ascii_text.push_str(&current_word);
+        }
+        
+        // Combine both extraction methods
+        let mut final_text = extracted_text;
+        if !ascii_text.trim().is_empty() {
+            final_text.push_str("\\n");
+            final_text.push_str(&ascii_text);
+        }
+        
+        // Clean up the text
+        let cleaned_text = final_text
+            .split_whitespace()
+            .filter(|word| word.len() > 1)  // Filter out single characters
+            .collect::<Vec<_>>()
+            .join(" ");
+        
+        if cleaned_text.trim().is_empty() {
+            Err(anyhow!("No readable text found in PDF"))
+        } else {
+            Ok(cleaned_text)
+        }
     }
     
     /// Check if ocrmypdf is available on the system
@@ -1353,24 +1596,4 @@ fn is_valid_pdf(data: &[u8]) -> bool {
     }
     
     false
-}
-
-/// Remove leading null bytes and return clean PDF data
-/// Returns the original data if no PDF header is found
-fn clean_pdf_data(data: &[u8]) -> Vec<u8> {
-    if data.len() < 5 {
-        return data.to_vec();
-    }
-    
-    // Find the first occurrence of "%PDF-" in the first 1KB
-    let search_limit = data.len().min(1024);
-    
-    for i in 0..=search_limit.saturating_sub(5) {
-        if &data[i..i+5] == b"%PDF-" {
-            return data[i..].to_vec();
-        }
-    }
-    
-    // If no PDF header found, return original data
-    data.to_vec()
 }

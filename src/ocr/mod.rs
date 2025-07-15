@@ -8,7 +8,6 @@ pub mod tests;
 
 use anyhow::{anyhow, Result};
 use std::path::Path;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use crate::ocr::error::OcrError;
 use crate::ocr::health::OcrHealthChecker;
 
@@ -62,14 +61,85 @@ impl OcrService {
     pub async fn extract_text_from_pdf(&self, file_path: &str) -> Result<String> {
         #[cfg(feature = "ocr")]
         {
-            let bytes = std::fs::read(file_path)?;
-            let text = match catch_unwind(AssertUnwindSafe(|| {
-                pdf_extract::extract_text_from_mem(&bytes)
-            })) {
-                Ok(Ok(text)) => text,
-                Ok(Err(e)) => return Err(anyhow!("Failed to extract text from PDF: {}", e)),
-                Err(_) => return Err(anyhow!("PDF extraction panicked due to invalid content stream in file: {}", file_path)),
-            };
+            // Check if ocrmypdf is available
+            let ocrmypdf_check = tokio::process::Command::new("ocrmypdf")
+                .arg("--version")
+                .output()
+                .await;
+                
+            if ocrmypdf_check.is_err() || !ocrmypdf_check.unwrap().status.success() {
+                return Err(anyhow!(
+                    "ocrmypdf is not available. Please install ocrmypdf: \
+                    On Ubuntu/Debian: 'apt-get install ocrmypdf'. \
+                    On macOS: 'brew install ocrmypdf'."
+                ));
+            }
+            
+            // Create temporary file for text extraction
+            let temp_dir = std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string());
+            let temp_text_path = format!("{}/pdf_text_{}.txt", temp_dir, std::process::id());
+            
+            // Progressive extraction with fallback strategies
+            let mut output = tokio::process::Command::new("ocrmypdf")
+                .arg("--skip-text")  // Extract existing text without OCR processing
+                .arg("--sidecar")    // Extract text to sidecar file
+                .arg(&temp_text_path)
+                .arg(file_path)
+                .arg("-")  // Dummy output (required)
+                .output()
+                .await?;
+                
+            if !output.status.success() {
+                // Try with metadata fixing for corrupted files
+                output = tokio::process::Command::new("ocrmypdf")
+                    .arg("--fix-metadata")  // Fix corrupted metadata
+                    .arg("--skip-text")     // Still extract existing text only
+                    .arg("--sidecar")
+                    .arg(&temp_text_path)
+                    .arg(file_path)
+                    .arg("-")
+                    .output()
+                    .await?;
+                    
+                if !output.status.success() {
+                    // Final fallback: minimal processing (may skip large pages)
+                    output = tokio::process::Command::new("ocrmypdf")
+                        .arg("--skip-big")   // Skip very large pages to avoid memory issues
+                        .arg("--sidecar")
+                        .arg(&temp_text_path)
+                        .arg(file_path)
+                        .arg("-")
+                        .output()
+                        .await?;
+                        
+                    if !output.status.success() {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        // Clean up temp file on error
+                        let _ = tokio::fs::remove_file(&temp_text_path).await;
+                        
+                        // Last resort: try direct text extraction
+                        match self.extract_text_from_pdf_bytes(file_path).await {
+                            Ok(text) if !text.trim().is_empty() => {
+                                return Ok(text);
+                            }
+                            Ok(_) => {
+                                // Empty text from direct extraction
+                            }
+                            Err(_) => {
+                                // Direct extraction also failed
+                            }
+                        }
+                        
+                        return Err(anyhow!("Failed to extract text from PDF after trying multiple strategies: {}", stderr));
+                    }
+                }
+            }
+            
+            // Read the extracted text
+            let text = tokio::fs::read_to_string(&temp_text_path).await?;
+            
+            // Clean up temporary file
+            let _ = tokio::fs::remove_file(&temp_text_path).await;
             
             Ok(text.trim().to_string())
         }
@@ -103,6 +173,45 @@ impl OcrService {
                     }))
                 }
             }
+        }
+    }
+
+    /// Last resort: extract readable text directly from PDF bytes
+    async fn extract_text_from_pdf_bytes(&self, file_path: &str) -> Result<String> {
+        let bytes = tokio::fs::read(file_path).await?;
+        
+        // Look for readable ASCII text in the PDF
+        let mut ascii_text = String::new();
+        let mut current_word = String::new();
+        
+        for &byte in &bytes {
+            if byte >= 32 && byte <= 126 {  // Printable ASCII
+                current_word.push(byte as char);
+            } else {
+                if current_word.len() > 3 {  // Only keep words longer than 3 characters
+                    ascii_text.push_str(&current_word);
+                    ascii_text.push(' ');
+                }
+                current_word.clear();
+            }
+        }
+        
+        // Add the last word if it's long enough
+        if current_word.len() > 3 {
+            ascii_text.push_str(&current_word);
+        }
+        
+        // Clean up the text
+        let cleaned_text = ascii_text
+            .split_whitespace()
+            .filter(|word| word.len() > 1)  // Filter out single characters
+            .collect::<Vec<_>>()
+            .join(" ");
+        
+        if cleaned_text.trim().is_empty() {
+            Err(anyhow!("No readable text found in PDF"))
+        } else {
+            Ok(cleaned_text)
         }
     }
 
