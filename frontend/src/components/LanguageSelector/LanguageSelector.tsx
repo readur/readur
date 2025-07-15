@@ -176,9 +176,15 @@ function LanguageSelector({
             textTransform: 'none',
             color: 'text.secondary',
             borderColor: 'divider',
+            py: 1,
+            backgroundColor: (theme) => theme.palette.mode === 'dark' 
+              ? 'rgba(255, 255, 255, 0.02)'
+              : 'rgba(0, 0, 0, 0.02)',
             '&:hover': {
-              backgroundColor: 'action.hover',
-              borderColor: 'primary.main',
+              backgroundColor: (theme) => theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.05)'
+                : 'rgba(0, 0, 0, 0.04)',
+              borderColor: 'divider',
             },
           }}
         >
@@ -259,7 +265,7 @@ function LanguageSelector({
                         borderRadius: 1.5,
                         backgroundColor: isSelected 
                           ? (theme) => theme.palette.mode === 'dark' 
-                              ? 'rgba(144, 202, 249, 0.16)' 
+                              ? 'rgba(144, 202, 249, 0.08)' 
                               : 'rgba(25, 118, 210, 0.08)'
                           : 'transparent',
                         cursor: canSelect || isSelected ? 'pointer' : 'not-allowed',
@@ -313,7 +319,7 @@ function LanguageSelector({
                           variant="body2"
                           sx={{
                             fontWeight: isSelected ? 500 : 400,
-                            color: isSelected ? 'primary.dark' : 'text.primary',
+                            color: isSelected ? 'primary.main' : 'text.primary',
                           }}
                         >
                           {language.name}
@@ -336,7 +342,7 @@ function LanguageSelector({
                       {isSelected && showPrimarySelector && selectedLanguages.length > 1 && (
                         <Button
                           size="small"
-                          variant={isPrimary ? "contained" : "outlined"}
+                          variant={isPrimary ? "contained" : "text"}
                           color="primary"
                           onClick={() => handlePrimaryChange(language.code)}
                           disabled={isPrimary}
@@ -346,6 +352,7 @@ function LanguageSelector({
                             px: 1,
                             minWidth: 'auto',
                             textTransform: 'none',
+                            opacity: isPrimary ? 0.7 : 1,
                           }}
                         >
                           {isPrimary ? 'Primary' : 'Set Primary'}
@@ -361,7 +368,7 @@ function LanguageSelector({
                 mt: 3, 
                 p: 2, 
                 backgroundColor: (theme) => theme.palette.mode === 'dark'
-                  ? 'rgba(255, 193, 7, 0.1)'
+                  ? 'rgba(255, 193, 7, 0.08)'
                   : 'rgba(255, 193, 7, 0.08)',
                 border: '1px solid', 
                 borderColor: (theme) => theme.palette.mode === 'dark'
@@ -370,9 +377,7 @@ function LanguageSelector({
                 borderRadius: 2,
               }}>
                 <Typography variant="body2" sx={{ 
-                  color: (theme) => theme.palette.mode === 'dark'
-                    ? '#ffb74d'
-                    : '#e65100',
+                  color: 'warning.main',
                   fontWeight: 500,
                 }}>
                   Maximum {maxLanguages} languages allowed for optimal performance.
