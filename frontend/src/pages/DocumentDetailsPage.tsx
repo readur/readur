@@ -50,6 +50,7 @@ import {
   MoreVert as MoreIcon,
   OpenInFull as ExpandIcon,
   Close as CloseIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { documentService, OcrResponse, type Document } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
@@ -89,6 +90,10 @@ const DocumentDetailsPage: React.FC = () => {
   // Retry functionality state
   const [retryingOcr, setRetryingOcr] = useState<boolean>(false);
   const [retryHistoryModalOpen, setRetryHistoryModalOpen] = useState<boolean>(false);
+  
+  // Delete functionality state
+  const [deleting, setDeleting] = useState<boolean>(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
 
   // Retry handlers
   const handleRetryOcr = async () => {
@@ -115,6 +120,29 @@ const DocumentDetailsPage: React.FC = () => {
 
   const handleShowRetryHistory = () => {
     setRetryHistoryModalOpen(true);
+  };
+
+  // Delete handlers
+  const handleDeleteDocument = async () => {
+    if (!document) return;
+    
+    setDeleting(true);
+    try {
+      await documentService.delete(document.id);
+      // Navigate back to documents page after successful deletion
+      navigate('/documents');
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      // Show error message to user
+      alert('Failed to delete document. Please try again.');
+    } finally {
+      setDeleting(false);
+      setDeleteConfirmOpen(false);
+    }
+  };
+
+  const handleDeleteClick = () => {
+    setDeleteConfirmOpen(true);
   };
 
   useEffect(() => {
@@ -432,6 +460,27 @@ const DocumentDetailsPage: React.FC = () => {
                     </IconButton>
                   </Tooltip>
                 )}
+                
+                <Tooltip title="Delete Document">
+                  <IconButton
+                    onClick={handleDeleteClick}
+                    disabled={deleting}
+                    sx={{
+                      backgroundColor: theme.palette.action.hover,
+                      backdropFilter: 'blur(10px)',
+                      color: theme.palette.error.main,
+                      '&:hover': {
+                        transform: 'scale(1.05)',
+                        backgroundColor: theme.palette.error.light,
+                      },
+                      '&:disabled': {
+                        opacity: 0.6,
+                      },
+                    }}
+                  >
+                    {deleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+                  </IconButton>
+                </Tooltip>
               </Box>
             </Box>
             
@@ -1394,6 +1443,52 @@ const DocumentDetailsPage: React.FC = () => {
           documentName={document.original_filename}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DeleteIcon color="error" />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Delete Document
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This action cannot be undone.
+          </Alert>
+          <Typography variant="body1">
+            Are you sure you want to delete <strong>{document?.original_filename}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will permanently remove the document and all associated data including OCR text, labels, and processing history.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setDeleteConfirmOpen(false)}
+            disabled={deleting}
+          >
+            Cancel
+          </Button>
+          <Button 
+            variant="contained" 
+            color="error"
+            onClick={handleDeleteDocument}
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+            sx={{ borderRadius: 2 }}
+          >
+            {deleting ? 'Deleting...' : 'Delete Document'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

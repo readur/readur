@@ -377,8 +377,8 @@ export const documentService = {
   },
 
   bulkDelete: (documentIds: string[]) => {
-    return api.delete('/documents', {
-      data: { document_ids: documentIds }
+    return api.post('/documents/bulk/delete', {
+      document_ids: documentIds
     })
   },
 
