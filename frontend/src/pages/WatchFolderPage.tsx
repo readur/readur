@@ -277,8 +277,19 @@ const WatchFolderPage: React.FC = () => {
             </Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6} md={3}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.light', borderRadius: 2 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 600, color: 'info.dark' }}>
+                <Box sx={{ 
+                  textAlign: 'center', 
+                  p: 2, 
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(2, 136, 209, 0.15)' 
+                    : 'info.light', 
+                  borderRadius: 2,
+                  border: theme.palette.mode === 'dark' ? '1px solid rgba(2, 136, 209, 0.3)' : 'none'
+                }}>
+                  <Typography variant="h4" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.mode === 'dark' ? '#29b6f6' : 'info.dark' 
+                  }}>
                     {queueStats.pending_count}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -287,8 +298,19 @@ const WatchFolderPage: React.FC = () => {
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.light', borderRadius: 2 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 600, color: 'warning.dark' }}>
+                <Box sx={{ 
+                  textAlign: 'center', 
+                  p: 2, 
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(237, 108, 2, 0.15)' 
+                    : 'warning.light', 
+                  borderRadius: 2,
+                  border: theme.palette.mode === 'dark' ? '1px solid rgba(237, 108, 2, 0.3)' : 'none'
+                }}>
+                  <Typography variant="h4" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.mode === 'dark' ? '#ff9800' : 'warning.dark' 
+                  }}>
                     {queueStats.processing_count}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -297,8 +319,19 @@ const WatchFolderPage: React.FC = () => {
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.light', borderRadius: 2 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 600, color: 'error.dark' }}>
+                <Box sx={{ 
+                  textAlign: 'center', 
+                  p: 2, 
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(211, 47, 47, 0.15)' 
+                    : 'error.light', 
+                  borderRadius: 2,
+                  border: theme.palette.mode === 'dark' ? '1px solid rgba(211, 47, 47, 0.3)' : 'none'
+                }}>
+                  <Typography variant="h4" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.mode === 'dark' ? '#ef5350' : 'error.dark' 
+                  }}>
                     {queueStats.failed_count}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -307,8 +340,19 @@ const WatchFolderPage: React.FC = () => {
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.light', borderRadius: 2 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 600, color: 'success.dark' }}>
+                <Box sx={{ 
+                  textAlign: 'center', 
+                  p: 2, 
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(46, 125, 50, 0.15)' 
+                    : 'success.light', 
+                  borderRadius: 2,
+                  border: theme.palette.mode === 'dark' ? '1px solid rgba(46, 125, 50, 0.3)' : 'none'
+                }}>
+                  <Typography variant="h4" sx={{ 
+                    fontWeight: 600, 
+                    color: theme.palette.mode === 'dark' ? '#81c784' : 'success.dark' 
+                  }}>
                     {queueStats.completed_today}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
