@@ -80,24 +80,32 @@ impl OcrService {
             let temp_text_path = format!("{}/pdf_text_{}.txt", temp_dir, std::process::id());
             
             // Progressive extraction with fallback strategies
-            let mut output = tokio::process::Command::new("ocrmypdf")
-                .arg("--skip-text")  // Extract existing text without OCR processing
-                .arg("--sidecar")    // Extract text to sidecar file
-                .arg(&temp_text_path)
+            // Strategy 1: pdftotext for existing text (fastest)
+            let mut output = tokio::process::Command::new("pdftotext")
+                .arg("-layout")  // Preserve layout
                 .arg(file_path)
-                .arg("-")  // Dummy output (required)
+                .arg(&temp_text_path)
                 .output()
                 .await?;
                 
+            if output.status.success() {
+                // Check if we got substantial text
+                if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
+                    let word_count = text.split_whitespace().count();
+                    if word_count > 5 {
+                        let _ = tokio::fs::remove_file(&temp_text_path).await;
+                        return Ok(text.trim().to_string());
+                    }
+                }
+            }
+            
             if !output.status.success() {
-                // Try with metadata fixing for corrupted files
+                // Strategy 2: ocrmypdf sidecar (when pdftotext fails)
                 output = tokio::process::Command::new("ocrmypdf")
-                    .arg("--fix-metadata")  // Fix corrupted metadata
-                    .arg("--skip-text")     // Still extract existing text only
-                    .arg("--sidecar")
+                    .arg("--sidecar")    // Extract text to sidecar file
                     .arg(&temp_text_path)
                     .arg(file_path)
-                    .arg("-")
+                    .arg("-")  // Dummy output
                     .output()
                     .await?;
                     

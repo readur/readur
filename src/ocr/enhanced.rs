@@ -872,7 +872,7 @@ impl EnhancedOcrService {
                         confidence: 95.0,
                         processing_time_ms: extraction_time,
                         word_count,
-                        preprocessing_applied: vec!["PDF text extraction (ocrmypdf --skip-text)".to_string()],
+                        preprocessing_applied: vec!["PDF text extraction (pdftotext)".to_string()],
                         processed_image_path: None,
                     });
                 } else {
@@ -938,8 +938,16 @@ impl EnhancedOcrService {
         // Reasonable thresholds based on typical PDF content:
         // - Text-based PDFs typically have 50-200 words per KB
         // - Below 5 words per KB suggests mostly images/scanned content
+        // - But if we have a substantial number of words (>50), accept it regardless of density
         const MIN_WORD_DENSITY: f64 = 5.0;
         const MIN_WORDS_FOR_LARGE_FILES: usize = 10;
+        const SUBSTANTIAL_WORD_COUNT: usize = 50;
+        
+        // If we have substantial text, accept it regardless of density
+        if word_count >= SUBSTANTIAL_WORD_COUNT {
+            debug!("PDF has substantial text content: {} words, accepting regardless of density", word_count);
+            return true;
+        }
         
         if word_density < MIN_WORD_DENSITY && word_count < MIN_WORDS_FOR_LARGE_FILES {
             debug!("PDF appears to be image-based: {} words in {:.1} KB (density: {:.2} words/KB)", 
@@ -1122,102 +1130,130 @@ impl EnhancedOcrService {
         );
         let temp_text_path = format!("{}/{}", self.temp_dir, temp_text_filename);
         
-        // Strategy 1: Fast extraction with --skip-text (extracts existing text, no OCR)
-        let mut ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
-            .arg("--skip-text")  // Extract existing text without OCR processing
-            .arg("--sidecar")    // Extract text to sidecar file
-            .arg(&temp_text_path)
+        // Strategy 1: Fast text extraction using pdftotext (for existing text)
+        debug!("Trying pdftotext for existing text extraction: {}", file_path);
+        debug!("Using temp file path: {}", temp_text_path);
+        let pdftotext_result = tokio::process::Command::new("pdftotext")
+            .arg("-layout")  // Preserve layout
             .arg(file_path)
-            .arg("-")  // Dummy output (required by ocrmypdf)
+            .arg(&temp_text_path)
             .output()
             .await;
         
-        if ocrmypdf_result.is_ok() && ocrmypdf_result.as_ref().unwrap().status.success() {
-            if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
-                let _ = tokio::fs::remove_file(&temp_text_path).await;
-                let processing_time = start_time.elapsed().as_millis() as u64;
-                return Ok((text.trim().to_string(), processing_time));
+        if let Ok(output) = pdftotext_result {
+            debug!("pdftotext exit status: {}", output.status);
+            if !output.stderr.is_empty() {
+                debug!("pdftotext stderr: {}", String::from_utf8_lossy(&output.stderr));
+            }
+            if output.status.success() {
+                if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
+                    let _ = tokio::fs::remove_file(&temp_text_path).await;
+                    let word_count = text.split_whitespace().count();
+                    debug!("pdftotext extracted {} words from temp file", word_count);
+                    
+                    // If we got substantial text (more than a few words), use it
+                    if word_count > 5 {
+                        let processing_time = start_time.elapsed().as_millis() as u64;
+                        info!("pdftotext extracted {} words from: {}", word_count, file_path);
+                        return Ok((text.trim().to_string(), processing_time));
+                    } else {
+                        debug!("pdftotext only extracted {} words, will try direct extraction before OCR", word_count);
+                    }
+                } else {
+                    debug!("Failed to read pdftotext output file: {}", temp_text_path);
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                debug!("pdftotext failed with status {}: {}", output.status, stderr);
+            }
+        } else {
+            debug!("Failed to execute pdftotext command");
+        }
+        
+        info!("pdftotext extraction insufficient for '{}', trying direct extraction before OCR", file_path);
+        
+        // Strategy 2: Try direct text extraction (often works when pdftotext fails)
+        match self.extract_text_from_pdf_bytes(file_path).await {
+            Ok(text) if !text.trim().is_empty() => {
+                let word_count = text.split_whitespace().count();
+                if word_count > 5 {
+                    let processing_time = start_time.elapsed().as_millis() as u64;
+                    info!("Direct text extraction succeeded for '{}': {} words", file_path, word_count);
+                    return Ok((text, processing_time));
+                } else {
+                    debug!("Direct extraction only got {} words, trying OCR", word_count);
+                }
+            }
+            Ok(_) => {
+                debug!("Direct text extraction returned empty text");
+            }
+            Err(e) => {
+                debug!("Direct text extraction failed: {}", e);
             }
         }
         
-        info!("Quick extraction failed, trying recovery strategies for: {}", file_path);
+        info!("Direct extraction insufficient for '{}', using OCR extraction", file_path);
         
-        // Strategy 2: Try with --fix-metadata for corrupted metadata
-        let temp_fixed_pdf = format!("{}/fixed_{}_{}.pdf", self.temp_dir, std::process::id(), 
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis());
-        
-        ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
-            .arg("--fix-metadata")  // Fix metadata issues
-            .arg("--skip-text")     // Still skip OCR for speed
+        // Strategy 3: Use ocrmypdf --sidecar to extract existing OCR text
+        let ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
             .arg("--sidecar")
             .arg(&temp_text_path)
             .arg(file_path)
-            .arg(&temp_fixed_pdf)
+            .arg("-")  // Dummy output (we only want sidecar)
             .output()
             .await;
         
-        if ocrmypdf_result.is_ok() && ocrmypdf_result.as_ref().unwrap().status.success() {
-            if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
-                let _ = tokio::fs::remove_file(&temp_text_path).await;
-                let _ = tokio::fs::remove_file(&temp_fixed_pdf).await;
-                let processing_time = start_time.elapsed().as_millis() as u64;
-                return Ok((text.trim().to_string(), processing_time));
+        if let Ok(output) = &ocrmypdf_result {
+            if output.status.success() {
+                if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
+                    let _ = tokio::fs::remove_file(&temp_text_path).await;
+                    let word_count = text.split_whitespace().count();
+                    if word_count > 0 {
+                        let processing_time = start_time.elapsed().as_millis() as u64;
+                        info!("ocrmypdf --sidecar extracted {} words from: {}", word_count, file_path);
+                        return Ok((text.trim().to_string(), processing_time));
+                    }
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                debug!("ocrmypdf --sidecar failed: {}", stderr);
+                
+                // Check if the error indicates the page already has text
+                if stderr.contains("page already has text") {
+                    // This is good - it means there's already text, we should use pdftotext
+                    warn!("ocrmypdf detected existing text in PDF, this should have been caught by pdftotext");
+                }
             }
         }
         
-        // Strategy 3: Try with --remove-background for scanned documents
-        ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
-            .arg("--remove-background")
-            .arg("--skip-text")
-            .arg("--sidecar")
-            .arg(&temp_text_path)
-            .arg(file_path)
-            .arg(&temp_fixed_pdf)
-            .output()
-            .await;
-        
-        if ocrmypdf_result.is_ok() && ocrmypdf_result.as_ref().unwrap().status.success() {
-            if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
-                let _ = tokio::fs::remove_file(&temp_text_path).await;
-                let _ = tokio::fs::remove_file(&temp_fixed_pdf).await;
-                let processing_time = start_time.elapsed().as_millis() as u64;
-                return Ok((text.trim().to_string(), processing_time));
-            }
-        }
-        
-        // Clean up temporary files
-        let _ = tokio::fs::remove_file(&temp_text_path).await;
-        let _ = tokio::fs::remove_file(&temp_fixed_pdf).await;
-        
-        // Last resort: try to extract any readable text directly from the PDF file
-        warn!("All ocrmypdf strategies failed, trying direct text extraction from: {}", file_path);
+        // Strategy 3: Last resort - direct byte-level text extraction
+        warn!("Standard extraction methods failed, trying direct text extraction from: {}", file_path);
         
         match self.extract_text_from_pdf_bytes(file_path).await {
             Ok(text) if !text.trim().is_empty() => {
                 let processing_time = start_time.elapsed().as_millis() as u64;
-                info!("Direct text extraction succeeded for: {}", file_path);
+                let word_count = text.split_whitespace().count();
+                info!("Direct text extraction succeeded for '{}': {} words", file_path, word_count);
                 Ok((text, processing_time))
             }
             Ok(_) => {
                 warn!("Direct text extraction returned empty text for: {}", file_path);
                 // If all strategies fail, return the last error
-                match ocrmypdf_result {
-                    Ok(output) => {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        Err(anyhow!("All PDF extraction strategies failed. Last error: {}", stderr))
-                    }
-                    Err(e) => Err(anyhow!("Failed to run ocrmypdf: {}", e)),
+                if let Ok(ref output) = ocrmypdf_result {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    Err(anyhow!("All PDF extraction strategies failed. Last error: {}", stderr))
+                } else {
+                    Err(anyhow!("All PDF extraction strategies failed"))
                 }
             }
             Err(e) => {
                 warn!("Direct text extraction also failed for {}: {}", file_path, e);
                 // If all strategies fail, return the last error
-                match ocrmypdf_result {
-                    Ok(output) => {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        Err(anyhow!("All PDF extraction strategies failed. Last error: {}", stderr))
-                    }
-                    Err(e) => Err(anyhow!("Failed to run ocrmypdf: {}", e)),
+                if let Ok(ref output) = ocrmypdf_result {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    Err(anyhow!("All PDF extraction strategies failed. Last error: {}", stderr))
+                } else {
+                    Err(anyhow!("All PDF extraction strategies failed: {}", e))
                 }
             }
         }
