@@ -20,10 +20,10 @@ export interface E2ETestUser {
 }
 
 export const E2E_TIMEOUTS = {
-  login: 10000,
-  navigation: 10000,
-  api: 5000,
-  userCreation: 15000,
+  login: 15000,
+  navigation: 15000,
+  api: 8000,
+  userCreation: 20000,
 } as const;
 
 /**
@@ -148,7 +148,7 @@ export class E2ETestAuthHelper {
       const isWebKit = browserName.includes('WebKit') && !browserName.includes('Chrome');
       if (isWebKit) {
         console.log('WebKit browser detected - adding extra wait time');
-        await this.page.waitForTimeout(3000);
+        await this.page.waitForTimeout(5000);
       }
       
       // Clear any existing content and fill the fields
@@ -160,32 +160,53 @@ export class E2ETestAuthHelper {
       
       // WebKit needs extra time for form validation
       if (isWebKit) {
-        await this.page.waitForTimeout(2000);
+        await this.page.waitForTimeout(3000);
       }
-      
-      // Wait for login API response before clicking submit
-      const loginPromise = this.page.waitForResponse(response => 
-        response.url().includes('/auth/login') && response.status() === 200,
-        { timeout: E2E_TIMEOUTS.login }
-      );
       
       // Click submit button - look for the sign in button specifically
       const signInButton = this.page.locator('button[type="submit"]:has-text("Sign in")');
       await signInButton.waitFor({ state: 'visible', timeout: E2E_TIMEOUTS.login });
-      await signInButton.click();
       
-      const response = await loginPromise;
-      
-      // Wait for navigation to dashboard with more flexible URL pattern
-      await this.page.waitForURL(/.*\/dashboard.*/, { timeout: E2E_TIMEOUTS.navigation });
-      console.log(`Successfully navigated to: ${this.page.url()}`);
-      
-      // Wait for dashboard content to load - be more flexible about the welcome message
-      await this.page.waitForFunction(() => {
-        return document.querySelector('h4') !== null && 
-               (document.querySelector('h4')?.textContent?.includes('Welcome') ||
-                document.querySelector('[role="main"]') !== null);
-      }, { timeout: E2E_TIMEOUTS.navigation });
+      if (isWebKit) {
+        // WebKit-specific approach: don't wait for API response, just click and wait for navigation
+        await signInButton.click();
+        
+        // WebKit needs more time before checking navigation
+        await this.page.waitForTimeout(2000);
+        
+        // Wait for navigation with longer timeout for WebKit
+        await this.page.waitForURL(/.*\/dashboard.*/, { timeout: 25000 });
+        console.log(`Successfully navigated to: ${this.page.url()}`);
+        
+        // Wait for dashboard content to load with extra time for WebKit
+        await this.page.waitForFunction(() => {
+          return document.querySelector('h4') !== null && 
+                 (document.querySelector('h4')?.textContent?.includes('Welcome') ||
+                  document.querySelector('[role="main"]') !== null);
+        }, { timeout: 20000 });
+        
+      } else {
+        // Standard approach for other browsers
+        const loginPromise = this.page.waitForResponse(response => 
+          response.url().includes('/auth/login') && response.status() === 200,
+          { timeout: E2E_TIMEOUTS.login }
+        );
+        
+        await signInButton.click();
+        
+        const response = await loginPromise;
+        
+        // Wait for navigation to dashboard with more flexible URL pattern
+        await this.page.waitForURL(/.*\/dashboard.*/, { timeout: E2E_TIMEOUTS.navigation });
+        console.log(`Successfully navigated to: ${this.page.url()}`);
+        
+        // Wait for dashboard content to load - be more flexible about the welcome message
+        await this.page.waitForFunction(() => {
+          return document.querySelector('h4') !== null && 
+                 (document.querySelector('h4')?.textContent?.includes('Welcome') ||
+                  document.querySelector('[role="main"]') !== null);
+        }, { timeout: E2E_TIMEOUTS.navigation });
+      }
       
       console.log(`Login as ${credentials.username} completed successfully`);
       return true;

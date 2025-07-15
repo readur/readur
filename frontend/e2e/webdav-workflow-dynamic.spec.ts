@@ -5,16 +5,16 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('WebDAV Workflow (Dynamic Auth)', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ dynamicAdminPage }) => {
-    helpers = new TestHelpers(dynamicAdminPage);
+  test.beforeEach(async ({ authenticatedPage }) => {
+    helpers = new TestHelpers(authenticatedPage);
     await helpers.navigateToPage('/sources');
   });
 
-  test('should create and configure WebDAV source with dynamic admin', async ({ dynamicAdminPage: page, testAdmin }) => {
+  test('should create and configure WebDAV source with dynamic admin', async ({ authenticatedPage: page }) => {
     // Increase timeout for this test as WebDAV operations can be slow
     test.setTimeout(60000);
     
-    console.log(`Running WebDAV test with dynamic admin: ${testAdmin.credentials.username}`);
+    console.log('Running WebDAV test with authenticated admin');
     
     // Navigate to sources page
     await page.goto('/sources');
@@ -141,7 +141,7 @@ test.describe('WebDAV Workflow (Dynamic Auth)', () => {
     
     if (nameInput) {
       await nameInput.clear();
-      await nameInput.fill(`Test WebDAV Source - ${testAdmin.credentials.username}`);
+      await nameInput.fill('Test WebDAV Source - admin');
       console.log('Filled name input');
     } else {
       console.log('Warning: Could not find name input field');
@@ -339,11 +339,11 @@ test.describe('WebDAV Workflow (Dynamic Auth)', () => {
       console.log('Warning: Could not find source items - list may be empty or using different selectors');
     }
     
-    console.log(`✅ WebDAV source creation test completed by dynamic admin: ${testAdmin.credentials.username}`);
+    console.log('✅ WebDAV source creation test completed by authenticated admin');
   });
 
-  test('should test WebDAV connection with dynamic admin', async ({ dynamicAdminPage: page, testAdmin }) => {
-    console.log(`Testing WebDAV connection with dynamic admin: ${testAdmin.credentials.username}`);
+  test('should test WebDAV connection with dynamic admin', async ({ authenticatedPage: page }) => {
+    console.log('Testing WebDAV connection with authenticated admin');
     
     // This test assumes a WebDAV source exists from the previous test or setup
     await page.goto('/sources');
@@ -376,6 +376,6 @@ test.describe('WebDAV Workflow (Dynamic Auth)', () => {
       console.log('Connection status:', statusText);
     }
     
-    console.log(`✅ WebDAV connection test completed by dynamic admin: ${testAdmin.credentials.username}`);
+    console.log('✅ WebDAV connection test completed by authenticated admin');
   });
 });

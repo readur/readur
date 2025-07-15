@@ -238,11 +238,9 @@ test.describe('Source Management', () => {
           console.log('No toast notification found');
         }
         
-        // Source should be removed from list
-        if (sourceName) {
-          await expect(page.locator(`:has-text("${sourceName}")`)).not.toBeVisible({ timeout: 10000 });
-          console.log(`Source '${sourceName}' successfully deleted`);
-        }
+        // Source should be removed from list - check for empty state
+        await expect(page.locator('h5:has-text("No Sources Configured")')).toBeVisible({ timeout: 10000 });
+        console.log('Source successfully deleted - no sources remaining');
       } else {
         console.log('No delete button found - test will pass but delete was not performed');
       }

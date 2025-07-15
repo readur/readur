@@ -35,12 +35,12 @@ const OCR_LANGUAGES = {
 test.describe('OCR Multiple Languages', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ adminPage }) => {
-    helpers = new TestHelpers(adminPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
     await helpers.navigateToPage('/settings');
   });
 
-  test('should display OCR language selector in settings', async ({ adminPage: page }) => {
+  test('should display OCR language selector in settings', async ({ dynamicAdminPage: page }) => {
     // Navigate to settings page
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
@@ -77,7 +77,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should select multiple OCR languages', async ({ adminPage: page }) => {
+  test('should select multiple OCR languages', async ({ dynamicAdminPage: page }) => {
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
 
@@ -126,7 +126,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should upload Spanish document and process with Spanish OCR', async ({ adminPage: page }) => {
+  test('should upload Spanish document and process with Spanish OCR', async ({ dynamicAdminPage: page }) => {
     // First set language to Spanish using the multi-language selector
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
@@ -203,7 +203,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should upload English document and process with English OCR', async ({ adminPage: page }) => {
+  test('should upload English document and process with English OCR', async ({ dynamicAdminPage: page }) => {
     // First set language to English using the multi-language selector
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
@@ -280,7 +280,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should validate OCR results contain expected language-specific content', async ({ adminPage: page }) => {
+  test('should validate OCR results contain expected language-specific content', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 
@@ -325,7 +325,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should retry failed OCR with different language', async ({ adminPage: page }) => {
+  test('should retry failed OCR with different language', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 
@@ -371,7 +371,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should handle mixed language document', async ({ adminPage: page }) => {
+  test('should handle mixed language document', async ({ dynamicAdminPage: page }) => {
     // Upload mixed language document
     await page.goto('/upload');
     await helpers.waitForLoadingToComplete();
@@ -425,7 +425,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should persist language preference across sessions', async ({ adminPage: page }) => {
+  test('should persist language preference across sessions', async ({ dynamicAdminPage: page }) => {
     // Set language to Spanish
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
@@ -466,7 +466,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should display available languages from API', async ({ adminPage: page }) => {
+  test('should display available languages from API', async ({ dynamicAdminPage: page }) => {
     // Navigate to settings and check API call for languages
     const languagesPromise = helpers.waitForApiCall('/api/ocr/languages', TIMEOUTS.medium);
     
@@ -500,7 +500,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should handle bulk operations with multiple languages', async ({ adminPage: page }) => {
+  test('should handle bulk operations with multiple languages', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 
@@ -555,7 +555,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should handle OCR language errors gracefully', async ({ adminPage: page }) => {
+  test('should handle OCR language errors gracefully', async ({ dynamicAdminPage: page }) => {
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
     
@@ -584,7 +584,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should upload document with multiple languages selected', async ({ adminPage: page }) => {
+  test('should upload document with multiple languages selected', async ({ dynamicAdminPage: page }) => {
     // First set multiple languages in settings
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
@@ -671,7 +671,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should retry failed OCR with multiple languages', async ({ adminPage: page }) => {
+  test('should retry failed OCR with multiple languages', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 

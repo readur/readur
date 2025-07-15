@@ -5,12 +5,12 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('WebDAV Workflow', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ adminPage }) => {
-    helpers = new TestHelpers(adminPage);
+  test.beforeEach(async ({ authenticatedPage }) => {
+    helpers = new TestHelpers(authenticatedPage);
     await helpers.navigateToPage('/sources');
   });
 
-  test('should create and configure WebDAV source', async ({ adminPage: page }) => {
+  test('should create and configure WebDAV source', async ({ authenticatedPage: page }) => {
     // Increase timeout for this test as WebDAV operations can be slow
     // This addresses the timeout issues with Material-UI Select components
     test.setTimeout(60000);
@@ -223,7 +223,7 @@ test.describe('WebDAV Workflow', () => {
     }
   });
 
-  test('should test WebDAV connection', async ({ adminPage: page }) => {
+  test('should test WebDAV connection', async ({ authenticatedPage: page }) => {
     // This test assumes a WebDAV source exists from the previous test or setup
     await page.goto('/sources');
     await helpers.waitForLoadingToComplete();
@@ -256,7 +256,7 @@ test.describe('WebDAV Workflow', () => {
     }
   });
 
-  test('should initiate WebDAV sync', async ({ adminPage: page }) => {
+  test('should initiate WebDAV sync', async ({ authenticatedPage: page }) => {
     await page.goto('/sources');
     await helpers.waitForLoadingToComplete();
 
@@ -287,7 +287,7 @@ test.describe('WebDAV Workflow', () => {
     }
   });
 
-  test('should show WebDAV sync history', async ({ adminPage: page }) => {
+  test('should show WebDAV sync history', async ({ authenticatedPage: page }) => {
     await page.goto('/sources');
     await helpers.waitForLoadingToComplete();
 
@@ -310,7 +310,7 @@ test.describe('WebDAV Workflow', () => {
     }
   });
 
-  test('should handle WebDAV source deletion', async ({ adminPage: page }) => {
+  test('should handle WebDAV source deletion', async ({ authenticatedPage: page }) => {
     await page.goto('/sources');
     await helpers.waitForLoadingToComplete();
 

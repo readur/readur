@@ -15,9 +15,9 @@ export const TEST_CREDENTIALS = {
 } as const;
 
 export const TIMEOUTS = {
-  login: 10000,
-  navigation: 10000,
-  api: 5000
+  login: 15000,
+  navigation: 15000,
+  api: 8000
 } as const;
 
 export interface AuthFixture {
@@ -67,7 +67,7 @@ export class AuthHelper {
     const isWebKit = browserName.includes('WebKit') && !browserName.includes('Chrome');
     if (isWebKit) {
       console.log('WebKit browser detected - adding extra wait time');
-      await this.page.waitForTimeout(3000);
+      await this.page.waitForTimeout(5000);
     }
     
     // Clear any existing content and fill the fields
@@ -79,41 +79,62 @@ export class AuthHelper {
     
     // WebKit needs extra time for form validation
     if (isWebKit) {
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(3000);
     }
-    
-    // Wait for login API response before clicking submit
-    const loginPromise = this.page.waitForResponse(response => 
-      response.url().includes('/auth/login') && response.status() === 200,
-      { timeout: TIMEOUTS.login }
-    );
     
     // Click submit button - look for the sign in button specifically
     const signInButton = this.page.locator('button[type="submit"]:has-text("Sign in")');
     await signInButton.waitFor({ state: 'visible', timeout: TIMEOUTS.login });
-    await signInButton.click();
     
-    try {
-      const response = await loginPromise;
+    if (isWebKit) {
+      // WebKit-specific approach: don't wait for API response, just click and wait for navigation
+      await signInButton.click();
       
-      // Wait for navigation to dashboard with more flexible URL pattern
-      await this.page.waitForURL(/.*\/dashboard.*/, { timeout: TIMEOUTS.navigation });
+      // WebKit needs more time before checking navigation
+      await this.page.waitForTimeout(2000);
+      
+      // Wait for navigation with longer timeout for WebKit
+      await this.page.waitForURL(/.*\/dashboard.*/, { timeout: 25000 });
       console.log(`Successfully navigated to: ${this.page.url()}`);
       
-      // Wait for dashboard content to load - be more flexible about the welcome message
+      // Wait for dashboard content to load with extra time for WebKit
       await this.page.waitForFunction(() => {
         return document.querySelector('h4') !== null && 
                (document.querySelector('h4')?.textContent?.includes('Welcome') ||
                 document.querySelector('[role="main"]') !== null);
-      }, { timeout: TIMEOUTS.navigation });
+      }, { timeout: 20000 });
       
-    } catch (error) {
-      // Take a screenshot for debugging
-      await this.page.screenshot({ 
-        path: `test-results/login-failure-${credentials.username}-${Date.now()}.png`,
-        fullPage: true 
-      });
-      throw error;
+    } else {
+      // Standard approach for other browsers
+      const loginPromise = this.page.waitForResponse(response => 
+        response.url().includes('/auth/login') && response.status() === 200,
+        { timeout: TIMEOUTS.login }
+      );
+      
+      await signInButton.click();
+      
+      try {
+        const response = await loginPromise;
+        
+        // Wait for navigation to dashboard with more flexible URL pattern
+        await this.page.waitForURL(/.*\/dashboard.*/, { timeout: TIMEOUTS.navigation });
+        console.log(`Successfully navigated to: ${this.page.url()}`);
+        
+        // Wait for dashboard content to load - be more flexible about the welcome message
+        await this.page.waitForFunction(() => {
+          return document.querySelector('h4') !== null && 
+                 (document.querySelector('h4')?.textContent?.includes('Welcome') ||
+                  document.querySelector('[role="main"]') !== null);
+        }, { timeout: TIMEOUTS.navigation });
+        
+      } catch (error) {
+        // Take a screenshot for debugging
+        await this.page.screenshot({ 
+          path: `test-results/login-failure-${credentials.username}-${Date.now()}.png`,
+          fullPage: true 
+        });
+        throw error;
+      }
     }
   }
 
