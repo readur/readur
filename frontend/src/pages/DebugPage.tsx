@@ -91,6 +91,20 @@ const DebugPage: React.FC = () => {
   const [monitoringInterval, setMonitoringInterval] = useState<NodeJS.Timeout | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string>('');
 
+  // Auto-switch to debug results tab when debugInfo is available
+  useEffect(() => {
+    if (debugInfo && activeTab !== 2) {
+      setActiveTab(2);
+    }
+  }, [debugInfo]);
+
+  // Reset activeTab when debugInfo is cleared
+  useEffect(() => {
+    if (!debugInfo && activeTab === 2) {
+      setActiveTab(0);
+    }
+  }, [debugInfo, activeTab]);
+
   const getStepIcon = (status: string, success: boolean) => {
     if (status === 'processing') return <CircularProgress size={20} />;
     if (success || status === 'completed' || status === 'passed') return <CheckCircleIcon color="success" />;
@@ -411,7 +425,7 @@ const DebugPage: React.FC = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {details.queue_history.map((entry: any, index: number) => (
+                      {(details.queue_history || []).map((entry: any, index: number) => (
                         <TableRow key={index}>
                           <TableCell>
                             <Chip 
@@ -504,7 +518,7 @@ const DebugPage: React.FC = () => {
             <Box sx={{ mt: 2 }}>
               <Typography variant="h6" gutterBottom>Quality Checks</Typography>
               <Grid container spacing={1}>
-                {Object.entries(details.quality_checks).map(([check, passed]: [string, any]) => (
+                {Object.entries(details.quality_checks || {}).map(([check, passed]: [string, any]) => (
                   <Grid item key={check}>
                     <Chip 
                       label={check.replace('_check', '').replace('_', ' ')} 
@@ -774,7 +788,7 @@ const DebugPage: React.FC = () => {
                 Processing Pipeline
               </Typography>
               <Stepper orientation="vertical">
-                {debugInfo.pipeline_steps.map((step) => (
+                {(debugInfo.pipeline_steps || []).map((step) => (
                   <Step key={step.step} active={true}>
                     <StepLabel 
                       icon={getStepIcon(step.status, step.success)}
@@ -782,14 +796,14 @@ const DebugPage: React.FC = () => {
                         style: { color: step.success ? '#4caf50' : step.status === 'failed' ? '#f44336' : '#ff9800' }
                       }}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1">{step.name}</Typography>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Typography variant="subtitle1" component="span">{step.name}</Typography>
                         <Chip 
                           label={step.status} 
                           size="small" 
                           color={getStatusColor(step.status, step.success)}
                         />
-                      </Box>
+                      </span>
                     </StepLabel>
                     <StepContent>
                       {renderStepDetails(step)}
@@ -889,7 +903,7 @@ const DebugPage: React.FC = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {debugInfo.detailed_processing_logs.map((log: any, index: number) => (
+                      {(debugInfo.detailed_processing_logs || []).map((log: any, index: number) => (
                         <TableRow key={log.id}>
                           <TableCell>{index + 1}</TableCell>
                           <TableCell>
@@ -978,7 +992,7 @@ const DebugPage: React.FC = () => {
             </Card>
           )}
 
-          {debugInfo.pipeline_steps.some(step => step.step === 3 && step.details.has_processed_image) && (
+          {(debugInfo.pipeline_steps || []).some(step => step.step === 3 && step.details?.has_processed_image) && (
             <Card sx={{ mb: 4 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
@@ -1041,18 +1055,18 @@ const DebugPage: React.FC = () => {
                     <Grid item xs={12} md={6}>
                       <Paper sx={{ p: 2 }}>
                         <Typography variant="subtitle1" gutterBottom>OCR Settings</Typography>
-                        <Typography><strong>Background OCR:</strong> {debugInfo.user_settings.enable_background_ocr ? 'Enabled' : 'Disabled'}</Typography>
-                        <Typography><strong>Min Confidence:</strong> {debugInfo.user_settings.ocr_min_confidence}%</Typography>
-                        <Typography><strong>Max File Size:</strong> {debugInfo.user_settings.max_file_size_mb} MB</Typography>
+                        <Typography><strong>Background OCR:</strong> {debugInfo.user_settings?.enable_background_ocr ? 'Enabled' : 'Disabled'}</Typography>
+                        <Typography><strong>Min Confidence:</strong> {debugInfo.user_settings?.ocr_min_confidence || 'N/A'}%</Typography>
+                        <Typography><strong>Max File Size:</strong> {debugInfo.user_settings?.max_file_size_mb || 'N/A'} MB</Typography>
                       </Paper>
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <Paper sx={{ p: 2 }}>
                         <Typography variant="subtitle1" gutterBottom>Quality Thresholds</Typography>
-                        <Typography><strong>Brightness:</strong> {debugInfo.user_settings.quality_thresholds.brightness}</Typography>
-                        <Typography><strong>Contrast:</strong> {debugInfo.user_settings.quality_thresholds.contrast}</Typography>
-                        <Typography><strong>Noise:</strong> {debugInfo.user_settings.quality_thresholds.noise}</Typography>
-                        <Typography><strong>Sharpness:</strong> {debugInfo.user_settings.quality_thresholds.sharpness}</Typography>
+                        <Typography><strong>Brightness:</strong> {debugInfo.user_settings?.quality_thresholds?.brightness || 'N/A'}</Typography>
+                        <Typography><strong>Contrast:</strong> {debugInfo.user_settings?.quality_thresholds?.contrast || 'N/A'}</Typography>
+                        <Typography><strong>Noise:</strong> {debugInfo.user_settings?.quality_thresholds?.noise || 'N/A'}</Typography>
+                        <Typography><strong>Sharpness:</strong> {debugInfo.user_settings?.quality_thresholds?.sharpness || 'N/A'}</Typography>
                       </Paper>
                     </Grid>
                   </Grid>
