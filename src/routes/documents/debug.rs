@@ -137,9 +137,9 @@ pub async fn get_document_thumbnail(
 
     let file_service = FileService::new(state.config.upload_path.clone());
     
-    // Try to read thumbnail from the thumbnails directory
-    let thumbnail_path = format!("{}/thumbnails/{}.jpg", state.config.upload_path, document.id);
-    match file_service.read_file(&thumbnail_path).await {
+    // Use the FileService to get or generate thumbnail
+    #[cfg(feature = "ocr")]
+    match file_service.get_or_generate_thumbnail(&document.file_path, &document.original_filename).await {
         Ok(data) => {
             let response = axum::response::Response::builder()
                 .status(StatusCode::OK)
@@ -155,10 +155,16 @@ pub async fn get_document_thumbnail(
             debug!("Thumbnail served for document: {}", document_id);
             Ok(response)
         }
-        Err(_) => {
-            // Return a default "no thumbnail" response or generate one on the fly
+        Err(e) => {
+            error!("Failed to get or generate thumbnail for document {}: {}", document_id, e);
             Err(StatusCode::NOT_FOUND)
         }
+    }
+    
+    #[cfg(not(feature = "ocr"))]
+    {
+        error!("Thumbnail generation requires OCR feature to be enabled");
+        Err(StatusCode::NOT_FOUND)
     }
 }
 
