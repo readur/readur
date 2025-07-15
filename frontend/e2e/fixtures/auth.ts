@@ -95,7 +95,6 @@ export class AuthHelper {
     
     try {
       const response = await loginPromise;
-      console.log(`Login API call successful with status: ${response.status()}`);
       
       // Wait for navigation to dashboard with more flexible URL pattern
       await this.page.waitForURL(/.*\/dashboard.*/, { timeout: TIMEOUTS.navigation });
@@ -108,9 +107,7 @@ export class AuthHelper {
                 document.querySelector('[role="main"]') !== null);
       }, { timeout: TIMEOUTS.navigation });
       
-      console.log(`Login as ${credentials.username} completed successfully`);
     } catch (error) {
-      console.error(`Login as ${credentials.username} failed:`, error);
       // Take a screenshot for debugging
       await this.page.screenshot({ 
         path: `test-results/login-failure-${credentials.username}-${Date.now()}.png`,
@@ -174,14 +171,12 @@ export const test = base.extend<AuthFixture>({
   testUser: async ({ page }, use) => {
     const authHelper = new E2ETestAuthHelper(page);
     const testUser = await authHelper.createTestUser();
-    console.log(`Created dynamic test user: ${testUser.credentials.username}`);
     await use(testUser);
   },
 
   testAdmin: async ({ page }, use) => {
     const authHelper = new E2ETestAuthHelper(page);
     const testAdmin = await authHelper.createAdminUser();
-    console.log(`Created dynamic test admin: ${testAdmin.credentials.username}`);
     await use(testAdmin);
   },
 
@@ -191,7 +186,6 @@ export const test = base.extend<AuthFixture>({
     if (!loginSuccess) {
       throw new Error(`Failed to login dynamic test user: ${testUser.credentials.username}`);
     }
-    console.log(`Logged in dynamic test user: ${testUser.credentials.username}`);
     await use(page);
   },
 
@@ -201,7 +195,6 @@ export const test = base.extend<AuthFixture>({
     if (!loginSuccess) {
       throw new Error(`Failed to login dynamic test admin: ${testAdmin.credentials.username}`);
     }
-    console.log(`Logged in dynamic test admin: ${testAdmin.credentials.username}`);
     await use(page);
   },
 });

@@ -5,14 +5,12 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('Document Management', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ dynamicAdminPage }) => {
-    helpers = new TestHelpers(dynamicAdminPage);
+  test.beforeEach(async ({ adminPage }) => {
+    helpers = new TestHelpers(adminPage);
     await helpers.navigateToPage('/documents');
-    // Ensure we have test documents for tests that need them
-    await helpers.ensureTestDocumentsExist();
   });
 
-  test('should display document list', async ({ dynamicAdminPage: page }) => {
+  test('should display document list', async ({ adminPage: page }) => {
     // The documents page should be visible with title and description
     // Use more flexible selectors for headings - based on artifact, it's h4
     const documentsHeading = page.locator('h4:has-text("Documents")');

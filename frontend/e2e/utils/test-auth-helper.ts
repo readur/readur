@@ -44,8 +44,6 @@ export class E2ETestAuthHelper {
       password: 'testpass123'
     };
 
-    console.log(`Creating E2E test user: ${credentials.username}`);
-
     try {
       // Make API call to create user
       const response = await this.page.request.post('/api/auth/register', {
@@ -63,7 +61,6 @@ export class E2ETestAuthHelper {
       }
 
       const userResponse: TestUserResponse = await response.json();
-      console.log(`✅ Created E2E test user: ${userResponse.username} (${userResponse.id})`);
 
       return {
         credentials,
@@ -86,7 +83,6 @@ export class E2ETestAuthHelper {
       password: 'adminpass123'
     };
 
-    console.log(`Creating E2E admin user: ${credentials.username}`);
 
     try {
       // Make API call to create admin user
@@ -106,7 +102,6 @@ export class E2ETestAuthHelper {
       }
 
       const userResponse: TestUserResponse = await response.json();
-      console.log(`✅ Created E2E admin user: ${userResponse.username} (${userResponse.id})`);
 
       return {
         credentials,
@@ -122,7 +117,6 @@ export class E2ETestAuthHelper {
    * Login a user via browser UI and return authentication status
    */
   async loginUser(credentials: TestCredentials): Promise<boolean> {
-    console.log(`Attempting to login E2E user: ${credentials.username}...`);
     
     try {
       // Go to home page and wait for it to load
@@ -133,7 +127,6 @@ export class E2ETestAuthHelper {
       const welcomeText = await this.page.locator('h4:has-text("Welcome back,")').isVisible().catch(() => false);
       
       if (welcomeText) {
-        console.log('Already logged in - found welcome message');
         return true;
       }
       
@@ -182,7 +175,6 @@ export class E2ETestAuthHelper {
       await signInButton.click();
       
       const response = await loginPromise;
-      console.log(`Login API call successful with status: ${response.status()}`);
       
       // Wait for navigation to dashboard with more flexible URL pattern
       await this.page.waitForURL(/.*\/dashboard.*/, { timeout: E2E_TIMEOUTS.navigation });

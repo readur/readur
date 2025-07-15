@@ -45,8 +45,8 @@ test.describe('OCR Multiple Languages', () => {
     await page.goto('/settings');
     await helpers.waitForLoadingToComplete();
 
-    // Look for the new LanguageSelector component
-    const languageSelector = page.locator('label:has-text("OCR Languages")').first();
+    // Look for the OCR Languages section
+    const languageSelector = page.locator('text="OCR Languages (1/4)"').first();
     await expect(languageSelector).toBeVisible({ timeout: TIMEOUTS.medium });
 
     // Check for the language selector button
@@ -162,6 +162,9 @@ test.describe('OCR Multiple Languages', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
 
+    // Wait for the dropzone to be ready
+    await expect(page.locator('text=Drag & drop files here')).toBeVisible({ timeout: 10000 });
+
     // Upload Spanish test document - try multiple selectors for better WebKit compatibility
     let fileInput = page.locator('input[type="file"]').first();
     
@@ -235,6 +238,9 @@ test.describe('OCR Multiple Languages', () => {
     // Wait for page to be fully loaded and rendered (WebKit needs more time)
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
+
+    // Wait for the dropzone to be ready
+    await expect(page.locator('text=Drag & drop files here')).toBeVisible({ timeout: 10000 });
 
     // Upload English test document - try multiple selectors for better WebKit compatibility
     let fileInput = page.locator('input[type="file"]').first();

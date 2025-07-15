@@ -7,7 +7,6 @@ test.describe('E2E Auth System', () => {
     expect(testUser.credentials.username).toMatch(/^e2e_user_\d+_\d+_[a-z0-9]+$/);
     expect(testUser.userResponse.role).toBe('user');
     
-    console.log(`Test user created: ${testUser.credentials.username} (${testUser.userResponse.id})`);
   });
 
   test('should create and login dynamic admin user', async ({ page, testAdmin }) => {
@@ -15,7 +14,6 @@ test.describe('E2E Auth System', () => {
     expect(testAdmin.credentials.username).toMatch(/^e2e_admin_\d+_\d+_[a-z0-9]+$/);
     expect(testAdmin.userResponse.role).toBe('admin');
     
-    console.log(`Test admin created: ${testAdmin.credentials.username} (${testAdmin.userResponse.id})`);
   });
 
   test('should login dynamic user via browser UI', async ({ page, testUser }) => {
@@ -32,7 +30,6 @@ test.describe('E2E Auth System', () => {
     await expect(page).toHaveURL(/.*\/dashboard.*/);
     await expect(page.locator('h4:has-text("Welcome back,")')).toBeVisible();
     
-    console.log(`Successfully logged in dynamic user: ${testUser.credentials.username}`);
   });
 
   test('should login dynamic admin via browser UI', async ({ page, testAdmin }) => {
@@ -49,7 +46,6 @@ test.describe('E2E Auth System', () => {
     await expect(page).toHaveURL(/.*\/dashboard.*/);
     await expect(page.locator('h4:has-text("Welcome back,")')).toBeVisible();
     
-    console.log(`Successfully logged in dynamic admin: ${testAdmin.credentials.username}`);
   });
 
   test('should support API login for dynamic users', async ({ page, testUser }) => {
@@ -60,7 +56,6 @@ test.describe('E2E Auth System', () => {
     expect(token).toBeTruthy();
     expect(typeof token).toBe('string');
     
-    console.log(`Successfully got API token for: ${testUser.credentials.username}`);
   });
 
   test('should create unique users for each test', async ({ page }) => {
@@ -74,7 +69,6 @@ test.describe('E2E Auth System', () => {
     expect(user1.credentials.username).not.toBe(user2.credentials.username);
     expect(user1.userResponse.id).not.toBe(user2.userResponse.id);
     
-    console.log(`Created unique users: ${user1.credentials.username} and ${user2.credentials.username}`);
   });
 
   test('dynamic admin should have admin permissions', async ({ dynamicAdminPage }) => {
@@ -89,7 +83,6 @@ test.describe('E2E Auth System', () => {
     // Should see debug page content (admin accessible)
     await expect(dynamicAdminPage.locator('h1, h2, h3, h4, h5, h6').first()).toBeVisible({ timeout: 10000 });
     
-    console.log('✅ Dynamic admin user has admin permissions');
   });
 
   test('dynamic user should have user permissions', async ({ dynamicUserPage }) => {
@@ -107,6 +100,5 @@ test.describe('E2E Auth System', () => {
     
     expect(isDashboard).toBe(true);
     
-    console.log('✅ Dynamic user has user permissions');
   });
 });
