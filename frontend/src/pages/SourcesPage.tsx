@@ -60,6 +60,8 @@ import {
   Sync as SyncIcon,
   MoreVert as MoreVertIcon,
   Menu as MenuIcon,
+  Speed as QuickSyncIcon,
+  ManageSearch as DeepScanIcon,
   Folder as FolderIcon,
   Assessment as AssessmentIcon,
   Extension as ExtensionIcon,
@@ -74,7 +76,7 @@ import {
   Error as CriticalIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import api, { queueService } from '../services/api';
+import api, { queueService, sourcesService } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -165,6 +167,11 @@ const SourcesPage: React.FC = () => {
   const [stoppingSync, setStoppingSync] = useState<string | null>(null);
   const [validating, setValidating] = useState<string | null>(null);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
+  
+  // Sync modal state
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [sourceToSync, setSourceToSync] = useState<Source | null>(null);
+  const [deepScanning, setDeepScanning] = useState(false);
 
   useEffect(() => {
     loadSources();
@@ -482,11 +489,26 @@ const SourcesPage: React.FC = () => {
     }
   };
 
-  const handleTriggerSync = async (sourceId: string) => {
-    setSyncingSource(sourceId);
+  // Open sync modal instead of directly triggering sync
+  const handleOpenSyncModal = (source: Source) => {
+    setSourceToSync(source);
+    setSyncModalOpen(true);
+  };
+
+  const handleCloseSyncModal = () => {
+    setSyncModalOpen(false);
+    setSourceToSync(null);
+  };
+
+  const handleQuickSync = async () => {
+    if (!sourceToSync) return;
+    
+    setSyncingSource(sourceToSync.id);
+    handleCloseSyncModal();
+    
     try {
-      await api.post(`/sources/${sourceId}/sync`);
-      showSnackbar('Sync started successfully', 'success');
+      await sourcesService.triggerSync(sourceToSync.id);
+      showSnackbar('Quick sync started successfully', 'success');
       setTimeout(loadSources, 1000);
     } catch (error: any) {
       console.error('Failed to trigger sync:', error);
@@ -500,10 +522,34 @@ const SourcesPage: React.FC = () => {
     }
   };
 
+  const handleDeepScan = async () => {
+    if (!sourceToSync) return;
+    
+    setDeepScanning(true);
+    handleCloseSyncModal();
+    
+    try {
+      await sourcesService.triggerDeepScan(sourceToSync.id);
+      showSnackbar('Deep scan started successfully', 'success');
+      setTimeout(loadSources, 1000);
+    } catch (error: any) {
+      console.error('Failed to trigger deep scan:', error);
+      if (error.response?.status === 409) {
+        showSnackbar('Source is already syncing', 'warning');
+      } else if (error.response?.status === 400 && error.response?.data?.message?.includes('only supported for WebDAV')) {
+        showSnackbar('Deep scan is only supported for WebDAV sources', 'warning');
+      } else {
+        showSnackbar('Failed to start deep scan', 'error');
+      }
+    } finally {
+      setDeepScanning(false);
+    }
+  };
+
   const handleStopSync = async (sourceId: string) => {
     setStoppingSync(sourceId);
     try {
-      await api.post(`/sources/${sourceId}/sync/stop`);
+      await sourcesService.stopSync(sourceId);
       showSnackbar('Sync stopped successfully', 'success');
       setTimeout(loadSources, 1000);
     } catch (error: any) {
@@ -929,8 +975,8 @@ const SourcesPage: React.FC = () => {
                 <Tooltip title="Trigger Sync">
                   <span>
                     <IconButton
-                      onClick={() => handleTriggerSync(source.id)}
-                      disabled={syncingSource === source.id || !source.enabled}
+                      onClick={() => handleOpenSyncModal(source)}
+                      disabled={syncingSource === source.id || deepScanning || !source.enabled}
                       sx={{
                         bgcolor: alpha(theme.palette.primary.main, 0.1),
                         '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) },
@@ -2316,6 +2362,116 @@ const SourcesPage: React.FC = () => {
             }}
           >
             {deleteLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Sync Type Selection Modal */}
+      <Dialog 
+        open={syncModalOpen} 
+        onClose={handleCloseSyncModal}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SyncIcon color="primary" />
+            Choose Sync Type
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 3 }}>
+            {sourceToSync && (
+              <>
+                Select the type of synchronization for <strong>{sourceToSync.name}</strong>:
+              </>
+            )}
+          </DialogContentText>
+          
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <Card 
+                sx={{ 
+                  cursor: 'pointer',
+                  border: '2px solid transparent',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    bgcolor: 'action.hover',
+                  },
+                }}
+                onClick={handleQuickSync}
+              >
+                <CardContent sx={{ textAlign: 'center', py: 3 }}>
+                  <QuickSyncIcon 
+                    sx={{ 
+                      fontSize: 48, 
+                      color: 'primary.main', 
+                      mb: 2,
+                    }} 
+                  />
+                  <Typography variant="h6" gutterBottom>
+                    Quick Sync
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Fast incremental sync using ETags. Only processes new or changed files.
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    <Chip label="Recommended" color="primary" size="small" />
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <Card 
+                sx={{ 
+                  cursor: sourceToSync?.source_type === 'webdav' ? 'pointer' : 'not-allowed',
+                  border: '2px solid transparent',
+                  transition: 'all 0.2s',
+                  opacity: sourceToSync?.source_type === 'webdav' ? 1 : 0.6,
+                  '&:hover': sourceToSync?.source_type === 'webdav' ? {
+                    borderColor: 'warning.main',
+                    bgcolor: 'action.hover',
+                  } : {},
+                }}
+                onClick={sourceToSync?.source_type === 'webdav' ? handleDeepScan : undefined}
+              >
+                <CardContent sx={{ textAlign: 'center', py: 3 }}>
+                  <DeepScanIcon 
+                    sx={{ 
+                      fontSize: 48, 
+                      color: sourceToSync?.source_type === 'webdav' ? 'warning.main' : 'text.disabled', 
+                      mb: 2,
+                    }} 
+                  />
+                  <Typography variant="h6" gutterBottom>
+                    Deep Scan
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Complete rescan that resets ETag expectations. Use for troubleshooting sync issues.
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    {sourceToSync?.source_type === 'webdav' ? (
+                      <Chip label="WebDAV Only" color="warning" size="small" />
+                    ) : (
+                      <Chip label="Not Available" color="default" size="small" />
+                    )}
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+          
+          {sourceToSync?.source_type !== 'webdav' && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Deep scan is currently only available for WebDAV sources. Other source types will use quick sync.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseSyncModal}>
+            Cancel
           </Button>
         </DialogActions>
       </Dialog>

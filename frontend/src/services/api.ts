@@ -469,3 +469,17 @@ export const ocrService = {
     return api.post(`/documents/${documentId}/retry-ocr`, data)
   },
 }
+
+export const sourcesService = {
+  triggerSync: (sourceId: string) => {
+    return api.post(`/sources/${sourceId}/sync`)
+  },
+
+  triggerDeepScan: (sourceId: string) => {
+    return api.post(`/sources/${sourceId}/deep-scan`)
+  },
+
+  stopSync: (sourceId: string) => {
+    return api.post(`/sources/${sourceId}/sync/stop`)
+  },
+}
