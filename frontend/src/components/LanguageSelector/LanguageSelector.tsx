@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { LanguageInfo } from '../../services/api'
+import { useTheme } from '@mui/material/styles'
+import { Box, Typography, Chip, Button, Paper, Divider, Popper, ClickAwayListener } from '@mui/material'
 
 interface LanguageSelectorProps {
   selectedLanguages: string[]
@@ -49,8 +51,10 @@ function LanguageSelector({
   showPrimarySelector = true,
   className = '',
 }: LanguageSelectorProps) {
+  const theme = useTheme()
   const [availableLanguages, setAvailableLanguages] = useState<LanguageInfo[]>(COMMON_LANGUAGES)
   const [isOpen, setIsOpen] = useState(false)
+  const anchorRef = useRef<HTMLButtonElement>(null)
 
   // Auto-set primary language to first selected if not specified
   const effectivePrimary = primaryLanguage || selectedLanguages[0] || ''
@@ -94,78 +98,149 @@ function LanguageSelector({
     handleLanguageToggle(languageCode)
   }
 
+  const handleClose = () => {
+    setIsOpen(false)
+  }
+
   const getLanguageName = (code: string) => {
     const language = availableLanguages.find(lang => lang.code === code)
     return language?.name || code
   }
 
   return (
-    <div className={`relative ${className}`}>
+    <Box sx={{ position: 'relative' }} className={className}>
       {/* Selected Languages Display */}
-      <div className="mb-3">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="body2" sx={{ 
+          fontWeight: 500, 
+          color: 'text.primary', 
+          mb: 2 
+        }}>
           OCR Languages {selectedLanguages.length > 0 && `(${selectedLanguages.length}/${maxLanguages})`}
-        </label>
+        </Typography>
         
         {selectedLanguages.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
             {selectedLanguages.map((langCode) => (
-              <span
+              <Chip
                 key={langCode}
-                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  langCode === effectivePrimary
-                    ? 'bg-blue-100 text-blue-800 border-2 border-blue-300'
-                    : 'bg-gray-100 text-gray-800 border border-gray-300'
-                }`}
-              >
-                {getLanguageName(langCode)}
-                {langCode === effectivePrimary && (
-                  <span className="ml-1 text-xs font-bold text-blue-600">(Primary)</span>
-                )}
-                {!disabled && (
-                  <button
-                    type="button"
-                    onClick={() => removeLanguage(langCode)}
-                    className="ml-2 text-gray-400 hover:text-gray-600"
-                  >
-                    <XMarkIcon className="h-4 w-4" />
-                  </button>
-                )}
-              </span>
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <span>{getLanguageName(langCode)}</span>
+                    {langCode === effectivePrimary && (
+                      <Typography variant="caption" sx={{ 
+                        ml: 1, 
+                        fontWeight: 'bold',
+                        color: 'primary.main'
+                      }}>
+                        (Primary)
+                      </Typography>
+                    )}
+                  </Box>
+                }
+                variant={langCode === effectivePrimary ? 'filled' : 'outlined'}
+                color={langCode === effectivePrimary ? 'primary' : 'default'}
+                size="small"
+                onDelete={!disabled ? () => removeLanguage(langCode) : undefined}
+                deleteIcon={<XMarkIcon style={{ width: 16, height: 16 }} />}
+                sx={{
+                  '& .MuiChip-deleteIcon': {
+                    color: 'text.secondary',
+                    '&:hover': {
+                      color: 'text.primary',
+                    },
+                  },
+                }}
+              />
             ))}
-          </div>
+          </Box>
         ) : (
-          <div className="text-sm text-gray-500 italic">
+          <Typography variant="body2" sx={{ 
+            color: 'text.secondary', 
+            fontStyle: 'italic' 
+          }}>
             No languages selected. Documents will use default OCR language.
-          </div>
+          </Typography>
         )}
-      </div>
+      </Box>
 
       {/* Language Selector Button */}
       {!disabled && (
-        <button
-          type="button"
+        <Button
+          ref={anchorRef}
+          variant="outlined"
           onClick={() => setIsOpen(!isOpen)}
-          className="w-full px-4 py-2 text-left border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          fullWidth
+          sx={{
+            justifyContent: 'flex-start',
+            textTransform: 'none',
+            color: 'text.secondary',
+            borderColor: 'divider',
+            '&:hover': {
+              backgroundColor: 'action.hover',
+              borderColor: 'primary.main',
+            },
+          }}
         >
-          <span className="text-gray-600">
-            {selectedLanguages.length === 0 
-              ? 'Select OCR languages...' 
-              : `Add more languages (${maxLanguages - selectedLanguages.length} remaining)`
-            }
-          </span>
-        </button>
+          {selectedLanguages.length === 0 
+            ? 'Select OCR languages...' 
+            : `Add more languages (${maxLanguages - selectedLanguages.length} remaining)`
+          }
+        </Button>
       )}
 
       {/* Dropdown Panel */}
-      {isOpen && !disabled && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-          <div className="p-3">
-            <div className="text-xs text-gray-500 mb-2 uppercase tracking-wide font-semibold">
+      <Popper
+        open={isOpen && !disabled}
+        anchorEl={anchorRef.current}
+        placement="bottom-start"
+        sx={{ zIndex: 1300 }}
+        modifiers={[
+          {
+            name: 'offset',
+            options: {
+              offset: [0, 8],
+            },
+          },
+        ]}
+      >
+        <ClickAwayListener onClickAway={handleClose}>
+          <Paper
+            elevation={8}
+            sx={{
+              width: anchorRef.current?.offsetWidth || 300,
+              maxWidth: 500,
+              maxHeight: '60vh',
+              overflow: 'auto',
+              borderRadius: 2,
+              '&::-webkit-scrollbar': {
+                width: '6px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: 'transparent',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: 'divider',
+                borderRadius: '3px',
+                '&:hover': {
+                  background: 'text.disabled',
+                },
+              },
+            }}
+          >
+          <Box sx={{ p: 3 }}>
+            <Typography variant="subtitle2" sx={{ 
+              color: 'text.secondary', 
+              mb: 2, 
+              textTransform: 'uppercase', 
+              letterSpacing: 1,
+              fontWeight: 600,
+              fontSize: '0.75rem'
+            }}>
               Available Languages
-            </div>
+            </Typography>
             
-            <div className="space-y-1">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {availableLanguages
                 .filter(lang => lang.installed)
                 .map((language) => {
@@ -174,91 +249,173 @@ function LanguageSelector({
                   const canSelect = !isSelected && selectedLanguages.length < maxLanguages
                   
                   return (
-                    <div
+                    <Box
                       key={language.code}
-                      className={`flex items-center justify-between p-2 rounded ${
-                        isSelected 
-                          ? 'bg-blue-50 border border-blue-200' 
-                          : canSelect 
-                            ? 'hover:bg-gray-50 cursor-pointer' 
-                            : 'opacity-50 cursor-not-allowed'
-                      }`}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        p: 2,
+                        borderRadius: 1.5,
+                        backgroundColor: isSelected 
+                          ? (theme) => theme.palette.mode === 'dark' 
+                              ? 'rgba(144, 202, 249, 0.16)' 
+                              : 'rgba(25, 118, 210, 0.08)'
+                          : 'transparent',
+                        cursor: canSelect || isSelected ? 'pointer' : 'not-allowed',
+                        opacity: !canSelect && !isSelected ? 0.5 : 1,
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': canSelect ? {
+                          backgroundColor: (theme) => theme.palette.mode === 'dark'
+                            ? 'rgba(255, 255, 255, 0.05)'
+                            : 'rgba(0, 0, 0, 0.04)',
+                          transform: 'translateY(-1px)',
+                        } : {},
+                      }}
                     >
-                      <div className="flex items-center">
-                        <button
-                          type="button"
-                          onClick={() => handleLanguageToggle(language.code)}
-                          disabled={!canSelect && !isSelected}
-                          className={`flex items-center space-x-2 ${
-                            canSelect || isSelected ? 'cursor-pointer' : 'cursor-not-allowed'
-                          }`}
+                      <Box 
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center',
+                          cursor: canSelect || isSelected ? 'pointer' : 'not-allowed',
+                          gap: 2,
+                        }}
+                        onClick={() => canSelect || isSelected ? handleLanguageToggle(language.code) : undefined}
+                      >
+                        <Box
+                          sx={{
+                            width: 22,
+                            height: 22,
+                            border: 2,
+                            borderRadius: 1,
+                            borderColor: isSelected ? 'primary.main' : 'divider',
+                            backgroundColor: isSelected ? 'primary.main' : 'transparent',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s ease-in-out',
+                            '&:hover': canSelect && !isSelected ? {
+                              borderColor: 'primary.light',
+                            } : {},
+                          }}
                         >
-                          <div className={`w-5 h-5 border-2 rounded flex items-center justify-center ${
-                            isSelected 
-                              ? 'border-blue-500 bg-blue-500' 
-                              : 'border-gray-300'
-                          }`}>
-                            {isSelected && <CheckIcon className="h-3 w-3 text-white" />}
-                          </div>
-                          <span className={`text-sm ${isSelected ? 'font-medium text-blue-900' : 'text-gray-700'}`}>
-                            {language.name}
-                          </span>
-                          {isPrimary && (
-                            <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded font-bold">
-                              PRIMARY
-                            </span>
+                          {isSelected && (
+                            <CheckIcon 
+                              style={{ 
+                                width: 14, 
+                                height: 14, 
+                                color: theme.palette.primary.contrastText,
+                              }} 
+                            />
                           )}
-                        </button>
-                      </div>
+                        </Box>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: isSelected ? 500 : 400,
+                            color: isSelected ? 'primary.dark' : 'text.primary',
+                          }}
+                        >
+                          {language.name}
+                        </Typography>
+                        {isPrimary && (
+                          <Chip
+                            label="PRIMARY"
+                            size="small"
+                            color="primary"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.65rem',
+                              fontWeight: 'bold',
+                            }}
+                          />
+                        )}
+                      </Box>
                       
                       {/* Primary selector */}
                       {isSelected && showPrimarySelector && selectedLanguages.length > 1 && (
-                        <button
-                          type="button"
+                        <Button
+                          size="small"
+                          variant={isPrimary ? "contained" : "outlined"}
+                          color="primary"
                           onClick={() => handlePrimaryChange(language.code)}
-                          className={`text-xs px-2 py-1 rounded font-medium ${
-                            isPrimary 
-                              ? 'bg-blue-600 text-white cursor-default' 
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
+                          disabled={isPrimary}
+                          sx={{
+                            fontSize: '0.7rem',
+                            py: 0.5,
+                            px: 1,
+                            minWidth: 'auto',
+                            textTransform: 'none',
+                          }}
                         >
                           {isPrimary ? 'Primary' : 'Set Primary'}
-                        </button>
+                        </Button>
                       )}
-                    </div>
+                    </Box>
                   )
                 })}
-            </div>
+            </Box>
             
             {selectedLanguages.length >= maxLanguages && (
-              <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-                Maximum {maxLanguages} languages allowed for optimal performance.
-              </div>
+              <Box sx={{ 
+                mt: 3, 
+                p: 2, 
+                backgroundColor: (theme) => theme.palette.mode === 'dark'
+                  ? 'rgba(255, 193, 7, 0.1)'
+                  : 'rgba(255, 193, 7, 0.08)',
+                border: '1px solid', 
+                borderColor: (theme) => theme.palette.mode === 'dark'
+                  ? 'rgba(255, 193, 7, 0.3)'
+                  : 'rgba(255, 193, 7, 0.3)',
+                borderRadius: 2,
+              }}>
+                <Typography variant="body2" sx={{ 
+                  color: (theme) => theme.palette.mode === 'dark'
+                    ? '#ffb74d'
+                    : '#e65100',
+                  fontWeight: 500,
+                }}>
+                  Maximum {maxLanguages} languages allowed for optimal performance.
+                </Typography>
+              </Box>
             )}
-          </div>
+          </Box>
           
-          <div className="border-t border-gray-200 p-3">
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="w-full text-center text-sm text-gray-600 hover:text-gray-800"
+          <Divider sx={{ borderColor: 'divider' }} />
+          <Box sx={{ p: 2.5 }}>
+            <Button
+              variant="text"
+              onClick={handleClose}
+              fullWidth
+              sx={{
+                textTransform: 'none',
+                color: 'text.secondary',
+                py: 1.5,
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                '&:hover': {
+                  color: 'text.primary',
+                  backgroundColor: 'action.hover',
+                },
+              }}
             >
               Close
-            </button>
-          </div>
-        </div>
-      )}
+            </Button>
+          </Box>
+          </Paper>
+        </ClickAwayListener>
+      </Popper>
 
       {/* Help Text */}
       {selectedLanguages.length > 1 && (
-        <div className="mt-2 text-xs text-gray-500">
-          <p>
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             <strong>Primary language</strong> is processed first for better accuracy. 
             Multiple languages help with mixed-language documents.
-          </p>
-        </div>
+          </Typography>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 }
 
