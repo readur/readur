@@ -209,7 +209,50 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       </Box>
 
       {/* Navigation */}
-      <List sx={{ flex: 1, px: 3, py: 2 }}>
+      <List sx={{ 
+        flex: 1, 
+        px: 3, 
+        py: 2,
+        overflowY: 'auto',
+        // Custom scrollbar styling
+        '&::-webkit-scrollbar': {
+          width: '8px',
+          borderRadius: '4px',
+        },
+        '&::-webkit-scrollbar-track': {
+          background: theme.palette.mode === 'light' 
+            ? 'rgba(226,232,240,0.3)' 
+            : 'rgba(255,255,255,0.1)',
+          borderRadius: '4px',
+          margin: '8px 0',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: theme.palette.mode === 'light'
+            ? 'linear-gradient(135deg, rgba(99,102,241,0.6) 0%, rgba(139,92,246,0.6) 100%)'
+            : 'linear-gradient(135deg, rgba(99,102,241,0.8) 0%, rgba(139,92,246,0.8) 100%)',
+          borderRadius: '4px',
+          border: theme.palette.mode === 'light' 
+            ? '1px solid rgba(255,255,255,0.3)'
+            : '1px solid rgba(255,255,255,0.1)',
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': {
+            background: theme.palette.mode === 'light'
+              ? 'linear-gradient(135deg, rgba(99,102,241,0.8) 0%, rgba(139,92,246,0.8) 100%)'
+              : 'linear-gradient(135deg, rgba(99,102,241,1) 0%, rgba(139,92,246,1) 100%)',
+            transform: 'scale(1.1)',
+          },
+        },
+        '&::-webkit-scrollbar-thumb:active': {
+          background: theme.palette.mode === 'light'
+            ? 'linear-gradient(135deg, rgba(99,102,241,0.9) 0%, rgba(139,92,246,0.9) 100%)'
+            : 'linear-gradient(135deg, rgba(99,102,241,1) 0%, rgba(139,92,246,1) 100%)',
+        },
+        // Firefox scrollbar styling
+        scrollbarWidth: 'thin',
+        scrollbarColor: theme.palette.mode === 'light'
+          ? 'rgba(99,102,241,0.6) rgba(226,232,240,0.3)'
+          : 'rgba(99,102,241,0.8) rgba(255,255,255,0.1)',
+      }}>
         {navigationItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
