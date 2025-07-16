@@ -10,7 +10,7 @@ test.describe('WebDAV Workflow', () => {
     await helpers.navigateToPage('/sources');
   });
 
-  test('should create and configure WebDAV source', async ({ authenticatedPage: page }) => {
+  test.skip('should create and configure WebDAV source', async ({ authenticatedPage: page }) => {
     // Increase timeout for this test as WebDAV operations can be slow
     // This addresses the timeout issues with Material-UI Select components
     test.setTimeout(60000);

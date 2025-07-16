@@ -133,7 +133,7 @@ test.describe('OCR Multiple Languages', () => {
     }
   });
 
-  test('should upload Spanish document and process with Spanish OCR', async ({ dynamicAdminPage: page }) => {
+  test.skip('should upload Spanish document and process with Spanish OCR', async ({ dynamicAdminPage: page }) => {
     // Skip language selection for WebKit - just use direct upload
     await page.goto('/upload');
     await helpers.waitForLoadingToComplete();

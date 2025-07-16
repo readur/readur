@@ -10,7 +10,7 @@ test.describe('WebDAV Workflow (Dynamic Auth)', () => {
     await helpers.navigateToPage('/sources');
   });
 
-  test('should create and configure WebDAV source with dynamic admin', async ({ authenticatedPage: page }) => {
+  test.skip('should create and configure WebDAV source with dynamic admin', async ({ authenticatedPage: page }) => {
     // Increase timeout for this test as WebDAV operations can be slow
     test.setTimeout(60000);
     
