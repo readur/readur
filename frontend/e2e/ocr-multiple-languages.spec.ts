@@ -160,10 +160,10 @@ test.describe('OCR Multiple Languages', () => {
 
     // Wait for page to be fully loaded and rendered (WebKit needs more time)
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
+    await helpers.waitForWebKitStability();
 
     // Wait for the dropzone to be ready
-    await expect(page.locator('text=Drag & drop files here')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=Drag & drop files here')).toBeVisible({ timeout: 15000 });
 
     // Upload Spanish test document - try multiple selectors for better WebKit compatibility
     let fileInput = page.locator('input[type="file"]').first();
@@ -237,10 +237,10 @@ test.describe('OCR Multiple Languages', () => {
 
     // Wait for page to be fully loaded and rendered (WebKit needs more time)
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
+    await helpers.waitForWebKitStability();
 
     // Wait for the dropzone to be ready
-    await expect(page.locator('text=Drag & drop files here')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=Drag & drop files here')).toBeVisible({ timeout: 15000 });
 
     // Upload English test document - try multiple selectors for better WebKit compatibility
     let fileInput = page.locator('input[type="file"]').first();

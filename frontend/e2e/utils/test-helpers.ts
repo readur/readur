@@ -41,9 +41,56 @@ export class TestHelpers {
     );
   }
 
+  async waitForWebKitStability() {
+    const browserName = await this.page.evaluate(() => navigator.userAgent);
+    const isWebKit = browserName.includes('WebKit') && !browserName.includes('Chrome');
+    
+    if (isWebKit) {
+      console.log('WebKit stability waiting initiated...');
+      
+      // Wait for network to be completely idle
+      await this.page.waitForLoadState('networkidle');
+      await this.page.waitForTimeout(3000);
+      
+      // Wait for JavaScript to finish executing
+      await this.page.waitForFunction(() => {
+        return document.readyState === 'complete' && 
+               typeof window !== 'undefined';
+      }, { timeout: 15000 });
+      
+      // Extra stability wait
+      await this.page.waitForTimeout(2000);
+      console.log('WebKit stability waiting completed');
+    }
+  }
+
   async navigateToPage(path: string) {
     await this.page.goto(path);
     await this.waitForLoadingToComplete();
+    
+    // WebKit-specific stability waiting
+    const browserName = await this.page.evaluate(() => navigator.userAgent);
+    const isWebKit = browserName.includes('WebKit') && !browserName.includes('Chrome');
+    
+    if (isWebKit) {
+      console.log('WebKit detected - adding stability waiting for page:', path);
+      
+      // Wait for network to be completely idle
+      await this.page.waitForLoadState('networkidle');
+      await this.page.waitForTimeout(3000);
+      
+      // Wait for JavaScript to finish executing and ensure we're not stuck on login
+      await this.page.waitForFunction(() => {
+        return document.readyState === 'complete' && 
+               typeof window !== 'undefined' && 
+               !window.location.href.includes('/login') &&
+               !window.location.pathname.includes('/login');
+      }, { timeout: 20000 });
+      
+      // Extra stability wait
+      await this.page.waitForTimeout(2000);
+      console.log('WebKit stability waiting completed for:', path);
+    }
   }
 
   async takeScreenshotOnFailure(testName: string) {
