@@ -23,7 +23,17 @@ test.describe('WebDAV Workflow (Dynamic Auth)', () => {
     // Check if we can see the sources page (not stuck on login)
     const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
     if (isOnLoginPage) {
-      throw new Error('Test is stuck on login page - authentication failed');
+      console.log('WARNING: Still on login page after navigation to sources');
+      // Try to wait for dashboard to appear or navigation to complete
+      await page.waitForURL((url) => !url.pathname.includes('login'), { timeout: 10000 }).catch(() => {
+        console.log('Failed to navigate away from login page');
+      });
+      
+      // Check again
+      const stillOnLogin = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 1000 });
+      if (stillOnLogin) {
+        throw new Error('Test is stuck on login page - authentication failed');
+      }
     }
     
     // Wait for loading to complete and sources to be displayed

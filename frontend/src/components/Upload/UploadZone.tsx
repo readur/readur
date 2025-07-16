@@ -28,6 +28,7 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { useDropzone, FileRejection, DropzoneOptions } from 'react-dropzone';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useNotifications } from '../../contexts/NotificationContext';
 import LabelSelector from '../Labels/LabelSelector';
@@ -49,6 +50,7 @@ interface FileItem {
   status: 'pending' | 'uploading' | 'success' | 'error';
   progress: number;
   error: string | null;
+  documentId?: string;
 }
 
 interface UploadZoneProps {
@@ -59,6 +61,7 @@ type FileStatus = 'pending' | 'uploading' | 'success' | 'error';
 
 const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const { addBatchNotification } = useNotifications();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
@@ -195,7 +198,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
 
       setFiles(prev => prev.map(f => 
         f.id === fileItem.id 
-          ? { ...f, status: 'success' as FileStatus, progress: 100 }
+          ? { ...f, status: 'success' as FileStatus, progress: 100, documentId: response.data.id }
           : f
       ));
 
@@ -282,6 +285,12 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       case 'error': return <ErrorIcon />;
       case 'uploading': return <UploadIcon />;
       default: return <FileIcon />;
+    }
+  };
+
+  const handleFileClick = (fileItem: FileItem) => {
+    if (fileItem.status === 'success' && fileItem.documentId) {
+      navigate(`/documents/${fileItem.documentId}`);
     }
   };
 
@@ -440,7 +449,12 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                     py: 2,
                     borderBottom: index < files.length - 1 ? 1 : 0,
                     borderColor: 'divider',
+                    cursor: fileItem.status === 'success' && fileItem.documentId ? 'pointer' : 'default',
+                    '&:hover': fileItem.status === 'success' && fileItem.documentId ? {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                    } : {},
                   }}
+                  onClick={() => handleFileClick(fileItem)}
                 >
                   <ListItemIcon>
                     <Box sx={{ color: getStatusColor(fileItem.status) }}>
@@ -498,7 +512,10 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                       {fileItem.status === 'error' && (
                         <IconButton 
                           size="small" 
-                          onClick={() => retryUpload(fileItem)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            retryUpload(fileItem);
+                          }}
                           sx={{ color: 'primary.main' }}
                         >
                           <RefreshIcon fontSize="small" />
@@ -506,7 +523,10 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                       )}
                       <IconButton 
                         size="small" 
-                        onClick={() => removeFile(fileItem.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFile(fileItem.id);
+                        }}
                         disabled={fileItem.status === 'uploading'}
                       >
                         <DeleteIcon fontSize="small" />

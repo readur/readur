@@ -64,6 +64,34 @@ export class TestHelpers {
     }
   }
 
+  async waitForBrowserStability() {
+    const browserName = await this.page.context().browser()?.browserType().name() || '';
+    
+    switch (browserName) {
+      case 'webkit':
+        await this.waitForWebKitStability();
+        break;
+      case 'firefox':
+        // Firefox-specific stability wait
+        console.log('Firefox stability waiting initiated...');
+        await this.page.waitForLoadState('networkidle');
+        await this.page.waitForTimeout(2000);
+        // Firefox sometimes needs extra time for form validation
+        await this.page.waitForFunction(() => {
+          return document.readyState === 'complete' && 
+                 typeof window !== 'undefined' &&
+                 !document.querySelector('.MuiCircularProgress-root');
+        }, { timeout: 15000 });
+        console.log('Firefox stability waiting completed');
+        break;
+      default:
+        // Chromium and others
+        await this.page.waitForLoadState('networkidle');
+        await this.page.waitForTimeout(500);
+        break;
+    }
+  }
+
   async navigateToPage(path: string) {
     await this.page.goto(path);
     await this.waitForLoadingToComplete();
