@@ -6,8 +6,6 @@ use serde_json;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
 #[cfg(feature = "s3")]
-use aws_config::load_defaults;
-#[cfg(feature = "s3")]
 use aws_credential_types::Credentials;
 #[cfg(feature = "s3")]
 use aws_types::region::Region as AwsRegion;
