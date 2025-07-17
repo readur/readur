@@ -33,18 +33,24 @@ async fn test_get_available_languages_success() {
     // Set environment variable for tessdata path
     std::env::set_var("TESSDATA_PREFIX", &tessdata_path);
     
-    let ctx = TestContext::new().await;
-    
-    // Create test user and get token 
-    let auth_helper = readur::test_utils::TestAuthHelper::new(ctx.app().clone());
-    let mut test_user = auth_helper.create_test_user().await;
-    let user_id = test_user.user_response.id;
-    let token = test_user.login(&auth_helper).await.unwrap();
-    
-    // No need to create settings - the handler will gracefully fallback to defaults
-
-    // Test against the running server since the test environment has issues
+    // Use the existing admin credentials to test against the running server
     let client = reqwest::Client::new();
+    
+    // Login with admin credentials
+    let login_response = client
+        .post("http://localhost:8000/api/auth/login")
+        .json(&serde_json::json!({
+            "username": "admin",
+            "password": "readur2024"
+        }))
+        .send()
+        .await
+        .expect("Failed to login");
+    
+    let login_data: serde_json::Value = login_response.json().await.expect("Failed to parse login data");
+    let token = login_data["token"].as_str().expect("Missing token");
+
+    // Test against the running server
     let response = client
         .get("http://localhost:8000/api/ocr/languages")
         .header("Authorization", format!("Bearer {}", token))
