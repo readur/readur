@@ -41,17 +41,18 @@ async fn test_get_available_languages_success() {
     let user_id = test_user.user_response.id;
     let token = test_user.login(&auth_helper).await.unwrap();
     
-    // Create user settings
-    sqlx::query(
-        "INSERT INTO settings (user_id, ocr_language) VALUES ($1, $2)
-         ON CONFLICT (user_id) DO UPDATE SET ocr_language = $2"
-    )
-    .bind(user_id)
-    .bind("eng")
-    .execute(&ctx.state().db.pool)
-    .await
-    .expect("Failed to create user settings");
+    // No need to create settings - the handler will gracefully fallback to defaults
 
+    // Try without auth first to debug
+    let debug_request = Request::builder()
+        .method("GET")
+        .uri("/api/ocr/languages")
+        .body(Body::empty())
+        .unwrap();
+    
+    let debug_response = ctx.app().clone().oneshot(debug_request).await.unwrap();
+    println!("Debug response status (no auth): {}", debug_response.status());
+    
     let request = Request::builder()
         .method("GET")
         .uri("/api/ocr/languages")
@@ -60,9 +61,15 @@ async fn test_get_available_languages_success() {
         .unwrap();
 
     let response = ctx.app().clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
+    let status = response.status();
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    
+    if status != StatusCode::OK {
+        let body_str = String::from_utf8_lossy(&body_bytes);
+        println!("Response status: {}", status);
+        println!("Response body: {}", body_str);
+    }
+    assert_eq!(status, StatusCode::OK);
     let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     
     assert!(body.get("available_languages").is_some());
@@ -128,13 +135,14 @@ async fn test_retry_ocr_with_language_success() {
     // Create a test document
     let document_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO documents (id, user_id, filename, original_filename, file_size, mime_type, ocr_status, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())"
+        "INSERT INTO documents (id, user_id, filename, original_filename, file_path, file_size, mime_type, ocr_status, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())"
     )
     .bind(document_id)
     .bind(user_id)
     .bind("test.pdf")
     .bind("test.pdf")
+    .bind("/tmp/test.pdf")
     .bind(1024i64)
     .bind("application/pdf")
     .bind("failed")
@@ -148,7 +156,7 @@ async fn test_retry_ocr_with_language_success() {
 
     let request = Request::builder()
         .method("POST")
-        .uri(&format!("/api/documents/{}/retry-ocr", document_id))
+        .uri(&format!("/api/documents/{}/ocr/retry", document_id))
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_vec(&retry_request).unwrap()))
@@ -185,13 +193,14 @@ async fn test_retry_ocr_with_invalid_language() {
     // Create a test document
     let document_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO documents (id, user_id, filename, original_filename, file_size, mime_type, ocr_status, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())"
+        "INSERT INTO documents (id, user_id, filename, original_filename, file_path, file_size, mime_type, ocr_status, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())"
     )
     .bind(document_id)
     .bind(user_id)
     .bind("test.pdf")
     .bind("test.pdf")
+    .bind("/tmp/test.pdf")
     .bind(1024i64)
     .bind("application/pdf")
     .bind("failed")
@@ -205,7 +214,7 @@ async fn test_retry_ocr_with_invalid_language() {
 
     let request = Request::builder()
         .method("POST")
-        .uri(&format!("/api/documents/{}/retry-ocr", document_id))
+        .uri(&format!("/api/documents/{}/ocr/retry", document_id))
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_vec(&retry_request).unwrap()))
@@ -239,13 +248,14 @@ async fn test_retry_ocr_with_multiple_languages_success() {
     // Create a test document
     let document_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO documents (id, user_id, filename, original_filename, file_size, mime_type, ocr_status, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())"
+        "INSERT INTO documents (id, user_id, filename, original_filename, file_path, file_size, mime_type, ocr_status, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())"
     )
     .bind(document_id)
     .bind(user_id)
     .bind("test.pdf")
     .bind("test.pdf")
+    .bind("/tmp/test.pdf")
     .bind(1024i64)
     .bind("application/pdf")
     .bind("failed")
@@ -259,7 +269,7 @@ async fn test_retry_ocr_with_multiple_languages_success() {
 
     let request = Request::builder()
         .method("POST")
-        .uri(&format!("/api/documents/{}/retry-ocr", document_id))
+        .uri(&format!("/api/documents/{}/ocr/retry", document_id))
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_vec(&retry_request).unwrap()))
@@ -300,13 +310,14 @@ async fn test_retry_ocr_with_too_many_languages() {
     // Create a test document
     let document_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO documents (id, user_id, filename, original_filename, file_size, mime_type, ocr_status, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())"
+        "INSERT INTO documents (id, user_id, filename, original_filename, file_path, file_size, mime_type, ocr_status, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())"
     )
     .bind(document_id)
     .bind(user_id)
     .bind("test.pdf")
     .bind("test.pdf")
+    .bind("/tmp/test.pdf")
     .bind(1024i64)
     .bind("application/pdf")
     .bind("failed")
@@ -321,7 +332,7 @@ async fn test_retry_ocr_with_too_many_languages() {
 
     let request = Request::builder()
         .method("POST")
-        .uri(&format!("/api/documents/{}/retry-ocr", document_id))
+        .uri(&format!("/api/documents/{}/ocr/retry", document_id))
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_vec(&retry_request).unwrap()))
@@ -354,13 +365,14 @@ async fn test_retry_ocr_with_invalid_language_in_array() {
     // Create a test document
     let document_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO documents (id, user_id, filename, original_filename, file_size, mime_type, ocr_status, created_at, updated_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())"
+        "INSERT INTO documents (id, user_id, filename, original_filename, file_path, file_size, mime_type, ocr_status, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())"
     )
     .bind(document_id)
     .bind(user_id)
     .bind("test.pdf")
     .bind("test.pdf")
+    .bind("/tmp/test.pdf")
     .bind(1024i64)
     .bind("application/pdf")
     .bind("failed")
@@ -375,7 +387,7 @@ async fn test_retry_ocr_with_invalid_language_in_array() {
 
     let request = Request::builder()
         .method("POST")
-        .uri(&format!("/api/documents/{}/retry-ocr", document_id))
+        .uri(&format!("/api/documents/{}/ocr/retry", document_id))
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_vec(&retry_request).unwrap()))
