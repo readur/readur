@@ -54,6 +54,7 @@ jobs:
             libleptonica-dev \
             pkg-config \
             libclang-dev \
+            ocrmypdf \
             clang
 
       - name: Setup Rust
