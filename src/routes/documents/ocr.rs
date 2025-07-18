@@ -112,7 +112,11 @@ pub async fn retry_ocr(
     // Update user's OCR language settings based on what was provided
     if let Some(languages) = &request.languages {
         // Multi-language support: validate and update preferred languages
-        let health_checker = crate::ocr::health::OcrHealthChecker::new();
+        let health_checker = if let Ok(tessdata_path) = std::env::var("TESSDATA_PREFIX") {
+            crate::ocr::health::OcrHealthChecker::new_with_path(tessdata_path)
+        } else {
+            crate::ocr::health::OcrHealthChecker::new()
+        };
         match health_checker.validate_preferred_languages(languages) {
             Ok(_) => {
                 let settings_update = crate::models::UpdateSettings::language_update(
@@ -135,7 +139,11 @@ pub async fn retry_ocr(
         }
     } else if let Some(lang) = &request.language {
         // Single language (backward compatibility)
-        let health_checker = crate::ocr::health::OcrHealthChecker::new();
+        let health_checker = if let Ok(tessdata_path) = std::env::var("TESSDATA_PREFIX") {
+            crate::ocr::health::OcrHealthChecker::new_with_path(tessdata_path)
+        } else {
+            crate::ocr::health::OcrHealthChecker::new()
+        };
         match health_checker.validate_language(lang) {
             Ok(_) => {
                 if let Err(e) = state.db.update_user_ocr_language(auth_user.user.id, lang).await {

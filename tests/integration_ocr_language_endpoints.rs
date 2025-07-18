@@ -29,8 +29,13 @@ async fn test_get_available_languages_success() {
             .expect("Failed to create mock language file");
     }
     
-    // Set environment variable for tessdata path
-    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
+    // Set environment variable for tessdata path and verify it's properly set
+    let tessdata_str = tessdata_path.to_string_lossy().to_string();
+    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
+    
+    // Verify the files exist in the temp directory
+    assert!(tessdata_path.join("spa.traineddata").exists());
+    assert_eq!(std::env::var("TESSDATA_PREFIX").unwrap(), tessdata_str);
     
     // Use the existing admin credentials to test against the running server
     let client = reqwest::Client::new();
@@ -85,7 +90,8 @@ async fn test_get_available_languages_unauthorized() {
     
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
+    let tessdata_str = tessdata_path.to_string_lossy().to_string();
+    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
     
     let ctx = TestContext::new().await;
 
@@ -109,7 +115,8 @@ async fn test_retry_ocr_with_language_success() {
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
+    let tessdata_str = tessdata_path.to_string_lossy().to_string();
+    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
     
     let ctx = TestContext::new().await;
     
@@ -166,7 +173,8 @@ async fn test_retry_ocr_with_invalid_language() {
     
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
+    let tessdata_str = tessdata_path.to_string_lossy().to_string();
+    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
     
     let ctx = TestContext::new().await;
     
@@ -220,7 +228,8 @@ async fn test_retry_ocr_with_multiple_languages_success() {
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("fra.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
+    let tessdata_str = tessdata_path.to_string_lossy().to_string();
+    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
     
     let ctx = TestContext::new().await;
     
@@ -281,7 +290,8 @@ async fn test_retry_ocr_with_too_many_languages() {
     fs::write(tessdata_path.join("fra.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("deu.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("ita.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
+    let tessdata_str = tessdata_path.to_string_lossy().to_string();
+    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
     
     let ctx = TestContext::new().await;
     
@@ -335,7 +345,8 @@ async fn test_retry_ocr_with_invalid_language_in_array() {
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
+    let tessdata_str = tessdata_path.to_string_lossy().to_string();
+    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
     
     let ctx = TestContext::new().await;
     
