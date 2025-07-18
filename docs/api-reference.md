@@ -442,7 +442,7 @@ Response:
 #### Retry OCR Processing
 
 ```bash
-POST /api/documents/{id}/retry-ocr
+POST /api/documents/{id}/ocr/retry
 Authorization: Bearer <jwt_token>
 ```
 
