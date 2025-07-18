@@ -47,7 +47,7 @@ impl AdminTestClient {
     async fn setup_admin(&mut self) -> Result<String, Box<dyn std::error::Error>> {
         // Create an admin user through test utils
         let admin_user = self.auth_helper.create_admin_user().await;
-        let token = self.auth_helper.login_user(&admin_user.username, "password123").await;
+        let token = self.auth_helper.login_user(&admin_user.username, "adminpass123").await;
         
         self.admin_token = Some(token.clone());
         self.admin_user_id = Some(admin_user.user_response.id);
