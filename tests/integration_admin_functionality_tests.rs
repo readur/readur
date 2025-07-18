@@ -9,29 +9,33 @@
  * - System monitoring capabilities
  */
 
-use reqwest::Client;
 use serde_json::{json, Value};
 use uuid::Uuid;
+use axum::http::StatusCode;
+use axum::body::Body;
+use axum::http::Request;
+use tower::ServiceExt;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
-
-fn get_base_url() -> String {
-    std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
-}
+use readur::models::{CreateUser, UpdateUser, UserRole};
+use readur::test_utils::{TestContext, TestAuthHelper};
 
 /// Test client with admin capabilities
 struct AdminTestClient {
-    client: Client,
+    ctx: TestContext,
+    auth_helper: TestAuthHelper,
     admin_token: Option<String>,
     user_token: Option<String>,
-    admin_user_id: Option<String>,
-    regular_user_id: Option<String>,
+    admin_user_id: Option<Uuid>,
+    regular_user_id: Option<Uuid>,
 }
 
 impl AdminTestClient {
-    fn new() -> Self {
+    async fn new() -> Self {
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app().clone());
         Self {
-            client: Client::new(),
+            ctx,
+            auth_helper,
             admin_token: None,
             user_token: None,
             admin_user_id: None,
@@ -39,108 +43,28 @@ impl AdminTestClient {
         }
     }
     
-    /// Login as existing admin user
+    /// Setup admin user using test context
     async fn setup_admin(&mut self) -> Result<String, Box<dyn std::error::Error>> {
-        let username = "admin";
-        let password = "readur2024";
+        // Create an admin user through test utils
+        let admin_user = self.auth_helper.create_admin_user().await;
+        let token = self.auth_helper.login_user(&admin_user.username, "password123").await;
         
-        // Login admin with existing credentials
-        let login_data = LoginRequest {
-            username: username.to_string(),
-            password: password.to_string(),
-        };
+        self.admin_token = Some(token.clone());
+        self.admin_user_id = Some(admin_user.user_response.id);
         
-        let login_response = self.client
-            .post(&format!("{}/api/auth/login", get_base_url()))
-            .json(&login_data)
-            .send()
-            .await?;
-        
-        if !login_response.status().is_success() {
-            return Err(format!("Admin login failed: {}", login_response.text().await?).into());
-        }
-        
-        let login_result: LoginResponse = login_response.json().await?;
-        self.admin_token = Some(login_result.token.clone());
-        
-        // Get admin user info
-        let me_response = self.client
-            .get(&format!("{}/api/auth/me", get_base_url()))
-            .header("Authorization", format!("Bearer {}", login_result.token))
-            .send()
-            .await?;
-        
-        if me_response.status().is_success() {
-            let user_info: Value = me_response.json().await?;
-            self.admin_user_id = user_info["id"].as_str().map(|s| s.to_string());
-        }
-        
-        Ok(login_result.token)
+        Ok(token)
     }
     
-    /// Register and login as regular user
+    /// Setup regular user using test context
     async fn setup_regular_user(&mut self) -> Result<String, Box<dyn std::error::Error>> {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-        let random_suffix = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
-        let username = format!("user_test_{}_{}", timestamp, random_suffix);
-        let email = format!("user_test_{}@example.com", random_suffix);
-        let password = "userpassword123";
+        let mut test_user = self.auth_helper.create_test_user().await;
+        let user_id = test_user.user_response.id;
+        let token = test_user.login(&self.auth_helper).await?;
         
-        // Register regular user
-        let user_data = CreateUser {
-            username: username.clone(),
-            email: email.clone(),
-            password: password.to_string(),
-            role: Some(UserRole::User),
-        };
+        self.user_token = Some(token.to_string());
+        self.regular_user_id = Some(user_id);
         
-        let register_response = self.client
-            .post(&format!("{}/api/auth/register", get_base_url()))
-            .json(&user_data)
-            .send()
-            .await?;
-        
-        if !register_response.status().is_success() {
-            let status = register_response.status();
-            let error_text = register_response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("User registration failed with status {}: {}", status, error_text).into());
-        }
-        
-        // Login user
-        let login_data = LoginRequest {
-            username: username.clone(),
-            password: password.to_string(),
-        };
-        
-        let login_response = self.client
-            .post(&format!("{}/api/auth/login", get_base_url()))
-            .json(&login_data)
-            .send()
-            .await?;
-        
-        if !login_response.status().is_success() {
-            return Err(format!("User login failed: {}", login_response.text().await?).into());
-        }
-        
-        let login_result: LoginResponse = login_response.json().await?;
-        self.user_token = Some(login_result.token.clone());
-        
-        // Get user info
-        let me_response = self.client
-            .get(&format!("{}/api/auth/me", get_base_url()))
-            .header("Authorization", format!("Bearer {}", login_result.token))
-            .send()
-            .await?;
-        
-        if me_response.status().is_success() {
-            let user_info: Value = me_response.json().await?;
-            self.regular_user_id = user_info["id"].as_str().map(|s| s.to_string());
-        }
-        
-        Ok(login_result.token)
+        Ok(token.to_string())
     }
     
     /// Get all users (admin only)
@@ -151,17 +75,24 @@ impl AdminTestClient {
             self.user_token.as_ref().ok_or("User not logged in")?
         };
         
-        let response = self.client
-            .get(&format!("{}/api/users", get_base_url()))
+        let request = Request::builder()
+            .method("GET")
+            .uri("/api/users")
             .header("Authorization", format!("Bearer {}", token))
-            .send()
-            .await?;
+            .body(Body::empty())
+            .unwrap();
+            
+        let response = self.ctx.app().clone().oneshot(request).await.unwrap();
         
         if !response.status().is_success() {
-            return Err(format!("Get users failed: {} - {}", response.status(), response.text().await?).into());
+            let status = response.status();
+            let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body_str = String::from_utf8_lossy(&body_bytes);
+            return Err(format!("Get users failed: {} - {}", status, body_str).into());
         }
         
-        let users: Value = response.json().await?;
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let users: Value = serde_json::from_slice(&body_bytes)?;
         Ok(users)
     }
     
@@ -180,78 +111,103 @@ impl AdminTestClient {
             role: Some(role),
         };
         
-        let response = self.client
-            .post(&format!("{}/api/users", get_base_url()))
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/users")
             .header("Authorization", format!("Bearer {}", token))
-            .json(&user_data)
-            .send()
-            .await?;
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&user_data)?))
+            .unwrap();
+            
+        let response = self.ctx.app().clone().oneshot(request).await.unwrap();
         
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let error_text = String::from_utf8_lossy(&body_bytes);
             eprintln!("Create user failed with status {}: {}", status, error_text);
             eprintln!("Request data: {:?}", user_data);
             return Err(format!("Create user failed: {} - {}", status, error_text).into());
         }
         
-        let user: Value = response.json().await?;
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let user: Value = serde_json::from_slice(&body_bytes)?;
         Ok(user)
     }
     
     /// Get specific user (admin only)
-    async fn get_user(&self, user_id: &str, as_admin: bool) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn get_user(&self, user_id: &Uuid, as_admin: bool) -> Result<Value, Box<dyn std::error::Error>> {
         let token = if as_admin {
             self.admin_token.as_ref().ok_or("Admin not logged in")?
         } else {
             self.user_token.as_ref().ok_or("User not logged in")?
         };
         
-        let response = self.client
-            .get(&format!("{}/api/users/{}", get_base_url(), user_id))
+        let request = Request::builder()
+            .method("GET")
+            .uri(&format!("/api/users/{}", user_id))
             .header("Authorization", format!("Bearer {}", token))
-            .send()
-            .await?;
+            .body(Body::empty())
+            .unwrap();
+            
+        let response = self.ctx.app().clone().oneshot(request).await.unwrap();
         
         if !response.status().is_success() {
-            return Err(format!("Get user failed: {} - {}", response.status(), response.text().await?).into());
+            let status = response.status();
+            let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body_str = String::from_utf8_lossy(&body_bytes);
+            return Err(format!("Get user failed: {} - {}", status, body_str).into());
         }
         
-        let user: Value = response.json().await?;
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let user: Value = serde_json::from_slice(&body_bytes)?;
         Ok(user)
     }
     
     /// Update user (admin only)
-    async fn update_user(&self, user_id: &str, updates: Value) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn update_user(&self, user_id: &Uuid, updates: Value) -> Result<Value, Box<dyn std::error::Error>> {
         let token = self.admin_token.as_ref().ok_or("Admin not logged in")?;
         
-        let response = self.client
-            .put(&format!("{}/api/users/{}", get_base_url(), user_id))
+        let request = Request::builder()
+            .method("PUT")
+            .uri(&format!("/api/users/{}", user_id))
             .header("Authorization", format!("Bearer {}", token))
-            .json(&updates)
-            .send()
-            .await?;
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&updates)?))
+            .unwrap();
+            
+        let response = self.ctx.app().clone().oneshot(request).await.unwrap();
         
         if !response.status().is_success() {
-            return Err(format!("Update user failed: {} - {}", response.status(), response.text().await?).into());
+            let status = response.status();
+            let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body_str = String::from_utf8_lossy(&body_bytes);
+            return Err(format!("Update user failed: {} - {}", status, body_str).into());
         }
         
-        let user: Value = response.json().await?;
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let user: Value = serde_json::from_slice(&body_bytes)?;
         Ok(user)
     }
     
     /// Delete user (admin only)
-    async fn delete_user(&self, user_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete_user(&self, user_id: &Uuid) -> Result<(), Box<dyn std::error::Error>> {
         let token = self.admin_token.as_ref().ok_or("Admin not logged in")?;
         
-        let response = self.client
-            .delete(&format!("{}/api/users/{}", get_base_url(), user_id))
+        let request = Request::builder()
+            .method("DELETE")
+            .uri(&format!("/api/users/{}", user_id))
             .header("Authorization", format!("Bearer {}", token))
-            .send()
-            .await?;
+            .body(Body::empty())
+            .unwrap();
+            
+        let response = self.ctx.app().clone().oneshot(request).await.unwrap();
         
         if !response.status().is_success() {
-            return Err(format!("Delete user failed: {} - {}", response.status(), response.text().await?).into());
+            let status = response.status();
+            let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body_str = String::from_utf8_lossy(&body_bytes);
+            return Err(format!("Delete user failed: {} - {}", status, body_str).into());
         }
         
         Ok(())
@@ -265,39 +221,50 @@ impl AdminTestClient {
             self.user_token.as_ref().ok_or("User not logged in")?
         };
         
-        let response = self.client
-            .get(&format!("{}/api/metrics", get_base_url()))
+        let request = Request::builder()
+            .method("GET")
+            .uri("/api/metrics")
             .header("Authorization", format!("Bearer {}", token))
-            .send()
-            .await?;
+            .body(Body::empty())
+            .unwrap();
+            
+        let response = self.ctx.app().clone().oneshot(request).await.unwrap();
         
         if !response.status().is_success() {
-            return Err(format!("Get metrics failed: {} - {}", response.status(), response.text().await?).into());
+            let status = response.status();
+            let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body_str = String::from_utf8_lossy(&body_bytes);
+            return Err(format!("Get metrics failed: {} - {}", status, body_str).into());
         }
         
-        let metrics: Value = response.json().await?;
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let metrics: Value = serde_json::from_slice(&body_bytes)?;
         Ok(metrics)
     }
     
     /// Get Prometheus metrics (usually public)
     async fn get_prometheus_metrics(&self) -> Result<String, Box<dyn std::error::Error>> {
-        let response = self.client
-            .get(&format!("{}/metrics", get_base_url()))
-            .send()
-            .await?;
+        let request = Request::builder()
+            .method("GET")
+            .uri("/metrics")
+            .body(Body::empty())
+            .unwrap();
+            
+        let response = self.ctx.app().clone().oneshot(request).await.unwrap();
         
         if !response.status().is_success() {
             return Err(format!("Get Prometheus metrics failed: {}", response.status()).into());
         }
         
-        let metrics_text = response.text().await?;
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let metrics_text = String::from_utf8_lossy(&body_bytes).to_string();
         Ok(metrics_text)
     }
 }
 
 #[tokio::test]
 async fn test_admin_user_management_crud() {
-    let mut client = AdminTestClient::new();
+    let mut client = AdminTestClient::new().await;
     
     // Setup admin user
     client.setup_admin().await
@@ -318,55 +285,60 @@ async fn test_admin_user_management_crud() {
     
     println!("✅ Admin can list all users");
     
-    // Create a new user via admin API
-    let created_user = client.create_user("test_managed_user", "managed@example.com", UserRole::User, true).await
+    // Create a new user via admin API with unique name
+    let unique_id = Uuid::new_v4().to_string()[..8].to_string();
+    let username = format!("test_managed_user_{}", unique_id);
+    let email = format!("managed_{}@example.com", unique_id);
+    
+    let created_user = client.create_user(&username, &email, UserRole::User, true).await
         .expect("Failed to create user as admin");
     
-    let created_user_id = created_user["id"].as_str().expect("User should have ID");
-    assert_eq!(created_user["username"], "test_managed_user");
-    assert_eq!(created_user["email"], "managed@example.com");
+    let created_user_id = Uuid::parse_str(created_user["id"].as_str().expect("User should have ID")).unwrap();
+    assert_eq!(created_user["username"], username);
+    assert_eq!(created_user["email"], email);
     assert_eq!(created_user["role"], "user");
     
     println!("✅ Admin can create new users");
     
     // Get the created user details
-    let user_details = client.get_user(created_user_id, true).await
+    let user_details = client.get_user(&created_user_id, true).await
         .expect("Failed to get user details as admin");
     
     assert_eq!(user_details["id"], created_user["id"]);
-    assert_eq!(user_details["username"], "test_managed_user");
+    assert_eq!(user_details["username"], username);
     
     println!("✅ Admin can get user details");
     
     // Update the user
+    let updated_username = format!("updated_managed_user_{}", unique_id);
+    let updated_email = format!("updated_managed_{}@example.com", unique_id);
     let updates = json!({
-        "username": "updated_managed_user",
-        "email": "updated_managed@example.com",
-        "role": "user"
+        "username": updated_username,
+        "email": updated_email
     });
     
-    let updated_user = client.update_user(created_user_id, updates).await
+    let updated_user = client.update_user(&created_user_id, updates).await
         .expect("Failed to update user as admin");
     
-    assert_eq!(updated_user["username"], "updated_managed_user");
-    assert_eq!(updated_user["email"], "updated_managed@example.com");
+    assert_eq!(updated_user["username"], updated_username);
+    assert_eq!(updated_user["email"], updated_email);
     
     println!("✅ Admin can update users");
     
     // Verify the update persisted
-    let updated_user_details = client.get_user(created_user_id, true).await
+    let updated_user_details = client.get_user(&created_user_id, true).await
         .expect("Failed to get updated user details");
     
-    assert_eq!(updated_user_details["username"], "updated_managed_user");
+    assert_eq!(updated_user_details["username"], updated_username);
     
     // Delete the user
-    client.delete_user(created_user_id).await
+    client.delete_user(&created_user_id).await
         .expect("Failed to delete user as admin");
     
     println!("✅ Admin can delete users");
     
     // Verify deletion
-    let delete_verification = client.get_user(created_user_id, true).await;
+    let delete_verification = client.get_user(&created_user_id, true).await;
     assert!(delete_verification.is_err());
     
     println!("🎉 Admin user management CRUD test passed!");
@@ -374,7 +346,7 @@ async fn test_admin_user_management_crud() {
 
 #[tokio::test]
 async fn test_role_based_access_control() {
-    let mut client = AdminTestClient::new();
+    let mut client = AdminTestClient::new().await;
     
     // Setup both admin and regular user
     client.setup_admin().await
@@ -399,7 +371,8 @@ async fn test_role_based_access_control() {
     println!("✅ Regular user cannot access other user details (properly secured)");
     
     // Test that regular user CANNOT create users (secured implementation)
-    let test_user = client.create_user("regular_created_user", "regular@example.com", UserRole::User, false).await;
+    let unique_id = Uuid::new_v4().to_string()[..8].to_string();
+    let test_user = client.create_user(&format!("regular_created_user_{}", unique_id), &format!("regular_{}@example.com", unique_id), UserRole::User, false).await;
     // Secured implementation denies user creation to non-admins
     assert!(test_user.is_err());
     println!("✅ Regular user cannot create users (properly secured)");
@@ -424,7 +397,7 @@ async fn test_role_based_access_control() {
 
 #[tokio::test]
 async fn test_system_metrics_access() {
-    let mut client = AdminTestClient::new();
+    let mut client = AdminTestClient::new().await;
     
     // Setup admin and regular user
     client.setup_admin().await
@@ -469,7 +442,7 @@ async fn test_system_metrics_access() {
 
 #[tokio::test]
 async fn test_admin_user_management_without_roles() {
-    let mut client = AdminTestClient::new();
+    let mut client = AdminTestClient::new().await;
     
     client.setup_admin().await
         .expect("Failed to setup admin user");
@@ -477,18 +450,14 @@ async fn test_admin_user_management_without_roles() {
     println!("✅ Admin user setup complete");
     
     // Create a regular user with unique name
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let random_suffix = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
-    let username = format!("role_test_user_{}_{}", timestamp, random_suffix);
-    let email = format!("roletest_{}@example.com", random_suffix);
+    let unique_id = Uuid::new_v4().to_string()[..8].to_string();
+    let username = format!("role_test_user_{}", unique_id);
+    let email = format!("roletest_{}@example.com", unique_id);
     
     let regular_user = client.create_user(&username, &email, UserRole::User, true).await
         .expect("Failed to create regular user");
     
-    let user_id = regular_user["id"].as_str().unwrap();
+    let user_id = Uuid::parse_str(regular_user["id"].as_str().unwrap()).unwrap();
     assert_eq!(regular_user["role"], "user");
     
     println!("✅ Regular user created");
@@ -499,7 +468,7 @@ async fn test_admin_user_management_without_roles() {
         "email": format!("updated_{}", email)
     });
     
-    let updated_user = client.update_user(user_id, updates).await
+    let updated_user = client.update_user(&user_id, updates).await
         .expect("Failed to update user");
     
     assert_eq!(updated_user["username"], format!("updated_{}", username));
@@ -508,7 +477,7 @@ async fn test_admin_user_management_without_roles() {
     println!("✅ User info updated (role management not supported in current API)");
     
     // Clean up
-    client.delete_user(user_id).await
+    client.delete_user(&user_id).await
         .expect("Failed to delete test user");
     
     println!("🎉 Admin user management test passed!");
@@ -516,25 +485,29 @@ async fn test_admin_user_management_without_roles() {
 
 #[tokio::test]
 async fn test_admin_bulk_operations() {
-    let mut client = AdminTestClient::new();
+    let mut client = AdminTestClient::new().await;
     
     client.setup_admin().await
         .expect("Failed to setup admin user");
     
     println!("✅ Admin user setup complete");
     
-    // Create multiple users
+    // Create multiple users with unique identifiers
     let mut created_user_ids = Vec::new();
+    let test_run_id = Uuid::new_v4().to_string()[..8].to_string();
     
     for i in 1..=5 {
+        let username = format!("bulk_user_{}_{}", test_run_id, i);
+        let email = format!("bulk_user_{}_{}@example.com", test_run_id, i);
+        
         let user = client.create_user(
-            &format!("bulk_user_{}", i),
-            &format!("bulk_user_{}@example.com", i),
+            &username,
+            &email,
             UserRole::User,
             true
         ).await.expect("Failed to create bulk user");
         
-        created_user_ids.push(user["id"].as_str().unwrap().to_string());
+        created_user_ids.push(Uuid::parse_str(user["id"].as_str().unwrap()).unwrap());
     }
     
     println!("✅ Created 5 test users");
@@ -549,7 +522,7 @@ async fn test_admin_bulk_operations() {
     // Verify each created user exists
     for user_id in &created_user_ids {
         let user_exists = users_array.iter()
-            .any(|u| u["id"].as_str() == Some(user_id));
+            .any(|u| u["id"].as_str() == Some(&user_id.to_string()));
         assert!(user_exists);
     }
     
@@ -557,10 +530,12 @@ async fn test_admin_bulk_operations() {
     
     // Update all users
     for (i, user_id) in created_user_ids.iter().enumerate() {
+        let username = format!("updated_bulk_user_{}_{}", test_run_id, i + 1);
+        let email = format!("updated_bulk_user_{}_{}@example.com", test_run_id, i + 1);
+        
         let updates = json!({
-            "username": format!("updated_bulk_user_{}", i + 1),
-            "email": format!("updated_bulk_user_{}@example.com", i + 1),
-            "role": "user"
+            "username": username,
+            "email": email
         });
         
         client.update_user(user_id, updates).await
@@ -574,7 +549,7 @@ async fn test_admin_bulk_operations() {
         .expect("Failed to get updated users");
     
     let updated_count = updated_users.as_array().unwrap().iter()
-        .filter(|u| u["username"].as_str().unwrap_or("").starts_with("updated_bulk_user_"))
+        .filter(|u| u["username"].as_str().unwrap_or("").starts_with(&format!("updated_bulk_user_{}_", test_run_id)))
         .count();
     
     assert_eq!(updated_count, 5);
@@ -594,7 +569,7 @@ async fn test_admin_bulk_operations() {
     
     for user_id in &created_user_ids {
         let user_still_exists = final_users.as_array().unwrap().iter()
-            .any(|u| u["id"].as_str() == Some(user_id));
+            .any(|u| u["id"].as_str() == Some(&user_id.to_string()));
         assert!(!user_still_exists);
     }
     
@@ -603,45 +578,15 @@ async fn test_admin_bulk_operations() {
 
 #[tokio::test]
 async fn test_admin_error_handling() {
-    let mut client = AdminTestClient::new();
+    let mut client = AdminTestClient::new().await;
     
     client.setup_admin().await
         .expect("Failed to setup admin user");
     
     println!("✅ Admin user setup complete");
     
-    // Test creating user with invalid data (current API doesn't validate strictly)
-    let invalid_user_data = CreateUser {
-        username: "".to_string(), // Empty username
-        email: "invalid-email".to_string(), // Invalid email format
-        password: "123".to_string(), // Too short password
-        role: Some(UserRole::User), // Valid role
-    };
-    
-    let token = client.admin_token.as_ref().unwrap();
-    let invalid_create_response = client.client
-        .post(&format!("{}/api/users", get_base_url()))
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&invalid_user_data)
-        .send()
-        .await
-        .expect("Request should complete");
-    
-    // Current implementation doesn't validate input strictly, so this might succeed
-    if invalid_create_response.status().is_success() {
-        println!("ℹ️  Current API allows invalid user data (no strict validation)");
-        // Clean up if user was created
-        if let Ok(created_user) = invalid_create_response.json::<Value>().await {
-            if let Some(user_id) = created_user["id"].as_str() {
-                let _ = client.delete_user(user_id).await; // Best effort cleanup
-            }
-        }
-    } else {
-        println!("✅ Invalid user creation properly rejected");
-    }
-    
     // Test accessing non-existent user
-    let fake_user_id = Uuid::new_v4().to_string();
+    let fake_user_id = Uuid::new_v4();
     let non_existent_user_result = client.get_user(&fake_user_id, true).await;
     assert!(non_existent_user_result.is_err());
     println!("✅ Non-existent user access properly handled");
@@ -658,17 +603,20 @@ async fn test_admin_error_handling() {
     println!("✅ Non-existent user deletion returns success (current behavior)");
     
     // Test creating duplicate username
-    let user1 = client.create_user("duplicate_test", "test1@example.com", UserRole::User, true).await
+    let unique_id = Uuid::new_v4().to_string()[..8].to_string();
+    let username = format!("duplicate_test_{}", unique_id);
+    
+    let user1 = client.create_user(&username, &format!("{}1@example.com", username), UserRole::User, true).await
         .expect("Failed to create first user");
     
-    let duplicate_result = client.create_user("duplicate_test", "test2@example.com", UserRole::User, true).await;
+    let duplicate_result = client.create_user(&username, &format!("{}2@example.com", username), UserRole::User, true).await;
     // Should fail due to duplicate username
     assert!(duplicate_result.is_err());
     println!("✅ Duplicate username creation properly rejected");
     
     // Clean up
-    let user1_id = user1["id"].as_str().unwrap();
-    client.delete_user(user1_id).await
+    let user1_id = Uuid::parse_str(user1["id"].as_str().unwrap()).unwrap();
+    client.delete_user(&user1_id).await
         .expect("Failed to cleanup user");
     
     println!("🎉 Admin error handling test passed!");

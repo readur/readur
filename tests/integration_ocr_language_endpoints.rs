@@ -12,8 +12,7 @@ use uuid::Uuid;
 async fn test_get_available_languages_success() {
     // Create temporary directory for tessdata
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path().join("tessdata");
-    fs::create_dir_all(&tessdata_path).expect("Failed to create tessdata directory");
+    let tessdata_path = temp_dir.path();
     
     // Create mock language files
     let language_files = vec![
@@ -31,7 +30,7 @@ async fn test_get_available_languages_success() {
     }
     
     // Set environment variable for tessdata path
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_path);
+    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
     
     // Use the existing admin credentials to test against the running server
     let client = reqwest::Client::new();
@@ -82,12 +81,11 @@ async fn test_get_available_languages_success() {
 async fn test_get_available_languages_unauthorized() {
     // Create temporary directory for tessdata
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path().join("tessdata");
-    fs::create_dir_all(&tessdata_path).expect("Failed to create tessdata directory");
+    let tessdata_path = temp_dir.path();
     
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_path);
+    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
     
     let ctx = TestContext::new().await;
 
@@ -106,13 +104,12 @@ async fn test_get_available_languages_unauthorized() {
 async fn test_retry_ocr_with_language_success() {
     // Create temporary directory for tessdata
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path().join("tessdata");
-    fs::create_dir_all(&tessdata_path).expect("Failed to create tessdata directory");
+    let tessdata_path = temp_dir.path();
     
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_path);
+    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
     
     let ctx = TestContext::new().await;
     
@@ -165,12 +162,11 @@ async fn test_retry_ocr_with_language_success() {
 async fn test_retry_ocr_with_invalid_language() {
     // Create temporary directory for tessdata
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path().join("tessdata");
-    fs::create_dir_all(&tessdata_path).expect("Failed to create tessdata directory");
+    let tessdata_path = temp_dir.path();
     
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_path);
+    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
     
     let ctx = TestContext::new().await;
     
@@ -218,14 +214,13 @@ async fn test_retry_ocr_with_invalid_language() {
 async fn test_retry_ocr_with_multiple_languages_success() {
     // Create temporary directory for tessdata
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path().join("tessdata");
-    fs::create_dir_all(&tessdata_path).expect("Failed to create tessdata directory");
+    let tessdata_path = temp_dir.path();
     
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("fra.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_path);
+    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
     
     let ctx = TestContext::new().await;
     
@@ -278,8 +273,7 @@ async fn test_retry_ocr_with_multiple_languages_success() {
 async fn test_retry_ocr_with_too_many_languages() {
     // Create temporary directory for tessdata
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path().join("tessdata");
-    fs::create_dir_all(&tessdata_path).expect("Failed to create tessdata directory");
+    let tessdata_path = temp_dir.path();
     
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
@@ -287,7 +281,7 @@ async fn test_retry_ocr_with_too_many_languages() {
     fs::write(tessdata_path.join("fra.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("deu.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("ita.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_path);
+    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
     
     let ctx = TestContext::new().await;
     
@@ -336,13 +330,12 @@ async fn test_retry_ocr_with_too_many_languages() {
 async fn test_retry_ocr_with_invalid_language_in_array() {
     // Create temporary directory for tessdata
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path().join("tessdata");
-    fs::create_dir_all(&tessdata_path).expect("Failed to create tessdata directory");
+    let tessdata_path = temp_dir.path();
     
     // Create mock language files
     fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
     fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_path);
+    std::env::set_var("TESSDATA_PREFIX", tessdata_path);
     
     let ctx = TestContext::new().await;
     
