@@ -205,6 +205,8 @@ impl TestContext {
             .nest("/api/settings", crate::routes::settings::router())
             .nest("/api/users", crate::routes::users::router())
             .nest("/api/ignored-files", crate::routes::ignored_files::ignored_files_routes())
+            .nest("/api/metrics", crate::routes::metrics::router())
+            .nest("/metrics", crate::routes::prometheus_metrics::router())
             .with_state(state.clone());
         
         Self { app, container, state }
