@@ -81,11 +81,8 @@ describe('LanguageSelector Component', () => {
       // Open dropdown
       await user.click(screen.getByText('Select OCR languages...'));
       
-      // Select English from the dropdown
-      const englishButton = screen.getByText('English').closest('button');
-      if (englishButton) {
-        await user.click(englishButton);
-      }
+      // Select English from the dropdown - click on the language text directly
+      await user.click(screen.getByText('English'));
       
       expect(mockOnChange).toHaveBeenCalledWith(['eng'], 'eng');
     });
@@ -216,10 +213,7 @@ describe('LanguageSelector Component', () => {
       
       // Open dropdown and select English
       await user.click(screen.getByText('Select OCR languages...'));
-      const englishButton = screen.getByText('English').closest('button');
-      if (englishButton) {
-        await user.click(englishButton);
-      }
+      await user.click(screen.getByText('English'));
       
       expect(mockOnChange).toHaveBeenCalledWith(['eng'], 'eng');
     });

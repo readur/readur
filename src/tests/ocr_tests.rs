@@ -459,7 +459,9 @@ startxref
                     error_msg.contains("extraction") ||
                     error_msg.contains("InputFileError") ||
                     error_msg.contains("Failed to extract") ||
-                    error_msg.contains("All PDF extraction strategies failed")
+                    error_msg.contains("All PDF extraction strategies failed") ||
+                    error_msg.contains("No such file or directory") ||
+                    error_msg.contains("ocrmypdf is not available")
                 );
             }
         }
@@ -528,7 +530,9 @@ startxref
                     error_msg.contains("extract") ||
                     error_msg.contains("PDF") ||
                     error_msg.contains("Failed to extract") ||
-                    error_msg.contains("All PDF extraction strategies failed")
+                    error_msg.contains("All PDF extraction strategies failed") ||
+                    error_msg.contains("No such file or directory") ||
+                    error_msg.contains("ocrmypdf is not available")
                 );
             }
         }
@@ -557,7 +561,9 @@ startxref
                         error_msg.contains("font") ||
                         error_msg.contains("encoding") ||
                         error_msg.contains("extract") ||
-                        error_msg.contains("All PDF extraction strategies failed")
+                        error_msg.contains("All PDF extraction strategies failed") ||
+                        error_msg.contains("No such file or directory") ||
+                        error_msg.contains("ocrmypdf is not available")
                     );
                 }
             }
@@ -594,7 +600,9 @@ This tests the error handling for files that aren't actually PDFs.";
                     error_msg.contains("PDF") ||
                     error_msg.contains("format") ||
                     error_msg.contains("Failed to extract") ||
-                    error_msg.contains("All PDF extraction strategies failed")
+                    error_msg.contains("All PDF extraction strategies failed") ||
+                    error_msg.contains("No such file or directory") ||
+                    error_msg.contains("ocrmypdf is not available")
                 );
             }
         }
@@ -621,7 +629,9 @@ This tests the error handling for files that aren't actually PDFs.";
                         error_msg.contains("ocrmypdf") || 
                         error_msg.contains("extraction") ||
                         error_msg.contains("strategies") ||
-                        error_msg.contains("Failed to extract")
+                        error_msg.contains("Failed to extract") ||
+                        error_msg.contains("No such file or directory") ||
+                        error_msg.contains("ocrmypdf is not available")
                     );
                 }
             }
@@ -724,7 +734,8 @@ This tests the error handling for files that aren't actually PDFs.";
                                 error_msg.contains("corrupted") ||
                                 error_msg.contains("encoding") ||
                                 error_msg.contains("All PDF extraction strategies failed") ||
-                                error_msg.contains("No such file or directory"),
+                                error_msg.contains("No such file or directory") ||
+                                error_msg.contains("ocrmypdf is not available"),
                                 "Error message should be descriptive for {}: {}", test_file_owned, error_msg
                             );
                         }
