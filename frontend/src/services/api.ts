@@ -319,7 +319,7 @@ export const documentService = {
   },
 
   retryOcr: (id: string) => {
-    return api.post(`/documents/${id}/retry-ocr`)
+    return api.post(`/documents/${id}/ocr/retry`)
   },
 
   // Advanced OCR retry functionality
@@ -466,7 +466,7 @@ export const ocrService = {
     } else if (language) {
       data.language = language
     }
-    return api.post(`/documents/${documentId}/retry-ocr`, data)
+    return api.post(`/documents/${documentId}/ocr/retry`, data)
   },
 }
 

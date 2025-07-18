@@ -21,6 +21,10 @@ use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 #[cfg(any(test, feature = "test-utils"))]
 use tower::util::ServiceExt;
+#[cfg(any(test, feature = "test-utils"))]
+use serde_json::Value;
+#[cfg(any(test, feature = "test-utils"))]
+use reqwest::{Response, StatusCode};
 
 /// Test image information with expected OCR content
 #[derive(Debug, Clone)]
@@ -837,5 +841,84 @@ pub mod document_helpers {
             ocr_retry_count: Some(3),
             ocr_failure_reason: Some("OCR engine timeout".to_string()),
         }
+    }
+
+    /// Enhanced test assertion utility for HTTP responses with detailed debug output
+    #[cfg(any(test, feature = "test-utils"))]
+    pub async fn assert_response_status_with_debug(
+        response: reqwest::Response,
+        expected_status: reqwest::StatusCode,
+        context: &str,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let actual_status = response.status();
+        let url = response.url().clone();
+        
+        if actual_status == expected_status {
+            // Success case - try to parse JSON
+            let response_text = response.text().await?;
+            
+            if response_text.is_empty() {
+                println!("✅ {} - Status {} as expected (empty response)", context, expected_status);
+                return Ok(serde_json::Value::Null);
+            }
+            
+            match serde_json::from_str::<serde_json::Value>(&response_text) {
+                Ok(json_value) => {
+                    println!("✅ {} - Status {} as expected", context, expected_status);
+                    Ok(json_value)
+                }
+                Err(e) => {
+                    println!("⚠️  {} - Status {} as expected but failed to parse JSON: {}", context, expected_status, e);
+                    println!("Response text: {}", response_text);
+                    Err(format!("JSON parse error: {}", e).into())
+                }
+            }
+        } else {
+            // Failure case - provide detailed debug info
+            let response_text = response.text().await.unwrap_or_else(|_| "Unable to read response body".to_string());
+            
+            println!("❌ {} - Expected status {}, got {}", context, expected_status, actual_status);
+            println!("🔗 Request URL: {}", url);
+            println!("📄 Response headers:");
+            
+            println!("📝 Response body:");
+            println!("{}", response_text);
+            
+            // Try to parse as JSON for better formatting
+            if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
+                println!("📋 Formatted JSON response:");
+                println!("{}", serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| response_text.clone()));
+            }
+            
+            Err(format!(
+                "{} - Expected status {}, got {}. URL: {}. Response: {}", 
+                context, expected_status, actual_status, url, response_text
+            ).into())
+        }
+}
+
+    /// Quick assertion for successful responses (2xx status codes)
+    #[cfg(any(test, feature = "test-utils"))]
+    pub async fn assert_success_with_debug(
+        response: reqwest::Response,
+        context: &str,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let status = response.status();
+        
+        if status.is_success() {
+            assert_response_status_with_debug(response, status, context).await
+        } else {
+            assert_response_status_with_debug(response, reqwest::StatusCode::OK, context).await
+        }
+    }
+
+    /// Assert a specific error status with debug output
+    #[cfg(any(test, feature = "test-utils"))]
+    pub async fn assert_error_with_debug(
+        response: reqwest::Response,
+        expected_status: reqwest::StatusCode,
+        context: &str,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        assert_response_status_with_debug(response, expected_status, context).await
     }
 }

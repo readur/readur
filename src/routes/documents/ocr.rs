@@ -63,7 +63,7 @@ pub async fn get_document_ocr(
 /// Retry OCR processing for a document
 #[utoipa::path(
     post,
-    path = "/api/documents/{id}/retry-ocr",
+    path = "/api/documents/{id}/ocr/retry",
     tag = "documents",
     security(
         ("bearer_auth" = [])
@@ -86,6 +86,8 @@ pub async fn retry_ocr(
     Path(document_id): Path<uuid::Uuid>,
     Json(request): Json<super::types::RetryOcrRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    debug!("OCR retry request for document {} by user {}", document_id, auth_user.user.id);
+    debug!("Request data: language={:?}, languages={:?}", request.language, request.languages);
     // Get document first to check if it exists and user has access
     let document = state
         .db
@@ -126,7 +128,8 @@ pub async fn retry_ocr(
                 }
             }
             Err(e) => {
-                warn!("Invalid language combination provided: {}", e);
+                warn!("Invalid language combination provided for document {}: {}", document_id, e);
+                error!("OCR retry failed due to invalid languages: {:?}", request.languages);
                 return Err(StatusCode::BAD_REQUEST);
             }
         }
@@ -142,7 +145,8 @@ pub async fn retry_ocr(
                 }
             }
             Err(e) => {
-                warn!("Invalid OCR language specified '{}': {}", lang, e);
+                warn!("Invalid OCR language specified '{}' for document {}: {}", lang, document_id, e);
+                error!("OCR retry failed due to invalid language: {}", lang);
                 return Err(StatusCode::BAD_REQUEST);
             }
         }
