@@ -37,20 +37,21 @@ pub async fn upload_document(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     mut multipart: Multipart,
-) -> Result<Json<DocumentUploadResponse>, StatusCode> {
+) -> Result<Json<DocumentUploadResponse>, (StatusCode, String)> {
     let mut uploaded_file = None;
     let mut ocr_language: Option<String> = None;
     let mut ocr_languages: Vec<String> = Vec::new();
     
     // First pass: collect all multipart fields
     while let Some(field) = multipart.next_field().await.map_err(|e| {
-        error!("Failed to get multipart field: {}", e);
-        StatusCode::BAD_REQUEST
+        let error_msg = format!("Failed to get multipart field: {}", e);
+        error!("{}", error_msg);
+        (StatusCode::BAD_REQUEST, error_msg)
     })? {
         let name = field.name().unwrap_or("").to_string();
         
         if name == "ocr_language" {
-            let language = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            let language = field.text().await.map_err(|_| (StatusCode::BAD_REQUEST, "Failed to read language field".to_string()))?;
             if !language.trim().is_empty() {
                 // Validate that the language is available
                 let health_checker = crate::ocr::health::OcrHealthChecker::new();
@@ -60,14 +61,18 @@ pub async fn upload_document(
                         info!("OCR language specified and validated: {}", language);
                     }
                     Err(e) => {
-                        warn!("Invalid OCR language specified '{}': {}", language, e);
-                        // Return early with bad request for invalid language
-                        return Err(StatusCode::BAD_REQUEST);
+                        let available_languages = health_checker.get_available_languages().unwrap_or_default();
+                        let error_msg = format!(
+                            "Invalid OCR language '{}': {}. Available languages: {}",
+                            language, e, available_languages.join(", ")
+                        );
+                        warn!("{}", error_msg);
+                        return Err((StatusCode::BAD_REQUEST, error_msg));
                     }
                 }
             }
         } else if name == "ocr_languages" || name.starts_with("ocr_languages[") {
-            let language = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            let language = field.text().await.map_err(|_| (StatusCode::BAD_REQUEST, "Failed to read language field".to_string()))?;
             if !language.trim().is_empty() {
                 // Validate that the language is available
                 let health_checker = crate::ocr::health::OcrHealthChecker::new();
@@ -78,20 +83,22 @@ pub async fn upload_document(
                         info!("OCR language added to list: {}", language);
                     }
                     Err(e) => {
-                        warn!("Invalid OCR language specified '{}': {}", language, e);
-                        debug!("Available languages: {:?}", health_checker.get_available_languages().unwrap_or_default());
-                        debug!("Tessdata path: {:?}", health_checker.get_tessdata_path().unwrap_or_else(|e| format!("Error: {}", e)));
-                        // Don't fail upload for invalid languages - let OCR processing handle it
-                        // This allows tests with mock data to pass the upload stage
-                        warn!("Continuing with upload despite invalid language - OCR processing will handle the error");
+                        let available_languages = health_checker.get_available_languages().unwrap_or_default();
+                        let error_msg = format!(
+                            "Invalid OCR language '{}': {}. Available languages: {}",
+                            language, e, available_languages.join(", ")
+                        );
+                        warn!("{}", error_msg);
+                        return Err((StatusCode::BAD_REQUEST, error_msg));
                     }
                 }
             }
         } else if name == "file" {
             let filename = field.file_name()
                 .ok_or_else(|| {
-                    error!("No filename provided in upload");
-                    StatusCode::BAD_REQUEST
+                    let error_msg = "No filename provided in upload".to_string();
+                    error!("{}", error_msg);
+                    (StatusCode::BAD_REQUEST, error_msg)
                 })?
                 .to_string();
             
@@ -100,8 +107,9 @@ pub async fn upload_document(
                 .to_string();
             
             let data = field.bytes().await.map_err(|e| {
-                error!("Failed to read file data: {}", e);
-                StatusCode::BAD_REQUEST
+                let error_msg = format!("Failed to read file data: {}", e);
+                error!("{}", error_msg);
+                (StatusCode::BAD_REQUEST, error_msg)
             })?;
             
             uploaded_file = Some((filename, content_type, data.to_vec()));
@@ -109,16 +117,18 @@ pub async fn upload_document(
     }
     
     let (filename, content_type, data) = uploaded_file.ok_or_else(|| {
-        error!("No file found in upload");
-        StatusCode::BAD_REQUEST
+        let error_msg = "No file found in upload".to_string();
+        error!("{}", error_msg);
+        (StatusCode::BAD_REQUEST, error_msg)
     })?;
     
     // Validate file size against configured limit
     let max_file_size_bytes = state.config.max_file_size_mb as usize * 1024 * 1024;
     if data.len() > max_file_size_bytes {
-        error!("File '{}' size ({} bytes) exceeds maximum allowed size ({} bytes / {}MB)", 
+        let error_msg = format!("File '{}' size ({} bytes) exceeds maximum allowed size ({} bytes / {}MB)", 
                filename, data.len(), max_file_size_bytes, state.config.max_file_size_mb);
-        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        error!("{}", error_msg);
+        return Err((StatusCode::PAYLOAD_TOO_LARGE, error_msg));
     }
     
     info!("Uploading document: {} ({} bytes)", filename, data.len());
@@ -226,16 +236,19 @@ pub async fn upload_document(
             }))
         }
         Ok(IngestionResult::Skipped { existing_document_id, reason }) => {
-            info!("Document upload skipped - {}: {}", reason, existing_document_id);
-            Err(StatusCode::CONFLICT)
+            let error_msg = format!("Document upload skipped - {}: {}", reason, existing_document_id);
+            info!("{}", error_msg);
+            Err((StatusCode::CONFLICT, error_msg))
         }
         Ok(IngestionResult::TrackedAsDuplicate { existing_document_id }) => {
-            info!("Document tracked as duplicate: {}", existing_document_id);
-            Err(StatusCode::CONFLICT)
+            let error_msg = format!("Document tracked as duplicate: {}", existing_document_id);
+            info!("{}", error_msg);
+            Err((StatusCode::CONFLICT, error_msg))
         }
         Err(e) => {
-            error!("Failed to ingest document: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            let error_msg = format!("Failed to ingest document: {}", e);
+            error!("{}", error_msg);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, error_msg))
         }
     }
 }
