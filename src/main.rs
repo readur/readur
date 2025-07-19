@@ -268,48 +268,6 @@ async fn main() -> anyhow::Result<()> {
             )
             .fetch_one(web_db.get_pool())
             .await;
-            
-            match function_check {
-                Ok(Some(def)) => {
-                    info!("📋 get_queue_statistics function definition retrieved");
-                    
-                    // Debug: print the actual function definition
-                    info!("🔍 Function definition (first 500 chars): {}", 
-                          def.chars().take(500).collect::<String>());
-                    
-                    // Check if it contains the correct logic from our latest migration
-                    let has_documents_subquery = def.contains("FROM documents") && def.contains("ocr_status = 'completed'");
-                    let has_cast_statements = def.contains("CAST(");
-                    
-                    info!("🔍 Function content analysis:");
-                    info!("  Has documents subquery: {}", has_documents_subquery);
-                    info!("  Has CAST statements: {}", has_cast_statements);
-                    
-                    if has_documents_subquery && has_cast_statements {
-                        info!("✅ get_queue_statistics function has correct logic (uses documents table subquery with CAST)");
-                    } else {
-                        error!("❌ get_queue_statistics function has unexpected structure");
-                    }
-                    
-                    // Test the function execution at startup
-                    info!("🧪 Testing function execution at startup...");
-                    match sqlx::query("SELECT * FROM get_queue_statistics()").fetch_one(web_db.get_pool()).await {
-                        Ok(test_result) => {
-                            info!("✅ Function executes successfully at startup");
-                            let columns = test_result.columns();
-                            info!("🔍 Function returns {} columns at startup:", columns.len());
-                            for (i, column) in columns.iter().enumerate() {
-                                info!("  Column {}: name='{}', type='{:?}'", i, column.name(), column.type_info());
-                            }
-                        }
-                        Err(e) => {
-                            error!("❌ Function fails to execute at startup: {}", e);
-                        }
-                    }
-                }
-                Ok(None) => error!("❌ get_queue_statistics function does not exist after migration"),
-                Err(e) => error!("❌ Failed to verify get_queue_statistics function: {}", e),
-            }
         }
         Err(e) => {
             error!("❌ CRITICAL: SQLx migrations failed!");
