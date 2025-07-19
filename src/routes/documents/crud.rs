@@ -1,9 +1,10 @@
 use axum::{
     extract::{Multipart, Path, Query, State},
     http::{StatusCode, header::CONTENT_TYPE},
-    response::{Json, Response},
+    response::{Json, Response, IntoResponse},
     body::Body,
 };
+use serde_json::json;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
@@ -15,6 +16,33 @@ use crate::{
     AppState,
 };
 use super::types::{PaginationQuery, DocumentUploadResponse, PaginatedDocumentsResponse, DocumentPaginationInfo};
+
+/// Custom error type for document operations
+#[derive(Debug)]
+pub enum DocumentError {
+    BadRequest(String),
+    NotFound,
+    Conflict(String),
+    PayloadTooLarge(String),
+    InternalServerError(String),
+}
+
+impl IntoResponse for DocumentError {
+    fn into_response(self) -> Response {
+        let (status, message) = match self {
+            DocumentError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+            DocumentError::NotFound => (StatusCode::NOT_FOUND, "Document not found".to_string()),
+            DocumentError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+            DocumentError::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, msg),
+            DocumentError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+        };
+        
+        (status, Json(json!({
+            "error": message,
+            "status": status.as_u16()
+        }))).into_response()
+    }
+}
 
 /// Upload a new document
 #[utoipa::path(
@@ -37,7 +65,7 @@ pub async fn upload_document(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     mut multipart: Multipart,
-) -> Result<Json<DocumentUploadResponse>, (StatusCode, String)> {
+) -> Result<Json<DocumentUploadResponse>, DocumentError> {
     let mut uploaded_file = None;
     let mut ocr_language: Option<String> = None;
     let mut ocr_languages: Vec<String> = Vec::new();
@@ -46,12 +74,12 @@ pub async fn upload_document(
     while let Some(field) = multipart.next_field().await.map_err(|e| {
         let error_msg = format!("Failed to get multipart field: {}", e);
         error!("{}", error_msg);
-        (StatusCode::BAD_REQUEST, error_msg)
+        DocumentError::BadRequest(error_msg)
     })? {
         let name = field.name().unwrap_or("").to_string();
         
         if name == "ocr_language" {
-            let language = field.text().await.map_err(|_| (StatusCode::BAD_REQUEST, "Failed to read language field".to_string()))?;
+            let language = field.text().await.map_err(|_| DocumentError::BadRequest("Failed to read language field".to_string()))?;
             if !language.trim().is_empty() {
                 // Validate that the language is available
                 let health_checker = crate::ocr::health::OcrHealthChecker::new();
@@ -67,12 +95,12 @@ pub async fn upload_document(
                             language, e, available_languages.join(", ")
                         );
                         warn!("{}", error_msg);
-                        return Err((StatusCode::BAD_REQUEST, error_msg));
+                        return Err(DocumentError::BadRequest(error_msg));
                     }
                 }
             }
         } else if name == "ocr_languages" || name.starts_with("ocr_languages[") {
-            let language = field.text().await.map_err(|_| (StatusCode::BAD_REQUEST, "Failed to read language field".to_string()))?;
+            let language = field.text().await.map_err(|_| DocumentError::BadRequest("Failed to read language field".to_string()))?;
             if !language.trim().is_empty() {
                 // Validate that the language is available
                 let health_checker = crate::ocr::health::OcrHealthChecker::new();
@@ -89,7 +117,7 @@ pub async fn upload_document(
                             language, e, available_languages.join(", ")
                         );
                         warn!("{}", error_msg);
-                        return Err((StatusCode::BAD_REQUEST, error_msg));
+                        return Err(DocumentError::BadRequest(error_msg));
                     }
                 }
             }
@@ -98,7 +126,7 @@ pub async fn upload_document(
                 .ok_or_else(|| {
                     let error_msg = "No filename provided in upload".to_string();
                     error!("{}", error_msg);
-                    (StatusCode::BAD_REQUEST, error_msg)
+                    DocumentError::BadRequest(error_msg)
                 })?
                 .to_string();
             
@@ -109,7 +137,7 @@ pub async fn upload_document(
             let data = field.bytes().await.map_err(|e| {
                 let error_msg = format!("Failed to read file data: {}", e);
                 error!("{}", error_msg);
-                (StatusCode::BAD_REQUEST, error_msg)
+                DocumentError::BadRequest(error_msg)
             })?;
             
             uploaded_file = Some((filename, content_type, data.to_vec()));
@@ -119,7 +147,7 @@ pub async fn upload_document(
     let (filename, content_type, data) = uploaded_file.ok_or_else(|| {
         let error_msg = "No file found in upload".to_string();
         error!("{}", error_msg);
-        (StatusCode::BAD_REQUEST, error_msg)
+        DocumentError::BadRequest(error_msg)
     })?;
     
     // Validate file size against configured limit
@@ -128,7 +156,7 @@ pub async fn upload_document(
         let error_msg = format!("File '{}' size ({} bytes) exceeds maximum allowed size ({} bytes / {}MB)", 
                filename, data.len(), max_file_size_bytes, state.config.max_file_size_mb);
         error!("{}", error_msg);
-        return Err((StatusCode::PAYLOAD_TOO_LARGE, error_msg));
+        return Err(DocumentError::PayloadTooLarge(error_msg));
     }
     
     info!("Uploading document: {} ({} bytes)", filename, data.len());
@@ -238,17 +266,17 @@ pub async fn upload_document(
         Ok(IngestionResult::Skipped { existing_document_id, reason }) => {
             let error_msg = format!("Document upload skipped - {}: {}", reason, existing_document_id);
             info!("{}", error_msg);
-            Err((StatusCode::CONFLICT, error_msg))
+            Err(DocumentError::Conflict(error_msg))
         }
         Ok(IngestionResult::TrackedAsDuplicate { existing_document_id }) => {
             let error_msg = format!("Document tracked as duplicate: {}", existing_document_id);
             info!("{}", error_msg);
-            Err((StatusCode::CONFLICT, error_msg))
+            Err(DocumentError::Conflict(error_msg))
         }
         Err(e) => {
             let error_msg = format!("Failed to ingest document: {}", e);
             error!("{}", error_msg);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, error_msg))
+            Err(DocumentError::InternalServerError(error_msg))
         }
     }
 }
