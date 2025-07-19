@@ -257,17 +257,6 @@ async fn main() -> anyhow::Result<()> {
                 info!("📊 Latest migration now: {}", latest);
             }
             
-            // Verify the get_queue_statistics function has the correct implementation
-            let function_check = sqlx::query_scalar::<_, Option<String>>(
-                r#"
-                SELECT pg_get_functiondef(p.oid)
-                FROM pg_proc p
-                JOIN pg_namespace n ON p.pronamespace = n.oid
-                WHERE n.nspname = 'public' AND p.proname = 'get_queue_statistics'
-                "#
-            )
-            .fetch_one(web_db.get_pool())
-            .await;
         }
         Err(e) => {
             error!("❌ CRITICAL: SQLx migrations failed!");
