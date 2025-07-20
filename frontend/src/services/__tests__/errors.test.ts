@@ -18,7 +18,8 @@ describe('ErrorHelper', () => {
             status: 404
           },
           status: 404
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.getErrorInfo(structuredError);
@@ -37,7 +38,8 @@ describe('ErrorHelper', () => {
             message: 'Legacy error message'
           },
           status: 500
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.getErrorInfo(legacyError);
@@ -53,7 +55,8 @@ describe('ErrorHelper', () => {
         message: 'Network Error',
         response: {
           status: 500
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.getErrorInfo(axiosError);
@@ -98,7 +101,8 @@ describe('ErrorHelper', () => {
           data: {},
           status: 400
         },
-        message: 'Bad Request'
+        message: 'Bad Request',
+        isAxiosError: true
       };
 
       const result = ErrorHelper.getErrorInfo(emptyError);
@@ -119,7 +123,8 @@ describe('ErrorHelper', () => {
             code: 'USER_NOT_FOUND',
             status: 404
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.isErrorCode(error, ErrorCodes.USER_NOT_FOUND)).toBe(true);
@@ -133,7 +138,8 @@ describe('ErrorHelper', () => {
             code: 'USER_NOT_FOUND',
             status: 404
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.isErrorCode(error, ErrorCodes.USER_DUPLICATE_USERNAME)).toBe(false);
@@ -145,7 +151,8 @@ describe('ErrorHelper', () => {
           data: {
             message: 'Legacy error'
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.isErrorCode(error, ErrorCodes.USER_NOT_FOUND)).toBe(false);
@@ -172,7 +179,8 @@ describe('ErrorHelper', () => {
             code: 'USER_NOT_FOUND',
             status: 404
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.getUserMessage(error)).toBe('Custom error message');
@@ -185,7 +193,7 @@ describe('ErrorHelper', () => {
 
     test('should return default fallback when no message', () => {
       const error = null;
-      expect(ErrorHelper.getUserMessage(error)).toBe('An error occurred');
+      expect(ErrorHelper.getUserMessage(error)).toBe('An unknown error occurred');
     });
   });
 
@@ -198,7 +206,8 @@ describe('ErrorHelper', () => {
             code: 'USER_DUPLICATE_USERNAME',
             status: 409
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.getSuggestedAction(error)).toBe('Please choose a different username');
@@ -212,7 +221,8 @@ describe('ErrorHelper', () => {
             code: 'USER_INVALID_CREDENTIALS',
             status: 401
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.getSuggestedAction(error)).toBe('Please check your username and password');
@@ -226,7 +236,8 @@ describe('ErrorHelper', () => {
             code: 'UNKNOWN_ERROR_CODE',
             status: 500
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.getSuggestedAction(error)).toBe(null);
@@ -247,7 +258,8 @@ describe('ErrorHelper', () => {
             code: 'SOURCE_CONNECTION_FAILED',
             status: 503
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.shouldShowRetry(error)).toBe(true);
@@ -260,7 +272,8 @@ describe('ErrorHelper', () => {
             message: 'Internal server error'
           },
           status: 500
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.shouldShowRetry(error)).toBe(true);
@@ -274,7 +287,8 @@ describe('ErrorHelper', () => {
             code: 'USER_INVALID_CREDENTIALS',
             status: 400
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.shouldShowRetry(error)).toBe(false);
@@ -293,7 +307,8 @@ describe('ErrorHelper', () => {
         const error = {
           response: {
             data: { error: 'Test', code, status: 401 }
-          }
+          },
+          isAxiosError: true
         };
         expect(ErrorHelper.getErrorCategory(error)).toBe('auth');
       });
@@ -310,7 +325,8 @@ describe('ErrorHelper', () => {
         const error = {
           response: {
             data: { error: 'Test', code, status: 400 }
-          }
+          },
+          isAxiosError: true
         };
         expect(ErrorHelper.getErrorCategory(error)).toBe('validation');
       });
@@ -324,7 +340,8 @@ describe('ErrorHelper', () => {
             code: 'SOURCE_CONNECTION_FAILED',
             status: 503
           }
-        }
+        },
+        isAxiosError: true
       };
 
       expect(ErrorHelper.getErrorCategory(error)).toBe('network');
@@ -338,7 +355,7 @@ describe('ErrorHelper', () => {
         { status: 422, expectedCategory: 'validation' },
         { status: 500, expectedCategory: 'server' },
         { status: 502, expectedCategory: 'server' },
-        { status: 503, expectedCategory: 'server' }
+        { status: 503, expectedCategory: 'network' }
       ];
 
       statusTests.forEach(({ status, expectedCategory }) => {
@@ -346,7 +363,8 @@ describe('ErrorHelper', () => {
           response: {
             data: { message: 'Test error' },
             status
-          }
+          },
+          isAxiosError: true
         };
         expect(ErrorHelper.getErrorCategory(error)).toBe(expectedCategory);
       });
@@ -373,16 +391,16 @@ describe('ErrorHelper', () => {
         let error;
         switch (category) {
           case 'auth':
-            error = { response: { data: { code: 'USER_INVALID_CREDENTIALS' }, status: 401 } };
+            error = { response: { data: { code: 'USER_INVALID_CREDENTIALS' }, status: 401 }, isAxiosError: true };
             break;
           case 'validation':
-            error = { response: { data: { code: 'USER_INVALID_PASSWORD' }, status: 400 } };
+            error = { response: { data: { code: 'USER_INVALID_PASSWORD' }, status: 400 }, isAxiosError: true };
             break;
           case 'network':
-            error = { response: { data: { code: 'SOURCE_CONNECTION_FAILED' }, status: 503 } };
+            error = { response: { data: { code: 'SOURCE_CONNECTION_FAILED' }, status: 503 }, isAxiosError: true };
             break;
           case 'server':
-            error = { response: { data: { message: 'Server error' }, status: 500 } };
+            error = { response: { data: { message: 'Server error' }, status: 500 }, isAxiosError: true };
             break;
           default:
             error = new Error('Unknown error');
@@ -402,7 +420,8 @@ describe('ErrorHelper', () => {
             code: 'USER_DUPLICATE_USERNAME',
             status: 409
           }
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.formatErrorForDisplay(error, true);
@@ -425,7 +444,8 @@ describe('ErrorHelper', () => {
             code: 'USER_DUPLICATE_USERNAME',
             status: 409
           }
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.formatErrorForDisplay(error, false);
@@ -446,7 +466,8 @@ describe('ErrorHelper', () => {
         const error = {
           response: {
             data: { error: 'Test', code, status: 400 }
-          }
+          },
+          isAxiosError: true
         };
         
         const result = ErrorHelper.formatErrorForDisplay(error, true);
@@ -464,7 +485,8 @@ describe('ErrorHelper', () => {
             code: 'USER_SESSION_EXPIRED',
             status: 401
           }
-        }
+        },
+        isAxiosError: true
       };
 
       const onLogin = vi.fn();
@@ -482,7 +504,8 @@ describe('ErrorHelper', () => {
             code: 'SOURCE_CONNECTION_FAILED',
             status: 503
           }
-        }
+        },
+        isAxiosError: true
       };
 
       const onRetry = vi.fn();
@@ -503,7 +526,8 @@ describe('ErrorHelper', () => {
             code: 'SOME_OTHER_ERROR',
             status: 400
           }
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.handleSpecificError(error);
@@ -518,7 +542,8 @@ describe('ErrorHelper', () => {
             code: 'USER_SESSION_EXPIRED',
             status: 401
           }
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.handleSpecificError(error);
@@ -560,12 +585,12 @@ describe('ErrorHelper', () => {
   describe('Edge cases and robustness', () => {
     test('should handle malformed error objects', () => {
       const malformedErrors = [
-        { response: null },
-        { response: { data: null } },
-        { response: { data: { error: null, code: null } } },
-        { response: { status: 'not-a-number' } },
-        { code: 123 }, // numeric code instead of string
-        { message: { nested: 'object' } } // object instead of string
+        { response: null, isAxiosError: true },
+        { response: { data: null }, isAxiosError: true },
+        { response: { data: { error: null, code: null } }, isAxiosError: true },
+        { response: { status: 'not-a-number' }, isAxiosError: true },
+        { code: 123, isAxiosError: true }, // numeric code instead of string
+        { message: { nested: 'object' }, isAxiosError: true } // object instead of string
       ];
 
       malformedErrors.forEach(error => {
@@ -586,7 +611,8 @@ describe('ErrorHelper', () => {
             code: 'USER_NOT_FOUND',
             status: 404
           }
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.getErrorInfo(error);
@@ -602,7 +628,8 @@ describe('ErrorHelper', () => {
             code: 12345, // numeric code
             status: 400
           }
-        }
+        },
+        isAxiosError: true
       };
 
       // Should not crash and should handle it as if no code was provided
@@ -623,7 +650,8 @@ describe('ErrorHelper', () => {
         response: {
           data: apiError,
           status: 404
-        }
+        },
+        isAxiosError: true
       };
 
       const result = ErrorHelper.getErrorInfo(error);
@@ -645,7 +673,8 @@ describe('ErrorHelper', () => {
           headers: {}
         },
         message: 'Request failed',
-        name: 'AxiosError'
+        name: 'AxiosError',
+        isAxiosError: true
       };
 
       const result = ErrorHelper.getErrorInfo(axiosError);

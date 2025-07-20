@@ -140,6 +140,9 @@ export const ErrorHelper = {
    */
   getUserMessage: (error: unknown, fallback?: string): string => {
     const errorInfo = ErrorHelper.getErrorInfo(error)
+    if (errorInfo.message === 'An unknown error occurred' && fallback) {
+      return fallback
+    }
     return errorInfo.message || fallback || 'An error occurred'
   },
 
@@ -219,7 +222,7 @@ export const ErrorHelper = {
       if (['USER_INVALID_CREDENTIALS', 'USER_TOKEN_EXPIRED', 'USER_SESSION_EXPIRED'].includes(errorInfo.code)) {
         return 'auth'
       }
-      if (['USER_INVALID_PASSWORD', 'USER_INVALID_EMAIL', 'USER_INVALID_USERNAME'].includes(errorInfo.code)) {
+      if (['USER_INVALID_PASSWORD', 'USER_INVALID_EMAIL', 'USER_INVALID_USERNAME', 'USER_DUPLICATE_USERNAME', 'USER_DUPLICATE_EMAIL'].includes(errorInfo.code)) {
         return 'validation'
       }
     }
@@ -230,6 +233,10 @@ export const ErrorHelper = {
     
     if (errorInfo.code?.includes('INVALID') || errorInfo.code?.includes('OUT_OF_RANGE')) {
       return 'validation'
+    }
+    
+    if (errorInfo.status === 503) {
+      return 'network'
     }
     
     if (errorInfo.status && errorInfo.status >= 500) {
