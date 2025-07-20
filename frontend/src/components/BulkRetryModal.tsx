@@ -32,7 +32,7 @@ import {
   Assessment as AssessmentIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { documentService, BulkOcrRetryRequest, OcrRetryFilter, BulkOcrRetryResponse } from '../services/api';
+import { documentService, BulkOcrRetryRequest, OcrRetryFilter, BulkOcrRetryResponse, ErrorHelper, ErrorCodes } from '../services/api';
 
 interface BulkRetryModalProps {
   open: boolean;
@@ -146,7 +146,26 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({
       const response = await documentService.bulkRetryOcr(request);
       setPreviewResult(response.data);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to preview retry operation');
+      const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
+      let errorMessage = 'Failed to preview retry operation';
+      
+      // Handle specific bulk retry preview errors
+      if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || 
+          ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_PERMISSION_DENIED)) {
+        errorMessage = 'You do not have permission to preview retry operations.';
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_NOT_FOUND)) {
+        errorMessage = 'No documents found matching the specified criteria.';
+      } else if (errorInfo.category === 'server') {
+        errorMessage = 'Server error. Please try again later.';
+      } else if (errorInfo.category === 'network') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else {
+        errorMessage = errorInfo.message || 'Failed to preview retry operation';
+      }
+      
+      setError(errorMessage);
       setPreviewResult(null);
     } finally {
       setLoading(false);
@@ -162,7 +181,28 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({
       onSuccess(response.data);
       onClose();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to execute retry operation');
+      const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
+      let errorMessage = 'Failed to execute retry operation';
+      
+      // Handle specific bulk retry execution errors
+      if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || 
+          ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_PERMISSION_DENIED)) {
+        errorMessage = 'You do not have permission to execute retry operations.';
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_NOT_FOUND)) {
+        errorMessage = 'No documents found matching the specified criteria.';
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_PROCESSING_FAILED)) {
+        errorMessage = 'Some documents cannot be retried due to processing issues.';
+      } else if (errorInfo.category === 'server') {
+        errorMessage = 'Server error. Please try again later or contact support.';
+      } else if (errorInfo.category === 'network') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else {
+        errorMessage = errorInfo.message || 'Failed to execute retry operation';
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

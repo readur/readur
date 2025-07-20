@@ -14,7 +14,7 @@ import {
 import { Refresh as RefreshIcon, Language as LanguageIcon } from '@mui/icons-material';
 import OcrLanguageSelector from '../OcrLanguageSelector';
 import LanguageSelector from '../LanguageSelector';
-import { ocrService } from '../../services/api';
+import { ocrService, ErrorHelper, ErrorCodes } from '../../services/api';
 
 interface OcrRetryDialogProps {
   open: boolean;
@@ -139,9 +139,35 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
       }
     } catch (error: any) {
       console.error('Failed to retry OCR:', error);
-      onRetryError(
-        error.response?.data?.message || 'Failed to retry OCR processing'
-      );
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      let errorMessage = 'Failed to retry OCR processing';
+      
+      // Handle specific OCR retry errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_NOT_FOUND)) {
+        errorMessage = 'Document not found. It may have been deleted or processed already.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_PROCESSING_FAILED)) {
+        errorMessage = 'Document cannot be retried due to processing issues. Please check the document format.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.OCR_NOT_INSTALLED)) {
+        errorMessage = 'OCR engine is not installed or configured. Please contact your administrator.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.OCR_LANG_MISSING)) {
+        errorMessage = 'Selected OCR language is not available. Please choose a different language or contact your administrator.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.OCR_TIMEOUT)) {
+        errorMessage = 'OCR processing timed out. The document may be too large or complex.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+                 ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        errorMessage = 'You do not have permission to retry OCR processing.';
+      } else if (errorInfo.category === 'server') {
+        errorMessage = 'Server error. Please try again later or contact support.';
+      } else if (errorInfo.category === 'network') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else {
+        errorMessage = errorInfo.message || 'Failed to retry OCR processing';
+      }
+      
+      onRetryError(errorMessage);
     } finally {
       setRetrying(false);
     }

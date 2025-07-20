@@ -1,4 +1,4 @@
-use readur::test_utils::TestContext;
+use readur::test_utils::{TestContext, AssertRequest};
 use axum::http::StatusCode;
 use axum::body::Body;
 use axum::http::Request;
@@ -40,24 +40,72 @@ async fn test_get_available_languages_success() {
         .await
         .expect("Failed to make request");
 
-    assert_eq!(response.status(), 200);
+    let status = response.status();
+    if status != 200 {
+        println!("🔍 AssertRequest Debug Info for: get available languages");
+        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+        println!("📤 Request Payload: (empty - GET request)");
+        println!("📊 Response Status: {} (expected: 200)", status);
+        println!("📝 Response Body:");
+        let error_text = response.text().await.unwrap_or_else(|_| "Unable to read response body".to_string());
+        println!("{}", error_text);
+        panic!("Expected status 200, got {}. Response: {}", status, error_text);
+    }
+
     let body: serde_json::Value = response.json().await.expect("Failed to parse JSON");
     
-    assert!(body.get("available_languages").is_some());
+    if body.get("available_languages").is_none() {
+        println!("🔍 AssertRequest Debug Info for: available_languages field check");
+        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+        println!("📤 Request Payload: (empty - GET request)");
+        println!("📊 Response Status: 200");
+        println!("📝 Response Body:");
+        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
+        panic!("Response missing 'available_languages' field");
+    }
+
     let languages = body["available_languages"].as_array().unwrap();
-    assert!(languages.len() >= 1); // At least English should be available
+    if languages.len() < 1 {
+        println!("🔍 AssertRequest Debug Info for: minimum languages check");
+        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+        println!("📤 Request Payload: (empty - GET request)");
+        println!("📊 Response Status: 200");
+        println!("📝 Response Body:");
+        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
+        panic!("Expected at least 1 language, got {}", languages.len());
+    }
 
     // Check that languages have the expected structure
-    for lang in languages {
-        assert!(lang.get("code").is_some());
-        assert!(lang.get("name").is_some());
+    for (i, lang) in languages.iter().enumerate() {
+        if lang.get("code").is_none() || lang.get("name").is_none() {
+            println!("🔍 AssertRequest Debug Info for: language structure check");
+            println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+            println!("📤 Request Payload: (empty - GET request)");
+            println!("📊 Response Status: 200");
+            println!("📝 Response Body:");
+            println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
+            println!("❌ Language at index {} missing required fields 'code' or 'name': {}", i, lang);
+            panic!("Language structure validation failed");
+        }
     }
 
     // Check that English is included
     let has_english = languages.iter().any(|lang| {
         lang.get("code").unwrap().as_str().unwrap() == "eng"
     });
-    assert!(has_english);
+    if !has_english {
+        println!("🔍 AssertRequest Debug Info for: English language check");
+        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+        println!("📤 Request Payload: (empty - GET request)");
+        println!("📊 Response Status: 200");
+        println!("📝 Response Body:");
+        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
+        let available_codes: Vec<&str> = languages.iter()
+            .filter_map(|lang| lang.get("code")?.as_str())
+            .collect();
+        println!("Available language codes: {:?}", available_codes);
+        panic!("English language 'eng' not found in available languages");
+    }
 }
 
 #[tokio::test]
@@ -72,7 +120,17 @@ async fn test_get_available_languages_unauthorized() {
         .await
         .expect("Failed to make request");
 
-    assert_eq!(response.status(), 401);
+    let status = response.status();
+    if status != 401 {
+        println!("🔍 AssertRequest Debug Info for: unauthorized access check");
+        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+        println!("📤 Request Payload: (empty - GET request without auth)");
+        println!("📊 Response Status: {} (expected: 401)", status);
+        println!("📝 Response Body:");
+        let error_text = response.text().await.unwrap_or_else(|_| "Unable to read response body".to_string());
+        println!("{}", error_text);
+        panic!("Expected status 401 (unauthorized), got {}. Response: {}", status, error_text);
+    }
 }
 
 #[tokio::test]
@@ -116,12 +174,34 @@ async fn test_retry_ocr_with_language_success() {
         .unwrap();
 
     let response = ctx.app().clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = AssertRequest::assert_response(
+        response,
+        StatusCode::OK,
+        "retry OCR with language success",
+        &format!("/api/documents/{}/ocr/retry", document_id),
+        Some(&retry_request),
+    ).await.expect("Response assertion failed");
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert_eq!(body["success"].as_bool().unwrap(), true);
-    assert!(body.get("message").is_some());
+    if body["success"].as_bool() != Some(true) {
+        println!("🔍 AssertRequest Debug Info for: success field check");
+        println!("🔗 Request URL: /api/documents/{}/ocr/retry", document_id);
+        println!("📤 Request Payload:");
+        println!("{}", serde_json::to_string_pretty(&retry_request).unwrap());
+        println!("📝 Response Body:");
+        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
+        panic!("Expected success=true in response body");
+    }
+
+    if body.get("message").is_none() {
+        println!("🔍 AssertRequest Debug Info for: message field check");
+        println!("🔗 Request URL: /api/documents/{}/ocr/retry", document_id);
+        println!("📤 Request Payload:");
+        println!("{}", serde_json::to_string_pretty(&retry_request).unwrap());
+        println!("📝 Response Body:");
+        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
+        panic!("Expected 'message' field in response body");
+    }
 }
 
 #[tokio::test]
@@ -165,7 +245,14 @@ async fn test_retry_ocr_with_invalid_language() {
         .unwrap();
 
     let response = ctx.app().clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    
+    AssertRequest::assert_response(
+        response,
+        StatusCode::BAD_REQUEST,
+        "retry OCR with invalid language",
+        &format!("/api/documents/{}/ocr/retry", document_id),
+        Some(&retry_request),
+    ).await.expect("Response assertion failed");
 }
 
 #[tokio::test]
@@ -209,12 +296,34 @@ async fn test_retry_ocr_with_multiple_languages_success() {
         .unwrap();
 
     let response = ctx.app().clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = AssertRequest::assert_response(
+        response,
+        StatusCode::OK,
+        "retry OCR with multiple languages success",
+        &format!("/api/documents/{}/ocr/retry", document_id),
+        Some(&retry_request),
+    ).await.expect("Response assertion failed");
 
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert_eq!(body["success"].as_bool().unwrap(), true);
-    assert!(body.get("message").is_some());
+    if body["success"].as_bool() != Some(true) {
+        println!("🔍 AssertRequest Debug Info for: multiple languages success field check");
+        println!("🔗 Request URL: /api/documents/{}/ocr/retry", document_id);
+        println!("📤 Request Payload:");
+        println!("{}", serde_json::to_string_pretty(&retry_request).unwrap());
+        println!("📝 Response Body:");
+        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
+        panic!("Expected success=true in response body");
+    }
+
+    if body.get("message").is_none() {
+        println!("🔍 AssertRequest Debug Info for: multiple languages message field check");
+        println!("🔗 Request URL: /api/documents/{}/ocr/retry", document_id);
+        println!("📤 Request Payload:");
+        println!("{}", serde_json::to_string_pretty(&retry_request).unwrap());
+        println!("📝 Response Body:");
+        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
+        panic!("Expected 'message' field in response body");
+    }
 }
 
 #[tokio::test]
@@ -259,7 +368,14 @@ async fn test_retry_ocr_with_too_many_languages() {
         .unwrap();
 
     let response = ctx.app().clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    
+    AssertRequest::assert_response(
+        response,
+        StatusCode::BAD_REQUEST,
+        "retry OCR with too many languages",
+        &format!("/api/documents/{}/ocr/retry", document_id),
+        Some(&retry_request),
+    ).await.expect("Response assertion failed");
 }
 
 #[tokio::test]
@@ -304,5 +420,12 @@ async fn test_retry_ocr_with_invalid_language_in_array() {
         .unwrap();
 
     let response = ctx.app().clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    
+    AssertRequest::assert_response(
+        response,
+        StatusCode::BAD_REQUEST,
+        "retry OCR with invalid language in array",
+        &format!("/api/documents/{}/ocr/retry", document_id),
+        Some(&retry_request),
+    ).await.expect("Response assertion failed");
 }

@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use crate::{
     auth::AuthUser,
+    errors::settings::SettingsError,
     models::{SettingsResponse, UpdateSettings, UserRole},
     AppState,
 };
@@ -36,12 +37,12 @@ pub fn router() -> Router<Arc<AppState>> {
 async fn get_settings(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<SettingsResponse>, StatusCode> {
+) -> Result<Json<SettingsResponse>, SettingsError> {
     let settings = state
         .db
         .get_user_settings(auth_user.user.id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| SettingsError::invalid_value("database", &format!("Failed to fetch settings: {}", e), "Settings must be accessible"))?;
 
     let response = match settings {
         Some(s) => s.into(),

@@ -59,6 +59,97 @@ impl FileProcessingTestClient {
         }
     }
     
+    /// Debug assertion helper for better test debugging
+    fn debug_assert_response_status(
+        &self,
+        response_status: reqwest::StatusCode,
+        expected_status: reqwest::StatusCode,
+        context: &str,
+        url: &str,
+        payload: Option<&str>,
+        response_body: Option<&str>,
+    ) {
+        if response_status != expected_status {
+            println!("🔍 FileProcessingTestClient Debug Info for: {}", context);
+            println!("🔗 Request URL: {}", url);
+            if let Some(payload) = payload {
+                println!("📤 Request Payload:");
+                println!("{}", payload);
+            } else {
+                println!("📤 Request Payload: (empty or multipart)");
+            }
+            println!("📊 Response Status: {} (expected: {})", response_status, expected_status);
+            if let Some(body) = response_body {
+                println!("📝 Response Body:");
+                println!("{}", body);
+            }
+            panic!("❌ {} - Expected status {}, got {}. URL: {}",
+                context, expected_status, response_status, url);
+        } else {
+            println!("✅ {} - Status {} as expected", context, expected_status);
+        }
+    }
+    
+    /// Debug assertion for content validation
+    fn debug_assert_content_contains(
+        &self,
+        content: &str,
+        expected_substring: &str,
+        context: &str,
+        url: &str,
+    ) {
+        if !content.contains(expected_substring) {
+            println!("🔍 FileProcessingTestClient Debug Info for: {}", context);
+            println!("🔗 Request URL: {}", url);
+            println!("📝 Content length: {} bytes", content.len());
+            println!("🔍 Expected substring: '{}'", expected_substring);
+            println!("📝 Actual content (first 500 chars):");
+            println!("{}", &content[..content.len().min(500)]);
+            if content.len() > 500 {
+                println!("... (truncated)");
+            }
+            panic!("❌ {} - Content does not contain expected substring '{}'", context, expected_substring);
+        } else {
+            println!("✅ {} - Content contains expected substring", context);
+        }
+    }
+    
+    /// Debug assertion for field validation
+    fn debug_assert_field_equals<T: std::fmt::Debug + PartialEq>(
+        &self,
+        actual: &T,
+        expected: &T,
+        field_name: &str,
+        context: &str,
+        url: &str,
+    ) {
+        if actual != expected {
+            println!("🔍 FileProcessingTestClient Debug Info for: {}", context);
+            println!("🔗 Request URL: {}", url);
+            println!("📊 Field '{}': Expected {:?}, got {:?}", field_name, expected, actual);
+            panic!("❌ {} - Field '{}' mismatch", context, field_name);
+        } else {
+            println!("✅ {} - Field '{}' matches expected value", context, field_name);
+        }
+    }
+    
+    /// Debug assertion for non-empty validation
+    fn debug_assert_non_empty(
+        &self,
+        content: &[u8],
+        context: &str,
+        url: &str,
+    ) {
+        if content.is_empty() {
+            println!("🔍 FileProcessingTestClient Debug Info for: {}", context);
+            println!("🔗 Request URL: {}", url);
+            println!("📝 Content is empty when it should not be");
+            panic!("❌ {} - Content is empty", context);
+        } else {
+            println!("✅ {} - Content is non-empty ({} bytes)", context, content.len());
+        }
+    }
+    
     /// Setup test user
     async fn setup_user(&mut self) -> Result<String, Box<dyn std::error::Error>> {
         let timestamp = std::time::SystemTime::now()
@@ -481,25 +572,33 @@ End of test document."#;
     println!("✅ Text file uploaded: {}", document_id);
     
     // Validate initial document properties
-    assert_eq!(document.mime_type, "text/plain");
-    assert!(document.file_size > 0);
-    assert_eq!(document.filename, "test_pipeline.txt");
+    let upload_url = format!("{}/api/documents", get_base_url());
+    client.debug_assert_field_equals(&document.mime_type, &"text/plain".to_string(), "mime_type", "document upload validation", &upload_url);
+    if document.file_size <= 0 {
+        println!("🔍 FileProcessingTestClient Debug Info for: file size validation");
+        println!("🔗 Request URL: {}", upload_url);
+        println!("📊 Field 'file_size': Expected > 0, got {}", document.file_size);
+        panic!("❌ document upload validation - Field 'file_size' should be > 0");
+    }
+    client.debug_assert_field_equals(&document.filename, &"test_pipeline.txt".to_string(), "filename", "document upload validation", &upload_url);
     
     // Wait for processing to complete
     let processed_doc = client.wait_for_processing(&document_id).await
         .expect("Failed to wait for processing");
     
-    assert_eq!(processed_doc.ocr_status.as_deref(), Some("completed"));
+    let processing_url = format!("{}/api/documents/{}", get_base_url(), document_id);
+    client.debug_assert_field_equals(&processed_doc.ocr_status.as_deref(), &Some("completed"), "ocr_status", "document processing validation", &processing_url);
     println!("✅ Text file processing completed");
     
     // Test file download
     let (download_status, downloaded_content) = client.download_file(&document_id).await
         .expect("Failed to download file");
     
-    assert!(download_status.is_success());
-    assert!(!downloaded_content.is_empty());
+    let download_url = format!("{}/api/documents/{}/download", get_base_url(), document_id);
+    client.debug_assert_response_status(download_status, reqwest::StatusCode::OK, "file download", &download_url, None, None);
+    client.debug_assert_non_empty(&downloaded_content, "file download content", &download_url);
     let downloaded_text = String::from_utf8_lossy(&downloaded_content);
-    assert!(downloaded_text.contains("test document for the file processing pipeline"));
+    client.debug_assert_content_contains(&downloaded_text, "test document for the file processing pipeline", "file download content validation", &download_url);
     println!("✅ File download successful");
     
     // Test file view
@@ -668,9 +767,15 @@ async fn test_image_processing_pipeline() {
     println!("✅ PNG image uploaded: {}", document_id);
     
     // Validate image document properties
-    assert_eq!(document.mime_type, "image/png");
-    assert!(document.file_size > 0);
-    assert_eq!(document.filename, "test_image.png");
+    let image_upload_url = format!("{}/api/documents", get_base_url());
+    client.debug_assert_field_equals(&document.mime_type, &"image/png".to_string(), "mime_type", "image upload validation", &image_upload_url);
+    if document.file_size <= 0 {
+        println!("🔍 FileProcessingTestClient Debug Info for: image file size validation");
+        println!("🔗 Request URL: {}", image_upload_url);
+        println!("📊 Field 'file_size': Expected > 0, got {}", document.file_size);
+        panic!("❌ image upload validation - Field 'file_size' should be > 0");
+    }
+    client.debug_assert_field_equals(&document.filename, &"test_image.png".to_string(), "filename", "image upload validation", &image_upload_url);
     
     // Wait for processing - note that minimal images might fail OCR
     let processed_result = client.wait_for_processing(&document_id).await;

@@ -29,7 +29,7 @@ import {
 } from '@mui/icons-material';
 import { useDropzone, FileRejection, DropzoneOptions } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
+import { api, ErrorHelper, ErrorCodes } from '../../services/api';
 import { useNotifications } from '../../contexts/NotificationContext';
 import LabelSelector from '../Labels/LabelSelector';
 import { type LabelData } from '../Labels/Label';
@@ -88,6 +88,21 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       }
     } catch (error) {
       console.error('Failed to fetch labels:', error);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific label fetch errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+          ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        setError('Your session has expired. Please refresh the page and log in again.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        setError('You do not have permission to access labels.');
+      } else if (errorInfo.category === 'network') {
+        setError('Network error loading labels. Please check your connection.');
+      } else {
+        // Don't show error for label loading failures as it's not critical
+        console.warn('Label loading failed:', errorInfo.message);
+      }
     } finally {
       setLabelsLoading(false);
     }
@@ -101,7 +116,21 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       return newLabel;
     } catch (error) {
       console.error('Failed to create label:', error);
-      throw error;
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific label creation errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_DUPLICATE_NAME)) {
+        throw new Error('A label with this name already exists. Please choose a different name.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_INVALID_NAME)) {
+        throw new Error('Label name contains invalid characters. Please use only letters, numbers, and basic punctuation.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_INVALID_COLOR)) {
+        throw new Error('Invalid color format. Please use a valid hex color like #0969da.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_MAX_LABELS_REACHED)) {
+        throw new Error('Maximum number of labels reached. Please delete some labels before creating new ones.');
+      } else {
+        throw new Error(errorInfo.message || 'Failed to create label');
+      }
     }
   };
 
@@ -206,12 +235,35 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
         onUploadComplete(response.data);
       }
     } catch (error: any) {
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      let errorMessage = 'Upload failed';
+      
+      // Handle specific document upload errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_TOO_LARGE)) {
+        errorMessage = 'File is too large. Maximum size is 50MB.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_INVALID_FORMAT)) {
+        errorMessage = 'Unsupported file format. Please use PDF, images, text, or Word documents.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_PROCESSING_FAILED)) {
+        errorMessage = 'Failed to process document. Please try again or contact support.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+                 ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        errorMessage = 'Session expired. Please refresh and log in again.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        errorMessage = 'You do not have permission to upload documents.';
+      } else if (errorInfo.category === 'network') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (errorInfo.category === 'server') {
+        errorMessage = 'Server error. Please try again later.';
+      } else {
+        errorMessage = errorInfo.message || 'Upload failed';
+      }
+      
       setFiles(prev => prev.map(f => 
         f.id === fileItem.id 
           ? { 
               ...f, 
               status: 'error' as FileStatus, 
-              error: error.response?.data?.message || 'Upload failed',
+              error: errorMessage,
               progress: 0,
             }
           : f

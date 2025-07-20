@@ -9,6 +9,7 @@ use tracing::{error, info};
 
 use crate::{
     auth::AuthUser,
+    errors::source::SourceError,
     models::{CreateSource, SourceResponse, SourceWithStats, UpdateSource, SourceType},
     AppState,
 };
@@ -30,12 +31,12 @@ use crate::{
 pub async fn list_sources(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<SourceResponse>>, StatusCode> {
+) -> Result<Json<Vec<SourceResponse>>, SourceError> {
     let sources = state
         .db
         .get_sources(auth_user.user.id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| SourceError::connection_failed(format!("Failed to retrieve sources: {}", e)))?;
 
     // Get source IDs for batch counting
     let source_ids: Vec<Uuid> = sources.iter().map(|s| s.id).collect();
@@ -45,7 +46,7 @@ pub async fn list_sources(
         .db
         .count_documents_for_sources(auth_user.user.id, &source_ids)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| SourceError::connection_failed(format!("Failed to count documents: {}", e)))?;
     
     // Create a map for quick lookup
     let count_map: std::collections::HashMap<Uuid, (i64, i64)> = counts
@@ -87,12 +88,12 @@ pub async fn create_source(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Json(source_data): Json<CreateSource>,
-) -> Result<Json<SourceResponse>, StatusCode> {
+) -> Result<Json<SourceResponse>, SourceError> {
     // Validate source configuration based on type
     if let Err(validation_error) = validate_source_config(&source_data) {
         error!("Source validation failed: {}", validation_error);
         error!("Invalid source data received: {:?}", source_data);
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(SourceError::configuration_invalid(validation_error));
     }
 
     let source = state
@@ -101,7 +102,12 @@ pub async fn create_source(
         .await
         .map_err(|e| {
             error!("Failed to create source in database: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
+            let error_msg = e.to_string();
+            if error_msg.contains("name") && error_msg.contains("unique") {
+                SourceError::duplicate_name(&source_data.name)
+            } else {
+                SourceError::connection_failed(format!("Database error: {}", e))
+            }
         })?;
 
     let mut response: SourceResponse = source.into();

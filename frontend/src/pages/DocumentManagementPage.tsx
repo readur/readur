@@ -56,7 +56,7 @@ import {
   History as HistoryIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
-import { api, documentService, queueService, BulkOcrRetryResponse } from '../services/api';
+import { api, documentService, queueService, BulkOcrRetryResponse, ErrorHelper, ErrorCodes } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import FailedDocumentViewer from '../components/FailedDocumentViewer';
 import MetadataDisplay from '../components/MetadataDisplay';
@@ -257,9 +257,29 @@ const DocumentManagementPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch failed documents:', error);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      let errorMessage = 'Failed to load failed documents';
+      
+      // Handle specific document management errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+          ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        errorMessage = 'You do not have permission to view failed documents.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_NOT_FOUND)) {
+        errorMessage = 'No failed documents found or they may have been processed.';
+      } else if (errorInfo.category === 'network') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (errorInfo.category === 'server') {
+        errorMessage = 'Server error. Please try again later.';
+      } else {
+        errorMessage = errorInfo.message || 'Failed to load failed documents';
+      }
+      
       setSnackbar({
         open: true,
-        message: 'Failed to load failed documents',
+        message: errorMessage,
         severity: 'error'
       });
     } finally {
@@ -282,9 +302,27 @@ const DocumentManagementPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch duplicates:', error);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      let errorMessage = 'Failed to load duplicate documents';
+      
+      // Handle specific duplicate fetch errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+          ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        errorMessage = 'You do not have permission to view duplicate documents.';
+      } else if (errorInfo.category === 'network') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (errorInfo.category === 'server') {
+        errorMessage = 'Server error. Please try again later.';
+      } else {
+        errorMessage = errorInfo.message || 'Failed to load duplicate documents';
+      }
+      
       setSnackbar({
         open: true,
-        message: 'Failed to load duplicate documents',
+        message: errorMessage,
         severity: 'error'
       });
     } finally {
@@ -350,9 +388,31 @@ const DocumentManagementPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to retry OCR:', error);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      let errorMessage = 'Failed to retry OCR processing';
+      
+      // Handle specific OCR retry errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_NOT_FOUND)) {
+        errorMessage = 'Document not found. It may have been deleted or processed already.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_PROCESSING_FAILED)) {
+        errorMessage = 'Document cannot be retried due to processing issues. Please check the document format.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+                 ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        errorMessage = 'You do not have permission to retry OCR processing.';
+      } else if (errorInfo.category === 'server') {
+        errorMessage = 'Server error. Please try again later or contact support.';
+      } else if (errorInfo.category === 'network') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else {
+        errorMessage = errorInfo.message || 'Failed to retry OCR processing';
+      }
+      
       setSnackbar({
         open: true,
-        message: 'Failed to retry OCR processing',
+        message: errorMessage,
         severity: 'error'
       });
     } finally {
@@ -512,9 +572,27 @@ const DocumentManagementPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch ignored files:', error);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      let errorMessage = 'Failed to load ignored files';
+      
+      // Handle specific ignored files errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+          ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        errorMessage = 'You do not have permission to view ignored files.';
+      } else if (errorInfo.category === 'network') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (errorInfo.category === 'server') {
+        errorMessage = 'Server error. Please try again later.';
+      } else {
+        errorMessage = errorInfo.message || 'Failed to load ignored files';
+      }
+      
       setSnackbar({
         open: true,
-        message: 'Failed to load ignored files',
+        message: errorMessage,
         severity: 'error'
       });
     } finally {

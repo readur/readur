@@ -76,7 +76,7 @@ import {
   Error as CriticalIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import api, { queueService, sourcesService } from '../services/api';
+import api, { queueService, sourcesService, ErrorHelper, ErrorCodes } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -404,7 +404,23 @@ const SourcesPage: React.FC = () => {
       loadSources();
     } catch (error) {
       console.error('Failed to save source:', error);
-      showSnackbar('Failed to save source', 'error');
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific source errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_DUPLICATE_NAME)) {
+        showSnackbar('A source with this name already exists. Please choose a different name.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONFIG_INVALID)) {
+        showSnackbar('Source configuration is invalid. Please check your settings and try again.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_AUTH_FAILED)) {
+        showSnackbar('Authentication failed. Please verify your credentials.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONNECTION_FAILED)) {
+        showSnackbar('Cannot connect to the source. Please check your network and server settings.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_INVALID_PATH)) {
+        showSnackbar('Invalid path specified. Please check your folder paths and try again.', 'error');
+      } else {
+        showSnackbar(errorInfo.message || 'Failed to save source', 'error');
+      }
     }
   };
 
@@ -430,7 +446,19 @@ const SourcesPage: React.FC = () => {
       handleDeleteCancel();
     } catch (error) {
       console.error('Failed to delete source:', error);
-      showSnackbar('Failed to delete source', 'error');
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific delete errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_NOT_FOUND)) {
+        showSnackbar('Source not found. It may have already been deleted.', 'warning');
+        loadSources(); // Refresh the list
+        handleDeleteCancel();
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_SYNC_IN_PROGRESS)) {
+        showSnackbar('Cannot delete source while sync is in progress. Please stop the sync first.', 'error');
+      } else {
+        showSnackbar(errorInfo.message || 'Failed to delete source', 'error');
+      }
       setDeleteLoading(false);
     }
   };
@@ -482,8 +510,23 @@ const SourcesPage: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Failed to test connection:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to test connection';
-      showSnackbar(errorMessage, 'error');
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific connection test errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONNECTION_FAILED)) {
+        showSnackbar('Connection failed. Please check your server URL and network connectivity.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_AUTH_FAILED)) {
+        showSnackbar('Authentication failed. Please verify your username and password.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_INVALID_PATH)) {
+        showSnackbar('Invalid path specified. Please check your folder paths.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONFIG_INVALID)) {
+        showSnackbar('Configuration is invalid. Please review your settings.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_NETWORK_TIMEOUT)) {
+        showSnackbar('Connection timed out. Please check your network and try again.', 'error');
+      } else {
+        showSnackbar(errorInfo.message || 'Failed to test connection', 'error');
+      }
     } finally {
       setTestingConnection(false);
     }
@@ -512,10 +555,21 @@ const SourcesPage: React.FC = () => {
       setTimeout(loadSources, 1000);
     } catch (error: any) {
       console.error('Failed to trigger sync:', error);
-      if (error.response?.status === 409) {
-        showSnackbar('Source is already syncing', 'warning');
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific sync errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_SYNC_IN_PROGRESS)) {
+        showSnackbar('Source is already syncing. Please wait for the current sync to complete.', 'warning');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONNECTION_FAILED)) {
+        showSnackbar('Cannot connect to source. Please check your connection and try again.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_AUTH_FAILED)) {
+        showSnackbar('Authentication failed. Please verify your source credentials.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_NOT_FOUND)) {
+        showSnackbar('Source not found. It may have been deleted.', 'error');
+        loadSources(); // Refresh the sources list
       } else {
-        showSnackbar('Failed to start sync', 'error');
+        showSnackbar(errorInfo.message || 'Failed to start sync', 'error');
       }
     } finally {
       setSyncingSource(null);

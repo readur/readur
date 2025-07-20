@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use crate::{
     auth::AuthUser,
+    errors::search::SearchError,
     models::{SearchRequest, SearchResponse, EnhancedDocumentResponse, SearchFacetsResponse},
     AppState,
 };
@@ -41,14 +42,34 @@ async fn search_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
-) -> Result<Json<SearchResponse>, StatusCode> {
+) -> Result<Json<SearchResponse>, SearchError> {
+    // Validate query length
+    if search_request.query.len() < 2 {
+        return Err(SearchError::query_too_short(search_request.query.len(), 2));
+    }
+    if search_request.query.len() > 1000 {
+        return Err(SearchError::query_too_long(search_request.query.len(), 1000));
+    }
+    
+    // Validate pagination
+    let limit = search_request.limit.unwrap_or(25);
+    let offset = search_request.offset.unwrap_or(0);
+    if limit > 1000 || offset < 0 || limit <= 0 {
+        return Err(SearchError::invalid_pagination(offset, limit));
+    }
+    
     let documents = state
         .db
         .search_documents(auth_user.user.id, &search_request)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
     
     let total = documents.len() as i64;
+    
+    // Check if too many results
+    if total > 10000 {
+        return Err(SearchError::too_many_results(total, 10000));
+    }
 
     let response = SearchResponse {
         documents: documents.into_iter().map(|doc| EnhancedDocumentResponse {

@@ -32,6 +32,7 @@ import { useNavigate } from 'react-router-dom';
 import Label, { type LabelData } from '../components/Labels/Label';
 import LabelCreateDialog from '../components/Labels/LabelCreateDialog';
 import { useApi } from '../hooks/useApi';
+import { ErrorHelper, ErrorCodes } from '../services/api';
 
 const LabelsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -69,15 +70,21 @@ const LabelsPage: React.FC = () => {
     } catch (error: any) {
       console.error('Failed to fetch labels:', error);
       
-      // Handle different types of errors more specifically
-      if (error?.response?.status === 401) {
-        setError('Authentication required. Please log in again.');
-      } else if (error?.response?.status === 403) {
-        setError('Access denied. You do not have permission to view labels.');
-      } else if (error?.response?.status >= 500) {
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific label errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+          ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        setError('Your session has expired. Please log in again.');
+        // Could trigger a redirect to login here
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        setError('You do not have permission to view labels.');
+      } else if (errorInfo.category === 'server') {
         setError('Server error. Please try again later.');
+      } else if (errorInfo.category === 'network') {
+        setError('Network error. Please check your connection and try again.');
       } else {
-        setError('Failed to load labels. Please check your connection.');
+        setError(errorInfo.message || 'Failed to load labels. Please check your connection.');
       }
       
       setLabels([]); // Reset to empty array to prevent filter errors
@@ -108,7 +115,21 @@ const LabelsPage: React.FC = () => {
       await fetchLabels(); // Refresh the list
     } catch (error) {
       console.error('Failed to create label:', error);
-      throw error;
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific label creation errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_DUPLICATE_NAME)) {
+        throw new Error('A label with this name already exists. Please choose a different name.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_INVALID_NAME)) {
+        throw new Error('Label name contains invalid characters. Please use only letters, numbers, and basic punctuation.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_INVALID_COLOR)) {
+        throw new Error('Invalid color format. Please use a valid hex color like #0969da.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_MAX_LABELS_REACHED)) {
+        throw new Error('Maximum number of labels reached. Please delete some labels before creating new ones.');
+      } else {
+        throw new Error(errorInfo.message || 'Failed to create label');
+      }
     }
   };
 
@@ -121,7 +142,23 @@ const LabelsPage: React.FC = () => {
       setEditingLabel(null);
     } catch (error) {
       console.error('Failed to update label:', error);
-      throw error;
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific label update errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_NOT_FOUND)) {
+        throw new Error('Label not found. It may have been deleted by another user.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_DUPLICATE_NAME)) {
+        throw new Error('A label with this name already exists. Please choose a different name.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_SYSTEM_MODIFICATION)) {
+        throw new Error('System labels cannot be modified. Only user-created labels can be edited.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_INVALID_NAME)) {
+        throw new Error('Label name contains invalid characters. Please use only letters, numbers, and basic punctuation.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_INVALID_COLOR)) {
+        throw new Error('Invalid color format. Please use a valid hex color like #0969da.');
+      } else {
+        throw new Error(errorInfo.message || 'Failed to update label');
+      }
     }
   };
 
@@ -133,7 +170,22 @@ const LabelsPage: React.FC = () => {
       setLabelToDelete(null);
     } catch (error) {
       console.error('Failed to delete label:', error);
-      setError('Failed to delete label');
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific label deletion errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_NOT_FOUND)) {
+        setError('Label not found. It may have already been deleted.');
+        await fetchLabels(); // Refresh the list to sync state
+        setDeleteDialogOpen(false);
+        setLabelToDelete(null);
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_IN_USE)) {
+        setError('Cannot delete label because it is currently assigned to documents. Please remove the label from all documents first.');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_SYSTEM_MODIFICATION)) {
+        setError('System labels cannot be deleted. Only user-created labels can be removed.');
+      } else {
+        setError(errorInfo.message || 'Failed to delete label');
+      }
     }
   };
 

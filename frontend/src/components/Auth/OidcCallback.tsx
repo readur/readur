@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Box, CircularProgress, Typography, Alert, Container } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
-import { api } from '../../services/api';
+import { api, ErrorHelper, ErrorCodes } from '../../services/api';
 
 const OidcCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -46,11 +46,29 @@ const OidcCallback: React.FC = () => {
         }
       } catch (err: any) {
         console.error('OIDC callback error:', err);
-        setError(
-          err.response?.data?.error || 
-          err.message || 
-          'Failed to complete authentication'
-        );
+        
+        const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
+        
+        // Handle specific OIDC callback errors
+        if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_OIDC_AUTH_FAILED)) {
+          setError('OIDC authentication failed. Please try logging in again or contact your administrator.');
+        } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_AUTH_PROVIDER_NOT_CONFIGURED)) {
+          setError('OIDC is not configured on this server. Please use username/password login.');
+        } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_INVALID_CREDENTIALS)) {
+          setError('Authentication failed. Your OIDC credentials may be invalid or expired.');
+        } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
+          setError('Your account has been disabled. Please contact an administrator for assistance.');
+        } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || 
+                   ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
+          setError('Authentication session expired. Please try logging in again.');
+        } else if (errorInfo.category === 'network') {
+          setError('Network error during authentication. Please check your connection and try again.');
+        } else if (errorInfo.category === 'server') {
+          setError('Server error during authentication. Please try again later or contact support.');
+        } else {
+          setError(errorInfo.message || 'Failed to complete authentication. Please try again.');
+        }
+        
         setProcessing(false);
       }
     };

@@ -10,6 +10,10 @@ const api = axios.create({
 export { api }
 export default api
 
+// Re-export error handling utilities for convenience
+export { ErrorHelper, ErrorCodes } from './errors'
+export type { ApiErrorResponse, AxiosErrorWithCode, ErrorCode } from './errors'
+
 export interface Document {
   id: string
   filename: string

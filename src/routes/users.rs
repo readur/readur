@@ -10,13 +10,14 @@ use uuid::Uuid;
 
 use crate::{
     auth::AuthUser,
+    errors::user::UserError,
     models::{CreateUser, UpdateUser, UserResponse, UserRole},
     AppState,
 };
 
-fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
+fn require_admin(auth_user: &AuthUser) -> Result<(), UserError> {
     if auth_user.user.role != UserRole::Admin {
-        Err(StatusCode::FORBIDDEN)
+        Err(UserError::permission_denied("Admin access required"))
     } else {
         Ok(())
     }
@@ -45,13 +46,13 @@ pub fn router() -> Router<Arc<AppState>> {
 async fn list_users(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<UserResponse>>, StatusCode> {
+) -> Result<Json<Vec<UserResponse>>, UserError> {
     require_admin(&auth_user)?;
     let users = state
         .db
         .get_all_users()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| UserError::internal_server_error(format!("Failed to fetch users: {}", e)))?;
 
     let user_responses: Vec<UserResponse> = users.into_iter().map(|u| u.into()).collect();
     Ok(Json(user_responses))
@@ -79,14 +80,14 @@ async fn get_user(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<Json<UserResponse>, StatusCode> {
+) -> Result<Json<UserResponse>, UserError> {
     require_admin(&auth_user)?;
     let user = state
         .db
         .get_user_by_id(id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .map_err(|e| UserError::internal_server_error(format!("Failed to fetch user: {}", e)))?
+        .ok_or_else(|| UserError::not_found_by_id(id))?;
 
     Ok(Json(user.into()))
 }
@@ -111,13 +112,23 @@ async fn create_user(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Json(user_data): Json<CreateUser>,
-) -> Result<Json<UserResponse>, StatusCode> {
+) -> Result<Json<UserResponse>, UserError> {
     require_admin(&auth_user)?;
+    
     let user = state
         .db
         .create_user(user_data)
         .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|e| {
+            let error_msg = e.to_string();
+            if error_msg.contains("username") && error_msg.contains("unique") {
+                UserError::duplicate_username(&error_msg)
+            } else if error_msg.contains("email") && error_msg.contains("unique") {
+                UserError::duplicate_email(&error_msg)
+            } else {
+                UserError::internal_server_error(format!("Failed to create user: {}", e))
+            }
+        })?;
 
     Ok(Json(user.into()))
 }
@@ -146,13 +157,25 @@ async fn update_user(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(update_data): Json<UpdateUser>,
-) -> Result<Json<UserResponse>, StatusCode> {
+) -> Result<Json<UserResponse>, UserError> {
     require_admin(&auth_user)?;
+    
     let user = state
         .db
         .update_user(id, update_data.username, update_data.email, update_data.password)
         .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|e| {
+            let error_msg = e.to_string();
+            if error_msg.contains("username") && error_msg.contains("unique") {
+                UserError::duplicate_username(&error_msg)
+            } else if error_msg.contains("email") && error_msg.contains("unique") {
+                UserError::duplicate_email(&error_msg)
+            } else if error_msg.contains("not found") {
+                UserError::not_found_by_id(id)
+            } else {
+                UserError::internal_server_error(format!("Failed to update user: {}", e))
+            }
+        })?;
 
     Ok(Json(user.into()))
 }
@@ -179,19 +202,26 @@ async fn delete_user(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<StatusCode, UserError> {
     require_admin(&auth_user)?;
     
     // Prevent users from deleting themselves
     if auth_user.user.id == id {
-        return Err(StatusCode::FORBIDDEN);
+        return Err(UserError::delete_restricted(id, "Cannot delete your own account"));
     }
 
     state
         .db
         .delete_user(id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            let error_msg = e.to_string();
+            if error_msg.contains("not found") {
+                UserError::not_found_by_id(id)
+            } else {
+                UserError::internal_server_error(format!("Failed to delete user: {}", e))
+            }
+        })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

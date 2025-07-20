@@ -922,3 +922,147 @@ pub mod document_helpers {
         assert_response_status_with_debug(response, expected_status, context).await
     }
 }
+
+/// Enhanced request assertion helper that provides comprehensive debugging information
+#[cfg(any(test, feature = "test-utils"))]
+pub struct AssertRequest;
+
+#[cfg(any(test, feature = "test-utils"))]
+impl AssertRequest {
+    /// Assert response status with comprehensive debugging output including URL, payload, and response
+    pub async fn assert_response(
+        response: axum::response::Response,
+        expected_status: axum::http::StatusCode,
+        context: &str,
+        original_url: &str,
+        payload: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let actual_status = response.status();
+        let headers = response.headers().clone();
+        
+        // Extract response body
+        let response_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await?;
+        let response_text = String::from_utf8_lossy(&response_bytes);
+        
+        println!("🔍 AssertRequest Debug Info for: {}", context);
+        println!("🔗 Request URL: {}", original_url);
+        
+        if let Some(payload) = payload {
+            println!("📤 Request Payload:");
+            println!("{}", serde_json::to_string_pretty(payload).unwrap_or_else(|_| "Invalid JSON payload".to_string()));
+        } else {
+            println!("📤 Request Payload: (empty)");
+        }
+        
+        println!("📊 Response Status: {} (expected: {})", actual_status, expected_status);
+        println!("📋 Response Headers:");
+        for (name, value) in headers.iter() {
+            println!("  {}: {}", name, value.to_str().unwrap_or("<invalid header>"));
+        }
+        
+        println!("📝 Response Body ({} bytes):", response_bytes.len());
+        if response_text.is_empty() {
+            println!("  (empty response)");
+        } else {
+            // Try to format as JSON for better readability
+            if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
+                println!("{}", serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| response_text.to_string()));
+            } else {
+                println!("{}", response_text);
+            }
+        }
+        
+        if actual_status == expected_status {
+            println!("✅ {} - Status {} as expected", context, expected_status);
+            
+            if response_text.is_empty() {
+                Ok(serde_json::Value::Null)
+            } else {
+                match serde_json::from_str::<serde_json::Value>(&response_text) {
+                    Ok(json_value) => Ok(json_value),
+                    Err(e) => {
+                        println!("⚠️  JSON parse error: {}", e);
+                        Err(format!("JSON parse error: {}", e).into())
+                    }
+                }
+            }
+        } else {
+            println!("❌ {} - Expected status {}, got {}", context, expected_status, actual_status);
+            Err(format!(
+                "{} - Expected status {}, got {}. URL: {}. Response: {}", 
+                context, expected_status, actual_status, original_url, response_text
+            ).into())
+        }
+    }
+    
+    /// Assert successful response (2xx status codes) with comprehensive debugging
+    pub async fn assert_success(
+        response: axum::response::Response,
+        context: &str,
+        original_url: &str,
+        payload: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let status = response.status();
+        
+        if status.is_success() {
+            Self::assert_response(response, status, context, original_url, payload).await
+        } else {
+            Self::assert_response(response, axum::http::StatusCode::OK, context, original_url, payload).await
+        }
+    }
+    
+    /// Assert client error (4xx) with comprehensive debugging
+    pub async fn assert_client_error(
+        response: axum::response::Response,
+        expected_status: axum::http::StatusCode,
+        context: &str,
+        original_url: &str,
+        payload: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        Self::assert_response(response, expected_status, context, original_url, payload).await
+    }
+    
+    /// Assert server error (5xx) with comprehensive debugging
+    pub async fn assert_server_error(
+        response: axum::response::Response,
+        expected_status: axum::http::StatusCode,
+        context: &str,
+        original_url: &str,
+        payload: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        Self::assert_response(response, expected_status, context, original_url, payload).await
+    }
+    
+    /// Make a request and assert the response in one call
+    pub async fn make_and_assert(
+        app: &axum::Router,
+        method: &str,
+        uri: &str,
+        payload: Option<serde_json::Value>,
+        expected_status: axum::http::StatusCode,
+        context: &str,
+        token: Option<&str>,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let mut builder = axum::http::Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("Content-Type", "application/json");
+        
+        if let Some(token) = token {
+            builder = builder.header("Authorization", format!("Bearer {}", token));
+        }
+        
+        let request_body = if let Some(ref body) = payload {
+            axum::body::Body::from(serde_json::to_vec(body)?)
+        } else {
+            axum::body::Body::empty()
+        };
+        
+        let response = app
+            .clone()
+            .oneshot(builder.body(request_body)?)
+            .await?;
+        
+        Self::assert_response(response, expected_status, context, uri, payload.as_ref()).await
+    }
+}

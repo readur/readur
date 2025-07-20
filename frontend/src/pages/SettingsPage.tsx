@@ -41,7 +41,7 @@ import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon,
          Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon,
          Pause as PauseIcon, Stop as StopIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import api, { queueService } from '../services/api';
+import api, { queueService, ErrorHelper, ErrorCodes } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
 import LanguageSelector from '../components/LanguageSelector';
 
@@ -359,7 +359,19 @@ const SettingsPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Error updating settings:', error);
-      showSnackbar('Failed to update settings', 'error');
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific settings errors
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.SETTINGS_INVALID_LANGUAGE)) {
+        showSnackbar('Invalid language selected. Please choose from available languages.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SETTINGS_VALUE_OUT_OF_RANGE)) {
+        showSnackbar(`${errorInfo.message}. ${errorInfo.suggestedAction || ''}`, 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SETTINGS_CONFLICTING_SETTINGS)) {
+        showSnackbar('Conflicting settings detected. Please review your configuration.', 'warning');
+      } else {
+        showSnackbar(errorInfo.message || 'Failed to update settings', 'error');
+      }
     }
   };
 
@@ -382,7 +394,25 @@ const SettingsPage: React.FC = () => {
       handleCloseUserDialog();
     } catch (error: any) {
       console.error('Error saving user:', error);
-      showSnackbar(error.response?.data?.message || 'Failed to save user', 'error');
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      
+      // Handle specific user errors with better messages
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_DUPLICATE_USERNAME)) {
+        showSnackbar('This username is already taken. Please choose a different username.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_DUPLICATE_EMAIL)) {
+        showSnackbar('This email address is already in use. Please use a different email.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_INVALID_PASSWORD)) {
+        showSnackbar('Password must be at least 8 characters with uppercase, lowercase, and numbers.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_INVALID_EMAIL)) {
+        showSnackbar('Please enter a valid email address.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_INVALID_USERNAME)) {
+        showSnackbar('Username contains invalid characters. Please use only letters, numbers, and underscores.', 'error');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+        showSnackbar('You do not have permission to perform this action.', 'error');
+      } else {
+        showSnackbar(errorInfo.message || 'Failed to save user', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -402,7 +432,20 @@ const SettingsPage: React.FC = () => {
         fetchUsers();
       } catch (error) {
         console.error('Error deleting user:', error);
-        showSnackbar('Failed to delete user', 'error');
+        
+        const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+        
+        // Handle specific delete errors
+        if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_DELETE_RESTRICTED)) {
+          showSnackbar('Cannot delete this user: They may have associated data or be the last admin.', 'error');
+        } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_NOT_FOUND)) {
+          showSnackbar('User not found. They may have already been deleted.', 'warning');
+          fetchUsers(); // Refresh the list
+        } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+          showSnackbar('You do not have permission to delete users.', 'error');
+        } else {
+          showSnackbar(errorInfo.message || 'Failed to delete user', 'error');
+        }
       } finally {
         setLoading(false);
       }

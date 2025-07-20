@@ -26,7 +26,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
-import { api } from '../../services/api';
+import { api, ErrorHelper, ErrorCodes } from '../../services/api';
 
 interface LoginFormData {
   username: string;
@@ -56,7 +56,27 @@ const Login: React.FC = () => {
       await login(data.username, data.password);
       navigate('/dashboard');
     } catch (err) {
-      setError('Failed to log in. Please check your credentials.');
+      console.error('Login failed:', err);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
+      
+      // Handle specific login errors
+      if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_INVALID_CREDENTIALS)) {
+        setError('Invalid username or password. Please check your credentials and try again.');
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
+        setError('Your account has been disabled. Please contact an administrator for assistance.');
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_NOT_FOUND)) {
+        setError('No account found with this username. Please check your username or contact support.');
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || 
+                 ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        setError('Your session has expired. Please try logging in again.');
+      } else if (errorInfo.category === 'network') {
+        setError('Network error. Please check your connection and try again.');
+      } else if (errorInfo.category === 'server') {
+        setError('Server error. Please try again later or contact support if the problem persists.');
+      } else {
+        setError(errorInfo.message || 'Failed to log in. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -73,7 +93,20 @@ const Login: React.FC = () => {
       // Redirect to OIDC login endpoint
       window.location.href = '/api/auth/oidc/login';
     } catch (err) {
-      setError('Failed to initiate OIDC login. Please try again.');
+      console.error('OIDC login failed:', err);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
+      
+      // Handle specific OIDC errors
+      if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_OIDC_AUTH_FAILED)) {
+        setError('OIDC authentication failed. Please check with your administrator.');
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_AUTH_PROVIDER_NOT_CONFIGURED)) {
+        setError('OIDC is not configured on this server. Please use username/password login.');
+      } else if (errorInfo.category === 'network') {
+        setError('Network error. Please check your connection and try again.');
+      } else {
+        setError(errorInfo.message || 'Failed to initiate OIDC login. Please try again.');
+      }
       setOidcLoading(false);
     }
   };
