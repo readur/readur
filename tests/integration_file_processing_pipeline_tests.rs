@@ -1415,6 +1415,8 @@ async fn test_real_test_images_processing() {
 async fn test_multi_language_document_upload() {
     println!("🌐 Testing multi-language document upload...");
     
+    // No tessdata setup needed - using system tesseract installation
+    
     let mut client = FileProcessingTestClient::new();
     client.setup_user().await.expect("Authentication failed");
 

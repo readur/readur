@@ -9,11 +9,6 @@ pub enum OcrError {
     #[error("Tesseract language data not found for '{lang}'. Please install tesseract-ocr-{lang}")]
     LanguageDataNotFound { lang: String },
     
-    #[error("TESSDATA_PREFIX environment variable not set or invalid: {path}")]
-    TessdataPathInvalid { path: String },
-    
-    #[error("Tessdata path not found: {path}")]
-    TessdataPathNotFound { path: String },
     
     #[error("Insufficient memory for OCR operation. Required: {required}MB, Available: {available}MB")]
     InsufficientMemory { required: u64, available: u64 },
@@ -69,8 +64,6 @@ impl OcrError {
             self,
             OcrError::TesseractNotInstalled
                 | OcrError::LanguageDataNotFound { .. }
-                | OcrError::TessdataPathInvalid { .. }
-                | OcrError::TessdataPathNotFound { .. }
                 | OcrError::MissingCpuInstruction { .. }
         )
     }
@@ -79,8 +72,6 @@ impl OcrError {
         match self {
             OcrError::TesseractNotInstalled => "OCR_NOT_INSTALLED",
             OcrError::LanguageDataNotFound { .. } => "OCR_LANG_MISSING",
-            OcrError::TessdataPathInvalid { .. } => "OCR_DATA_PATH_INVALID",
-            OcrError::TessdataPathNotFound { .. } => "OCR_DATA_PATH_NOT_FOUND",
             OcrError::InsufficientMemory { .. } => "OCR_OUT_OF_MEMORY",
             OcrError::MissingCpuInstruction { .. } => "OCR_CPU_UNSUPPORTED",
             OcrError::ImageTooLarge { .. } => "OCR_IMAGE_TOO_LARGE",

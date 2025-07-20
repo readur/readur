@@ -1,24 +1,13 @@
 use crate::ocr::error::{CpuFeatures, OcrDiagnostics, OcrError};
 use std::process::Command;
 use std::env;
-use std::path::Path;
 use sysinfo::System;
 
-pub struct OcrHealthChecker {
-    custom_tessdata_path: Option<String>,
-}
+pub struct OcrHealthChecker;
 
 impl OcrHealthChecker {
     pub fn new() -> Self {
-        Self {
-            custom_tessdata_path: None,
-        }
-    }
-    
-    pub fn new_with_path<P: AsRef<Path>>(custom_tessdata_path: P) -> Self {
-        Self {
-            custom_tessdata_path: Some(custom_tessdata_path.as_ref().to_string_lossy().to_string()),
-        }
+        Self
     }
     
     pub fn check_tesseract_installation(&self) -> Result<String, OcrError> {
@@ -42,11 +31,20 @@ impl OcrHealthChecker {
     }
     
     pub fn check_language_data(&self, lang: &str) -> Result<(), OcrError> {
-        let tessdata_path = self.get_tessdata_path()?;
-        let lang_file = format!("{}.traineddata", lang);
-        let lang_path = Path::new(&tessdata_path).join(&lang_file);
+        // Use Tesseract's built-in language validation by attempting to list languages
+        let output = Command::new("tesseract")
+            .arg("--list-langs")
+            .output()
+            .map_err(|_| OcrError::TesseractNotInstalled)?;
         
-        if !lang_path.exists() {
+        if !output.status.success() {
+            return Err(OcrError::TesseractNotInstalled);
+        }
+        
+        let langs_output = String::from_utf8_lossy(&output.stdout);
+        let available_langs: Vec<&str> = langs_output.lines().skip(1).collect(); // Skip first line "List of available languages:"
+        
+        if !available_langs.contains(&lang) {
             return Err(OcrError::LanguageDataNotFound {
                 lang: lang.to_string(),
             });
@@ -55,60 +53,25 @@ impl OcrHealthChecker {
         Ok(())
     }
     
-    pub fn get_tessdata_path(&self) -> Result<String, OcrError> {
-        // Use custom tessdata path if provided
-        if let Some(ref custom_path) = self.custom_tessdata_path {
-            if Path::new(custom_path).exists() {
-                return Ok(custom_path.clone());
-            } else {
-                return Err(OcrError::TessdataPathNotFound { 
-                    path: custom_path.clone() 
-                });
-            }
-        }
-        
-        if let Ok(path) = env::var("TESSDATA_PREFIX") {
-            if Path::new(&path).exists() {
-                return Ok(path);
-            } else {
-                return Err(OcrError::TessdataPathInvalid { path });
-            }
-        }
-        
-        let common_paths = vec![
-            "/usr/share/tesseract-ocr/4.00/tessdata",
-            "/usr/share/tesseract-ocr/5.00/tessdata",
-            "/usr/local/share/tessdata",
-            "/opt/homebrew/share/tessdata",
-            "/home/linuxbrew/.linuxbrew/share/tessdata",
-            "C:\\Program Files\\Tesseract-OCR\\tessdata",
-        ];
-        
-        for path in common_paths {
-            if Path::new(path).exists() {
-                return Ok(path.to_string());
-            }
-        }
-        
-        Err(OcrError::TessdataPathInvalid {
-            path: "No tessdata directory found".to_string(),
-        })
-    }
     
     pub fn get_available_languages(&self) -> Result<Vec<String>, OcrError> {
-        let tessdata_path = self.get_tessdata_path()?;
+        // Use Tesseract's built-in language listing
+        let output = Command::new("tesseract")
+            .arg("--list-langs")
+            .output()
+            .map_err(|_| OcrError::TesseractNotInstalled)?;
         
-        let mut languages = vec![];
-        if let Ok(entries) = std::fs::read_dir(&tessdata_path) {
-            for entry in entries.flatten() {
-                if let Some(name) = entry.file_name().to_str() {
-                    if name.ends_with(".traineddata") {
-                        let lang = name.trim_end_matches(".traineddata");
-                        languages.push(lang.to_string());
-                    }
-                }
-            }
+        if !output.status.success() {
+            return Err(OcrError::TesseractNotInstalled);
         }
+        
+        let langs_output = String::from_utf8_lossy(&output.stdout);
+        let mut languages: Vec<String> = langs_output
+            .lines()
+            .skip(1) // Skip first line "List of available languages:"
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
         
         languages.sort();
         Ok(languages)
@@ -350,7 +313,7 @@ impl OcrHealthChecker {
         OcrDiagnostics {
             tesseract_version: self.check_tesseract_installation().ok(),
             available_languages: self.get_available_languages().unwrap_or_else(|_| vec![]),
-            tessdata_path: self.get_tessdata_path().ok(),
+            tessdata_path: None, // No longer managing tessdata paths
             cpu_features: self.check_cpu_features(),
             memory_available_mb: self.check_memory_available(),
             temp_space_available_mb: self.check_temp_space(),
@@ -370,10 +333,7 @@ impl OcrHealthChecker {
             errors.push(e);
         }
         
-        // Check tessdata path
-        if let Err(e) = self.get_tessdata_path() {
-            errors.push(e);
-        }
+        // Tessdata path no longer managed - Tesseract handles it automatically
         
         // Check for at least English language data
         if let Err(e) = self.check_language_data("eng") {

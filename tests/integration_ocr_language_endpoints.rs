@@ -4,38 +4,16 @@ use axum::body::Body;
 use axum::http::Request;
 use tower::ServiceExt;
 use serde_json::json;
-use tempfile::TempDir;
-use std::fs;
 use uuid::Uuid;
+
+// Helper function for tests - no longer needs tessdata setup since we use system tesseract
+async fn setup_simple_test_context() -> TestContext {
+    TestContext::new().await
+}
 
 #[tokio::test]
 async fn test_get_available_languages_success() {
-    // Create temporary directory for tessdata
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path();
-    
-    // Create mock language files
-    let language_files = vec![
-        "eng.traineddata",
-        "spa.traineddata", 
-        "fra.traineddata",
-        "deu.traineddata",
-        "ita.traineddata",
-        "por.traineddata",
-    ];
-    
-    for file in language_files {
-        fs::write(tessdata_path.join(file), "mock language data")
-            .expect("Failed to create mock language file");
-    }
-    
-    // Set environment variable for tessdata path and verify it's properly set
-    let tessdata_str = tessdata_path.to_string_lossy().to_string();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
-    
-    // Verify the files exist in the temp directory
-    assert!(tessdata_path.join("spa.traineddata").exists());
-    assert_eq!(std::env::var("TESSDATA_PREFIX").unwrap(), tessdata_str);
+    // No tessdata setup needed - using system tesseract installation
     
     // Use the existing admin credentials to test against the running server
     let client = reqwest::Client::new();
@@ -84,16 +62,7 @@ async fn test_get_available_languages_success() {
 
 #[tokio::test]
 async fn test_get_available_languages_unauthorized() {
-    // Create temporary directory for tessdata
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path();
-    
-    // Create mock language files
-    fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    let tessdata_str = tessdata_path.to_string_lossy().to_string();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
-    
-    let ctx = TestContext::new().await;
+    let ctx = setup_simple_test_context().await;
 
     // Test against the running server since the test environment has issues
     let client = reqwest::Client::new();
@@ -108,17 +77,7 @@ async fn test_get_available_languages_unauthorized() {
 
 #[tokio::test]
 async fn test_retry_ocr_with_language_success() {
-    // Create temporary directory for tessdata
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path();
-    
-    // Create mock language files
-    fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    let tessdata_str = tessdata_path.to_string_lossy().to_string();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
-    
-    let ctx = TestContext::new().await;
+    let ctx = setup_simple_test_context().await;
     
     // Create test user and get token
     let auth_helper = readur::test_utils::TestAuthHelper::new(ctx.app().clone());
@@ -167,16 +126,7 @@ async fn test_retry_ocr_with_language_success() {
 
 #[tokio::test]
 async fn test_retry_ocr_with_invalid_language() {
-    // Create temporary directory for tessdata
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path();
-    
-    // Create mock language files
-    fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    let tessdata_str = tessdata_path.to_string_lossy().to_string();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
-    
-    let ctx = TestContext::new().await;
+    let ctx = setup_simple_test_context().await;
     
     // Create test user and get token
     let auth_helper = readur::test_utils::TestAuthHelper::new(ctx.app().clone());
@@ -220,18 +170,7 @@ async fn test_retry_ocr_with_invalid_language() {
 
 #[tokio::test]
 async fn test_retry_ocr_with_multiple_languages_success() {
-    // Create temporary directory for tessdata
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path();
-    
-    // Create mock language files
-    fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("fra.traineddata"), "mock").unwrap();
-    let tessdata_str = tessdata_path.to_string_lossy().to_string();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
-    
-    let ctx = TestContext::new().await;
+    let ctx = setup_simple_test_context().await;
     
     // Create test user and get token
     let auth_helper = readur::test_utils::TestAuthHelper::new(ctx.app().clone());
@@ -280,20 +219,7 @@ async fn test_retry_ocr_with_multiple_languages_success() {
 
 #[tokio::test]
 async fn test_retry_ocr_with_too_many_languages() {
-    // Create temporary directory for tessdata
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path();
-    
-    // Create mock language files
-    fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("fra.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("deu.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("ita.traineddata"), "mock").unwrap();
-    let tessdata_str = tessdata_path.to_string_lossy().to_string();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
-    
-    let ctx = TestContext::new().await;
+    let ctx = setup_simple_test_context().await;
     
     // Create test user and get token
     let auth_helper = readur::test_utils::TestAuthHelper::new(ctx.app().clone());
@@ -338,17 +264,7 @@ async fn test_retry_ocr_with_too_many_languages() {
 
 #[tokio::test]
 async fn test_retry_ocr_with_invalid_language_in_array() {
-    // Create temporary directory for tessdata
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let tessdata_path = temp_dir.path();
-    
-    // Create mock language files
-    fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    let tessdata_str = tessdata_path.to_string_lossy().to_string();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
-    
-    let ctx = TestContext::new().await;
+    let ctx = setup_simple_test_context().await;
     
     // Create test user and get token
     let auth_helper = readur::test_utils::TestAuthHelper::new(ctx.app().clone());
