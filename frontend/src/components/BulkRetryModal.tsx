@@ -192,7 +192,7 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({
         errorMessage = 'You do not have permission to execute retry operations.';
       } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_NOT_FOUND)) {
         errorMessage = 'No documents found matching the specified criteria.';
-      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_PROCESSING_FAILED)) {
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_OCR_FAILED)) {
         errorMessage = 'Some documents cannot be retried due to processing issues.';
       } else if (errorInfo.category === 'server') {
         errorMessage = 'Server error. Please try again later or contact support.';

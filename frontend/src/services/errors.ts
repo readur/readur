@@ -8,11 +8,8 @@ export interface ApiErrorResponse {
 }
 
 export interface AxiosErrorWithCode extends AxiosError {
-  response?: {
+  response?: AxiosError['response'] & {
     data: ApiErrorResponse
-    status: number
-    statusText: string
-    headers: any
   }
 }
 
@@ -82,6 +79,21 @@ export const ErrorCodes = {
   DOCUMENT_INVALID_FORMAT: 'DOCUMENT_INVALID_FORMAT',
   DOCUMENT_TOO_LARGE: 'DOCUMENT_TOO_LARGE',
   DOCUMENT_OCR_FAILED: 'DOCUMENT_OCR_FAILED',
+
+  // OCR Errors
+  OCR_NOT_INSTALLED: 'OCR_NOT_INSTALLED',
+  OCR_LANG_MISSING: 'OCR_LANG_MISSING',
+  OCR_OUT_OF_MEMORY: 'OCR_OUT_OF_MEMORY',
+  OCR_CPU_UNSUPPORTED: 'OCR_CPU_UNSUPPORTED',
+  OCR_IMAGE_TOO_LARGE: 'OCR_IMAGE_TOO_LARGE',
+  OCR_INVALID_FORMAT: 'OCR_INVALID_FORMAT',
+  OCR_TIMEOUT: 'OCR_TIMEOUT',
+  OCR_PERMISSION_DENIED: 'OCR_PERMISSION_DENIED',
+  OCR_INIT_FAILED: 'OCR_INIT_FAILED',
+  OCR_LOW_CONFIDENCE: 'OCR_LOW_CONFIDENCE',
+  OCR_NO_HW_ACCEL: 'OCR_NO_HW_ACCEL',
+  OCR_IO_ERROR: 'OCR_IO_ERROR',
+  OCR_UNKNOWN_ERROR: 'OCR_UNKNOWN_ERROR',
 } as const
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes]
@@ -105,9 +117,9 @@ export const ErrorHelper = {
       }
       
       // Fallback to legacy error handling
-      if (axiosError.response?.data?.message) {
+      if (axiosError.response?.data && 'message' in axiosError.response.data) {
         return {
-          message: axiosError.response.data.message,
+          message: (axiosError.response.data as any).message,
           status: axiosError.response.status,
         }
       }
@@ -188,6 +200,18 @@ export const ErrorHelper = {
         return 'Please check your OCR configuration settings'
       case ErrorCodes.SETTINGS_CONFLICTING_SETTINGS:
         return 'Please resolve conflicting settings before saving'
+      case ErrorCodes.OCR_NOT_INSTALLED:
+        return 'Please install Tesseract OCR on the server'
+      case ErrorCodes.OCR_LANG_MISSING:
+        return 'Install the required language pack for OCR'
+      case ErrorCodes.OCR_TIMEOUT:
+        return 'Try reducing image size or quality'
+      case ErrorCodes.OCR_IMAGE_TOO_LARGE:
+        return 'Please resize the image to smaller dimensions'
+      case ErrorCodes.OCR_OUT_OF_MEMORY:
+        return 'Free up memory and try again'
+      case ErrorCodes.OCR_LOW_CONFIDENCE:
+        return 'Try improving image quality or clarity'
       default:
         return null
     }
@@ -199,17 +223,20 @@ export const ErrorHelper = {
   shouldShowRetry: (error: unknown): boolean => {
     const errorInfo = ErrorHelper.getErrorInfo(error)
     
-    const retryableCodes = [
+    const retryableCodes: ErrorCode[] = [
       ErrorCodes.SOURCE_CONNECTION_FAILED,
       ErrorCodes.SOURCE_NETWORK_TIMEOUT,
       ErrorCodes.SOURCE_RATE_LIMIT_EXCEEDED,
       ErrorCodes.SEARCH_INDEX_UNAVAILABLE,
       ErrorCodes.DOCUMENT_UPLOAD_FAILED,
       ErrorCodes.DOCUMENT_OCR_FAILED,
+      ErrorCodes.OCR_TIMEOUT,
+      ErrorCodes.OCR_OUT_OF_MEMORY,
+      ErrorCodes.OCR_LOW_CONFIDENCE,
     ]
     
-    return retryableCodes.includes(errorInfo.code as ErrorCode) || 
-           (errorInfo.status && errorInfo.status >= 500)
+    return (errorInfo.code && retryableCodes.includes(errorInfo.code as ErrorCode)) || 
+           (errorInfo.status !== undefined && errorInfo.status >= 500)
   },
 
   /**

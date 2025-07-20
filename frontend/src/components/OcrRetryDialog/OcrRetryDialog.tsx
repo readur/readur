@@ -146,7 +146,7 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
       // Handle specific OCR retry errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_NOT_FOUND)) {
         errorMessage = 'Document not found. It may have been deleted or processed already.';
-      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_PROCESSING_FAILED)) {
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_OCR_FAILED)) {
         errorMessage = 'Document cannot be retried due to processing issues. Please check the document format.';
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.OCR_NOT_INSTALLED)) {
         errorMessage = 'OCR engine is not installed or configured. Please contact your administrator.';

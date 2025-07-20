@@ -243,7 +243,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
         errorMessage = 'File is too large. Maximum size is 50MB.';
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_INVALID_FORMAT)) {
         errorMessage = 'Unsupported file format. Please use PDF, images, text, or Word documents.';
-      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_PROCESSING_FAILED)) {
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_OCR_FAILED)) {
         errorMessage = 'Failed to process document. Please try again or contact support.';
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
                  ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
