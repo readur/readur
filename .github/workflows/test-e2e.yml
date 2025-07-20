@@ -117,6 +117,16 @@ jobs:
           VITE_API_URL: http://localhost:8000
           PLAYWRIGHT_BASE_URL: http://localhost:8000
 
+      - name: Upload Playwright Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-results
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 30
+
       - name: Stop backend server
         if: always()
         run: |
