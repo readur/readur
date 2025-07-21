@@ -175,15 +175,15 @@ impl TestContext {
     pub async fn with_config(config_builder: TestConfigBuilder) -> Self {
         let postgres_image = Postgres::default()
             .with_tag("15")  // Use PostgreSQL 15 which has gen_random_uuid() built-in
-            .with_env_var("POSTGRES_USER", "test")
-            .with_env_var("POSTGRES_PASSWORD", "test")
-            .with_env_var("POSTGRES_DB", "test");
+            .with_env_var("POSTGRES_USER", "readur")
+            .with_env_var("POSTGRES_PASSWORD", "readur")
+            .with_env_var("POSTGRES_DB", "readur");
         
         let container = postgres_image.start().await.expect("Failed to start postgres container");
         let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
         
         let database_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| format!("postgresql://test:test@localhost:{}/test", port));
+            .unwrap_or_else(|_| format!("postgresql://readur:readur@localhost:{}/readur", port));
         let db = crate::db::Database::new(&database_url).await.unwrap();
         
         // Run proper SQLx migrations (PostgreSQL 15+ has gen_random_uuid() built-in)
