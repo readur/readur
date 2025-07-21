@@ -35,7 +35,7 @@ impl OCRPipelineTestHarness {
     async fn new() -> Result<Self> {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
-            .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/readur_test".to_string());
+            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
         
         // Initialize database connection with higher limits for stress testing
         let pool = sqlx::postgres::PgPoolOptions::new()

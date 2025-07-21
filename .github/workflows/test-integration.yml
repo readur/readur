@@ -12,7 +12,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/readur_test
+  DATABASE_URL: postgresql://readur:readur@localhost:5432/readur
 
 jobs:
   integration-tests:
