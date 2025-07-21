@@ -428,10 +428,13 @@ impl OcrQueueService {
                                     let error_msg = "OCR update failed validation (document may have been modified)";
                                     warn!("{} for document {}", error_msg, item.document_id);
                                     
+                                    // Use classification function to determine proper failure reason
+                                    let (failure_reason, _should_suppress) = Self::classify_ocr_error(error_msg);
+                                    
                                     // Create failed document record using helper function
                                     let _ = self.create_failed_document_from_ocr_error(
                                         item.document_id,
-                                        "processing",
+                                        failure_reason,
                                         error_msg,
                                         item.attempts,
                                     ).await;
@@ -443,10 +446,13 @@ impl OcrQueueService {
                                     let error_msg = format!("Transaction-safe OCR update failed: {}", e);
                                     error!("{}", error_msg);
                                     
+                                    // Use classification function to determine proper failure reason
+                                    let (failure_reason, _should_suppress) = Self::classify_ocr_error(&error_msg);
+                                    
                                     // Create failed document record using helper function
                                     let _ = self.create_failed_document_from_ocr_error(
                                         item.document_id,
-                                        "processing",
+                                        failure_reason,
                                         &error_msg,
                                         item.attempts,
                                     ).await;
@@ -461,10 +467,13 @@ impl OcrQueueService {
                             warn!("⚠️  No searchable content extracted for '{}' | Job: {} | Document: {} | 0 words", 
                                   filename, item.id, item.document_id);
                             
+                            // Use classification function to determine proper failure reason
+                            let (failure_reason, _should_suppress) = Self::classify_ocr_error(&error_msg);
+                            
                             // Create failed document record using helper function
                             let _ = self.create_failed_document_from_ocr_error(
                                 item.document_id,
-                                "no_extractable_text",
+                                failure_reason,
                                 &error_msg,
                                 item.attempts,
                             ).await;
@@ -1196,8 +1205,12 @@ impl OcrQueueService {
             ("unsupported_format", false)
         } else if error_str.contains("too large") || error_str.contains("file size") {
             ("file_too_large", false)
+        } else if error_str.contains("No extractable text") || error_str.contains("0 words") {
+            ("low_ocr_confidence", false)  // No extractable text treated as low confidence OCR
+        } else if error_str.contains("validation") || error_str.contains("document may have been modified") {
+            ("other", false)  // Document validation failures use "other"
         } else {
-            ("other", false)
+            ("other", false)  // Fallback for any unrecognized errors
         }
     }
 }
