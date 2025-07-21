@@ -74,7 +74,7 @@ impl AppError for UserError {
             UserError::InvalidPassword { .. } => StatusCode::BAD_REQUEST,
             UserError::InvalidUsername { .. } => StatusCode::BAD_REQUEST,
             UserError::InvalidEmail { .. } => StatusCode::BAD_REQUEST,
-            UserError::DeleteRestricted { .. } => StatusCode::CONFLICT,
+            UserError::DeleteRestricted { .. } => StatusCode::FORBIDDEN,
             UserError::OidcAuthenticationFailed { .. } => StatusCode::UNAUTHORIZED,
             UserError::AuthProviderNotConfigured { .. } => StatusCode::BAD_REQUEST,
             UserError::TokenExpired => StatusCode::UNAUTHORIZED,
