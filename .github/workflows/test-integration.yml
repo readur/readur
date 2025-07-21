@@ -22,9 +22,9 @@ jobs:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: readur_test
+          POSTGRES_USER: readur
+          POSTGRES_PASSWORD: readur
+          POSTGRES_DB: readur
         ports:
           - 5432:5432
         options: >-
@@ -125,7 +125,7 @@ jobs:
 
       - name: Wait for PostgreSQL to be ready
         run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do
+          until pg_isready -h localhost -p 5432 -U readur; do
             echo "Waiting for PostgreSQL..."
             sleep 1
           done
@@ -134,7 +134,7 @@ jobs:
       - name: Verify database connection
         run: |
           echo "Testing database connection..."
-          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d readur_test -c "SELECT version();"
+          PGPASSWORD=readur psql -h localhost -p 5432 -U readur -d readur -c "SELECT version();"
           echo "Database connection successful!"
 
       - name: Run integration tests

@@ -21,9 +21,9 @@ jobs:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: readur_test
+          POSTGRES_USER: readur
+          POSTGRES_PASSWORD: readur
+          POSTGRES_DB: readur
         ports:
           - 5432:5432
         options: >-
@@ -78,7 +78,7 @@ jobs:
       - name: Build backend
         run: cargo build --release
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/readur_test
+          DATABASE_URL: postgres://readur:readur@localhost:5432/readur
           RUST_BACKTRACE: 1
 
       - name: Build frontend
@@ -92,7 +92,7 @@ jobs:
           ./target/release/readur &
           echo $! > backend.pid
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/readur_test
+          DATABASE_URL: postgres://readur:readur@localhost:5432/readur
           JWT_SECRET: test-secret-key
           PORT: 8000
           FRONTEND_PATH: ./frontend/dist
