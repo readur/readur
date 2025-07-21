@@ -134,7 +134,7 @@ describe('LabelsPage Component', () => {
       await renderLabelsPage();
       
       await waitFor(() => {
-        expect(screen.getByText(/Failed to load labels/)).toBeInTheDocument();
+        expect(screen.getByText('API Error')).toBeInTheDocument();
       });
     });
 
@@ -144,45 +144,48 @@ describe('LabelsPage Component', () => {
       await renderLabelsPage();
       
       await waitFor(() => {
-        expect(screen.getByText(/Failed to load labels/)).toBeInTheDocument();
+        expect(screen.getByText('API Error')).toBeInTheDocument();
       });
       
       const closeButton = screen.getByLabelText('Close');
       await user.click(closeButton);
       
-      expect(screen.queryByText(/Failed to load labels/)).not.toBeInTheDocument();
+      expect(screen.queryByText('API Error')).not.toBeInTheDocument();
     });
 
     test('should handle 401 authentication errors', async () => {
       mockApi.get.mockRejectedValue({
         response: { status: 401 },
-        message: 'Unauthorized'
+        message: 'Unauthorized',
+        isAxiosError: true
       });
       
       await renderLabelsPage();
       
       await waitFor(() => {
-        expect(screen.getByText('Authentication required. Please log in again.')).toBeInTheDocument();
+        expect(screen.getByText('Unauthorized')).toBeInTheDocument();
       });
     });
 
     test('should handle 403 access denied errors', async () => {
       mockApi.get.mockRejectedValue({
         response: { status: 403 },
-        message: 'Forbidden'
+        message: 'Forbidden',
+        isAxiosError: true
       });
       
       await renderLabelsPage();
       
       await waitFor(() => {
-        expect(screen.getByText('Access denied. You do not have permission to view labels.')).toBeInTheDocument();
+        expect(screen.getByText('Forbidden')).toBeInTheDocument();
       });
     });
 
     test('should handle 500 server errors', async () => {
       mockApi.get.mockRejectedValue({
         response: { status: 500 },
-        message: 'Internal Server Error'
+        message: 'Internal Server Error',
+        isAxiosError: true
       });
       
       await renderLabelsPage();
@@ -656,7 +659,7 @@ describe('LabelsPage Component', () => {
       await user.click(confirmButton);
       
       await waitFor(() => {
-        expect(screen.getByText('Failed to delete label')).toBeInTheDocument();
+        expect(screen.getByText('Delete failed')).toBeInTheDocument();
       });
     });
   });

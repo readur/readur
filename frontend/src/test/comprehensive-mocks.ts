@@ -31,11 +31,21 @@ export const createComprehensiveAxiosMock = () => {
     },
   };
 
+  const axiosDefault = {
+    create: vi.fn(() => mockAxiosInstance),
+    isAxiosError: vi.fn((error: any) => {
+      return error && error.isAxiosError === true;
+    }),
+    ...mockAxiosInstance,
+  };
+
   return {
-    default: {
-      create: vi.fn(() => mockAxiosInstance),
-      ...mockAxiosInstance,
-    },
+    default: axiosDefault,
+    isAxiosError: vi.fn((error: any) => {
+      return error && error.isAxiosError === true;
+    }),
+    // Make axios the default export work as expected
+    ...axiosDefault,
   };
 };
 
