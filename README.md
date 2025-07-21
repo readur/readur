@@ -54,6 +54,7 @@ open http://localhost:8000
 - [👥 User Management](docs/user-management-guide.md) - Authentication, roles, and administration
 - [🏷️ Labels & Organization](docs/labels-and-organization.md) - Document tagging and categorization
 - [🔎 Advanced Search](docs/advanced-search.md) - Search modes, syntax, and optimization
+- [🌍 Multi-Language OCR Guide](docs/multi-language-ocr-guide.md) - Process documents in multiple languages simultaneously
 - [🔐 OIDC Setup](docs/oidc-setup.md) - Single Sign-On integration
 
 ### Deployment & Operations
@@ -69,6 +70,7 @@ open http://localhost:8000
 - [🔍 OCR Optimization](docs/dev/OCR_OPTIMIZATION_GUIDE.md) - Improve OCR performance
 - [🗄️ Database Best Practices](docs/dev/DATABASE_GUARDRAILS.md) - Concurrency and safety
 - [📊 Queue Architecture](docs/dev/QUEUE_IMPROVEMENTS.md) - Background job processing
+- [⚠️ Error System Guide](docs/dev/ERROR_SYSTEM.md) - Comprehensive error handling architecture
 
 ## 🏗️ Architecture
 
