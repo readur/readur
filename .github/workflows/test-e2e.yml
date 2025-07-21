@@ -42,6 +42,11 @@ jobs:
           sudo apt-get install -y \
             tesseract-ocr \
             tesseract-ocr-eng \
+            tesseract-ocr-spa \
+            tesseract-ocr-fra \
+            tesseract-ocr-deu \
+            tesseract-ocr-ita \
+            tesseract-ocr-por \
             libtesseract-dev \
             libleptonica-dev \
             pkg-config \

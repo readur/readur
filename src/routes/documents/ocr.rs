@@ -1,7 +1,7 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Json, Path, State},
     http::StatusCode,
-    response::Json,
+    response::Json as ResponseJson,
 };
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
@@ -34,7 +34,7 @@ pub async fn get_document_ocr(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
-) -> Result<Json<DocumentOcrResponse>, StatusCode> {
+) -> Result<ResponseJson<DocumentOcrResponse>, StatusCode> {
     let document = state
         .db
         .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
@@ -57,7 +57,7 @@ pub async fn get_document_ocr(
         pages_processed: None,   // This would need to be stored separately if needed
     };
 
-    Ok(Json(response))
+    Ok(ResponseJson(response))
 }
 
 /// Retry OCR processing for a document
@@ -85,7 +85,7 @@ pub async fn retry_ocr(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
     Json(request): Json<super::types::RetryOcrRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
     debug!("OCR retry request for document {} by user {}", document_id, auth_user.user.id);
     debug!("Request data: language={:?}, languages={:?}", request.language, request.languages);
     // Get document first to check if it exists and user has access
@@ -102,7 +102,7 @@ pub async fn retry_ocr(
     // Check if OCR is already in progress
     if let Some(ref status) = document.ocr_status {
         if status == "processing" {
-            return Ok(Json(serde_json::json!({
+            return Ok(ResponseJson(serde_json::json!({
                 "success": false,
                 "message": "OCR is already in progress for this document"
             })));
@@ -156,7 +156,7 @@ pub async fn retry_ocr(
     match state.queue_service.enqueue_document(document.id, 5, document.file_size).await {
         Ok(_) => {
             info!("Document {} queued for OCR retry", document_id);
-            Ok(Json(serde_json::json!({
+            Ok(ResponseJson(serde_json::json!({
                 "success": true,
                 "message": "Document queued for OCR processing"
             })))
@@ -173,7 +173,7 @@ pub async fn get_ocr_status_batch(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(document_ids): Json<Vec<uuid::Uuid>>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
     if document_ids.len() > 100 {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -211,7 +211,7 @@ pub async fn get_ocr_status_batch(
         }
     }
 
-    Ok(Json(serde_json::json!({
+    Ok(ResponseJson(serde_json::json!({
         "results": results
     })))
 }
@@ -221,7 +221,7 @@ pub async fn cancel_ocr(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
     // Verify user has access to the document
     let _document = state
         .db
@@ -235,7 +235,7 @@ pub async fn cancel_ocr(
 
     // Note: OCR queue removal not implemented in current queue service
     info!("Stop OCR processing requested for document {}", document_id);
-    Ok(Json(serde_json::json!({
+    Ok(ResponseJson(serde_json::json!({
         "success": true,
         "message": "OCR processing stop requested"
     })))
@@ -245,7 +245,7 @@ pub async fn cancel_ocr(
 pub async fn get_ocr_stats(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
     let (total, pending, completed, failed) = state
         .db
         .count_documents_by_ocr_status(auth_user.user.id, auth_user.user.role)
@@ -265,7 +265,7 @@ pub async fn get_ocr_stats(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    Ok(Json(serde_json::json!({
+    Ok(ResponseJson(serde_json::json!({
         "total_documents": total,
         "pending_ocr": pending,
         "completed_ocr": completed,
@@ -282,7 +282,7 @@ pub async fn update_ocr_settings(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
     Json(settings): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
     // Verify user has access to the document
     let _document = state
         .db
@@ -297,7 +297,7 @@ pub async fn update_ocr_settings(
     // For now, just return success - OCR settings would be stored in metadata
     debug!("OCR settings updated for document {}: {:?}", document_id, settings);
     
-    Ok(Json(serde_json::json!({
+    Ok(ResponseJson(serde_json::json!({
         "success": true,
         "message": "OCR settings updated"
     })))
