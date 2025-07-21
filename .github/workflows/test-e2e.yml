@@ -89,8 +89,11 @@ jobs:
 
       - name: Start backend server
         run: |
-          ./target/release/readur &
+          echo "Starting server with DATABASE_URL: $DATABASE_URL"
+          ./target/release/readur > server.log 2>&1 &
           echo $! > backend.pid
+          sleep 2
+          echo "Server started with PID: $(cat backend.pid)"
         env:
           DATABASE_URL: postgres://readur:readur@localhost:5432/readur
           JWT_SECRET: test-secret-key
@@ -99,6 +102,7 @@ jobs:
           UPLOAD_PATH: ./uploads
           WATCH_PATH: ./watch
           RUST_BACKTRACE: 1
+          DEBUG: 1
 
       - name: Wait for backend to be ready
         run: |
@@ -131,6 +135,13 @@ jobs:
             frontend/test-results/
             frontend/playwright-report/
           retention-days: 30
+
+      - name: Print server logs on failure
+        if: failure()
+        run: |
+          echo "=== Server logs ==="
+          cat server.log || echo "No server logs found"
+          echo "=== End of server logs ==="
 
       - name: Stop backend server
         if: always()
