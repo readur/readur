@@ -133,7 +133,7 @@ impl DocumentIngestionService {
         // Check for existing document with same content
         match self.db.get_document_by_user_and_hash(request.user_id, &file_hash).await {
             Ok(Some(existing_doc)) => {
-                info!(
+                debug!(
                     "Found existing document with same content: {} (ID: {}) matches new file: {}",
                     existing_doc.original_filename, existing_doc.id, request.filename
                 );
@@ -155,7 +155,7 @@ impl DocumentIngestionService {
                     }
                     DeduplicationPolicy::AllowDuplicateContent => {
                         // Continue with creating new document record
-                        info!("Creating new document record despite duplicate content (policy: AllowDuplicateContent)");
+                        debug!("Creating new document record despite duplicate content (policy: AllowDuplicateContent)");
                     }
                 }
             }
@@ -245,7 +245,7 @@ impl DocumentIngestionService {
                     // Race condition: another request created the document, fetch it
                     match self.db.get_document_by_user_and_hash(request.user_id, &file_hash).await {
                         Ok(Some(existing_doc)) => {
-                            info!("Found existing document after collision for {}: {} (ID: {})", 
+                            debug!("Found existing document after collision for {}: {} (ID: {})", 
                                   request.filename, existing_doc.original_filename, existing_doc.id);
                             return Ok(IngestionResult::ExistingDocument(existing_doc));
                         }
