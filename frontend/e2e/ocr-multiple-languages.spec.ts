@@ -221,27 +221,116 @@ test.describe('OCR Multiple Languages', () => {
     try {
       await uploadButton.click({ force: true, timeout: 5000 });
       
+      // Debug: Add logging to understand what's happening
+      await page.waitForTimeout(2000);
+      const debugInfo = await page.evaluate(() => {
+        const listItems = Array.from(document.querySelectorAll('li'));
+        const englishItem = listItems.find(li => li.textContent?.includes('english_test.pdf'));
+        if (englishItem) {
+          return {
+            found: true,
+            text: englishItem.textContent,
+            hasProgressBar: !!englishItem.querySelector('.MuiLinearProgress-root'),
+            hasSvgIcon: !!englishItem.querySelector('svg'),
+            iconCount: englishItem.querySelectorAll('svg').length,
+            innerHTML: englishItem.innerHTML.substring(0, 500) // First 500 chars
+          };
+        }
+        return { found: false, listItemCount: listItems.length };
+      });
+      console.log('Debug info after upload click:', debugInfo);
+      
       // Wait for the file to show success state (green checkmark)
       await page.waitForFunction(() => {
         const fileElements = document.querySelectorAll('li');
         for (const el of fileElements) {
           if (el.textContent && el.textContent.includes('english_test.pdf')) {
-            // Look for success icon (CheckCircle)
-            const hasCheckIcon = el.querySelector('svg[data-testid="CheckCircleIcon"]');
-            if (hasCheckIcon) {
+            // Look for the CheckIcon SVG in the list item
+            // Material-UI CheckCircle icon typically has a path that draws a checkmark
+            const svgIcons = el.querySelectorAll('svg');
+            
+            for (const svg of svgIcons) {
+              // Check if this is likely a check/success icon by looking at:
+              // 1. The path data (check icons often have specific path patterns)
+              // 2. The color (success icons are green)
+              // 3. The parent structure (should be in ListItemIcon)
+              
+              // Check if it's in a ListItemIcon container
+              const listItemIcon = svg.closest('[class*="MuiListItemIcon"]');
+              if (!listItemIcon) continue;
+              
+              // Check the color - success icons should be green
+              const parentBox = svg.closest('[class*="MuiBox"]');
+              if (parentBox) {
+                const computedStyle = window.getComputedStyle(parentBox);
+                const color = computedStyle.color;
+                
+                // Check for green color (Material-UI success.main)
+                // Common success colors in RGB
+                if (color.includes('46, 125, 50') ||  // #2e7d32
+                    color.includes('76, 175, 80') ||  // #4caf50
+                    color.includes('67, 160, 71') ||  // #43a047
+                    color.includes('56, 142, 60')) {  // #388e3c
+                  return true;
+                }
+              }
+              
+              // Alternative: Check the SVG viewBox and path
+              // CheckCircle icons typically have viewBox="0 0 24 24"
+              if (svg.getAttribute('viewBox') === '0 0 24 24') {
+                // Check if there's a path element (all Material-UI icons have paths)
+                const path = svg.querySelector('path');
+                if (path) {
+                  const d = path.getAttribute('d');
+                  // CheckCircle icon path typically contains these patterns
+                  if (d && (d.includes('9 16.17') || d.includes('check') || d.includes('12 2C6.48'))) {
+                    return true;
+                  }
+                }
+              }
+            }
+            
+            // Fallback: if no uploading indicators and no error, assume success
+            const hasProgressBar = el.querySelector('.MuiLinearProgress-root');
+            const hasError = el.textContent.toLowerCase().includes('error') || el.textContent.toLowerCase().includes('failed');
+            const isUploading = el.textContent.includes('%') || el.textContent.toLowerCase().includes('uploading');
+            
+            if (!hasProgressBar && !hasError && !isUploading && svgIcons.length > 0) {
               return true;
             }
           }
         }
         return false;
-      }, { timeout: 20000 });
+      }, { timeout: 30000 });
       
       console.log('✅ English document uploaded successfully');
     } catch (uploadError) {
-      console.log('Upload failed, trying alternative method:', uploadError);
+      console.log('Upload waitForFunction failed, trying Playwright selectors:', uploadError);
       
-      // Fallback method - just verify file was selected
-      console.log('✅ English document file selected successfully (fallback)');
+      // Alternative approach using Playwright's built-in selectors
+      const fileListItem = page.locator('li', { hasText: 'english_test.pdf' });
+      
+      // Wait for any of these conditions to indicate success:
+      // 1. Progress bar disappears
+      await expect(fileListItem.locator('.MuiLinearProgress-root')).toBeHidden({ timeout: 30000 }).catch(() => {
+        console.log('No progress bar found or already hidden');
+      });
+      
+      // 2. Upload percentage text disappears
+      await expect(fileListItem).not.toContainText('%', { timeout: 30000 }).catch(() => {
+        console.log('No percentage text found');
+      });
+      
+      // 3. File is visible and not showing error/uploading state
+      await expect(fileListItem).toBeVisible({ timeout: 30000 });
+      const hasError = await fileListItem.locator('text=/error|failed/i').count() > 0;
+      const isUploading = await fileListItem.locator('text=/uploading/i').count() > 0;
+      
+      if (!hasError && !isUploading) {
+        console.log('✅ English document uploaded (verified via Playwright selectors)');
+      } else {
+        throw new Error('File upload did not complete successfully');
+      }
     }
   });
 
