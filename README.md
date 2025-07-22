@@ -7,20 +7,24 @@ A powerful, modern document management system built with Rust and React. Readur 
 
 ## ✨ Features
 
-- 🔐 **Secure Authentication**: JWT-based user authentication with bcrypt password hashing + OIDC/SSO support
-- 👥 **User Management**: Role-based access control with Admin and User roles
-- 📤 **Smart File Upload**: Drag-and-drop support for PDF, images, text files, and Office documents
-- 🔍 **Advanced OCR**: Automatic text extraction using Tesseract for searchable document content
-- 🔎 **Powerful Search**: PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean)
-- 🔗 **Multi-Source Sync**: WebDAV, Local Folders, and S3-compatible storage integration
-- 🏷️ **Labels & Organization**: Comprehensive tagging system with color-coding and hierarchical structure
-- 👁️ **Folder Monitoring**: Non-destructive file watching with intelligent sync scheduling
-- 📊 **Health Monitoring**: Proactive source validation and system health tracking
-- 🔔 **Notifications**: Real-time alerts for sync events, OCR completion, and system status
-- 🎨 **Modern UI**: Beautiful React frontend with Material-UI components and responsive design
-- 🐳 **Docker Ready**: Complete containerization with production-ready multi-stage builds
-- ⚡ **High Performance**: Rust backend for speed and reliability
-- 📊 **Analytics Dashboard**: Document statistics and processing status overview
+| Feature | Description | Documentation |
+|---------|-------------|---------------|
+| 🔐 **Secure Authentication** | JWT-based user authentication with bcrypt password hashing + OIDC/SSO support | [User Management](docs/user-management-guide.md), [OIDC Setup](docs/oidc-setup.md) |
+| 👥 **User Management** | Role-based access control with Admin and User roles | [User Management Guide](docs/user-management-guide.md) |
+| 📤 **Smart File Upload** | Drag-and-drop support for PDF, images, text files, and Office documents | [File Upload Guide](docs/file-upload-guide.md) |
+| 🔍 **Advanced OCR** | Automatic text extraction using Tesseract for searchable document content | [OCR Optimization](docs/dev/OCR_OPTIMIZATION_GUIDE.md) |
+| 🌍 **Multi-Language OCR** | Process documents in multiple languages simultaneously with automatic language detection | [Multi-Language OCR Guide](docs/multi-language-ocr-guide.md) |
+| 🔎 **Powerful Search** | PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean) | [Advanced Search Guide](docs/advanced-search.md) |
+| 🔗 **Multi-Source Sync** | WebDAV, Local Folders, and S3-compatible storage integration | [Sources Guide](docs/sources-guide.md) |
+| 🏷️ **Labels & Organization** | Comprehensive tagging system with color-coding and hierarchical structure | [Labels & Organization](docs/labels-and-organization.md) |
+| 👁️ **Folder Monitoring** | Non-destructive file watching with intelligent sync scheduling | [Watch Folder Guide](docs/WATCH_FOLDER.md) |
+| 📊 **Health Monitoring** | Proactive source validation and system health tracking | [Health Monitoring Guide](docs/health-monitoring-guide.md) |
+| 🔔 **Notifications** | Real-time alerts for sync events, OCR completion, and system status | [Notifications Guide](docs/notifications-guide.md) |
+| 🔌 **Swagger UI** | Built-in interactive API documentation accessible from your profile menu | [Swagger UI Guide](docs/swagger-ui-guide.md) |
+| 🎨 **Modern UI** | Beautiful React frontend with Material-UI components and responsive design | [User Guide](docs/user-guide.md) |
+| 🐳 **Docker Ready** | Complete containerization with production-ready multi-stage builds | [Installation Guide](docs/installation.md), [Deployment Guide](docs/deployment.md) |
+| ⚡ **High Performance** | Rust backend for speed and reliability | [Architecture Documentation](docs/dev/architecture.md) |
+| 📊 **Analytics Dashboard** | Document statistics and processing status overview | [Analytics Dashboard Guide](docs/analytics-dashboard-guide.md) |
 
 ## 🚀 Quick Start
 
