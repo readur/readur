@@ -47,8 +47,8 @@ controllers:
             custom: true
             type: HTTP
             spec:
-              initialDelaySeconds: 30
-              periodSeconds: 10
+              initialDelaySeconds: 5
+              periodSeconds: 5
               timeoutSeconds: 5
               failureThreshold: 30
               httpGet: &probesPath
@@ -58,10 +58,10 @@ controllers:
             enabled: true
             custom: true
             spec:
-              initialDelaySeconds: 10
-              periodSeconds: 20
-              timeoutSeconds: 20
-              failureThreshold: 5
+              initialDelaySeconds: 5
+              periodSeconds: 5
+              timeoutSeconds: 5
+              failureThreshold: 10
               httpGet: *probesPath
           liveness: *probes
 
