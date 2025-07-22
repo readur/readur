@@ -47,17 +47,20 @@ interface UploadedDocument {
 interface FileItem {
   file: File;
   id: string;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: 'pending' | 'uploading' | 'success' | 'error' | 'timeout' | 'cancelled';
   progress: number;
   error: string | null;
+  errorCode?: string;
   documentId?: string;
+  uploadStartTime?: number;
+  retryCount?: number;
 }
 
 interface UploadZoneProps {
   onUploadComplete?: (document: UploadedDocument) => void;
 }
 
-type FileStatus = 'pending' | 'uploading' | 'success' | 'error';
+type FileStatus = 'pending' | 'uploading' | 'success' | 'error' | 'timeout' | 'cancelled';
 
 const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const theme = useTheme();
@@ -65,6 +68,8 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const { addBatchNotification } = useNotifications();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number; failed: number }>({ completed: 0, total: 0, failed: 0 });
+  const [concurrentUploads, setConcurrentUploads] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string>('');
   const [selectedLabels, setSelectedLabels] = useState<LabelData[]>([]);
   const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
@@ -161,6 +166,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       status: 'pending' as FileStatus,
       progress: 0,
       error: null,
+      retryCount: 0,
     }));
 
     setFiles(prev => [...prev, ...newFiles]);
@@ -185,7 +191,18 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     setFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
-  const uploadFile = async (fileItem: FileItem): Promise<void> => {
+  const uploadFile = async (fileItem: FileItem, isRetry: boolean = false): Promise<void> => {
+    const uploadId = fileItem.id;
+    const maxRetries = 3;
+    const uploadTimeout = 60000; // 60 seconds timeout
+    
+    // Prevent concurrent uploads of the same file
+    if (concurrentUploads.has(uploadId)) {
+      console.warn(`Upload already in progress for file: ${fileItem.file.name}`);
+      return;
+    }
+    
+    setConcurrentUploads(prev => new Set(prev.add(uploadId)));
     const formData = new FormData();
     formData.append('file', fileItem.file);
     
@@ -203,9 +220,11 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     }
 
     try {
+      const uploadStartTime = Date.now();
+      
       setFiles(prev => prev.map(f => 
         f.id === fileItem.id 
-          ? { ...f, status: 'uploading' as FileStatus, progress: 0 }
+          ? { ...f, status: 'uploading' as FileStatus, progress: 0, uploadStartTime, error: null, errorCode: undefined }
           : f
       ));
 
@@ -237,6 +256,8 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     } catch (error: any) {
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
       let errorMessage = 'Upload failed';
+      let errorCode = 'UNKNOWN_ERROR';
+      let newStatus: FileStatus = 'error';
       
       // Handle specific document upload errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_TOO_LARGE)) {
@@ -262,31 +283,82 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
         f.id === fileItem.id 
           ? { 
               ...f, 
-              status: 'error' as FileStatus, 
+              status: newStatus, 
               error: errorMessage,
+              errorCode,
               progress: 0,
             }
           : f
       ));
+    } finally {
+      setConcurrentUploads(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(uploadId);
+        return newSet;
+      });
     }
   };
 
   const uploadAllFiles = async (): Promise<void> => {
+    if (uploading) {
+      console.warn('[UPLOAD_DEBUG] Upload already in progress, ignoring request');
+      return;
+    }
+    
     setUploading(true);
     setError('');
 
-    const pendingFiles = files.filter(f => f.status === 'pending' || f.status === 'error');
-    const results: { name: string; success: boolean }[] = [];
+    const pendingFiles = files.filter(f => f.status === 'pending' || f.status === 'error' || f.status === 'timeout');
+    const results: { name: string; success: boolean; errorCode?: string }[] = [];
+    
+    if (pendingFiles.length === 0) {
+      setUploading(false);
+      return;
+    }
+    
+    console.log(`[UPLOAD_DEBUG] Starting upload of ${pendingFiles.length} files`);
+    
+    // Initialize progress tracking
+    setUploadProgress({ completed: 0, total: pendingFiles.length, failed: 0 });
+    
+    // Limit concurrent uploads to prevent overwhelming the server
+    const maxConcurrentUploads = 3;
+    const uploadQueue: FileItem[] = [...pendingFiles];
+    const activeUploads: Promise<void>[] = [];
+    
+    const processNextUpload = async (): Promise<void> => {
+      if (uploadQueue.length === 0) return;
+      
+      const fileItem = uploadQueue.shift()!;
+      
+      try {
+        await uploadFile(fileItem);
+        results.push({ name: fileItem.file.name, success: true });
+        setUploadProgress(prev => ({ ...prev, completed: prev.completed + 1 }));
+        console.log(`[UPLOAD_DEBUG] Upload succeeded for ${fileItem.file.name}`);
+      } catch (error) {
+        const errorCode = error?.response?.data?.error_code || 'UNKNOWN_ERROR';
+        results.push({ name: fileItem.file.name, success: false, errorCode });
+        setUploadProgress(prev => ({ ...prev, completed: prev.completed + 1, failed: prev.failed + 1 }));
+        console.error(`[UPLOAD_DEBUG] Upload failed for ${fileItem.file.name}:`, error);
+      }
+      
+      // Process next file in queue
+      if (uploadQueue.length > 0) {
+        return processNextUpload();
+      }
+    };
     
     try {
-      await Promise.allSettled(pendingFiles.map(async (file) => {
-        try {
-          await uploadFile(file);
-          results.push({ name: file.file.name, success: true });
-        } catch (error) {
-          results.push({ name: file.file.name, success: false });
-        }
-      }));
+      // Start initial batch of concurrent uploads
+      for (let i = 0; i < Math.min(maxConcurrentUploads, uploadQueue.length); i++) {
+        activeUploads.push(processNextUpload());
+      }
+      
+      // Wait for all uploads to complete
+      await Promise.allSettled(activeUploads);
+      
+      console.log(`[UPLOAD_DEBUG] Batch upload completed. ${results.filter(r => r.success).length} succeeded, ${results.filter(r => !r.success).length} failed`);
       
       // Trigger notification based on results
       const hasFailures = results.some(r => !r.success);
@@ -299,10 +371,26 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       } else {
         addBatchNotification('warning', 'upload', results);
       }
+      
+      // Show detailed error information if there were failures
+      if (hasFailures) {
+        const errorsByType = results
+          .filter(r => !r.success)
+          .reduce((acc, r) => {
+            const key = r.errorCode || 'UNKNOWN_ERROR';
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+        
+        console.warn('[UPLOAD_DEBUG] Upload failures by error type:', errorsByType);
+      }
     } catch (error) {
-      setError('Upload failed. Please try again.');
+      console.error('[UPLOAD_DEBUG] Critical error during batch upload:', error);
+      setError('Upload failed due to an unexpected error. Please refresh the page and try again.');
     } finally {
       setUploading(false);
+      // Reset concurrent uploads tracking
+      setConcurrentUploads(new Set());
     }
   };
 
@@ -326,6 +414,8 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     switch (status) {
       case 'success': return theme.palette.success.main;
       case 'error': return theme.palette.error.main;
+      case 'timeout': return theme.palette.warning.main;
+      case 'cancelled': return theme.palette.text.disabled;
       case 'uploading': return theme.palette.primary.main;
       default: return theme.palette.text.secondary;
     }
@@ -335,6 +425,8 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
     switch (status) {
       case 'success': return <CheckIcon />;
       case 'error': return <ErrorIcon />;
+      case 'timeout': return <ErrorIcon />;
+      case 'cancelled': return <DeleteIcon />;
       case 'uploading': return <UploadIcon />;
       default: return <FileIcon />;
     }
@@ -484,10 +576,14 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                   variant="contained"
                   size="small"
                   onClick={uploadAllFiles}
-                  disabled={uploading || !files.some(f => f.status === 'pending' || f.status === 'error')}
+                  disabled={uploading || !files.some(f => f.status === 'pending' || f.status === 'error' || f.status === 'timeout')}
                   sx={{ borderRadius: 2 }}
                 >
-                  {uploading ? 'Uploading...' : 'Upload All'}
+                  {uploading ? (
+                    uploadProgress.total > 0 ? 
+                      `Uploading... (${uploadProgress.completed}/${uploadProgress.total})` : 
+                      'Uploading...'
+                  ) : 'Upload All'}
                 </Button>
               </Box>
             </Box>
@@ -551,8 +647,18 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                           </Box>
                         )}
                         {fileItem.error && (
-                          <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
+                          <Typography 
+                            variant="caption" 
+                            color={fileItem.status === 'timeout' ? 'warning' : 'error'} 
+                            sx={{ display: 'block', mt: 0.5 }}
+                            title={fileItem.errorCode ? `Error Code: ${fileItem.errorCode}` : undefined}
+                          >
                             {fileItem.error}
+                            {fileItem.retryCount && fileItem.retryCount > 0 && (
+                              <span style={{ marginLeft: '8px', fontSize: '0.8em' }}>
+                                (Attempt {fileItem.retryCount + 1})
+                              </span>
+                            )}
                           </Typography>
                         )}
                       </Box>
@@ -561,7 +667,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                   
                   <ListItemSecondaryAction>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      {fileItem.status === 'error' && (
+                      {(fileItem.status === 'error' || fileItem.status === 'timeout') && (
                         <IconButton 
                           size="small" 
                           onClick={(e) => {
@@ -569,6 +675,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                             retryUpload(fileItem);
                           }}
                           sx={{ color: 'primary.main' }}
+                          title={`Retry upload${fileItem.errorCode ? ` (Error: ${fileItem.errorCode})` : ''}`}
                         >
                           <RefreshIcon fontSize="small" />
                         </IconButton>

@@ -25,21 +25,34 @@ pub enum DocumentError {
     Conflict(String),
     PayloadTooLarge(String),
     InternalServerError(String),
+    UploadTimeout(String),
+    DatabaseConstraintViolation(String),
+    OcrProcessingError(String),
+    FileProcessingError(String),
+    ConcurrentUploadError(String),
 }
 
 impl IntoResponse for DocumentError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            DocumentError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            DocumentError::NotFound => (StatusCode::NOT_FOUND, "Document not found".to_string()),
-            DocumentError::Conflict(msg) => (StatusCode::CONFLICT, msg),
-            DocumentError::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, msg),
-            DocumentError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+        let (status, message, error_code) = match self {
+            DocumentError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg, "UPLOAD_BAD_REQUEST"),
+            DocumentError::NotFound => (StatusCode::NOT_FOUND, "Document not found".to_string(), "UPLOAD_NOT_FOUND"),
+            DocumentError::Conflict(msg) => (StatusCode::CONFLICT, msg, "UPLOAD_CONFLICT"),
+            DocumentError::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, msg, "UPLOAD_TOO_LARGE"),
+            DocumentError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg, "UPLOAD_INTERNAL_ERROR"),
+            DocumentError::UploadTimeout(msg) => (StatusCode::REQUEST_TIMEOUT, msg, "UPLOAD_TIMEOUT"),
+            DocumentError::DatabaseConstraintViolation(msg) => (StatusCode::CONFLICT, msg, "UPLOAD_DB_CONSTRAINT"),
+            DocumentError::OcrProcessingError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg, "UPLOAD_OCR_ERROR"),
+            DocumentError::FileProcessingError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg, "UPLOAD_FILE_PROCESSING_ERROR"),
+            DocumentError::ConcurrentUploadError(msg) => (StatusCode::TOO_MANY_REQUESTS, msg, "UPLOAD_CONCURRENT_ERROR"),
         };
         
         (status, Json(json!({
             "error": message,
-            "status": status.as_u16()
+            "status": status.as_u16(),
+            "error_code": error_code,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "request_id": uuid::Uuid::new_v4()
         }))).into_response()
     }
 }
@@ -192,6 +205,9 @@ pub async fn upload_document(
         file_service,
     );
     
+    debug!("[UPLOAD_DEBUG] Calling ingestion service for file: {}", filename);
+    let ingestion_start = std::time::Instant::now();
+    
     match ingestion_service.ingest_from_file_info(
         &file_info, 
         data, 
@@ -274,8 +290,21 @@ pub async fn upload_document(
             Err(DocumentError::Conflict(error_msg))
         }
         Err(e) => {
-            let error_msg = format!("Failed to ingest document: {}", e);
-            error!("{}", error_msg);
+            let ingestion_duration = ingestion_start.elapsed();
+            let error_msg = format!("Failed to ingest document: {} (failed after {:?})", e, ingestion_duration);
+            error!("[UPLOAD_DEBUG] {}", error_msg);
+            
+            // Categorize the error for better client handling
+            if e.to_string().contains("constraint") || e.to_string().contains("duplicate") {
+                return Err(DocumentError::DatabaseConstraintViolation(format!("Database constraint violation during upload: {}", e)));
+            } else if e.to_string().contains("timeout") {
+                return Err(DocumentError::UploadTimeout(format!("Upload processing timed out: {}", e)));
+            } else if e.to_string().contains("ocr") || e.to_string().contains("processing") {
+                return Err(DocumentError::OcrProcessingError(format!("OCR processing error: {}", e)));
+            } else if e.to_string().contains("file") || e.to_string().contains("read") {
+                return Err(DocumentError::FileProcessingError(format!("File processing error: {}", e)));
+            }
+            
             Err(DocumentError::InternalServerError(error_msg))
         }
     }
