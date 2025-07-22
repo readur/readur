@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::path::Path;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use chrono::Utc;
 use tokio::sync::Semaphore;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -187,7 +187,7 @@ async fn perform_sync_internal(
                         Ok(processed) => {
                             if processed {
                                 folder_files_processed += 1;
-                                info!("Successfully processed file ({} completed in this folder)", folder_files_processed);
+                                debug!("Successfully processed file ({} completed in this folder)", folder_files_processed);
                             }
                         }
                         Err(error) => {
@@ -246,25 +246,25 @@ async fn process_single_file(
         }
     }
     
-    info!("Processing file: {}", file_info.path);
+    debug!("Processing file: {}", file_info.path);
     
     // Check if we've already processed this file
-    info!("Checking WebDAV tracking for: {}", file_info.path);
+    debug!("Checking WebDAV tracking for: {}", file_info.path);
     match state.db.get_webdav_file_by_path(user_id, &file_info.path).await {
         Ok(Some(existing_file)) => {
-            info!("Found existing WebDAV file record: {} (current ETag: {}, remote ETag: {})", 
+            debug!("Found existing WebDAV file record: {} (current ETag: {}, remote ETag: {})", 
                 file_info.path, existing_file.etag, file_info.etag);
             
             // Check if file has changed (compare ETags)
             if existing_file.etag == file_info.etag {
-                info!("Skipping unchanged WebDAV file: {} (ETag: {})", file_info.path, file_info.etag);
+                debug!("Skipping unchanged WebDAV file: {} (ETag: {})", file_info.path, file_info.etag);
                 return Ok(false); // Not processed (no change)
             }
-            info!("WebDAV file has changed: {} (old ETag: {}, new ETag: {})", 
+            debug!("WebDAV file has changed: {} (old ETag: {}, new ETag: {})", 
                 file_info.path, existing_file.etag, file_info.etag);
         }
         Ok(None) => {
-            info!("New WebDAV file detected: {}", file_info.path);
+            debug!("New WebDAV file detected: {}", file_info.path);
         }
         Err(e) => {
             warn!("Error checking existing WebDAV file {}: {}", file_info.path, e);
@@ -275,7 +275,7 @@ async fn process_single_file(
     let file_data = webdav_service.download_file(&file_info.path).await
         .map_err(|e| format!("Failed to download {}: {}", file_info.path, e))?;
     
-    info!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
+    debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
     
     // Use the unified ingestion service for consistent deduplication
     let file_service = FileService::new(state.config.upload_path.clone());
@@ -310,15 +310,15 @@ async fn process_single_file(
 
     let (document, should_queue_ocr, webdav_sync_status) = match result {
         IngestionResult::Created(doc) => {
-            info!("Created new document for {}: {}", file_info.name, doc.id);
+            debug!("Created new document for {}: {}", file_info.name, doc.id);
             (doc, true, "synced") // New document - queue for OCR
         }
         IngestionResult::ExistingDocument(doc) => {
-            info!("Found existing document for {}: {}", file_info.name, doc.id);
+            debug!("Found existing document for {}: {}", file_info.name, doc.id);
             (doc, false, "duplicate_content") // Existing document - don't re-queue OCR
         }
         IngestionResult::TrackedAsDuplicate { existing_document_id } => {
-            info!("Tracked {} as duplicate of existing document: {}", file_info.name, existing_document_id);
+            debug!("Tracked {} as duplicate of existing document: {}", file_info.name, existing_document_id);
             
             // For duplicates, we still need to get the document info for WebDAV tracking
             let existing_doc = state.db.get_document_by_id(existing_document_id, user_id, crate::models::UserRole::User).await
@@ -328,7 +328,7 @@ async fn process_single_file(
             (existing_doc, false, "duplicate_content") // Track as duplicate
         }
         IngestionResult::Skipped { existing_document_id, reason: _ } => {
-            info!("Skipped duplicate file {}: existing document {}", file_info.name, existing_document_id);
+            debug!("Skipped duplicate file {}: existing document {}", file_info.name, existing_document_id);
             
             // For skipped files, we still need to get the document info for WebDAV tracking
             let existing_doc = state.db.get_document_by_id(existing_document_id, user_id, crate::models::UserRole::User).await
@@ -358,7 +358,7 @@ async fn process_single_file(
     
     // Queue for OCR processing if enabled and this is a new document
     if enable_background_ocr && should_queue_ocr {
-        info!("Background OCR is enabled, queueing document {} for processing", document.id);
+        debug!("Background OCR is enabled, queueing document {} for processing", document.id);
         
         // Determine priority based on file size
         let priority = if file_info.size <= 1024 * 1024 { 10 } // ≤ 1MB: High priority
@@ -370,10 +370,10 @@ async fn process_single_file(
         if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
             error!("Failed to enqueue document for OCR: {}", e);
         } else {
-            info!("Enqueued document {} for OCR processing", document.id);
+            debug!("Enqueued document {} for OCR processing", document.id);
         }
     } else {
-        info!("Background OCR is disabled or document already processed, skipping OCR queue for document {}", document.id);
+        debug!("Background OCR is disabled or document already processed, skipping OCR queue for document {}", document.id);
     }
     
     Ok(true) // Successfully processed
@@ -426,7 +426,7 @@ pub async fn process_files_for_deep_scan(
             Ok(processed) => {
                 if processed {
                     files_processed += 1;
-                    info!("Deep scan: Successfully processed file ({} completed)", files_processed);
+                    debug!("Deep scan: Successfully processed file ({} completed)", files_processed);
                 }
             }
             Err(error) => {
