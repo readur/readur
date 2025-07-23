@@ -209,8 +209,8 @@ async fn test_concurrent_smart_sync_operations() {
                 user_id,
                 directory_path: format!("/Concurrent{}", i + 10),
                 directory_etag: format!("concurrent{}-etag", i + 10),
-                file_count: i as i32 + 1,
-                total_size_bytes: (i as i64 + 1) * 100000,
+                file_count: (i as i64) + 1,
+                total_size_bytes: ((i as i64) + 1) * 100000,
             };
             
             // Add some delay to increase chance of race conditions
@@ -302,7 +302,7 @@ async fn test_malformed_data_recovery() {
             user_id: user.id,
             directory_path: "/VeryLongPath/With/Many/Nested/Directories/That/Goes/On/And/On/For/A/Very/Long/Time/To/Test/Path/Length/Limits".to_string(),
             directory_etag: "very-long-etag-that-might-exceed-normal-database-field-lengths-and-cause-truncation-issues-if-not-handled-properly".to_string(),
-            file_count: i32::MAX, // Maximum integer value
+            file_count: i32::MAX as i64, // Maximum integer value
             total_size_bytes: i64::MAX, // Maximum long value
         },
     ];
