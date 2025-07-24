@@ -130,7 +130,7 @@ async fn test_directory_etag_comparison_efficiency() {
             user_id: user.id,
             directory_path: format!("/Documents/Folder{:03}", i),
             directory_etag: format!("etag-folder-{:03}", i),
-            file_count: i as i32 % 10 + 1, // 1-10 files per directory
+            file_count: i as i64 % 10 + 1, // 1-10 files per directory
             total_size_bytes: (i as i64 + 1) * 10000, // Varying sizes
         });
     }
