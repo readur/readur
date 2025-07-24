@@ -287,7 +287,7 @@ async fn test_deep_scan_performance_with_many_directories() {
             user_id: user.id,
             directory_path: format!("/Documents/Old{:03}", i),
             directory_etag: format!("old-etag-{:03}", i),
-            file_count: i as i32 % 20 + 1, // 1-20 files
+            file_count: i as i64 % 20 + 1, // 1-20 files
             total_size_bytes: (i as i64 + 1) * 4000, // Varying sizes
         };
         
@@ -322,7 +322,7 @@ async fn test_deep_scan_performance_with_many_directories() {
             user_id: user.id,
             directory_path: format!("/Documents/New{:03}", i),
             directory_etag: format!("new-etag-{:03}", i),
-            file_count: i as i32 % 15 + 1, // 1-15 files
+            file_count: i as i64 % 15 + 1, // 1-15 files
             total_size_bytes: (i as i64 + 1) * 5000, // Different sizing
         };
         
