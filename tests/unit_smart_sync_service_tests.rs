@@ -13,21 +13,18 @@ use readur::{
 // Note: Mocking is complex due to WebDAV service dependencies
 // These tests focus on the logic we can test without full WebDAV integration
 
-use tokio::sync::OnceCell;
-
-static TEST_CONTEXT: OnceCell<TestContext> = OnceCell::const_new();
-
-/// Helper function to create test setup with database using shared TestContext
-async fn create_test_state() -> (Arc<AppState>, Uuid) {
-    // Get or create shared test context to avoid multiple database containers
-    let test_context = TEST_CONTEXT.get_or_init(|| async {
-        TestContext::new().await
-    }).await;
+/// Helper function to create test setup with database
+async fn create_test_state() -> (TestContext, Arc<AppState>, Uuid) {
+    // Create a fresh test context for each test, following the pattern used in all other tests
+    let test_context = TestContext::new().await;
     
     let auth_helper = TestAuthHelper::new(test_context.app().clone());
     let test_user = auth_helper.create_test_user().await;
 
-    (test_context.state().clone(), test_user.user_response.id)
+    let state = test_context.state().clone();
+    let user_id = test_user.user_response.id;
+    
+    (test_context, state, user_id)
 }
 
 /// Helper function to create directory info for testing
@@ -53,7 +50,7 @@ async fn test_evaluate_sync_need_first_time_no_known_directories() {
     // Unit Test: First-time sync evaluation with no existing directory ETags
     // Expected: Should return RequiresSync(FullDeepScan)
     
-    let (state, user_id) = create_test_state().await;
+    let (_test_context, state, user_id) = create_test_state().await;
     let smart_sync_service = SmartSyncService::new(state.clone());
     
     // Test evaluation - should detect no known directories and require deep scan
@@ -76,7 +73,7 @@ async fn test_evaluate_sync_need_no_changes_skip_sync() {
     // Unit Test: Smart sync evaluation with no directory changes
     // Expected: Should return SkipSync
     
-    let (state, user_id) = create_test_state().await;
+    let (_test_context, state, user_id) = create_test_state().await;
     let smart_sync_service = SmartSyncService::new(state.clone());
     
     // Pre-populate database with known directory ETags
@@ -152,7 +149,7 @@ async fn test_directory_etag_comparison_logic() {
     // Unit Test: Directory ETag comparison and change detection
     // Expected: Should correctly identify changed, new, and unchanged directories
     
-    let (state, user_id) = create_test_state().await;
+    let (_test_context, state, user_id) = create_test_state().await;
     
     // Setup known directories in database
     let known_dirs = vec![
@@ -233,7 +230,7 @@ async fn test_bulk_directory_fetching_performance() {
     // Unit Test: Bulk directory ETag fetching vs individual queries
     // Expected: Should fetch all relevant directories in single database query
     
-    let (state, user_id) = create_test_state().await;
+    let (_test_context, state, user_id) = create_test_state().await;
     
     // Create many directories across different folder hierarchies
     let directories = (0..50).map(|i| {
@@ -287,7 +284,7 @@ async fn test_smart_sync_error_handling() {
     // Unit Test: Error handling and fallback behavior
     // Expected: Should handle various error conditions gracefully
     
-    let (state, user_id) = create_test_state().await;
+    let (_test_context, state, user_id) = create_test_state().await;
     let smart_sync_service = SmartSyncService::new(state.clone());
     
     // Test database error handling (simulate by using invalid user ID)
