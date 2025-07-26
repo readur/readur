@@ -99,7 +99,7 @@ impl DocumentIngestionService {
         }
         
         // Add source path
-        metadata.insert("source_path".to_string(), serde_json::Value::String(file_info.path.clone()));
+        metadata.insert("source_path".to_string(), serde_json::Value::String(file_info.relative_path.clone()));
         
         // Merge any additional metadata from the source
         if let Some(ref source_meta) = file_info.metadata {
@@ -339,7 +339,7 @@ impl DocumentIngestionService {
             source_id,
             original_created_at,
             original_modified_at,
-            source_path: Some(file_info.path.clone()),
+            source_path: Some(file_info.relative_path.clone()),
             file_permissions: file_info.permissions.map(|p| p as i32),
             file_owner: file_info.owner.clone(),
             file_group: file_info.group.clone(),

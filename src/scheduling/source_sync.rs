@@ -534,11 +534,11 @@ impl SourceSyncService {
         let _permit = semaphore.acquire().await
             .map_err(|e| anyhow!("Semaphore error: {}", e))?;
 
-        debug!("Processing file: {}", file_info.path);
+        debug!("Processing file: {}", file_info.relative_path);
         
         // Download the file
-        let file_data = download_file(file_info.path.clone()).await
-            .map_err(|e| anyhow!("Failed to download {}: {}", file_info.path, e))?;
+        let file_data = download_file(file_info.relative_path.clone()).await
+            .map_err(|e| anyhow!("Failed to download {}: {}", file_info.relative_path, e))?;
 
         debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
 
@@ -613,28 +613,28 @@ impl SourceSyncService {
     {
         // Check for cancellation before starting file processing
         if cancellation_token.is_cancelled() {
-            info!("File processing cancelled before starting: {}", file_info.path);
+            info!("File processing cancelled before starting: {}", file_info.relative_path);
             return Err(anyhow!("Processing cancelled"));
         }
 
         let _permit = semaphore.acquire().await
             .map_err(|e| anyhow!("Semaphore error: {}", e))?;
 
-        debug!("Processing file: {}", file_info.path);
+        debug!("Processing file: {}", file_info.relative_path);
 
         // Check for cancellation again after acquiring semaphore
         if cancellation_token.is_cancelled() {
-            info!("File processing cancelled after acquiring semaphore: {}", file_info.path);
+            info!("File processing cancelled after acquiring semaphore: {}", file_info.relative_path);
             return Err(anyhow!("Processing cancelled"));
         }
 
         // Download the file
-        let file_data = download_file(file_info.path.clone()).await
-            .map_err(|e| anyhow!("Failed to download {}: {}", file_info.path, e))?;
+        let file_data = download_file(file_info.relative_path.clone()).await
+            .map_err(|e| anyhow!("Failed to download {}: {}", file_info.relative_path, e))?;
 
         // Check for cancellation after download
         if cancellation_token.is_cancelled() {
-            info!("File processing cancelled after download: {}", file_info.path);
+            info!("File processing cancelled after download: {}", file_info.relative_path);
             return Err(anyhow!("Processing cancelled"));
         }
 
@@ -642,7 +642,7 @@ impl SourceSyncService {
 
         // Check for cancellation before processing
         if cancellation_token.is_cancelled() {
-            info!("File processing cancelled before ingestion: {}", file_info.path);
+            info!("File processing cancelled before ingestion: {}", file_info.relative_path);
             return Err(anyhow!("Processing cancelled"));
         }
 

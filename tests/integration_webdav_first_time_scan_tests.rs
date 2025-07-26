@@ -26,6 +26,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
     vec![
         // Parent root directory
         FileIngestionInfo {
+            relative_path: "/FullerDocuments".to_string(),
+            full_path: "/FullerDocuments".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments".to_string(),
             name: "FullerDocuments".to_string(),
             size: 0,
@@ -41,6 +44,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
         },
         // Root directory
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments".to_string(),
+            full_path: "/FullerDocuments/JonDocuments".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments".to_string(),
             name: "JonDocuments".to_string(),
             size: 0,
@@ -56,6 +62,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
         },
         // Subdirectory level 1
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Projects".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Projects".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Projects".to_string(),
             name: "Projects".to_string(),
             size: 0,
@@ -70,6 +79,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Archive".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Archive".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Archive".to_string(),
             name: "Archive".to_string(),
             size: 0,
@@ -85,6 +97,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
         },
         // Subdirectory level 2
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Projects/WebDev".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Projects/WebDev".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Projects/WebDev".to_string(),
             name: "WebDev".to_string(),
             size: 0,
@@ -99,6 +114,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Projects/Mobile".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Projects/Mobile".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Projects/Mobile".to_string(),
             name: "Mobile".to_string(),
             size: 0,
@@ -114,6 +132,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
         },
         // Files in various directories
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/readme.txt".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/readme.txt".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/readme.txt".to_string(),
             name: "readme.txt".to_string(),
             size: 1024,
@@ -128,6 +149,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Projects/project-overview.pdf".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Projects/project-overview.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Projects/project-overview.pdf".to_string(),
             name: "project-overview.pdf".to_string(),
             size: 2048000,
@@ -142,6 +166,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Projects/WebDev/website-specs.docx".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Projects/WebDev/website-specs.docx".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Projects/WebDev/website-specs.docx".to_string(),
             name: "website-specs.docx".to_string(),
             size: 512000,
@@ -156,6 +183,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Projects/Mobile/app-design.pdf".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Projects/Mobile/app-design.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Projects/Mobile/app-design.pdf".to_string(),
             name: "app-design.pdf".to_string(),
             size: 1536000,
@@ -170,6 +200,9 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Archive/old-notes.txt".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Archive/old-notes.txt".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Archive/old-notes.txt".to_string(),
             name: "old-notes.txt".to_string(),
             size: 256,

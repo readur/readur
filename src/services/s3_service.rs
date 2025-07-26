@@ -175,6 +175,9 @@ impl S3Service {
                                 metadata_map.insert("s3_region".to_string(), serde_json::Value::String(self.config.region.clone()));
                                 
                                 let file_info = FileIngestionInfo {
+                                    relative_path: key.clone(),
+                                    full_path: format!("s3://{}/{}", self.config.bucket_name, key), // S3 full path includes bucket
+                                    #[allow(deprecated)]
                                     path: key.clone(),
                                     name: file_name,
                                     size,

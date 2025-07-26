@@ -193,10 +193,10 @@ impl WebDAVService {
     pub async fn download_file_info(&self, file_info: &FileIngestionInfo) -> Result<Vec<u8>> {
         let _permit = self.download_semaphore.acquire().await?;
         
-        debug!("⬇️ Downloading file: {}", file_info.path);
+        debug!("⬇️ Downloading file: {}", file_info.relative_path);
         
-        // Convert full WebDAV paths to relative paths to prevent double path construction
-        let relative_path = self.convert_to_relative_path(&file_info.path);
+        // Use the relative path directly since it's already processed
+        let relative_path = &file_info.relative_path;
         let url = self.connection.get_url_for_path(&relative_path);
         
         let response = self.connection
@@ -211,13 +211,13 @@ impl WebDAVService {
         if !response.status().is_success() {
             return Err(anyhow!(
                 "Failed to download file '{}': HTTP {}",
-                file_info.path,
+                file_info.relative_path,
                 response.status()
             ));
         }
 
         let content = response.bytes().await?;
-        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_info.path);
+        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_info.relative_path);
         
         Ok(content.to_vec())
     }
@@ -282,7 +282,7 @@ impl WebDAVService {
         let files = crate::webdav_xml_parser::parse_propfind_response(&body)?;
         
         files.into_iter()
-            .find(|f| f.path == file_path)
+            .find(|f| f.relative_path == file_path)
             .ok_or_else(|| anyhow!("File metadata not found: {}", file_path))
     }
 

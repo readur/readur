@@ -23,6 +23,9 @@ fn calculate_file_hash(data: &[u8]) -> String {
 fn create_test_file_info(name: &str, path: &str, content: &[u8]) -> FileIngestionInfo {
     FileIngestionInfo {
         name: name.to_string(),
+        relative_path: path.to_string(),
+        full_path: path.to_string(),
+        #[allow(deprecated)]
         path: path.to_string(),
         size: content.len() as i64,
         last_modified: Some(Utc::now()),

@@ -81,17 +81,17 @@ impl SmartSyncService {
                 
                 // Check if any immediate subdirectories have changed ETags
                 for directory in &root_discovery.directories {
-                    match relevant_dirs.get(&directory.path) {
+                    match relevant_dirs.get(&directory.relative_path) {
                         Some(known_etag) => {
                             if known_etag != &directory.etag {
                                 info!("Directory changed: {} (old: {}, new: {})", 
-                                      directory.path, known_etag, directory.etag);
-                                changed_directories.push(directory.path.clone());
+                                      directory.relative_path, known_etag, directory.etag);
+                                changed_directories.push(directory.relative_path.clone());
                             }
                         }
                         None => {
-                            info!("New directory discovered: {}", directory.path);
-                            new_directories.push(directory.path.clone());
+                            info!("New directory discovered: {}", directory.relative_path);
+                            new_directories.push(directory.relative_path.clone());
                         }
                     }
                 }
@@ -183,7 +183,7 @@ impl SmartSyncService {
         for directory_info in &discovery_result.directories {
             let webdav_directory = CreateWebDAVDirectory {
                 user_id,
-                directory_path: directory_info.path.clone(),
+                directory_path: directory_info.relative_path.clone(),
                 directory_etag: directory_info.etag.clone(),
                 file_count: 0, // Will be updated by stats
                 total_size_bytes: 0, // Will be updated by stats
@@ -191,11 +191,11 @@ impl SmartSyncService {
             
             match self.state.db.create_or_update_webdav_directory(&webdav_directory).await {
                 Ok(_) => {
-                    debug!("Saved directory ETag: {} -> {}", directory_info.path, directory_info.etag);
+                    debug!("Saved directory ETag: {} -> {}", directory_info.relative_path, directory_info.etag);
                     directories_saved += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to save directory ETag for {}: {}", directory_info.path, e);
+                    warn!("Failed to save directory ETag for {}: {}", directory_info.relative_path, e);
                 }
             }
         }
@@ -232,16 +232,16 @@ impl SmartSyncService {
                     for directory_info in &discovery_result.directories {
                         let webdav_directory = CreateWebDAVDirectory {
                             user_id,
-                            directory_path: directory_info.path.clone(),
+                            directory_path: directory_info.relative_path.clone(),
                             directory_etag: directory_info.etag.clone(),
                             file_count: 0,
                             total_size_bytes: 0,
                         };
                         
                         if let Err(e) = self.state.db.create_or_update_webdav_directory(&webdav_directory).await {
-                            warn!("Failed to save directory ETag for {}: {}", directory_info.path, e);
+                            warn!("Failed to save directory ETag for {}: {}", directory_info.relative_path, e);
                         } else {
-                            debug!("Updated directory ETag: {} -> {}", directory_info.path, directory_info.etag);
+                            debug!("Updated directory ETag: {} -> {}", directory_info.relative_path, directory_info.etag);
                         }
                     }
                     

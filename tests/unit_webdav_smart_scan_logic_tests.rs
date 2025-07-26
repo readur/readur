@@ -39,6 +39,9 @@ fn create_mock_directory_structure() -> Vec<FileIngestionInfo> {
     vec![
         // Root directory
         FileIngestionInfo {
+            relative_path: "/Documents".to_string(),
+            full_path: "/Documents".to_string(),
+            #[allow(deprecated)]
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -54,6 +57,9 @@ fn create_mock_directory_structure() -> Vec<FileIngestionInfo> {
         },
         // Subdirectory 1 - Changed
         FileIngestionInfo {
+            relative_path: "/Documents/Projects".to_string(),
+            full_path: "/Documents/Projects".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Projects".to_string(),
             name: "Projects".to_string(),
             size: 0,
@@ -69,6 +75,9 @@ fn create_mock_directory_structure() -> Vec<FileIngestionInfo> {
         },
         // File in changed subdirectory
         FileIngestionInfo {
+            relative_path: "/Documents/Projects/report.pdf".to_string(),
+            full_path: "/Documents/Projects/report.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Projects/report.pdf".to_string(),
             name: "report.pdf".to_string(),
             size: 1024000,
@@ -84,6 +93,9 @@ fn create_mock_directory_structure() -> Vec<FileIngestionInfo> {
         },
         // Subdirectory 2 - Unchanged
         FileIngestionInfo {
+            relative_path: "/Documents/Archive".to_string(),
+            full_path: "/Documents/Archive".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Archive".to_string(),
             name: "Archive".to_string(),
             size: 0,

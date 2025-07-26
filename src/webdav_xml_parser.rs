@@ -201,7 +201,10 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>>
                                 let metadata = resp.metadata;
                                 
                                 let file_info = FileIngestionInfo {
-                                    path: resp.href.clone(),
+                                    relative_path: "TEMP".to_string(), // Will be set by discovery layer
+                                    full_path: resp.href.clone(),
+                                    #[allow(deprecated)]
+                                    path: resp.href.clone(), // Legacy field - keep for compatibility
                                     name,
                                     size: resp.content_length.unwrap_or(0),
                                     mime_type: resp.content_type.unwrap_or_else(|| "application/octet-stream".to_string()),
@@ -416,7 +419,10 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
                                     });
                                 
                                 let file_info = FileIngestionInfo {
-                                    path: resp.href.clone(),
+                                    relative_path: "TEMP".to_string(), // Will be set by discovery layer
+                                    full_path: resp.href.clone(),
+                                    #[allow(deprecated)]
+                                    path: resp.href.clone(), // Legacy field - keep for compatibility
                                     name,
                                     size: resp.content_length.unwrap_or(0),
                                     mime_type: if resp.is_collection {
@@ -801,7 +807,7 @@ mod tests {
         
         let file = &files[0];
         assert_eq!(file.name, "report.pdf");
-        assert_eq!(file.path, "/remote.php/dav/files/admin/Documents/report.pdf");
+        assert_eq!(file.full_path, "/remote.php/dav/files/admin/Documents/report.pdf");
         assert_eq!(file.size, 2048000);
         assert_eq!(file.etag, "pdf123"); // ETag should be normalized (quotes removed)
         assert!(file.last_modified.is_some());

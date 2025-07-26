@@ -138,6 +138,9 @@ impl LocalFolderService {
                                 additional_metadata.insert("readonly".to_string(), serde_json::Value::Bool(metadata.permissions().readonly()));
                                 
                                 let file_info = FileIngestionInfo {
+                                    relative_path: path.to_string_lossy().to_string(),
+                                    full_path: path.to_string_lossy().to_string(), // For filesystem, relative and full are the same
+                                    #[allow(deprecated)]
                                     path: path.to_string_lossy().to_string(),
                                     name: file_name,
                                     size: metadata.len() as i64,

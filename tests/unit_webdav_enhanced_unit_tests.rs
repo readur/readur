@@ -608,6 +608,9 @@ fn test_special_characters_in_paths() {
 
     for path in test_paths {
         let file_info = FileIngestionInfo {
+            relative_path: path.to_string(),
+            full_path: path.to_string(),
+            #[allow(deprecated)]
             path: path.to_string(),
             name: std::path::Path::new(path)
                 .file_name()
