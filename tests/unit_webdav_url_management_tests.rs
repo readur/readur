@@ -284,7 +284,7 @@ fn test_with_nextcloud_fixture_data() {
     
     let config = WebDAVConfig {
         server_url: "https://nas.jonathonfuller.com".to_string(),
-        username: "perf3ct".to_string(),
+        username: "testuser".to_string(),
         password: "password".to_string(),
         watch_folders: vec!["/Photos".to_string()],
         file_extensions: vec!["jpg".to_string(), "jpeg".to_string(), "png".to_string()],
