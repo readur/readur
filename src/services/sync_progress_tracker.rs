@@ -145,7 +145,7 @@ impl SyncProgressTracker {
                 .map(|d| d.as_secs()),
             current_directory: stats.current_directory,
             current_file: stats.current_file,
-            errors: stats.errors,
+            errors: stats.errors.len(),
             warnings: stats.warnings,
             is_active,
         }
@@ -185,6 +185,10 @@ impl SyncProgressTracker {
             SyncPhase::Failed(error) => (
                 "failed".to_string(),
                 format!("Sync failed: {}", error),
+            ),
+            SyncPhase::Retrying { attempt, category, delay_ms } => (
+                "retrying".to_string(),
+                format!("Retry attempt {} for {:?} (delay: {}ms)", attempt, category, delay_ms),
             ),
         }
     }

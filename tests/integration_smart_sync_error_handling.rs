@@ -91,7 +91,7 @@ async fn test_webdav_error_fallback() {
         .expect("WebDAV service creation should not fail");
     
     // Test smart sync evaluation with failing WebDAV service
-    let decision = smart_sync_service.evaluate_sync_need(user.id, &failing_webdav_service, "/Documents").await;
+    let decision = smart_sync_service.evaluate_sync_need(user.id, &failing_webdav_service, "/Documents", None).await;
     
     // The system should handle the WebDAV error gracefully
     match decision {
@@ -131,7 +131,7 @@ async fn test_database_error_handling() {
     let invalid_user_id = uuid::Uuid::new_v4(); // Random UUID that doesn't exist
     let webdav_service = create_test_webdav_service();
     
-    let decision = smart_sync_service.evaluate_sync_need(invalid_user_id, &webdav_service, "/Documents").await;
+    let decision = smart_sync_service.evaluate_sync_need(invalid_user_id, &webdav_service, "/Documents", None).await;
     
     match decision {
         Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan)) => {

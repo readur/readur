@@ -58,7 +58,7 @@ async fn test_evaluate_sync_need_first_time_no_known_directories() {
     
     // Test evaluation - should detect no known directories and require deep scan
     let webdav_service = create_real_webdav_service();
-    let decision = smart_sync_service.evaluate_sync_need(user_id, &webdav_service, "/Documents").await;
+    let decision = smart_sync_service.evaluate_sync_need(user_id, &webdav_service, "/Documents", None).await;
     
     match decision {
         Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan)) => {
@@ -197,16 +197,16 @@ async fn test_directory_etag_comparison_logic() {
     let mut unchanged_directories = Vec::new();
     
     for current_dir in &current_dirs {
-        match known_map.get(&current_dir.path) {
+        match known_map.get(&current_dir.relative_path) {
             Some(known_etag) => {
                 if known_etag != &current_dir.etag {
-                    changed_directories.push(current_dir.path.clone());
+                    changed_directories.push(current_dir.relative_path.clone());
                 } else {
-                    unchanged_directories.push(current_dir.path.clone());
+                    unchanged_directories.push(current_dir.relative_path.clone());
                 }
             }
             None => {
-                new_directories.push(current_dir.path.clone());
+                new_directories.push(current_dir.relative_path.clone());
             }
         }
     }
@@ -295,7 +295,7 @@ async fn test_smart_sync_error_handling() {
     
     // This should not panic, but handle the error gracefully
     let webdav_service = create_real_webdav_service();
-    let decision = smart_sync_service.evaluate_sync_need(invalid_user_id, &webdav_service, "/Documents").await;
+    let decision = smart_sync_service.evaluate_sync_need(invalid_user_id, &webdav_service, "/Documents", None).await;
     
     match decision {
         Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan)) => {

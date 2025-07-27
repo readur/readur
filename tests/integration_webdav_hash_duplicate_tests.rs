@@ -149,12 +149,13 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
     );
     
     Ok(Arc::new(AppState {
-        db,
+        db: db.clone(),
         config,
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
         oidc_client: None,
+        sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
     }))
 }
 

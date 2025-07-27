@@ -347,7 +347,7 @@ pub async fn trigger_deep_scan(
                                     progress.set_phase(SyncPhase::Completed);
                                     if let Some(stats) = progress.get_stats() {
                                         info!("📊 Manual deep scan statistics: {} files processed, {} errors, {} warnings, elapsed: {}s", 
-                                              stats.files_processed, stats.errors, stats.warnings, stats.elapsed_time.as_secs());
+                                              stats.files_processed, stats.errors.len(), stats.warnings, stats.elapsed_time.as_secs());
                                     }
                                     
                                     // Update source status to idle

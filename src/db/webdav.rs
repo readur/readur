@@ -442,4 +442,173 @@ impl Database {
 
         Ok(())
     }
+
+    /// Bulk create or update WebDAV directories in a single transaction
+    /// This ensures atomic updates and prevents race conditions during directory sync
+    pub async fn bulk_create_or_update_webdav_directories(&self, directories: &[crate::models::CreateWebDAVDirectory]) -> Result<Vec<crate::models::WebDAVDirectory>> {
+        if directories.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut tx = self.pool.begin().await?;
+        let mut results = Vec::new();
+
+        for directory in directories {
+            let row = sqlx::query(
+                r#"INSERT INTO webdav_directories (user_id, directory_path, directory_etag, 
+                   file_count, total_size_bytes, last_scanned_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                   ON CONFLICT (user_id, directory_path) DO UPDATE SET
+                   directory_etag = EXCLUDED.directory_etag,
+                   file_count = EXCLUDED.file_count,
+                   total_size_bytes = EXCLUDED.total_size_bytes,
+                   last_scanned_at = NOW(),
+                   updated_at = NOW()
+                   RETURNING id, user_id, directory_path, directory_etag, last_scanned_at,
+                   file_count, total_size_bytes, created_at, updated_at"#
+            )
+            .bind(directory.user_id)
+            .bind(&directory.directory_path)
+            .bind(&directory.directory_etag)
+            .bind(directory.file_count)
+            .bind(directory.total_size_bytes)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            results.push(crate::models::WebDAVDirectory {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                directory_path: row.get("directory_path"),
+                directory_etag: row.get("directory_etag"),
+                last_scanned_at: row.get("last_scanned_at"),
+                file_count: row.get("file_count"),
+                total_size_bytes: row.get("total_size_bytes"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        tx.commit().await?;
+        Ok(results)
+    }
+
+    /// Delete directories that no longer exist on the WebDAV server
+    /// Returns the number of directories deleted
+    pub async fn delete_missing_webdav_directories(&self, user_id: Uuid, existing_paths: &[String]) -> Result<i64> {
+        if existing_paths.is_empty() {
+            // If no directories exist, delete all for this user
+            return self.clear_webdav_directories(user_id).await;
+        }
+
+        // Build the NOT IN clause with placeholders
+        let placeholders = (0..existing_paths.len())
+            .map(|i| format!("${}", i + 2))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let query = format!(
+            r#"DELETE FROM webdav_directories 
+               WHERE user_id = $1 AND directory_path NOT IN ({})"#,
+            placeholders
+        );
+
+        let mut query_builder = sqlx::query(&query);
+        query_builder = query_builder.bind(user_id);
+        
+        for path in existing_paths {
+            query_builder = query_builder.bind(path);
+        }
+
+        let result = query_builder.execute(&self.pool).await?;
+        Ok(result.rows_affected() as i64)
+    }
+
+    /// Perform a complete atomic sync of directory state
+    /// This combines creation/updates and deletion in a single transaction
+    pub async fn sync_webdav_directories(
+        &self, 
+        user_id: Uuid, 
+        discovered_directories: &[crate::models::CreateWebDAVDirectory]
+    ) -> Result<(Vec<crate::models::WebDAVDirectory>, i64)> {
+        let mut tx = self.pool.begin().await?;
+        let mut updated_directories = Vec::new();
+
+        // First, update/create all discovered directories
+        for directory in discovered_directories {
+            let row = sqlx::query(
+                r#"INSERT INTO webdav_directories (user_id, directory_path, directory_etag, 
+                   file_count, total_size_bytes, last_scanned_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                   ON CONFLICT (user_id, directory_path) DO UPDATE SET
+                   directory_etag = EXCLUDED.directory_etag,
+                   file_count = EXCLUDED.file_count,
+                   total_size_bytes = EXCLUDED.total_size_bytes,
+                   last_scanned_at = NOW(),
+                   updated_at = NOW()
+                   RETURNING id, user_id, directory_path, directory_etag, last_scanned_at,
+                   file_count, total_size_bytes, created_at, updated_at"#
+            )
+            .bind(directory.user_id)
+            .bind(&directory.directory_path)
+            .bind(&directory.directory_etag)
+            .bind(directory.file_count)
+            .bind(directory.total_size_bytes)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            updated_directories.push(crate::models::WebDAVDirectory {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                directory_path: row.get("directory_path"),
+                directory_etag: row.get("directory_etag"),
+                last_scanned_at: row.get("last_scanned_at"),
+                file_count: row.get("file_count"),
+                total_size_bytes: row.get("total_size_bytes"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        // Then, delete directories that are no longer present
+        let discovered_paths: Vec<String> = discovered_directories
+            .iter()
+            .map(|d| d.directory_path.clone())
+            .collect();
+
+        let deleted_count = if discovered_paths.is_empty() {
+            // If no directories discovered, delete all for this user
+            let result = sqlx::query(
+                r#"DELETE FROM webdav_directories WHERE user_id = $1"#
+            )
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+            result.rows_affected() as i64
+        } else {
+            // Build the NOT IN clause
+            let placeholders = (0..discovered_paths.len())
+                .map(|i| format!("${}", i + 2))
+                .collect::<Vec<_>>()
+                .join(",");
+
+            let query = format!(
+                r#"DELETE FROM webdav_directories 
+                   WHERE user_id = $1 AND directory_path NOT IN ({})"#,
+                placeholders
+            );
+
+            let mut query_builder = sqlx::query(&query);
+            query_builder = query_builder.bind(user_id);
+            
+            for path in &discovered_paths {
+                query_builder = query_builder.bind(path);
+            }
+
+            let result = query_builder.execute(&mut *tx).await?;
+            result.rows_affected() as i64
+        };
+
+        tx.commit().await?;
+        Ok((updated_directories, deleted_count))
+    }
 }

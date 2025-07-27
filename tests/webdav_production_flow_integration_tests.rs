@@ -13,7 +13,7 @@ use readur::{
         SmartSyncStrategy, 
         SyncProgress, 
         SyncPhase,
-        discovery::WebDAVDiscoveryResult,
+        WebDAVDiscoveryResult,
     },
 };
 
@@ -53,7 +53,7 @@ async fn create_production_webdav_source(
         name: name.to_string(),
         source_type: SourceType::WebDAV,
         config: serde_json::to_value(config).unwrap(),
-        enabled: true,
+        enabled: Some(true),
     };
 
     state.db.create_source(user_id, &create_source).await
@@ -80,20 +80,36 @@ impl ProductionMockWebDAVService {
                 FileIngestionInfo {
                     name: "report.pdf".to_string(),
                     relative_path: "/Documents/report.pdf".to_string(),
+                    full_path: "/remote.php/dav/files/user/Documents/report.pdf".to_string(),
+                    #[allow(deprecated)]
+                    path: "/Documents/report.pdf".to_string(),
                     size: 2048576, // 2MB
-                    modified: chrono::Utc::now() - chrono::Duration::hours(2),
+                    last_modified: Some(chrono::Utc::now() - chrono::Duration::hours(2)),
                     etag: "report-etag-1".to_string(),
                     is_directory: false,
-                    content_type: Some("application/pdf".to_string()),
+                    mime_type: "application/pdf".to_string(),
+                    created_at: None,
+                    permissions: None,
+                    owner: None,
+                    group: None,
+                    metadata: None,
                 },
                 FileIngestionInfo {
                     name: "notes.md".to_string(),
                     relative_path: "/Documents/notes.md".to_string(),
+                    full_path: "/remote.php/dav/files/user/Documents/notes.md".to_string(),
+                    #[allow(deprecated)]
+                    path: "/Documents/notes.md".to_string(),
                     size: 4096, // 4KB
-                    modified: chrono::Utc::now() - chrono::Duration::minutes(30),
+                    last_modified: Some(chrono::Utc::now() - chrono::Duration::minutes(30)),
                     etag: "notes-etag-1".to_string(),
                     is_directory: false,
-                    content_type: Some("text/markdown".to_string()),
+                    mime_type: "text/markdown".to_string(),
+                    created_at: None,
+                    permissions: None,
+                    owner: None,
+                    group: None,
+                    metadata: None,
                 },
             ]
         ));
@@ -104,11 +120,19 @@ impl ProductionMockWebDAVService {
                 FileIngestionInfo {
                     name: "spec.docx".to_string(),
                     relative_path: "/Projects/spec.docx".to_string(),
+                    full_path: "/remote.php/dav/files/user/Projects/spec.docx".to_string(),
+                    #[allow(deprecated)]
+                    path: "/Projects/spec.docx".to_string(),
                     size: 1024000, // 1MB
-                    modified: chrono::Utc::now() - chrono::Duration::days(1),
+                    last_modified: Some(chrono::Utc::now() - chrono::Duration::days(1)),
                     etag: "spec-etag-1".to_string(),
                     is_directory: false,
-                    content_type: Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document".to_string()),
+                    mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document".to_string(),
+                    created_at: None,
+                    permissions: None,
+                    owner: None,
+                    group: None,
+                    metadata: None,
                 },
             ]
         ));
@@ -154,11 +178,19 @@ impl ProductionMockWebDAVService {
             let directory_info = FileIngestionInfo {
                 name: directory_path.split('/').last().unwrap_or("").to_string(),
                 relative_path: directory_path.to_string(),
+                full_path: format!("/remote.php/dav/files/user{}", directory_path),
+                #[allow(deprecated)]
+                path: directory_path.to_string(),
                 size: 0,
-                modified: chrono::Utc::now(),
+                last_modified: Some(chrono::Utc::now()),
                 etag: etag.clone(),
                 is_directory: true,
-                content_type: None,
+                mime_type: "application/octet-stream".to_string(),
+                created_at: None,
+                permissions: None,
+                owner: None,
+                group: None,
+                metadata: None,
             };
 
             Ok(WebDAVDiscoveryResult {
@@ -211,27 +243,30 @@ async fn test_production_sync_flow_concurrent_sources() {
     ];
     
     // Simulate production workload: concurrent sync triggers from different sources
-    let production_sync_operations = sources.iter().zip(mock_services.iter()).enumerate().map(|(i, (source, mock_service))| {
-        let scheduler_clone = scheduler.clone();
+    let production_sync_operations: Vec<_> = sources.iter().zip(mock_services.iter()).enumerate().map(|(i, (source, mock_service))| {
         let state_clone = state.clone();
         let smart_sync_service = SmartSyncService::new(state_clone.clone());
         let source_id = source.id;
         let source_name = source.name.clone();
+        let source_config = source.config.clone(); // Clone the config to avoid borrowing the source
         let mock_service = mock_service.clone();
         let user_id = user_id;
         
         tokio::spawn(async move {
             println!("🚀 Starting production sync for source: {}", source_name);
             
+            // Create scheduler instance for this task
+            let scheduler_local = SourceScheduler::new(state_clone.clone());
+            
             // Step 1: Trigger sync via scheduler (Route Level simulation)
-            let trigger_result = scheduler_clone.trigger_sync(source_id).await;
+            let trigger_result = scheduler_local.trigger_sync(source_id).await;
             if trigger_result.is_err() {
                 println!("❌ Failed to trigger sync for {}: {:?}", source_name, trigger_result);
                 return (i, source_name, false, 0, 0);
             }
             
             // Step 2: Simulate smart sync evaluation and execution
-            let config: WebDAVSourceConfig = serde_json::from_value(source.config.clone()).unwrap();
+            let config: WebDAVSourceConfig = serde_json::from_value(source_config).unwrap();
             let mut total_files_discovered = 0;
             let mut total_directories_processed = 0;
             
@@ -277,7 +312,7 @@ async fn test_production_sync_flow_concurrent_sources() {
             
             (i, source_name, true, total_files_discovered, total_directories_processed)
         })
-    });
+    }).collect();
     
     // Wait for all production sync operations
     let sync_results: Vec<_> = join_all(production_sync_operations).await;
@@ -366,20 +401,23 @@ async fn test_production_concurrent_user_actions() {
     ];
     
     let user_action_tasks = user_actions.into_iter().map(|(delay_ms, action, source_id, _)| {
-        let scheduler_clone = scheduler.clone();
+        let state_clone = state.clone();
         let action = action.to_string();
         tokio::spawn(async move {
             // Wait for scheduled time
             sleep(Duration::from_millis(delay_ms)).await;
             
+            // Create scheduler instance for this task
+            let scheduler_local = SourceScheduler::new(state_clone);
+            
             let result = match action.as_str() {
                 "trigger" => {
                     println!("🎯 User action: trigger sync for source {}", source_id);
-                    scheduler_clone.trigger_sync(source_id).await
+                    scheduler_local.trigger_sync(source_id).await
                 }
                 "stop" => {
                     println!("🛑 User action: stop sync for source {}", source_id);
-                    scheduler_clone.stop_sync(source_id).await
+                    scheduler_local.stop_sync(source_id).await
                 }
                 _ => Ok(()),
             };
@@ -477,7 +515,6 @@ async fn test_production_resource_management() {
     
     // Test concurrent operations under memory pressure
     let memory_stress_operations = (0..50).map(|i| {
-        let scheduler_clone = scheduler.clone();
         let smart_sync_clone = smart_sync_service.clone();
         let state_clone = state.clone();
         let source_id = sources[i % sources.len()].id;
@@ -492,7 +529,8 @@ async fn test_production_resource_management() {
                 }
                 1 => {
                     // Sync trigger operation
-                    scheduler_clone.trigger_sync(source_id).await.is_ok() as usize
+                    let scheduler_local = SourceScheduler::new(state_clone.clone());
+                    scheduler_local.trigger_sync(source_id).await.is_ok() as usize
                 }
                 2 => {
                     // Multiple directory updates
@@ -513,7 +551,8 @@ async fn test_production_resource_management() {
                 }
                 3 => {
                     // Stop operation
-                    scheduler_clone.stop_sync(source_id).await.is_ok() as usize
+                    let scheduler_local = SourceScheduler::new(state_clone.clone());
+                    scheduler_local.stop_sync(source_id).await.is_ok() as usize
                 }
                 4 => {
                     // Batch directory read and update

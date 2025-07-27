@@ -1,29 +1,26 @@
-// WebDAV service modules organized by functionality
+// Simplified WebDAV service modules - consolidated architecture
 
 pub mod config;
-pub mod connection;
-pub mod discovery;
-pub mod validation;
-pub mod service;
+pub mod service; 
 pub mod smart_sync;
-pub mod url_management;
-pub mod progress;
+pub mod progress_shim; // Backward compatibility shim for simplified progress tracking
 
 // Re-export main types for convenience
 pub use config::{WebDAVConfig, RetryConfig, ConcurrencyConfig};
-pub use connection::WebDAVConnection;
-pub use discovery::WebDAVDiscovery;
-pub use validation::{
-    WebDAVValidator, ValidationReport, ValidationIssue, ValidationIssueType, 
-    ValidationSeverity, ValidationRecommendation, ValidationAction, ValidationSummary
+pub use service::{
+    WebDAVService, WebDAVDiscoveryResult, ServerCapabilities, HealthStatus, test_webdav_connection,
+    ValidationReport, ValidationIssue, ValidationIssueType, ValidationSeverity, 
+    ValidationRecommendation, ValidationAction, ValidationSummary
 };
-pub use service::{WebDAVService, ServerCapabilities, HealthStatus, test_webdav_connection};
 pub use smart_sync::{SmartSyncService, SmartSyncDecision, SmartSyncStrategy, SmartSyncResult};
-pub use url_management::WebDAVUrlManager;
-pub use progress::{SyncProgress, SyncPhase, ProgressStats};
+
+// Backward compatibility exports for progress tracking (simplified)
+pub use progress_shim::{SyncProgress, SyncPhase, ProgressStats};
 
 // Test modules
 #[cfg(test)]
 mod url_construction_tests;
 #[cfg(test)]
 mod subdirectory_edge_cases_tests;
+#[cfg(test)]
+mod tests;

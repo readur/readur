@@ -50,12 +50,13 @@ async fn create_test_app_state() -> Arc<AppState> {
     
     let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
     Arc::new(AppState {
-        db,
+        db: db.clone(),
         config,
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
         oidc_client: None,
+        sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
     })
 }
 

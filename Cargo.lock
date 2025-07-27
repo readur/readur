@@ -3591,9 +3591,10 @@ dependencies = [
 
 [[package]]
 name = "readur"
-version = "2.4.2"
+version = "2.5.3"
 dependencies = [
  "anyhow",
+ "async-trait",
  "aws-config",
  "aws-credential-types",
  "aws-sdk-s3",
@@ -3614,6 +3615,7 @@ dependencies = [
  "notify",
  "oauth2",
  "quick-xml",
+ "rand 0.8.5",
  "raw-cpuid",
  "readur",
  "regex",

@@ -12,7 +12,7 @@ use readur::{
         SmartSyncStrategy, 
         SyncProgress, 
         SyncPhase,
-        discovery::WebDAVDiscoveryResult,
+        WebDAVDiscoveryResult,
     },
 };
 
@@ -82,22 +82,36 @@ impl MockWebDAVServiceForSmartSync {
                     FileIngestionInfo {
                         name: "default.pdf".to_string(),
                         relative_path: format!("{}/default.pdf", directory_path),
+                        full_path: format!("{}/default.pdf", directory_path),
+                        path: format!("{}/default.pdf", directory_path),
                         size: 1024,
-                        modified: chrono::Utc::now(),
+                        mime_type: "application/pdf".to_string(),
+                        last_modified: Some(chrono::Utc::now()),
                         etag: format!("default-etag-{}", directory_path.replace('/', "-")),
                         is_directory: false,
-                        content_type: Some("application/pdf".to_string()),
+                        created_at: None,
+                        permissions: None,
+                        owner: None,
+                        group: None,
+                        metadata: None,
                     }
                 ],
                 directories: vec![
                     FileIngestionInfo {
                         name: "subdir".to_string(),
                         relative_path: format!("{}/subdir", directory_path),
+                        full_path: format!("{}/subdir", directory_path),
+                        path: format!("{}/subdir", directory_path),
                         size: 0,
-                        modified: chrono::Utc::now(),
+                        mime_type: "inode/directory".to_string(),
+                        last_modified: Some(chrono::Utc::now()),
                         etag: format!("dir-etag-{}", directory_path.replace('/', "-")),
                         is_directory: true,
-                        content_type: None,
+                        created_at: None,
+                        permissions: None,
+                        owner: None,
+                        group: None,
+                        metadata: None,
                     }
                 ],
             })
@@ -166,20 +180,34 @@ async fn test_concurrent_smart_sync_etag_evaluation() {
                         FileIngestionInfo {
                             name: "subdir1".to_string(),
                             relative_path: "/test/subdir1".to_string(),
+                            full_path: "/test/subdir1".to_string(),
+                            path: "/test/subdir1".to_string(),
                             size: 0,
-                            modified: chrono::Utc::now(),
+                            mime_type: "inode/directory".to_string(),
+                            last_modified: Some(chrono::Utc::now()),
                             etag: "old-etag-2".to_string(), // Same as database
                             is_directory: true,
-                            content_type: None,
+                            created_at: None,
+                            permissions: None,
+                            owner: None,
+                            group: None,
+                            metadata: None,
                         },
                         FileIngestionInfo {
                             name: "subdir2".to_string(),
                             relative_path: "/test/subdir2".to_string(),
+                            full_path: "/test/subdir2".to_string(),
+                            path: "/test/subdir2".to_string(),
                             size: 0,
-                            modified: chrono::Utc::now(),
+                            mime_type: "inode/directory".to_string(),
+                            last_modified: Some(chrono::Utc::now()),
                             etag: "old-etag-3".to_string(), // Same as database
                             is_directory: true,
-                            content_type: None,
+                            created_at: None,
+                            permissions: None,
+                            owner: None,
+                            group: None,
+                            metadata: None,
                         },
                     ],
                 });
@@ -192,11 +220,18 @@ async fn test_concurrent_smart_sync_etag_evaluation() {
                         FileIngestionInfo {
                             name: "subdir1".to_string(),
                             relative_path: "/test/subdir1".to_string(),
+                            full_path: "/test/subdir1".to_string(),
+                            path: "/test/subdir1".to_string(),
                             size: 0,
-                            modified: chrono::Utc::now(),
+                            mime_type: "inode/directory".to_string(),
+                            last_modified: Some(chrono::Utc::now()),
                             etag: "new-etag-2".to_string(), // Changed
                             is_directory: true,
-                            content_type: None,
+                            created_at: None,
+                            permissions: None,
+                            owner: None,
+                            group: None,
+                            metadata: None,
                         },
                     ],
                 });
@@ -209,11 +244,18 @@ async fn test_concurrent_smart_sync_etag_evaluation() {
                         FileIngestionInfo {
                             name: "new_subdir".to_string(),
                             relative_path: "/test/new_subdir".to_string(),
+                            full_path: "/test/new_subdir".to_string(),
+                            path: "/test/new_subdir".to_string(),
                             size: 0,
-                            modified: chrono::Utc::now(),
+                            mime_type: "inode/directory".to_string(),
+                            last_modified: Some(chrono::Utc::now()),
                             etag: "new-dir-etag".to_string(),
                             is_directory: true,
-                            content_type: None,
+                            created_at: None,
+                            permissions: None,
+                            owner: None,
+                            group: None,
+                            metadata: None,
                         },
                     ],
                 });
@@ -226,20 +268,34 @@ async fn test_concurrent_smart_sync_etag_evaluation() {
                         FileIngestionInfo {
                             name: "subdir1".to_string(),
                             relative_path: "/test/subdir1".to_string(),
+                            full_path: "/test/subdir1".to_string(),
+                            path: "/test/subdir1".to_string(),
                             size: 0,
-                            modified: chrono::Utc::now(),
+                            mime_type: "inode/directory".to_string(),
+                            last_modified: Some(chrono::Utc::now()),
                             etag: "updated-etag-2".to_string(), // Changed
                             is_directory: true,
-                            content_type: None,
+                            created_at: None,
+                            permissions: None,
+                            owner: None,
+                            group: None,
+                            metadata: None,
                         },
                         FileIngestionInfo {
                             name: "another_new_dir".to_string(),
                             relative_path: "/test/another_new_dir".to_string(),
+                            full_path: "/test/another_new_dir".to_string(),
+                            path: "/test/another_new_dir".to_string(),
                             size: 0,
-                            modified: chrono::Utc::now(),
+                            mime_type: "inode/directory".to_string(),
+                            last_modified: Some(chrono::Utc::now()),
                             etag: "another-new-etag".to_string(), // New
                             is_directory: true,
-                            content_type: None,
+                            created_at: None,
+                            permissions: None,
+                            owner: None,
+                            group: None,
+                            metadata: None,
                         },
                     ],
                 });
@@ -261,7 +317,7 @@ async fn test_concurrent_smart_sync_etag_evaluation() {
             // that SmartSyncService would call
             
             // 1. Get known directories (what SmartSyncService.evaluate_sync_need does)
-            let known_dirs_result = smart_sync_clone.state.db.list_webdav_directories(user_id).await;
+            let known_dirs_result = smart_sync_clone.state().db.list_webdav_directories(user_id).await;
             
             // 2. Simulate discovery with delay (mock WebDAV call)
             let discovery_result = mock_service.mock_discover_files_and_directories("/test", false).await;
@@ -277,7 +333,7 @@ async fn test_concurrent_smart_sync_etag_evaluation() {
                         file_count: 0,
                         total_size_bytes: 0,
                     };
-                    let result = smart_sync_clone.state.db.create_or_update_webdav_directory(&update_dir).await;
+                    let result = smart_sync_clone.state().db.create_or_update_webdav_directory(&update_dir).await;
                     results.push(result.is_ok());
                 }
                 results
@@ -384,10 +440,10 @@ async fn test_concurrent_smart_sync_strategies() {
             println!("Starting strategy test {} ({}) for {}", i, test_name, base_path);
             
             // Simulate what perform_smart_sync would do for each strategy
-            let result = match strategy {
+            let result: Result<i32, anyhow::Error> = match strategy {
                 SmartSyncStrategy::FullDeepScan => {
                     // Simulate full deep scan - update all directories under base_path
-                    let all_dirs = smart_sync_clone.state.db.list_webdav_directories(user_id).await?;
+                    let all_dirs = smart_sync_clone.state().db.list_webdav_directories(user_id).await?;
                     let relevant_dirs: Vec<_> = all_dirs.into_iter()
                         .filter(|d| d.directory_path.starts_with(&base_path))
                         .collect();
@@ -402,7 +458,7 @@ async fn test_concurrent_smart_sync_strategies() {
                             total_size_bytes: dir.total_size_bytes + 100,
                         };
                         
-                        if smart_sync_clone.state.db.create_or_update_webdav_directory(&updated_dir).await.is_ok() {
+                        if smart_sync_clone.state().db.create_or_update_webdav_directory(&updated_dir).await.is_ok() {
                             update_count += 1;
                         }
                     }
@@ -420,7 +476,7 @@ async fn test_concurrent_smart_sync_strategies() {
                             total_size_bytes: 2048,
                         };
                         
-                        if smart_sync_clone.state.db.create_or_update_webdav_directory(&updated_dir).await.is_ok() {
+                        if smart_sync_clone.state().db.create_or_update_webdav_directory(&updated_dir).await.is_ok() {
                             update_count += 1;
                         }
                     }
@@ -503,7 +559,7 @@ async fn test_concurrent_smart_sync_progress_tracking() {
             // Simulate database operations
             sleep(Duration::from_millis(50)).await;
             
-            progress.set_phase(SyncPhase::Discovering);
+            progress.set_phase(SyncPhase::DiscoveringDirectories);
             progress.set_current_directory(&format!("/operation-{}/subdir", i));
             
             // Simulate discovery delay
@@ -520,7 +576,7 @@ async fn test_concurrent_smart_sync_progress_tracking() {
                 total_size_bytes: (i as i64) * 1024,
             };
             
-            let db_result = smart_sync_clone.state.db.create_or_update_webdav_directory(&directory).await;
+            let db_result = smart_sync_clone.state().db.create_or_update_webdav_directory(&directory).await;
             
             if db_result.is_ok() {
                 progress.set_phase(SyncPhase::Completed);
@@ -550,7 +606,7 @@ async fn test_concurrent_smart_sync_progress_tracking() {
         }
         
         if let Some(stats) = stats {
-            println!("Operation {}: Success: {}, Elapsed: {:?}, Errors: {}", 
+            println!("Operation {}: Success: {}, Elapsed: {:?}, Errors: {:?}", 
                      operation_id, db_success, stats.elapsed_time, stats.errors);
         }
     }
@@ -599,7 +655,7 @@ async fn test_concurrent_smart_sync_etag_conflicts() {
             println!("ETag conflict operation {} starting", i);
             
             // First, read the current directory state
-            let current_dirs = smart_sync_clone.state.db.list_webdav_directories(user_id).await?;
+            let current_dirs = smart_sync_clone.state().db.list_webdav_directories(user_id).await?;
             let shared_dir = current_dirs.iter()
                 .find(|d| d.directory_path == "/shared")
                 .ok_or_else(|| anyhow::anyhow!("Shared directory not found"))?;
@@ -616,7 +672,7 @@ async fn test_concurrent_smart_sync_etag_conflicts() {
                 total_size_bytes: shared_dir.total_size_bytes + (i as i64 * 100),
             };
             
-            let update_result = smart_sync_clone.state.db.create_or_update_webdav_directory(&updated_directory).await;
+            let update_result = smart_sync_clone.state().db.create_or_update_webdav_directory(&updated_directory).await;
             
             println!("ETag conflict operation {} completed: {:?}", i, update_result.is_ok());
             Result::<_, anyhow::Error>::Ok((i, update_result.is_ok()))

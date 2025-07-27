@@ -604,6 +604,30 @@ impl ParsedETag {
         self.normalized == other.normalized
     }
     
+    /// RFC 7232 compliant strong comparison - weak ETags never match strong comparison
+    pub fn strong_compare(&self, other: &ParsedETag) -> bool {
+        // Strong comparison: ETags match AND neither is weak
+        !self.is_weak && !other.is_weak && self.normalized == other.normalized
+    }
+    
+    /// RFC 7232 compliant weak comparison - considers weak and strong ETags equivalent if values match
+    pub fn weak_compare(&self, other: &ParsedETag) -> bool {
+        // Weak comparison: ETags match regardless of weak/strong
+        self.normalized == other.normalized
+    }
+    
+    /// Smart comparison that chooses the appropriate method based on context
+    /// For WebDAV sync, we typically want weak comparison since servers may return weak ETags
+    pub fn smart_compare(&self, other: &ParsedETag) -> bool {
+        // If either ETag is weak, use weak comparison
+        if self.is_weak || other.is_weak {
+            self.weak_compare(other)
+        } else {
+            // Both are strong, use strong comparison
+            self.strong_compare(other)
+        }
+    }
+    
     /// Get a safe string for comparison that handles edge cases
     pub fn comparison_string(&self) -> String {
         // For comparison, we normalize further by removing internal quotes and whitespace
@@ -613,6 +637,31 @@ impl ParsedETag {
             .trim()
             .to_string()
     }
+}
+
+/// Utility function for comparing two ETag strings with proper RFC 7232 semantics
+pub fn compare_etags(etag1: &str, etag2: &str) -> bool {
+    let parsed1 = ParsedETag::parse(etag1);
+    let parsed2 = ParsedETag::parse(etag2);
+    
+    // Use smart comparison which handles weak/strong appropriately
+    parsed1.smart_compare(&parsed2)
+}
+
+/// Utility function for weak ETag comparison (most common in WebDAV)
+pub fn weak_compare_etags(etag1: &str, etag2: &str) -> bool {
+    let parsed1 = ParsedETag::parse(etag1);
+    let parsed2 = ParsedETag::parse(etag2);
+    
+    parsed1.weak_compare(&parsed2)
+}
+
+/// Utility function for strong ETag comparison 
+pub fn strong_compare_etags(etag1: &str, etag2: &str) -> bool {
+    let parsed1 = ParsedETag::parse(etag1);
+    let parsed2 = ParsedETag::parse(etag2);
+    
+    parsed1.strong_compare(&parsed2)
 }
 
 fn classify_etag_format(etag: &str) -> ETagFormat {
@@ -859,5 +908,39 @@ mod tests {
         assert_eq!(normalize_etag(""), "");
         assert_eq!(normalize_etag("\"\""), "");
         assert_eq!(normalize_etag("W/\"\""), "");
+    }
+
+    #[test]
+    fn test_utility_function_performance() {
+        // Test that utility functions work correctly under load
+        let test_etags = [
+            ("\"abc123\"", "W/\"abc123\""),
+            ("\"def456\"", "\"def456\""),
+            ("W/\"ghi789\"", "W/\"ghi789\""),
+            ("\"jkl012\"", "\"mno345\""),
+        ];
+
+        for (etag1, etag2) in &test_etags {
+            let result1 = compare_etags(etag1, etag2);
+            let result2 = compare_etags(etag2, etag1); // Should be symmetric
+            assert_eq!(result1, result2, "ETag comparison should be symmetric");
+        }
+    }
+
+    #[test]
+    fn test_rfc_compliance() {
+        // Test RFC 7232 compliance for various ETag scenarios
+        
+        // Example from RFC 7232: W/"1" and "1" should match in weak comparison
+        assert!(weak_compare_etags("W/\"1\"", "\"1\""));
+        assert!(!strong_compare_etags("W/\"1\"", "\"1\""));
+        
+        // Both weak should match
+        assert!(weak_compare_etags("W/\"1\"", "W/\"1\""));
+        assert!(!strong_compare_etags("W/\"1\"", "W/\"1\""));
+        
+        // Both strong should match in both comparisons
+        assert!(weak_compare_etags("\"1\"", "\"1\""));
+        assert!(strong_compare_etags("\"1\"", "\"1\""));
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "readur"
-version = "2.4.2"
+version = "2.5.3"
 edition = "2021"
 
 [[bin]]
@@ -48,6 +48,7 @@ dotenvy = "0.15"
 hostname = "0.4"
 walkdir = "2"
 clap = { version = "4", features = ["derive"] }
+async-trait = "0.1"
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
 aws-config = { version = "1.8", optional = true }
 aws-sdk-s3 = { version = "1.92", optional = true }
@@ -69,6 +70,7 @@ tempfile = "3"
 wiremock = "0.6" 
 tokio-test = "0.4"
 futures = "0.3"
+rand = "0.8"
 # Database testing dependencies
 testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }

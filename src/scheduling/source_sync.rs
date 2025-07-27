@@ -58,12 +58,13 @@ impl SourceSyncService {
             Ok(files_processed) => {
                 if cancellation_token.is_cancelled() {
                     info!("Sync for source {} was cancelled during execution", source.name);
-                    if let Err(e) = self.update_source_status(source.id, SourceStatus::Idle, Some("Sync cancelled by user")).await {
+                    // Don't overwrite status if it's already been set to cancelled by stop_sync
+                    if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Idle, Some("Sync cancelled by user")).await {
                         error!("Failed to update source status after cancellation: {}", e);
                     }
                 } else {
                     info!("Sync completed for source {}: {} files processed", source.name, files_processed);
-                    if let Err(e) = self.update_source_status(source.id, SourceStatus::Idle, None).await {
+                    if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Idle, None).await {
                         error!("Failed to update source status after successful sync: {}", e);
                     }
                 }
@@ -71,13 +72,14 @@ impl SourceSyncService {
             Err(e) => {
                 if cancellation_token.is_cancelled() {
                     info!("Sync for source {} was cancelled: {}", source.name, e);
-                    if let Err(e) = self.update_source_status(source.id, SourceStatus::Idle, Some("Sync cancelled by user")).await {
+                    // Don't overwrite status if it's already been set to cancelled by stop_sync
+                    if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Idle, Some("Sync cancelled by user")).await {
                         error!("Failed to update source status after cancellation: {}", e);
                     }
                 } else {
                     error!("Sync failed for source {}: {}", source.name, e);
                     let error_msg = format!("Sync failed: {}", e);
-                    if let Err(e) = self.update_source_status(source.id, SourceStatus::Error, Some(&error_msg)).await {
+                    if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Error, Some(&error_msg)).await {
                         error!("Failed to update source status after error: {}", e);
                     }
                 }
@@ -176,7 +178,7 @@ impl SourceSyncService {
         progress.set_phase(SyncPhase::Completed);
         if let Some(stats) = progress.get_stats() {
             info!("📊 Scheduled sync completed for '{}': {} files processed, {} errors, {} warnings, elapsed: {}s", 
-                  source.name, stats.files_processed, stats.errors, stats.warnings, stats.elapsed_time.as_secs());
+                  source.name, stats.files_processed, stats.errors.len(), stats.warnings, stats.elapsed_time.as_secs());
         }
 
         sync_result
@@ -741,6 +743,38 @@ impl SourceSyncService {
 
         query.execute(self.state.db.get_pool()).await
             .map_err(|e| anyhow!("Failed to update source status: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Update source status only if it hasn't already been set to cancelled
+    /// This prevents race conditions where stop_sync sets status to idle and sync task overwrites it
+    async fn update_source_status_if_not_cancelled(&self, source_id: Uuid, status: SourceStatus, error_message: Option<&str>) -> Result<()> {
+        let query = if let Some(error) = error_message {
+            sqlx::query(
+                r#"UPDATE sources 
+                   SET status = $2, last_error = $3, last_error_at = NOW(), updated_at = NOW()
+                   WHERE id = $1 AND NOT (status = 'idle' AND last_error = 'Sync cancelled by user')"#
+            )
+            .bind(source_id)
+            .bind(status.to_string())
+            .bind(error)
+        } else {
+            sqlx::query(
+                r#"UPDATE sources 
+                   SET status = $2, last_error = NULL, last_error_at = NULL, updated_at = NOW()
+                   WHERE id = $1 AND NOT (status = 'idle' AND last_error = 'Sync cancelled by user')"#
+            )
+            .bind(source_id)
+            .bind(status.to_string())
+        };
+
+        let result = query.execute(self.state.db.get_pool()).await
+            .map_err(|e| anyhow!("Failed to update source status: {}", e))?;
+
+        if result.rows_affected() == 0 {
+            info!("Source {} status not updated - already cancelled by user", source_id);
+        }
 
         Ok(())
     }

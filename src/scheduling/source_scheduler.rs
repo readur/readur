@@ -222,6 +222,11 @@ impl SourceScheduler {
                     // Get user's OCR setting - simplified, you might want to store this in source config  
                     let enable_background_ocr = true; // Default to true, could be made configurable per source
                     
+                    // Create progress tracker for this sync and register it
+                    let progress = Arc::new(crate::services::webdav::SyncProgress::new());
+                    progress.set_phase(crate::services::webdav::SyncPhase::Initializing);
+                    state_clone.sync_progress_tracker.register_sync(source.id, progress.clone());
+                    
                     // Pass cancellation token to sync service
                     match sync_service.sync_source_with_cancellation(&source_clone, enable_background_ocr, cancellation_token.clone()).await {
                         Ok(files_processed) => {
@@ -290,11 +295,12 @@ impl SourceScheduler {
                         }
                     }
                     
-                    // Cleanup: Remove the sync from running list
+                    // Cleanup: Remove the sync from running list and unregister progress tracker
                     {
                         let mut running_syncs = running_syncs_clone.write().await;
                         running_syncs.remove(&source_clone.id);
                     }
+                    state_clone.sync_progress_tracker.unregister_sync(source_clone.id);
                 });
             }
         }
@@ -377,6 +383,11 @@ impl SourceScheduler {
             tokio::spawn(async move {
                 let enable_background_ocr = true; // Could be made configurable
                 
+                // Create progress tracker for this sync and register it
+                let progress = Arc::new(crate::services::webdav::SyncProgress::new());
+                progress.set_phase(crate::services::webdav::SyncPhase::Initializing);
+                state_clone.sync_progress_tracker.register_sync(source_id, progress.clone());
+                
                 match sync_service.sync_source_with_cancellation(&source, enable_background_ocr, cancellation_token).await {
                     Ok(files_processed) => {
                         info!("Manual sync completed for source {}: {} files processed", 
@@ -402,11 +413,12 @@ impl SourceScheduler {
                     }
                 }
                 
-                // Cleanup: Remove the sync from running list
+                // Cleanup: Remove the sync from running list and unregister progress tracker
                 {
                     let mut running_syncs = running_syncs_clone.write().await;
                     running_syncs.remove(&source.id);
                 }
+                state_clone.sync_progress_tracker.unregister_sync(source_id);
             });
             
             Ok(())
@@ -429,15 +441,33 @@ impl SourceScheduler {
             token.cancel();
             info!("Cancellation signal sent for source {}", source_id);
             
-            // Update source status to indicate cancellation
+            // Use a transaction to atomically update status and prevent race conditions
+            let mut tx = self.state.db.get_pool().begin().await
+                .map_err(|e| format!("Failed to start transaction: {}", e))?;
+            
+            // Update source status to indicate cancellation - this will persist even if sync task tries to update later
             if let Err(e) = sqlx::query(
-                r#"UPDATE sources SET status = 'idle', last_error = 'Sync cancelled by user', last_error_at = NOW(), updated_at = NOW() WHERE id = $1"#
+                r#"UPDATE sources 
+                   SET status = 'idle', 
+                       last_error = 'Sync cancelled by user', 
+                       last_error_at = NOW(), 
+                       updated_at = NOW() 
+                   WHERE id = $1 AND status = 'syncing'"#
             )
             .bind(source_id)
-            .execute(self.state.db.get_pool())
+            .execute(&mut *tx)
             .await {
+                tx.rollback().await.ok();
                 error!("Failed to update source status after cancellation: {}", e);
+            } else {
+                // Commit the status change
+                if let Err(e) = tx.commit().await {
+                    error!("Failed to commit cancellation status update: {}", e);
+                }
             }
+            
+            // Immediately unregister from progress tracker to update UI
+            self.state.sync_progress_tracker.unregister_sync(source_id);
             
             // Remove from running syncs list
             {
@@ -445,6 +475,7 @@ impl SourceScheduler {
                 running_syncs.remove(&source_id);
             }
             
+            info!("Sync cancellation completed for source {}", source_id);
             Ok(())
         } else {
             Err("No running sync found for this source".into())

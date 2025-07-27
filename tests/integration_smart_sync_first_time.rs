@@ -59,7 +59,7 @@ async fn test_first_time_sync_full_deep_scan() {
     
     // Test evaluation for first-time sync
     let webdav_service = create_test_webdav_service();
-    let decision = smart_sync_service.evaluate_sync_need(user.id, &webdav_service, "/Documents").await;
+    let decision = smart_sync_service.evaluate_sync_need(user.id, &webdav_service, "/Documents", None).await;
     
     match decision {
         Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan)) => {

@@ -1,5 +1,5 @@
 use readur::models::FileIngestionInfo;
-use readur::services::webdav::{WebDAVConfig, WebDAVUrlManager};
+use readur::services::webdav::{WebDAVConfig, WebDAVService};
 
 #[test]
 fn test_nextcloud_directory_path_handling() {
@@ -13,7 +13,7 @@ fn test_nextcloud_directory_path_handling() {
         server_type: Some("nextcloud".to_string()),
     };
 
-    let manager = WebDAVUrlManager::new(config);
+    let manager = WebDAVService::new(config).unwrap();
 
     // Test a directory from Nextcloud WebDAV response
     let directory_info = FileIngestionInfo {
@@ -57,7 +57,7 @@ fn test_nextcloud_file_path_handling() {
         server_type: Some("nextcloud".to_string()),
     };
 
-    let manager = WebDAVUrlManager::new(config);
+    let manager = WebDAVService::new(config).unwrap();
 
     // Test a file from Nextcloud WebDAV response
     let file_info = FileIngestionInfo {
@@ -101,7 +101,7 @@ fn test_webdav_root_path_handling() {
         server_type: Some("nextcloud".to_string()),
     };
 
-    let manager = WebDAVUrlManager::new(config);
+    let manager = WebDAVService::new(config).unwrap();
 
     // Test root directory handling
     let root_info = FileIngestionInfo {
@@ -141,7 +141,7 @@ fn test_url_construction_from_relative_path() {
         server_type: Some("nextcloud".to_string()),
     };
 
-    let manager = WebDAVUrlManager::new(config);
+    let manager = WebDAVService::new(config).unwrap();
 
     // Test URL construction for scanning subdirectories
     let subfolder_url = manager.relative_path_to_url("/Photos/Subfolder/");
@@ -166,7 +166,7 @@ fn test_owncloud_path_handling() {
         server_type: Some("owncloud".to_string()),
     };
 
-    let manager = WebDAVUrlManager::new(config);
+    let manager = WebDAVService::new(config).unwrap();
 
     // Test ownCloud path conversion
     let file_info = FileIngestionInfo {
@@ -204,7 +204,7 @@ fn test_generic_webdav_path_handling() {
         server_type: Some("generic".to_string()),
     };
 
-    let manager = WebDAVUrlManager::new(config);
+    let manager = WebDAVService::new(config).unwrap();
 
     // Test generic WebDAV path conversion
     let file_info = FileIngestionInfo {
@@ -243,7 +243,7 @@ fn test_download_path_resolution() {
         server_type: Some("nextcloud".to_string()),
     };
 
-    let manager = WebDAVUrlManager::new(config);
+    let manager = WebDAVService::new(config).unwrap();
 
     // Test that processed file info has correct paths for download operations
     let file_info = FileIngestionInfo {
@@ -292,7 +292,7 @@ fn test_with_nextcloud_fixture_data() {
         server_type: Some("nextcloud".to_string()),
     };
 
-    let manager = WebDAVUrlManager::new(config);
+    let manager = WebDAVService::new(config).unwrap();
 
     // Load the real Nextcloud XML fixture
     let fixture_path = "tests/fixtures/webdav/nextcloud_photos_propfind_response.xml";

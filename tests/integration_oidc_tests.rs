@@ -65,6 +65,7 @@ mod tests {
                     2
                 )),
                 oidc_client: None,
+                sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
             }));
 
         (app, ())
@@ -153,6 +154,7 @@ mod tests {
                     2
                 )),
                 oidc_client,
+                sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
             }));
 
         (app, mock_server)

@@ -55,6 +55,7 @@ async fn create_test_app_state() -> Arc<AppState> {
     let db = Database::new(&config.database_url).await.unwrap();
     
     let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
+    let sync_progress_tracker = Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new());
     Arc::new(AppState {
         db,
         config,
@@ -62,6 +63,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         source_scheduler: None,
         queue_service,
         oidc_client: None,
+        sync_progress_tracker,
     })
 }
 

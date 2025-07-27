@@ -30,6 +30,23 @@ pub struct ConcurrencyConfig {
     pub adaptive_rate_limiting: bool,
 }
 
+/// Configuration for Depth infinity PROPFIND optimizations
+#[derive(Debug, Clone)]
+pub struct DepthInfinityConfig {
+    /// Whether to attempt Depth infinity PROPFIND requests
+    pub enabled: bool,
+    /// Maximum response size in bytes before falling back to recursive approach
+    pub max_response_size_bytes: usize,
+    /// Timeout for infinity depth requests in seconds
+    pub timeout_seconds: u64,
+    /// Cache server capability detection results for this duration (seconds)
+    pub capability_cache_duration_seconds: u64,
+    /// Whether to automatically fallback to recursive approach on failure
+    pub auto_fallback: bool,
+    /// Maximum directory depth to attempt infinity for (0 = no limit)
+    pub max_depth_for_infinity: u32,
+}
+
 impl Default for RetryConfig {
     fn default() -> Self {
         Self {
@@ -49,6 +66,19 @@ impl Default for ConcurrencyConfig {
             max_concurrent_scans: 4,
             max_concurrent_downloads: 8,
             adaptive_rate_limiting: true,
+        }
+    }
+}
+
+impl Default for DepthInfinityConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_response_size_bytes: 50 * 1024 * 1024, // 50MB
+            timeout_seconds: 120, // 2 minutes for large directories
+            capability_cache_duration_seconds: 3600, // 1 hour
+            auto_fallback: true,
+            max_depth_for_infinity: 0, // No limit by default
         }
     }
 }

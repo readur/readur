@@ -45,7 +45,7 @@ async fn create_test_webdav_source(
         name: name.to_string(),
         source_type: SourceType::WebDAV,
         config: serde_json::to_value(config).unwrap(),
-        enabled: true,
+        enabled: Some(true),
     };
 
     state.db.create_source(user_id, &create_source).await
@@ -73,7 +73,7 @@ impl MockWebDAVService {
         &self,
         directory_path: &str,
         _recursive: bool,
-    ) -> Result<readur::services::webdav::discovery::WebDAVDiscoveryResult, anyhow::Error> {
+    ) -> Result<readur::services::webdav::WebDAVDiscoveryResult, anyhow::Error> {
         // Simulate network delay
         sleep(Duration::from_millis(self.delay_ms)).await;
 
@@ -92,11 +92,19 @@ impl MockWebDAVService {
             readur::models::FileIngestionInfo {
                 name: format!("test-file-{}.pdf", etag),
                 relative_path: format!("{}/test-file-{}.pdf", directory_path, etag),
+                full_path: format!("{}/test-file-{}.pdf", directory_path, etag),
+                #[allow(deprecated)]
+                path: format!("{}/test-file-{}.pdf", directory_path, etag),
                 size: 1024,
-                modified: chrono::Utc::now(),
+                mime_type: "application/pdf".to_string(),
+                last_modified: Some(chrono::Utc::now()),
                 etag: etag.clone(),
                 is_directory: false,
-                content_type: Some("application/pdf".to_string()),
+                created_at: Some(chrono::Utc::now()),
+                permissions: Some(0o644),
+                owner: None,
+                group: None,
+                metadata: None,
             }
         ];
 
@@ -104,15 +112,23 @@ impl MockWebDAVService {
             readur::models::FileIngestionInfo {
                 name: "subdir".to_string(),
                 relative_path: format!("{}/subdir", directory_path),
+                full_path: format!("{}/subdir", directory_path),
+                #[allow(deprecated)]
+                path: format!("{}/subdir", directory_path),
                 size: 0,
-                modified: chrono::Utc::now(),
+                mime_type: "".to_string(),
+                last_modified: Some(chrono::Utc::now()),
                 etag: etag.clone(),
                 is_directory: true,
-                content_type: None,
+                created_at: Some(chrono::Utc::now()),
+                permissions: Some(0o755),
+                owner: None,
+                group: None,
+                metadata: None,
             }
         ];
 
-        Ok(readur::services::webdav::discovery::WebDAVDiscoveryResult {
+        Ok(readur::services::webdav::WebDAVDiscoveryResult {
             files: mock_files,
             directories: mock_directories,
         })
@@ -480,10 +496,11 @@ async fn test_concurrent_directory_etag_updates_during_smart_sync() {
     let smart_sync_updates = (0..15).map(|i| {
         let state_clone = state.clone();
         let user_id = user_id;
+        let base_dirs = base_directories.clone(); // Clone for use in async task
         tokio::spawn(async move {
             // Pick a directory to update
-            let dir_index = i % base_directories.len();
-            let (path, _) = &base_directories[dir_index];
+            let dir_index = i % base_dirs.len();
+            let (path, _) = &base_dirs[dir_index];
             
             // Simulate smart sync discovering changes
             sleep(Duration::from_millis(((i % 5) * 20) as u64)).await;
@@ -626,6 +643,9 @@ async fn test_concurrent_operations_with_partial_failures() {
     // Verify system resilience
     assert!(successful_operations > 0, "At least some operations should succeed");
     
+    // Save the first source ID for later use
+    let first_source_id = sources[0].id;
+    
     // Verify all sources are in consistent states
     for source in sources {
         let final_source = state.db.get_source(user_id, source.id).await
@@ -639,7 +659,7 @@ async fn test_concurrent_operations_with_partial_failures() {
     }
     
     // System should remain functional for new operations
-    let recovery_test = scheduler.trigger_sync(sources[0].id).await;
+    let recovery_test = scheduler.trigger_sync(first_source_id).await;
     // Recovery might succeed or fail, but shouldn't panic
     println!("Recovery test result: {:?}", recovery_test.is_ok());
 }

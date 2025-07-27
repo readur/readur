@@ -307,7 +307,7 @@ pub struct WebDAVDirectory {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateWebDAVDirectory {
     pub user_id: Uuid,
     pub directory_path: String,
