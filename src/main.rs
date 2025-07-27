@@ -335,6 +335,9 @@ async fn main() -> anyhow::Result<()> {
         None
     };
     
+    // Create shared progress tracker
+    let sync_progress_tracker = Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new());
+    
     // Create web-facing state with shared queue service
     let web_state = AppState { 
         db: web_db, 
@@ -343,6 +346,7 @@ async fn main() -> anyhow::Result<()> {
         source_scheduler: None, // Will be set after creating scheduler
         queue_service: shared_queue_service.clone(),
         oidc_client: oidc_client.clone(),
+        sync_progress_tracker: sync_progress_tracker.clone(),
     };
     let web_state = Arc::new(web_state);
     
@@ -354,6 +358,7 @@ async fn main() -> anyhow::Result<()> {
         source_scheduler: None,
         queue_service: shared_queue_service.clone(),
         oidc_client: oidc_client.clone(),
+        sync_progress_tracker: sync_progress_tracker.clone(),
     };
     let background_state = Arc::new(background_state);
     
@@ -435,6 +440,7 @@ async fn main() -> anyhow::Result<()> {
         source_scheduler: Some(source_scheduler.clone()),
         queue_service: shared_queue_service.clone(),
         oidc_client: oidc_client.clone(),
+        sync_progress_tracker: sync_progress_tracker.clone(),
     };
     let web_state = Arc::new(updated_web_state);
     

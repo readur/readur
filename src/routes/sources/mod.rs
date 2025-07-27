@@ -25,6 +25,8 @@ pub fn router() -> Router<Arc<AppState>> {
         // Sync operations
         .route("/{id}/sync", post(trigger_sync))
         .route("/{id}/sync/stop", post(stop_sync))
+        .route("/{id}/sync/progress", get(sync_progress_stream))
+        .route("/{id}/sync/status", get(get_sync_status))
         .route("/{id}/deep-scan", post(trigger_deep_scan))
         
         // Validation operations

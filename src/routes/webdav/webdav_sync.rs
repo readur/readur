@@ -10,7 +10,7 @@ use crate::{
     models::{CreateWebDAVFile, UpdateWebDAVSyncState},
     services::file_service::FileService,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
-    services::webdav::{WebDAVConfig, WebDAVService, SmartSyncService},
+    services::webdav::{WebDAVConfig, WebDAVService, SmartSyncService, SyncProgress, SyncPhase},
 };
 
 pub async fn perform_webdav_sync_with_tracking(
@@ -42,6 +42,7 @@ pub async fn perform_webdav_sync_with_tracking(
     let cleanup_sync_state = |errors: Vec<String>, files_processed: usize| {
         let state_clone = state.clone();
         let user_id_clone = user_id;
+        let source_id_clone = webdav_source_id;
         tokio::spawn(async move {
             let final_state = UpdateWebDAVSyncState {
                 last_sync_at: Some(Utc::now()),
@@ -55,6 +56,11 @@ pub async fn perform_webdav_sync_with_tracking(
             
             if let Err(e) = state_clone.db.update_webdav_sync_state(user_id_clone, &final_state).await {
                 error!("Failed to cleanup sync state: {}", e);
+            }
+            
+            // Unregister progress tracking
+            if let Some(source_id) = source_id_clone {
+                state_clone.sync_progress_tracker.unregister_sync(source_id);
             }
         });
     };
@@ -87,6 +93,17 @@ async fn perform_sync_internal(
     let mut total_files_processed = 0;
     let mut sync_errors = Vec::new();
     
+    // Create progress tracker for this sync session
+    let progress = Arc::new(SyncProgress::new());
+    progress.set_phase(SyncPhase::Initializing);
+    
+    // Register progress with the global tracker if we have a source ID
+    if let Some(source_id) = webdav_source_id {
+        state.sync_progress_tracker.register_sync(source_id, progress.clone());
+    }
+    
+    info!("🚀 Starting WebDAV sync with progress tracking for {} folders", config.watch_folders.len());
+    
     // Process each watch folder
     for folder_path in &config.watch_folders {
         // Check if sync has been cancelled before processing each folder
@@ -117,7 +134,7 @@ async fn perform_sync_internal(
         // Use smart sync service for intelligent scanning
         let smart_sync_service = SmartSyncService::new(state.clone());
         
-        match smart_sync_service.evaluate_and_sync(user_id, &webdav_service, folder_path).await {
+        match smart_sync_service.evaluate_and_sync(user_id, &webdav_service, folder_path, Some(&progress)).await {
             Ok(Some(sync_result)) => {
                 info!("🧠 Smart sync completed for {}: {} files found using {:?}", 
                       folder_path, sync_result.files.len(), sync_result.strategy_used);
@@ -137,6 +154,10 @@ async fn perform_sync_internal(
                     .collect();
                 
                 info!("Processing {} files from folder {}", files_to_process.len(), folder_path);
+                
+                // Update progress for file processing phase
+                progress.set_phase(SyncPhase::ProcessingFiles);
+                progress.add_files_found(files_to_process.len());
                 
                 // Process files concurrently with a limit to avoid overwhelming the system
                 let concurrent_limit = 5; // Max 5 concurrent downloads
@@ -185,12 +206,14 @@ async fn perform_sync_internal(
                         Ok(processed) => {
                             if processed {
                                 folder_files_processed += 1;
+                                progress.add_files_processed(1, 0); // We don't track bytes here yet
                                 debug!("Successfully processed file ({} completed in this folder)", folder_files_processed);
                             }
                         }
                         Err(error) => {
                             error!("File processing error: {}", error);
-                            sync_errors.push(error);
+                            sync_errors.push(error.clone());
+                            progress.add_error(&error);
                         }
                     }
                     
@@ -217,13 +240,25 @@ async fn perform_sync_internal(
                 // No files to process, continue to next folder
             }
             Err(e) => {
-                error!("Smart sync failed for folder {}: {}", folder_path, e);
-                sync_errors.push(format!("Smart sync failed for folder {}: {}", folder_path, e));
+                let error_msg = format!("Smart sync failed for folder {}: {}", folder_path, e);
+                error!("{}", error_msg);
+                sync_errors.push(error_msg.clone());
+                progress.add_error(&error_msg);
             }
         }
     }
     
     info!("WebDAV sync completed for user {}: {} files processed", user_id, total_files_processed);
+    
+    // Mark sync as completed
+    progress.set_phase(SyncPhase::Completed);
+    
+    // Log final statistics
+    if let Some(stats) = progress.get_stats() {
+        info!("📊 Final Sync Statistics: {} files processed, {} errors, {} warnings, elapsed: {}s", 
+              stats.files_processed, stats.errors, stats.warnings, stats.elapsed_time.as_secs());
+    }
+    
     Ok(total_files_processed)
 }
 

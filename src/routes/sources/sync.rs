@@ -1,15 +1,20 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::Json,
+    response::{Json, Response, Sse},
+    response::sse::Event,
 };
 use std::sync::Arc;
 use uuid::Uuid;
 use tracing::{error, info};
+use futures::stream::{self, Stream};
+use std::time::Duration;
+use std::convert::Infallible;
 
 use crate::{
     auth::AuthUser,
     models::SourceStatus,
+    services::webdav::{SyncProgress, SyncPhase},
     AppState,
 };
 
@@ -270,6 +275,11 @@ pub async fn trigger_deep_scan(
             tokio::spawn(async move {
                 let start_time = chrono::Utc::now();
                 
+                // Create progress tracker for manual deep scan
+                let progress = SyncProgress::new();
+                progress.set_phase(SyncPhase::Initializing);
+                info!("🚀 Starting manual deep scan with progress tracking for source '{}'", source_name);
+                
                 // Use smart sync service for deep scans - this will properly reset directory ETags
                 let smart_sync_service = crate::services::webdav::SmartSyncService::new(state_clone.clone());
                 let mut all_files_to_process = Vec::new();
@@ -278,12 +288,14 @@ pub async fn trigger_deep_scan(
                 // Process each watch folder using smart sync
                 for watch_folder in &webdav_config.watch_folders {
                     info!("🔍 Deep scan processing watch folder: {}", watch_folder);
+                    progress.set_current_directory(&watch_folder);
                     
                     match smart_sync_service.perform_smart_sync(
                         user_id, 
                         &webdav_service, 
                         watch_folder, 
-                        crate::services::webdav::SmartSyncStrategy::FullDeepScan // Force deep scan for directory reset
+                        crate::services::webdav::SmartSyncStrategy::FullDeepScan, // Force deep scan for directory reset
+                        Some(&progress) // Add progress tracking for manual deep scan
                     ).await {
                         Ok(sync_result) => {
                             info!("Deep scan found {} files and {} directories in {}", 
@@ -305,7 +317,9 @@ pub async fn trigger_deep_scan(
                             total_directories_tracked += sync_result.directories.len();
                         }
                         Err(e) => {
-                            error!("Deep scan failed for watch folder {}: {}", watch_folder, e);
+                            let error_msg = format!("Deep scan failed for watch folder {}: {}", watch_folder, e);
+                            error!("{}", error_msg);
+                            progress.add_error(&error_msg);
                             // Continue with other folders rather than failing completely
                         }
                     }
@@ -328,6 +342,13 @@ pub async fn trigger_deep_scan(
                                     let duration = chrono::Utc::now() - start_time;
                                     info!("Deep scan completed for source {}: {} files processed in {:?}", 
                                         source_id_clone, files_processed, duration);
+                                    
+                                    // Mark progress as completed and log final statistics
+                                    progress.set_phase(SyncPhase::Completed);
+                                    if let Some(stats) = progress.get_stats() {
+                                        info!("📊 Manual deep scan statistics: {} files processed, {} errors, {} warnings, elapsed: {}s", 
+                                              stats.files_processed, stats.errors, stats.warnings, stats.elapsed_time.as_secs());
+                                    }
                                     
                                     // Update source status to idle
                                     if let Err(e) = state_clone.db.update_source_status(
@@ -364,6 +385,10 @@ pub async fn trigger_deep_scan(
                                 }
                                 Err(e) => {
                                     error!("Deep scan file processing failed for source {}: {}", source_id_clone, e);
+                                    
+                                    // Mark progress as failed and log error
+                                    progress.set_phase(SyncPhase::Failed(e.to_string()));
+                                    progress.add_error(&format!("File processing failed: {}", e));
                                     
                                     // Update source status to error
                                     if let Err(e2) = state_clone.db.update_source_status(
@@ -422,4 +447,122 @@ pub async fn trigger_deep_scan(
             })))
         }
     }
+}
+
+/// SSE endpoint for real-time sync progress updates
+#[utoipa::path(
+    get,
+    path = "/api/sources/{id}/sync/progress",
+    tag = "sources",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Source ID")
+    ),
+    responses(
+        (status = 200, description = "SSE stream of sync progress updates"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Source not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn sync_progress_stream(
+    auth_user: AuthUser,
+    Path(source_id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+    // Verify the source exists and the user has access
+    let _source = state
+        .db
+        .get_source(auth_user.user.id, source_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Create the progress stream
+    let progress_tracker = state.sync_progress_tracker.clone();
+    let stream = stream::unfold((), move |_| {
+        let tracker = progress_tracker.clone();
+        async move {
+            // Check for progress update
+            let progress_info = tracker.get_progress(source_id);
+            
+            let event = match progress_info {
+                Some(info) => {
+                    // Send current progress
+                    match serde_json::to_string(&info) {
+                        Ok(json) => Event::default()
+                            .event("progress")
+                            .data(json),
+                        Err(e) => {
+                            error!("Failed to serialize progress info: {}", e);
+                            Event::default()
+                                .event("error")
+                                .data(format!("Failed to serialize progress: {}", e))
+                        }
+                    }
+                }
+                None => {
+                    // No active sync, send a heartbeat
+                    Event::default()
+                        .event("heartbeat")
+                        .data(serde_json::json!({
+                            "source_id": source_id,
+                            "is_active": false,
+                            "timestamp": chrono::Utc::now().timestamp()
+                        }).to_string())
+                }
+            };
+            
+            // Wait before next update
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            
+            Some((Ok(event), ()))
+        }
+    });
+
+    Ok(Sse::new(stream)
+        .keep_alive(
+            axum::response::sse::KeepAlive::new()
+                .interval(Duration::from_secs(5))
+                .text("keep-alive")
+        ))
+}
+
+/// Get current sync progress (one-time API call)
+#[utoipa::path(
+    get,
+    path = "/api/sources/{id}/sync/status",
+    tag = "sources",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = Uuid, Path, description = "Source ID")
+    ),
+    responses(
+        (status = 200, description = "Current sync progress", body = crate::services::sync_progress_tracker::SyncProgressInfo),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Source not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_sync_status(
+    auth_user: AuthUser,
+    Path(source_id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Option<crate::services::sync_progress_tracker::SyncProgressInfo>>, StatusCode> {
+    // Verify the source exists and the user has access
+    let _source = state
+        .db
+        .get_source(auth_user.user.id, source_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Get current progress
+    let progress_info = state.sync_progress_tracker.get_progress(source_id);
+    
+    Ok(Json(progress_info))
 }

@@ -201,6 +201,7 @@ impl TestContext {
             source_scheduler: None,
             queue_service,
             oidc_client: None,
+            sync_progress_tracker: Arc::new(crate::services::sync_progress_tracker::SyncProgressTracker::new()),
         });
         
         let app = Router::new()

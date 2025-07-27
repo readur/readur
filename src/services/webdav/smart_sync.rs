@@ -5,7 +5,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::{AppState, models::{CreateWebDAVDirectory, FileIngestionInfo}};
-use super::WebDAVService;
+use super::{WebDAVService, SyncProgress, SyncPhase};
 
 /// Smart sync service that provides intelligent WebDAV synchronization
 /// by comparing directory ETags to avoid unnecessary scans
@@ -52,7 +52,11 @@ impl SmartSyncService {
         user_id: Uuid,
         webdav_service: &WebDAVService,
         folder_path: &str,
+        progress: Option<&SyncProgress>,
     ) -> Result<SmartSyncDecision> {
+        if let Some(progress) = progress {
+            progress.set_phase(SyncPhase::Evaluating);
+        }
         info!("🧠 Evaluating smart sync for folder: {}", folder_path);
         
         // Get all known directory ETags from database in bulk
@@ -134,15 +138,16 @@ impl SmartSyncService {
         webdav_service: &WebDAVService,
         folder_path: &str,
         strategy: SmartSyncStrategy,
+        progress: Option<&SyncProgress>,
     ) -> Result<SmartSyncResult> {
         match strategy {
             SmartSyncStrategy::FullDeepScan => {
                 info!("🔍 Performing full deep scan for: {}", folder_path);
-                self.perform_full_deep_scan(user_id, webdav_service, folder_path).await
+                self.perform_full_deep_scan(user_id, webdav_service, folder_path, progress).await
             }
             SmartSyncStrategy::TargetedScan(target_dirs) => {
                 info!("🎯 Performing targeted scan of {} directories", target_dirs.len());
-                self.perform_targeted_scan(user_id, webdav_service, target_dirs).await
+                self.perform_targeted_scan(user_id, webdav_service, target_dirs, progress).await
             }
         }
     }
@@ -153,14 +158,21 @@ impl SmartSyncService {
         user_id: Uuid,
         webdav_service: &WebDAVService,
         folder_path: &str,
+        progress: Option<&SyncProgress>,
     ) -> Result<Option<SmartSyncResult>> {
-        match self.evaluate_sync_need(user_id, webdav_service, folder_path).await? {
+        match self.evaluate_sync_need(user_id, webdav_service, folder_path, progress).await? {
             SmartSyncDecision::SkipSync => {
                 info!("✅ Smart sync: Skipping sync for {} - no changes detected", folder_path);
+                if let Some(progress) = progress {
+                    progress.set_phase(SyncPhase::Completed);
+                }
                 Ok(None)
             }
             SmartSyncDecision::RequiresSync(strategy) => {
-                let result = self.perform_smart_sync(user_id, webdav_service, folder_path, strategy).await?;
+                let result = self.perform_smart_sync(user_id, webdav_service, folder_path, strategy, progress).await?;
+                if let Some(progress) = progress {
+                    progress.set_phase(SyncPhase::Completed);
+                }
                 Ok(Some(result))
             }
         }
@@ -172,11 +184,17 @@ impl SmartSyncService {
         user_id: Uuid,
         webdav_service: &WebDAVService,
         folder_path: &str,
+        progress: Option<&SyncProgress>,
     ) -> Result<SmartSyncResult> {
-        let discovery_result = webdav_service.discover_files_and_directories(folder_path, true).await?;
+        let discovery_result = webdav_service.discover_files_and_directories_with_progress(folder_path, true, progress).await?;
         
         info!("Deep scan found {} files and {} directories in folder {}", 
               discovery_result.files.len(), discovery_result.directories.len(), folder_path);
+        
+        // Update progress phase for metadata saving
+        if let Some(progress) = progress {
+            progress.set_phase(SyncPhase::SavingMetadata);
+        }
         
         // Save all discovered directories to database for ETag tracking
         let mut directories_saved = 0;
@@ -217,6 +235,7 @@ impl SmartSyncService {
         user_id: Uuid,
         webdav_service: &WebDAVService,
         target_directories: Vec<String>,
+        progress: Option<&SyncProgress>,
     ) -> Result<SmartSyncResult> {
         let mut all_files = Vec::new();
         let mut all_directories = Vec::new();
@@ -224,7 +243,11 @@ impl SmartSyncService {
 
         // Scan each target directory recursively
         for target_dir in &target_directories {
-            match webdav_service.discover_files_and_directories(target_dir, true).await {
+            if let Some(progress) = progress {
+                progress.set_current_directory(target_dir);
+            }
+            
+            match webdav_service.discover_files_and_directories_with_progress(target_dir, true, progress).await {
                 Ok(discovery_result) => {
                     all_files.extend(discovery_result.files);
                     
@@ -254,6 +277,11 @@ impl SmartSyncService {
             }
         }
 
+        // Update progress phase for metadata saving
+        if let Some(progress) = progress {
+            progress.set_phase(SyncPhase::SavingMetadata);
+        }
+        
         info!("Targeted scan completed: {} directories scanned, {} files found", 
               directories_scanned, all_files.len());
 

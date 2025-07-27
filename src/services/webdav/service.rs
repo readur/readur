@@ -11,6 +11,7 @@ use super::config::{WebDAVConfig, RetryConfig, ConcurrencyConfig};
 use super::connection::WebDAVConnection;
 use super::discovery::{WebDAVDiscovery, WebDAVDiscoveryResult};
 use super::validation::{WebDAVValidator, ValidationReport};
+use super::progress::SyncProgress;
 
 /// Main WebDAV service that coordinates all WebDAV operations
 pub struct WebDAVService {
@@ -154,6 +155,17 @@ impl WebDAVService {
     pub async fn discover_files_and_directories(&self, directory_path: &str, recursive: bool) -> Result<WebDAVDiscoveryResult> {
         info!("🔍 Discovering files and directories: {} (recursive: {})", directory_path, recursive);
         self.discovery.discover_files_and_directories(directory_path, recursive).await
+    }
+
+    /// Discovers both files and directories with progress tracking
+    pub async fn discover_files_and_directories_with_progress(
+        &self, 
+        directory_path: &str, 
+        recursive: bool, 
+        progress: Option<&SyncProgress>
+    ) -> Result<WebDAVDiscoveryResult> {
+        info!("🔍 Discovering files and directories with progress: {} (recursive: {})", directory_path, recursive);
+        self.discovery.discover_files_and_directories_with_progress(directory_path, recursive, progress).await
     }
 
     /// Downloads a file from WebDAV server by path

@@ -700,7 +700,8 @@ impl SourceScheduler {
                         source_clone.user_id, 
                         &webdav_service, 
                         watch_folder, 
-                        crate::services::webdav::SmartSyncStrategy::FullDeepScan // Force deep scan for automatic triggers
+                        crate::services::webdav::SmartSyncStrategy::FullDeepScan, // Force deep scan for automatic triggers
+                        None // No progress tracking for automatic syncs
                     ).await {
                         Ok(sync_result) => {
                             all_files_to_process.extend(sync_result.files);

@@ -10,6 +10,7 @@ use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_
 use super::config::{WebDAVConfig, ConcurrencyConfig};
 use super::connection::WebDAVConnection;
 use super::url_management::WebDAVUrlManager;
+use super::progress::{SyncProgress, SyncPhase};
 
 /// Results from WebDAV discovery including both files and directories
 #[derive(Debug, Clone)]
@@ -59,6 +60,34 @@ impl WebDAVDiscovery {
             self.discover_files_and_directories_recursive(directory_path).await
         } else {
             self.discover_files_and_directories_single(directory_path).await
+        }
+    }
+
+    /// Discovers both files and directories with progress tracking
+    pub async fn discover_files_and_directories_with_progress(
+        &self, 
+        directory_path: &str, 
+        recursive: bool, 
+        progress: Option<&SyncProgress>
+    ) -> Result<WebDAVDiscoveryResult> {
+        if let Some(progress) = progress {
+            if recursive {
+                progress.set_phase(SyncPhase::DiscoveringDirectories);
+            }
+            progress.set_current_directory(directory_path);
+        }
+        
+        info!("🔍 Discovering files and directories in: {}", directory_path);
+        
+        if recursive {
+            self.discover_files_and_directories_recursive_with_progress(directory_path, progress).await
+        } else {
+            let result = self.discover_files_and_directories_single(directory_path).await?;
+            if let Some(progress) = progress {
+                progress.add_directories_found(result.directories.len());
+                progress.add_files_found(result.files.len());
+            }
+            Ok(result)
         }
     }
 
@@ -204,6 +233,15 @@ impl WebDAVDiscovery {
 
     /// Discovers both files and directories recursively in directory tree
     async fn discover_files_and_directories_recursive(&self, root_directory: &str) -> Result<WebDAVDiscoveryResult> {
+        self.discover_files_and_directories_recursive_with_progress(root_directory, None).await
+    }
+
+    /// Discovers both files and directories recursively with progress tracking
+    async fn discover_files_and_directories_recursive_with_progress(
+        &self, 
+        root_directory: &str, 
+        progress: Option<&SyncProgress>
+    ) -> Result<WebDAVDiscoveryResult> {
         let mut all_files = Vec::new();
         let mut all_directories = Vec::new();
         let mut directories_to_scan = vec![root_directory.to_string()];
@@ -219,7 +257,22 @@ impl WebDAVDiscovery {
                 let semaphore = &semaphore;
                 async move {
                     let _permit = semaphore.acquire().await.unwrap();
-                    self.scan_directory_with_all_info(&dir).await
+                    
+                    // Update progress with current directory
+                    if let Some(progress) = progress {
+                        progress.set_current_directory(&dir);
+                    }
+                    
+                    let result = self.scan_directory_with_all_info(&dir).await;
+                    
+                    // Update progress counts on successful scan
+                    if let (Ok((ref files, ref directories, _)), Some(progress)) = (&result, progress) {
+                        progress.add_directories_found(directories.len());
+                        progress.add_files_found(files.len());
+                        progress.add_directories_processed(1);
+                    }
+                    
+                    result
                 }
             });
 
@@ -237,6 +290,9 @@ impl WebDAVDiscovery {
                     }
                     Err(e) => {
                         warn!("Failed to scan directory: {}", e);
+                        if let Some(progress) = progress {
+                            progress.add_error(&format!("Directory scan failed: {}", e));
+                        }
                     }
                 }
             }
@@ -244,6 +300,12 @@ impl WebDAVDiscovery {
 
         info!("Recursive discovery found {} total files and {} directories", 
               all_files.len(), all_directories.len());
+        
+        // Update final phase when discovery is complete
+        if let Some(progress) = progress {
+            progress.set_phase(SyncPhase::DiscoveringFiles);
+        }
+        
         Ok(WebDAVDiscoveryResult { 
             files: all_files, 
             directories: all_directories 

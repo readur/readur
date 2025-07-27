@@ -37,6 +37,7 @@ pub struct AppState {
     pub source_scheduler: Option<std::sync::Arc<scheduling::source_scheduler::SourceScheduler>>,
     pub queue_service: std::sync::Arc<ocr::queue::OcrQueueService>,
     pub oidc_client: Option<std::sync::Arc<OidcClient>>,
+    pub sync_progress_tracker: std::sync::Arc<services::sync_progress_tracker::SyncProgressTracker>,
 }
 
 /// Health check endpoint for monitoring

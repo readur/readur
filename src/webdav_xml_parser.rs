@@ -616,7 +616,7 @@ impl ParsedETag {
 }
 
 fn classify_etag_format(etag: &str) -> ETagFormat {
-    let lower = etag.to_lowercase();
+    let _lower = etag.to_lowercase();
     
     // Check for UUIDs (with or without dashes/braces)
     if is_uuid_like(etag) {

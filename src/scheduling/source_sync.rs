@@ -14,7 +14,7 @@ use crate::{
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::local_folder_service::LocalFolderService,
     services::s3_service::S3Service,
-    services::webdav::{WebDAVService, WebDAVConfig},
+    services::webdav::{WebDAVService, WebDAVConfig, SyncProgress, SyncPhase},
 };
 
 #[derive(Clone)]
@@ -115,7 +115,12 @@ impl SourceSyncService {
 
         info!("WebDAV service created successfully, starting sync with {} folders", webdav_config.watch_folders.len());
 
-        self.perform_sync_internal_with_cancellation(
+        // Create progress tracker for scheduled sync
+        let progress = SyncProgress::new();
+        progress.set_phase(SyncPhase::Initializing);
+        info!("🚀 Starting scheduled WebDAV sync with progress tracking for source '{}'", source.name);
+
+        let sync_result = self.perform_sync_internal_with_cancellation(
             source.user_id,
             source.id,
             &webdav_config.watch_folders,
@@ -126,13 +131,15 @@ impl SourceSyncService {
                 let service = webdav_service.clone();
                 let state_clone = self.state.clone();
                 let user_id = source.user_id;  // Capture user_id from source
+                let progress = progress.clone(); // Clone progress for the async closure
                 async move { 
                     info!("🧠 Using smart sync for scheduled sync: {}", folder_path);
+                    progress.set_current_directory(&folder_path);
                     
                     // Use smart sync service for intelligent discovery
                     let smart_sync_service = crate::services::webdav::SmartSyncService::new(state_clone);
                     
-                    match smart_sync_service.evaluate_and_sync(user_id, &service, &folder_path).await {
+                    match smart_sync_service.evaluate_and_sync(user_id, &service, &folder_path, Some(&progress)).await {
                         Ok(Some(sync_result)) => {
                             info!("✅ Smart sync completed for {}: {} files found using {:?}", 
                                   folder_path, sync_result.files.len(), sync_result.strategy_used);
@@ -151,8 +158,10 @@ impl SourceSyncService {
             },
             |file_path| {
                 let service = webdav_service.clone();
+                let progress = progress.clone(); // Clone progress for the async closure
                 async move { 
                     debug!("WebDAV download_file called for: {}", file_path);
+                    progress.set_current_file(Some(&file_path));
                     let result = service.download_file(&file_path).await;
                     match &result {
                         Ok(data) => debug!("WebDAV downloaded {} bytes for file: {}", data.len(), file_path),
@@ -161,7 +170,16 @@ impl SourceSyncService {
                     result
                 }
             }
-        ).await
+        ).await;
+
+        // Mark sync as completed and log final statistics
+        progress.set_phase(SyncPhase::Completed);
+        if let Some(stats) = progress.get_stats() {
+            info!("📊 Scheduled sync completed for '{}': {} files processed, {} errors, {} warnings, elapsed: {}s", 
+                  source.name, stats.files_processed, stats.errors, stats.warnings, stats.elapsed_time.as_secs());
+        }
+
+        sync_result
     }
 
     async fn sync_local_folder_source(&self, source: &Source, enable_background_ocr: bool) -> Result<usize> {

@@ -14,6 +14,26 @@ export default api
 export { ErrorHelper, ErrorCodes } from './errors'
 export type { ApiErrorResponse, AxiosErrorWithCode, ErrorCode } from './errors'
 
+export interface SyncProgressInfo {
+  source_id: string
+  phase: string
+  phase_description: string
+  elapsed_time_secs: number
+  directories_found: number
+  directories_processed: number
+  files_found: number
+  files_processed: number
+  bytes_processed: number
+  processing_rate_files_per_sec: number
+  files_progress_percent: number
+  estimated_time_remaining_secs?: number
+  current_directory: string
+  current_file?: string
+  errors: number
+  warnings: number
+  is_active: boolean
+}
+
 export interface Document {
   id: string
   filename: string
@@ -485,5 +505,13 @@ export const sourcesService = {
 
   stopSync: (sourceId: string) => {
     return api.post(`/sources/${sourceId}/sync/stop`)
+  },
+
+  getSyncStatus: (sourceId: string) => {
+    return api.get(`/sources/${sourceId}/sync/status`)
+  },
+
+  getSyncProgressStream: (sourceId: string) => {
+    return new EventSource(`/api/sources/${sourceId}/sync/progress`)
   },
 }

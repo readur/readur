@@ -79,6 +79,7 @@ import { useNavigate } from 'react-router-dom';
 import api, { queueService, sourcesService, ErrorHelper, ErrorCodes } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
+import SyncProgressDisplay from '../components/SyncProgressDisplay';
 
 interface Source {
   id: string;
@@ -885,7 +886,14 @@ const SourcesPage: React.FC = () => {
 
   const renderSourceCard = (source: Source) => (
     <Fade in={true} key={source.id}>
-      <Card 
+      <Box>
+        {/* Progress Display for Syncing Sources */}
+        <SyncProgressDisplay
+          sourceId={source.id}
+          sourceName={source.name}
+          isVisible={source.status === 'syncing'}
+        />
+        <Card 
         data-testid="source-item"
         sx={{ 
           position: 'relative',
@@ -1178,7 +1186,8 @@ const SourcesPage: React.FC = () => {
             </Alert>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      </Box>
     </Fade>
   );
 
