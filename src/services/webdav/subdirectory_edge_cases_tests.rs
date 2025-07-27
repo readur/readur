@@ -26,6 +26,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
     vec![
         // Root directories at different levels
         FileIngestionInfo {
+            relative_path: "/FullerDocuments".to_string(),
+            full_path: "/FullerDocuments".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments".to_string(),
             name: "FullerDocuments".to_string(),
             size: 0,
@@ -40,6 +43,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments".to_string(),
+            full_path: "/FullerDocuments/JonDocuments".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments".to_string(),
             name: "JonDocuments".to_string(),
             size: 0,
@@ -55,6 +61,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
         },
         // Multiple levels of nesting
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Work".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Work".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Work".to_string(),
             name: "Work".to_string(),
             size: 0,
@@ -69,6 +78,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Personal".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Personal".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Personal".to_string(),
             name: "Personal".to_string(),
             size: 0,
@@ -83,6 +95,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Work/Projects".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Work/Projects".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Work/Projects".to_string(),
             name: "Projects".to_string(),
             size: 0,
@@ -97,6 +112,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Work/Reports".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Work/Reports".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Work/Reports".to_string(),
             name: "Reports".to_string(),
             size: 0,
@@ -111,6 +129,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Work/Projects/WebApp".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Work/Projects/WebApp".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Work/Projects/WebApp".to_string(),
             name: "WebApp".to_string(),
             size: 0,
@@ -126,6 +147,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
         },
         // Files at various nesting levels - this is the key part that was failing
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/index.txt".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/index.txt".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/index.txt".to_string(),
             name: "index.txt".to_string(),
             size: 1500,
@@ -140,6 +164,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Work/schedule.pdf".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Work/schedule.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Work/schedule.pdf".to_string(),
             name: "schedule.pdf".to_string(),
             size: 2048000,
@@ -154,6 +181,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Work/Projects/proposal.docx".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Work/Projects/proposal.docx".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Work/Projects/proposal.docx".to_string(),
             name: "proposal.docx".to_string(),
             size: 1024000,
@@ -168,6 +198,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Work/Projects/WebApp/design.pdf".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Work/Projects/WebApp/design.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Work/Projects/WebApp/design.pdf".to_string(),
             name: "design.pdf".to_string(),
             size: 3072000,
@@ -182,6 +215,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Work/Reports/monthly.pdf".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Work/Reports/monthly.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Work/Reports/monthly.pdf".to_string(),
             name: "monthly.pdf".to_string(),
             size: 4096000,
@@ -196,6 +232,9 @@ fn create_complex_nested_structure() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/FullerDocuments/JonDocuments/Personal/diary.txt".to_string(),
+            full_path: "/FullerDocuments/JonDocuments/Personal/diary.txt".to_string(),
+            #[allow(deprecated)]
             path: "/FullerDocuments/JonDocuments/Personal/diary.txt".to_string(),
             name: "diary.txt".to_string(),
             size: 5120,
@@ -222,10 +261,10 @@ async fn test_comprehensive_directory_extraction() {
     for file in &files {
         if file.is_directory {
             // Add the directory itself
-            all_directories.insert(file.path.clone());
+            all_directories.insert(file.relative_path.clone());
         } else {
             // Extract all parent directories from file paths
-            let mut path_parts: Vec<&str> = file.path.split('/').collect();
+            let mut path_parts: Vec<&str> = file.relative_path.split('/').collect();
             path_parts.pop(); // Remove the filename
             
             // Build directory paths from root down to immediate parent
@@ -297,7 +336,7 @@ async fn test_first_time_scan_scenario_logic() {
     
     // Verify that files actually exist in subdirectories
     let files_in_subdirs: Vec<_> = files.iter()
-        .filter(|f| f.path.starts_with(parent_path) && f.path != parent_path && !f.is_directory)
+        .filter(|f| f.relative_path.starts_with(parent_path) && f.relative_path != parent_path && !f.is_directory)
         .collect();
     
     assert!(!files_in_subdirs.is_empty(), "There should be files in subdirectories");
@@ -305,14 +344,14 @@ async fn test_first_time_scan_scenario_logic() {
     
     // Test that we can correctly identify direct children at each level
     let direct_children_root: Vec<_> = files.iter()
-        .filter(|f| service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments"))
+        .filter(|f| service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments"))
         .collect();
     
     // Should include: index.txt, Work/, Personal/
     assert_eq!(direct_children_root.len(), 3);
     
     let direct_children_work: Vec<_> = files.iter()
-        .filter(|f| service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work"))
+        .filter(|f| service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work"))
         .collect();
     
     // Should include: schedule.pdf, Projects/, Reports/
@@ -330,7 +369,7 @@ async fn test_directory_etag_mapping_accuracy() {
     let mut directory_etags = std::collections::HashMap::new();
     for file in &files {
         if file.is_directory {
-            directory_etags.insert(file.path.clone(), file.etag.clone());
+            directory_etags.insert(file.relative_path.clone(), file.etag.clone());
         }
     }
     
@@ -358,42 +397,42 @@ async fn test_direct_file_counting_precision() {
     
     // Root level: should have 1 direct file (index.txt)
     let root_direct_files: Vec<_> = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments"))
         .collect();
     assert_eq!(root_direct_files.len(), 1);
     assert_eq!(root_direct_files[0].name, "index.txt");
     
     // Work level: should have 1 direct file (schedule.pdf)
     let work_direct_files: Vec<_> = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work"))
         .collect();
     assert_eq!(work_direct_files.len(), 1);
     assert_eq!(work_direct_files[0].name, "schedule.pdf");
     
     // Projects level: should have 1 direct file (proposal.docx)
     let projects_direct_files: Vec<_> = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work/Projects"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work/Projects"))
         .collect();
     assert_eq!(projects_direct_files.len(), 1);
     assert_eq!(projects_direct_files[0].name, "proposal.docx");
     
     // WebApp level: should have 1 direct file (design.pdf)
     let webapp_direct_files: Vec<_> = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work/Projects/WebApp"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work/Projects/WebApp"))
         .collect();
     assert_eq!(webapp_direct_files.len(), 1);
     assert_eq!(webapp_direct_files[0].name, "design.pdf");
     
     // Reports level: should have 1 direct file (monthly.pdf)
     let reports_direct_files: Vec<_> = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work/Reports"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work/Reports"))
         .collect();
     assert_eq!(reports_direct_files.len(), 1);
     assert_eq!(reports_direct_files[0].name, "monthly.pdf");
     
     // Personal level: should have 1 direct file (diary.txt)
     let personal_direct_files: Vec<_> = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Personal"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Personal"))
         .collect();
     assert_eq!(personal_direct_files.len(), 1);
     assert_eq!(personal_direct_files[0].name, "diary.txt");
@@ -409,37 +448,37 @@ async fn test_total_size_calculation_per_directory() {
     // Test size calculations match expected values
     
     let root_size: i64 = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments"))
         .map(|f| f.size)
         .sum();
     assert_eq!(root_size, 1500); // index.txt
     
     let work_size: i64 = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work"))
         .map(|f| f.size)
         .sum();
     assert_eq!(work_size, 2048000); // schedule.pdf
     
     let projects_size: i64 = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work/Projects"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work/Projects"))
         .map(|f| f.size)
         .sum();
     assert_eq!(projects_size, 1024000); // proposal.docx
     
     let webapp_size: i64 = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work/Projects/WebApp"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work/Projects/WebApp"))
         .map(|f| f.size)
         .sum();
     assert_eq!(webapp_size, 3072000); // design.pdf
     
     let reports_size: i64 = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Work/Reports"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Work/Reports"))
         .map(|f| f.size)
         .sum();
     assert_eq!(reports_size, 4096000); // monthly.pdf
     
     let personal_size: i64 = files.iter()
-        .filter(|f| !f.is_directory && service.is_direct_child(&f.path, "/FullerDocuments/JonDocuments/Personal"))
+        .filter(|f| !f.is_directory && service.is_direct_child(&f.relative_path, "/FullerDocuments/JonDocuments/Personal"))
         .map(|f| f.size)
         .sum();
     assert_eq!(personal_size, 5120); // diary.txt
@@ -497,7 +536,7 @@ async fn test_bug_scenario_file_count_verification() {
     // Verify all files would be discovered in a full scan
     let parent_path = "/FullerDocuments/JonDocuments";
     let files_under_parent: Vec<_> = files.iter()
-        .filter(|f| f.path.starts_with(parent_path) && !f.is_directory)
+        .filter(|f| f.relative_path.starts_with(parent_path) && !f.is_directory)
         .collect();
     
     // All 6 files should be under the parent (all files in our mock are under this path)
@@ -508,7 +547,7 @@ async fn test_bug_scenario_file_count_verification() {
     
     // But with the fix, a full scan would discover them all
     let discovered_files: Vec<_> = files.iter()
-        .filter(|f| f.path.starts_with(parent_path))
+        .filter(|f| f.relative_path.starts_with(parent_path))
         .collect();
     
     // Should include both directories and files

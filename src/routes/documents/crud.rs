@@ -179,6 +179,9 @@ pub async fn upload_document(
     use chrono::Utc;
     
     let mut file_info = FileIngestionInfo {
+        relative_path: format!("upload/{}", filename), // Virtual path for web uploads
+        full_path: format!("upload/{}", filename), // For web uploads, relative and full are the same
+        #[allow(deprecated)]
         path: format!("upload/{}", filename), // Virtual path for web uploads
         name: filename.clone(),
         size: data.len() as i64,

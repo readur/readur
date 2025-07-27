@@ -398,6 +398,9 @@ async fn test_connection_get_url_for_path_normalization() {
     for (input_path, expected_url) in test_cases {
         let result_url = connection.get_url_for_path(input_path);
         
+        // Verify the URL matches expected
+        assert_eq!(result_url, expected_url, "URL construction failed for path: {}", input_path);
+        
         // Ensure no double slashes in the final URL (except after protocol)
         let url_without_protocol = result_url.replace("https://", "");
         assert!(!url_without_protocol.contains("//"), "URL should not contain double slashes: {}", result_url);

@@ -42,6 +42,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
     vec![
         // Root directory
         FileIngestionInfo {
+            relative_path: "/Documents".to_string(),
+            full_path: "/Documents".to_string(),
+            #[allow(deprecated)]
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -57,6 +60,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
         },
         // Level 1 directories
         FileIngestionInfo {
+            relative_path: "/Documents/2024".to_string(),
+            full_path: "/Documents/2024".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/2024".to_string(),
             name: "2024".to_string(),
             size: 0,
@@ -71,6 +77,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/Archive".to_string(),
+            full_path: "/Documents/Archive".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Archive".to_string(),
             name: "Archive".to_string(),
             size: 0,
@@ -86,6 +95,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
         },
         // Level 2 directories
         FileIngestionInfo {
+            relative_path: "/Documents/2024/Q1".to_string(),
+            full_path: "/Documents/2024/Q1".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/2024/Q1".to_string(),
             name: "Q1".to_string(),
             size: 0,
@@ -100,6 +112,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/2024/Q2".to_string(),
+            full_path: "/Documents/2024/Q2".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/2024/Q2".to_string(),
             name: "Q2".to_string(),
             size: 0,
@@ -115,6 +130,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
         },
         // Level 3 directory
         FileIngestionInfo {
+            relative_path: "/Documents/2024/Q1/Reports".to_string(),
+            full_path: "/Documents/2024/Q1/Reports".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/2024/Q1/Reports".to_string(),
             name: "Reports".to_string(),
             size: 0,
@@ -130,6 +148,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
         },
         // Files at various levels
         FileIngestionInfo {
+            relative_path: "/Documents/root-file.pdf".to_string(),
+            full_path: "/Documents/root-file.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/root-file.pdf".to_string(),
             name: "root-file.pdf".to_string(),
             size: 1024000,
@@ -144,6 +165,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/2024/annual-report.pdf".to_string(),
+            full_path: "/Documents/2024/annual-report.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/2024/annual-report.pdf".to_string(),
             name: "annual-report.pdf".to_string(),
             size: 2048000,
@@ -158,6 +182,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/2024/Q1/q1-summary.pdf".to_string(),
+            full_path: "/Documents/2024/Q1/q1-summary.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/2024/Q1/q1-summary.pdf".to_string(),
             name: "q1-summary.pdf".to_string(),
             size: 512000,
@@ -172,6 +199,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/2024/Q1/Reports/detailed-report.pdf".to_string(),
+            full_path: "/Documents/2024/Q1/Reports/detailed-report.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/2024/Q1/Reports/detailed-report.pdf".to_string(),
             name: "detailed-report.pdf".to_string(),
             size: 4096000,
@@ -186,6 +216,9 @@ fn mock_nested_directory_files() -> Vec<FileIngestionInfo> {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/Archive/old-document.pdf".to_string(),
+            full_path: "/Documents/Archive/old-document.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Archive/old-document.pdf".to_string(),
             name: "old-document.pdf".to_string(),
             size: 256000,

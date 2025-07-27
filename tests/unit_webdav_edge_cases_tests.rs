@@ -58,6 +58,9 @@ async fn test_directory_only_structure() {
     // Test structure with only directories, no files
     let directory_only_files = vec![
         FileIngestionInfo {
+            relative_path: "/Documents".to_string(),
+            full_path: "/Documents".to_string(),
+            #[allow(deprecated)]
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -72,6 +75,9 @@ async fn test_directory_only_structure() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/Empty1".to_string(),
+            full_path: "/Documents/Empty1".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Empty1".to_string(),
             name: "Empty1".to_string(),
             size: 0,
@@ -86,6 +92,9 @@ async fn test_directory_only_structure() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/Empty2".to_string(),
+            full_path: "/Documents/Empty2".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Empty2".to_string(),
             name: "Empty2".to_string(),
             size: 0,
@@ -137,6 +146,9 @@ async fn test_very_deep_nesting() {
     let deep_files = vec![
         // All directories in the path
         FileIngestionInfo {
+            relative_path: "/Documents".to_string(),
+            full_path: "/Documents".to_string(),
+            #[allow(deprecated)]
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -152,6 +164,9 @@ async fn test_very_deep_nesting() {
         },
         // All intermediate directories from L1 to L10
         FileIngestionInfo {
+            relative_path: "/Documents/L1".to_string(),
+            full_path: "/Documents/L1".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/L1".to_string(),
             name: "L1".to_string(),
             size: 0,
@@ -166,6 +181,9 @@ async fn test_very_deep_nesting() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/L1/L2".to_string(),
+            full_path: "/Documents/L1/L2".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/L1/L2".to_string(),
             name: "L2".to_string(),
             size: 0,
@@ -180,6 +198,9 @@ async fn test_very_deep_nesting() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/L1/L2/L3".to_string(),
+            full_path: "/Documents/L1/L2/L3".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/L1/L2/L3".to_string(),
             name: "L3".to_string(),
             size: 0,
@@ -194,6 +215,9 @@ async fn test_very_deep_nesting() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: deep_path.to_string(),
+            full_path: deep_path.to_string(),
+            #[allow(deprecated)]
             path: deep_path.to_string(),
             name: "L10".to_string(),
             size: 0,
@@ -209,6 +233,9 @@ async fn test_very_deep_nesting() {
         },
         // File at the deepest level
         FileIngestionInfo {
+            relative_path: file_path.clone(),
+            full_path: file_path.clone(),
+            #[allow(deprecated)]
             path: file_path.clone(),
             name: "deep-file.pdf".to_string(),
             size: 1024000,
@@ -267,6 +294,9 @@ async fn test_special_characters_in_paths() {
     // Test paths with special characters, spaces, unicode
     let special_files = vec![
         FileIngestionInfo {
+            relative_path: "/Documents/Folder with spaces".to_string(),
+            full_path: "/Documents/Folder with spaces".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Folder with spaces".to_string(),
             name: "Folder with spaces".to_string(),
             size: 0,
@@ -281,6 +311,9 @@ async fn test_special_characters_in_paths() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/Folder-with-dashes".to_string(),
+            full_path: "/Documents/Folder-with-dashes".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Folder-with-dashes".to_string(),
             name: "Folder-with-dashes".to_string(),
             size: 0,
@@ -295,7 +328,10 @@ async fn test_special_characters_in_paths() {
             metadata: None,
         },
         FileIngestionInfo {
-            path: "/Documents/Документы".to_string(), // Cyrillic
+            relative_path: "/Documents/Документы".to_string(), // Cyrillic
+            full_path: "/Documents/Документы".to_string(),
+            #[allow(deprecated)]
+            path: "/Documents/Документы".to_string(),
             name: "Документы".to_string(),
             size: 0,
             mime_type: "".to_string(),
@@ -309,6 +345,9 @@ async fn test_special_characters_in_paths() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/Folder with spaces/file with spaces.pdf".to_string(),
+            full_path: "/Documents/Folder with spaces/file with spaces.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/Folder with spaces/file with spaces.pdf".to_string(),
             name: "file with spaces.pdf".to_string(),
             size: 1024000,
@@ -687,6 +726,9 @@ async fn test_large_directory_structures() {
     
     // Add root directory
     large_files.push(FileIngestionInfo {
+        relative_path: "/Documents".to_string(),
+        full_path: "/Documents".to_string(),
+        #[allow(deprecated)]
         path: "/Documents".to_string(),
         name: "Documents".to_string(),
         size: 0,
@@ -707,6 +749,9 @@ async fn test_large_directory_structures() {
         
         // Add level-1 directory
         large_files.push(FileIngestionInfo {
+            relative_path: level1_path.clone(),
+            full_path: level1_path.clone(),
+            #[allow(deprecated)]
             path: level1_path.clone(),
             name: format!("Dir{:03}", i),
             size: 0,
@@ -725,6 +770,9 @@ async fn test_large_directory_structures() {
         for j in 0..10 {
             let level2_path = format!("{}/SubDir{:02}", level1_path, j);
             large_files.push(FileIngestionInfo {
+                relative_path: level2_path.clone(),
+                full_path: level2_path.clone(),
+                #[allow(deprecated)]
                 path: level2_path.clone(),
                 name: format!("SubDir{:02}", j),
                 size: 0,
@@ -741,8 +789,12 @@ async fn test_large_directory_structures() {
             
             // Add 5 files in each subdirectory
             for k in 0..5 {
+                let file_path = format!("{}/file{:02}.pdf", level2_path, k);
                 large_files.push(FileIngestionInfo {
-                    path: format!("{}/file{:02}.pdf", level2_path, k),
+                    relative_path: file_path.clone(),
+                    full_path: file_path.clone(),
+                    #[allow(deprecated)]
+                    path: file_path,
                     name: format!("file{:02}.pdf", k),
                     size: 1024 * (k + 1) as i64,
                     mime_type: "application/pdf".to_string(),

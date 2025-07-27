@@ -417,6 +417,9 @@ async fn extract_file_info_from_path(path: &Path) -> Result<FileIngestionInfo> {
     let (permissions, owner, group) = (None, None, None);
     
     Ok(FileIngestionInfo {
+        relative_path: path.to_string_lossy().to_string(),
+        full_path: path.to_string_lossy().to_string(), // For filesystem, relative and full are the same
+        #[allow(deprecated)]
         path: path.to_string_lossy().to_string(),
         name: filename,
         size: file_size,

@@ -99,6 +99,9 @@ async fn test_update_single_directory_tracking() {
     // Create mock files representing a shallow directory scan
     let files = vec![
         FileIngestionInfo {
+            relative_path: "/Documents".to_string(),
+            full_path: "/Documents".to_string(),
+            #[allow(deprecated)]
             path: "/Documents".to_string(),
             name: "Documents".to_string(),
             size: 0,
@@ -113,6 +116,9 @@ async fn test_update_single_directory_tracking() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/file1.pdf".to_string(),
+            full_path: "/Documents/file1.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/file1.pdf".to_string(),
             name: "file1.pdf".to_string(),
             size: 1024000,
@@ -127,6 +133,9 @@ async fn test_update_single_directory_tracking() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/file2.pdf".to_string(),
+            full_path: "/Documents/file2.pdf".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/file2.pdf".to_string(),
             name: "file2.pdf".to_string(),
             size: 2048000,
@@ -141,6 +150,9 @@ async fn test_update_single_directory_tracking() {
             metadata: None,
         },
         FileIngestionInfo {
+            relative_path: "/Documents/SubFolder".to_string(),
+            full_path: "/Documents/SubFolder".to_string(),
+            #[allow(deprecated)]
             path: "/Documents/SubFolder".to_string(),
             name: "SubFolder".to_string(),
             size: 0,

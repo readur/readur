@@ -30,6 +30,9 @@ async fn create_test_state() -> (TestContext, Arc<AppState>, Uuid) {
 /// Helper function to create directory info for testing
 fn create_directory_info(path: &str, etag: &str) -> FileIngestionInfo {
     FileIngestionInfo {
+        relative_path: path.to_string(),
+        full_path: path.to_string(),
+        #[allow(deprecated)]
         path: path.to_string(),
         name: path.split('/').last().unwrap_or("").to_string(),
         size: 0,

@@ -9,6 +9,7 @@ use crate::models::{FileIngestionInfo, WebDAVCrawlEstimate, WebDAVFolderInfo};
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use super::config::{WebDAVConfig, ConcurrencyConfig};
 use super::connection::WebDAVConnection;
+use super::url_management::WebDAVUrlManager;
 
 /// Results from WebDAV discovery including both files and directories
 #[derive(Debug, Clone)]
@@ -21,6 +22,7 @@ pub struct WebDAVDiscovery {
     connection: WebDAVConnection,
     config: WebDAVConfig,
     concurrency_config: ConcurrencyConfig,
+    url_manager: WebDAVUrlManager,
 }
 
 impl WebDAVDiscovery {
@@ -29,10 +31,12 @@ impl WebDAVDiscovery {
         config: WebDAVConfig, 
         concurrency_config: ConcurrencyConfig
     ) -> Self {
+        let url_manager = WebDAVUrlManager::new(config.clone());
         Self { 
             connection, 
             config, 
-            concurrency_config 
+            concurrency_config,
+            url_manager
         }
     }
 
@@ -89,6 +93,9 @@ impl WebDAVDiscovery {
         let body = response.text().await?;
         let files = parse_propfind_response(&body)?;
         
+        // Process file paths using the centralized URL manager
+        let files = self.url_manager.process_file_infos(files);
+        
         // Filter files based on supported extensions
         let filtered_files: Vec<FileIngestionInfo> = files
             .into_iter()
@@ -131,6 +138,9 @@ impl WebDAVDiscovery {
 
         let body = response.text().await?;
         let all_items = parse_propfind_response_with_directories(&body)?;
+        
+        // Process file paths using the centralized URL manager
+        let all_items = self.url_manager.process_file_infos(all_items);
         
         // Separate files and directories
         let mut files = Vec::new();
@@ -271,19 +281,17 @@ impl WebDAVDiscovery {
         let body = response.text().await?;
         let all_items = parse_propfind_response_with_directories(&body)?;
         
+        // Process file paths using the centralized URL manager
+        let all_items = self.url_manager.process_file_infos(all_items);
+        
         // Separate files and directories
         let mut filtered_files = Vec::new();
         let mut subdirectory_paths = Vec::new();
         
         for item in all_items {
             if item.is_directory {
-                // Convert directory path to full path
-                let full_path = if directory_path == "/" {
-                    format!("/{}", item.path.trim_start_matches('/'))
-                } else {
-                    format!("{}/{}", directory_path.trim_end_matches('/'), item.path.trim_start_matches('/'))
-                };
-                subdirectory_paths.push(full_path);
+                // Use the relative_path which is now properly set by url_manager
+                subdirectory_paths.push(item.relative_path.clone());
             } else if self.config.is_supported_extension(&item.name) {
                 filtered_files.push(item);
             }
@@ -328,6 +336,9 @@ impl WebDAVDiscovery {
         let body = response.text().await?;
         let all_items = parse_propfind_response_with_directories(&body)?;
         
+        // Process file paths using the centralized URL manager
+        let all_items = self.url_manager.process_file_infos(all_items);
+        
         // Separate files and directories
         let mut filtered_files = Vec::new();
         let mut directories = Vec::new();
@@ -335,20 +346,9 @@ impl WebDAVDiscovery {
         
         for item in all_items {
             if item.is_directory {
-                // Fix the directory path to be absolute
-                let full_path = if directory_path == "/" {
-                    format!("/{}", item.path.trim_start_matches('/'))
-                } else {
-                    format!("{}/{}", directory_path.trim_end_matches('/'), item.path.trim_start_matches('/'))
-                };
-                
-                // Create a directory info with the corrected path
-                let mut directory_info = item.clone();
-                directory_info.path = full_path.clone();
-                directories.push(directory_info);
-                
-                // Add to paths for further scanning
-                subdirectory_paths.push(full_path);
+                // Use the relative_path which is now properly set by url_manager
+                directories.push(item.clone());
+                subdirectory_paths.push(item.relative_path.clone());
             } else if self.config.is_supported_extension(&item.name) {
                 filtered_files.push(item);
             }
@@ -476,11 +476,14 @@ impl WebDAVDiscovery {
         let body = response.text().await?;
         let all_items = parse_propfind_response_with_directories(&body)?;
         
+        // Process file paths using the centralized URL manager
+        let all_items = self.url_manager.process_file_infos(all_items);
+        
         // Filter out only directories and extract their paths
         let directory_paths: Vec<String> = all_items
             .into_iter()
             .filter(|item| item.is_directory)
-            .map(|item| item.path)
+            .map(|item| item.relative_path)
             .collect();
         
         Ok(directory_paths)
@@ -522,7 +525,7 @@ impl WebDAVDiscovery {
             let is_duplicate = if !file.etag.is_empty() {
                 !seen_etags.insert(file.etag.clone())
             } else {
-                !seen_paths.insert(file.path.clone())
+                !seen_paths.insert(file.relative_path.clone())
             };
 
             if !is_duplicate {

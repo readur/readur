@@ -23,6 +23,9 @@ fn calculate_file_hash(data: &[u8]) -> String {
 fn create_test_file_info(name: &str, path: &str, size: i64) -> FileIngestionInfo {
     FileIngestionInfo {
         name: name.to_string(),
+        relative_path: path.to_string(),
+        full_path: path.to_string(),
+        #[allow(deprecated)]
         path: path.to_string(),
         size,
         last_modified: Some(Utc::now()),
@@ -290,6 +293,9 @@ async fn test_webdav_sync_etag_change_detection() -> Result<()> {
     // Simulate file with new ETag (indicating change)
     let file_info = FileIngestionInfo {
         name: "updated.pdf".to_string(),
+        relative_path: webdav_path.to_string(),
+        full_path: webdav_path.to_string(),
+        #[allow(deprecated)]
         path: webdav_path.to_string(),
         size: 1024,
         last_modified: Some(Utc::now()),

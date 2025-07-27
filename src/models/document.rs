@@ -254,6 +254,12 @@ pub struct CreateIgnoredFile {
 
 #[derive(Debug, Clone)]
 pub struct FileIngestionInfo {
+    /// Relative path from WebDAV root (e.g., "/Photos/image.jpg")
+    pub relative_path: String,
+    /// Full WebDAV path as returned by server (e.g., "/remote.php/dav/files/user/Photos/image.jpg")
+    pub full_path: String,
+    /// Legacy field - deprecated, use relative_path instead
+    #[deprecated(note = "Use relative_path instead for new code")]
     pub path: String,
     pub name: String,
     pub size: i64,
