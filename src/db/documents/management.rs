@@ -53,7 +53,7 @@ impl Database {
             let doc_id: Uuid = row.get("document_id");
             let label = Label {
                 id: row.get("label_id"),
-                user_id: Some(row.get("user_id")),
+                user_id: row.get("user_id"),
                 name: row.get("name"),
                 description: None,
                 color: row.get("color"),
