@@ -382,10 +382,7 @@ async fn test_connection_get_url_for_path_normalization() {
     };
     
     let service = WebDAVService::new(config).unwrap();
-    let connection = super::super::connection::WebDAVConnection::new(
-        service.get_config().clone(), 
-        super::super::config::RetryConfig::default()
-    ).unwrap();
+    // Connection functionality is now integrated into WebDAVService
     
     // Test various path scenarios
     let test_cases = vec![
@@ -396,7 +393,7 @@ async fn test_connection_get_url_for_path_normalization() {
     ];
     
     for (input_path, expected_url) in test_cases {
-        let result_url = connection.get_url_for_path(input_path);
+        let result_url = service.relative_path_to_url(input_path);
         
         // Verify the URL matches expected
         assert_eq!(result_url, expected_url, "URL construction failed for path: {}", input_path);
@@ -490,10 +487,7 @@ async fn test_service_download_file_url_construction() {
     };
     
     let service = WebDAVService::new(config).unwrap();
-    let connection = super::super::connection::WebDAVConnection::new(
-        service.get_config().clone(), 
-        super::super::config::RetryConfig::default()
-    ).unwrap();
+    // Connection functionality is now integrated into WebDAVService
     
     // These are the actual paths that would come from XML parser responses
     let xml_parser_paths = vec![
@@ -513,7 +507,7 @@ async fn test_service_download_file_url_construction() {
     for (xml_path, expected_url) in xml_parser_paths.iter().zip(expected_urls.iter()) {
         // Test the conversion from full XML path to relative path (the correct approach)
         let relative_path = service.convert_to_relative_path(xml_path);
-        let constructed_url = connection.get_url_for_path(&relative_path);
+        let constructed_url = service.relative_path_to_url(&relative_path);
         
         println!("XML path: {}", xml_path);
         println!("Relative path: {}", relative_path);
@@ -557,10 +551,7 @@ async fn test_file_fetch_url_construction_with_convert_to_relative_path() {
     };
     
     let service = WebDAVService::new(config).unwrap();
-    let connection = super::super::connection::WebDAVConnection::new(
-        service.get_config().clone(), 
-        super::super::config::RetryConfig::default()
-    ).unwrap();
+    // Connection functionality is now integrated into WebDAVService
     
     // XML parser returns this full WebDAV path
     let xml_full_path = "/remote.php/dav/files/testuser/Documents/TestFolder/file.pdf";
@@ -574,7 +565,7 @@ async fn test_file_fetch_url_construction_with_convert_to_relative_path() {
     let correct_url = format!("{}{}", base_webdav_url, relative_path);
     
     // Method 3: Using get_url_for_path with relative path (the correct way)
-    let connection_url = connection.get_url_for_path(&relative_path);
+    let connection_url = service.relative_path_to_url(&relative_path);
     
     println!("XML full path: {}", xml_full_path);
     println!("Base WebDAV URL: {}", base_webdav_url);
@@ -613,10 +604,7 @@ async fn test_file_fetch_real_world_error_scenario() {
     };
     
     let service = WebDAVService::new(config).unwrap();
-    let connection = super::super::connection::WebDAVConnection::new(
-        service.get_config().clone(), 
-        super::super::config::RetryConfig::default()
-    ).unwrap();
+    // Connection functionality is now integrated into WebDAVService
     
     // This is the exact path from the error message
     let problematic_path = "/remote.php/dav/files/Alex/Photos/PC%20Screenshots/zjoQcWqldv.png";
@@ -627,7 +615,7 @@ async fn test_file_fetch_real_world_error_scenario() {
     let corrected_url = format!("{}{}", base_url, relative_path);
     
     // Also test using connection with relative path
-    let connection_url = connection.get_url_for_path(&relative_path);
+    let connection_url = service.relative_path_to_url(&relative_path);
     
     println!("Problematic path: {}", problematic_path);
     println!("Relative path: {}", relative_path);
@@ -691,14 +679,11 @@ async fn test_file_fetch_different_server_types() {
         };
         
         let service = WebDAVService::new(config).unwrap();
-        let connection = super::super::connection::WebDAVConnection::new(
-            service.get_config().clone(), 
-            super::super::config::RetryConfig::default()
-        ).unwrap();
+        // Connection functionality is now integrated into WebDAVService
         
         // Test the CORRECT approach: convert to relative path first
         let relative_path = service.convert_to_relative_path(xml_path);
-        let download_url = connection.get_url_for_path(&relative_path);
+        let download_url = service.relative_path_to_url(&relative_path);
         
         println!("Server type: {}", server_type);
         println!("XML path: {}", xml_path);
