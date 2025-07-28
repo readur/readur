@@ -2,6 +2,7 @@ use anyhow::Result;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
+use serde::{Serialize, Deserialize};
 
 pub mod users;
 pub mod documents;
@@ -13,6 +14,13 @@ pub mod images;
 pub mod ignored_files;
 pub mod constraint_validation;
 pub mod ocr_retry;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DatabasePoolHealth {
+    pub size: u32,
+    pub num_idle: usize,
+    pub is_closed: bool,
+}
 
 #[derive(Clone)]
 pub struct Database {
@@ -35,10 +43,11 @@ impl Database {
     pub async fn new_with_pool_config(database_url: &str, max_connections: u32, min_connections: u32) -> Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(max_connections)
-            .acquire_timeout(Duration::from_secs(10))
-            .idle_timeout(Duration::from_secs(600))
-            .max_lifetime(Duration::from_secs(1800))
+            .acquire_timeout(Duration::from_secs(60))    // Increased from 10s to 60s for tests
+            .idle_timeout(Duration::from_secs(300))      // Reduced from 600s to 300s for faster cleanup
+            .max_lifetime(Duration::from_secs(900))      // Reduced from 1800s to 900s for better resource management
             .min_connections(min_connections)
+            .test_before_acquire(true)                   // Validate connections before use
             .connect(database_url)
             .await?;
         Ok(Self { pool })
@@ -46,6 +55,100 @@ impl Database {
     
     pub fn get_pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    /// Get database connection pool health information
+    pub fn get_pool_health(&self) -> DatabasePoolHealth {
+        DatabasePoolHealth {
+            size: self.pool.size(),
+            num_idle: self.pool.num_idle(),
+            is_closed: self.pool.is_closed(),
+        }
+    }
+
+    /// Check if the database pool is healthy and has available connections
+    pub async fn check_pool_health(&self) -> Result<bool> {
+        // Try to acquire a connection with a short timeout to check health
+        match tokio::time::timeout(
+            Duration::from_secs(5), 
+            self.pool.acquire()
+        ).await {
+            Ok(Ok(_conn)) => Ok(true),
+            Ok(Err(e)) => {
+                tracing::warn!("Database pool health check failed: {}", e);
+                Ok(false)
+            }
+            Err(_) => {
+                tracing::warn!("Database pool health check timed out");
+                Ok(false)
+            }
+        }
+    }
+
+    /// Execute a simple query with enhanced error handling and retries
+    pub async fn execute_with_retry<F, T, Fut>(&self, operation_name: &str, operation: F) -> Result<T>
+    where
+        F: Fn(&PgPool) -> Fut + Send + Sync,
+        Fut: std::future::Future<Output = Result<T>> + Send,
+        T: Send,
+    {
+        const MAX_RETRIES: usize = 3;
+        const BASE_DELAY_MS: u64 = 100;
+        
+        for attempt in 0..MAX_RETRIES {
+            // Check pool health before attempting operation
+            if attempt > 0 {
+                if let Ok(false) = self.check_pool_health().await {
+                    tracing::warn!("Database pool unhealthy on attempt {} for {}", attempt + 1, operation_name);
+                    let delay_ms = BASE_DELAY_MS * (2_u64.pow(attempt as u32));
+                    sleep(Duration::from_millis(delay_ms)).await;
+                    continue;
+                }
+            }
+            
+            match timeout(Duration::from_secs(30), operation(&self.pool)).await {
+                Ok(Ok(result)) => {
+                    if attempt > 0 {
+                        tracing::info!("Database operation '{}' succeeded on retry attempt {}", operation_name, attempt + 1);
+                    }
+                    return Ok(result);
+                }
+                Ok(Err(e)) => {
+                    if attempt == MAX_RETRIES - 1 {
+                        tracing::error!("Database operation '{}' failed after {} attempts: {}", operation_name, MAX_RETRIES, e);
+                        return Err(e);
+                    }
+                    
+                    // Check if this is a connection pool timeout or similar transient error
+                    let error_msg = e.to_string().to_lowercase();
+                    let is_retryable = error_msg.contains("pool") || 
+                                     error_msg.contains("timeout") || 
+                                     error_msg.contains("connection") ||
+                                     error_msg.contains("busy");
+                    
+                    if is_retryable {
+                        tracing::warn!("Retryable database error on attempt {} for '{}': {}", attempt + 1, operation_name, e);
+                        let delay_ms = BASE_DELAY_MS * (2_u64.pow(attempt as u32));
+                        sleep(Duration::from_millis(delay_ms)).await;
+                    } else {
+                        tracing::error!("Non-retryable database error for '{}': {}", operation_name, e);
+                        return Err(e);
+                    }
+                }
+                Err(_) => {
+                    if attempt == MAX_RETRIES - 1 {
+                        tracing::error!("Database operation '{}' timed out after {} attempts", operation_name, MAX_RETRIES);
+                        return Err(anyhow::anyhow!("Database operation '{}' timed out after {} retries", operation_name, MAX_RETRIES));
+                    }
+                    
+                    tracing::warn!("Database operation '{}' timed out on attempt {}", operation_name, attempt + 1);
+                    let delay_ms = BASE_DELAY_MS * (2_u64.pow(attempt as u32));
+                    sleep(Duration::from_millis(delay_ms)).await;
+                }
+            }
+        }
+        
+        unreachable!()
     }
 
     pub async fn with_retry<T, F, Fut>(&self, operation: F) -> Result<T>

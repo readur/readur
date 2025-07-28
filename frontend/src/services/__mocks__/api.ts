@@ -32,6 +32,65 @@ export const documentService = {
   bulkRetryOcr: vi.fn(),
 }
 
+// Mock EventSource constants  
+const EVENTSOURCE_CONNECTING = 0;
+const EVENTSOURCE_OPEN = 1;
+const EVENTSOURCE_CLOSED = 2;
+
+// Create a proper EventSource mock factory
+const createMockEventSource = () => {
+  const mockInstance = {
+    onopen: null as ((event: Event) => void) | null,
+    onmessage: null as ((event: MessageEvent) => void) | null,
+    onerror: null as ((event: Event) => void) | null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+    readyState: EVENTSOURCE_CONNECTING,
+    url: '',
+    withCredentials: false,
+    CONNECTING: EVENTSOURCE_CONNECTING,
+    OPEN: EVENTSOURCE_OPEN,
+    CLOSED: EVENTSOURCE_CLOSED,
+    dispatchEvent: vi.fn(),
+  };
+  return mockInstance;
+};
+
+// Create the main mock instance
+let currentMockEventSource = createMockEventSource();
+
+// Mock the global EventSource
+global.EventSource = vi.fn(() => currentMockEventSource) as any;
+(global.EventSource as any).CONNECTING = EVENTSOURCE_CONNECTING;
+(global.EventSource as any).OPEN = EVENTSOURCE_OPEN;
+(global.EventSource as any).CLOSED = EVENTSOURCE_CLOSED;
+
+// Mock sources service
+export const sourcesService = {
+  triggerSync: vi.fn(),
+  triggerDeepScan: vi.fn(),
+  stopSync: vi.fn(),
+  getSyncStatus: vi.fn(),
+  getSyncProgressStream: vi.fn(() => {
+    // Return the current mock EventSource instance
+    return currentMockEventSource;
+  }),
+}
+
+// Export helper functions for tests
+export const getMockEventSource = () => currentMockEventSource;
+export const resetMockEventSource = () => {
+  currentMockEventSource = createMockEventSource();
+  sourcesService.getSyncProgressStream.mockReturnValue(currentMockEventSource);
+  // Update global EventSource mock to return the new instance
+  global.EventSource = vi.fn(() => currentMockEventSource) as any;
+  (global.EventSource as any).CONNECTING = EVENTSOURCE_CONNECTING;
+  (global.EventSource as any).OPEN = EVENTSOURCE_OPEN;
+  (global.EventSource as any).CLOSED = EVENTSOURCE_CLOSED;
+  return currentMockEventSource;
+};
+
 // Re-export types that components might need
 export interface Document {
   id: string

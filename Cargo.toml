@@ -81,3 +81,9 @@ readur = { path = ".", features = ["test-utils"] }
 [profile.test]
 incremental = false
 debug = false
+
+# Test configuration to prevent resource contention
+[[test]]
+name = "integration"
+path = "tests/integration_smart_sync_deep_scan.rs"
+harness = true

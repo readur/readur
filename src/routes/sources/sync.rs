@@ -50,32 +50,26 @@ pub async fn trigger_sync(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Check if already syncing
-    if matches!(source.status, SourceStatus::Syncing) {
-        return Err(StatusCode::CONFLICT);
-    }
-
-    // Update status to syncing
-    state
-        .db
-        .update_source_status(source_id, SourceStatus::Syncing, None)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
     // Trigger sync using the universal source scheduler
+    // The scheduler will handle all status checks and atomic operations
     if let Some(scheduler) = &state.source_scheduler {
-        if let Err(e) = scheduler.trigger_sync(source_id).await {
-            error!("Failed to trigger sync for source {}: {}", source_id, e);
-            state
-                .db
-                .update_source_status(
-                    source_id,
-                    SourceStatus::Error,
-                    Some(format!("Failed to trigger sync: {}", e)),
-                )
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        match scheduler.trigger_sync(source_id).await {
+            Ok(()) => {
+                // Sync started successfully
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                error!("Failed to trigger sync for source {}: {}", source_id, error_msg);
+                
+                // Map specific errors to appropriate HTTP status codes
+                if error_msg.contains("already syncing") || error_msg.contains("already running") {
+                    return Err(StatusCode::CONFLICT);
+                } else if error_msg.contains("not found") {
+                    return Err(StatusCode::NOT_FOUND);
+                } else {
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            }
         }
     } else {
         // Fallback to WebDAV scheduler for backward compatibility
@@ -154,17 +148,17 @@ pub async fn stop_sync(
             let error_msg = e.to_string();
             // If no sync is running, treat it as success since the desired state is achieved
             if error_msg.contains("No running sync found") {
-                info!("No sync was running for source {}, updating status to idle", source_id);
-                // Update status to idle since no sync is running
-                state
+                info!("No sync was running for source {}, ensuring status is idle", source_id);
+                // Use atomic operation to ensure status is idle if not already syncing
+                let _ = state
                     .db
-                    .update_source_status(
+                    .update_source_status_atomic(
                         source_id,
+                        None, // Don't check current status
                         SourceStatus::Idle,
-                        None,
+                        Some("No sync was running")
                     )
-                    .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                    .await;
             } else {
                 error!("Failed to stop sync for source {}: {}", source_id, e);
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);

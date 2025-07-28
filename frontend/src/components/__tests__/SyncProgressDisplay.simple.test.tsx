@@ -27,13 +27,18 @@ const mockSourcesService = {
 };
 
 // Mock the API - ensure EventSource is mocked first
-global.EventSource = vi.fn(() => createMockEventSource()) as any;
+let currentMockEventSource = createMockEventSource();
+
+global.EventSource = vi.fn(() => currentMockEventSource) as any;
 (global.EventSource as any).CONNECTING = 0;
 (global.EventSource as any).OPEN = 1;
 (global.EventSource as any).CLOSED = 2;
 
 vi.mock('../../services/api', () => ({
-  sourcesService: mockSourcesService,
+  sourcesService: {
+    ...mockSourcesService,
+    getSyncProgressStream: vi.fn(() => currentMockEventSource),
+  },
 }));
 
 const renderComponent = (props = {}) => {
@@ -50,7 +55,10 @@ const renderComponent = (props = {}) => {
 describe('SyncProgressDisplay Simple Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSourcesService.getSyncProgressStream.mockReturnValue(createMockEventSource());
+    // Reset the mock EventSource
+    currentMockEventSource = createMockEventSource();
+    global.EventSource = vi.fn(() => currentMockEventSource) as any;
+    mockSourcesService.getSyncProgressStream.mockReturnValue(currentMockEventSource);
   });
 
   describe('Basic Rendering', () => {

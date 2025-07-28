@@ -404,4 +404,246 @@ impl Database {
             Ok(None)
         }
     }
+
+    /// Atomically update source status with optimistic locking to prevent race conditions
+    /// This method checks the current status before updating to ensure consistency
+    pub async fn update_source_status_atomic(
+        &self, 
+        source_id: Uuid, 
+        expected_current_status: Option<crate::models::SourceStatus>,
+        new_status: crate::models::SourceStatus, 
+        error_msg: Option<&str>
+    ) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+        
+        // First, check current status if expected status is provided
+        if let Some(expected) = expected_current_status {
+            let current_status: Option<String> = sqlx::query_scalar(
+                "SELECT status FROM sources WHERE id = $1"
+            )
+            .bind(source_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+            
+            if let Some(current) = current_status {
+                let current_status: crate::models::SourceStatus = current.try_into()
+                    .map_err(|e: String| anyhow::anyhow!("Invalid status in database: {}", e))?;
+                
+                if current_status != expected {
+                    // Status has changed, abort transaction
+                    tx.rollback().await?;
+                    return Ok(false);
+                }
+            } else {
+                // Source doesn't exist
+                tx.rollback().await?;
+                return Ok(false);
+            }
+        }
+        
+        // Update the status
+        let affected_rows = if let Some(error_msg) = error_msg {
+            sqlx::query(
+                r#"UPDATE sources 
+                   SET status = $1, last_error = $2, last_error_at = NOW(), updated_at = NOW()
+                   WHERE id = $3"#
+            )
+            .bind(new_status.to_string())
+            .bind(error_msg)
+            .bind(source_id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected()
+        } else {
+            sqlx::query(
+                r#"UPDATE sources 
+                   SET status = $1, last_error = NULL, last_error_at = NULL, updated_at = NOW()
+                   WHERE id = $2"#
+            )
+            .bind(new_status.to_string())
+            .bind(source_id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected()
+        };
+        
+        if affected_rows > 0 {
+            tx.commit().await?;
+            Ok(true)
+        } else {
+            tx.rollback().await?;
+            Ok(false)
+        }
+    }
+
+    /// Atomically start a sync operation by checking current status and updating to syncing
+    /// Returns true if sync was successfully started, false if already syncing or error
+    pub async fn start_sync_atomic(&self, source_id: Uuid) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+        
+        // Check current status - only allow starting sync from idle or error states
+        let current_status: Option<String> = sqlx::query_scalar(
+            "SELECT status FROM sources WHERE id = $1"
+        )
+        .bind(source_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        
+        if let Some(status_str) = current_status {
+            let current_status: crate::models::SourceStatus = status_str.clone().try_into()
+                .map_err(|e: String| anyhow::anyhow!("Invalid status in database: {}", e))?;
+            
+            // Only allow sync to start from idle or error states
+            if !matches!(current_status, crate::models::SourceStatus::Idle | crate::models::SourceStatus::Error) {
+                tx.rollback().await?;
+                return Ok(false);
+            }
+            
+            // Update to syncing status
+            let affected_rows = sqlx::query(
+                r#"UPDATE sources 
+                   SET status = 'syncing', last_error = NULL, last_error_at = NULL, updated_at = NOW()
+                   WHERE id = $1 AND status = $2"#
+            )
+            .bind(source_id)
+            .bind(status_str)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+            
+            if affected_rows > 0 {
+                tx.commit().await?;
+                Ok(true)
+            } else {
+                tx.rollback().await?;
+                Ok(false)
+            }
+        } else {
+            // Source doesn't exist
+            tx.rollback().await?;
+            Ok(false)
+        }
+    }
+
+    /// Atomically complete a sync operation by updating status and stats
+    pub async fn complete_sync_atomic(
+        &self, 
+        source_id: Uuid, 
+        success: bool, 
+        files_processed: Option<i64>,
+        error_msg: Option<&str>
+    ) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+        
+        // Verify that the source is currently syncing
+        let current_status: Option<String> = sqlx::query_scalar(
+            "SELECT status FROM sources WHERE id = $1"
+        )
+        .bind(source_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        
+        if let Some(status_str) = current_status {
+            let current_status: crate::models::SourceStatus = status_str.try_into()
+                .map_err(|e: String| anyhow::anyhow!("Invalid status in database: {}", e))?;
+            
+            // Only allow completion if currently syncing
+            if current_status != crate::models::SourceStatus::Syncing {
+                tx.rollback().await?;
+                return Ok(false);
+            }
+            
+            let new_status = if success { "idle" } else { "error" };
+            
+            // Update status and optionally sync stats
+            let affected_rows = if let Some(files) = files_processed {
+                if let Some(error_msg) = error_msg {
+                    sqlx::query(
+                        r#"UPDATE sources 
+                           SET status = $1, last_sync_at = NOW(), total_files_synced = total_files_synced + $2,
+                               last_error = $3, last_error_at = NOW(), updated_at = NOW()
+                           WHERE id = $4"#
+                    )
+                    .bind(new_status)
+                    .bind(files)
+                    .bind(error_msg)
+                    .bind(source_id)
+                    .execute(&mut *tx)
+                    .await?
+                    .rows_affected()
+                } else {
+                    sqlx::query(
+                        r#"UPDATE sources 
+                           SET status = $1, last_sync_at = NOW(), total_files_synced = total_files_synced + $2,
+                               last_error = NULL, last_error_at = NULL, updated_at = NOW()
+                           WHERE id = $3"#
+                    )
+                    .bind(new_status)
+                    .bind(files)
+                    .bind(source_id)
+                    .execute(&mut *tx)
+                    .await?
+                    .rows_affected()
+                }
+            } else {
+                if let Some(error_msg) = error_msg {
+                    sqlx::query(
+                        r#"UPDATE sources 
+                           SET status = $1, last_error = $2, last_error_at = NOW(), updated_at = NOW()
+                           WHERE id = $3"#
+                    )
+                    .bind(new_status)
+                    .bind(error_msg)
+                    .bind(source_id)
+                    .execute(&mut *tx)
+                    .await?
+                    .rows_affected()
+                } else {
+                    sqlx::query(
+                        r#"UPDATE sources 
+                           SET status = $1, last_error = NULL, last_error_at = NULL, updated_at = NOW()
+                           WHERE id = $2"#
+                    )
+                    .bind(new_status)
+                    .bind(source_id)
+                    .execute(&mut *tx)
+                    .await?
+                    .rows_affected()
+                }
+            };
+            
+            if affected_rows > 0 {
+                tx.commit().await?;
+                Ok(true)
+            } else {
+                tx.rollback().await?;
+                Ok(false)
+            }
+        } else {
+            // Source doesn't exist
+            tx.rollback().await?;
+            Ok(false)
+        }
+    }
+
+    /// Reset stuck syncing sources back to idle (for cleanup during startup)
+    pub async fn reset_stuck_syncing_sources(&self) -> Result<u64> {
+        let affected_rows = sqlx::query(
+            r#"UPDATE sources 
+               SET status = 'idle', 
+                   last_error = 'Sync was interrupted by server restart', 
+                   last_error_at = NOW(), 
+                   updated_at = NOW()
+               WHERE status = 'syncing'"#
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+        
+        if affected_rows > 0 {
+            warn!("Reset {} sources that were stuck in syncing state", affected_rows);
+        }
+        
+        Ok(affected_rows)
+    }
 }

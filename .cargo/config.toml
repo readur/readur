@@ -1,0 +1,8 @@
+[build]
+# Set test-threads to 1 for integration tests to prevent resource contention
+# when running database tests that use shared resources
+
+[env]
+# Environment variables for test execution
+RUST_TEST_THREADS = "1"
+READUR_TEST_MODE = "true"

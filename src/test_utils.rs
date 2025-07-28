@@ -22,9 +22,11 @@ use testcontainers_modules::postgres::Postgres;
 #[cfg(any(test, feature = "test-utils"))]
 use tower::util::ServiceExt;
 #[cfg(any(test, feature = "test-utils"))]
-use serde_json::Value;
-#[cfg(any(test, feature = "test-utils"))]
 use reqwest::{Response, StatusCode};
+#[cfg(any(test, feature = "test-utils"))]
+use std::sync::Mutex;
+#[cfg(any(test, feature = "test-utils"))]
+use std::collections::HashMap;
 
 /// Test image information with expected OCR content
 #[derive(Debug, Clone)]
@@ -156,40 +158,167 @@ mod tests {
     }
 }
 
-/// Unified test context that eliminates duplication across integration tests
+/// Shared test database manager that uses a single PostgreSQL container
+/// across all tests for better resource efficiency
+#[cfg(any(test, feature = "test-utils"))]
+static SHARED_DB_MANAGER: std::sync::LazyLock<std::sync::Mutex<Option<SharedDatabaseManager>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+
+/// Shared database configuration
+#[cfg(any(test, feature = "test-utils"))]
+struct SharedDatabaseManager {
+    container: Arc<ContainerAsync<Postgres>>,
+    database_url: String,
+    active_contexts: HashMap<String, u32>,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl SharedDatabaseManager {
+    async fn get_or_create() -> Result<SharedDatabaseManager, Box<dyn std::error::Error + Send + Sync>> {
+        // Create a new PostgreSQL container with optimized settings
+        let postgres_image = Postgres::default()
+            .with_tag("15")
+            .with_env_var("POSTGRES_USER", "readur")
+            .with_env_var("POSTGRES_PASSWORD", "readur")
+            .with_env_var("POSTGRES_DB", "readur")
+            // Optimize for testing environment
+            .with_env_var("POSTGRES_MAX_CONNECTIONS", "200")
+            .with_env_var("POSTGRES_SHARED_BUFFERS", "128MB")
+            .with_env_var("POSTGRES_EFFECTIVE_CACHE_SIZE", "256MB")
+            .with_env_var("POSTGRES_MAINTENANCE_WORK_MEM", "64MB")
+            .with_env_var("POSTGRES_WORK_MEM", "8MB");
+        
+        let container = postgres_image.start().await
+            .map_err(|e| format!("Failed to start shared postgres container: {}", e))?;
+        
+        let port = container.get_host_port_ipv4(5432).await
+            .map_err(|e| format!("Failed to get postgres port: {}", e))?;
+        
+        let database_url = format!("postgresql://readur:readur@localhost:{}/readur", port);
+        
+        // Wait for the database to be ready
+        let mut retries = 0;
+        const MAX_RETRIES: u32 = 30;
+        while retries < MAX_RETRIES {
+            match crate::db::Database::new_with_pool_config(&database_url, 10, 2).await {
+                Ok(test_db) => {
+                    // Run migrations on the shared database
+                    let migrations = sqlx::migrate!("./migrations");
+                    if let Err(e) = migrations.run(&test_db.pool).await {
+                        eprintln!("Migration failed: {}, retrying...", e);
+                        retries += 1;
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        continue;
+                    }
+                    break;
+                }
+                Err(e) => {
+                    if retries == MAX_RETRIES - 1 {
+                        return Err(format!("Failed to connect to shared database after {} retries: {}", MAX_RETRIES, e).into());
+                    }
+                    retries += 1;
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+        }
+        
+        Ok(SharedDatabaseManager {
+            container: Arc::new(container),
+            database_url,
+            active_contexts: HashMap::new(),
+        })
+    }
+}
+
+/// Unified test context that uses shared database infrastructure
 #[cfg(any(test, feature = "test-utils"))]
 pub struct TestContext {
     pub app: Router,
-    pub container: ContainerAsync<Postgres>,
+    pub container: Arc<ContainerAsync<Postgres>>,
     pub state: Arc<AppState>,
+    context_id: String,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl Clone for TestContext {
+    fn clone(&self) -> Self {
+        Self {
+            app: self.app.clone(),
+            container: Arc::clone(&self.container),
+            state: Arc::clone(&self.state),
+            context_id: self.context_id.clone(),
+        }
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl Drop for TestContext {
+    fn drop(&mut self) {
+        // Decrease reference count when context is dropped
+        let mut manager_guard = SHARED_DB_MANAGER.lock().unwrap();
+        if let Some(ref mut manager) = manager_guard.as_mut() {
+            if let Some(count) = manager.active_contexts.get_mut(&self.context_id) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    manager.active_contexts.remove(&self.context_id);
+                }
+            }
+        }
+    }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
 impl TestContext {
-    /// Create a new test context with default test configuration
+    /// Create a new test context with default test configuration using shared database
     pub async fn new() -> Self {
         Self::with_config(TestConfigBuilder::default()).await
     }
     
-    /// Create a test context with custom configuration
+    /// Create a test context with custom configuration using shared database infrastructure
+    /// This method uses a single shared PostgreSQL container to reduce resource contention
     pub async fn with_config(config_builder: TestConfigBuilder) -> Self {
-        let postgres_image = Postgres::default()
-            .with_tag("15")  // Use PostgreSQL 15 which has gen_random_uuid() built-in
-            .with_env_var("POSTGRES_USER", "readur")
-            .with_env_var("POSTGRES_PASSWORD", "readur")
-            .with_env_var("POSTGRES_DB", "readur");
+        // Generate unique context ID for this test instance
+        let context_id = format!(
+            "test_{}_{}_{}_{}",
+            std::process::id(),
+            format!("{:?}", std::thread::current().id()).replace("ThreadId(", "").replace(")", ""),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            uuid::Uuid::new_v4().simple()
+        );
         
-        let container = postgres_image.start().await.expect("Failed to start postgres container");
-        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
+        // Get or create shared database manager
+        let (container, database_url) = {
+            let mut manager_guard = SHARED_DB_MANAGER.lock().unwrap();
+            match manager_guard.as_mut() {
+                Some(manager) => {
+                    // Increment reference count for this context
+                    *manager.active_contexts.entry(context_id.clone()).or_insert(0) += 1;
+                    (manager.container.clone(), manager.database_url.clone())
+                }
+                None => {
+                    // Create new shared database manager
+                    drop(manager_guard); // Release lock before async operation
+                    let new_manager = SharedDatabaseManager::get_or_create().await
+                        .expect("Failed to create shared database manager");
+                    
+                    let container = new_manager.container.clone();
+                    let url = new_manager.database_url.clone();
+                    
+                    let mut manager_guard = SHARED_DB_MANAGER.lock().unwrap();
+                    let manager = manager_guard.insert(new_manager);
+                    *manager.active_contexts.entry(context_id.clone()).or_insert(0) += 1;
+                    
+                    (container, url)
+                }
+            }
+        };
         
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| format!("postgresql://readur:readur@localhost:{}/readur", port));
-        // Use enhanced pool configuration for testing with more connections and faster timeouts
-        let db = crate::db::Database::new_with_pool_config(&database_url, 100, 10).await.unwrap();
-        
-        // Run proper SQLx migrations (PostgreSQL 15+ has gen_random_uuid() built-in)
-        let migrations = sqlx::migrate!("./migrations");
-        migrations.run(&db.pool).await.unwrap();
+        // Use smaller connection pool per test context to avoid exhausting connections
+        let db = crate::db::Database::new_with_pool_config(&database_url, 20, 2).await
+            .expect("Failed to create database connection");
         
         let config = config_builder.build(database_url);
         let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
@@ -215,8 +344,14 @@ impl TestContext {
             .nest("/metrics", crate::routes::prometheus_metrics::router())
             .with_state(state.clone());
         
-        Self { app, container, state }
+        Self { 
+            app, 
+            container, 
+            state,
+            context_id,
+        }
     }
+    
     
     /// Get the app router for making requests
     pub fn app(&self) -> &Router {
@@ -226,6 +361,65 @@ impl TestContext {
     /// Get the application state
     pub fn state(&self) -> &Arc<AppState> {
         &self.state
+    }
+
+    /// Check database pool health
+    pub async fn check_pool_health(&self) -> bool {
+        self.state.db.check_pool_health().await.unwrap_or(false)
+    }
+
+    /// Get database pool health information
+    pub fn get_pool_health(&self) -> crate::db::DatabasePoolHealth {
+        self.state.db.get_pool_health()
+    }
+
+    /// Wait for pool health to stabilize (useful for tests that create many connections)
+    pub async fn wait_for_pool_health(&self, timeout_secs: u64) -> Result<(), String> {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(timeout_secs);
+        
+        while start.elapsed() < timeout {
+            if self.check_pool_health().await {
+                let health = self.get_pool_health();
+                // Check that we have reasonable number of idle connections
+                if health.num_idle > 0 && !health.is_closed {
+                    return Ok(());
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        
+        let health = self.get_pool_health();
+        Err(format!(
+            "Pool health check timed out after {}s. Health: size={}, idle={}, closed={}",
+            timeout_secs, health.size, health.num_idle, health.is_closed
+        ))
+    }
+
+    /// Clean up test database by removing test data for this context
+    pub async fn cleanup_database(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Clean up test data by deleting test users and cascading to related data
+        // This provides isolation without schema complexity
+        let cleanup_queries = vec![
+            "DELETE FROM ocr_queue WHERE document_id IN (SELECT id FROM documents WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%'))",
+            "DELETE FROM ocr_metrics", 
+            "DELETE FROM notifications WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
+            "DELETE FROM ignored_files WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
+            "DELETE FROM webdav_files WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
+            "DELETE FROM webdav_directories WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
+            "DELETE FROM documents WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
+            "DELETE FROM sources WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
+            "DELETE FROM settings WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
+            "DELETE FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%'",
+        ];
+        
+        for query in cleanup_queries {
+            if let Err(e) = sqlx::query(query).execute(self.state.db.get_pool()).await {
+                eprintln!("Warning: Failed to execute cleanup query '{}': {}", query, e);
+            }
+        }
+        
+        Ok(())
     }
 }
 
@@ -329,9 +523,9 @@ pub fn create_test_app(state: Arc<AppState>) -> Router {
 
 /// Legacy function for backward compatibility - will be deprecated
 #[cfg(any(test, feature = "test-utils"))]
-pub async fn create_test_app_with_container() -> (Router, ContainerAsync<Postgres>) {
+pub async fn create_test_app_with_container() -> (Router, Arc<ContainerAsync<Postgres>>) {
     let ctx = TestContext::new().await;
-    (ctx.app, ctx.container)
+    (ctx.app.clone(), ctx.container.clone())
 }
 
 /// Unified test authentication helper that replaces TestClient/AdminTestClient patterns
@@ -1066,5 +1260,112 @@ impl AssertRequest {
             .await?;
         
         Self::assert_response(response, expected_status, context, uri, payload.as_ref()).await
+    }
+}
+
+/// Helper for managing concurrent test operations with proper resource cleanup
+#[cfg(any(test, feature = "test-utils"))]
+pub struct ConcurrentTestManager {
+    pub context: TestContext,
+    active_operations: std::sync::Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl ConcurrentTestManager {
+    pub async fn new() -> Self {
+        let context = TestContext::new().await;
+        
+        // Wait for initial pool health
+        if let Err(e) = context.wait_for_pool_health(10).await {
+            eprintln!("Warning: Pool health check failed during setup: {}", e);
+        }
+        
+        Self {
+            context,
+            active_operations: std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
+        }
+    }
+
+    /// Execute a concurrent operation with automatic tracking and cleanup
+    pub async fn run_concurrent_operation<F, T, Fut>(
+        &self,
+        operation_name: &str,
+        operation: F,
+    ) -> Result<T, Box<dyn std::error::Error + Send + Sync>>
+    where
+        F: FnOnce(TestContext) -> Fut + Send,
+        Fut: std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>> + Send,
+        T: Send,
+    {
+        let op_id = format!("{}_{}", operation_name, uuid::Uuid::new_v4());
+        
+        // Register operation
+        {
+            let mut ops = self.active_operations.write().await;
+            ops.insert(op_id.clone());
+        }
+        
+        // Check pool health before operation
+        let health = self.context.get_pool_health();
+        if health.is_closed {
+            return Err("Database pool is closed".into());
+        }
+        
+        // Execute operation
+        let result = operation(self.context.clone()).await;
+        
+        // Cleanup: Remove operation from tracking
+        {
+            let mut ops = self.active_operations.write().await;
+            ops.remove(&op_id);
+        }
+        
+        result
+    }
+
+    /// Wait for all concurrent operations to complete
+    pub async fn wait_for_completion(&self, timeout_secs: u64) -> Result<(), String> {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(timeout_secs);
+        
+        while start.elapsed() < timeout {
+            let ops = self.active_operations.read().await;
+            if ops.is_empty() {
+                return Ok(());
+            }
+            drop(ops);
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        
+        let ops = self.active_operations.read().await;
+        Err(format!("Timeout waiting for {} operations to complete", ops.len()))
+    }
+
+    /// Get current pool health and active operation count
+    pub async fn get_health_summary(&self) -> (crate::db::DatabasePoolHealth, usize) {
+        let pool_health = self.context.get_pool_health();
+        let ops = self.active_operations.read().await;
+        let active_count = ops.len();
+        (pool_health, active_count)
+    }
+
+    /// Clean up all test data and wait for pool to stabilize
+    pub async fn cleanup(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Wait for operations to complete
+        if let Err(e) = self.wait_for_completion(30).await {
+            eprintln!("Warning: {}", e);
+        }
+        
+        // Clean up database
+        if let Err(e) = self.context.cleanup_database().await {
+            eprintln!("Warning: Failed to cleanup database: {}", e);
+        }
+        
+        // Wait for pool to stabilize
+        if let Err(e) = self.context.wait_for_pool_health(10).await {
+            eprintln!("Warning: Pool did not stabilize after cleanup: {}", e);
+        }
+        
+        Ok(())
     }
 }

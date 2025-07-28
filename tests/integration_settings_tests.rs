@@ -12,7 +12,7 @@ mod tests {
         let user = auth_helper.create_test_user().await;
         let token = auth_helper.login_user(&user.username, "password123").await;
 
-        let response = ctx.app
+        let response = ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
@@ -121,7 +121,7 @@ mod tests {
 
         if status == StatusCode::OK {
             // Verify the update
-            let response = ctx.app
+            let response = ctx.app.clone()
                 .oneshot(
                     axum::http::Request::builder()
                         .method("GET")
@@ -231,7 +231,7 @@ mod tests {
 
         if status == StatusCode::OK {
             // Check user2's settings are still default
-            let response = ctx.app
+            let response = ctx.app.clone()
                 .oneshot(
                     axum::http::Request::builder()
                         .method("GET")
@@ -258,7 +258,7 @@ mod tests {
     async fn test_settings_requires_auth() {
         let ctx = TestContext::new().await;
 
-        let response = ctx.app
+        let response = ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
@@ -355,7 +355,7 @@ mod tests {
 
         if status == StatusCode::OK {
             // Verify the multi-language settings were updated
-            let response = ctx.app
+            let response = ctx.app.clone()
                 .oneshot(
                     axum::http::Request::builder()
                         .method("GET")
