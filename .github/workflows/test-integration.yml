@@ -142,7 +142,7 @@ jobs:
           echo "Running tests with DATABASE_URL: $DATABASE_URL"
           echo "Environment check:"
           env | grep -E "(DATABASE_URL|JWT_SECRET|API_URL)" | sort
-          cargo test --test '*' --features test-utils --no-fail-fast -- --test-threads=1
+          cargo test --test '*' --features test-utils --no-fail-fast -- --test-threads=1 --nocapture
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
