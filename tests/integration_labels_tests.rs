@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
     use super::*;
     use readur::models::UserRole;
     use readur::routes::labels::{CreateLabel, UpdateLabel, LabelAssignment, Label};
@@ -17,7 +18,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -79,7 +80,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -129,7 +130,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -203,7 +204,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -261,7 +262,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -327,7 +328,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -420,7 +421,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -514,7 +515,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -614,7 +615,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -707,7 +708,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 
@@ -744,7 +745,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
 
             // Check that system labels were created by migration
             let system_labels = sqlx::query(
@@ -788,7 +789,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let user = auth_helper.create_test_user().await;
 

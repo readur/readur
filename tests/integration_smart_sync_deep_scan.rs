@@ -306,15 +306,34 @@ mod tests {
         // Integration Test: Deep scan should perform well even with large numbers of directories
         // This tests the scalability of the deep scan reset operation
         
+        let test_start_time = std::time::Instant::now();
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Test starting", test_start_time.elapsed());
+        
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Creating test setup...", test_start_time.elapsed());
+        let setup_start = std::time::Instant::now();
         let (state, user, test_context) = create_test_setup().await;
         let _cleanup_guard = TestCleanupGuard::new(test_context);
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Test setup completed in {:?}", test_start_time.elapsed(), setup_start.elapsed());
+        eprintln!("[DEEP_SCAN_TEST] {:?} - User ID: {}", test_start_time.elapsed(), user.id);
         
         // Create a large number of old directories
         let num_old_dirs = 250;
         let mut old_directories = Vec::new();
         
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Starting creation of {} old directories", test_start_time.elapsed(), num_old_dirs);
         let create_start = std::time::Instant::now();
+        
         for i in 0..num_old_dirs {
+            if i % 50 == 0 || i < 10 {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - Creating directory {}/{} ({}%)", 
+                    test_start_time.elapsed(), 
+                    i + 1, 
+                    num_old_dirs, 
+                    ((i + 1) * 100) / num_old_dirs
+                );
+            }
+            
+            let dir_create_start = std::time::Instant::now();
             let dir = CreateWebDAVDirectory {
                 user_id: user.id,
                 directory_path: format!("/Documents/Old{:03}", i),
@@ -323,33 +342,137 @@ mod tests {
                 total_size_bytes: (i as i64 + 1) * 4000, // Varying sizes
             };
             
-            state.db.create_or_update_webdav_directory(&dir).await
-                .expect("Failed to create old directory");
+            eprintln!("[DEEP_SCAN_TEST] {:?} - About to call create_or_update_webdav_directory for dir {}", test_start_time.elapsed(), i);
+            match state.db.create_or_update_webdav_directory(&dir).await {
+                Ok(_) => {
+                    if i < 10 || dir_create_start.elapsed().as_millis() > 100 {
+                        eprintln!("[DEEP_SCAN_TEST] {:?} - Successfully created directory {} in {:?}", 
+                            test_start_time.elapsed(), i, dir_create_start.elapsed());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[DEEP_SCAN_TEST] {:?} - ERROR: Failed to create old directory {}: {}", test_start_time.elapsed(), i, e);
+                    panic!("Failed to create old directory {}: {}", i, e);
+                }
+            }
             old_directories.push(dir);
+            
+            // Check for potential infinite loops by timing individual operations
+            if dir_create_start.elapsed().as_secs() > 5 {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - WARNING: Directory creation {} took {:?} (> 5s)", 
+                    test_start_time.elapsed(), i, dir_create_start.elapsed());
+            }
         }
         let create_duration = create_start.elapsed();
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Completed creation of {} directories in {:?}", 
+            test_start_time.elapsed(), num_old_dirs, create_duration);
         
         // Verify old directories were created
-        let before_count = state.db.list_webdav_directories(user.id).await.unwrap().len();
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Verifying old directories were created...", test_start_time.elapsed());
+        let list_start = std::time::Instant::now();
+        let before_count = match state.db.list_webdav_directories(user.id).await {
+            Ok(dirs) => {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - Successfully listed {} directories in {:?}", 
+                    test_start_time.elapsed(), dirs.len(), list_start.elapsed());
+                dirs.len()
+            }
+            Err(e) => {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - ERROR: Failed to list directories: {}", test_start_time.elapsed(), e);
+                panic!("Failed to list directories: {}", e);
+            }
+        };
         assert_eq!(before_count, num_old_dirs, "Should have created {} old directories", num_old_dirs);
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Verification passed: {} directories found", test_start_time.elapsed(), before_count);
         
         // Simulate deep scan reset - delete all existing
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Starting deletion phase...", test_start_time.elapsed());
         let delete_start = std::time::Instant::now();
-        let dirs_to_delete = state.db.list_webdav_directories(user.id).await.unwrap();
-        for dir in &dirs_to_delete {
-            state.db.delete_webdav_directory(user.id, &dir.directory_path).await
-                .expect("Failed to delete directory during deep scan");
+        
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Fetching directories to delete...", test_start_time.elapsed());
+        let fetch_delete_start = std::time::Instant::now();
+        let dirs_to_delete = match state.db.list_webdav_directories(user.id).await {
+            Ok(dirs) => {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - Fetched {} directories to delete in {:?}", 
+                    test_start_time.elapsed(), dirs.len(), fetch_delete_start.elapsed());
+                dirs
+            }
+            Err(e) => {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - ERROR: Failed to fetch directories for deletion: {}", test_start_time.elapsed(), e);
+                panic!("Failed to fetch directories for deletion: {}", e);
+            }
+        };
+        
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Beginning deletion of {} directories...", test_start_time.elapsed(), dirs_to_delete.len());
+        for (idx, dir) in dirs_to_delete.iter().enumerate() {
+            if idx % 50 == 0 || idx < 10 {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - Deleting directory {}/{} ({}%): {}", 
+                    test_start_time.elapsed(), 
+                    idx + 1, 
+                    dirs_to_delete.len(), 
+                    ((idx + 1) * 100) / dirs_to_delete.len(),
+                    dir.directory_path
+                );
+            }
+            
+            let delete_item_start = std::time::Instant::now();
+            eprintln!("[DEEP_SCAN_TEST] {:?} - About to delete directory: {}", test_start_time.elapsed(), dir.directory_path);
+            match state.db.delete_webdav_directory(user.id, &dir.directory_path).await {
+                Ok(_) => {
+                    if idx < 10 || delete_item_start.elapsed().as_millis() > 100 {
+                        eprintln!("[DEEP_SCAN_TEST] {:?} - Successfully deleted directory {} in {:?}", 
+                            test_start_time.elapsed(), dir.directory_path, delete_item_start.elapsed());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[DEEP_SCAN_TEST] {:?} - ERROR: Failed to delete directory {}: {}", 
+                        test_start_time.elapsed(), dir.directory_path, e);
+                    panic!("Failed to delete directory during deep scan: {}", e);
+                }
+            }
+            
+            // Check for potential infinite loops
+            if delete_item_start.elapsed().as_secs() > 5 {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - WARNING: Directory deletion {} took {:?} (> 5s)", 
+                    test_start_time.elapsed(), dir.directory_path, delete_item_start.elapsed());
+            }
         }
         let delete_duration = delete_start.elapsed();
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Completed deletion of {} directories in {:?}", 
+            test_start_time.elapsed(), dirs_to_delete.len(), delete_duration);
         
         // Verify cleanup
-        let cleared_count = state.db.list_webdav_directories(user.id).await.unwrap().len();
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Verifying cleanup...", test_start_time.elapsed());
+        let verify_cleanup_start = std::time::Instant::now();
+        let cleared_count = match state.db.list_webdav_directories(user.id).await {
+            Ok(dirs) => {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - Cleanup verification: {} directories remaining in {:?}", 
+                    test_start_time.elapsed(), dirs.len(), verify_cleanup_start.elapsed());
+                dirs.len()
+            }
+            Err(e) => {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - ERROR: Failed to verify cleanup: {}", test_start_time.elapsed(), e);
+                panic!("Failed to verify cleanup: {}", e);
+            }
+        };
         assert_eq!(cleared_count, 0, "Should have cleared all directories");
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Cleanup verification passed: 0 directories remaining", test_start_time.elapsed());
         
         // Create new directories (simulating rediscovery)
         let num_new_dirs = 300; // Slightly different number
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Starting recreation of {} new directories", test_start_time.elapsed(), num_new_dirs);
         let recreate_start = std::time::Instant::now();
+        
         for i in 0..num_new_dirs {
+            if i % 50 == 0 || i < 10 {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - Creating new directory {}/{} ({}%)", 
+                    test_start_time.elapsed(), 
+                    i + 1, 
+                    num_new_dirs, 
+                    ((i + 1) * 100) / num_new_dirs
+                );
+            }
+            
+            let recreate_item_start = std::time::Instant::now();
             let dir = CreateWebDAVDirectory {
                 user_id: user.id,
                 directory_path: format!("/Documents/New{:03}", i),
@@ -358,26 +481,65 @@ mod tests {
                 total_size_bytes: (i as i64 + 1) * 5000, // Different sizing
             };
             
-            state.db.create_or_update_webdav_directory(&dir).await
-                .expect("Failed to create new directory");
+            eprintln!("[DEEP_SCAN_TEST] {:?} - About to create new directory {}", test_start_time.elapsed(), i);
+            match state.db.create_or_update_webdav_directory(&dir).await {
+                Ok(_) => {
+                    if i < 10 || recreate_item_start.elapsed().as_millis() > 100 {
+                        eprintln!("[DEEP_SCAN_TEST] {:?} - Successfully created new directory {} in {:?}", 
+                            test_start_time.elapsed(), i, recreate_item_start.elapsed());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[DEEP_SCAN_TEST] {:?} - ERROR: Failed to create new directory {}: {}", test_start_time.elapsed(), i, e);
+                    panic!("Failed to create new directory {}: {}", i, e);
+                }
+            }
+            
+            // Check for potential infinite loops
+            if recreate_item_start.elapsed().as_secs() > 5 {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - WARNING: New directory creation {} took {:?} (> 5s)", 
+                    test_start_time.elapsed(), i, recreate_item_start.elapsed());
+            }
         }
         let recreate_duration = recreate_start.elapsed();
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Completed recreation of {} directories in {:?}", 
+            test_start_time.elapsed(), num_new_dirs, recreate_duration);
         
         // Verify final state
-        let final_count = state.db.list_webdav_directories(user.id).await.unwrap().len();
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Verifying final state...", test_start_time.elapsed());
+        let final_verify_start = std::time::Instant::now();
+        let final_count = match state.db.list_webdav_directories(user.id).await {
+            Ok(dirs) => {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - Final verification: {} directories found in {:?}", 
+                    test_start_time.elapsed(), dirs.len(), final_verify_start.elapsed());
+                dirs.len()
+            }
+            Err(e) => {
+                eprintln!("[DEEP_SCAN_TEST] {:?} - ERROR: Failed to verify final state: {}", test_start_time.elapsed(), e);
+                panic!("Failed to verify final state: {}", e);
+            }
+        };
         assert_eq!(final_count, num_new_dirs, "Should have created {} new directories", num_new_dirs);
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Final verification passed: {} directories found", test_start_time.elapsed(), final_count);
         
         // Performance assertions - should complete within reasonable time
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Running performance assertions...", test_start_time.elapsed());
         assert!(create_duration.as_secs() < 30, "Creating {} directories should take < 30s, took {:?}", num_old_dirs, create_duration);
         assert!(delete_duration.as_secs() < 15, "Deleting {} directories should take < 15s, took {:?}", num_old_dirs, delete_duration);
         assert!(recreate_duration.as_secs() < 30, "Recreating {} directories should take < 30s, took {:?}", num_new_dirs, recreate_duration);
         
         let total_duration = create_duration + delete_duration + recreate_duration;
+        let overall_test_duration = test_start_time.elapsed();
+        
+        eprintln!("[DEEP_SCAN_TEST] {:?} - All performance assertions passed", test_start_time.elapsed());
         
         println!("✅ Deep scan performance test completed successfully");
         println!("   Created {} old directories in {:?}", num_old_dirs, create_duration);
         println!("   Deleted {} directories in {:?}", num_old_dirs, delete_duration);
         println!("   Created {} new directories in {:?}", num_new_dirs, recreate_duration);
         println!("   Total deep scan simulation time: {:?}", total_duration);
+        println!("   Overall test duration: {:?}", overall_test_duration);
+        
+        eprintln!("[DEEP_SCAN_TEST] {:?} - Test completed successfully!", test_start_time.elapsed());
     }
 }

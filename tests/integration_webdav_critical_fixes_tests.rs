@@ -15,11 +15,11 @@ use readur::{
 /// Tests that concurrent directory updates are atomic and consistent
 #[tokio::test]
 async fn test_race_condition_fix_atomic_updates() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = Arc::new(test_context.state.db.clone());
+        let db = Arc::new(ctx.state.db.clone());
 
         // Create a test user first
         let create_user = CreateUser {
@@ -127,11 +127,11 @@ async fn test_race_condition_fix_atomic_updates() {
 /// Test that validates directory deletion detection works correctly
 #[tokio::test]
 async fn test_deletion_detection_fix() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = &test_context.state.db;
+        let db = &ctx.state.db;
 
         // Create a test user first
         let create_user = CreateUser {
@@ -250,11 +250,11 @@ async fn test_etag_comparison_fix() {
 /// Test performance of bulk operations vs individual operations
 #[tokio::test]
 async fn test_bulk_operations_performance() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = &test_context.state.db;
+        let db = &ctx.state.db;
 
         // Create a test user first
         let create_user = CreateUser {
@@ -314,11 +314,11 @@ async fn test_bulk_operations_performance() {
 /// Test transaction rollback behavior
 #[tokio::test]
 async fn test_transaction_rollback_consistency() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = &test_context.state.db;
+        let db = &ctx.state.db;
 
         // Create a test user first
         let create_user = CreateUser {
@@ -391,11 +391,11 @@ async fn test_transaction_rollback_consistency() {
 /// Integration test simulating real WebDAV sync scenario
 #[tokio::test]
 async fn test_full_sync_integration() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let app_state = &test_context.state;
+        let app_state = &ctx.state;
 
         // Create a test user first
         let create_user = CreateUser {

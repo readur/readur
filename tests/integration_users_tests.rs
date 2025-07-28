@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
     use readur::models::{CreateUser, UpdateUser, UserResponse, AuthProvider, UserRole};
     use readur::test_utils::{TestContext, TestAuthHelper};
     use axum::http::StatusCode;
@@ -12,7 +13,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             // Create admin user using TestAuthHelper for unique credentials
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let admin = auth_helper.create_admin_user().await;
@@ -61,7 +62,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
-        let result = async {
+        let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
             let admin = auth_helper.create_admin_user().await;
             let token = auth_helper.login_user(&admin.username, "adminpass123").await;

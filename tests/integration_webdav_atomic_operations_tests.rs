@@ -10,11 +10,11 @@ use readur::{
 
 #[tokio::test]
 async fn test_bulk_create_or_update_atomic() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = &test_context.state.db;
+        let db = &ctx.state.db;
 
         // Create a test user first
         let create_user = CreateUser {
@@ -81,11 +81,11 @@ async fn test_bulk_create_or_update_atomic() {
 
 #[tokio::test]
 async fn test_sync_webdav_directories_atomic() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = &test_context.state.db;
+        let db = &ctx.state.db;
 
         // Create a test user first
         let create_user = CreateUser {
@@ -175,11 +175,11 @@ async fn test_sync_webdav_directories_atomic() {
 
 #[tokio::test]
 async fn test_delete_missing_directories() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = &test_context.state.db;
+        let db = &ctx.state.db;
 
         // Create a test user first
         let create_user = CreateUser {
@@ -243,11 +243,11 @@ async fn test_delete_missing_directories() {
 
 #[tokio::test]
 async fn test_atomic_rollback_on_failure() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = &test_context.state.db;
+        let db = &ctx.state.db;
 
         // Create a test user first
         let create_user = CreateUser {
@@ -311,11 +311,11 @@ async fn test_atomic_rollback_on_failure() {
 
 #[tokio::test]
 async fn test_concurrent_directory_updates() {
-    let test_context = TestContext::new().await;
+    let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-        let db = Arc::new(test_context.state.db.clone());
+        let db = Arc::new(ctx.state.db.clone());
 
         // Create a test user first
         let create_user = CreateUser {
