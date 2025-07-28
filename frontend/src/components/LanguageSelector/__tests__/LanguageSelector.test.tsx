@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LanguageSelector from '../LanguageSelector';
 import { renderWithProviders } from '../../../test/test-utils';
@@ -259,7 +259,11 @@ describe('LanguageSelector Component', () => {
       expect(button).toHaveFocus();
       
       await user.keyboard('{Enter}');
-      expect(screen.getByText('Available Languages')).toBeInTheDocument();
+      
+      // Wait for the dialog to appear
+      await waitFor(() => {
+        expect(screen.getByText('Available Languages')).toBeInTheDocument();
+      });
     });
 
     test('should have proper button roles', () => {
