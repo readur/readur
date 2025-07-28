@@ -71,122 +71,188 @@ fn create_test_document(user_id: Uuid, filename: &str, file_hash: Option<String>
 #[tokio::test]
 async fn test_get_document_by_user_and_hash_found() -> Result<()> {
     let ctx = TestContext::new().await;
-    let user_id = create_test_user(&ctx.state.db, "testuser1").await?;
-    let file_hash = "abcd1234567890";
+    
+    // Ensure cleanup happens even if test fails
+    let result = async {
+        let user_id = create_test_user(&ctx.state.db, "testuser1").await?;
+        let file_hash = "abcd1234567890";
 
-    // Create a document with the hash
-    let document = create_test_document(user_id, "test.pdf", Some(file_hash.to_string()));
-    let created_doc = ctx.state.db.create_document(document).await?;
+        // Create a document with the hash
+        let document = create_test_document(user_id, "test.pdf", Some(file_hash.to_string()));
+        let created_doc = ctx.state.db.create_document(document).await?;
 
-    // Test finding the document by hash
-    let found_doc = ctx.state.db.get_document_by_user_and_hash(user_id, file_hash).await?;
+        // Test finding the document by hash
+        let found_doc = ctx.state.db.get_document_by_user_and_hash(user_id, file_hash).await?;
 
-    assert!(found_doc.is_some());
-    let found_doc = found_doc.unwrap();
-    assert_eq!(found_doc.id, created_doc.id);
-    assert_eq!(found_doc.file_hash, Some(file_hash.to_string()));
-    assert_eq!(found_doc.user_id, user_id);
+        assert!(found_doc.is_some());
+        let found_doc = found_doc.unwrap();
+        assert_eq!(found_doc.id, created_doc.id);
+        assert_eq!(found_doc.file_hash, Some(file_hash.to_string()));
+        assert_eq!(found_doc.user_id, user_id);
 
-    Ok(())
+        Ok(())
+    }.await;
+    
+    // Always cleanup database connections and test data
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    
+    result
 }
 
 #[tokio::test]
 async fn test_get_document_by_user_and_hash_not_found() -> Result<()> {
     let ctx = TestContext::new().await;
-    let user_id = Uuid::new_v4();
-    let non_existent_hash = "nonexistent1234567890";
+    
+    // Ensure cleanup happens even if test fails
+    let result = async {
+        let user_id = Uuid::new_v4();
+        let non_existent_hash = "nonexistent1234567890";
 
-    // Test finding a non-existent hash
-    let found_doc = ctx.state.db.get_document_by_user_and_hash(user_id, non_existent_hash).await?;
+        // Test finding a non-existent hash
+        let found_doc = ctx.state.db.get_document_by_user_and_hash(user_id, non_existent_hash).await?;
 
-    assert!(found_doc.is_none());
+        assert!(found_doc.is_none());
 
-    Ok(())
+        Ok(())
+    }.await;
+    
+    // Always cleanup database connections and test data
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    
+    result
 }
 
 #[tokio::test]
 async fn test_get_document_by_user_and_hash_different_user() -> Result<()> {
     let ctx = TestContext::new().await;
-    let user1_id = create_test_user(&ctx.state.db, "testuser2").await?;
-    let user2_id = create_test_user(&ctx.state.db, "testuser3").await?;
-    let file_hash = "shared_hash_1234567890";
+    
+    // Ensure cleanup happens even if test fails
+    let result = async {
+        let user1_id = create_test_user(&ctx.state.db, "testuser2").await?;
+        let user2_id = create_test_user(&ctx.state.db, "testuser3").await?;
+        let file_hash = "shared_hash_1234567890";
 
-    // Create a document for user1 with the hash
-    let document = create_test_document(user1_id, "test.pdf", Some(file_hash.to_string()));
-    ctx.state.db.create_document(document).await?;
+        // Create a document for user1 with the hash
+        let document = create_test_document(user1_id, "test.pdf", Some(file_hash.to_string()));
+        ctx.state.db.create_document(document).await?;
 
-    // Test that user2 cannot find user1's document by hash
-    let found_doc = ctx.state.db.get_document_by_user_and_hash(user2_id, file_hash).await?;
+        // Test that user2 cannot find user1's document by hash
+        let found_doc = ctx.state.db.get_document_by_user_and_hash(user2_id, file_hash).await?;
 
-    assert!(found_doc.is_none(), "User should not be able to access another user's documents");
+        assert!(found_doc.is_none(), "User should not be able to access another user's documents");
 
-    Ok(())
+        Ok(())
+    }.await;
+    
+    // Always cleanup database connections and test data
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    
+    result
 }
 
 #[tokio::test]
 async fn test_duplicate_hash_prevention_same_user() -> Result<()> {
     let ctx = TestContext::new().await;
-    let user_id = create_test_user(&ctx.state.db, "testuser4").await?;
-    let file_hash = "duplicate_hash_1234567890";
-
-    // Create first document with the hash
-    let document1 = create_test_document(user_id, "test1.pdf", Some(file_hash.to_string()));
-    let result1 = ctx.state.db.create_document(document1).await;
-    assert!(result1.is_ok(), "First document with hash should be created successfully");
-
-    // Try to create second document with same hash for same user
-    let document2 = create_test_document(user_id, "test2.pdf", Some(file_hash.to_string()));
-    let result2 = ctx.state.db.create_document(document2).await;
     
-    // This should fail due to unique constraint
-    assert!(result2.is_err(), "Second document with same hash for same user should fail");
+    // Ensure cleanup happens even if test fails
+    let result = async {
+        let user_id = create_test_user(&ctx.state.db, "testuser4").await?;
+        let file_hash = "duplicate_hash_1234567890";
 
-    Ok(())
+        // Create first document with the hash
+        let document1 = create_test_document(user_id, "test1.pdf", Some(file_hash.to_string()));
+        let result1 = ctx.state.db.create_document(document1).await;
+        assert!(result1.is_ok(), "First document with hash should be created successfully");
+
+        // Try to create second document with same hash for same user
+        let document2 = create_test_document(user_id, "test2.pdf", Some(file_hash.to_string()));
+        let result2 = ctx.state.db.create_document(document2).await;
+        
+        // This should fail due to unique constraint
+        assert!(result2.is_err(), "Second document with same hash for same user should fail");
+
+        Ok(())
+    }.await;
+    
+    // Always cleanup database connections and test data
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    
+    result
 }
 
 #[tokio::test]
 async fn test_same_hash_different_users_allowed() -> Result<()> {
     let ctx = TestContext::new().await;
-    let user1_id = create_test_user(&ctx.state.db, "testuser5").await?;
-    let user2_id = create_test_user(&ctx.state.db, "testuser6").await?;
-    let file_hash = "shared_content_hash_1234567890";
+    
+    // Ensure cleanup happens even if test fails
+    let result = async {
+        let user1_id = create_test_user(&ctx.state.db, "testuser5").await?;
+        let user2_id = create_test_user(&ctx.state.db, "testuser6").await?;
+        let file_hash = "shared_content_hash_1234567890";
 
-    // Create document for user1 with the hash
-    let document1 = create_test_document(user1_id, "test1.pdf", Some(file_hash.to_string()));
-    let result1 = ctx.state.db.create_document(document1).await;
-    assert!(result1.is_ok(), "First user's document should be created successfully");
+        // Create document for user1 with the hash
+        let document1 = create_test_document(user1_id, "test1.pdf", Some(file_hash.to_string()));
+        let result1 = ctx.state.db.create_document(document1).await;
+        assert!(result1.is_ok(), "First user's document should be created successfully");
 
-    // Create document for user2 with same hash
-    let document2 = create_test_document(user2_id, "test2.pdf", Some(file_hash.to_string()));
-    let result2 = ctx.state.db.create_document(document2).await;
-    assert!(result2.is_ok(), "Second user's document with same hash should be allowed");
+        // Create document for user2 with same hash
+        let document2 = create_test_document(user2_id, "test2.pdf", Some(file_hash.to_string()));
+        let result2 = ctx.state.db.create_document(document2).await;
+        assert!(result2.is_ok(), "Second user's document with same hash should be allowed");
 
-    // Verify both users can find their respective documents
-    let found_doc1 = ctx.state.db.get_document_by_user_and_hash(user1_id, file_hash).await?;
-    let found_doc2 = ctx.state.db.get_document_by_user_and_hash(user2_id, file_hash).await?;
+        // Verify both users can find their respective documents
+        let found_doc1 = ctx.state.db.get_document_by_user_and_hash(user1_id, file_hash).await?;
+        let found_doc2 = ctx.state.db.get_document_by_user_and_hash(user2_id, file_hash).await?;
 
-    assert!(found_doc1.is_some());
-    assert!(found_doc2.is_some());
-    assert_ne!(found_doc1.unwrap().id, found_doc2.unwrap().id);
+        assert!(found_doc1.is_some());
+        assert!(found_doc2.is_some());
+        assert_ne!(found_doc1.unwrap().id, found_doc2.unwrap().id);
 
-    Ok(())
+        Ok(())
+    }.await;
+    
+    // Always cleanup database connections and test data
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    
+    result
 }
 
 #[tokio::test]
 async fn test_null_hash_allowed_multiple() -> Result<()> {
     let ctx = TestContext::new().await;
-    let user_id = create_test_user(&ctx.state.db, "testuser7").await?;
+    
+    // Ensure cleanup happens even if test fails
+    let result = async {
+        let user_id = create_test_user(&ctx.state.db, "testuser7").await?;
 
-    // Create multiple documents with null hash (should be allowed)
-    let document1 = create_test_document(user_id, "test1.pdf", None);
-    let result1 = ctx.state.db.create_document(document1).await;
-    assert!(result1.is_ok(), "First document with null hash should be created");
+        // Create multiple documents with null hash (should be allowed)
+        let document1 = create_test_document(user_id, "test1.pdf", None);
+        let result1 = ctx.state.db.create_document(document1).await;
+        assert!(result1.is_ok(), "First document with null hash should be created");
 
-    let document2 = create_test_document(user_id, "test2.pdf", None);
-    let result2 = ctx.state.db.create_document(document2).await;
-    assert!(result2.is_ok(), "Second document with null hash should be created");
+        let document2 = create_test_document(user_id, "test2.pdf", None);
+        let result2 = ctx.state.db.create_document(document2).await;
+        assert!(result2.is_ok(), "Second document with null hash should be created");
 
-    Ok(())
+        Ok(())
+    }.await;
+    
+    // Always cleanup database connections and test data
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    
+    result
 }
 
 #[test]

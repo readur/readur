@@ -169,7 +169,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
     
     let config = Config {
-        database_url,
+        database_url: database_url.clone(),
         server_address: "127.0.0.1:8080".to_string(),
         jwt_secret: "test_secret".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
@@ -191,7 +191,8 @@ async fn create_test_app_state() -> Arc<AppState> {
         oidc_redirect_uri: None,
     };
 
-    let db = Database::new(&config.database_url).await.unwrap();
+    // Use smaller connection pool for tests to avoid exhaustion  
+    let db = Database::new_with_pool_config(&database_url, 10, 2).await.unwrap();
     let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
     
     Arc::new(AppState {
@@ -203,6 +204,11 @@ async fn create_test_app_state() -> Arc<AppState> {
         oidc_client: None,
         sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
     })
+}
+
+/// Cleanup function to close database connections after tests
+async fn cleanup_test_app_state(state: Arc<AppState>) {
+    state.db.pool.close().await;
 }
 
 #[tokio::test]
@@ -591,6 +597,9 @@ async fn test_trigger_sync_nonexistent_source() {
     
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Source not found");
+    
+    // Cleanup database connections
+    cleanup_test_app_state(state).await;
 }
 
 #[tokio::test]

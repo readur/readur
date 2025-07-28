@@ -11,68 +11,93 @@ mod tests {
     async fn test_list_users() {
         let ctx = TestContext::new().await;
         
-        // Create admin user using TestAuthHelper for unique credentials
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let admin = auth_helper.create_admin_user().await;
-        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+        // Ensure cleanup happens even if test fails
+        let result = async {
+            // Create admin user using TestAuthHelper for unique credentials
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let admin = auth_helper.create_admin_user().await;
+            let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
-        // Create another user using TestAuthHelper for unique credentials
-        let user2 = auth_helper.create_test_user().await;
+            // Create another user using TestAuthHelper for unique credentials
+            let user2 = auth_helper.create_test_user().await;
 
-        let response = ctx.app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri("/api/users")
-                    .header("Authorization", format!("Bearer {}", token))
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+            let response = ctx.app.clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("GET")
+                        .uri("/api/users")
+                        .header("Authorization", format!("Bearer {}", token))
+                        .body(axum::body::Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let users: Vec<UserResponse> = serde_json::from_slice(&body).unwrap();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let users: Vec<UserResponse> = serde_json::from_slice(&body).unwrap();
 
-        // Ensure we have at least our 2 created users
-        assert!(users.len() >= 2);
-        assert!(users.iter().any(|u| u.username == admin.username));
-        assert!(users.iter().any(|u| u.username == user2.username));
+            // Ensure we have at least our 2 created users
+            assert!(users.len() >= 2);
+            assert!(users.iter().any(|u| u.username == admin.username));
+            assert!(users.iter().any(|u| u.username == user2.username));
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_get_user_by_id() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let admin = auth_helper.create_admin_user().await;
-        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+        
+        // Ensure cleanup happens even if test fails
+        let result = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let admin = auth_helper.create_admin_user().await;
+            let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
-        let response = ctx.app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri(format!("/api/users/{}", admin.id()))
-                    .header("Authorization", format!("Bearer {}", token))
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+            let response = ctx.app.clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("GET")
+                        .uri(format!("/api/users/{}", admin.id()))
+                        .header("Authorization", format!("Bearer {}", token))
+                        .body(axum::body::Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let fetched_user: UserResponse = serde_json::from_slice(&body).unwrap();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let fetched_user: UserResponse = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(fetched_user.id.to_string(), admin.id());
-        assert_eq!(fetched_user.username, admin.username);
-        assert_eq!(fetched_user.email, admin.user_response.email);
+            assert_eq!(fetched_user.id.to_string(), admin.id());
+            assert_eq!(fetched_user.username, admin.username);
+            assert_eq!(fetched_user.email, admin.user_response.email);
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
@@ -96,7 +121,7 @@ mod tests {
             role: Some(readur::models::UserRole::User),
         };
 
-        let response = ctx.app
+        let response = ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("POST")
@@ -145,7 +170,7 @@ mod tests {
             password: None,
         };
 
-        let response = ctx.app
+        let response = ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("PUT")
@@ -257,7 +282,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
         // Verify user is deleted
-        let response = ctx.app
+        let response = ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
@@ -279,7 +304,7 @@ mod tests {
         let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
-        let response = ctx.app
+        let response = ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("DELETE")
@@ -298,7 +323,7 @@ mod tests {
     async fn test_users_require_auth() {
         let ctx = TestContext::new().await;
 
-        let response = ctx.app
+        let response = ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("GET")
@@ -469,7 +494,7 @@ mod tests {
             "password": "password123"
         });
 
-        let response = ctx.app
+        let response = ctx.app.clone()
             .oneshot(
                 axum::http::Request::builder()
                     .method("POST")

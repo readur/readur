@@ -57,6 +57,11 @@ impl Database {
         &self.pool
     }
 
+    /// Close the database connection pool
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
+
     /// Get database connection pool health information
     pub fn get_pool_health(&self) -> DatabasePoolHealth {
         DatabasePoolHealth {

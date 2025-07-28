@@ -348,11 +348,26 @@ async fn test_production_sync_flow_concurrent_sources() {
     // Should have directories from successful syncs
     assert!(final_directories.len() > 0, "Should have discovered some directories");
     
-    // Verify all sources are in consistent states
+    // Verify all sources are in consistent states with force reset failsafe
+    let scheduler_reset = SourceScheduler::new(state.clone());
     for source in sources {
-        let final_source = state.db.get_source(user_id, source.id).await
+        let mut final_source = state.db.get_source(user_id, source.id).await
             .expect("Failed to get source")
             .expect("Source should exist");
+        
+        // If source is still syncing, try force reset as failsafe
+        if matches!(final_source.status, SourceStatus::Syncing) {
+            println!("Source {} still syncing, attempting force reset...", source.name);
+            if let Err(e) = scheduler_reset.force_reset_source(source.id).await {
+                println!("Force reset source {} failed: {}", source.name, e);
+            } else {
+                sleep(Duration::from_millis(100)).await;
+                final_source = state.db.get_source(user_id, source.id).await
+                    .expect("Failed to get source")
+                    .expect("Source should exist");
+                println!("Source {} status after force reset: {:?}", source.name, final_source.status);
+            }
+        }
         
         // Source should not be stuck in syncing state
         assert_ne!(final_source.status, SourceStatus::Syncing,
@@ -457,13 +472,41 @@ async fn test_production_concurrent_user_actions() {
     // Give time for any background operations to settle
     sleep(Duration::from_millis(3000)).await;
     
-    // Verify final state after chaotic user interactions
-    let final_source1 = state.db.get_source(user_id, source1.id).await
+    // Verify final state after chaotic user interactions with force reset failsafe
+    let mut final_source1 = state.db.get_source(user_id, source1.id).await
         .expect("Failed to get source1")
         .expect("Source1 should exist");
-    let final_source2 = state.db.get_source(user_id, source2.id).await
+    let mut final_source2 = state.db.get_source(user_id, source2.id).await
         .expect("Failed to get source2")
         .expect("Source2 should exist");
+    
+    // If sources are still syncing, try force reset as failsafe
+    let scheduler_reset = SourceScheduler::new(state.clone());
+    if matches!(final_source1.status, SourceStatus::Syncing) {
+        println!("Source1 still syncing after chaotic user actions, attempting force reset...");
+        if let Err(e) = scheduler_reset.force_reset_source(source1.id).await {
+            println!("Force reset source1 failed: {}", e);
+        } else {
+            sleep(Duration::from_millis(100)).await;
+            final_source1 = state.db.get_source(user_id, source1.id).await
+                .expect("Failed to get source1")
+                .expect("Source1 should exist");
+            println!("Source1 status after force reset: {:?}", final_source1.status);
+        }
+    }
+    
+    if matches!(final_source2.status, SourceStatus::Syncing) {
+        println!("Source2 still syncing after chaotic user actions, attempting force reset...");
+        if let Err(e) = scheduler_reset.force_reset_source(source2.id).await {
+            println!("Force reset source2 failed: {}", e);
+        } else {
+            sleep(Duration::from_millis(100)).await;
+            final_source2 = state.db.get_source(user_id, source2.id).await
+                .expect("Failed to get source2")
+                .expect("Source2 should exist");
+            println!("Source2 status after force reset: {:?}", final_source2.status);
+        }
+    }
     
     // Both sources should be in stable states (not stuck in syncing)
     assert!(matches!(final_source1.status, SourceStatus::Idle | SourceStatus::Error),

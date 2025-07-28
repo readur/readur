@@ -84,6 +84,6 @@ debug = false
 
 # Test configuration to prevent resource contention
 [[test]]
-name = "integration"
+name = "integration_smart_sync_deep_scan"
 path = "tests/integration_smart_sync_deep_scan.rs"
 harness = true

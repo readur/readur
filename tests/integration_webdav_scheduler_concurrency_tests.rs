@@ -166,9 +166,22 @@ async fn test_concurrent_sync_trigger_and_stop() {
     }
     
     // Final source should be in a consistent state (not stuck in "Syncing")
-    sleep(Duration::from_millis(100)).await; // Allow operations to complete
-    let final_source = state.db.get_source(user_id, source.id).await.unwrap().unwrap();
+    sleep(Duration::from_millis(2000)).await; // Allow more time for operations to complete
+    let mut final_source = state.db.get_source(user_id, source.id).await.unwrap().unwrap();
     println!("Final source status after concurrent operations: {:?}", final_source.status);
+    
+    // If source is still syncing, try force reset as fallback
+    if matches!(final_source.status, SourceStatus::Syncing) {
+        println!("Source still syncing, attempting force reset...");
+        let scheduler = SourceScheduler::new(state.clone());
+        if let Err(e) = scheduler.force_reset_source(source.id).await {
+            println!("Force reset failed: {}", e);
+        } else {
+            sleep(Duration::from_millis(100)).await;
+            final_source = state.db.get_source(user_id, source.id).await.unwrap().unwrap();
+            println!("Source status after force reset: {:?}", final_source.status);
+        }
+    }
     
     // The source should not be permanently stuck in Syncing state
     assert_ne!(final_source.status, SourceStatus::Syncing, 

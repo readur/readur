@@ -1,3 +1,4 @@
+use anyhow::Result;
 use readur::models::{Document, DocumentResponse};
 use readur::test_utils::{TestContext, TestAuthHelper};
 use chrono::Utc;
@@ -356,300 +357,417 @@ mod document_deletion_tests {
     #[tokio::test]
     async fn test_delete_document_as_owner() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create test user and document
-        let user_data = CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
-        let document = super::create_test_document(user.id);
-        let document = db.create_document(document).await.expect("Failed to create document");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        // Delete document as owner
-        let result = db
-            .delete_document(document.id, user.id, user.role)
-            .await
-            .expect("Failed to delete document");
+            // Create test user and document
+            let user_data = CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
+            let document = super::create_test_document(user.id);
+            let document = db.create_document(document).await.expect("Failed to create document");
 
-        // Verify document was deleted
-        assert!(result);
+            // Delete document as owner
+            let result = db
+                .delete_document(document.id, user.id, user.role)
+                .await
+                .expect("Failed to delete document");
 
-        // Verify document no longer exists in database
-        let found_doc = db
-            .get_document_by_id(document.id, user.id, user.role)
-            .await
-            .expect("Database query failed");
-        assert!(found_doc.is_none());
+            // Verify document was deleted
+            assert!(result);
+
+            // Verify document no longer exists in database
+            let found_doc = db
+                .get_document_by_id(document.id, user.id, user.role)
+                .await
+                .expect("Database query failed");
+            assert!(found_doc.is_none());
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_delete_document_as_admin() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create regular user and their document
-        let user_data = CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
-        let document = super::create_test_document(user.id);
-        let document = db.create_document(document).await.expect("Failed to create document");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+
+            // Create regular user and their document
+            let user_data = CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
+            let document = super::create_test_document(user.id);
+            let document = db.create_document(document).await.expect("Failed to create document");
+
+            // Create admin user
+            let admin_data = CreateUser {
+                username: format!("adminuser_{}", Uuid::new_v4()),
+                email: format!("admin_{}@example.com", Uuid::new_v4()),
+                password: "adminpass123".to_string(),
+                role: Some(UserRole::Admin),
+            };
+            let admin = db.create_user(admin_data).await.expect("Failed to create admin");
+
+            // Delete document as admin
+            let result = db
+                .delete_document(document.id, admin.id, admin.role)
+                .await
+                .expect("Failed to delete document as admin");
+
+            // Verify document was deleted
+            assert!(result);
+            
+            Ok(())
+        }.await;
         
-        // Create admin user
-        let admin_data = CreateUser {
-            username: format!("adminuser_{}", Uuid::new_v4()),
-            email: format!("admin_{}@example.com", Uuid::new_v4()),
-            password: "adminpass123".to_string(),
-            role: Some(UserRole::Admin),
-        };
-        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
-
-        // Delete document as admin
-        let result = db
-            .delete_document(document.id, admin.id, admin.role)
-            .await
-            .expect("Failed to delete document as admin");
-
-        // Verify document was deleted
-        assert!(result);
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_delete_document_unauthorized() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create two regular users
-        let user1_data = CreateUser {
-            username: format!("testuser1_{}", Uuid::new_v4()),
-            email: format!("test1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+
+            // Create two regular users
+            let user1_data = CreateUser {
+                username: format!("testuser1_{}", Uuid::new_v4()),
+                email: format!("test1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+
+            let user2_data = CreateUser {
+                username: format!("testuser2_{}", Uuid::new_v4()),
+                email: format!("test2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+
+            // Create document owned by user1
+            let document = super::create_test_document(user1.id);
+            let document = db.create_document(document).await.expect("Failed to create document");
+
+            // Try to delete document as user2 (should fail)
+            let result = db
+                .delete_document(document.id, user2.id, user2.role)
+                .await
+                .expect("Database query failed");
+
+            // Verify document was not deleted
+            assert!(!result);
+
+            // Verify document still exists
+            let found_doc = db
+                .get_document_by_id(document.id, user1.id, user1.role)
+                .await
+                .expect("Database query failed");
+            assert!(found_doc.is_some());
+            
+            Ok(())
+        }.await;
         
-        let user2_data = CreateUser {
-            username: format!("testuser2_{}", Uuid::new_v4()),
-            email: format!("test2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        // Create document owned by user1
-        let document = super::create_test_document(user1.id);
-        let document = db.create_document(document).await.expect("Failed to create document");
-
-        // Try to delete document as user2 (should fail)
-        let result = db
-            .delete_document(document.id, user2.id, user2.role)
-            .await
-            .expect("Database query failed");
-
-        // Verify document was not deleted
-        assert!(!result);
-
-        // Verify document still exists
-        let found_doc = db
-            .get_document_by_id(document.id, user1.id, user1.role)
-            .await
-            .expect("Database query failed");
-        assert!(found_doc.is_some());
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_delete_nonexistent_document() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
         
-        let nonexistent_id = Uuid::new_v4();
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
 
-        // Try to delete nonexistent document
-        let result = ctx.state.db
-            .delete_document(nonexistent_id, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Database query failed");
+            let nonexistent_id = Uuid::new_v4();
 
-        // Verify nothing was deleted
-        assert!(!result);
+            // Try to delete nonexistent document
+            let result = ctx.state.db
+                .delete_document(nonexistent_id, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Database query failed");
+
+            // Verify nothing was deleted
+            assert!(!result);
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_documents_as_owner() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
         
-        // Create multiple documents
-        let doc1 = create_test_document(user.user_response.id);
-        let doc1 = ctx.state.db.create_document(doc1).await.expect("Failed to create document");
-        let doc2 = create_test_document(user.user_response.id);
-        let doc2 = ctx.state.db.create_document(doc2).await.expect("Failed to create document");
-        let doc3 = create_test_document(user.user_response.id);
-        let doc3 = ctx.state.db.create_document(doc3).await.expect("Failed to create document");
-        
-        let document_ids = vec![doc1.id, doc2.id, doc3.id];
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
 
-        // Delete documents as owner
-        let result = ctx.state.db
-            .bulk_delete_documents(&document_ids, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Failed to bulk delete documents");
+            // Create multiple documents
+            let doc1 = create_test_document(user.user_response.id);
+            let doc1 = ctx.state.db.create_document(doc1).await.expect("Failed to create document");
+            let doc2 = create_test_document(user.user_response.id);
+            let doc2 = ctx.state.db.create_document(doc2).await.expect("Failed to create document");
+            let doc3 = create_test_document(user.user_response.id);
+            let doc3 = ctx.state.db.create_document(doc3).await.expect("Failed to create document");
 
-        // Verify all documents were deleted
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 3);
-        assert_eq!(failed_ids.len(), 0);
-        assert!(deleted_ids.contains(&doc1.id));
-        assert!(deleted_ids.contains(&doc2.id));
-        assert!(deleted_ids.contains(&doc3.id));
+            let document_ids = vec![doc1.id, doc2.id, doc3.id];
 
-        // Verify documents no longer exist
-        for doc_id in document_ids {
-            let found_doc = ctx.state.db
-                .get_document_by_id(doc_id, user.user_response.id, user.user_response.role)
+            // Delete documents as owner
+            let result = ctx.state.db
+                .bulk_delete_documents(&document_ids, user.user_response.id, user.user_response.role)
                 .await
-                .expect("Database query failed");
-            assert!(found_doc.is_none());
+                .expect("Failed to bulk delete documents");
+
+            // Verify all documents were deleted
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 3);
+            assert_eq!(failed_ids.len(), 0);
+            assert!(deleted_ids.contains(&doc1.id));
+            assert!(deleted_ids.contains(&doc2.id));
+            assert!(deleted_ids.contains(&doc3.id));
+
+            // Verify documents no longer exist
+            for doc_id in document_ids {
+                let found_doc = ctx.state.db
+                    .get_document_by_id(doc_id, user.user_response.id, user.user_response.role)
+                    .await
+                    .expect("Database query failed");
+                assert!(found_doc.is_none());
+            }
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
         }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_documents_as_admin() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
         
-        // Create regular user and their documents
-        let user = auth_helper.create_test_user().await;
-        let doc1 = create_test_document(user.user_response.id);
-        let doc1 = ctx.state.db.create_document(doc1).await.expect("Failed to create document");
-        let doc2 = create_test_document(user.user_response.id);
-        let doc2 = ctx.state.db.create_document(doc2).await.expect("Failed to create document");
-        
-        // Create admin user
-        let admin = auth_helper.create_admin_user().await;
-        
-        let document_ids = vec![doc1.id, doc2.id];
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
 
-        // Delete documents as admin
-        let result = ctx.state.db
-            .bulk_delete_documents(&document_ids, admin.user_response.id, admin.user_response.role)
-            .await
-            .expect("Failed to bulk delete documents as admin");
+            // Create regular user and their documents
+            let user = auth_helper.create_test_user().await;
+            let doc1 = create_test_document(user.user_response.id);
+            let doc1 = ctx.state.db.create_document(doc1).await.expect("Failed to create document");
+            let doc2 = create_test_document(user.user_response.id);
+            let doc2 = ctx.state.db.create_document(doc2).await.expect("Failed to create document");
 
-        // Verify all documents were deleted
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 2);
-        assert_eq!(failed_ids.len(), 0);
+            // Create admin user
+            let admin = auth_helper.create_admin_user().await;
+
+            let document_ids = vec![doc1.id, doc2.id];
+
+            // Delete documents as admin
+            let result = ctx.state.db
+                .bulk_delete_documents(&document_ids, admin.user_response.id, admin.user_response.role)
+                .await
+                .expect("Failed to bulk delete documents as admin");
+
+            // Verify all documents were deleted
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 2);
+            assert_eq!(failed_ids.len(), 0);
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_documents_mixed_ownership() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create two regular users
-        let user1_data = CreateUser {
-            username: format!("testuser1_{}", Uuid::new_v4()),
-            email: format!("test1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
-        
-        let user2_data = CreateUser {
-            username: format!("testuser2_{}", Uuid::new_v4()),
-            email: format!("test2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
-        
-        // Create documents for both users
-        let doc1_user1 = create_test_document(user1.id);
-        let doc1_user1 = ctx.state.db.create_document(doc1_user1).await.expect("Failed to create document");
-        let doc2_user1 = create_test_document(user1.id);
-        let doc2_user1 = ctx.state.db.create_document(doc2_user1).await.expect("Failed to create document");
-        let doc1_user2 = create_test_document(user2.id);
-        let doc1_user2 = ctx.state.db.create_document(doc1_user2).await.expect("Failed to create document");
-        
-        let document_ids = vec![doc1_user1.id, doc2_user1.id, doc1_user2.id];
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        // Try to delete all documents as user1 (should only delete their own)
-        let result = ctx.state.db
-            .bulk_delete_documents(&document_ids, user1.id, user1.role)
-            .await
-            .expect("Failed to bulk delete documents");
+            // Create two regular users
+            let user1_data = CreateUser {
+                username: format!("testuser1_{}", Uuid::new_v4()),
+                email: format!("test1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
 
-        // Verify only user1's documents were deleted
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 2);
-        assert_eq!(failed_ids.len(), 1);
-        assert!(deleted_ids.contains(&doc1_user1.id));
-        assert!(deleted_ids.contains(&doc2_user1.id));
-        assert!(failed_ids.contains(&doc1_user2.id));
+            let user2_data = CreateUser {
+                username: format!("testuser2_{}", Uuid::new_v4()),
+                email: format!("test2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
 
-        // Verify user2's document still exists
-        let found_doc = ctx.state.db
-            .get_document_by_id(doc1_user2.id, user2.id, user2.role)
-            .await
-            .expect("Database query failed");
-        assert!(found_doc.is_some());
+            // Create documents for both users
+            let doc1_user1 = create_test_document(user1.id);
+            let doc1_user1 = ctx.state.db.create_document(doc1_user1).await.expect("Failed to create document");
+            let doc2_user1 = create_test_document(user1.id);
+            let doc2_user1 = ctx.state.db.create_document(doc2_user1).await.expect("Failed to create document");
+            let doc1_user2 = create_test_document(user2.id);
+            let doc1_user2 = ctx.state.db.create_document(doc1_user2).await.expect("Failed to create document");
+
+            let document_ids = vec![doc1_user1.id, doc2_user1.id, doc1_user2.id];
+
+            // Try to delete all documents as user1 (should only delete their own)
+            let result = ctx.state.db
+                .bulk_delete_documents(&document_ids, user1.id, user1.role)
+                .await
+                .expect("Failed to bulk delete documents");
+
+            // Verify only user1's documents were deleted
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 2);
+            assert_eq!(failed_ids.len(), 1);
+            assert!(deleted_ids.contains(&doc1_user1.id));
+            assert!(deleted_ids.contains(&doc2_user1.id));
+            assert!(failed_ids.contains(&doc1_user2.id));
+
+            // Verify user2's document still exists
+            let found_doc = ctx.state.db
+                .get_document_by_id(doc1_user2.id, user2.id, user2.role)
+                .await
+                .expect("Database query failed");
+            assert!(found_doc.is_some());
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_documents_empty_list() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
         
-        let user = auth_helper.create_test_user().await;
-        let empty_ids: Vec<Uuid> = vec![];
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
 
-        // Delete empty list of documents
-        let result = ctx.state.db
-            .bulk_delete_documents(&empty_ids, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Failed to bulk delete empty list");
+            let user = auth_helper.create_test_user().await;
+            let empty_ids: Vec<Uuid> = vec![];
 
-        // Verify empty result
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 0);
-        assert_eq!(failed_ids.len(), 0);
+            // Delete empty list of documents
+            let result = ctx.state.db
+                .bulk_delete_documents(&empty_ids, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Failed to bulk delete empty list");
+
+            // Verify empty result
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 0);
+            assert_eq!(failed_ids.len(), 0);
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_documents_nonexistent_ids() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
         
-        let user = auth_helper.create_test_user().await;
-        
-        // Create one real document
-        let real_doc = create_test_document(user.user_response.id);
-        let real_doc = ctx.state.db.create_document(real_doc).await.expect("Failed to create document");
-        
-        // Mix of real and nonexistent IDs
-        let document_ids = vec![real_doc.id, Uuid::new_v4(), Uuid::new_v4()];
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
 
-        // Delete documents (should only delete the real one)
-        let result = ctx.state.db
-            .bulk_delete_documents(&document_ids, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Failed to bulk delete documents");
+            let user = auth_helper.create_test_user().await;
 
-        // Verify only the real document was deleted
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 1);
-        assert_eq!(failed_ids.len(), 2);
-        assert!(deleted_ids.contains(&real_doc.id));
+            // Create one real document
+            let real_doc = create_test_document(user.user_response.id);
+            let real_doc = ctx.state.db.create_document(real_doc).await.expect("Failed to create document");
+
+            // Mix of real and nonexistent IDs
+            let document_ids = vec![real_doc.id, Uuid::new_v4(), Uuid::new_v4()];
+
+            // Delete documents (should only delete the real one)
+            let result = ctx.state.db
+                .bulk_delete_documents(&document_ids, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Failed to bulk delete documents");
+
+            // Verify only the real document was deleted
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 1);
+            assert_eq!(failed_ids.len(), 2);
+            assert!(deleted_ids.contains(&real_doc.id));
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
@@ -657,46 +775,59 @@ mod document_deletion_tests {
         
         // Create regular user and admin
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
-        let admin = auth_helper.create_admin_user().await;
         
-        // Create documents for both users
-        let user_doc_doc = create_test_document(user.user_response.id);
-        let user_doc = ctx.state.db.create_document(user_doc_doc).await.expect("Failed to create document");
-        let admin_doc_doc = create_test_document(admin.user_response.id);
-        let admin_doc = ctx.state.db.create_document(admin_doc_doc).await.expect("Failed to create document");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
+            let admin = auth_helper.create_admin_user().await;
+
+            // Create documents for both users
+            let user_doc_doc = create_test_document(user.user_response.id);
+            let user_doc = ctx.state.db.create_document(user_doc_doc).await.expect("Failed to create document");
+            let admin_doc_doc = create_test_document(admin.user_response.id);
+            let admin_doc = ctx.state.db.create_document(admin_doc_doc).await.expect("Failed to create document");
+
+            let document_ids = vec![user_doc.id, admin_doc.id];
+
+            // Admin should be able to delete both
+            let result = ctx.state.db
+                .bulk_delete_documents(&document_ids, admin.user_response.id, admin.user_response.role)
+                .await
+                .expect("Failed to bulk delete documents as admin");
+
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 2);
+            assert_eq!(failed_ids.len(), 0);
+
+            // Recreate documents for user test
+            let user_doc2_doc = create_test_document(user.user_response.id);
+            let user_doc2 = ctx.state.db.create_document(user_doc2_doc).await.expect("Failed to create document");
+            let admin_doc2_doc = create_test_document(admin.user_response.id);
+            let admin_doc2 = ctx.state.db.create_document(admin_doc2_doc).await.expect("Failed to create document");
+
+            let document_ids2 = vec![user_doc2.id, admin_doc2.id];
+
+            // Regular user should only delete their own
+            let result2 = ctx.state.db
+                .bulk_delete_documents(&document_ids2, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Failed to bulk delete documents as user");
+
+            let (deleted_ids2, failed_ids2) = result2;
+            assert_eq!(deleted_ids2.len(), 1);
+            assert_eq!(failed_ids2.len(), 1);
+            assert!(deleted_ids2.contains(&user_doc2.id));
+            
+            Ok(())
+        }.await;
         
-        let document_ids = vec![user_doc.id, admin_doc.id];
-
-        // Admin should be able to delete both
-        let result = ctx.state.db
-            .bulk_delete_documents(&document_ids, admin.user_response.id, admin.user_response.role)
-            .await
-            .expect("Failed to bulk delete documents as admin");
-
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 2);
-        assert_eq!(failed_ids.len(), 0);
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        // Recreate documents for user test
-        let user_doc2_doc = create_test_document(user.user_response.id);
-        let user_doc2 = ctx.state.db.create_document(user_doc2_doc).await.expect("Failed to create document");
-        let admin_doc2_doc = create_test_document(admin.user_response.id);
-        let admin_doc2 = ctx.state.db.create_document(admin_doc2_doc).await.expect("Failed to create document");
-        
-        let document_ids2 = vec![user_doc2.id, admin_doc2.id];
-
-        // Regular user should only delete their own
-        let result2 = ctx.state.db
-            .bulk_delete_documents(&document_ids2, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Failed to bulk delete documents as user");
-
-        let (deleted_ids2, failed_ids2) = result2;
-        assert_eq!(deleted_ids2.len(), 1);
-        assert_eq!(failed_ids2.len(), 1);
-        assert!(deleted_ids2.contains(&user_doc2.id));
+        result.unwrap();
     }
 }
 
@@ -710,278 +841,356 @@ mod rbac_deletion_tests {
     #[tokio::test]
     async fn test_user_can_delete_own_document() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        let user_data = CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
-        let document = super::create_test_document(user.id);
-        let document = db.create_document(document).await.expect("Failed to create document");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        // User should be able to delete their own document
-        let result = db
-            .delete_document(document.id, user.id, user.role)
-            .await
-            .expect("Failed to delete document");
+            let user_data = CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
+            let document = super::create_test_document(user.id);
+            let document = db.create_document(document).await.expect("Failed to create document");
 
-        assert!(result);
+            // User should be able to delete their own document
+            let result = db
+                .delete_document(document.id, user.id, user.role)
+                .await
+                .expect("Failed to delete document");
+
+            assert!(result);
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_user_cannot_delete_other_user_document() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create users using direct database approach
-        let user1_data = CreateUser {
-            username: format!("testuser1_{}", Uuid::new_v4()),
-            email: format!("test1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+
+            // Create users using direct database approach
+            let user1_data = CreateUser {
+                username: format!("testuser1_{}", Uuid::new_v4()),
+                email: format!("test1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+
+            let user2_data = CreateUser {
+                username: format!("testuser2_{}", Uuid::new_v4()),
+                email: format!("test2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+
+            let document = create_test_document(user1.id);
+            let document = ctx.state.db.create_document(document).await.expect("Failed to create document");
+
+            // User2 should NOT be able to delete user1's document
+            let result = ctx.state.db
+                .delete_document(document.id, user2.id, user2.role)
+                .await
+                .expect("Database query failed");
+
+            assert!(!result);
+
+            // Verify document still exists
+            let found_doc = ctx.state.db
+                .get_document_by_id(document.id, user1.id, user1.role)
+                .await
+                .expect("Database query failed");
+            assert!(found_doc.is_some());
+            
+            Ok(())
+        }.await;
         
-        let user2_data = CreateUser {
-            username: format!("testuser2_{}", Uuid::new_v4()),
-            email: format!("test2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let document = create_test_document(user1.id);
-        let document = ctx.state.db.create_document(document).await.expect("Failed to create document");
-
-        // User2 should NOT be able to delete user1's document
-        let result = ctx.state.db
-            .delete_document(document.id, user2.id, user2.role)
-            .await
-            .expect("Database query failed");
-
-        assert!(!result);
-
-        // Verify document still exists
-        let found_doc = ctx.state.db
-            .get_document_by_id(document.id, user1.id, user1.role)
-            .await
-            .expect("Database query failed");
-        assert!(found_doc.is_some());
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_admin_can_delete_any_document() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create users using direct database approach
-        let user_data = CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+
+            // Create users using direct database approach
+            let user_data = CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
+
+            let admin_data = CreateUser {
+                username: format!("testadmin_{}", Uuid::new_v4()),
+                email: format!("admin_{}@example.com", Uuid::new_v4()),
+                password: "adminpass123".to_string(),
+                role: Some(UserRole::Admin),
+            };
+            let admin = db.create_user(admin_data).await.expect("Failed to create admin");
+
+            let user_document = create_test_document(user.id);
+            let user_document = ctx.state.db.create_document(user_document).await.expect("Failed to create document");
+            let admin_document = create_test_document(admin.id);
+            let admin_document = ctx.state.db.create_document(admin_document).await.expect("Failed to create document");
+
+            // Admin should be able to delete user's document
+            let result1 = ctx.state.db
+                .delete_document(user_document.id, admin.id, admin.role)
+                .await
+                .expect("Failed to delete user document as admin");
+
+            assert!(result1);
+
+            // Admin should be able to delete their own document
+            let result2 = ctx.state.db
+                .delete_document(admin_document.id, admin.id, admin.role)
+                .await
+                .expect("Failed to delete admin document as admin");
+
+            assert!(result2);
+            
+            Ok(())
+        }.await;
         
-        let admin_data = CreateUser {
-            username: format!("testadmin_{}", Uuid::new_v4()),
-            email: format!("admin_{}@example.com", Uuid::new_v4()),
-            password: "adminpass123".to_string(),
-            role: Some(UserRole::Admin),
-        };
-        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let user_document = create_test_document(user.id);
-        let user_document = ctx.state.db.create_document(user_document).await.expect("Failed to create document");
-        let admin_document = create_test_document(admin.id);
-        let admin_document = ctx.state.db.create_document(admin_document).await.expect("Failed to create document");
-
-        // Admin should be able to delete user's document
-        let result1 = ctx.state.db
-            .delete_document(user_document.id, admin.id, admin.role)
-            .await
-            .expect("Failed to delete user document as admin");
-
-        assert!(result1);
-
-        // Admin should be able to delete their own document
-        let result2 = ctx.state.db
-            .delete_document(admin_document.id, admin.id, admin.role)
-            .await
-            .expect("Failed to delete admin document as admin");
-
-        assert!(result2);
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_respects_ownership() {
         
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create users using direct database approach
-        let user1_data = CreateUser {
-            username: format!("testuser1_{}", Uuid::new_v4()),
-            email: format!("test1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+
+            // Create users using direct database approach
+            let user1_data = CreateUser {
+                username: format!("testuser1_{}", Uuid::new_v4()),
+                email: format!("test1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+
+            let user2_data = CreateUser {
+                username: format!("testuser2_{}", Uuid::new_v4()),
+                email: format!("test2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+
+            // Create documents for both users
+            let user1_doc1_doc = create_test_document(user1.id);
+            let user1_doc1 = ctx.state.db.create_document(user1_doc1_doc).await.expect("Failed to create document");
+            let user1_doc2_doc = create_test_document(user1.id);
+            let user1_doc2 = ctx.state.db.create_document(user1_doc2_doc).await.expect("Failed to create document");
+            let user2_doc1_doc = create_test_document(user2.id);
+            let user2_doc1 = ctx.state.db.create_document(user2_doc1_doc).await.expect("Failed to create document");
+            let user2_doc2_doc = create_test_document(user2.id);
+            let user2_doc2 = ctx.state.db.create_document(user2_doc2_doc).await.expect("Failed to create document");
+
+            let all_document_ids = vec![
+                user1_doc1.id, 
+                user1_doc2.id, 
+                user2_doc1.id, 
+                user2_doc2.id
+            ];
+
+            // User1 tries to delete all documents (should only delete their own)
+            let result = ctx.state.db
+                .bulk_delete_documents(&all_document_ids, user1.id, user1.role)
+                .await
+                .expect("Failed to bulk delete documents");
+
+            // Should only delete user1's documents
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 2);
+            assert_eq!(failed_ids.len(), 2);
+            assert!(deleted_ids.contains(&user1_doc1.id));
+            assert!(deleted_ids.contains(&user1_doc2.id));
+            assert!(failed_ids.contains(&user2_doc1.id));
+            assert!(failed_ids.contains(&user2_doc2.id));
+
+            // Verify user2's documents still exist
+            let user2_doc1_exists = ctx.state.db
+                .get_document_by_id(user2_doc1.id, user2.id, user2.role)
+                .await
+                .expect("Database query failed");
+            assert!(user2_doc1_exists.is_some());
+
+            let user2_doc2_exists = ctx.state.db
+                .get_document_by_id(user2_doc2.id, user2.id, user2.role)
+                .await
+                .expect("Database query failed");
+            assert!(user2_doc2_exists.is_some());
+            
+            Ok(())
+        }.await;
         
-        let user2_data = CreateUser {
-            username: format!("testuser2_{}", Uuid::new_v4()),
-            email: format!("test2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        // Create documents for both users
-        let user1_doc1_doc = create_test_document(user1.id);
-        let user1_doc1 = ctx.state.db.create_document(user1_doc1_doc).await.expect("Failed to create document");
-        let user1_doc2_doc = create_test_document(user1.id);
-        let user1_doc2 = ctx.state.db.create_document(user1_doc2_doc).await.expect("Failed to create document");
-        let user2_doc1_doc = create_test_document(user2.id);
-        let user2_doc1 = ctx.state.db.create_document(user2_doc1_doc).await.expect("Failed to create document");
-        let user2_doc2_doc = create_test_document(user2.id);
-        let user2_doc2 = ctx.state.db.create_document(user2_doc2_doc).await.expect("Failed to create document");
-        
-        let all_document_ids = vec![
-            user1_doc1.id, 
-            user1_doc2.id, 
-            user2_doc1.id, 
-            user2_doc2.id
-        ];
-
-        // User1 tries to delete all documents (should only delete their own)
-        let result = ctx.state.db
-            .bulk_delete_documents(&all_document_ids, user1.id, user1.role)
-            .await
-            .expect("Failed to bulk delete documents");
-
-        // Should only delete user1's documents
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 2);
-        assert_eq!(failed_ids.len(), 2);
-        assert!(deleted_ids.contains(&user1_doc1.id));
-        assert!(deleted_ids.contains(&user1_doc2.id));
-        assert!(failed_ids.contains(&user2_doc1.id));
-        assert!(failed_ids.contains(&user2_doc2.id));
-
-        // Verify user2's documents still exist
-        let user2_doc1_exists = ctx.state.db
-            .get_document_by_id(user2_doc1.id, user2.id, user2.role)
-            .await
-            .expect("Database query failed");
-        assert!(user2_doc1_exists.is_some());
-
-        let user2_doc2_exists = ctx.state.db
-            .get_document_by_id(user2_doc2.id, user2.id, user2.role)
-            .await
-            .expect("Database query failed");
-        assert!(user2_doc2_exists.is_some());
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_admin_bulk_delete_all_documents() {
         
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create users using direct database approach
-        let user1_data = CreateUser {
-            username: format!("testuser1_{}", Uuid::new_v4()),
-            email: format!("test1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
-        
-        let user2_data = CreateUser {
-            username: format!("testuser2_{}", Uuid::new_v4()),
-            email: format!("test2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
-        
-        let admin_data = CreateUser {
-            username: format!("testadmin_{}", Uuid::new_v4()),
-            email: format!("admin_{}@example.com", Uuid::new_v4()),
-            password: "adminpass123".to_string(),
-            role: Some(UserRole::Admin),
-        };
-        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
-        
-        // Create documents for all users
-        let user1_doc_doc = create_test_document(user1.id);
-        let user1_doc = ctx.state.db.create_document(user1_doc_doc).await.expect("Failed to create document");
-        let user2_doc_doc = create_test_document(user2.id);
-        let user2_doc = ctx.state.db.create_document(user2_doc_doc).await.expect("Failed to create document");
-        let admin_doc_doc = create_test_document(admin.id);
-        let admin_doc = ctx.state.db.create_document(admin_doc_doc).await.expect("Failed to create document");
-        
-        let all_document_ids = vec![user1_doc.id, user2_doc.id, admin_doc.id];
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        // Admin should be able to delete all documents
-        let result = ctx.state.db
-            .bulk_delete_documents(&all_document_ids, admin.id, admin.role)
-            .await
-            .expect("Failed to bulk delete documents as admin");
+            // Create users using direct database approach
+            let user1_data = CreateUser {
+                username: format!("testuser1_{}", Uuid::new_v4()),
+                email: format!("test1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
 
-        // Should delete all documents
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 3);
-        assert_eq!(failed_ids.len(), 0);
-        assert!(deleted_ids.contains(&user1_doc.id));
-        assert!(deleted_ids.contains(&user2_doc.id));
-        assert!(deleted_ids.contains(&admin_doc.id));
+            let user2_data = CreateUser {
+                username: format!("testuser2_{}", Uuid::new_v4()),
+                email: format!("test2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+
+            let admin_data = CreateUser {
+                username: format!("testadmin_{}", Uuid::new_v4()),
+                email: format!("admin_{}@example.com", Uuid::new_v4()),
+                password: "adminpass123".to_string(),
+                role: Some(UserRole::Admin),
+            };
+            let admin = db.create_user(admin_data).await.expect("Failed to create admin");
+
+            // Create documents for all users
+            let user1_doc_doc = create_test_document(user1.id);
+            let user1_doc = ctx.state.db.create_document(user1_doc_doc).await.expect("Failed to create document");
+            let user2_doc_doc = create_test_document(user2.id);
+            let user2_doc = ctx.state.db.create_document(user2_doc_doc).await.expect("Failed to create document");
+            let admin_doc_doc = create_test_document(admin.id);
+            let admin_doc = ctx.state.db.create_document(admin_doc_doc).await.expect("Failed to create document");
+
+            let all_document_ids = vec![user1_doc.id, user2_doc.id, admin_doc.id];
+
+            // Admin should be able to delete all documents
+            let result = ctx.state.db
+                .bulk_delete_documents(&all_document_ids, admin.id, admin.role)
+                .await
+                .expect("Failed to bulk delete documents as admin");
+
+            // Should delete all documents
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 3);
+            assert_eq!(failed_ids.len(), 0);
+            assert!(deleted_ids.contains(&user1_doc.id));
+            assert!(deleted_ids.contains(&user2_doc.id));
+            assert!(deleted_ids.contains(&admin_doc.id));
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_role_escalation_prevention() {
         
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create users using direct database approach
-        let user_data = CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+
+            // Create users using direct database approach
+            let user_data = CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
+
+            let admin_data = CreateUser {
+                username: format!("testadmin_{}", Uuid::new_v4()),
+                email: format!("admin_{}@example.com", Uuid::new_v4()),
+                password: "adminpass123".to_string(),
+                role: Some(UserRole::Admin),
+            };
+            let admin = db.create_user(admin_data).await.expect("Failed to create admin");
+
+            let admin_document_doc = create_test_document(admin.id);
+            let admin_document = ctx.state.db.create_document(admin_document_doc).await.expect("Failed to create document");
+
+            // Regular user should NOT be able to delete admin's document
+            // even if they somehow know the document ID
+            let result = ctx.state.db
+                .delete_document(admin_document.id, user.id, user.role)
+                .await
+                .expect("Database query failed");
+
+            assert!(!result);
+
+            // Verify admin's document still exists
+            let found_doc = ctx.state.db
+                .get_document_by_id(admin_document.id, admin.id, admin.role)
+                .await
+                .expect("Database query failed");
+            assert!(found_doc.is_some());
+            
+            Ok(())
+        }.await;
         
-        let admin_data = CreateUser {
-            username: format!("testadmin_{}", Uuid::new_v4()),
-            email: format!("admin_{}@example.com", Uuid::new_v4()),
-            password: "adminpass123".to_string(),
-            role: Some(UserRole::Admin),
-        };
-        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let admin_document_doc = create_test_document(admin.id);
-        let admin_document = ctx.state.db.create_document(admin_document_doc).await.expect("Failed to create document");
-
-        // Regular user should NOT be able to delete admin's document
-        // even if they somehow know the document ID
-        let result = ctx.state.db
-            .delete_document(admin_document.id, user.id, user.role)
-            .await
-            .expect("Database query failed");
-
-        assert!(!result);
-
-        // Verify admin's document still exists
-        let found_doc = ctx.state.db
-            .get_document_by_id(admin_document.id, admin.id, admin.role)
-            .await
-            .expect("Database query failed");
-        assert!(found_doc.is_some());
+        result.unwrap();
     }
 
     #[tokio::test]
@@ -989,194 +1198,233 @@ mod rbac_deletion_tests {
         
         // Create users that could represent different tenants/organizations
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create tenant users using direct database approach
-        let tenant1_user1_data = CreateUser {
-            username: format!("tenant1_user1_{}", Uuid::new_v4()),
-            email: format!("tenant1_user1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let tenant1_user1 = db.create_user(tenant1_user1_data).await.expect("Failed to create tenant1_user1");
-        
-        let tenant1_user2_data = CreateUser {
-            username: format!("tenant1_user2_{}", Uuid::new_v4()),
-            email: format!("tenant1_user2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let tenant1_user2 = db.create_user(tenant1_user2_data).await.expect("Failed to create tenant1_user2");
-        
-        let tenant2_user1_data = CreateUser {
-            username: format!("tenant2_user1_{}", Uuid::new_v4()),
-            email: format!("tenant2_user1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let tenant2_user1 = db.create_user(tenant2_user1_data).await.expect("Failed to create tenant2_user1");
-        
-        let tenant2_user2_data = CreateUser {
-            username: format!("tenant2_user2_{}", Uuid::new_v4()),
-            email: format!("tenant2_user2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let tenant2_user2 = db.create_user(tenant2_user2_data).await.expect("Failed to create tenant2_user2");
-        
-        // Create documents for each tenant
-        let tenant1_doc1_doc = create_test_document(tenant1_user1.id);
-        let tenant1_doc1 = ctx.state.db.create_document(tenant1_doc1_doc).await.expect("Failed to create document");
-        let tenant1_doc2_doc = create_test_document(tenant1_user2.id);
-        let tenant1_doc2 = ctx.state.db.create_document(tenant1_doc2_doc).await.expect("Failed to create document");
-        let tenant2_doc1_doc = create_test_document(tenant2_user1.id);
-        let tenant2_doc1 = ctx.state.db.create_document(tenant2_doc1_doc).await.expect("Failed to create document");
-        let tenant2_doc2_doc = create_test_document(tenant2_user2.id);
-        let tenant2_doc2 = ctx.state.db.create_document(tenant2_doc2_doc).await.expect("Failed to create document");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        // Tenant1 user should not be able to delete tenant2 documents
-        let result1 = ctx.state.db
-            .delete_document(tenant2_doc1.id, tenant1_user1.id, tenant1_user1.role)
-            .await
-            .expect("Database query failed");
-        assert!(!result1);
+            // Create tenant users using direct database approach
+            let tenant1_user1_data = CreateUser {
+                username: format!("tenant1_user1_{}", Uuid::new_v4()),
+                email: format!("tenant1_user1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let tenant1_user1 = db.create_user(tenant1_user1_data).await.expect("Failed to create tenant1_user1");
 
-        let result2 = ctx.state.db
-            .delete_document(tenant2_doc2.id, tenant1_user2.id, tenant1_user2.role)
-            .await
-            .expect("Database query failed");
-        assert!(!result2);
+            let tenant1_user2_data = CreateUser {
+                username: format!("tenant1_user2_{}", Uuid::new_v4()),
+                email: format!("tenant1_user2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let tenant1_user2 = db.create_user(tenant1_user2_data).await.expect("Failed to create tenant1_user2");
 
-        // Tenant2 user should not be able to delete tenant1 documents
-        let result3 = ctx.state.db
-            .delete_document(tenant1_doc1.id, tenant2_user1.id, tenant2_user1.role)
-            .await
-            .expect("Database query failed");
-        assert!(!result3);
+            let tenant2_user1_data = CreateUser {
+                username: format!("tenant2_user1_{}", Uuid::new_v4()),
+                email: format!("tenant2_user1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let tenant2_user1 = db.create_user(tenant2_user1_data).await.expect("Failed to create tenant2_user1");
 
-        let result4 = ctx.state.db
-            .delete_document(tenant1_doc2.id, tenant2_user2.id, tenant2_user2.role)
-            .await
-            .expect("Database query failed");
-        assert!(!result4);
+            let tenant2_user2_data = CreateUser {
+                username: format!("tenant2_user2_{}", Uuid::new_v4()),
+                email: format!("tenant2_user2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let tenant2_user2 = db.create_user(tenant2_user2_data).await.expect("Failed to create tenant2_user2");
 
-        // Verify all documents still exist
-        for (doc_id, owner_id, owner_role) in [
-            (tenant1_doc1.id, tenant1_user1.id, tenant1_user1.role),
-            (tenant1_doc2.id, tenant1_user2.id, tenant1_user2.role),
-            (tenant2_doc1.id, tenant2_user1.id, tenant2_user1.role),
-            (tenant2_doc2.id, tenant2_user2.id, tenant2_user2.role),
-        ] {
-            let found_doc = ctx.state.db
-                .get_document_by_id(doc_id, owner_id, owner_role)
+            // Create documents for each tenant
+            let tenant1_doc1_doc = create_test_document(tenant1_user1.id);
+            let tenant1_doc1 = ctx.state.db.create_document(tenant1_doc1_doc).await.expect("Failed to create document");
+            let tenant1_doc2_doc = create_test_document(tenant1_user2.id);
+            let tenant1_doc2 = ctx.state.db.create_document(tenant1_doc2_doc).await.expect("Failed to create document");
+            let tenant2_doc1_doc = create_test_document(tenant2_user1.id);
+            let tenant2_doc1 = ctx.state.db.create_document(tenant2_doc1_doc).await.expect("Failed to create document");
+            let tenant2_doc2_doc = create_test_document(tenant2_user2.id);
+            let tenant2_doc2 = ctx.state.db.create_document(tenant2_doc2_doc).await.expect("Failed to create document");
+
+            // Tenant1 user should not be able to delete tenant2 documents
+            let result1 = ctx.state.db
+                .delete_document(tenant2_doc1.id, tenant1_user1.id, tenant1_user1.role)
                 .await
                 .expect("Database query failed");
-            assert!(found_doc.is_some());
+            assert!(!result1);
+
+            let result2 = ctx.state.db
+                .delete_document(tenant2_doc2.id, tenant1_user2.id, tenant1_user2.role)
+                .await
+                .expect("Database query failed");
+            assert!(!result2);
+
+            // Tenant2 user should not be able to delete tenant1 documents
+            let result3 = ctx.state.db
+                .delete_document(tenant1_doc1.id, tenant2_user1.id, tenant2_user1.role)
+                .await
+                .expect("Database query failed");
+            assert!(!result3);
+
+            let result4 = ctx.state.db
+                .delete_document(tenant1_doc2.id, tenant2_user2.id, tenant2_user2.role)
+                .await
+                .expect("Database query failed");
+            assert!(!result4);
+
+            // Verify all documents still exist
+            for (doc_id, owner_id, owner_role) in [
+                (tenant1_doc1.id, tenant1_user1.id, tenant1_user1.role),
+                (tenant1_doc2.id, tenant1_user2.id, tenant1_user2.role),
+                (tenant2_doc1.id, tenant2_user1.id, tenant2_user1.role),
+                (tenant2_doc2.id, tenant2_user2.id, tenant2_user2.role),
+            ] {
+                let found_doc = ctx.state.db
+                    .get_document_by_id(doc_id, owner_id, owner_role)
+                    .await
+                    .expect("Database query failed");
+                assert!(found_doc.is_some());
+            }
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
         }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_permission_consistency_single_vs_bulk() {
         
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create users using direct database approach
-        let user1_data = CreateUser {
-            username: format!("testuser1_{}", Uuid::new_v4()),
-            email: format!("test1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+
+            // Create users using direct database approach
+            let user1_data = CreateUser {
+                username: format!("testuser1_{}", Uuid::new_v4()),
+                email: format!("test1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user1 = db.create_user(user1_data).await.expect("Failed to create user1");
+
+            let user2_data = CreateUser {
+                username: format!("testuser2_{}", Uuid::new_v4()),
+                email: format!("test2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+
+            let _user1_doc_doc = create_test_document(user1.id);
+            let _user1_doc = ctx.state.db.create_document(_user1_doc_doc).await.expect("Failed to create document");
+            let user2_doc_doc = create_test_document(user2.id);
+            let user2_doc = ctx.state.db.create_document(user2_doc_doc).await.expect("Failed to create document");
+
+            // Test single deletion permissions
+            let single_delete_result = ctx.state.db
+                .delete_document(user2_doc.id, user1.id, user1.role)
+                .await
+                .expect("Database query failed");
+            assert!(!single_delete_result); // Should fail
+
+            // Test bulk deletion permissions with same document
+            let user2_doc2_doc = create_test_document(user2.id);
+            let user2_doc2 = ctx.state.db.create_document(user2_doc2_doc).await.expect("Failed to create document");
+            let bulk_delete_result = ctx.state.db
+                .bulk_delete_documents(&vec![user2_doc2.id], user1.id, user1.role)
+                .await
+                .expect("Database query failed");
+            let (deleted_ids, failed_ids) = bulk_delete_result;
+            assert_eq!(deleted_ids.len(), 0); // Should delete nothing
+            assert_eq!(failed_ids.len(), 1);
+
+            // Verify both documents still exist
+            let doc1_exists = ctx.state.db
+                .get_document_by_id(user2_doc.id, user2.id, user2.role)
+                .await
+                .expect("Database query failed");
+            assert!(doc1_exists.is_some());
+
+            let doc2_exists = ctx.state.db
+                .get_document_by_id(user2_doc2.id, user2.id, user2.role)
+                .await
+                .expect("Database query failed");
+            assert!(doc2_exists.is_some());
+            
+            Ok(())
+        }.await;
         
-        let user2_data = CreateUser {
-            username: format!("testuser2_{}", Uuid::new_v4()),
-            email: format!("test2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user2 = db.create_user(user2_data).await.expect("Failed to create user2");
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let _user1_doc_doc = create_test_document(user1.id);
-        let _user1_doc = ctx.state.db.create_document(_user1_doc_doc).await.expect("Failed to create document");
-        let user2_doc_doc = create_test_document(user2.id);
-        let user2_doc = ctx.state.db.create_document(user2_doc_doc).await.expect("Failed to create document");
-
-        // Test single deletion permissions
-        let single_delete_result = ctx.state.db
-            .delete_document(user2_doc.id, user1.id, user1.role)
-            .await
-            .expect("Database query failed");
-        assert!(!single_delete_result); // Should fail
-
-        // Test bulk deletion permissions with same document
-        let user2_doc2_doc = create_test_document(user2.id);
-        let user2_doc2 = ctx.state.db.create_document(user2_doc2_doc).await.expect("Failed to create document");
-        let bulk_delete_result = ctx.state.db
-            .bulk_delete_documents(&vec![user2_doc2.id], user1.id, user1.role)
-            .await
-            .expect("Database query failed");
-        let (deleted_ids, failed_ids) = bulk_delete_result;
-        assert_eq!(deleted_ids.len(), 0); // Should delete nothing
-        assert_eq!(failed_ids.len(), 1);
-
-        // Verify both documents still exist
-        let doc1_exists = ctx.state.db
-            .get_document_by_id(user2_doc.id, user2.id, user2.role)
-            .await
-            .expect("Database query failed");
-        assert!(doc1_exists.is_some());
-
-        let doc2_exists = ctx.state.db
-            .get_document_by_id(user2_doc2.id, user2.id, user2.role)
-            .await
-            .expect("Database query failed");
-        assert!(doc2_exists.is_some());
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_admin_permission_inheritance() {
         
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create users using direct database approach
-        let user_data = CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
-        
-        let admin_data = CreateUser {
-            username: format!("testadmin_{}", Uuid::new_v4()),
-            email: format!("admin_{}@example.com", Uuid::new_v4()),
-            password: "adminpass123".to_string(),
-            role: Some(UserRole::Admin),
-        };
-        let admin = db.create_user(admin_data).await.expect("Failed to create admin");
-        
-        let user_doc_doc = create_test_document(user.id);
-        let user_doc = ctx.state.db.create_document(user_doc_doc).await.expect("Failed to create document");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        // Admin should have all permissions that a regular user has, plus more
-        // Test that admin can delete user's document (admin-specific permission)
-        let admin_delete_result = ctx.state.db
-            .delete_document(user_doc.id, admin.id, admin.role)
-            .await
-            .expect("Failed to delete as admin");
-        assert!(admin_delete_result);
+            // Create users using direct database approach
+            let user_data = CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
 
-        // Create another document to test admin's own document deletion
-        let admin_doc_doc = create_test_document(admin.id);
-        let admin_doc = ctx.state.db.create_document(admin_doc_doc).await.expect("Failed to create document");
-        let admin_own_delete_result = ctx.state.db
-            .delete_document(admin_doc.id, admin.id, admin.role)
-            .await
-            .expect("Failed to delete admin's own document");
-        assert!(admin_own_delete_result);
+            let admin_data = CreateUser {
+                username: format!("testadmin_{}", Uuid::new_v4()),
+                email: format!("admin_{}@example.com", Uuid::new_v4()),
+                password: "adminpass123".to_string(),
+                role: Some(UserRole::Admin),
+            };
+            let admin = db.create_user(admin_data).await.expect("Failed to create admin");
+
+            let user_doc_doc = create_test_document(user.id);
+            let user_doc = ctx.state.db.create_document(user_doc_doc).await.expect("Failed to create document");
+
+            // Admin should have all permissions that a regular user has, plus more
+            // Test that admin can delete user's document (admin-specific permission)
+            let admin_delete_result = ctx.state.db
+                .delete_document(user_doc.id, admin.id, admin.role)
+                .await
+                .expect("Failed to delete as admin");
+            assert!(admin_delete_result);
+
+            // Create another document to test admin's own document deletion
+            let admin_doc_doc = create_test_document(admin.id);
+            let admin_doc = ctx.state.db.create_document(admin_doc_doc).await.expect("Failed to create document");
+            let admin_own_delete_result = ctx.state.db
+                .delete_document(admin_doc.id, admin.id, admin.role)
+                .await
+                .expect("Failed to delete admin's own document");
+            assert!(admin_own_delete_result);
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[test]
@@ -1216,181 +1464,259 @@ mod deletion_error_handling_tests {
     #[tokio::test]
     async fn test_delete_with_invalid_uuid() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create user using direct database approach
-        let user_data = readur::models::CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
-        
-        // Use malformed UUID (this test assumes the function handles UUID parsing)
-        let invalid_uuid = Uuid::nil(); // Use nil UUID as "invalid"
-        
-        let result = ctx.state.db
-            .delete_document(invalid_uuid, user.id, user.role)
-            .await
-            .expect("Database query should not fail for invalid UUID");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        // Should return None for non-existent document
-        assert!(!result);
+            // Create user using direct database approach
+            let user_data = readur::models::CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(readur::models::UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
+
+            // Use malformed UUID (this test assumes the function handles UUID parsing)
+            let invalid_uuid = Uuid::nil(); // Use nil UUID as "invalid"
+
+            let result = ctx.state.db
+                .delete_document(invalid_uuid, user.id, user.role)
+                .await
+                .expect("Database query should not fail for invalid UUID");
+
+            // Should return None for non-existent document
+            assert!(!result);
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_delete_with_sql_injection_attempt() {
         
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create user using direct database approach
-        let user_data = readur::models::CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
-        
-        let document_doc = create_test_document(user.id);
-        let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
-        
-        // Test with legitimate document ID - SQLx should prevent injection
-        let result = ctx.state.db
-            .delete_document(document.id, user.id, user.role)
-            .await
-            .expect("Query should execute safely");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        assert!(result);
+            // Create user using direct database approach
+            let user_data = readur::models::CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(readur::models::UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
+
+            let document_doc = create_test_document(user.id);
+            let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
+
+            // Test with legitimate document ID - SQLx should prevent injection
+            let result = ctx.state.db
+                .delete_document(document.id, user.id, user.role)
+                .await
+                .expect("Query should execute safely");
+
+            assert!(result);
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_with_duplicate_ids() {
         
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        // Create user using direct database approach
-        let user_data = readur::models::CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        let user = db.create_user(user_data).await.expect("Failed to create user");
-        
-        let document_doc = create_test_document(user.id);
-        let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
-        
-        // Include the same document ID multiple times
-        let duplicate_ids = vec![document.id, document.id, document.id];
-        
-        let result = ctx.state.db
-            .bulk_delete_documents(&duplicate_ids, user.id, user.role)
-            .await
-            .expect("Bulk delete should handle duplicates");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
 
-        // Should only delete the document once, but subsequent attempts fail
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 1);
-        assert_eq!(failed_ids.len(), 2); // Two failed attempts on already-deleted document
-        assert!(deleted_ids.contains(&document.id));
+            // Create user using direct database approach
+            let user_data = readur::models::CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(readur::models::UserRole::User),
+            };
+            let user = db.create_user(user_data).await.expect("Failed to create user");
+
+            let document_doc = create_test_document(user.id);
+            let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
+
+            // Include the same document ID multiple times
+            let duplicate_ids = vec![document.id, document.id, document.id];
+
+            let result = ctx.state.db
+                .bulk_delete_documents(&duplicate_ids, user.id, user.role)
+                .await
+                .expect("Bulk delete should handle duplicates");
+
+            // Should only delete the document once, but subsequent attempts fail
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 1);
+            assert_eq!(failed_ids.len(), 2); // Two failed attempts on already-deleted document
+            assert!(deleted_ids.contains(&document.id));
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_with_extremely_large_request() {
         
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
         
-        // Create a large number of document IDs (mostly non-existent)
-        let mut large_id_list = Vec::new();
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
+
+            // Create a large number of document IDs (mostly non-existent)
+            let mut large_id_list = Vec::new();
+
+            // Add one real document
+            let real_document_doc = create_test_document(user.user_response.id);
+            let real_document = ctx.state.db.create_document(real_document_doc).await.expect("Failed to create document");
+            large_id_list.push(real_document.id);
+
+            // Add many fake UUIDs
+            for _ in 0..499 {
+                large_id_list.push(Uuid::new_v4());
+            }
+
+            let result = ctx.state.db
+                .bulk_delete_documents(&large_id_list, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Should handle large requests");
+
+            // Should only delete the one real document
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 1);
+            assert_eq!(failed_ids.len(), 499);
+            assert!(deleted_ids.contains(&real_document.id));
+            
+            Ok(())
+        }.await;
         
-        // Add one real document
-        let real_document_doc = create_test_document(user.user_response.id);
-        let real_document = ctx.state.db.create_document(real_document_doc).await.expect("Failed to create document");
-        large_id_list.push(real_document.id);
-        
-        // Add many fake UUIDs
-        for _ in 0..499 {
-            large_id_list.push(Uuid::new_v4());
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
         }
         
-        let result = ctx.state.db
-            .bulk_delete_documents(&large_id_list, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Should handle large requests");
-
-        // Should only delete the one real document
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 1);
-        assert_eq!(failed_ids.len(), 499);
-        assert!(deleted_ids.contains(&real_document.id));
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_concurrent_deletion_same_document() {
         
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
-        let document_doc = create_test_document(user.user_response.id);
-        let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
         
-        // Create multiple handles to the same database connection pool
-        let db1 = ctx.state.db.clone();
-        let db2 = ctx.state.db.clone();
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
+            let document_doc = create_test_document(user.user_response.id);
+            let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
+
+            // Create multiple handles to the same database connection pool
+            let db1 = ctx.state.db.clone();
+            let db2 = ctx.state.db.clone();
+
+            // Attempt concurrent deletions
+            let doc_id = document.id;
+            let user_id = user.user_response.id;
+            let user_role = user.user_response.role;
+
+            let task1 = tokio::spawn(async move {
+                db1.delete_document(doc_id, user_id, user_role).await
+            });
+
+            let task2 = tokio::spawn(async move {
+                db2.delete_document(doc_id, user_id, user_role).await
+            });
+
+            let result1 = task1.await.unwrap().expect("First deletion should succeed");
+            let result2 = task2.await.unwrap().expect("Second deletion should not error");
+
+            // One should succeed, one should return false
+            let success_count = [result1, result2]
+                .iter()
+                .filter(|&&x| x)
+                .count();
+
+            assert_eq!(success_count, 1, "Exactly one deletion should succeed");
+            
+            Ok(())
+        }.await;
         
-        // Attempt concurrent deletions
-        let doc_id = document.id;
-        let user_id = user.user_response.id;
-        let user_role = user.user_response.role;
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let task1 = tokio::spawn(async move {
-            db1.delete_document(doc_id, user_id, user_role).await
-        });
-        
-        let task2 = tokio::spawn(async move {
-            db2.delete_document(doc_id, user_id, user_role).await
-        });
-        
-        let result1 = task1.await.unwrap().expect("First deletion should succeed");
-        let result2 = task2.await.unwrap().expect("Second deletion should not error");
-        
-        // One should succeed, one should return false
-        let success_count = [result1, result2]
-            .iter()
-            .filter(|&&x| x)
-            .count();
-        
-        assert_eq!(success_count, 1, "Exactly one deletion should succeed");
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_delete_document_with_foreign_key_constraints() {
         
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
-        let document_doc = create_test_document(user.user_response.id);
-        let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
         
-        // If there are foreign key relationships (like document_labels), 
-        // test that CASCADE deletion works properly
-        
-        // Delete the document
-        let result = ctx.state.db
-            .delete_document(document.id, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Deletion should handle foreign key constraints");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
+            let document_doc = create_test_document(user.user_response.id);
+            let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
 
-        assert!(result);
+            // If there are foreign key relationships (like document_labels), 
+            // test that CASCADE deletion works properly
+
+            // Delete the document
+            let result = ctx.state.db
+                .delete_document(document.id, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Deletion should handle foreign key constraints");
+
+            assert!(result);
+
+            // Verify related records are also deleted (if any exist)
+            // This would depend on the actual schema relationships
+            
+            Ok(())
+        }.await;
         
-        // Verify related records are also deleted (if any exist)
-        // This would depend on the actual schema relationships
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
@@ -1398,50 +1724,63 @@ mod deletion_error_handling_tests {
         
         let ctx = TestContext::new().await;
         
-        // Create users using direct database approach
-        let user1_data = readur::models::CreateUser {
-            username: format!("testuser1_{}", Uuid::new_v4()),
-            email: format!("test1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        let user1 = ctx.state.db.create_user(user1_data).await.expect("Failed to create user1");
-        
-        let user2_data = readur::models::CreateUser {
-            username: format!("testuser2_{}", Uuid::new_v4()),
-            email: format!("test2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        let user2 = ctx.state.db.create_user(user2_data).await.expect("Failed to create user2");
-        
-        // Create mix of documents
-        let user1_doc_doc = create_test_document(user1.id);
-        let user1_doc = ctx.state.db.create_document(user1_doc_doc).await.expect("Failed to create document");
-        let user2_doc_doc = create_test_document(user2.id);
-        let user2_doc = ctx.state.db.create_document(user2_doc_doc).await.expect("Failed to create document");
-        let nonexistent_id = Uuid::new_v4();
-        
-        let mixed_ids = vec![user1_doc.id, user2_doc.id, nonexistent_id];
-        
-        // User1 attempts to delete all (should only delete their own)
-        let result = ctx.state.db
-            .bulk_delete_documents(&mixed_ids, user1.id, user1.role)
-            .await
-            .expect("Should handle mixed permissions gracefully");
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
 
-        // Should only delete user1's document
-        let (deleted_ids, failed_ids) = result;
-        assert_eq!(deleted_ids.len(), 1);
-        assert_eq!(failed_ids.len(), 2);
-        assert!(deleted_ids.contains(&user1_doc.id));
+            // Create users using direct database approach
+            let user1_data = readur::models::CreateUser {
+                username: format!("testuser1_{}", Uuid::new_v4()),
+                email: format!("test1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(readur::models::UserRole::User),
+            };
+            let user1 = ctx.state.db.create_user(user1_data).await.expect("Failed to create user1");
+
+            let user2_data = readur::models::CreateUser {
+                username: format!("testuser2_{}", Uuid::new_v4()),
+                email: format!("test2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(readur::models::UserRole::User),
+            };
+            let user2 = ctx.state.db.create_user(user2_data).await.expect("Failed to create user2");
+
+            // Create mix of documents
+            let user1_doc_doc = create_test_document(user1.id);
+            let user1_doc = ctx.state.db.create_document(user1_doc_doc).await.expect("Failed to create document");
+            let user2_doc_doc = create_test_document(user2.id);
+            let user2_doc = ctx.state.db.create_document(user2_doc_doc).await.expect("Failed to create document");
+            let nonexistent_id = Uuid::new_v4();
+
+            let mixed_ids = vec![user1_doc.id, user2_doc.id, nonexistent_id];
+
+            // User1 attempts to delete all (should only delete their own)
+            let result = ctx.state.db
+                .bulk_delete_documents(&mixed_ids, user1.id, user1.role)
+                .await
+                .expect("Should handle mixed permissions gracefully");
+
+            // Should only delete user1's document
+            let (deleted_ids, failed_ids) = result;
+            assert_eq!(deleted_ids.len(), 1);
+            assert_eq!(failed_ids.len(), 2);
+            assert!(deleted_ids.contains(&user1_doc.id));
+
+            // Verify user2's document still exists
+            let user2_doc_exists = ctx.state.db
+                .get_document_by_id(user2_doc.id, user2.id, user2.role)
+                .await
+                .expect("Query should succeed");
+            assert!(user2_doc_exists.is_some());
+            
+            Ok(())
+        }.await;
         
-        // Verify user2's document still exists
-        let user2_doc_exists = ctx.state.db
-            .get_document_by_id(user2_doc.id, user2.id, user2.role)
-            .await
-            .expect("Query should succeed");
-        assert!(user2_doc_exists.is_some());
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[test]
@@ -1490,67 +1829,93 @@ mod deletion_error_handling_tests {
     async fn test_delete_after_user_deletion() {
         
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
-        let document_doc = create_test_document(user.user_response.id);
-        let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
         
-        // Delete the user first (simulating cascade deletion scenarios)
-        sqlx::query("DELETE FROM users WHERE id = $1")
-            .bind(user.user_response.id)
-            .execute(&ctx.state.db.pool)
-            .await
-            .expect("User deletion should succeed");
-        
-        // Attempt to delete document after user is gone
-        // This depends on how foreign key constraints are set up
-        let result = ctx.state.db
-            .delete_document(document.id, user.user_response.id, user.user_response.role)
-            .await;
-            
-        // The behavior here depends on FK constraints:
-        // - If CASCADE: document might already be deleted
-        // - If RESTRICT: document still exists but operation might fail
-        // Test should verify consistent behavior
-        match result {
-            Ok(true) => {
-                // Document was deleted successfully
-            },
-            Ok(false) => {
-                // Document not found (possibly already cascade deleted)
-            },
-            Err(_) => {
-                // Error occurred (foreign key constraint issue)
-                // This might be expected behavior
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
+            let document_doc = create_test_document(user.user_response.id);
+            let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
+
+            // Delete the user first (simulating cascade deletion scenarios)
+            sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(user.user_response.id)
+                .execute(&ctx.state.db.pool)
+                .await
+                .expect("User deletion should succeed");
+
+            // Attempt to delete document after user is gone
+            // This depends on how foreign key constraints are set up
+            let result = ctx.state.db
+                .delete_document(document.id, user.user_response.id, user.user_response.role)
+                .await;
+
+            // The behavior here depends on FK constraints:
+            // - If CASCADE: document might already be deleted
+            // - If RESTRICT: document still exists but operation might fail
+            // Test should verify consistent behavior
+            match result {
+                Ok(true) => {
+                    // Document was deleted successfully
+                },
+                Ok(false) => {
+                    // Document not found (possibly already cascade deleted)
+                },
+                Err(_) => {
+                    // Error occurred (foreign key constraint issue)
+                    // This might be expected behavior
+                }
             }
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
         }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_bulk_delete_empty_and_null_scenarios() {
         
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
         
-        // Test empty list
-        let empty_result = ctx.state.db
-            .bulk_delete_documents(&vec![], user.user_response.id, user.user_response.role)
-            .await
-            .expect("Empty list should be handled gracefully");
-        let (deleted_ids, failed_ids) = empty_result;
-        assert_eq!(deleted_ids.len(), 0);
-        assert_eq!(failed_ids.len(), 0);
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
+
+            // Test empty list
+            let empty_result = ctx.state.db
+                .bulk_delete_documents(&vec![], user.user_response.id, user.user_response.role)
+                .await
+                .expect("Empty list should be handled gracefully");
+            let (deleted_ids, failed_ids) = empty_result;
+            assert_eq!(deleted_ids.len(), 0);
+            assert_eq!(failed_ids.len(), 0);
+
+            // Test with only nil UUIDs
+            let nil_uuids = vec![Uuid::nil(), Uuid::nil()];
+            let nil_result = ctx.state.db
+                .bulk_delete_documents(&nil_uuids, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Nil UUIDs should be handled gracefully");
+            let (deleted_ids, failed_ids) = nil_result;
+            assert_eq!(deleted_ids.len(), 0);
+            assert_eq!(failed_ids.len(), 2);
+            
+            Ok(())
+        }.await;
         
-        // Test with only nil UUIDs
-        let nil_uuids = vec![Uuid::nil(), Uuid::nil()];
-        let nil_result = ctx.state.db
-            .bulk_delete_documents(&nil_uuids, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Nil UUIDs should be handled gracefully");
-        let (deleted_ids, failed_ids) = nil_result;
-        assert_eq!(deleted_ids.len(), 0);
-        assert_eq!(failed_ids.len(), 2);
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
 
@@ -1558,34 +1923,47 @@ mod deletion_error_handling_tests {
     async fn test_transaction_rollback_simulation() {
         
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let user = auth_helper.create_test_user().await;
-        let document_doc = create_test_document(user.user_response.id);
-        let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
         
-        // Verify document exists before deletion
-        let exists_before = ctx.state.db
-            .get_document_by_id(document.id, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Query should succeed");
-        assert!(exists_before.is_some());
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
+            let document_doc = create_test_document(user.user_response.id);
+            let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
+
+            // Verify document exists before deletion
+            let exists_before = ctx.state.db
+                .get_document_by_id(document.id, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Query should succeed");
+            assert!(exists_before.is_some());
+
+            // Perform deletion
+            let deletion_result = ctx.state.db
+                .delete_document(document.id, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Deletion should succeed");
+            assert!(deletion_result);
+
+            // Verify document no longer exists
+            let exists_after = ctx.state.db
+                .get_document_by_id(document.id, user.user_response.id, user.user_response.role)
+                .await
+                .expect("Query should succeed");
+            assert!(exists_after.is_none());
+
+            // If transaction were to be rolled back, document would exist again
+            // This test verifies the transaction was committed properly
+            
+            Ok(())
+        }.await;
         
-        // Perform deletion
-        let deletion_result = ctx.state.db
-            .delete_document(document.id, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Deletion should succeed");
-        assert!(deletion_result);
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        // Verify document no longer exists
-        let exists_after = ctx.state.db
-            .get_document_by_id(document.id, user.user_response.id, user.user_response.role)
-            .await
-            .expect("Query should succeed");
-        assert!(exists_after.is_none());
-        
-        // If transaction were to be rolled back, document would exist again
-        // This test verifies the transaction was committed properly
+        result.unwrap();
     }
 
     mod low_confidence_deletion_db_tests {
@@ -1873,387 +2251,452 @@ mod deletion_error_handling_tests {
     #[tokio::test]
     async fn test_find_failed_ocr_documents() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let database = &ctx.state.db;
         
-        // Create actual users in the database
-        let user = auth_helper.create_test_user().await;
-        let admin_user = auth_helper.create_test_admin().await;
-        let user_id = user.user_response.id;
-        let admin_user_id = admin_user.user_response.id;
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let database = &ctx.state.db;
 
-        // Create test documents with different OCR statuses
-        let mut success_doc = create_test_document(user_id);
-        success_doc.ocr_status = Some("completed".to_string());
-        success_doc.ocr_confidence = Some(85.0);
-        success_doc.ocr_text = Some("Successfully extracted text".to_string());
+            // Create actual users in the database
+            let user = auth_helper.create_test_user().await;
+            let admin_user = auth_helper.create_test_admin().await;
+            let user_id = user.user_response.id;
+            let admin_user_id = admin_user.user_response.id;
 
-        let mut failed_doc = create_test_document(user_id);
-        failed_doc.ocr_status = Some("failed".to_string());
-        failed_doc.ocr_confidence = None;
-        failed_doc.ocr_text = None;
-        failed_doc.ocr_error = Some("OCR processing failed due to corrupted image".to_string());
+            // Create test documents with different OCR statuses
+            let mut success_doc = create_test_document(user_id);
+            success_doc.ocr_status = Some("completed".to_string());
+            success_doc.ocr_confidence = Some(85.0);
+            success_doc.ocr_text = Some("Successfully extracted text".to_string());
 
-        let mut null_confidence_doc = create_test_document(user_id);
-        null_confidence_doc.ocr_status = Some("completed".to_string());
-        null_confidence_doc.ocr_confidence = None; // NULL confidence but not failed
-        null_confidence_doc.ocr_text = Some("Text extracted but no confidence".to_string());
+            let mut failed_doc = create_test_document(user_id);
+            failed_doc.ocr_status = Some("failed".to_string());
+            failed_doc.ocr_confidence = None;
+            failed_doc.ocr_text = None;
+            failed_doc.ocr_error = Some("OCR processing failed due to corrupted image".to_string());
 
-        let mut pending_doc = create_test_document(user_id);
-        pending_doc.ocr_status = Some("pending".to_string());
-        pending_doc.ocr_confidence = None;
-        pending_doc.ocr_text = None;
+            let mut null_confidence_doc = create_test_document(user_id);
+            null_confidence_doc.ocr_status = Some("completed".to_string());
+            null_confidence_doc.ocr_confidence = None; // NULL confidence but not failed
+            null_confidence_doc.ocr_text = Some("Text extracted but no confidence".to_string());
 
-        let mut processing_doc = create_test_document(user_id);
-        processing_doc.ocr_status = Some("processing".to_string());
-        processing_doc.ocr_confidence = None;
-        processing_doc.ocr_text = None;
+            let mut pending_doc = create_test_document(user_id);
+            pending_doc.ocr_status = Some("pending".to_string());
+            pending_doc.ocr_confidence = None;
+            pending_doc.ocr_text = None;
 
-        // Different user's failed document
-        let mut other_user_failed_doc = create_test_document(admin_user_id);
-        other_user_failed_doc.ocr_status = Some("failed".to_string());
-        other_user_failed_doc.ocr_confidence = None;
+            let mut processing_doc = create_test_document(user_id);
+            processing_doc.ocr_status = Some("processing".to_string());
+            processing_doc.ocr_confidence = None;
+            processing_doc.ocr_text = None;
 
-        // Insert all documents
-        let success_id = ctx.state.db.create_document(success_doc).await.unwrap().id;
-        let failed_id = ctx.state.db.create_document(failed_doc).await.unwrap().id;
-        let null_confidence_id = ctx.state.db.create_document(null_confidence_doc).await.unwrap().id;
-        let pending_id = ctx.state.db.create_document(pending_doc).await.unwrap().id;
-        let processing_id = ctx.state.db.create_document(processing_doc).await.unwrap().id;
-        let other_user_failed_id = ctx.state.db.create_document(other_user_failed_doc).await.unwrap().id;
+            // Different user's failed document
+            let mut other_user_failed_doc = create_test_document(admin_user_id);
+            other_user_failed_doc.ocr_status = Some("failed".to_string());
+            other_user_failed_doc.ocr_confidence = None;
 
-        // Test as regular user
-        let failed_docs = database
-            .find_failed_ocr_documents(user_id, readur::models::UserRole::User, 100, 0)
-            .await
-            .unwrap();
+            // Insert all documents
+            let success_id = ctx.state.db.create_document(success_doc).await.unwrap().id;
+            let failed_id = ctx.state.db.create_document(failed_doc).await.unwrap().id;
+            let null_confidence_id = ctx.state.db.create_document(null_confidence_doc).await.unwrap().id;
+            let pending_id = ctx.state.db.create_document(pending_doc).await.unwrap().id;
+            let processing_id = ctx.state.db.create_document(processing_doc).await.unwrap().id;
+            let other_user_failed_id = ctx.state.db.create_document(other_user_failed_doc).await.unwrap().id;
 
-        // Should find: only failed_doc (null_confidence_doc has status 'completed')
-        assert_eq!(failed_docs.len(), 1);
-        let failed_ids: Vec<Uuid> = failed_docs.iter().map(|d| d.id).collect();
-        assert!(failed_ids.contains(&failed_id));
-        assert!(!failed_ids.contains(&null_confidence_id)); // This has status 'completed'
-        assert!(!failed_ids.contains(&success_id));
-        assert!(!failed_ids.contains(&pending_id));
-        assert!(!failed_ids.contains(&processing_id));
-        assert!(!failed_ids.contains(&other_user_failed_id)); // Different user
+            // Test as regular user
+            let failed_docs = database
+                .find_failed_ocr_documents(user_id, readur::models::UserRole::User, 100, 0)
+                .await
+                .unwrap();
 
-        // Test as admin
-        let admin_failed_docs = database
-            .find_failed_ocr_documents(admin_user_id, readur::models::UserRole::Admin, 100, 0)
-            .await
-            .unwrap();
+            // Should find: only failed_doc (null_confidence_doc has status 'completed')
+            assert_eq!(failed_docs.len(), 1);
+            let failed_ids: Vec<Uuid> = failed_docs.iter().map(|d| d.id).collect();
+            assert!(failed_ids.contains(&failed_id));
+            assert!(!failed_ids.contains(&null_confidence_id)); // This has status 'completed'
+            assert!(!failed_ids.contains(&success_id));
+            assert!(!failed_ids.contains(&pending_id));
+            assert!(!failed_ids.contains(&processing_id));
+            assert!(!failed_ids.contains(&other_user_failed_id)); // Different user
 
-        // Should find all failed documents (from all users)
-        assert!(admin_failed_docs.len() >= 2); // At least our 2 failed docs
-        let admin_failed_ids: Vec<Uuid> = admin_failed_docs.iter().map(|d| d.id).collect();
-        assert!(admin_failed_ids.contains(&failed_id));
-        assert!(!admin_failed_ids.contains(&null_confidence_id)); // This has status 'completed'
-        assert!(admin_failed_ids.contains(&other_user_failed_id));
+            // Test as admin
+            let admin_failed_docs = database
+                .find_failed_ocr_documents(admin_user_id, readur::models::UserRole::Admin, 100, 0)
+                .await
+                .unwrap();
+
+            // Should find all failed documents (from all users)
+            assert!(admin_failed_docs.len() >= 2); // At least our 2 failed docs
+            let admin_failed_ids: Vec<Uuid> = admin_failed_docs.iter().map(|d| d.id).collect();
+            assert!(admin_failed_ids.contains(&failed_id));
+            assert!(!admin_failed_ids.contains(&null_confidence_id)); // This has status 'completed'
+            assert!(admin_failed_ids.contains(&other_user_failed_id));
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_find_low_confidence_and_failed_documents() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let database = &ctx.state.db;
         
-        // Create actual user in the database
-        let user = auth_helper.create_test_user().await;
-        let user_id = user.user_response.id;
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let database = &ctx.state.db;
 
-        // Create test documents with different confidence levels
-        let mut high_confidence_doc = create_test_document(user_id);
-        high_confidence_doc.ocr_confidence = Some(95.0);
-        high_confidence_doc.ocr_status = Some("completed".to_string());
+            // Create actual user in the database
+            let user = auth_helper.create_test_user().await;
+            let user_id = user.user_response.id;
 
-        let mut medium_confidence_doc = create_test_document(user_id);
-        medium_confidence_doc.ocr_confidence = Some(65.0);
-        medium_confidence_doc.ocr_status = Some("completed".to_string());
+            // Create test documents with different confidence levels
+            let mut high_confidence_doc = create_test_document(user_id);
+            high_confidence_doc.ocr_confidence = Some(95.0);
+            high_confidence_doc.ocr_status = Some("completed".to_string());
 
-        let mut low_confidence_doc = create_test_document(user_id);
-        low_confidence_doc.ocr_confidence = Some(25.0);
-        low_confidence_doc.ocr_status = Some("completed".to_string());
+            let mut medium_confidence_doc = create_test_document(user_id);
+            medium_confidence_doc.ocr_confidence = Some(65.0);
+            medium_confidence_doc.ocr_status = Some("completed".to_string());
 
-        let mut failed_doc = create_test_document(user_id);
-        failed_doc.ocr_status = Some("failed".to_string());
-        failed_doc.ocr_confidence = None;
-        failed_doc.ocr_error = Some("Processing failed".to_string());
+            let mut low_confidence_doc = create_test_document(user_id);
+            low_confidence_doc.ocr_confidence = Some(25.0);
+            low_confidence_doc.ocr_status = Some("completed".to_string());
 
-        let mut null_confidence_doc = create_test_document(user_id);
-        null_confidence_doc.ocr_status = Some("completed".to_string());
-        null_confidence_doc.ocr_confidence = None;
+            let mut failed_doc = create_test_document(user_id);
+            failed_doc.ocr_status = Some("failed".to_string());
+            failed_doc.ocr_confidence = None;
+            failed_doc.ocr_error = Some("Processing failed".to_string());
 
-        let mut pending_doc = create_test_document(user_id);
-        pending_doc.ocr_status = Some("pending".to_string());
-        pending_doc.ocr_confidence = None;
+            let mut null_confidence_doc = create_test_document(user_id);
+            null_confidence_doc.ocr_status = Some("completed".to_string());
+            null_confidence_doc.ocr_confidence = None;
 
-        // Insert all documents
-        let high_id = ctx.state.db.create_document(high_confidence_doc).await.unwrap().id;
-        let medium_id = ctx.state.db.create_document(medium_confidence_doc).await.unwrap().id;
-        let low_id = ctx.state.db.create_document(low_confidence_doc).await.unwrap().id;
-        let failed_id = ctx.state.db.create_document(failed_doc).await.unwrap().id;
-        let null_confidence_id = ctx.state.db.create_document(null_confidence_doc).await.unwrap().id;
-        let pending_id = ctx.state.db.create_document(pending_doc).await.unwrap().id;
+            let mut pending_doc = create_test_document(user_id);
+            pending_doc.ocr_status = Some("pending".to_string());
+            pending_doc.ocr_confidence = None;
 
-        // Test with threshold of 50% - should include low confidence and failed only
-        let threshold_50_docs = database
-            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 50.0, 100, 0)
-            .await
-            .unwrap();
+            // Insert all documents
+            let high_id = ctx.state.db.create_document(high_confidence_doc).await.unwrap().id;
+            let medium_id = ctx.state.db.create_document(medium_confidence_doc).await.unwrap().id;
+            let low_id = ctx.state.db.create_document(low_confidence_doc).await.unwrap().id;
+            let failed_id = ctx.state.db.create_document(failed_doc).await.unwrap().id;
+            let null_confidence_id = ctx.state.db.create_document(null_confidence_doc).await.unwrap().id;
+            let pending_id = ctx.state.db.create_document(pending_doc).await.unwrap().id;
 
-        assert_eq!(threshold_50_docs.len(), 2);
-        let threshold_50_ids: Vec<Uuid> = threshold_50_docs.iter().map(|d| d.id).collect();
-        assert!(threshold_50_ids.contains(&low_id)); // 25% confidence
-        assert!(threshold_50_ids.contains(&failed_id)); // failed status
-        assert!(!threshold_50_ids.contains(&null_confidence_id)); // NULL confidence excluded
-        assert!(!threshold_50_ids.contains(&high_id)); // 95% confidence
-        assert!(!threshold_50_ids.contains(&medium_id)); // 65% confidence
-        assert!(!threshold_50_ids.contains(&pending_id)); // pending status
+            // Test with threshold of 50% - should include low confidence and failed only
+            let threshold_50_docs = database
+                .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 50.0, 100, 0)
+                .await
+                .unwrap();
 
-        // Test with threshold of 70% - should include low and medium confidence and failed only
-        let threshold_70_docs = database
-            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 70.0, 100, 0)
-            .await
-            .unwrap();
+            assert_eq!(threshold_50_docs.len(), 2);
+            let threshold_50_ids: Vec<Uuid> = threshold_50_docs.iter().map(|d| d.id).collect();
+            assert!(threshold_50_ids.contains(&low_id)); // 25% confidence
+            assert!(threshold_50_ids.contains(&failed_id)); // failed status
+            assert!(!threshold_50_ids.contains(&null_confidence_id)); // NULL confidence excluded
+            assert!(!threshold_50_ids.contains(&high_id)); // 95% confidence
+            assert!(!threshold_50_ids.contains(&medium_id)); // 65% confidence
+            assert!(!threshold_50_ids.contains(&pending_id)); // pending status
 
-        assert_eq!(threshold_70_docs.len(), 3);
-        let threshold_70_ids: Vec<Uuid> = threshold_70_docs.iter().map(|d| d.id).collect();
-        assert!(threshold_70_ids.contains(&low_id)); // 25% confidence
-        assert!(threshold_70_ids.contains(&medium_id)); // 65% confidence
-        assert!(threshold_70_ids.contains(&failed_id)); // failed status
-        assert!(!threshold_70_ids.contains(&null_confidence_id)); // NULL confidence excluded
-        assert!(!threshold_70_ids.contains(&high_id)); // 95% confidence
-        assert!(!threshold_70_ids.contains(&pending_id)); // pending status
+            // Test with threshold of 70% - should include low and medium confidence and failed only
+            let threshold_70_docs = database
+                .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 70.0, 100, 0)
+                .await
+                .unwrap();
 
-        // Test with threshold of 100% - should include all confidence levels and failed only
-        let threshold_100_docs = database
-            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 100.0, 100, 0)
-            .await
-            .unwrap();
+            assert_eq!(threshold_70_docs.len(), 3);
+            let threshold_70_ids: Vec<Uuid> = threshold_70_docs.iter().map(|d| d.id).collect();
+            assert!(threshold_70_ids.contains(&low_id)); // 25% confidence
+            assert!(threshold_70_ids.contains(&medium_id)); // 65% confidence
+            assert!(threshold_70_ids.contains(&failed_id)); // failed status
+            assert!(!threshold_70_ids.contains(&null_confidence_id)); // NULL confidence excluded
+            assert!(!threshold_70_ids.contains(&high_id)); // 95% confidence
+            assert!(!threshold_70_ids.contains(&pending_id)); // pending status
 
-        assert_eq!(threshold_100_docs.len(), 4);
-        let threshold_100_ids: Vec<Uuid> = threshold_100_docs.iter().map(|d| d.id).collect();
-        assert!(threshold_100_ids.contains(&high_id)); // 95% confidence
-        assert!(threshold_100_ids.contains(&medium_id)); // 65% confidence
-        assert!(threshold_100_ids.contains(&low_id)); // 25% confidence
-        assert!(threshold_100_ids.contains(&failed_id)); // failed status
-        assert!(!threshold_100_ids.contains(&null_confidence_id)); // NULL confidence excluded
-        assert!(!threshold_100_ids.contains(&pending_id)); // pending status
+            // Test with threshold of 100% - should include all confidence levels and failed only
+            let threshold_100_docs = database
+                .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 100.0, 100, 0)
+                .await
+                .unwrap();
 
-        // Test with threshold of 0% - should only include failed documents
-        let threshold_0_docs = database
-            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 0.0, 100, 0)
-            .await
-            .unwrap();
+            assert_eq!(threshold_100_docs.len(), 4);
+            let threshold_100_ids: Vec<Uuid> = threshold_100_docs.iter().map(|d| d.id).collect();
+            assert!(threshold_100_ids.contains(&high_id)); // 95% confidence
+            assert!(threshold_100_ids.contains(&medium_id)); // 65% confidence
+            assert!(threshold_100_ids.contains(&low_id)); // 25% confidence
+            assert!(threshold_100_ids.contains(&failed_id)); // failed status
+            assert!(!threshold_100_ids.contains(&null_confidence_id)); // NULL confidence excluded
+            assert!(!threshold_100_ids.contains(&pending_id)); // pending status
 
-        assert_eq!(threshold_0_docs.len(), 1);
-        let threshold_0_ids: Vec<Uuid> = threshold_0_docs.iter().map(|d| d.id).collect();
-        assert!(threshold_0_ids.contains(&failed_id)); // failed status
-        assert!(!threshold_0_ids.contains(&null_confidence_id)); // NULL confidence excluded
-        assert!(!threshold_0_ids.contains(&high_id)); // 95% confidence
-        assert!(!threshold_0_ids.contains(&medium_id)); // 65% confidence
-        assert!(!threshold_0_ids.contains(&low_id)); // 25% confidence
-        assert!(!threshold_0_ids.contains(&pending_id)); // pending status
+            // Test with threshold of 0% - should only include failed documents
+            let threshold_0_docs = database
+                .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 0.0, 100, 0)
+                .await
+                .unwrap();
+
+            assert_eq!(threshold_0_docs.len(), 1);
+            let threshold_0_ids: Vec<Uuid> = threshold_0_docs.iter().map(|d| d.id).collect();
+            assert!(threshold_0_ids.contains(&failed_id)); // failed status
+            assert!(!threshold_0_ids.contains(&null_confidence_id)); // NULL confidence excluded
+            assert!(!threshold_0_ids.contains(&high_id)); // 95% confidence
+            assert!(!threshold_0_ids.contains(&medium_id)); // 65% confidence
+            assert!(!threshold_0_ids.contains(&low_id)); // 25% confidence
+            assert!(!threshold_0_ids.contains(&pending_id)); // pending status
+            
+            Ok(())
+        }.await;
+        
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_find_documents_by_confidence_threshold_original_behavior() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
-        let database = &ctx.state.db;
         
-        // Create actual user in the database
-        let user = auth_helper.create_test_user().await;
-        let user_id = user.user_response.id;
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let database = &ctx.state.db;
 
-        // Create test documents to verify original behavior is preserved
-        let mut high_confidence_doc = create_test_document(user_id);
-        high_confidence_doc.ocr_confidence = Some(90.0);
-        high_confidence_doc.ocr_status = Some("completed".to_string());
+            // Create actual user in the database
+            let user = auth_helper.create_test_user().await;
+            let user_id = user.user_response.id;
 
-        let mut low_confidence_doc = create_test_document(user_id);
-        low_confidence_doc.ocr_confidence = Some(40.0);
-        low_confidence_doc.ocr_status = Some("completed".to_string());
+            // Create test documents to verify original behavior is preserved
+            let mut high_confidence_doc = create_test_document(user_id);
+            high_confidence_doc.ocr_confidence = Some(90.0);
+            high_confidence_doc.ocr_status = Some("completed".to_string());
 
-        let mut null_confidence_doc = create_test_document(user_id);
-        null_confidence_doc.ocr_confidence = None;
-        null_confidence_doc.ocr_status = Some("completed".to_string());
+            let mut low_confidence_doc = create_test_document(user_id);
+            low_confidence_doc.ocr_confidence = Some(40.0);
+            low_confidence_doc.ocr_status = Some("completed".to_string());
 
-        let mut failed_doc = create_test_document(user_id);
-        failed_doc.ocr_confidence = None;
-        failed_doc.ocr_status = Some("failed".to_string());
+            let mut null_confidence_doc = create_test_document(user_id);
+            null_confidence_doc.ocr_confidence = None;
+            null_confidence_doc.ocr_status = Some("completed".to_string());
 
-        // Insert documents
-        let high_id = ctx.state.db.create_document(high_confidence_doc).await.unwrap().id;
-        let low_id = ctx.state.db.create_document(low_confidence_doc).await.unwrap().id;
-        let null_confidence_id = ctx.state.db.create_document(null_confidence_doc).await.unwrap().id;
-        let failed_id = ctx.state.db.create_document(failed_doc).await.unwrap().id;
+            let mut failed_doc = create_test_document(user_id);
+            failed_doc.ocr_confidence = None;
+            failed_doc.ocr_status = Some("failed".to_string());
 
-        // Test original method - should only find documents with explicit confidence below threshold
-        let original_results = database
-            .find_documents_by_confidence_threshold(user_id, readur::models::UserRole::User, 50.0, 100, 0)
-            .await
-            .unwrap();
+            // Insert documents
+            let high_id = ctx.state.db.create_document(high_confidence_doc).await.unwrap().id;
+            let low_id = ctx.state.db.create_document(low_confidence_doc).await.unwrap().id;
+            let null_confidence_id = ctx.state.db.create_document(null_confidence_doc).await.unwrap().id;
+            let failed_id = ctx.state.db.create_document(failed_doc).await.unwrap().id;
 
-        // Should only include low_confidence_doc (40%), not NULL confidence or failed docs
-        assert_eq!(original_results.len(), 1);
-        assert_eq!(original_results[0].id, low_id);
+            // Test original method - should only find documents with explicit confidence below threshold
+            let original_results = database
+                .find_documents_by_confidence_threshold(user_id, readur::models::UserRole::User, 50.0, 100, 0)
+                .await
+                .unwrap();
+
+            // Should only include low_confidence_doc (40%), not NULL confidence or failed docs
+            assert_eq!(original_results.len(), 1);
+            assert_eq!(original_results[0].id, low_id);
+
+            let original_ids: Vec<Uuid> = original_results.iter().map(|d| d.id).collect();
+            assert!(!original_ids.contains(&high_id)); // 90% > 50%
+            assert!(!original_ids.contains(&null_confidence_id)); // NULL confidence excluded
+            assert!(!original_ids.contains(&failed_id)); // NULL confidence excluded
+            
+            Ok(())
+        }.await;
         
-        let original_ids: Vec<Uuid> = original_results.iter().map(|d| d.id).collect();
-        assert!(!original_ids.contains(&high_id)); // 90% > 50%
-        assert!(!original_ids.contains(&null_confidence_id)); // NULL confidence excluded
-        assert!(!original_ids.contains(&failed_id)); // NULL confidence excluded
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_confidence_query_ordering() {
         let ctx = TestContext::new().await;
-        let database = &ctx.state.db;
         
-        // Create user using direct database approach
-        let user_data = readur::models::CreateUser {
-            username: format!("testuser_{}", Uuid::new_v4()),
-            email: format!("test_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        let user = database.create_user(user_data).await.expect("Failed to create user");
-        let user_id = user.id;
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let database = &ctx.state.db;
 
-        // Create documents with different confidence levels and statuses
-        let mut confidence_10_doc = create_test_document(user_id);
-        confidence_10_doc.ocr_confidence = Some(10.0);
-        confidence_10_doc.ocr_status = Some("completed".to_string());
+            // Create user using direct database approach
+            let user_data = readur::models::CreateUser {
+                username: format!("testuser_{}", Uuid::new_v4()),
+                email: format!("test_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(readur::models::UserRole::User),
+            };
+            let user = database.create_user(user_data).await.expect("Failed to create user");
+            let user_id = user.id;
 
-        let mut confidence_30_doc = create_test_document(user_id);
-        confidence_30_doc.ocr_confidence = Some(30.0);
-        confidence_30_doc.ocr_status = Some("completed".to_string());
+            // Create documents with different confidence levels and statuses
+            let mut confidence_10_doc = create_test_document(user_id);
+            confidence_10_doc.ocr_confidence = Some(10.0);
+            confidence_10_doc.ocr_status = Some("completed".to_string());
 
-        let mut failed_doc = create_test_document(user_id);
-        failed_doc.ocr_confidence = None;
-        failed_doc.ocr_status = Some("failed".to_string());
+            let mut confidence_30_doc = create_test_document(user_id);
+            confidence_30_doc.ocr_confidence = Some(30.0);
+            confidence_30_doc.ocr_status = Some("completed".to_string());
 
-        let mut null_confidence_doc = create_test_document(user_id);
-        null_confidence_doc.ocr_confidence = None;
-        null_confidence_doc.ocr_status = Some("completed".to_string());
+            let mut failed_doc = create_test_document(user_id);
+            failed_doc.ocr_confidence = None;
+            failed_doc.ocr_status = Some("failed".to_string());
 
-        // Insert documents
-        let id_10 = ctx.state.db.create_document(confidence_10_doc).await.unwrap().id;
-        let id_30 = ctx.state.db.create_document(confidence_30_doc).await.unwrap().id;
-        let failed_id = ctx.state.db.create_document(failed_doc).await.unwrap().id;
-        let null_id = ctx.state.db.create_document(null_confidence_doc).await.unwrap().id;
+            let mut null_confidence_doc = create_test_document(user_id);
+            null_confidence_doc.ocr_confidence = None;
+            null_confidence_doc.ocr_status = Some("completed".to_string());
 
-        // Test ordering in combined query
-        let results = database
-            .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 50.0, 100, 0)
-            .await
-            .unwrap();
+            // Insert documents
+            let id_10 = ctx.state.db.create_document(confidence_10_doc).await.unwrap().id;
+            let id_30 = ctx.state.db.create_document(confidence_30_doc).await.unwrap().id;
+            let failed_id = ctx.state.db.create_document(failed_doc).await.unwrap().id;
+            let null_id = ctx.state.db.create_document(null_confidence_doc).await.unwrap().id;
 
-        // The function returns documents that are either:
-        // 1. Low confidence (< threshold) 
-        // 2. Failed status
-        // A completed document with NULL confidence is not considered "failed"
-        assert_eq!(results.len(), 3); // Update expectation based on actual behavior
+            // Test ordering in combined query
+            let results = database
+                .find_low_confidence_and_failed_documents(user_id, readur::models::UserRole::User, 50.0, 100, 0)
+                .await
+                .unwrap();
 
-        // Check that documents with actual confidence are ordered by confidence (ascending)
-        // and NULL confidence documents come first (due to CASE WHEN ordering)
-        let confidence_values: Vec<Option<f32>> = results.iter().map(|d| d.ocr_confidence).collect();
+            // The function returns documents that are either:
+            // 1. Low confidence (< threshold) 
+            // 2. Failed status
+            // A completed document with NULL confidence is not considered "failed"
+            assert_eq!(results.len(), 3); // Update expectation based on actual behavior
+
+            // Check that documents with actual confidence are ordered by confidence (ascending)
+            // and NULL confidence documents come first (due to CASE WHEN ordering)
+            let confidence_values: Vec<Option<f32>> = results.iter().map(|d| d.ocr_confidence).collect();
+
+            // With 3 documents: 1 failed (NULL confidence), 2 low confidence documents
+            // First should be NULL confidence (failed)
+            assert!(confidence_values[0].is_none());
+
+            // Next should be lowest confidence
+            assert_eq!(confidence_values[1], Some(10.0));
+
+            // Last should be higher confidence  
+            assert_eq!(confidence_values[2], Some(30.0));
+            
+            Ok(())
+        }.await;
         
-        // With 3 documents: 1 failed (NULL confidence), 2 low confidence documents
-        // First should be NULL confidence (failed)
-        assert!(confidence_values[0].is_none());
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        // Next should be lowest confidence
-        assert_eq!(confidence_values[1], Some(10.0));
-        
-        // Last should be higher confidence  
-        assert_eq!(confidence_values[2], Some(30.0));
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_user_isolation_in_confidence_queries() {
         let ctx = TestContext::new().await;
-        let database = &ctx.state.db;
         
-        // Create users using direct database approach
-        let user1_data = readur::models::CreateUser {
-            username: format!("testuser1_{}", Uuid::new_v4()),
-            email: format!("test1_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        let user1 = database.create_user(user1_data).await.expect("Failed to create user1");
-        let user1_id = user1.id;
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let database = &ctx.state.db;
+
+            // Create users using direct database approach
+            let user1_data = readur::models::CreateUser {
+                username: format!("testuser1_{}", Uuid::new_v4()),
+                email: format!("test1_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(readur::models::UserRole::User),
+            };
+            let user1 = database.create_user(user1_data).await.expect("Failed to create user1");
+            let user1_id = user1.id;
+
+            let user2_data = readur::models::CreateUser {
+                username: format!("testuser2_{}", Uuid::new_v4()),
+                email: format!("test2_{}@example.com", Uuid::new_v4()),
+                password: "password123".to_string(),
+                role: Some(readur::models::UserRole::User),
+            };
+            let user2 = database.create_user(user2_data).await.expect("Failed to create user2");
+            let user2_id = user2.id;
+
+            // Create documents for user1
+            let mut user1_low_doc = create_test_document(user1_id);
+            user1_low_doc.ocr_confidence = Some(20.0);
+
+            let mut user1_failed_doc = create_test_document(user1_id);
+            user1_failed_doc.ocr_status = Some("failed".to_string());
+            user1_failed_doc.ocr_confidence = None;
+
+            // Create documents for user2
+            let mut user2_low_doc = create_test_document(user2_id);
+            user2_low_doc.ocr_confidence = Some(25.0);
+
+            let mut user2_failed_doc = create_test_document(user2_id);
+            user2_failed_doc.ocr_status = Some("failed".to_string());
+            user2_failed_doc.ocr_confidence = None;
+
+            // Insert documents
+            let user1_low_id: Uuid = ctx.state.db.create_document(user1_low_doc).await.unwrap().id;
+            let user1_failed_id: Uuid = ctx.state.db.create_document(user1_failed_doc).await.unwrap().id;
+            let user2_low_id: Uuid = ctx.state.db.create_document(user2_low_doc).await.unwrap().id;
+            let user2_failed_id: Uuid = ctx.state.db.create_document(user2_failed_doc).await.unwrap().id;
+
+            // Test user1 can only see their documents
+            let user1_results = database
+                .find_low_confidence_and_failed_documents(user1_id, readur::models::UserRole::User, 50.0, 100, 0)
+                .await
+                .unwrap();
+
+            assert_eq!(user1_results.len(), 2);
+            let user1_ids: Vec<Uuid> = user1_results.iter().map(|d| d.id).collect();
+            assert!(user1_ids.contains(&user1_low_id));
+            assert!(user1_ids.contains(&user1_failed_id));
+            assert!(!user1_ids.contains(&user2_low_id));
+            assert!(!user1_ids.contains(&user2_failed_id));
+
+            // Test user2 can only see their documents
+            let user2_results = database
+                .find_low_confidence_and_failed_documents(user2_id, readur::models::UserRole::User, 50.0, 100, 0)
+                .await
+                .unwrap();
+
+            assert_eq!(user2_results.len(), 2);
+            let user2_ids: Vec<Uuid> = user2_results.iter().map(|d| d.id).collect();
+            assert!(user2_ids.contains(&user2_low_id));
+            assert!(user2_ids.contains(&user2_failed_id));
+            assert!(!user2_ids.contains(&user1_low_id));
+            assert!(!user2_ids.contains(&user1_failed_id));
+
+            // Test admin can see all documents
+            let admin_results = database
+                .find_low_confidence_and_failed_documents(user1_id, readur::models::UserRole::Admin, 50.0, 100, 0)
+                .await
+                .unwrap();
+
+            assert!(admin_results.len() >= 4); // At least our 4 test documents
+            let admin_ids: Vec<Uuid> = admin_results.iter().map(|d| d.id).collect();
+            assert!(admin_ids.contains(&user1_low_id));
+            assert!(admin_ids.contains(&user1_failed_id));
+            assert!(admin_ids.contains(&user2_low_id));
+            assert!(admin_ids.contains(&user2_failed_id));
+            
+            Ok(())
+        }.await;
         
-        let user2_data = readur::models::CreateUser {
-            username: format!("testuser2_{}", Uuid::new_v4()),
-            email: format!("test2_{}@example.com", Uuid::new_v4()),
-            password: "password123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        let user2 = database.create_user(user2_data).await.expect("Failed to create user2");
-        let user2_id = user2.id;
-
-        // Create documents for user1
-        let mut user1_low_doc = create_test_document(user1_id);
-        user1_low_doc.ocr_confidence = Some(20.0);
-
-        let mut user1_failed_doc = create_test_document(user1_id);
-        user1_failed_doc.ocr_status = Some("failed".to_string());
-        user1_failed_doc.ocr_confidence = None;
-
-        // Create documents for user2
-        let mut user2_low_doc = create_test_document(user2_id);
-        user2_low_doc.ocr_confidence = Some(25.0);
-
-        let mut user2_failed_doc = create_test_document(user2_id);
-        user2_failed_doc.ocr_status = Some("failed".to_string());
-        user2_failed_doc.ocr_confidence = None;
-
-        // Insert documents
-        let user1_low_id: Uuid = ctx.state.db.create_document(user1_low_doc).await.unwrap().id;
-        let user1_failed_id: Uuid = ctx.state.db.create_document(user1_failed_doc).await.unwrap().id;
-        let user2_low_id: Uuid = ctx.state.db.create_document(user2_low_doc).await.unwrap().id;
-        let user2_failed_id: Uuid = ctx.state.db.create_document(user2_failed_doc).await.unwrap().id;
-
-        // Test user1 can only see their documents
-        let user1_results = database
-            .find_low_confidence_and_failed_documents(user1_id, readur::models::UserRole::User, 50.0, 100, 0)
-            .await
-            .unwrap();
-
-        assert_eq!(user1_results.len(), 2);
-        let user1_ids: Vec<Uuid> = user1_results.iter().map(|d| d.id).collect();
-        assert!(user1_ids.contains(&user1_low_id));
-        assert!(user1_ids.contains(&user1_failed_id));
-        assert!(!user1_ids.contains(&user2_low_id));
-        assert!(!user1_ids.contains(&user2_failed_id));
-
-        // Test user2 can only see their documents
-        let user2_results = database
-            .find_low_confidence_and_failed_documents(user2_id, readur::models::UserRole::User, 50.0, 100, 0)
-            .await
-            .unwrap();
-
-        assert_eq!(user2_results.len(), 2);
-        let user2_ids: Vec<Uuid> = user2_results.iter().map(|d| d.id).collect();
-        assert!(user2_ids.contains(&user2_low_id));
-        assert!(user2_ids.contains(&user2_failed_id));
-        assert!(!user2_ids.contains(&user1_low_id));
-        assert!(!user2_ids.contains(&user1_failed_id));
-
-        // Test admin can see all documents
-        let admin_results = database
-            .find_low_confidence_and_failed_documents(user1_id, readur::models::UserRole::Admin, 50.0, 100, 0)
-            .await
-            .unwrap();
-
-        assert!(admin_results.len() >= 4); // At least our 4 test documents
-        let admin_ids: Vec<Uuid> = admin_results.iter().map(|d| d.id).collect();
-        assert!(admin_ids.contains(&user1_low_id));
-        assert!(admin_ids.contains(&user1_failed_id));
-        assert!(admin_ids.contains(&user2_low_id));
-        assert!(admin_ids.contains(&user2_failed_id));
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 }

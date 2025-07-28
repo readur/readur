@@ -327,98 +327,131 @@ impl SourceScheduler {
             }
         }
         
-        // Atomically start the sync - this prevents race conditions
-        if !self.state.db.start_sync_atomic(source_id).await? {
-            return Err("Could not start sync - source is already syncing or does not exist".into());
+        // First check if the source exists
+        let source = match self.state.db.get_source_by_id(source_id).await? {
+            Some(s) => s,
+            None => return Err("Source not found".into()),
+        };
+        
+        // Validate source configuration before attempting sync
+        if let Err(e) = self.validate_source_config(&source) {
+            return Err(format!("Configuration error: {}", e).into());
         }
         
-        if let Some(source) = self.state.db.get_source_by_id(source_id).await? {
-            let sync_service = self.sync_service.clone();
-            let state_clone = self.state.clone();
-            let running_syncs_clone = self.running_syncs.clone();
+        // Atomically start the sync - this prevents race conditions
+        if !self.state.db.start_sync_atomic(source_id).await? {
+            return Err("Could not start sync - source is already syncing".into());
+        }
+        
+        let sync_service = self.sync_service.clone();
+        let state_clone = self.state.clone();
+        let running_syncs_clone = self.running_syncs.clone();
+        
+        // Create cancellation token for this sync
+        let cancellation_token = CancellationToken::new();
+        
+        // Register the sync task
+        {
+            let mut running_syncs = running_syncs_clone.write().await;
+            running_syncs.insert(source_id, cancellation_token.clone());
+        }
+        
+        tokio::spawn(async move {
+            let enable_background_ocr = true; // Could be made configurable
             
-            // Create cancellation token for this sync
-            let cancellation_token = CancellationToken::new();
+            // Create progress tracker for this sync and register it
+            let progress = Arc::new(crate::services::webdav::SyncProgress::new());
+            progress.set_phase(crate::services::webdav::SyncPhase::Initializing);
+            state_clone.sync_progress_tracker.register_sync(source_id, progress.clone());
             
-            // Register the sync task
-            {
-                let mut running_syncs = running_syncs_clone.write().await;
-                running_syncs.insert(source_id, cancellation_token.clone());
-            }
-            
-            tokio::spawn(async move {
-                let enable_background_ocr = true; // Could be made configurable
-                
-                // Create progress tracker for this sync and register it
-                let progress = Arc::new(crate::services::webdav::SyncProgress::new());
-                progress.set_phase(crate::services::webdav::SyncPhase::Initializing);
-                state_clone.sync_progress_tracker.register_sync(source_id, progress.clone());
-                
-                let sync_result = sync_service.sync_source_with_cancellation(&source, enable_background_ocr, cancellation_token).await;
-                
-                match sync_result {
-                    Ok(files_processed) => {
-                        info!("Manual sync completed for source {}: {} files processed", 
-                              source.name, files_processed);
-                        
-                        // Atomically complete the sync
-                        if let Err(e) = state_clone.db.complete_sync_atomic(
-                            source_id, 
-                            true, 
-                            Some(files_processed as i64), 
-                            None
-                        ).await {
-                            error!("Failed to atomically complete sync: {}", e);
-                            // Fallback to manual status update
-                            let _ = state_clone.db.update_source_status_atomic(
-                                source_id, 
-                                Some(crate::models::SourceStatus::Syncing), 
-                                crate::models::SourceStatus::Idle, 
-                                None
-                            ).await;
-                        }
-                    }
-                    Err(e) => {
-                        error!("Manual sync failed for source {}: {}", source.name, e);
-                        
-                        // Atomically mark sync as failed
-                        if let Err(complete_err) = state_clone.db.complete_sync_atomic(
-                            source_id, 
-                            false, 
-                            None, 
-                            Some(&format!("Sync failed: {}", e))
-                        ).await {
-                            error!("Failed to atomically mark sync as failed: {}", complete_err);
-                            // Fallback to manual status update
-                            let _ = state_clone.db.update_source_status_atomic(
-                                source_id, 
-                                Some(crate::models::SourceStatus::Syncing), 
-                                crate::models::SourceStatus::Error, 
-                                Some(&format!("Sync failed: {}", e))
-                            ).await;
-                        }
-                    }
-                }
-                
+            // Ensure cleanup happens regardless of what happens in the sync operation
+            let cleanup = || async {
                 // Cleanup: Remove the sync from running list and unregister progress tracker
                 {
                     let mut running_syncs = running_syncs_clone.write().await;
-                    running_syncs.remove(&source.id);
+                    running_syncs.remove(&source_id);
                 }
                 state_clone.sync_progress_tracker.unregister_sync(source_id);
-            });
+            };
             
-            Ok(())
-        } else {
-            // Source was deleted while we were starting sync, reset status
-            let _ = self.state.db.update_source_status_atomic(
-                source_id, 
-                Some(crate::models::SourceStatus::Syncing), 
-                crate::models::SourceStatus::Error, 
-                Some("Source not found")
+            // Execute the sync operation with a timeout to prevent hanging
+            let sync_result = tokio::time::timeout(
+                std::time::Duration::from_secs(300), // 5 minute timeout for sync operations
+                sync_service.sync_source_with_cancellation(&source, enable_background_ocr, cancellation_token)
             ).await;
-            Err("Source not found".into())
-        }
+            
+            match sync_result {
+                Ok(Ok(files_processed)) => {
+                    info!("Manual sync completed for source {}: {} files processed", 
+                          source.name, files_processed);
+                    
+                    // Atomically complete the sync
+                    if let Err(e) = state_clone.db.complete_sync_atomic(
+                        source_id, 
+                        true, 
+                        Some(files_processed as i64), 
+                        None
+                    ).await {
+                        error!("Failed to atomically complete sync: {}", e);
+                        // Fallback to manual status update - force to idle
+                        let _ = sqlx::query(
+                            "UPDATE sources SET status = 'idle', last_error = NULL, last_error_at = NULL, updated_at = NOW() WHERE id = $1"
+                        )
+                        .bind(source_id)
+                        .execute(state_clone.db.get_pool())
+                        .await;
+                    }
+                }
+                Ok(Err(e)) => {
+                    error!("Manual sync failed for source {}: {}", source.name, e);
+                    
+                    // Atomically mark sync as failed
+                    if let Err(complete_err) = state_clone.db.complete_sync_atomic(
+                        source_id, 
+                        false, 
+                        None, 
+                        Some(&format!("Sync failed: {}", e))
+                    ).await {
+                        error!("Failed to atomically mark sync as failed: {}", complete_err);
+                        // Fallback to manual status update - force to error state
+                        let error_msg = format!("Sync failed: {}", e);
+                        let _ = sqlx::query(
+                            "UPDATE sources SET status = 'error', last_error = $2, last_error_at = NOW(), updated_at = NOW() WHERE id = $1"
+                        )
+                        .bind(source_id)
+                        .bind(error_msg)
+                        .execute(state_clone.db.get_pool())
+                        .await;
+                    }
+                }
+                Err(_timeout) => {
+                    error!("Manual sync timed out for source {}", source.name);
+                    
+                    // Handle timeout by resetting to error state
+                    let error_msg = "Sync operation timed out";
+                    if let Err(complete_err) = state_clone.db.complete_sync_atomic(
+                        source_id, 
+                        false, 
+                        None, 
+                        Some(error_msg)
+                    ).await {
+                        error!("Failed to atomically mark sync as timed out: {}", complete_err);
+                        // Fallback to manual status update - force to error state
+                        let _ = sqlx::query(
+                            "UPDATE sources SET status = 'error', last_error = $2, last_error_at = NOW(), updated_at = NOW() WHERE id = $1"
+                        )
+                        .bind(source_id)
+                        .bind(error_msg)
+                        .execute(state_clone.db.get_pool())
+                        .await;
+                    }
+                }
+            }
+            
+            cleanup().await;
+        });
+        
+        Ok(())
     }
 
     pub async fn stop_sync(&self, source_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -459,6 +492,35 @@ impl SourceScheduler {
         } else {
             Err("No running sync found for this source".into())
         }
+    }
+
+    /// Force reset a source that may be stuck in syncing state
+    /// This is used as a fail-safe mechanism for race conditions
+    pub async fn force_reset_source(&self, source_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Force resetting potentially stuck source {}", source_id);
+        
+        // Remove from running syncs list
+        {
+            let mut running_syncs = self.running_syncs.write().await;
+            running_syncs.remove(&source_id);
+        }
+        
+        // Unregister from progress tracker
+        self.state.sync_progress_tracker.unregister_sync(source_id);
+        
+        // Force reset database status to idle
+        if let Err(e) = sqlx::query(
+            "UPDATE sources SET status = 'idle', last_error = 'Force reset due to stuck sync', last_error_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'syncing'"
+        )
+        .bind(source_id)
+        .execute(self.state.db.get_pool())
+        .await {
+            error!("Failed to force reset source status: {}", e);
+            return Err(e.into());
+        }
+        
+        info!("Source {} force reset completed", source_id);
+        Ok(())
     }
 
     /// Validates a source configuration and provides detailed error messages for debugging

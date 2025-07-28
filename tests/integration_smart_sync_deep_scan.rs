@@ -50,7 +50,7 @@ mod tests {
                 let rt = tokio::runtime::Handle::current();
                 std::thread::spawn(move || {
                     rt.block_on(async {
-                        if let Err(e) = context.cleanup_database().await {
+                        if let Err(e) = context.cleanup_and_close().await {
                             eprintln!("Error during test cleanup: {}", e);
                         }
                     });

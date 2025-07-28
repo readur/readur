@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
     use readur::test_utils::TestContext;
     use readur::models::{CreateUser, Document, SearchRequest};
     use chrono::Utc;
@@ -59,135 +60,226 @@ mod tests {
     #[tokio::test]
     async fn test_create_user() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
-        let user_data = create_test_user_data();
         
-        let result = db.create_user(user_data).await;
-        assert!(result.is_ok());
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+            let user_data = create_test_user_data();
+
+            let result = db.create_user(user_data).await;
+            assert!(result.is_ok());
+
+            let user = result.unwrap();
+            assert!(user.username.starts_with("testuser_"));
+            assert!(user.email.starts_with("test_") && user.email.ends_with("@example.com"));
+            assert!(user.password_hash.is_some());
+            assert_ne!(user.password_hash.as_ref().unwrap(), "password123"); // Should be hashed
+            
+            Ok(())
+        }.await;
         
-        let user = result.unwrap();
-        assert!(user.username.starts_with("testuser_"));
-        assert!(user.email.starts_with("test_") && user.email.ends_with("@example.com"));
-        assert!(user.password_hash.is_some());
-        assert_ne!(user.password_hash.as_ref().unwrap(), "password123"); // Should be hashed
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_get_user_by_username() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
-        let user_data = create_test_user_data();
         
-        let created_user = db.create_user(user_data).await.unwrap();
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+            let user_data = create_test_user_data();
+
+            let created_user = db.create_user(user_data).await.unwrap();
+
+            let result = db.get_user_by_username(&created_user.username).await;
+            assert!(result.is_ok());
+
+            let found_user = result.unwrap();
+            assert!(found_user.is_some());
+
+            let user = found_user.unwrap();
+            assert_eq!(user.id, created_user.id);
+            assert_eq!(user.username, created_user.username);
+            
+            Ok(())
+        }.await;
         
-        let result = db.get_user_by_username(&created_user.username).await;
-        assert!(result.is_ok());
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let found_user = result.unwrap();
-        assert!(found_user.is_some());
-        
-        let user = found_user.unwrap();
-        assert_eq!(user.id, created_user.id);
-        assert_eq!(user.username, created_user.username);
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_get_user_by_username_not_found() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
         
-        let result = db.get_user_by_username("nonexistent").await;
-        assert!(result.is_ok());
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+
+            let result = db.get_user_by_username("nonexistent").await;
+            assert!(result.is_ok());
+
+            let found_user = result.unwrap();
+            assert!(found_user.is_none());
+            
+            Ok(())
+        }.await;
         
-        let found_user = result.unwrap();
-        assert!(found_user.is_none());
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+        
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_create_document() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
-        let user_data = create_test_user_data();
-        let user = db.create_user(user_data).await.unwrap();
         
-        let document = create_test_document(user.id);
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+            let user_data = create_test_user_data();
+            let user = db.create_user(user_data).await.unwrap();
+
+            let document = create_test_document(user.id);
+
+            let result = db.create_document(document.clone()).await;
+            assert!(result.is_ok());
+
+            let created_doc = result.unwrap();
+            assert_eq!(created_doc.filename, document.filename);
+            assert_eq!(created_doc.user_id, user.id);
+            
+            Ok(())
+        }.await;
         
-        let result = db.create_document(document.clone()).await;
-        assert!(result.is_ok());
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let created_doc = result.unwrap();
-        assert_eq!(created_doc.filename, document.filename);
-        assert_eq!(created_doc.user_id, user.id);
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_get_documents_by_user() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
-        let user_data = create_test_user_data();
-        let user = db.create_user(user_data).await.unwrap();
         
-        let document1 = create_test_document(user.id);
-        let document2 = create_test_document(user.id);
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+            let user_data = create_test_user_data();
+            let user = db.create_user(user_data).await.unwrap();
+
+            let document1 = create_test_document(user.id);
+            let document2 = create_test_document(user.id);
+
+            db.create_document(document1).await.unwrap();
+            db.create_document(document2).await.unwrap();
+
+            let result = db.get_documents_by_user(user.id, 10, 0).await;
+            assert!(result.is_ok());
+
+            let documents = result.unwrap();
+            assert_eq!(documents.len(), 2);
+            
+            Ok(())
+        }.await;
         
-        db.create_document(document1).await.unwrap();
-        db.create_document(document2).await.unwrap();
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let result = db.get_documents_by_user(user.id, 10, 0).await;
-        assert!(result.is_ok());
-        
-        let documents = result.unwrap();
-        assert_eq!(documents.len(), 2);
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_search_documents() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
-        let user_data = create_test_user_data();
-        let user = db.create_user(user_data).await.unwrap();
         
-        let mut document = create_test_document(user.id);
-        document.content = Some("This is a searchable document".to_string());
-        document.ocr_text = Some("OCR searchable text".to_string());
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+            let user_data = create_test_user_data();
+            let user = db.create_user(user_data).await.unwrap();
+
+            let mut document = create_test_document(user.id);
+            document.content = Some("This is a searchable document".to_string());
+            document.ocr_text = Some("OCR searchable text".to_string());
+
+            db.create_document(document).await.unwrap();
+
+            let search_request = SearchRequest {
+                query: "searchable".to_string(),
+                tags: None,
+                mime_types: None,
+                limit: Some(10),
+                offset: Some(0),
+                include_snippets: Some(true),
+                snippet_length: Some(200),
+                search_mode: None,
+            };
+
+            let result = db.search_documents(user.id, &search_request).await;
+            assert!(result.is_ok());
+
+            let documents = result.unwrap();
+            assert_eq!(documents.len(), 1);
+            
+            Ok(())
+        }.await;
         
-        db.create_document(document).await.unwrap();
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        let search_request = SearchRequest {
-            query: "searchable".to_string(),
-            tags: None,
-            mime_types: None,
-            limit: Some(10),
-            offset: Some(0),
-            include_snippets: Some(true),
-            snippet_length: Some(200),
-            search_mode: None,
-        };
-        
-        let result = db.search_documents(user.id, &search_request).await;
-        assert!(result.is_ok());
-        
-        let documents = result.unwrap();
-        assert_eq!(documents.len(), 1);
+        result.unwrap();
     }
 
     #[tokio::test]
     async fn test_update_document_ocr() {
         let ctx = TestContext::new().await;
-        let db = &ctx.state.db;
-        let user_data = create_test_user_data();
-        let user = db.create_user(user_data).await.unwrap();
         
-        let document = create_test_document(user.id);
-        let created_doc = db.create_document(document).await.unwrap();
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let db = &ctx.state.db;
+            let user_data = create_test_user_data();
+            let user = db.create_user(user_data).await.unwrap();
+
+            let document = create_test_document(user.id);
+            let created_doc = db.create_document(document).await.unwrap();
+
+            let new_ocr_text = "Updated OCR text";
+            let result = db.update_document_ocr(created_doc.id, Some(new_ocr_text.to_string()), None, None, None, None).await;
+            assert!(result.is_ok());
+
+            // Verify the update by searching
+            let documents = db.get_documents_by_user(user.id, 10, 0).await.unwrap();
+            let updated_doc = documents.iter().find(|d| d.id == created_doc.id).unwrap();
+            assert_eq!(updated_doc.ocr_text.as_ref().unwrap(), new_ocr_text);
+            
+            Ok(())
+        }.await;
         
-        let new_ocr_text = "Updated OCR text";
-        let result = db.update_document_ocr(created_doc.id, Some(new_ocr_text.to_string()), None, None, None, None).await;
-        assert!(result.is_ok());
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
         
-        // Verify the update by searching
-        let documents = db.get_documents_by_user(user.id, 10, 0).await.unwrap();
-        let updated_doc = documents.iter().find(|d| d.id == created_doc.id).unwrap();
-        assert_eq!(updated_doc.ocr_text.as_ref().unwrap(), new_ocr_text);
+        result.unwrap();
     }
 }

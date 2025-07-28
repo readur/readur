@@ -237,6 +237,7 @@ pub struct TestContext {
     pub container: Arc<ContainerAsync<Postgres>>,
     pub state: Arc<AppState>,
     context_id: String,
+    cleanup_called: Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -247,6 +248,7 @@ impl Clone for TestContext {
             container: Arc::clone(&self.container),
             state: Arc::clone(&self.state),
             context_id: self.context_id.clone(),
+            cleanup_called: Arc::clone(&self.cleanup_called),
         }
     }
 }
@@ -254,6 +256,27 @@ impl Clone for TestContext {
 #[cfg(any(test, feature = "test-utils"))]
 impl Drop for TestContext {
     fn drop(&mut self) {
+        // If cleanup wasn't already called, try to perform automatic cleanup
+        if !self.cleanup_called.load(std::sync::atomic::Ordering::Acquire) {
+            // Mark cleanup as called to prevent recursive calls
+            self.cleanup_called.store(true, std::sync::atomic::Ordering::Release);
+            
+            // Spawn a blocking task to perform async cleanup
+            // Note: This is a best-effort cleanup for forgotten manual cleanup calls
+            let state = Arc::clone(&self.state);
+            std::thread::spawn(move || {
+                // Create a new runtime for cleanup if we're not in an async context
+                if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build() {
+                    let _ = rt.block_on(async {
+                        // Try database cleanup first
+                        state.db.close().await;
+                    });
+                }
+            });
+        }
+        
         // Decrease reference count when context is dropped
         let mut manager_guard = SHARED_DB_MANAGER.lock().unwrap();
         if let Some(ref mut manager) = manager_guard.as_mut() {
@@ -349,6 +372,7 @@ impl TestContext {
             container, 
             state,
             context_id,
+            cleanup_called: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
     
@@ -418,6 +442,25 @@ impl TestContext {
                 eprintln!("Warning: Failed to execute cleanup query '{}': {}", query, e);
             }
         }
+        
+        Ok(())
+    }
+
+    /// Close the database connection pool for this test context
+    pub async fn close_connections(&self) {
+        self.state.db.close().await;
+    }
+
+    /// Complete cleanup: database cleanup + close connections
+    pub async fn cleanup_and_close(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Mark cleanup as called to prevent automatic cleanup in Drop
+        self.cleanup_called.store(true, std::sync::atomic::Ordering::Release);
+        
+        // First clean up test data
+        self.cleanup_database().await?;
+        
+        // Then close the connection pool
+        self.close_connections().await;
         
         Ok(())
     }
@@ -1356,9 +1399,9 @@ impl ConcurrentTestManager {
             eprintln!("Warning: {}", e);
         }
         
-        // Clean up database
-        if let Err(e) = self.context.cleanup_database().await {
-            eprintln!("Warning: Failed to cleanup database: {}", e);
+        // Clean up database and close connections
+        if let Err(e) = self.context.cleanup_and_close().await {
+            eprintln!("Warning: Failed to cleanup database and close connections: {}", e);
         }
         
         // Wait for pool to stabilize
@@ -1368,4 +1411,73 @@ impl ConcurrentTestManager {
         
         Ok(())
     }
+}
+
+/// Macro for running integration tests with automatic database cleanup
+/// 
+/// Usage:
+/// ```rust
+/// use readur::integration_test_with_cleanup;
+/// 
+/// integration_test_with_cleanup!(test_my_function, {
+///     let user_id = create_test_user(&ctx.state.db, "testuser").await?;
+///     // Your test logic here
+///     assert_eq!(something, expected);
+///     Ok(())
+/// });
+/// ```
+#[cfg(any(test, feature = "test-utils"))]
+#[macro_export]
+macro_rules! integration_test_with_cleanup {
+    ($test_name:ident, $test_body:block) => {
+        #[tokio::test]
+        async fn $test_name() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            let ctx = $crate::test_utils::TestContext::new().await;
+            
+            // Run test logic with proper error handling
+            let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = async move $test_body.await;
+            
+            // Always cleanup database connections and test data, regardless of test result
+            if let Err(e) = ctx.cleanup_and_close().await {
+                eprintln!("Warning: Test cleanup failed: {}", e);
+            }
+            
+            result
+        }
+    };
+}
+
+/// Macro for running integration tests with custom TestContext configuration and automatic cleanup
+/// 
+/// Usage:
+/// ```rust
+/// use readur::integration_test_with_config_and_cleanup;
+/// 
+/// integration_test_with_config_and_cleanup!(test_with_custom_config, 
+///     TestConfigBuilder::default().with_concurrent_ocr_jobs(1),
+///     {
+///         // Your test logic here
+///         Ok(())
+///     }
+/// );
+/// ```
+#[cfg(any(test, feature = "test-utils"))]
+#[macro_export]
+macro_rules! integration_test_with_config_and_cleanup {
+    ($test_name:ident, $config:expr, $test_body:block) => {
+        #[tokio::test]
+        async fn $test_name() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            let ctx = $crate::test_utils::TestContext::with_config($config).await;
+            
+            // Run test logic with proper error handling
+            let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = async move $test_body.await;
+            
+            // Always cleanup database connections and test data, regardless of test result
+            if let Err(e) = ctx.cleanup_and_close().await {
+                eprintln!("Warning: Test cleanup failed: {}", e);
+            }
+            
+            result
+        }
+    };
 }
