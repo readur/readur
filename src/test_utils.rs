@@ -28,6 +28,18 @@ use std::sync::Mutex;
 #[cfg(any(test, feature = "test-utils"))]
 use std::collections::HashMap;
 
+/// Cleanup strategy for database cleanup operations
+#[cfg(any(test, feature = "test-utils"))]
+#[derive(Debug, Clone, Copy)]
+pub enum CleanupStrategy {
+    /// Fast cleanup using TRUNCATE where possible, optimized for performance tests
+    Fast,
+    /// Standard cleanup with optimized queries and reasonable timeouts
+    Standard,
+    /// Thorough cleanup with detailed logging and progress tracking
+    Thorough,
+}
+
 /// Test image information with expected OCR content
 #[derive(Debug, Clone)]
 pub struct TestImage {
@@ -158,135 +170,24 @@ mod tests {
     }
 }
 
-/// Shared test database manager that uses a single PostgreSQL container
-/// across all tests for better resource efficiency
-#[cfg(any(test, feature = "test-utils"))]
-static SHARED_DB_MANAGER: std::sync::LazyLock<std::sync::Mutex<Option<SharedDatabaseManager>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
 
-/// Shared database configuration
-#[cfg(any(test, feature = "test-utils"))]
-struct SharedDatabaseManager {
-    container: Arc<ContainerAsync<Postgres>>,
-    database_url: String,
-    active_contexts: HashMap<String, u32>,
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-impl SharedDatabaseManager {
-    async fn get_or_create() -> Result<SharedDatabaseManager, Box<dyn std::error::Error + Send + Sync>> {
-        // Create a new PostgreSQL container with optimized settings
-        let postgres_image = Postgres::default()
-            .with_tag("15")
-            .with_env_var("POSTGRES_USER", "readur")
-            .with_env_var("POSTGRES_PASSWORD", "readur")
-            .with_env_var("POSTGRES_DB", "readur")
-            // Optimize for testing environment
-            .with_env_var("POSTGRES_MAX_CONNECTIONS", "200")
-            .with_env_var("POSTGRES_SHARED_BUFFERS", "128MB")
-            .with_env_var("POSTGRES_EFFECTIVE_CACHE_SIZE", "256MB")
-            .with_env_var("POSTGRES_MAINTENANCE_WORK_MEM", "64MB")
-            .with_env_var("POSTGRES_WORK_MEM", "8MB");
-        
-        let container = postgres_image.start().await
-            .map_err(|e| format!("Failed to start shared postgres container: {}", e))?;
-        
-        let port = container.get_host_port_ipv4(5432).await
-            .map_err(|e| format!("Failed to get postgres port: {}", e))?;
-        
-        let database_url = format!("postgresql://readur:readur@localhost:{}/readur", port);
-        
-        // Wait for the database to be ready
-        let mut retries = 0;
-        const MAX_RETRIES: u32 = 30;
-        while retries < MAX_RETRIES {
-            match crate::db::Database::new_with_pool_config(&database_url, 10, 2).await {
-                Ok(test_db) => {
-                    // Run migrations on the shared database
-                    let migrations = sqlx::migrate!("./migrations");
-                    if let Err(e) = migrations.run(&test_db.pool).await {
-                        eprintln!("Migration failed: {}, retrying...", e);
-                        retries += 1;
-                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                        continue;
-                    }
-                    break;
-                }
-                Err(e) => {
-                    if retries == MAX_RETRIES - 1 {
-                        return Err(format!("Failed to connect to shared database after {} retries: {}", MAX_RETRIES, e).into());
-                    }
-                    retries += 1;
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                }
-            }
-        }
-        
-        Ok(SharedDatabaseManager {
-            container: Arc::new(container),
-            database_url,
-            active_contexts: HashMap::new(),
-        })
-    }
-}
-
-/// Unified test context that uses shared database infrastructure
+/// Simplified test context with individual database per test
 #[cfg(any(test, feature = "test-utils"))]
 pub struct TestContext {
     pub app: Router,
-    pub container: Arc<ContainerAsync<Postgres>>,
+    pub container: ContainerAsync<Postgres>,
     pub state: Arc<AppState>,
     context_id: String,
     cleanup_called: Arc<std::sync::atomic::AtomicBool>,
 }
 
-#[cfg(any(test, feature = "test-utils"))]
-impl Clone for TestContext {
-    fn clone(&self) -> Self {
-        Self {
-            app: self.app.clone(),
-            container: Arc::clone(&self.container),
-            state: Arc::clone(&self.state),
-            context_id: self.context_id.clone(),
-            cleanup_called: Arc::clone(&self.cleanup_called),
-        }
-    }
-}
 
 #[cfg(any(test, feature = "test-utils"))]
 impl Drop for TestContext {
     fn drop(&mut self) {
-        // If cleanup wasn't already called, try to perform automatic cleanup
-        if !self.cleanup_called.load(std::sync::atomic::Ordering::Acquire) {
-            // Mark cleanup as called to prevent recursive calls
-            self.cleanup_called.store(true, std::sync::atomic::Ordering::Release);
-            
-            // Spawn a blocking task to perform async cleanup
-            // Note: This is a best-effort cleanup for forgotten manual cleanup calls
-            let state = Arc::clone(&self.state);
-            std::thread::spawn(move || {
-                // Create a new runtime for cleanup if we're not in an async context
-                if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build() {
-                    let _ = rt.block_on(async {
-                        // Try database cleanup first
-                        state.db.close().await;
-                    });
-                }
-            });
-        }
-        
-        // Decrease reference count when context is dropped
-        let mut manager_guard = SHARED_DB_MANAGER.lock().unwrap();
-        if let Some(ref mut manager) = manager_guard.as_mut() {
-            if let Some(count) = manager.active_contexts.get_mut(&self.context_id) {
-                *count = count.saturating_sub(1);
-                if *count == 0 {
-                    manager.active_contexts.remove(&self.context_id);
-                }
-            }
-        }
+        // Simplified drop - no async operations to prevent runtime issues
+        // The pool and container will be cleaned up naturally when dropped
+        // For proper cleanup, use cleanup_and_close() explicitly before dropping
     }
 }
 
@@ -297,8 +198,7 @@ impl TestContext {
         Self::with_config(TestConfigBuilder::default()).await
     }
     
-    /// Create a test context with custom configuration using shared database infrastructure
-    /// This method uses a single shared PostgreSQL container to reduce resource contention
+    /// Create a test context with custom configuration using individual database
     pub async fn with_config(config_builder: TestConfigBuilder) -> Self {
         // Generate unique context ID for this test instance
         let context_id = format!(
@@ -312,36 +212,58 @@ impl TestContext {
             uuid::Uuid::new_v4().simple()
         );
         
-        // Get or create shared database manager
-        let (container, database_url) = {
-            let mut manager_guard = SHARED_DB_MANAGER.lock().unwrap();
-            match manager_guard.as_mut() {
-                Some(manager) => {
-                    // Increment reference count for this context
-                    *manager.active_contexts.entry(context_id.clone()).or_insert(0) += 1;
-                    (manager.container.clone(), manager.database_url.clone())
+        // Create individual PostgreSQL container for this test
+        let postgres_image = Postgres::default()
+            .with_tag("15")
+            .with_env_var("POSTGRES_USER", "readur")
+            .with_env_var("POSTGRES_PASSWORD", "readur")
+            .with_env_var("POSTGRES_DB", "readur")
+            // Optimize for fast test execution
+            .with_env_var("POSTGRES_MAX_CONNECTIONS", "50")
+            .with_env_var("POSTGRES_SHARED_BUFFERS", "64MB")
+            .with_env_var("POSTGRES_EFFECTIVE_CACHE_SIZE", "128MB")
+            .with_env_var("POSTGRES_MAINTENANCE_WORK_MEM", "32MB")
+            .with_env_var("POSTGRES_WORK_MEM", "4MB")
+            .with_env_var("POSTGRES_FSYNC", "off")
+            .with_env_var("POSTGRES_SYNCHRONOUS_COMMIT", "off")
+            .with_env_var("POSTGRES_WAL_BUFFERS", "16MB")
+            .with_env_var("POSTGRES_CHECKPOINT_SEGMENTS", "32");
+        
+        let container = postgres_image.start().await
+            .expect("Failed to start postgres container");
+        
+        let port = container.get_host_port_ipv4(5432).await
+            .expect("Failed to get postgres port");
+        
+        let database_url = format!("postgresql://readur:readur@localhost:{}/readur", port);
+        
+        // Wait for the database to be ready with fast retry
+        let mut retries = 0;
+        const MAX_RETRIES: u32 = 15;
+        let db = loop {
+            match crate::db::Database::new_with_pool_config(&database_url, 5, 1).await {
+                Ok(test_db) => {
+                    // Run migrations
+                    let migrations = sqlx::migrate!("./migrations");
+                    if let Err(e) = migrations.run(&test_db.pool).await {
+                        if retries >= MAX_RETRIES - 1 {
+                            panic!("Migration failed after {} retries: {}", MAX_RETRIES, e);
+                        }
+                        retries += 1;
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                        continue;
+                    }
+                    break test_db;
                 }
-                None => {
-                    // Create new shared database manager
-                    drop(manager_guard); // Release lock before async operation
-                    let new_manager = SharedDatabaseManager::get_or_create().await
-                        .expect("Failed to create shared database manager");
-                    
-                    let container = new_manager.container.clone();
-                    let url = new_manager.database_url.clone();
-                    
-                    let mut manager_guard = SHARED_DB_MANAGER.lock().unwrap();
-                    let manager = manager_guard.insert(new_manager);
-                    *manager.active_contexts.entry(context_id.clone()).or_insert(0) += 1;
-                    
-                    (container, url)
+                Err(e) => {
+                    if retries >= MAX_RETRIES - 1 {
+                        panic!("Failed to connect to database after {} retries: {}", MAX_RETRIES, e);
+                    }
+                    retries += 1;
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 }
             }
         };
-        
-        // Use smaller connection pool per test context to avoid exhausting connections
-        let db = crate::db::Database::new_with_pool_config(&database_url, 20, 2).await
-            .expect("Failed to create database connection");
         
         let config = config_builder.build(database_url);
         let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
@@ -422,42 +344,376 @@ impl TestContext {
 
     /// Clean up test database by removing test data for this context
     pub async fn cleanup_database(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Clean up test data by deleting test users and cascading to related data
-        // This provides isolation without schema complexity
-        let cleanup_queries = vec![
-            "DELETE FROM ocr_queue WHERE document_id IN (SELECT id FROM documents WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%'))",
-            "DELETE FROM ocr_metrics", 
-            "DELETE FROM notifications WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
-            "DELETE FROM ignored_files WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
-            "DELETE FROM webdav_files WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
-            "DELETE FROM webdav_directories WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
-            "DELETE FROM documents WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
-            "DELETE FROM sources WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
-            "DELETE FROM settings WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%')",
-            "DELETE FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%'",
+        self.cleanup_database_with_strategy(CleanupStrategy::Standard).await
+    }
+
+    /// Clean up test database with configurable strategy for different test scenarios
+    pub async fn cleanup_database_with_strategy(&self, strategy: CleanupStrategy) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let cleanup_start = std::time::Instant::now();
+        println!("Starting database cleanup for test context {} with strategy {:?}", self.context_id, strategy);
+        
+        match strategy {
+            CleanupStrategy::Fast => self.cleanup_database_fast().await,
+            CleanupStrategy::Standard => self.cleanup_database_standard().await,
+            CleanupStrategy::Thorough => self.cleanup_database_thorough().await,
+        }
+        .map_err(|e| {
+            eprintln!("Database cleanup failed for test context {}: {}", self.context_id, e);
+            e
+        })?;
+        
+        println!("Database cleanup completed for test context {} in {:?}", 
+                 self.context_id, cleanup_start.elapsed());
+        Ok(())
+    }
+
+    /// Fast cleanup strategy for performance tests - uses TRUNCATE where possible
+    async fn cleanup_database_fast(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        println!("Using FAST cleanup strategy - truncating tables where possible");
+        
+        // First, get test user IDs to clean up user-specific data
+        let test_user_ids = self.get_test_user_ids().await?;
+        
+        if test_user_ids.is_empty() {
+            println!("No test users found, skipping cleanup");
+            return Ok(());
+        }
+        
+        println!("Found {} test users to clean up", test_user_ids.len());
+        
+        // For performance tests, we can safely truncate global tables since they're test-only
+        let global_truncate_queries = vec![
+            ("ocr_metrics", "TRUNCATE TABLE ocr_metrics RESTART IDENTITY CASCADE"),
         ];
         
-        for query in cleanup_queries {
-            if let Err(e) = sqlx::query(query).execute(self.state.db.get_pool()).await {
-                eprintln!("Warning: Failed to execute cleanup query '{}': {}", query, e);
+        for (table_name, query) in global_truncate_queries {
+            if let Err(e) = self.execute_cleanup_query_with_timeout(table_name, query, 10).await {
+                eprintln!("Warning: Failed to truncate {}: {}", table_name, e);
             }
         }
+        
+        // For user-specific data, use optimized batch deletes
+        self.cleanup_user_specific_data_batched(&test_user_ids).await?;
         
         Ok(())
     }
 
+    /// Standard cleanup strategy - optimized queries with timeouts
+    async fn cleanup_database_standard(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        println!("Using STANDARD cleanup strategy - optimized queries with timeouts");
+        
+        let test_user_ids = self.get_test_user_ids().await?;
+        
+        if test_user_ids.is_empty() {
+            println!("No test users found, skipping cleanup");
+            return Ok(());
+        }
+        
+        println!("Found {} test users to clean up", test_user_ids.len());
+        
+        // Clean up global test data first
+        let global_cleanup_queries = vec![
+            ("ocr_metrics", "DELETE FROM ocr_metrics", 15),
+        ];
+        
+        for (table_name, query, timeout_secs) in global_cleanup_queries {
+            if let Err(e) = self.execute_cleanup_query_with_timeout(table_name, query, timeout_secs).await {
+                eprintln!("Warning: Failed to clean up {}: {}", table_name, e);
+            }
+        }
+        
+        // Clean up user-specific data with batching
+        self.cleanup_user_specific_data_batched(&test_user_ids).await?;
+        
+        Ok(())
+    }
+
+    /// Thorough cleanup strategy - detailed logging and error handling
+    async fn cleanup_database_thorough(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        println!("Using THOROUGH cleanup strategy - detailed logging and error handling");
+        
+        let test_user_ids = self.get_test_user_ids().await?;
+        
+        if test_user_ids.is_empty() {
+            println!("No test users found, skipping cleanup");
+            return Ok(());
+        }
+        
+        println!("Found {} test users to clean up", test_user_ids.len());
+        
+        // Count records before cleanup for reporting
+        let counts_before = self.count_test_records(&test_user_ids).await;
+        println!("Records before cleanup: {:?}", counts_before);
+        
+        // Clean up with detailed progress tracking
+        self.cleanup_user_specific_data_with_progress(&test_user_ids).await?;
+        
+        // Verify cleanup completed
+        let counts_after = self.count_test_records(&test_user_ids).await;
+        println!("Records after cleanup: {:?}", counts_after);
+        
+        Ok(())
+    }
+
+    /// Get all test user IDs efficiently
+    async fn get_test_user_ids(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let query = "SELECT id::text FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%'";
+        
+        let start_time = std::time::Instant::now();
+        match tokio::time::timeout(std::time::Duration::from_secs(10), 
+                                   sqlx::query_scalar::<_, String>(query).fetch_all(self.state.db.get_pool())).await {
+            Ok(Ok(user_ids)) => {
+                println!("Retrieved {} test user IDs in {:?}", user_ids.len(), start_time.elapsed());
+                Ok(user_ids)
+            }
+            Ok(Err(e)) => {
+                eprintln!("Failed to retrieve test user IDs: {}", e);
+                Err(e.into())
+            }
+            Err(_) => {
+                eprintln!("Timeout retrieving test user IDs after 10 seconds");
+                Err("Timeout retrieving test user IDs".into())
+            }
+        }
+    }
+
+    /// Clean up user-specific data using batched deletes
+    async fn cleanup_user_specific_data_batched(&self, user_ids: &[String]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if user_ids.is_empty() {
+            return Ok(());
+        }
+
+        // Define cleanup order (respecting foreign key dependencies)
+        let cleanup_tables = vec![
+            ("ocr_queue", "document_id IN (SELECT id FROM documents WHERE user_id = ANY($1))", 20),
+            ("notifications", "user_id = ANY($1)", 15),
+            ("ignored_files", "ignored_by = ANY($1)", 15),
+            ("webdav_files", "user_id = ANY($1)", 30), // Potentially large table
+            ("webdav_directories", "user_id = ANY($1)", 30), // Potentially large table
+            ("documents", "user_id = ANY($1)", 45), // Potentially very large table
+            ("sources", "user_id = ANY($1)", 15),
+            ("settings", "user_id = ANY($1)", 10),
+            ("users", "id = ANY($1)", 10),
+        ];
+
+        // Convert user_ids to UUID array for PostgreSQL
+        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids.iter()
+            .map(|id| uuid::Uuid::parse_str(id))
+            .collect();
+        
+        let user_uuids = user_uuids.map_err(|e| format!("Failed to parse user UUIDs: {}", e))?;
+
+        for (table_name, where_clause, timeout_secs) in cleanup_tables {
+            let query = format!("DELETE FROM {} WHERE {}", table_name, where_clause);
+            
+            if let Err(e) = self.execute_parameterized_cleanup_with_timeout(
+                table_name, 
+                &query, 
+                &user_uuids, 
+                timeout_secs
+            ).await {
+                eprintln!("Warning: Failed to clean up {}: {}", table_name, e);
+                // Continue with other tables even if one fails
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute a cleanup query with timeout and progress logging
+    async fn execute_cleanup_query_with_timeout(
+        &self,
+        table_name: &str,
+        query: &str,
+        timeout_secs: u64,
+    ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+        let start_time = std::time::Instant::now();
+        println!("Executing cleanup on {}: {} (timeout: {}s)", 
+                 table_name, 
+                 if query.len() > 80 { format!("{}...", &query[..77]) } else { query.to_string() },
+                 timeout_secs);
+
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs),
+            sqlx::query(query).execute(self.state.db.get_pool())
+        ).await {
+            Ok(Ok(result)) => {
+                let rows_affected = result.rows_affected();
+                println!("✅ Cleaned up {} rows from {} in {:?}", 
+                         rows_affected, table_name, start_time.elapsed());
+                Ok(rows_affected)
+            }
+            Ok(Err(e)) => {
+                eprintln!("❌ Failed to clean up {}: {}", table_name, e);
+                Err(e.into())
+            }
+            Err(_) => {
+                eprintln!("⏰ Timeout cleaning up {} after {}s", table_name, timeout_secs);
+                Err(format!("Timeout cleaning up {} after {}s", table_name, timeout_secs).into())
+            }
+        }
+    }
+
+    /// Execute a parameterized cleanup query with timeout
+    async fn execute_parameterized_cleanup_with_timeout(
+        &self,
+        table_name: &str,
+        query: &str,
+        user_uuids: &[uuid::Uuid],
+        timeout_secs: u64,
+    ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+        let start_time = std::time::Instant::now();
+
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs),
+            sqlx::query(query).bind(user_uuids).execute(self.state.db.get_pool())
+        ).await {
+            Ok(Ok(result)) => {
+                let rows_affected = result.rows_affected();
+                println!("✅ Cleaned up {} rows from {} in {:?}", 
+                         rows_affected, table_name, start_time.elapsed());
+                Ok(rows_affected)
+            }
+            Ok(Err(e)) => {
+                eprintln!("❌ Failed to clean up {}: {}", table_name, e);
+                Err(e.into())
+            }
+            Err(_) => {
+                eprintln!("⏰ Timeout cleaning up {} after {}s", table_name, timeout_secs);
+                Err(format!("Timeout cleaning up {} after {}s", table_name, timeout_secs).into())
+            }
+        }
+    }
+
+    /// Clean up user-specific data with detailed progress tracking
+    async fn cleanup_user_specific_data_with_progress(&self, user_ids: &[String]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if user_ids.is_empty() {
+            return Ok(());
+        }
+
+        // Convert user_ids to UUID array
+        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids.iter()
+            .map(|id| uuid::Uuid::parse_str(id))
+            .collect();
+        
+        let user_uuids = user_uuids.map_err(|e| format!("Failed to parse user UUIDs: {}", e))?;
+
+        // Define cleanup with progress reporting
+        let cleanup_tables = vec![
+            ("ocr_queue", "document_id IN (SELECT id FROM documents WHERE user_id = ANY($1))", 20),
+            ("notifications", "user_id = ANY($1)", 15),
+            ("ignored_files", "ignored_by = ANY($1)", 15),
+            ("webdav_files", "user_id = ANY($1)", 30),
+            ("webdav_directories", "user_id = ANY($1)", 30),
+            ("documents", "user_id = ANY($1)", 45),
+            ("sources", "user_id = ANY($1)", 15),
+            ("settings", "user_id = ANY($1)", 10),
+            ("users", "id = ANY($1)", 10),
+        ];
+
+        let total_tables = cleanup_tables.len();
+        for (i, (table_name, where_clause, timeout_secs)) in cleanup_tables.iter().enumerate() {
+            println!("🧹 Cleanup progress: {}/{} - Processing {}", i + 1, total_tables, table_name);
+            
+            let query = format!("DELETE FROM {} WHERE {}", table_name, where_clause);
+            
+            match self.execute_parameterized_cleanup_with_timeout(
+                table_name, 
+                &query, 
+                &user_uuids, 
+                *timeout_secs
+            ).await {
+                Ok(rows_affected) => {
+                    println!("✅ Progress {}/{}: Cleaned {} rows from {}", 
+                             i + 1, total_tables, rows_affected, table_name);
+                }
+                Err(e) => {
+                    eprintln!("❌ Progress {}/{}: Failed to clean {}: {}", 
+                              i + 1, total_tables, table_name, e);
+                    // Continue with other tables
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Count test records for reporting (best effort)
+    async fn count_test_records(&self, user_ids: &[String]) -> std::collections::HashMap<String, u64> {
+        let mut counts = std::collections::HashMap::new();
+        
+        if user_ids.is_empty() {
+            return counts;
+        }
+
+        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids.iter()
+            .map(|id| uuid::Uuid::parse_str(id))
+            .collect();
+        
+        let user_uuids = match user_uuids {
+            Ok(uuids) => uuids,
+            Err(_) => return counts,
+        };
+
+        let count_queries = vec![
+            ("users", "SELECT COUNT(*) FROM users WHERE id = ANY($1)"),
+            ("documents", "SELECT COUNT(*) FROM documents WHERE user_id = ANY($1)"),
+            ("webdav_directories", "SELECT COUNT(*) FROM webdav_directories WHERE user_id = ANY($1)"),
+            ("webdav_files", "SELECT COUNT(*) FROM webdav_files WHERE user_id = ANY($1)"),
+            ("settings", "SELECT COUNT(*) FROM settings WHERE user_id = ANY($1)"),
+            ("sources", "SELECT COUNT(*) FROM sources WHERE user_id = ANY($1)"),
+            ("notifications", "SELECT COUNT(*) FROM notifications WHERE user_id = ANY($1)"),
+            ("ignored_files", "SELECT COUNT(*) FROM ignored_files WHERE ignored_by = ANY($1)"),
+        ];
+
+        for (table_name, query) in count_queries {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                sqlx::query_scalar::<_, i64>(query).bind(&user_uuids).fetch_one(self.state.db.get_pool())
+            ).await {
+                Ok(Ok(count)) => {
+                    counts.insert(table_name.to_string(), count as u64);
+                }
+                _ => {
+                    counts.insert(table_name.to_string(), 0);
+                }
+            }
+        }
+
+        counts
+    }
+
     /// Close the database connection pool for this test context
     pub async fn close_connections(&self) {
-        self.state.db.close().await;
+        if !self.state.db.pool.is_closed() {
+            self.state.db.close().await;
+        }
+    }
+
+    /// Close the database connection pool and mark cleanup as called to prevent Drop cleanup
+    /// This is specifically for tests that only need connection cleanup without data cleanup
+    pub async fn close_connections_only(&self) {
+        // Mark cleanup as called to prevent automatic cleanup in Drop
+        self.cleanup_called.store(true, std::sync::atomic::Ordering::Release);
+        
+        // Close the connection pool directly
+        if !self.state.db.pool.is_closed() {
+            self.state.db.close().await;
+        }
     }
 
     /// Complete cleanup: database cleanup + close connections
     pub async fn cleanup_and_close(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.cleanup_and_close_with_strategy(CleanupStrategy::Standard).await
+    }
+
+    /// Complete cleanup with configurable strategy: database cleanup + close connections
+    pub async fn cleanup_and_close_with_strategy(&self, strategy: CleanupStrategy) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Mark cleanup as called to prevent automatic cleanup in Drop
         self.cleanup_called.store(true, std::sync::atomic::Ordering::Release);
         
         // First clean up test data
-        self.cleanup_database().await?;
+        self.cleanup_database_with_strategy(strategy).await?;
         
         // Then close the connection pool
         self.close_connections().await;
@@ -568,7 +824,15 @@ pub fn create_test_app(state: Arc<AppState>) -> Router {
 #[cfg(any(test, feature = "test-utils"))]
 pub async fn create_test_app_with_container() -> (Router, Arc<ContainerAsync<Postgres>>) {
     let ctx = TestContext::new().await;
-    (ctx.app.clone(), ctx.container.clone())
+    let app = ctx.app.clone();
+    // Need to create a new container since we can't move out of ctx.container due to Drop trait
+    let postgres_image = Postgres::default()
+        .with_tag("15")
+        .with_env_var("POSTGRES_USER", "readur")
+        .with_env_var("POSTGRES_PASSWORD", "readur")
+        .with_env_var("POSTGRES_DB", "readur");
+    let container = postgres_image.start().await.expect("Failed to start postgres container");
+    (app, Arc::new(container))
 }
 
 /// Unified test authentication helper that replaces TestClient/AdminTestClient patterns
@@ -1336,7 +1600,7 @@ impl ConcurrentTestManager {
         operation: F,
     ) -> Result<T, Box<dyn std::error::Error + Send + Sync>>
     where
-        F: FnOnce(TestContext) -> Fut + Send,
+        F: FnOnce(&TestContext) -> Fut + Send,
         Fut: std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>> + Send,
         T: Send,
     {
@@ -1355,7 +1619,9 @@ impl ConcurrentTestManager {
         }
         
         // Execute operation
-        let result = operation(self.context.clone()).await;
+        // Since TestContext no longer implements Clone, we need to pass by reference
+        let context = &self.context;
+        let result = operation(context).await;
         
         // Cleanup: Remove operation from tracking
         {

@@ -43,11 +43,11 @@ impl Database {
     pub async fn new_with_pool_config(database_url: &str, max_connections: u32, min_connections: u32) -> Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(max_connections)
-            .acquire_timeout(Duration::from_secs(60))    // Increased from 10s to 60s for tests
-            .idle_timeout(Duration::from_secs(300))      // Reduced from 600s to 300s for faster cleanup
-            .max_lifetime(Duration::from_secs(900))      // Reduced from 1800s to 900s for better resource management
+            .acquire_timeout(Duration::from_secs(10))    // Short timeout for fast failure
+            .idle_timeout(Duration::from_secs(30))       // Very short idle timeout for tests
+            .max_lifetime(Duration::from_secs(300))      // Short lifetime for tests
             .min_connections(min_connections)
-            .test_before_acquire(true)                   // Validate connections before use
+            .test_before_acquire(false)                  // Disable validation for speed
             .connect(database_url)
             .await?;
         Ok(Self { pool })
@@ -57,8 +57,14 @@ impl Database {
         &self.pool
     }
 
-    /// Close the database connection pool
+    /// Close the database connection pool with simplified, fast approach
     pub async fn close(&self) {
+        if self.pool.is_closed() {
+            return; // Already closed, nothing to do
+        }
+        
+        // Directly close the pool without complex timeout logic
+        // The sqlx pool.close() is designed to be fast and reliable
         self.pool.close().await;
     }
 
@@ -89,6 +95,8 @@ impl Database {
             }
         }
     }
+
+
 
     /// Execute a simple query with enhanced error handling and retries
     pub async fn execute_with_retry<F, T, Fut>(&self, operation_name: &str, operation: F) -> Result<T>
