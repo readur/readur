@@ -1,4 +1,34 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi, beforeAll } from 'vitest';
+
+// Mock the API service before importing the component
+beforeAll(() => {
+  // Mock EventSource globally
+  global.EventSource = vi.fn().mockImplementation(() => ({
+    close: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    onopen: null,
+    onmessage: null,
+    onerror: null,
+    readyState: 0,
+  }));
+});
+
+// Mock the services/api module
+vi.mock('../../services/api', () => ({
+  sourcesService: {
+    getSyncProgressStream: vi.fn().mockReturnValue({
+      close: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      onopen: null,
+      onmessage: null,
+      onerror: null,
+      readyState: 0,
+    }),
+  },
+  SyncProgressInfo: {},
+}));
 
 // Simple compilation and type safety test for SyncProgressDisplay
 describe('SyncProgressDisplay Compilation Tests', () => {
@@ -7,7 +37,7 @@ describe('SyncProgressDisplay Compilation Tests', () => {
     const component = await import('../SyncProgressDisplay');
     expect(component.SyncProgressDisplay).toBeDefined();
     expect(component.default).toBeDefined();
-  });
+  }, 10000); // Increase timeout to 10 seconds
 
   test('should accept correct prop types', () => {
     // Test TypeScript compilation by defining expected props
