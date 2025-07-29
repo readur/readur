@@ -326,6 +326,21 @@ impl WebDAVService {
     pub async fn test_propfind(&self, path: &str) -> Result<()> {
         let url = self.get_url_for_path(path);
         
+        debug!("🧪 Testing PROPFIND for path '{}' at URL '{}'", path, url);
+        
+        // First, check server capabilities if this is the first PROPFIND
+        if path == "/" || path.is_empty() {
+            match self.validate_webdav_capabilities(&url).await {
+                Ok(capabilities) => {
+                    info!("✅ WebDAV capabilities validated: DAV={}, Methods={}", 
+                          capabilities.dav_compliance, capabilities.allowed_methods);
+                }
+                Err(e) => {
+                    warn!("⚠️ WebDAV capability validation failed (continuing anyway): {}", e);
+                }
+            }
+        }
+        
         let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
             <D:propfind xmlns:D="DAV:">
                 <D:prop>
@@ -348,7 +363,7 @@ impl WebDAVService {
         ).await?;
 
         if response.status().as_u16() == 207 {
-            debug!("PROPFIND successful for path: {}", path);
+            debug!("✅ PROPFIND successful for path: {}", path);
             Ok(())
         } else {
             Err(anyhow!(
@@ -358,6 +373,66 @@ impl WebDAVService {
                 response.text().await.unwrap_or_default()
             ))
         }
+    }
+
+    /// Validates WebDAV server capabilities to help diagnose configuration issues
+    async fn validate_webdav_capabilities(&self, url: &str) -> Result<ServerCapabilities> {
+        debug!("🔍 Validating WebDAV capabilities for URL: {}", url);
+        
+        let options_response = self.authenticated_request(
+            reqwest::Method::OPTIONS,
+            url,
+            None,
+            None,
+        ).await?;
+
+        let dav_header = options_response
+            .headers()
+            .get("dav")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+
+        let allow_header = options_response
+            .headers()
+            .get("allow")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+
+        let server_header = options_response
+            .headers()
+            .get("server")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        // Check if PROPFIND is in the allowed methods
+        if !allow_header.to_uppercase().contains("PROPFIND") {
+            warn!("⚠️ PROPFIND method not listed in server's Allow header: {}", allow_header);
+            warn!("💡 This suggests WebDAV may not be properly enabled on this endpoint");
+        }
+
+        // Check DAV compliance level
+        if dav_header.is_empty() {
+            warn!("⚠️ No DAV header found - this endpoint may not support WebDAV");
+        } else {
+            debug!("📋 Server DAV compliance: {}", dav_header);
+        }
+
+        if let Some(ref server) = server_header {
+            debug!("🖥️ Server software: {}", server);
+        }
+
+        Ok(ServerCapabilities {
+            dav_compliance: dav_header.clone(),
+            allowed_methods: allow_header,
+            server_software: server_header,
+            supports_etag: dav_header.contains("1") || dav_header.contains("2"),
+            supports_depth_infinity: dav_header.contains("1"),
+            infinity_depth_tested: false,
+            infinity_depth_works: false,
+            last_checked: std::time::Instant::now(),
+        })
     }
 
     // ============================================================================
@@ -375,6 +450,24 @@ impl WebDAVService {
         let mut attempt = 0;
         let mut delay = self.retry_config.initial_delay_ms;
 
+        // Enhanced debug logging for HTTP requests
+        debug!("🌐 HTTP Request Details:");
+        debug!("   Method: {}", method);
+        debug!("   URL: {}", url);
+        debug!("   Username: {}", self.config.username);
+        if let Some(ref headers_list) = headers {
+            debug!("   Headers: {:?}", headers_list);
+        }
+        if let Some(ref body_content) = body {
+            debug!("   Body length: {} bytes", body_content.len());
+            debug!("   Body preview: {}", 
+                if body_content.len() > 200 { 
+                    format!("{}...", &body_content[..200])
+                } else { 
+                    body_content.clone() 
+                });
+        }
+
         loop {
             let mut request = self.client
                 .request(method.clone(), url)
@@ -390,11 +483,23 @@ impl WebDAVService {
                 }
             }
 
+            debug!("📤 Sending HTTP {} request to: {}", method, url);
             match request.send().await {
                 Ok(response) => {
                     let status = response.status();
+                    debug!("📥 HTTP Response: {} {}", status.as_u16(), status.canonical_reason().unwrap_or(""));
+                    
+                    // Log response headers for debugging
+                    for (key, value) in response.headers() {
+                        if key.as_str().to_lowercase().contains("allow") || 
+                           key.as_str().to_lowercase().contains("dav") ||
+                           key.as_str().to_lowercase().contains("server") {
+                            debug!("   Response header: {}: {:?}", key, value);
+                        }
+                    }
                     
                     if status.is_success() || status.as_u16() == 207 {
+                        debug!("✅ HTTP request successful: {} {}", status.as_u16(), status.canonical_reason().unwrap_or(""));
                         return Ok(response);
                     }
 
@@ -407,8 +512,40 @@ impl WebDAVService {
 
                     // Handle client errors (don't retry)
                     if status.is_client_error() && status.as_u16() != 429 {
-                        return Err(anyhow!("Client error: {} - {}", status, 
-                            response.text().await.unwrap_or_default()));
+                        let error_body = response.text().await.unwrap_or_default();
+                        
+                        // Provide specific guidance for 405 Method Not Allowed errors
+                        if status.as_u16() == 405 {
+                            error!("🚫 HTTP 405 Method Not Allowed for {} {}", method, url);
+                            error!("🔍 Request Details:");
+                            error!("   Method: {}", method);
+                            error!("   URL: {}", url);
+                            error!("   Server type: {:?}", self.config.server_type);
+                            error!("   Username: {}", self.config.username);
+                            error!("   Server base URL: {}", self.config.server_url);
+                            error!("   WebDAV base URL: {}", self.config.webdav_url());
+                            if let Some(ref headers_list) = headers {
+                                error!("   Request headers: {:?}", headers_list);
+                            }
+                            error!("📝 This usually indicates:");
+                            error!("   1. WebDAV is not enabled on the server");
+                            error!("   2. The URL endpoint doesn't support {} method", method);
+                            error!("   3. Incorrect WebDAV endpoint URL");
+                            error!("   4. Authentication issues or insufficient permissions");
+                            error!("💡 Troubleshooting steps:");
+                            error!("   - Verify WebDAV is enabled in your server settings");
+                            error!("   - Check if the WebDAV endpoint URL is correct");
+                            error!("   - Try testing with a WebDAV client like Cyberduck");
+                            error!("   - Verify your user has WebDAV access permissions");
+                            
+                            return Err(anyhow!(
+                                "WebDAV {} method not allowed (405) at URL: {}. This typically means WebDAV is not properly enabled on the server or the URL is incorrect. \
+                                Server type: {:?}, Base URL: {}, WebDAV URL: {}. Error details: {}", 
+                                method, url, self.config.server_type, self.config.server_url, self.config.webdav_url(), error_body
+                            ));
+                        }
+                        
+                        return Err(anyhow!("Client error: {} - {}", status, error_body));
                     }
 
                     // Handle server errors (retry)
@@ -458,13 +595,23 @@ impl WebDAVService {
         let base_url = self.config.webdav_url();
         let clean_path = path.trim_start_matches('/');
         
-        if clean_path.is_empty() {
-            base_url
+        let final_url = if clean_path.is_empty() {
+            base_url.clone()
         } else {
             // Ensure no double slashes by normalizing the base URL
             let normalized_base = base_url.trim_end_matches('/');
             format!("{}/{}", normalized_base, clean_path)
-        }
+        };
+        
+        debug!("🔗 URL Construction:");
+        debug!("   Input path: '{}'", path);
+        debug!("   Clean path: '{}'", clean_path);
+        debug!("   Base WebDAV URL: '{}'", base_url);
+        debug!("   Final URL: '{}'", final_url);
+        debug!("   Server type: {:?}", self.config.server_type);
+        debug!("   Server base URL: '{}'", self.config.server_url);
+        
+        final_url
     }
 
     /// Convert full WebDAV href (from XML response) to relative path
@@ -674,7 +821,60 @@ impl WebDAVService {
 
     /// Discovers both files and directories in a single directory
     async fn discover_files_and_directories_single(&self, directory_path: &str) -> Result<WebDAVDiscoveryResult> {
-        let url = self.get_url_for_path(directory_path);
+        // Try the primary URL first, then fallback URLs if we get a 405 error
+        match self.discover_files_and_directories_single_with_url(directory_path, &self.get_url_for_path(directory_path)).await {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                // Check if this is a 405 Method Not Allowed error
+                if e.to_string().contains("405") || e.to_string().contains("Method Not Allowed") {
+                    warn!("🔄 Primary WebDAV URL failed with 405 error, trying fallback URLs...");
+                    self.try_fallback_discovery(directory_path).await
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Tries fallback URLs when the primary WebDAV URL fails with 405
+    async fn try_fallback_discovery(&self, directory_path: &str) -> Result<WebDAVDiscoveryResult> {
+        let fallback_urls = self.config.webdav_fallback_urls();
+        
+        for (i, fallback_base_url) in fallback_urls.iter().enumerate() {
+            let fallback_url = if directory_path == "/" || directory_path.is_empty() {
+                fallback_base_url.clone()
+            } else {
+                format!("{}/{}", fallback_base_url.trim_end_matches('/'), directory_path.trim_start_matches('/'))
+            };
+            
+            info!("🔄 Trying fallback URL #{}: {}", i + 1, fallback_url);
+            
+            match self.discover_files_and_directories_single_with_url(directory_path, &fallback_url).await {
+                Ok(result) => {
+                    info!("✅ Fallback URL #{} succeeded: {}", i + 1, fallback_url);
+                    warn!("💡 Consider updating your server type configuration to use this URL pattern");
+                    return Ok(result);
+                }
+                Err(e) => {
+                    warn!("❌ Fallback URL #{} failed: {} - {}", i + 1, fallback_url, e);
+                }
+            }
+        }
+        
+        Err(anyhow!(
+            "All WebDAV URLs failed for directory '{}'. Primary URL and {} fallback URLs were tried. \
+            This suggests WebDAV is not properly configured on the server or the server type is incorrect.",
+            directory_path, fallback_urls.len()
+        ))
+    }
+
+    /// Performs the actual discovery with a specific URL
+    async fn discover_files_and_directories_single_with_url(&self, directory_path: &str, url: &str) -> Result<WebDAVDiscoveryResult> {
+        // Enhanced debug logging for WebDAV URL construction
+        debug!("🔍 WebDAV directory scan - Path: '{}', URL: '{}', Server type: {:?}", 
+               directory_path, url, self.config.server_type);
+        debug!("🔧 WebDAV config - Server URL: '{}', Username: '{}', WebDAV base URL: '{}'", 
+               self.config.server_url, self.config.username, self.config.webdav_url());
         
         let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
             <D:propfind xmlns:D="DAV:">
@@ -688,15 +888,22 @@ impl WebDAVService {
                 </D:prop>
             </D:propfind>"#;
 
+        debug!("📤 Sending PROPFIND request to URL: {}", url);
+        debug!("📋 PROPFIND body length: {} bytes", propfind_body.len());
+
         let response = self.authenticated_request(
             Method::from_bytes(b"PROPFIND")?,
-            &url,
+            url,
             Some(propfind_body.to_string()),
             Some(vec![
                 ("Depth", "1"),
                 ("Content-Type", "application/xml"),
             ]),
-        ).await?;
+        ).await.map_err(|e| {
+            error!("❌ PROPFIND request failed for directory '{}' at URL '{}': {}", 
+                   directory_path, url, e);
+            e
+        })?;
 
         let body = response.text().await?;
         let all_items = parse_propfind_response_with_directories(&body)?;

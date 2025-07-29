@@ -157,6 +157,41 @@ impl WebDAVConfig {
         }
     }
 
+    /// Returns alternative WebDAV URLs to try if the primary one fails
+    /// This is used for fallback mechanisms when encountering 405 errors
+    pub fn webdav_fallback_urls(&self) -> Vec<String> {
+        let normalized_url = self.server_url.trim_end_matches('/').to_string();
+        let mut fallback_urls = Vec::new();
+        
+        match self.server_type.as_deref() {
+            Some("nextcloud") => {
+                // Primary: /remote.php/dav/files/{username}
+                // Fallback 1: /remote.php/webdav (legacy ownCloud style)  
+                // Fallback 2: /webdav (generic)
+                fallback_urls.push(format!("{}/remote.php/webdav", normalized_url));
+                fallback_urls.push(format!("{}/webdav", normalized_url));
+            }
+            Some("owncloud") => {
+                // Primary: /remote.php/webdav
+                // Fallback 1: /remote.php/dav/files/{username} (newer Nextcloud style)
+                // Fallback 2: /webdav (generic)
+                fallback_urls.push(format!("{}/remote.php/dav/files/{}", normalized_url, self.username));
+                fallback_urls.push(format!("{}/webdav", normalized_url));
+            }
+            _ => {
+                // Generic WebDAV - try common patterns
+                // Fallback 1: /remote.php/webdav (ownCloud/Nextcloud)
+                // Fallback 2: /remote.php/dav/files/{username} (Nextcloud)
+                // Fallback 3: /dav (alternative)
+                fallback_urls.push(format!("{}/remote.php/webdav", normalized_url));
+                fallback_urls.push(format!("{}/remote.php/dav/files/{}", normalized_url, self.username));
+                fallback_urls.push(format!("{}/dav", normalized_url));
+            }
+        }
+        
+        fallback_urls
+    }
+
     /// Checks if a file extension is supported
     pub fn is_supported_extension(&self, filename: &str) -> bool {
         if self.file_extensions.is_empty() {
