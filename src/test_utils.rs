@@ -241,7 +241,13 @@ impl TestContext {
         let mut retries = 0;
         const MAX_RETRIES: u32 = 15;
         let db = loop {
-            match crate::db::Database::new_with_pool_config(&database_url, 5, 1).await {
+            // Use larger pool for error handling tests that need more concurrent connections
+            let (max_connections, min_connections) = if std::env::var("TEST_REQUIRES_LARGER_POOL").is_ok() {
+                (15, 3) // Larger pool for error handling tests
+            } else {
+                (5, 1)  // Standard small pool for regular tests
+            };
+            match crate::db::Database::new_with_pool_config(&database_url, max_connections, min_connections).await {
                 Ok(test_db) => {
                     // Run migrations
                     let migrations = sqlx::migrate!("./migrations");

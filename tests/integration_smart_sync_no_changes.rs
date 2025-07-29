@@ -1,13 +1,11 @@
-use std::sync::Arc;
 use readur::{
-    AppState,
     models::{CreateWebDAVDirectory, User, AuthProvider},
-    services::webdav::{SmartSyncService, SmartSyncStrategy, SmartSyncDecision, WebDAVService, WebDAVConfig},
+    services::webdav::{SmartSyncService, WebDAVService, WebDAVConfig},
     test_utils::{TestContext, TestAuthHelper},
 };
 
-/// Helper function to create test database and user
-async fn create_test_setup() -> (Arc<AppState>, User) {
+/// Helper function to create test database and user with automatic cleanup
+async fn create_test_setup() -> (TestContext, User) {
     let test_context = TestContext::new().await;
     let auth_helper = TestAuthHelper::new(test_context.app().clone());
     let test_user = auth_helper.create_test_user().await;
@@ -27,7 +25,7 @@ async fn create_test_setup() -> (Arc<AppState>, User) {
         auth_provider: AuthProvider::Local,
     };
 
-    (test_context.state().clone(), user)
+    (test_context, user)
 }
 
 /// Helper function to create WebDAV service for testing
@@ -50,7 +48,8 @@ async fn test_smart_sync_no_changes_skip() {
     // Integration Test: Smart sync with no directory changes should skip sync entirely
     // Expected: Should return SkipSync when all directory ETags are unchanged
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     let smart_sync_service = SmartSyncService::new(state.clone());
     
     // Pre-populate database with known directory ETags
@@ -112,6 +111,11 @@ async fn test_smart_sync_no_changes_skip() {
     assert_eq!(archive_dir.file_count, 25);
     
     println!("✅ No changes sync test completed successfully - bulk fetch in {:?}", fetch_duration);
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }
 
 #[tokio::test]
@@ -119,7 +123,8 @@ async fn test_directory_etag_comparison_efficiency() {
     // Integration Test: Directory ETag comparison should be efficient for large numbers of directories
     // This tests the bulk fetching performance optimization
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     
     // Create a larger number of directories to test performance
     let num_directories = 100;
@@ -169,4 +174,9 @@ async fn test_directory_etag_comparison_efficiency() {
     println!("✅ Directory ETag comparison efficiency test completed successfully");
     println!("   Created {} directories in {:?}", num_directories, insert_duration);
     println!("   Fetched {} directories in {:?}", num_directories, fetch_duration);
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }

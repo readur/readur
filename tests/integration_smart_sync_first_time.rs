@@ -1,13 +1,11 @@
-use std::sync::Arc;
 use readur::{
-    AppState,
     models::{CreateWebDAVDirectory, User, AuthProvider},
     services::webdav::{SmartSyncService, SmartSyncStrategy, SmartSyncDecision, WebDAVService, WebDAVConfig},
     test_utils::{TestContext, TestAuthHelper},
 };
 
-/// Helper function to create test database and user
-async fn create_test_setup() -> (Arc<AppState>, User) {
+/// Helper function to create test database and user with automatic cleanup
+async fn create_test_setup() -> (TestContext, User) {
     let test_context = TestContext::new().await;
     let auth_helper = TestAuthHelper::new(test_context.app().clone());
     let test_user = auth_helper.create_test_user().await;
@@ -27,7 +25,7 @@ async fn create_test_setup() -> (Arc<AppState>, User) {
         auth_provider: AuthProvider::Local,
     };
 
-    (test_context.state().clone(), user)
+    (test_context, user)
 }
 
 /// Helper function to create WebDAV service for testing
@@ -50,7 +48,8 @@ async fn test_first_time_sync_full_deep_scan() {
     // Integration Test: First-time sync with no existing directory ETags
     // Expected: Should perform full deep scan and save all discovered directory ETags
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     let smart_sync_service = SmartSyncService::new(state.clone());
     
     // Verify no existing directories tracked
@@ -74,6 +73,11 @@ async fn test_first_time_sync_full_deep_scan() {
     }
     
     println!("✅ First-time sync test completed successfully");
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }
 
 #[tokio::test] 
@@ -81,7 +85,8 @@ async fn test_first_time_sync_saves_directory_etags() {
     // Integration Test: First-time sync should save discovered directory ETags to database
     // This test focuses on the database persistence aspect
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     
     // Manually create directories that would be discovered by WebDAV
     let discovered_directories = vec![
@@ -135,4 +140,9 @@ async fn test_first_time_sync_saves_directory_etags() {
     assert_eq!(archive_dir.total_size_bytes, 2048000);
     
     println!("✅ First-time sync directory ETag persistence test completed successfully");
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }

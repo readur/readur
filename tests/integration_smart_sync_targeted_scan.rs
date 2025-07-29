@@ -1,13 +1,12 @@
-use std::sync::Arc;
 use readur::{
-    AppState,
     models::{CreateWebDAVDirectory, User, AuthProvider},
-    services::webdav::{SmartSyncService, SmartSyncStrategy, SmartSyncDecision, WebDAVService, WebDAVConfig},
+    services::webdav::{WebDAVService, WebDAVConfig},
     test_utils::{TestContext, TestAuthHelper},
 };
+use std::collections::HashMap;
 
-/// Helper function to create test database and user
-async fn create_test_setup() -> (Arc<AppState>, User) {
+/// Helper function to create test database and user with automatic cleanup
+async fn create_test_setup() -> (TestContext, User) {
     let test_context = TestContext::new().await;
     let auth_helper = TestAuthHelper::new(test_context.app().clone());
     let test_user = auth_helper.create_test_user().await;
@@ -27,7 +26,7 @@ async fn create_test_setup() -> (Arc<AppState>, User) {
         auth_provider: AuthProvider::Local,
     };
 
-    (test_context.state().clone(), user)
+    (test_context, user)
 }
 
 /// Helper function to create WebDAV service for testing
@@ -50,7 +49,8 @@ async fn test_smart_sync_targeted_scan() {
     // Integration Test: Smart sync with single directory changed should use targeted scan
     // Expected: Should return RequiresSync(TargetedScan) when only a few directories have changed
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     
     // Create a scenario with many directories, where only one has changed
     let unchanged_directories = vec![
@@ -93,6 +93,11 @@ async fn test_smart_sync_targeted_scan() {
     assert!(should_use_targeted, "Should use targeted scan for small changes: {:.1}% change ratio", change_ratio * 100.0);
     
     println!("✅ Targeted scan strategy selection test passed - 10% change triggers targeted scan");
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }
 
 #[tokio::test]
@@ -100,7 +105,8 @@ async fn test_targeted_scan_vs_full_scan_thresholds() {
     // Integration Test: Test various scenarios for when to use targeted vs full scan
     // Expected: Strategy should be chosen based on change ratio and new directory count
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     
     // Create base directories for testing different scenarios
     let base_directories = 20; // Start with 20 directories
@@ -150,6 +156,11 @@ async fn test_targeted_scan_vs_full_scan_thresholds() {
     println!("   Scenario 2 (40% changes, 2 new): Full scan");
     println!("   Scenario 3 (5% changes, 7 new): Full scan");
     println!("   Scenario 4 (30% changes, 5 new): Targeted scan");
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }
 
 #[tokio::test]
@@ -157,7 +168,8 @@ async fn test_directory_change_detection_logic() {
     // Integration Test: Test the logic for detecting changed, new, and unchanged directories
     // This is the core of the targeted scan decision making
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     
     // Set up known directories in database
     let known_dirs = vec![
@@ -256,4 +268,9 @@ async fn test_directory_change_detection_logic() {
     println!("   Deleted: {} directories", deleted_directories.len());
     println!("   Change ratio: {:.1}%", change_ratio * 100.0);
     println!("   Strategy: {}", if should_use_targeted { "Targeted scan" } else { "Full scan" });
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }

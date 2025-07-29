@@ -1,14 +1,24 @@
-use std::sync::Arc;
 use readur::{
-    AppState,
     models::{CreateWebDAVDirectory, User, AuthProvider},
     services::webdav::{SmartSyncService, SmartSyncStrategy, SmartSyncDecision, WebDAVService, WebDAVConfig},
     test_utils::{TestContext, TestAuthHelper},
 };
 
-/// Helper function to create test database and user
-async fn create_test_setup() -> (Arc<AppState>, User) {
-    let test_context = TestContext::new().await;
+/// Helper function to create test database and user with enhanced pool configuration
+async fn create_test_setup() -> (TestContext, User) {
+    // Set environment variable to use larger database pool for error handling tests
+    std::env::set_var("TEST_REQUIRES_LARGER_POOL", "1");
+    
+    // Create TestContext with larger connection pool for error handling tests
+    let config_builder = readur::test_utils::TestConfigBuilder::default()
+        .with_concurrent_ocr_jobs(2); // Reduce concurrent jobs to prevent pool exhaustion
+    let test_context = TestContext::with_config(config_builder).await;
+    
+    // Wait for pool to be ready before proceeding
+    if let Err(e) = test_context.wait_for_pool_health(10).await {
+        eprintln!("Warning: Pool health check failed: {}", e);
+    }
+    
     let auth_helper = TestAuthHelper::new(test_context.app().clone());
     let test_user = auth_helper.create_test_user().await;
     
@@ -27,7 +37,7 @@ async fn create_test_setup() -> (Arc<AppState>, User) {
         auth_provider: AuthProvider::Local,
     };
 
-    (test_context.state().clone(), user)
+    (test_context, user)
 }
 
 /// Helper function to create WebDAV service for testing
@@ -50,7 +60,8 @@ async fn test_webdav_error_fallback() {
     // Integration Test: WebDAV server error scenarios should fall back to traditional sync
     // Expected: When WebDAV service fails, should gracefully handle errors
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     let smart_sync_service = SmartSyncService::new(state.clone());
     
     // Create some existing directories to test database robustness
@@ -117,6 +128,11 @@ async fn test_webdav_error_fallback() {
     assert_eq!(root_dir.directory_etag, "existing-root");
     
     println!("✅ WebDAV error fallback test completed - database remains intact");
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }
 
 #[tokio::test]
@@ -124,7 +140,8 @@ async fn test_database_error_handling() {
     // Integration Test: Database errors should be handled gracefully
     // This tests the system's resilience to database connectivity issues
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     let smart_sync_service = SmartSyncService::new(state.clone());
     
     // Test with invalid user ID (simulates database query errors)
@@ -163,6 +180,11 @@ async fn test_database_error_handling() {
     assert_eq!(saved_dirs.len(), 1, "Normal database operations should work after error handling");
     
     println!("✅ Database error handling test completed");
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }
 
 #[tokio::test]
@@ -170,7 +192,8 @@ async fn test_concurrent_smart_sync_operations() {
     // Integration Test: Concurrent smart sync operations should not interfere with each other
     // This tests race conditions and database locking
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     
     // Create initial directories
     let initial_dirs = vec![
@@ -195,8 +218,8 @@ async fn test_concurrent_smart_sync_operations() {
             .expect("Failed to create initial directory");
     }
     
-    // Run multiple concurrent operations
-    let num_concurrent = 5;
+    // Run multiple concurrent operations (reduced from 5 to 3 to prevent pool exhaustion)
+    let num_concurrent = 3;
     let mut handles = Vec::new();
     
     for i in 0..num_concurrent {
@@ -261,6 +284,11 @@ async fn test_concurrent_smart_sync_operations() {
     println!("   {} initial directories preserved", initial_dirs.len());
     println!("   {} concurrent operations executed", num_concurrent);
     println!("   {} operations successful", success_count);
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }
 
 #[tokio::test]
@@ -268,7 +296,8 @@ async fn test_malformed_data_recovery() {
     // Integration Test: System should handle and recover from malformed data gracefully
     // This tests robustness against data corruption scenarios
     
-    let (state, user) = create_test_setup().await;
+    let (test_context, user) = create_test_setup().await;
+    let state = test_context.state().clone();
     
     // Create a directory with normal data first
     let normal_dir = CreateWebDAVDirectory {
@@ -348,4 +377,9 @@ async fn test_malformed_data_recovery() {
     println!("   {} edge cases handled successfully", successful_edge_cases);
     println!("   {} edge cases failed as expected", failed_edge_cases);
     println!("   Database remains functional after edge case testing");
+    
+    // Clean up test context
+    if let Err(e) = test_context.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
 }
