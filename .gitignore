@@ -4,7 +4,7 @@ node_modules/
 .env
 assets/
 frontend/dist/
-.claude/
+.claude/settings.local.json # This file is used to store the local Claude settings.
 readur_uploads/
 readur_watch/
 test-results/

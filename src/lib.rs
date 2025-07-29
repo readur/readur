@@ -5,6 +5,7 @@ pub mod db_guardrails_simple;
 pub mod errors;
 pub mod ingestion;
 pub mod metadata_extraction;
+pub mod mime_detection;
 pub mod models;
 pub mod monitoring;
 pub mod ocr;

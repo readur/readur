@@ -14,6 +14,7 @@ use crate::models::{
     WebDAVFolderInfo,
 };
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
+use crate::mime_detection::{detect_mime_from_content, update_mime_type_with_content, MimeDetectionResult};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 
@@ -22,6 +23,15 @@ use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress
 pub struct WebDAVDiscoveryResult {
     pub files: Vec<FileIngestionInfo>,
     pub directories: Vec<FileIngestionInfo>,
+}
+
+/// Result of downloading a file with MIME type detection
+#[derive(Debug, Clone)]
+pub struct WebDAVDownloadResult {
+    pub content: Vec<u8>,
+    pub file_info: FileIngestionInfo,
+    pub mime_detection: MimeDetectionResult,
+    pub mime_type_updated: bool,
 }
 
 /// Server capabilities information
@@ -135,6 +145,8 @@ pub struct WebDAVService {
     concurrency_config: ConcurrencyConfig,
     scan_semaphore: Arc<Semaphore>,
     download_semaphore: Arc<Semaphore>,
+    /// Stores the working protocol (updated after successful protocol detection)
+    working_protocol: Arc<std::sync::RwLock<Option<String>>>,
 }
 
 impl WebDAVService {
@@ -173,7 +185,154 @@ impl WebDAVService {
             concurrency_config,
             scan_semaphore,
             download_semaphore,
+            working_protocol: Arc::new(std::sync::RwLock::new(None)),
         })
+    }
+
+    // ============================================================================
+    // Protocol Detection Methods
+    // ============================================================================
+
+    /// Detects the working protocol by trying HTTPS first, then HTTP
+    /// This method handles smart protocol detection for URLs without explicit protocols
+    async fn detect_working_protocol(&self) -> Result<String> {
+        info!("🔍 Starting smart protocol detection for: {}", self.config.server_url);
+
+        // If URL already has a protocol, use it directly
+        if self.config.server_url.starts_with("http://") || self.config.server_url.starts_with("https://") {
+            let protocol = if self.config.server_url.starts_with("https://") { "https" } else { "http" };
+            info!("✅ Protocol already specified: {}", protocol);
+            return Ok(protocol.to_string());
+        }
+
+        // Try HTTPS first (more secure default)
+        let https_url = format!("https://{}", self.config.server_url.trim());
+        info!("🔐 Trying HTTPS first: {}", https_url);
+        
+        match self.test_protocol_connection(&https_url).await {
+            Ok(()) => {
+                info!("✅ HTTPS connection successful");
+                // Store the working protocol for future use
+                if let Ok(mut working_protocol) = self.working_protocol.write() {
+                    *working_protocol = Some("https".to_string());
+                }
+                return Ok("https".to_string());
+            }
+            Err(https_error) => {
+                warn!("❌ HTTPS connection failed: {}", https_error);
+                
+                // Check if this is a connection-related error (not auth error)
+                if self.is_connection_error(&https_error) {
+                    info!("🔄 HTTPS failed with connection error, trying HTTP fallback");
+                    
+                    // Try HTTP fallback
+                    let http_url = format!("http://{}", self.config.server_url.trim());
+                    info!("🔓 Trying HTTP fallback: {}", http_url);
+                    
+                    match self.test_protocol_connection(&http_url).await {
+                        Ok(()) => {
+                            warn!("⚠️ HTTP connection successful - consider configuring HTTPS for security");
+                            // Store the working protocol for future use
+                            if let Ok(mut working_protocol) = self.working_protocol.write() {
+                                *working_protocol = Some("http".to_string());
+                            }
+                            return Ok("http".to_string());
+                        }
+                        Err(http_error) => {
+                            error!("❌ Both HTTPS and HTTP failed");
+                            error!("   HTTPS error: {}", https_error);
+                            error!("   HTTP error: {}", http_error);
+                            return Err(anyhow!(
+                                "Protocol detection failed. Both HTTPS and HTTP connections failed. \
+                                HTTPS error: {}. HTTP error: {}. \
+                                Please verify the server URL and ensure WebDAV is properly configured.",
+                                https_error, http_error
+                            ));
+                        }
+                    }
+                } else {
+                    // Auth or other non-connection error with HTTPS - don't try HTTP
+                    error!("❌ HTTPS failed with non-connection error (likely auth or server config): {}", https_error);
+                    return Err(anyhow!(
+                        "HTTPS connection failed with authentication or server configuration error: {}. \
+                        Please check your credentials and server settings.", 
+                        https_error
+                    ));
+                }
+            }
+        }
+    }
+
+    /// Tests connection with a specific protocol URL
+    async fn test_protocol_connection(&self, full_url: &str) -> Result<()> {
+        debug!("🧪 Testing protocol connection to: {}", full_url);
+        
+        // Create a temporary config with the full URL for testing
+        let temp_config = WebDAVConfig {
+            server_url: full_url.to_string(),
+            username: self.config.username.clone(),
+            password: self.config.password.clone(),
+            watch_folders: self.config.watch_folders.clone(),
+            file_extensions: self.config.file_extensions.clone(),
+            timeout_seconds: self.config.timeout_seconds,
+            server_type: self.config.server_type.clone(),
+        };
+
+        // Test basic OPTIONS request
+        let webdav_url = temp_config.webdav_url();
+        debug!("📍 Testing WebDAV URL: {}", webdav_url);
+        
+        let response = self.client
+            .request(Method::OPTIONS, &webdav_url)
+            .basic_auth(&self.config.username, Some(&self.config.password))
+            .send()
+            .await
+            .map_err(|e| anyhow!("Connection failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Protocol test failed with status: {} - {}",
+                response.status(),
+                response.text().await.unwrap_or_default()
+            ));
+        }
+
+        debug!("✅ Protocol connection test successful");
+        Ok(())
+    }
+
+    /// Determines if an error is connection-related (vs auth or other errors)
+    pub fn is_connection_error(&self, error: &anyhow::Error) -> bool {
+        let error_str = error.to_string().to_lowercase();
+        
+        // Connection-related errors that suggest trying different protocol
+        error_str.contains("connection refused") ||
+        error_str.contains("timeout") ||
+        error_str.contains("dns") ||
+        error_str.contains("network") ||
+        error_str.contains("unreachable") ||
+        error_str.contains("tls") ||
+        error_str.contains("ssl") ||
+        error_str.contains("certificate") ||
+        error_str.contains("handshake")
+    }
+
+    /// Gets the currently working protocol (if detected)
+    pub fn get_working_protocol(&self) -> Option<String> {
+        self.working_protocol.read().ok().and_then(|p| p.clone())
+    }
+
+    /// Gets the effective server URL with the working protocol
+    pub fn get_effective_server_url(&self) -> String {
+        // If we have a detected working protocol, use it
+        if let Some(protocol) = self.get_working_protocol() {
+            if !self.config.server_url.starts_with("http://") && !self.config.server_url.starts_with("https://") {
+                return format!("{}://{}", protocol, self.config.server_url.trim());
+            }
+        }
+        
+        // Otherwise use the configured URL (normalized)
+        WebDAVConfig::normalize_server_url(&self.config.server_url)
     }
 
     // ============================================================================
@@ -194,13 +353,31 @@ impl WebDAVService {
             });
         }
 
-        // Test basic connectivity with OPTIONS request
+        // Perform protocol detection if needed
+        let working_protocol = match self.detect_working_protocol().await {
+            Ok(protocol) => {
+                info!("✅ Protocol detection successful: {}", protocol);
+                protocol
+            }
+            Err(e) => {
+                error!("❌ Protocol detection failed: {}", e);
+                return Ok(WebDAVConnectionResult {
+                    success: false,
+                    message: format!("Protocol detection failed: {}", e),
+                    server_version: None,
+                    server_type: None,
+                });
+            }
+        };
+
+        // Test basic connectivity with OPTIONS request using detected protocol
         match self.test_options_request().await {
             Ok((server_version, server_type)) => {
-                info!("✅ WebDAV connection successful");
+                let effective_url = self.get_effective_server_url();
+                info!("✅ WebDAV connection successful using {} ({})", working_protocol.to_uppercase(), effective_url);
                 Ok(WebDAVConnectionResult {
                     success: true,
-                    message: "Connection successful".to_string(),
+                    message: format!("Connection successful using {}", working_protocol.to_uppercase()),
                     server_version,
                     server_type,
                 })
@@ -235,7 +412,18 @@ impl WebDAVService {
 
     /// Performs OPTIONS request to test basic connectivity
     async fn test_options_request(&self) -> Result<(Option<String>, Option<String>)> {
-        let webdav_url = self.config.webdav_url();
+        // Create a temporary config with the effective server URL for WebDAV operations
+        let effective_server_url = self.get_effective_server_url();
+        let temp_config = WebDAVConfig {
+            server_url: effective_server_url,
+            username: self.config.username.clone(),
+            password: self.config.password.clone(),
+            watch_folders: self.config.watch_folders.clone(),
+            file_extensions: self.config.file_extensions.clone(),
+            timeout_seconds: self.config.timeout_seconds,
+            server_type: self.config.server_type.clone(),
+        };
+        let webdav_url = temp_config.webdav_url();
         
         let response = self.client
             .request(Method::OPTIONS, &webdav_url)
@@ -304,8 +492,9 @@ impl WebDAVService {
 
     /// Tests for Nextcloud-specific capabilities
     async fn test_nextcloud_capabilities(&self) -> Result<()> {
+        let effective_server_url = self.get_effective_server_url();
         let capabilities_url = format!("{}/ocs/v1.php/cloud/capabilities", 
-            self.config.server_url.trim_end_matches('/'));
+            effective_server_url.trim_end_matches('/'));
 
         let response = self.client
             .get(&capabilities_url)
@@ -592,7 +781,18 @@ impl WebDAVService {
 
     /// Gets the WebDAV URL for a specific path
     pub fn get_url_for_path(&self, path: &str) -> String {
-        let base_url = self.config.webdav_url();
+        // Create a temporary config with the effective server URL
+        let effective_server_url = self.get_effective_server_url();
+        let temp_config = WebDAVConfig {
+            server_url: effective_server_url,
+            username: self.config.username.clone(),
+            password: self.config.password.clone(),
+            watch_folders: self.config.watch_folders.clone(),
+            file_extensions: self.config.file_extensions.clone(),
+            timeout_seconds: self.config.timeout_seconds,
+            server_type: self.config.server_type.clone(),
+        };
+        let base_url = temp_config.webdav_url();
         let clean_path = path.trim_start_matches('/');
         
         let final_url = if clean_path.is_empty() {
@@ -652,7 +852,18 @@ impl WebDAVService {
     /// Convert file paths to the proper URL format for the server
     pub fn path_to_url(&self, relative_path: &str) -> String {
         let clean_path = relative_path.trim_start_matches('/');
-        let base_url = self.config.webdav_url();
+        // Create a temporary config with the effective server URL
+        let effective_server_url = self.get_effective_server_url();
+        let temp_config = WebDAVConfig {
+            server_url: effective_server_url,
+            username: self.config.username.clone(),
+            password: self.config.password.clone(),
+            watch_folders: self.config.watch_folders.clone(),
+            file_extensions: self.config.file_extensions.clone(),
+            timeout_seconds: self.config.timeout_seconds,
+            server_type: self.config.server_type.clone(),
+        };
+        let base_url = temp_config.webdav_url();
         
         if clean_path.is_empty() {
             base_url
@@ -777,42 +988,64 @@ impl WebDAVService {
     async fn discover_files_recursive(&self, directory_path: &str) -> Result<Vec<FileIngestionInfo>> {
         let mut all_files = Vec::new();
         let mut directories_to_scan = vec![directory_path.to_string()];
+        let mut scanned_directories = std::collections::HashSet::new();
         let semaphore = Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
         
+        debug!("Starting recursive file scan from: {}", directory_path);
+        
         while !directories_to_scan.is_empty() {
-            let current_directories = directories_to_scan.clone();
-            directories_to_scan.clear();
+            // Take a batch of directories to process
+            let batch_size = std::cmp::min(directories_to_scan.len(), self.concurrency_config.max_concurrent_scans);
+            let current_batch: Vec<String> = directories_to_scan.drain(..batch_size).collect();
+            
+            debug!("Processing batch of {} directories, {} remaining in queue", 
+                   current_batch.len(), directories_to_scan.len());
 
             // Process directories concurrently
-            let tasks = current_directories.into_iter().map(|dir| {
+            let tasks = current_batch.into_iter().filter_map(|dir| {
+                // Skip if already scanned
+                if scanned_directories.contains(&dir) {
+                    debug!("Skipping already scanned directory: {}", dir);
+                    return None;
+                }
+                scanned_directories.insert(dir.clone());
+                
                 let permit = semaphore.clone();
                 let service = self.clone();
                 
-                async move {
+                Some(async move {
                     let _permit = permit.acquire().await.unwrap();
-                    service.discover_files_and_directories_single(&dir).await
-                }
+                    let result = service.discover_files_and_directories_single(&dir).await;
+                    (dir, result)
+                })
             });
 
             let results = futures_util::future::join_all(tasks).await;
 
-            for result in results {
+            for (scanned_dir, result) in results {
                 match result {
                     Ok(discovery_result) => {
+                        debug!("Directory '{}' scan complete: {} files, {} subdirectories", 
+                               scanned_dir, discovery_result.files.len(), discovery_result.directories.len());
+                        
                         all_files.extend(discovery_result.files);
                         
                         // Add subdirectories to the queue for the next iteration
                         for dir in discovery_result.directories {
-                            if dir.is_directory {
-                                directories_to_scan.push(dir.relative_path);
+                            if dir.is_directory && !scanned_directories.contains(&dir.relative_path) {
+                                directories_to_scan.push(dir.relative_path.clone());
+                                debug!("Added subdirectory to scan queue: {}", dir.relative_path);
                             }
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to scan directory: {}", e);
+                        warn!("Failed to scan directory '{}': {}", scanned_dir, e);
                     }
                 }
             }
+            
+            debug!("Batch complete. Total files found: {}. Queue size: {}", 
+                   all_files.len(), directories_to_scan.len());
         }
 
         info!("Recursive scan completed. Found {} files total", all_files.len());
@@ -908,12 +1141,19 @@ impl WebDAVService {
         let body = response.text().await?;
         let all_items = parse_propfind_response_with_directories(&body)?;
         
+        // Process the items to convert href to relative paths
+        let processed_items = self.process_file_infos(all_items);
+        
         // Separate files and directories, excluding the parent directory itself
         let mut files = Vec::new();
         let mut directories = Vec::new();
         
-        for item in all_items {
-            if item.relative_path == directory_path {
+        for item in processed_items {
+            // Skip the directory itself (handle both with and without trailing slash)
+            let normalized_item_path = item.relative_path.trim_end_matches('/');
+            let normalized_directory_path = directory_path.trim_end_matches('/');
+            
+            if normalized_item_path == normalized_directory_path {
                 continue; // Skip the directory itself
             }
             
@@ -933,41 +1173,69 @@ impl WebDAVService {
         let mut all_files = Vec::new();
         let mut all_directories = Vec::new();
         let mut directories_to_scan = vec![directory_path.to_string()];
+        let mut scanned_directories = std::collections::HashSet::new();
         let semaphore = Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
         
+        debug!("Starting recursive scan from: {}", directory_path);
+        
         while !directories_to_scan.is_empty() {
-            let current_directories = directories_to_scan.clone();
-            directories_to_scan.clear();
+            // Take a batch of directories to process (limit batch size for better progress tracking)
+            let batch_size = std::cmp::min(directories_to_scan.len(), self.concurrency_config.max_concurrent_scans);
+            let current_batch: Vec<String> = directories_to_scan.drain(..batch_size).collect();
+            
+            debug!("Processing batch of {} directories, {} remaining in queue", 
+                   current_batch.len(), directories_to_scan.len());
 
             // Process directories concurrently
-            let tasks = current_directories.into_iter().map(|dir| {
+            let tasks = current_batch.into_iter().filter_map(|dir| {
+                // Skip if already scanned (prevent infinite loops)
+                if scanned_directories.contains(&dir) {
+                    debug!("Skipping already scanned directory: {}", dir);
+                    return None;
+                }
+                scanned_directories.insert(dir.clone());
+                
                 let permit = semaphore.clone();
                 let service = self.clone();
                 
-                async move {
+                Some(async move {
                     let _permit = permit.acquire().await.unwrap();
-                    service.discover_files_and_directories_single(&dir).await
-                }
+                    let result = service.discover_files_and_directories_single(&dir).await;
+                    (dir, result)
+                })
             });
 
             let results = futures_util::future::join_all(tasks).await;
 
-            for result in results {
+            for (scanned_dir, result) in results {
                 match result {
                     Ok(discovery_result) => {
+                        debug!("Directory '{}' scan complete: {} files, {} subdirectories", 
+                               scanned_dir, discovery_result.files.len(), discovery_result.directories.len());
+                        
                         all_files.extend(discovery_result.files);
                         
                         // Add directories to our results and to the scan queue
                         for dir in discovery_result.directories {
-                            directories_to_scan.push(dir.relative_path.clone());
+                            // Only add to scan queue if not already scanned
+                            if !scanned_directories.contains(&dir.relative_path) {
+                                directories_to_scan.push(dir.relative_path.clone());
+                                debug!("Added subdirectory to scan queue: {} (scanned set size: {})", 
+                                       dir.relative_path, scanned_directories.len());
+                            } else {
+                                debug!("Skipping already scanned directory: {} (already in scanned set)", dir.relative_path);
+                            }
                             all_directories.push(dir);
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to scan directory: {}", e);
+                        warn!("Failed to scan directory '{}': {}", scanned_dir, e);
                     }
                 }
             }
+            
+            debug!("Batch complete. Total progress: {} files, {} directories found. Queue size: {}", 
+                   all_files.len(), all_directories.len(), directories_to_scan.len());
         }
 
         info!("Recursive scan completed. Found {} files and {} directories", all_files.len(), all_directories.len());
@@ -1172,6 +1440,131 @@ impl WebDAVService {
         Ok(results)
     }
 
+    /// Downloads a file with enhanced MIME type detection based on content
+    /// 
+    /// This method downloads the file and performs content-based MIME type detection
+    /// using magic bytes, providing more accurate type identification than the initial
+    /// discovery phase which only has access to filenames and server-provided types.
+    /// 
+    /// # Arguments
+    /// * `file_info` - The file information from WebDAV discovery
+    /// 
+    /// # Returns
+    /// A `WebDAVDownloadResult` containing the file content, updated file info, and MIME detection details
+    pub async fn download_file_with_mime_detection(&self, file_info: &FileIngestionInfo) -> Result<WebDAVDownloadResult> {
+        let _permit = self.download_semaphore.acquire().await?;
+        
+        debug!("⬇️🔍 Downloading file with MIME detection: {}", file_info.relative_path);
+        
+        // Use the relative path directly since it's already processed
+        let relative_path = &file_info.relative_path;
+        let url = self.get_url_for_path(&relative_path);
+        
+        let response = self.authenticated_request(
+            reqwest::Method::GET,
+            &url,
+            None,
+            None,
+        ).await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Failed to download file '{}': HTTP {}",
+                file_info.relative_path,
+                response.status()
+            ));
+        }
+
+        // Get server-provided content type from response headers
+        let server_content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|header| header.to_str().ok())
+            .map(|s| s.split(';').next().unwrap_or(s).trim().to_string()); // Remove charset info and convert to owned
+
+        let content = response.bytes().await?;
+        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_info.relative_path);
+        
+        // Perform content-based MIME type detection
+        let mime_detection_result = detect_mime_from_content(
+            &content,
+            &file_info.name,
+            server_content_type.as_deref()
+        );
+
+        // Check if MIME type should be updated
+        let mime_type_updated = mime_detection_result.mime_type != file_info.mime_type;
+        
+        if mime_type_updated {
+            debug!("🔄 MIME type updated for {}: '{}' -> '{}' (method: {:?}, confidence: {:?})",
+                   file_info.name,
+                   file_info.mime_type,
+                   mime_detection_result.mime_type,
+                   mime_detection_result.detection_method,
+                   mime_detection_result.confidence);
+        } else {
+            debug!("✅ MIME type confirmed for {}: '{}' (method: {:?}, confidence: {:?})",
+                   file_info.name,
+                   mime_detection_result.mime_type,
+                   mime_detection_result.detection_method,
+                   mime_detection_result.confidence);
+        }
+
+        // Create updated file info if MIME type changed
+        let updated_file_info = if mime_type_updated {
+            let mut updated = file_info.clone();
+            updated.mime_type = mime_detection_result.mime_type.clone();
+            updated
+        } else {
+            file_info.clone()
+        };
+
+        Ok(WebDAVDownloadResult {
+            content: content.to_vec(),
+            file_info: updated_file_info,
+            mime_detection: mime_detection_result,
+            mime_type_updated,
+        })
+    }
+
+    /// Downloads multiple files with MIME type detection concurrently
+    /// 
+    /// Similar to `download_files` but includes content-based MIME type detection
+    /// for each downloaded file.
+    /// 
+    /// # Arguments
+    /// * `files` - The files to download
+    /// 
+    /// # Returns
+    /// A vector of tuples containing the original file info and download result
+    pub async fn download_files_with_mime_detection(&self, files: &[FileIngestionInfo]) -> Result<Vec<(FileIngestionInfo, Result<WebDAVDownloadResult>)>> {
+        info!("⬇️🔍 Downloading {} files with MIME detection concurrently", files.len());
+        
+        let tasks = files.iter().map(|file| {
+            let file_clone = file.clone();
+            let service_clone = self.clone();
+            
+            async move {
+                let result = service_clone.download_file_with_mime_detection(&file_clone).await;
+                (file_clone, result)
+            }
+        });
+
+        let results = futures_util::future::join_all(tasks).await;
+        
+        let success_count = results.iter().filter(|(_, result)| result.is_ok()).count();
+        let failure_count = results.len() - success_count;
+        let mime_updated_count = results.iter()
+            .filter_map(|(_, result)| result.as_ref().ok())
+            .filter(|download_result| download_result.mime_type_updated)
+            .count();
+        
+        info!("📊 Download with MIME detection completed: {} successful, {} failed, {} MIME types updated", 
+              success_count, failure_count, mime_updated_count);
+        
+        Ok(results)
+    }
+
     /// Gets file metadata without downloading content
     pub async fn get_file_metadata(&self, file_path: &str) -> Result<FileIngestionInfo> {
         debug!("📋 Getting metadata for file: {}", file_path);
@@ -1226,9 +1619,21 @@ impl WebDAVService {
     pub async fn get_server_capabilities(&self) -> Result<ServerCapabilities> {
         debug!("🔍 Checking server capabilities");
         
+        // Create a temporary config with the effective server URL
+        let effective_server_url = self.get_effective_server_url();
+        let temp_config = WebDAVConfig {
+            server_url: effective_server_url,
+            username: self.config.username.clone(),
+            password: self.config.password.clone(),
+            watch_folders: self.config.watch_folders.clone(),
+            file_extensions: self.config.file_extensions.clone(),
+            timeout_seconds: self.config.timeout_seconds,
+            server_type: self.config.server_type.clone(),
+        };
+        
         let options_response = self.authenticated_request(
             reqwest::Method::OPTIONS,
-            &self.config.webdav_url(),
+            &temp_config.webdav_url(),
             None,
             None,
         ).await?;
@@ -1550,6 +1955,7 @@ impl WebDAVService {
     }
 }
 
+
 // Implement Clone to allow sharing the service
 impl Clone for WebDAVService {
     fn clone(&self) -> Self {
@@ -1560,6 +1966,7 @@ impl Clone for WebDAVService {
             concurrency_config: self.concurrency_config.clone(),
             scan_semaphore: Arc::clone(&self.scan_semaphore),
             download_semaphore: Arc::clone(&self.download_semaphore),
+            working_protocol: Arc::clone(&self.working_protocol),
         }
     }
 }

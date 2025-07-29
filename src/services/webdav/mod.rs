@@ -23,4 +23,6 @@ mod url_construction_tests;
 #[cfg(test)]
 mod subdirectory_edge_cases_tests;
 #[cfg(test)]
+mod protocol_detection_tests;
+#[cfg(test)]
 mod tests;

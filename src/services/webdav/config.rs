@@ -103,6 +103,32 @@ impl WebDAVConfig {
         }
     }
 
+    /// Normalizes a server URL by adding protocol if missing
+    /// Prefers HTTPS over HTTP for security reasons
+    pub fn normalize_server_url(url: &str) -> String {
+        let trimmed = url.trim();
+        
+        // If protocol is already specified, return as-is
+        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+            return trimmed.to_string();
+        }
+        
+        // If no protocol specified, default to HTTPS for security
+        format!("https://{}", trimmed)
+    }
+
+    /// Generates alternative protocol URL for fallback attempts
+    /// If input has HTTPS, returns HTTP version and vice versa
+    pub fn get_alternative_protocol_url(url: &str) -> Option<String> {
+        if url.starts_with("https://") {
+            Some(url.replacen("https://", "http://", 1))
+        } else if url.starts_with("http://") {
+            Some(url.replacen("http://", "https://", 1))
+        } else {
+            None
+        }
+    }
+
     /// Validates the configuration
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.server_url.is_empty() {
@@ -121,9 +147,22 @@ impl WebDAVConfig {
             return Err(anyhow::anyhow!("At least one watch folder must be specified"));
         }
 
-        // Validate URL format
-        if !self.server_url.starts_with("http://") && !self.server_url.starts_with("https://") {
-            return Err(anyhow::anyhow!("Server URL must start with http:// or https://"));
+        // Validate URL format - now accepts URLs without protocol
+        // Protocol detection and fallback will be handled during connection testing
+        let normalized_url = Self::normalize_server_url(&self.server_url);
+        
+        // Basic URL validation - check if it looks like a valid domain/IP
+        let url_without_protocol = normalized_url
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+            
+        if url_without_protocol.is_empty() {
+            return Err(anyhow::anyhow!("Server URL must contain a valid domain or IP address"));
+        }
+
+        // Check for obviously invalid URLs
+        if url_without_protocol.contains("://") {
+            return Err(anyhow::anyhow!("Invalid URL format: contains multiple protocols"));
         }
 
         Ok(())
@@ -131,8 +170,8 @@ impl WebDAVConfig {
 
     /// Returns the base URL for WebDAV operations
     pub fn webdav_url(&self) -> String {
-        // Normalize the server URL by removing trailing slashes
-        let normalized_url = self.server_url.trim_end_matches('/').to_string();
+        // Normalize the server URL by adding protocol if missing and removing trailing slashes
+        let normalized_url = Self::normalize_server_url(&self.server_url).trim_end_matches('/').to_string();
         
         // Add WebDAV path based on server type
         match self.server_type.as_deref() {
@@ -160,7 +199,7 @@ impl WebDAVConfig {
     /// Returns alternative WebDAV URLs to try if the primary one fails
     /// This is used for fallback mechanisms when encountering 405 errors
     pub fn webdav_fallback_urls(&self) -> Vec<String> {
-        let normalized_url = self.server_url.trim_end_matches('/').to_string();
+        let normalized_url = Self::normalize_server_url(&self.server_url).trim_end_matches('/').to_string();
         let mut fallback_urls = Vec::new();
         
         match self.server_type.as_deref() {

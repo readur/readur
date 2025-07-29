@@ -570,27 +570,17 @@ impl SourceScheduler {
             return Err(format!("WebDAV server_url is empty"));
         }
         
-        // Check if URL starts with a valid scheme
-        if !server_url.starts_with("http://") && !server_url.starts_with("https://") {
-            return Err(format!(
-                "WebDAV server_url must start with 'http://' or 'https://'. \
-                 Current value: '{}'. \
-                 Examples of valid URLs: \
-                 - https://cloud.example.com \
-                 - http://192.168.1.100:8080 \
-                 - https://nextcloud.mydomain.com:443", 
-                server_url
-            ));
-        }
+        // Normalize URL by adding protocol if missing (consistent with WebDAVConfig)
+        let normalized_url = crate::services::webdav::config::WebDAVConfig::normalize_server_url(server_url);
         
-        // Try to parse as URL to catch other issues
-        match reqwest::Url::parse(server_url) {
+        // Try to parse the normalized URL to catch other issues
+        match reqwest::Url::parse(&normalized_url) {
             Ok(url) => {
                 if url.scheme() != "http" && url.scheme() != "https" {
                     return Err(format!(
                         "WebDAV server_url has invalid scheme '{}'. Only 'http' and 'https' are supported. \
                          Current URL: '{}'", 
-                        url.scheme(), server_url
+                        url.scheme(), normalized_url
                     ));
                 }
                 
@@ -599,23 +589,23 @@ impl SourceScheduler {
                         "WebDAV server_url is missing hostname. \
                          Current URL: '{}'. \
                          Example: https://cloud.example.com", 
-                        server_url
+                        normalized_url
                     ));
                 }
                 
-                crate::debug_log!("SOURCE_SCHEDULER", "✅ WebDAV URL validation passed for source '{}': {}", source_name, server_url);
+                crate::debug_log!("SOURCE_SCHEDULER", "✅ WebDAV URL validation passed for source '{}': {} (normalized to: {})", source_name, server_url, normalized_url);
                 Ok(())
             }
             Err(e) => {
                 Err(format!(
                     "WebDAV server_url is not a valid URL: {}. \
-                     Current value: '{}'. \
+                     Current value: '{}' (normalized to: '{}'). \
                      The URL must be absolute and include the full domain. \
                      Examples: \
                      - https://cloud.example.com \
                      - http://192.168.1.100:8080/webdav \
                      - https://nextcloud.mydomain.com", 
-                    e, server_url
+                    e, server_url, normalized_url
                 ))
             }
         }

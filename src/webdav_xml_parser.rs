@@ -6,6 +6,7 @@ use std::str;
 use serde_json;
 
 use crate::models::FileIngestionInfo;
+use crate::mime_detection::{detect_mime_for_discovery, DetectionStrategy};
 
 #[derive(Debug, Default)]
 struct PropFindResponse {
@@ -200,6 +201,14 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>>
                                 // Use the metadata collected during parsing
                                 let metadata = resp.metadata;
                                 
+                                // Determine MIME type using improved detection
+                                let mime_detection_result = detect_mime_for_discovery(
+                                    &name,
+                                    resp.content_type.as_deref(),
+                                    DetectionStrategy::Comprehensive
+                                );
+                                let mime_type = mime_detection_result.mime_type;
+
                                 let file_info = FileIngestionInfo {
                                     relative_path: "TEMP".to_string(), // Will be set by discovery layer
                                     full_path: resp.href.clone(),
@@ -207,7 +216,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>>
                                     path: resp.href.clone(), // Legacy field - keep for compatibility
                                     name,
                                     size: resp.content_length.unwrap_or(0),
-                                    mime_type: resp.content_type.unwrap_or_else(|| "application/octet-stream".to_string()),
+                                    mime_type,
                                     last_modified: parse_http_date(&resp.last_modified.unwrap_or_default()),
                                     etag: resp.etag.unwrap_or_else(|| format!("\"{}\"", uuid::Uuid::new_v4())),
                                     is_directory: false,
@@ -418,6 +427,18 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
                                         }
                                     });
                                 
+                                // Determine MIME type for files (directories get empty string)
+                                let mime_type = if resp.is_collection {
+                                    "".to_string()
+                                } else {
+                                    let mime_detection_result = detect_mime_for_discovery(
+                                        &name,
+                                        resp.content_type.as_deref(),
+                                        DetectionStrategy::Comprehensive
+                                    );
+                                    mime_detection_result.mime_type
+                                };
+
                                 let file_info = FileIngestionInfo {
                                     relative_path: "TEMP".to_string(), // Will be set by discovery layer
                                     full_path: resp.href.clone(),
@@ -425,11 +446,7 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
                                     path: resp.href.clone(), // Legacy field - keep for compatibility
                                     name,
                                     size: resp.content_length.unwrap_or(0),
-                                    mime_type: if resp.is_collection {
-                                        "".to_string()
-                                    } else {
-                                        resp.content_type.unwrap_or_else(|| "application/octet-stream".to_string())
-                                    },
+                                    mime_type,
                                     last_modified: parse_http_date(&resp.last_modified.unwrap_or_default()),
                                     etag: resp.etag.unwrap_or_else(|| format!("\"{}\"", uuid::Uuid::new_v4())),
                                     is_directory: resp.is_collection,
@@ -944,3 +961,4 @@ mod tests {
         assert!(strong_compare_etags("\"1\"", "\"1\""));
     }
 }
+
