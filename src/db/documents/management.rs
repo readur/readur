@@ -188,11 +188,11 @@ impl Database {
                 COUNT(*) as total_documents,
                 COUNT(CASE WHEN ocr_text IS NOT NULL THEN 1 END) as total_documents_ocr
             FROM documents 
-            WHERE user_id = $1 AND source_metadata->>'source_id' = $2
+            WHERE user_id = $1 AND source_id = $2
             "#
         )
         .bind(user_id)
-        .bind(source_id.to_string())
+        .bind(source_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -205,27 +205,25 @@ impl Database {
             return Ok(Vec::new());
         }
 
-        let source_id_strings: Vec<String> = source_ids.iter().map(|id| id.to_string()).collect();
         
         let rows = sqlx::query(
             r#"
             SELECT 
-                source_metadata->>'source_id' as source_id_str,
+                source_id,
                 COUNT(*) as total_documents,
                 COUNT(CASE WHEN ocr_text IS NOT NULL THEN 1 END) as total_documents_ocr
             FROM documents 
-            WHERE user_id = $1 AND source_metadata->>'source_id' = ANY($2)
-            GROUP BY source_metadata->>'source_id'
+            WHERE user_id = $1 AND source_id = ANY($2)
+            GROUP BY source_id
             "#
         )
         .bind(user_id)
-        .bind(&source_id_strings)
+        .bind(source_ids)
         .fetch_all(&self.pool)
         .await?;
 
         Ok(rows.into_iter().map(|row| {
-            let source_id_str: String = row.get("source_id_str");
-            let source_id = Uuid::parse_str(&source_id_str).unwrap_or_default();
+            let source_id: Uuid = row.get("source_id");
             let total_documents: i64 = row.get("total_documents");
             let total_documents_ocr: i64 = row.get("total_documents_ocr");
             (source_id, total_documents, total_documents_ocr)

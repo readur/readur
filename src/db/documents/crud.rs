@@ -11,8 +11,8 @@ impl Database {
     pub async fn create_document(&self, document: Document) -> Result<Document> {
         let query_str = format!(
             r#"
-            INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, ocr_retry_count, ocr_failure_reason, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+            INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, ocr_retry_count, ocr_failure_reason, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_path, source_type, source_id, file_permissions, file_owner, file_group, source_metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
             RETURNING {}
             "#,
             DOCUMENT_FIELDS
@@ -42,6 +42,12 @@ impl Database {
             .bind(&document.file_hash)
             .bind(document.original_created_at)
             .bind(document.original_modified_at)
+            .bind(&document.source_path)
+            .bind(&document.source_type)
+            .bind(document.source_id)
+            .bind(document.file_permissions)
+            .bind(&document.file_owner)
+            .bind(&document.file_group)
             .bind(&document.source_metadata)
             .fetch_one(&self.pool)
             .await?;
@@ -179,7 +185,7 @@ impl Database {
             r#"
             SELECT {}
             FROM documents 
-            WHERE user_id = $1 AND source_metadata->>'source_id' = $2
+            WHERE user_id = $1 AND source_id = $2
             ORDER BY created_at DESC
             LIMIT $3
             "#,
@@ -188,7 +194,7 @@ impl Database {
 
         let rows = sqlx::query(&query_str)
             .bind(user_id)
-            .bind(source_id.to_string())
+            .bind(source_id)
             .bind(limit)
             .fetch_all(&self.pool)
             .await?;
