@@ -117,9 +117,10 @@ impl SourceSyncService {
 
         info!("WebDAV service created successfully, starting sync with {} folders", webdav_config.watch_folders.len());
 
-        // Create progress tracker for scheduled sync
-        let progress = SyncProgress::new();
+        // Create progress tracker for scheduled sync and register it globally
+        let progress = Arc::new(SyncProgress::new());
         progress.set_phase(SyncPhase::Initializing);
+        self.state.sync_progress_tracker.register_sync(source.id, progress.clone());
         info!("🚀 Starting scheduled WebDAV sync with progress tracking for source '{}'", source.name);
 
         let sync_result = self.perform_sync_internal_with_cancellation(
@@ -174,12 +175,19 @@ impl SourceSyncService {
             }
         ).await;
 
-        // Mark sync as completed and log final statistics
-        progress.set_phase(SyncPhase::Completed);
+        // Always mark sync phase and unregister progress tracker, regardless of result
+        match &sync_result {
+            Ok(_) => progress.set_phase(SyncPhase::Completed),
+            Err(e) => progress.set_phase(SyncPhase::Failed(e.to_string())),
+        }
+        
         if let Some(stats) = progress.get_stats() {
             info!("📊 Scheduled sync completed for '{}': {} files processed, {} errors, {} warnings, elapsed: {}s", 
                   source.name, stats.files_processed, stats.errors.len(), stats.warnings, stats.elapsed_time.as_secs());
         }
+        
+        // Always unregister the progress tracker to prevent memory leaks
+        self.state.sync_progress_tracker.unregister_sync(source.id);
 
         sync_result
     }
@@ -195,7 +203,13 @@ impl SourceSyncService {
         let local_service = LocalFolderService::new(config.clone())
             .map_err(|e| anyhow!("Failed to create LocalFolder service: {}", e))?;
 
-        self.perform_sync_internal_with_cancellation(
+        // Create progress tracker for local folder sync and register it globally
+        let progress = Arc::new(SyncProgress::new());
+        progress.set_phase(SyncPhase::Initializing);
+        self.state.sync_progress_tracker.register_sync(source.id, progress.clone());
+        info!("🚀 Starting local folder sync with progress tracking for source '{}'", source.name);
+
+        let sync_result = self.perform_sync_internal_with_cancellation(
             source.user_id,
             source.id,
             &config.watch_folders,
@@ -210,7 +224,18 @@ impl SourceSyncService {
                 let service = local_service.clone();
                 async move { service.read_file(&file_path).await }
             }
-        ).await
+        ).await;
+        
+        // Always mark sync phase and unregister progress tracker, regardless of result
+        match &sync_result {
+            Ok(_) => progress.set_phase(SyncPhase::Completed),
+            Err(e) => progress.set_phase(SyncPhase::Failed(e.to_string())),
+        }
+        
+        // Always unregister the progress tracker to prevent memory leaks
+        self.state.sync_progress_tracker.unregister_sync(source.id);
+        
+        sync_result
     }
 
     async fn sync_s3_source(&self, source: &Source, enable_background_ocr: bool) -> Result<usize> {
@@ -224,7 +249,13 @@ impl SourceSyncService {
         let s3_service = S3Service::new(config.clone()).await
             .map_err(|e| anyhow!("Failed to create S3 service: {}", e))?;
 
-        self.perform_sync_internal_with_cancellation(
+        // Create progress tracker for S3 sync and register it globally
+        let progress = Arc::new(SyncProgress::new());
+        progress.set_phase(SyncPhase::Initializing);
+        self.state.sync_progress_tracker.register_sync(source.id, progress.clone());
+        info!("🚀 Starting S3 sync with progress tracking for source '{}'", source.name);
+
+        let sync_result = self.perform_sync_internal_with_cancellation(
             source.user_id,
             source.id,
             &config.watch_folders,
@@ -239,7 +270,18 @@ impl SourceSyncService {
                 let service = s3_service.clone();
                 async move { service.download_file(&file_path).await }
             }
-        ).await
+        ).await;
+        
+        // Always mark sync phase and unregister progress tracker, regardless of result
+        match &sync_result {
+            Ok(_) => progress.set_phase(SyncPhase::Completed),
+            Err(e) => progress.set_phase(SyncPhase::Failed(e.to_string())),
+        }
+        
+        // Always unregister the progress tracker to prevent memory leaks
+        self.state.sync_progress_tracker.unregister_sync(source.id);
+        
+        sync_result
     }
 
     async fn perform_sync_internal<F, D, Fut1, Fut2>(

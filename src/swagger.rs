@@ -105,6 +105,8 @@ use crate::{
         crate::routes::sources::sync::trigger_sync,
         crate::routes::sources::sync::stop_sync,
         crate::routes::sources::sync::trigger_deep_scan,
+        crate::routes::sources::sync::sync_progress_websocket,
+        crate::routes::sources::sync::get_sync_status,
         crate::routes::sources::validation::test_connection,
         crate::routes::sources::validation::validate_source,
         crate::routes::sources::estimation::estimate_crawl,
@@ -150,7 +152,9 @@ use crate::{
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
             // OCR schemas
             crate::routes::ocr::AvailableLanguagesResponse, crate::routes::ocr::LanguageInfo,
-            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse, crate::ocr::api::OcrRequest
+            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse, crate::ocr::api::OcrRequest,
+            // Sync progress schemas
+            crate::services::sync_progress_tracker::SyncProgressInfo
         )
     ),
     tags(

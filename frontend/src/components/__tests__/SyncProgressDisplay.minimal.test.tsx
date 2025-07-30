@@ -2,30 +2,67 @@ import { describe, test, expect, vi, beforeAll } from 'vitest';
 
 // Mock the API service before importing the component
 beforeAll(() => {
-  // Mock EventSource globally
-  global.EventSource = vi.fn().mockImplementation(() => ({
+  // Mock WebSocket globally
+  global.WebSocket = vi.fn().mockImplementation(() => ({
     close: vi.fn(),
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
+    send: vi.fn(),
     onopen: null,
     onmessage: null,
     onerror: null,
+    onclose: null,
     readyState: 0,
+    CONNECTING: 0,
+    OPEN: 1,
+    CLOSING: 2,
+    CLOSED: 3,
   }));
+
+  // Mock localStorage for token access
+  Object.defineProperty(global, 'localStorage', {
+    value: {
+      getItem: vi.fn(() => 'mock-jwt-token'),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    },
+    writable: true,
+  });
+
+  // Mock window.location
+  Object.defineProperty(window, 'location', {
+    value: {
+      origin: 'http://localhost:3000',
+      href: 'http://localhost:3000',
+      protocol: 'http:',
+      host: 'localhost:3000',
+    },
+    writable: true,
+  });
 });
+
+// Mock WebSocket class for SyncProgressDisplay
+class MockSyncProgressWebSocket {
+  constructor(private sourceId: string) {}
+  
+  connect(): Promise<void> {
+    return Promise.resolve();
+  }
+  
+  addEventListener(eventType: string, callback: (data: any) => void): void {}
+  removeEventListener(eventType: string, callback: (data: any) => void): void {}
+  close(): void {}
+  getReadyState(): number { return 1; }
+  isConnected(): boolean { return true; }
+}
 
 // Mock the services/api module
 vi.mock('../../services/api', () => ({
   sourcesService: {
-    getSyncProgressStream: vi.fn().mockReturnValue({
-      close: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      onopen: null,
-      onmessage: null,
-      onerror: null,
-      readyState: 0,
-    }),
+    createSyncProgressWebSocket: vi.fn().mockImplementation((sourceId: string) => 
+      new MockSyncProgressWebSocket(sourceId)
+    ),
   },
   SyncProgressInfo: {},
 }));

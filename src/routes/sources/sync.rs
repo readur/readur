@@ -1,15 +1,13 @@
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    response::{Json, Response, Sse},
-    response::sse::Event,
+    extract::{Path, State, WebSocketUpgrade},
+    extract::ws::{WebSocket, Message},
+    http::{StatusCode, HeaderMap},
+    response::{Json, Response},
 };
 use std::sync::Arc;
 use uuid::Uuid;
 use tracing::{error, info};
-use futures::stream::{self, Stream};
 use std::time::Duration;
-use std::convert::Infallible;
 
 use crate::{
     auth::AuthUser,
@@ -17,6 +15,8 @@ use crate::{
     services::webdav::{SyncProgress, SyncPhase},
     AppState,
 };
+
+// Removed WebSocketAuthQuery - using secure header-based authentication instead
 
 /// Trigger a sync for a source
 #[utoipa::path(
@@ -254,7 +254,7 @@ pub async fn trigger_deep_scan(
                 .update_source_status(
                     source_id,
                     SourceStatus::Syncing,
-                    Some("Deep scan in progress".to_string()),
+                    Some("Deep scan in progress - this can take a while, especially initial requests".to_string()),
                 )
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -270,9 +270,14 @@ pub async fn trigger_deep_scan(
                 let start_time = chrono::Utc::now();
                 
                 // Create progress tracker for manual deep scan
-                let progress = SyncProgress::new();
+                let progress = Arc::new(SyncProgress::new());
                 progress.set_phase(SyncPhase::Initializing);
+                
+                // Register progress with global tracker so SSE can find it
+                state_clone.sync_progress_tracker.register_sync(source_id_clone, progress.clone());
                 info!("🚀 Starting manual deep scan with progress tracking for source '{}'", source_name);
+                
+                let mut progress_unregistered = false;
                 
                 // Use smart sync service for deep scans - this will properly reset directory ETags
                 let smart_sync_service = crate::services::webdav::SmartSyncService::new(state_clone.clone());
@@ -344,6 +349,12 @@ pub async fn trigger_deep_scan(
                                               stats.files_processed, stats.errors.len(), stats.warnings, stats.elapsed_time.as_secs());
                                     }
                                     
+                                    // Unregister progress from global tracker
+                                    if !progress_unregistered {
+                                        state_clone.sync_progress_tracker.unregister_sync(source_id_clone);
+                                        progress_unregistered = true;
+                                    }
+                                    
                                     // Update source status to idle
                                     if let Err(e) = state_clone.db.update_source_status(
                                         source_id_clone,
@@ -384,6 +395,12 @@ pub async fn trigger_deep_scan(
                                     progress.set_phase(SyncPhase::Failed(e.to_string()));
                                     progress.add_error(&format!("File processing failed: {}", e));
                                     
+                                    // Unregister progress from global tracker
+                                    if !progress_unregistered {
+                                        state_clone.sync_progress_tracker.unregister_sync(source_id_clone);
+                                        progress_unregistered = true;
+                                    }
+                                    
                                     // Update source status to error
                                     if let Err(e2) = state_clone.db.update_source_status(
                                         source_id_clone,
@@ -416,6 +433,15 @@ pub async fn trigger_deep_scan(
                             info!("Deep scan found no files but tracked {} directories for source {}", 
                                   total_directories_tracked, source_id_clone);
                             
+                            // Mark progress as completed (no files found case)
+                            progress.set_phase(SyncPhase::Completed);
+                            
+                            // Unregister progress from global tracker
+                            if !progress_unregistered {
+                                state_clone.sync_progress_tracker.unregister_sync(source_id_clone);
+                                progress_unregistered = true;
+                            }
+                            
                             // Update source status to idle even if no files found
                             if let Err(e) = state_clone.db.update_source_status(
                                 source_id_clone,
@@ -424,6 +450,11 @@ pub async fn trigger_deep_scan(
                             ).await {
                                 error!("Failed to update source status after empty deep scan: {}", e);
                             }
+                        }
+                        
+                        // Ensure progress is always unregistered at the end, even if we missed a case
+                        if !progress_unregistered {
+                            state_clone.sync_progress_tracker.unregister_sync(source_id_clone);
                         }
             });
 
@@ -443,85 +474,213 @@ pub async fn trigger_deep_scan(
     }
 }
 
-/// SSE endpoint for real-time sync progress updates
+
+/// WebSocket endpoint for real-time sync progress updates
+/// 
+/// This endpoint provides real-time updates about source synchronization progress via WebSocket.
+/// It sends progress messages every second during active sync operations and heartbeat messages
+/// when no sync is running. This replaces the previous Server-Sent Events (SSE) implementation
+/// with improved security by using query parameter authentication instead of exposing JWT tokens.
+/// 
+/// # Message Types
+/// - `progress`: Real-time sync progress updates with detailed statistics
+/// - `heartbeat`: Keep-alive messages when no sync is active
+/// - `error`: Error messages for connection or sync issues
+/// - `connection_confirmed`: Confirmation that the WebSocket connection is established
+/// 
+/// # Security
+/// Authentication is handled via JWT token in the `Sec-WebSocket-Protocol` header during WebSocket handshake.
+/// This secure approach prevents token exposure in logs, browser history, and referrer headers.
 #[utoipa::path(
     get,
-    path = "/api/sources/{id}/sync/progress",
+    path = "/api/sources/{id}/sync/progress/ws",
     tag = "sources",
     security(
         ("bearer_auth" = [])
     ),
     params(
-        ("id" = Uuid, Path, description = "Source ID")
+        ("id" = Uuid, Path, description = "Source ID to monitor for sync progress")
     ),
     responses(
-        (status = 200, description = "SSE stream of sync progress updates"),
-        (status = 401, description = "Unauthorized"),
-        (status = 404, description = "Source not found"),
-        (status = 500, description = "Internal server error")
+        (status = 101, description = "WebSocket connection established - will stream real-time progress updates"),
+        (status = 401, description = "Unauthorized - invalid or missing authentication token"),
+        (status = 404, description = "Source not found or user does not have access"),
+        (status = 500, description = "Internal server error during WebSocket upgrade")
     )
 )]
-pub async fn sync_progress_stream(
-    auth_user: AuthUser,
+pub async fn sync_progress_websocket(
+    ws: WebSocketUpgrade,
     Path(source_id): Path<Uuid>,
+    headers: HeaderMap,
     State(state): State<Arc<AppState>>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+) -> Result<Response, StatusCode> {
+    // Extract and verify token from Sec-WebSocket-Protocol header for secure WebSocket auth
+    let token = extract_websocket_token(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    
+    let claims = crate::auth::verify_jwt(&token, &state.config.jwt_secret)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    
+    let user = state.db.get_user_by_id(claims.sub).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    
     // Verify the source exists and the user has access
     let _source = state
         .db
-        .get_source(auth_user.user.id, source_id)
+        .get_source(user.id, source_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Create the progress stream
-    let progress_tracker = state.sync_progress_tracker.clone();
-    let stream = stream::unfold((), move |_| {
-        let tracker = progress_tracker.clone();
-        async move {
-            // Check for progress update
-            let progress_info = tracker.get_progress(source_id);
-            
-            let event = match progress_info {
-                Some(info) => {
-                    // Send current progress
-                    match serde_json::to_string(&info) {
-                        Ok(json) => Event::default()
-                            .event("progress")
-                            .data(json),
-                        Err(e) => {
-                            error!("Failed to serialize progress info: {}", e);
-                            Event::default()
-                                .event("error")
-                                .data(format!("Failed to serialize progress: {}", e))
-                        }
-                    }
-                }
-                None => {
-                    // No active sync, send a heartbeat
-                    Event::default()
-                        .event("heartbeat")
-                        .data(serde_json::json!({
-                            "source_id": source_id,
-                            "is_active": false,
-                            "timestamp": chrono::Utc::now().timestamp()
-                        }).to_string())
-                }
-            };
-            
-            // Wait before next update
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            
-            Some((Ok(event), ()))
+    // Upgrade the connection to WebSocket
+    Ok(ws.on_upgrade(move |socket| handle_websocket(socket, source_id, state)))
+}
+
+/// Handle WebSocket connection for sync progress updates
+async fn handle_websocket(mut socket: WebSocket, source_id: Uuid, state: Arc<AppState>) {
+    info!("WebSocket connection established for source {}", source_id);
+    
+    // Send connection confirmation
+    let confirmation_msg = serde_json::json!({
+        "type": "connection_confirmed",
+        "data": {
+            "source_id": source_id,
+            "timestamp": chrono::Utc::now().timestamp()
         }
     });
+    
+    if let Err(e) = socket.send(Message::Text(confirmation_msg.to_string().into())).await {
+        error!("Failed to send connection confirmation for source {}: {}", source_id, e);
+        return;
+    }
+    
+    let progress_tracker = state.sync_progress_tracker.clone();
+    
+    loop {
+        // Check for progress update
+        let progress_info = progress_tracker.get_progress(source_id);
+        
+        let message = match progress_info {
+            Some(info) => {
+                // Send current progress
+                match serde_json::to_string(&serde_json::json!({
+                    "type": "progress",
+                    "data": info
+                })) {
+                    Ok(json) => Message::Text(json.into()),
+                    Err(e) => {
+                        error!("Failed to serialize progress info: {}", e);
+                        let error_msg = serde_json::json!({
+                            "type": "error",
+                            "data": {
+                                "message": format!("Failed to serialize progress: {}", e),
+                                "error_type": "serialization_error"
+                            }
+                        });
+                        Message::Text(error_msg.to_string().into())
+                    }
+                }
+            }
+            None => {
+                // No active sync, send a heartbeat
+                Message::Text(serde_json::json!({
+                    "type": "heartbeat",
+                    "data": {
+                        "source_id": source_id,
+                        "is_active": false,
+                        "timestamp": chrono::Utc::now().timestamp()
+                    }
+                }).to_string().into())
+            }
+        };
+        
+        // Send the message to the client
+        if let Err(e) = socket.send(message).await {
+            error!("Failed to send WebSocket message for source {}: {}", source_id, e);
+            
+            // Try to send error notification to client before breaking
+            let error_notification = serde_json::json!({
+                "type": "error",
+                "data": {
+                    "message": "Connection error occurred, closing connection",
+                    "error_type": "connection_error",
+                    "details": e.to_string()
+                }
+            });
+            
+            // Attempt to send error message (ignore if this fails too)
+            let _ = socket.send(Message::Text(error_notification.to_string().into())).await;
+            break;
+        }
+        
+        // Wait before next update
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        
+        // Check if the connection is still alive by trying to send a ping
+        if let Err(e) = socket.send(Message::Ping(vec![].into())).await {
+            info!("WebSocket connection closed for source {} (ping failed: {})", source_id, e);
+            
+            // Try to send graceful closure message
+            let closure_msg = serde_json::json!({
+                "type": "error",
+                "data": {
+                    "message": "Connection lost during ping check",
+                    "error_type": "ping_failed",
+                    "details": e.to_string()
+                }
+            });
+            
+            // Attempt to send closure message (ignore if this fails)
+            let _ = socket.send(Message::Text(closure_msg.to_string().into())).await;
+            break;
+        }
+    }
+    
+    // Send final close message if connection is still open
+    let close_msg = serde_json::json!({
+        "type": "connection_closing",
+        "data": {
+            "source_id": source_id,
+            "message": "Server is closing connection",
+            "timestamp": chrono::Utc::now().timestamp()
+        }
+    });
+    
+    // Try to send close notification (ignore failures)
+    let _ = socket.send(Message::Text(close_msg.to_string().into())).await;
+    
+    info!("WebSocket connection terminated for source {}", source_id);
+}
 
-    Ok(Sse::new(stream)
-        .keep_alive(
-            axum::response::sse::KeepAlive::new()
-                .interval(Duration::from_secs(5))
-                .text("keep-alive")
-        ))
+/// Extract JWT token from WebSocket headers securely
+/// Uses Sec-WebSocket-Protocol header to avoid token exposure in logs/URLs
+fn extract_websocket_token(headers: &HeaderMap) -> Option<String> {
+    // Check for token in Sec-WebSocket-Protocol header (most secure)
+    if let Some(protocol_header) = headers.get("sec-websocket-protocol") {
+        if let Ok(protocols) = protocol_header.to_str() {
+            // Format: "bearer.{token}" or "bearer, {token}"
+            for protocol in protocols.split(',') {
+                let protocol = protocol.trim();
+                if protocol.starts_with("bearer.") {
+                    return Some(protocol.trim_start_matches("bearer.").to_string());
+                }
+                if protocol.starts_with("bearer ") {
+                    return Some(protocol.trim_start_matches("bearer ").to_string());
+                }
+            }
+        }
+    }
+    
+    // Fallback to Authorization header for backward compatibility
+    if let Some(auth_header) = headers.get("authorization") {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if auth_str.starts_with("Bearer ") {
+                return Some(auth_str.trim_start_matches("Bearer ").to_string());
+            }
+        }
+    }
+    
+    None
 }
 
 /// Get current sync progress (one-time API call)

@@ -1,18 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   LinearProgress,
   Chip,
-  Stack,
   Collapse,
-  Alert,
   IconButton,
   Tooltip,
   useTheme,
   alpha,
+  Fade,
+  Card,
+  CardContent,
+  Stack,
+  Alert,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -25,9 +26,12 @@ import {
   Error as ErrorIcon,
   CheckCircle as CheckCircleIcon,
   Timer as TimerIcon,
+  Sync as SyncIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { sourcesService, SyncProgressInfo } from '../services/api';
+import { SyncProgressInfo } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
+import { useSyncProgressWebSocket, ConnectionStatus } from '../hooks/useSyncProgressWebSocket';
 
 interface SyncProgressDisplayProps {
   sourceId: string;
@@ -43,98 +47,31 @@ export const SyncProgressDisplay: React.FC<SyncProgressDisplayProps> = ({
   onClose,
 }) => {
   const theme = useTheme();
-  const [progressInfo, setProgressInfo] = useState<SyncProgressInfo | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
-  const eventSourceRef = useRef<EventSource | null>(null);
 
-  useEffect(() => {
-    if (!isVisible || !sourceId) {
-      return;
-    }
+  // Handle WebSocket connection errors
+  const handleWebSocketError = useCallback((error: any) => {
+    console.error('WebSocket connection error in SyncProgressDisplay:', error);
+  }, []);
 
-    let mounted = true;
+  // Handle connection status changes
+  const handleConnectionStatusChange = useCallback((status: ConnectionStatus) => {
+    console.log(`Connection status changed to: ${status}`);
+  }, []);
 
-    // Function to connect to SSE stream
-    const connectToStream = () => {
-      try {
-        setConnectionStatus('connecting');
-        const eventSource = sourcesService.getSyncProgressStream(sourceId);
-        eventSourceRef.current = eventSource;
-
-        eventSource.onopen = () => {
-          if (mounted) {
-            setConnectionStatus('connected');
-          }
-        };
-
-        eventSource.onmessage = (event) => {
-          if (!mounted) return;
-          
-          try {
-            const data = JSON.parse(event.data);
-            if (event.type === 'progress' && data) {
-              setProgressInfo(data);
-            }
-          } catch (error) {
-            console.error('Failed to parse progress data:', error);
-          }
-        };
-
-        eventSource.addEventListener('progress', (event) => {
-          if (!mounted) return;
-          
-          try {
-            const data = JSON.parse(event.data);
-            setProgressInfo(data);
-          } catch (error) {
-            console.error('Failed to parse progress event:', error);
-          }
-        });
-
-        eventSource.addEventListener('heartbeat', (event) => {
-          if (!mounted) return;
-          
-          try {
-            const data = JSON.parse(event.data);
-            if (!data.is_active) {
-              // No active sync, clear progress info
-              setProgressInfo(null);
-            }
-          } catch (error) {
-            console.error('Failed to parse heartbeat event:', error);
-          }
-        });
-
-        eventSource.onerror = (error) => {
-          console.error('SSE connection error:', error);
-          if (mounted) {
-            setConnectionStatus('disconnected');
-            // Attempt to reconnect after 3 seconds
-            setTimeout(() => {
-              if (mounted && eventSourceRef.current?.readyState === EventSource.CLOSED) {
-                connectToStream();
-              }
-            }, 3000);
-          }
-        };
-
-      } catch (error) {
-        console.error('Failed to create EventSource:', error);
-        setConnectionStatus('disconnected');
-      }
-    };
-
-    connectToStream();
-
-    return () => {
-      mounted = false;
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-  }, [isVisible, sourceId]);
+  // Use the WebSocket hook for sync progress updates
+  const {
+    progressInfo,
+    connectionStatus,
+    isConnected,
+    reconnect,
+    disconnect,
+  } = useSyncProgressWebSocket({
+    sourceId,
+    enabled: isVisible && !!sourceId,
+    onError: handleWebSocketError,
+    onConnectionStatusChange: handleConnectionStatusChange,
+  });
 
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -189,7 +126,7 @@ export const SyncProgressDisplay: React.FC<SyncProgressDisplayProps> = ({
     }
   };
 
-  if (!isVisible || (!progressInfo && connectionStatus !== 'connecting' && connectionStatus !== 'disconnected')) {
+  if (!isVisible || (!progressInfo && connectionStatus === 'disconnected' && !isConnected)) {
     return null;
   }
 
@@ -233,12 +170,35 @@ export const SyncProgressDisplay: React.FC<SyncProgressDisplayProps> = ({
             {connectionStatus === 'connecting' && (
               <Chip size="small" label="Connecting..." color="warning" />
             )}
+            {connectionStatus === 'reconnecting' && (
+              <Chip size="small" label="Reconnecting..." color="warning" />
+            )}
             {connectionStatus === 'connected' && progressInfo?.is_active && (
               <Chip size="small" label="Live" color="success" />
             )}
-            {connectionStatus === 'disconnected' && (
+            {connectionStatus === 'connected' && !progressInfo?.is_active && (
+              <Chip size="small" label="Connected" color="info" />
+            )}
+            {(connectionStatus === 'disconnected' || connectionStatus === 'error') && (
               <Chip size="small" label="Disconnected" color="error" />
             )}
+            {connectionStatus === 'failed' && (
+              <Chip size="small" label="Connection Failed" color="error" />
+            )}
+            
+            {/* Add manual reconnect button for failed connections */}
+            {(connectionStatus === 'failed' || connectionStatus === 'error') && (
+              <Tooltip title="Reconnect">
+                <IconButton 
+                  onClick={reconnect}
+                  size="small"
+                  color="primary"
+                >
+                  <RefreshIcon />
+                </IconButton>
+              </Tooltip>
+            )}
+            
             <Tooltip title={isExpanded ? "Collapse" : "Expand"}>
               <IconButton 
                 onClick={() => setIsExpanded(!isExpanded)}

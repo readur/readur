@@ -32,39 +32,116 @@ export const documentService = {
   bulkRetryOcr: vi.fn(),
 }
 
-// Mock EventSource constants  
-const EVENTSOURCE_CONNECTING = 0;
-const EVENTSOURCE_OPEN = 1;
-const EVENTSOURCE_CLOSED = 2;
+// Mock WebSocket constants  
+const WEBSOCKET_CONNECTING = 0;
+const WEBSOCKET_OPEN = 1;
+const WEBSOCKET_CLOSING = 2;
+const WEBSOCKET_CLOSED = 3;
 
-// Create a proper EventSource mock factory
-const createMockEventSource = () => {
+// Create a proper WebSocket mock factory
+const createMockWebSocket = () => {
   const mockInstance = {
     onopen: null as ((event: Event) => void) | null,
     onmessage: null as ((event: MessageEvent) => void) | null,
     onerror: null as ((event: Event) => void) | null,
+    onclose: null as ((event: CloseEvent) => void) | null,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
+    send: vi.fn(),
     close: vi.fn(),
-    readyState: EVENTSOURCE_CONNECTING,
+    readyState: WEBSOCKET_CONNECTING,
     url: '',
-    withCredentials: false,
-    CONNECTING: EVENTSOURCE_CONNECTING,
-    OPEN: EVENTSOURCE_OPEN,
-    CLOSED: EVENTSOURCE_CLOSED,
+    protocol: '',
+    extensions: '',
+    bufferedAmount: 0,
+    binaryType: 'blob' as BinaryType,
+    CONNECTING: WEBSOCKET_CONNECTING,
+    OPEN: WEBSOCKET_OPEN,
+    CLOSING: WEBSOCKET_CLOSING,
+    CLOSED: WEBSOCKET_CLOSED,
     dispatchEvent: vi.fn(),
   };
   return mockInstance;
 };
 
 // Create the main mock instance
-let currentMockEventSource = createMockEventSource();
+let currentMockWebSocket = createMockWebSocket();
 
-// Mock the global EventSource
-global.EventSource = vi.fn(() => currentMockEventSource) as any;
-(global.EventSource as any).CONNECTING = EVENTSOURCE_CONNECTING;
-(global.EventSource as any).OPEN = EVENTSOURCE_OPEN;
-(global.EventSource as any).CLOSED = EVENTSOURCE_CLOSED;
+// Mock the global WebSocket
+global.WebSocket = vi.fn(() => currentMockWebSocket) as any;
+(global.WebSocket as any).CONNECTING = WEBSOCKET_CONNECTING;
+(global.WebSocket as any).OPEN = WEBSOCKET_OPEN;
+(global.WebSocket as any).CLOSING = WEBSOCKET_CLOSING;
+(global.WebSocket as any).CLOSED = WEBSOCKET_CLOSED;
+
+// Mock SyncProgressWebSocket class
+export class MockSyncProgressWebSocket {
+  private listeners: { [key: string]: ((data: any) => void)[] } = {};
+  
+  constructor(private sourceId: string) {
+    // Store reference to current instance for test access
+    currentMockSyncProgressWebSocket = this;
+  }
+
+  connect(): Promise<void> {
+    // Simulate successful connection
+    setTimeout(() => {
+      this.emit('connectionStatus', 'connected');
+    }, 10);
+    return Promise.resolve();
+  }
+
+  addEventListener(eventType: string, callback: (data: any) => void): void {
+    if (!this.listeners[eventType]) {
+      this.listeners[eventType] = [];
+    }
+    this.listeners[eventType].push(callback);
+  }
+
+  removeEventListener(eventType: string, callback: (data: any) => void): void {
+    if (this.listeners[eventType]) {
+      this.listeners[eventType] = this.listeners[eventType].filter(cb => cb !== callback);
+    }
+  }
+
+  private emit(eventType: string, data: any): void {
+    if (this.listeners[eventType]) {
+      this.listeners[eventType].forEach(callback => callback(data));
+    }
+  }
+
+  close(): void {
+    this.listeners = {};
+  }
+
+  getReadyState(): number {
+    return WEBSOCKET_OPEN;
+  }
+
+  isConnected(): boolean {
+    return true;
+  }
+
+  // Test helper methods
+  simulateProgress(data: any): void {
+    this.emit('progress', data);
+  }
+
+  simulateHeartbeat(data: any): void {
+    this.emit('heartbeat', data);
+  }
+
+  simulateError(data: any): void {
+    this.emit('error', data);
+  }
+
+  simulateConnectionStatus(status: string): void {
+    this.emit('connectionStatus', status);
+  }
+}
+
+// Create current mock instance holder
+let currentMockSyncProgressWebSocket: MockSyncProgressWebSocket | null = null;
 
 // Mock sources service
 export const sourcesService = {
@@ -72,23 +149,29 @@ export const sourcesService = {
   triggerDeepScan: vi.fn(),
   stopSync: vi.fn(),
   getSyncStatus: vi.fn(),
-  getSyncProgressStream: vi.fn(() => {
-    // Return the current mock EventSource instance
-    return currentMockEventSource;
+  createSyncProgressWebSocket: vi.fn((sourceId: string) => {
+    return new MockSyncProgressWebSocket(sourceId);
   }),
 }
 
 // Export helper functions for tests
-export const getMockEventSource = () => currentMockEventSource;
-export const resetMockEventSource = () => {
-  currentMockEventSource = createMockEventSource();
-  sourcesService.getSyncProgressStream.mockReturnValue(currentMockEventSource);
-  // Update global EventSource mock to return the new instance
-  global.EventSource = vi.fn(() => currentMockEventSource) as any;
-  (global.EventSource as any).CONNECTING = EVENTSOURCE_CONNECTING;
-  (global.EventSource as any).OPEN = EVENTSOURCE_OPEN;
-  (global.EventSource as any).CLOSED = EVENTSOURCE_CLOSED;
-  return currentMockEventSource;
+export const getMockWebSocket = () => currentMockWebSocket;
+export const getMockSyncProgressWebSocket = () => currentMockSyncProgressWebSocket;
+
+export const resetMockWebSocket = () => {
+  currentMockWebSocket = createMockWebSocket();
+  // Update global WebSocket mock to return the new instance
+  global.WebSocket = vi.fn(() => currentMockWebSocket) as any;
+  (global.WebSocket as any).CONNECTING = WEBSOCKET_CONNECTING;
+  (global.WebSocket as any).OPEN = WEBSOCKET_OPEN;
+  (global.WebSocket as any).CLOSING = WEBSOCKET_CLOSING;
+  (global.WebSocket as any).CLOSED = WEBSOCKET_CLOSED;
+  return currentMockWebSocket;
+};
+
+export const resetMockSyncProgressWebSocket = () => {
+  currentMockSyncProgressWebSocket = null;
+  return currentMockSyncProgressWebSocket;
 };
 
 // Re-export types that components might need

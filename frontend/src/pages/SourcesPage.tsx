@@ -887,12 +887,6 @@ const SourcesPage: React.FC = () => {
   const renderSourceCard = (source: Source) => (
     <Fade in={true} key={source.id}>
       <Box>
-        {/* Progress Display for Syncing Sources */}
-        <SyncProgressDisplay
-          sourceId={source.id}
-          sourceName={source.name}
-          isVisible={source.status === 'syncing'}
-        />
         <Card 
         data-testid="source-item"
         sx={{ 
@@ -1163,6 +1157,13 @@ const SourcesPage: React.FC = () => {
               />
             </Grid>
           </Grid>
+
+          {/* Sync Progress Display */}
+          <SyncProgressDisplay
+            sourceId={source.id}
+            sourceName={source.name}
+            isVisible={source.status === 'syncing'}
+          />
 
           {/* Error Alert */}
           {source.last_error && (
