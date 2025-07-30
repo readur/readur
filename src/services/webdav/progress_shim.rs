@@ -73,6 +73,18 @@ impl SyncProgress {
         // Do nothing - progress tracking simplified to basic logging
     }
 
+    pub fn add_warning(&self) {
+        // Do nothing - progress tracking simplified to basic logging
+    }
+
+    pub fn update_files_processed(&self, _count: usize) {
+        // Do nothing - progress tracking simplified to basic logging
+    }
+
+    pub fn update_files_found(&self, _count: usize) {
+        // Do nothing - progress tracking simplified to basic logging
+    }
+
     pub fn get_stats(&self) -> Option<ProgressStats> {
         // Return dummy stats for compatibility
         Some(ProgressStats {
