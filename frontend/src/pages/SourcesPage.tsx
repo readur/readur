@@ -79,7 +79,7 @@ import { useNavigate } from 'react-router-dom';
 import api, { queueService, sourcesService, ErrorHelper, ErrorCodes } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
-import SyncProgressDisplay from '../components/SyncProgressDisplay';
+import SyncProgressDisplay from '../components/SyncProgress';
 
 interface Source {
   id: string;

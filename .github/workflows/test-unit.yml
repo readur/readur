@@ -94,5 +94,5 @@ jobs:
       - name: Run type checking
         run: npm run type-check
 
-      - name: Run unit tests
-        run: npm test -- --run
+      - name: Run frontend unit tests
+        run: npm run test:unit
