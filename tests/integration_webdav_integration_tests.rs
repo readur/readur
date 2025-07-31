@@ -116,6 +116,7 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         queue_service,
         oidc_client: None,
         sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        user_watch_service: None,
     });
 
     let app = Router::new()

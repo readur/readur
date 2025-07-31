@@ -37,6 +37,8 @@ async fn create_test_app_state() -> Arc<AppState> {
         jwt_secret: "test_secret".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
         watch_folder: "/tmp/test_watch".to_string(),
+        user_watch_base_dir: "./user_watch".to_string(),
+        enable_per_user_watch: false,
         allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
         watch_interval_seconds: None,
         file_stability_check_ms: None,
@@ -69,6 +71,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         queue_service,
         oidc_client: None,
         sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        user_watch_service: None,
     })
 }
 
