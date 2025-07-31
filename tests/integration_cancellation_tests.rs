@@ -66,6 +66,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         queue_service,
         oidc_client: None,
         sync_progress_tracker,
+        user_watch_service: None,
     })
 }
 

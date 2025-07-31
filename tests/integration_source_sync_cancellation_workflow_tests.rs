@@ -44,7 +44,8 @@ async fn create_test_app_state() -> Arc<AppState> {
         jwt_secret: "test_secret_for_sync_cancellation".to_string(),
         upload_path: "/tmp/test_uploads_sync_cancel".to_string(),
         watch_folder: "/tmp/watch_sync_cancel".to_string(),
-        allowed_file_types: vec!["pdf".to_string(), "txt".to_string(), "jpg".to_string(), "png".to_string()],
+        user_watch_base_dir: "./user_watch".to_string(),
+        enable_per_user_watch: false,        allowed_file_types: vec!["pdf".to_string(), "txt".to_string(), "jpg".to_string(), "png".to_string()],
         watch_interval_seconds: Some(30),
         file_stability_check_ms: Some(500),
         max_file_age_hours: Some(24),
@@ -79,6 +80,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         queue_service,
         oidc_client: None,
         sync_progress_tracker,
+        user_watch_service: None,
     };
     
     // Wrap in Arc for sharing
@@ -98,6 +100,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         queue_service: state_arc.queue_service.clone(),
         oidc_client: None,
         sync_progress_tracker: state_arc.sync_progress_tracker.clone(),
+        user_watch_service: None,
     })
 }
 
