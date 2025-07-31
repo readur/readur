@@ -1,4 +1,4 @@
-import { SyncProgressManager } from './SyncProgressManager';
+import { SyncProgressManager, ConnectionStatus } from './SyncProgressManager';
 import { SyncProgressInfo } from '../api';
 
 /**

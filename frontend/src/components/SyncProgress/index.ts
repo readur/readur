@@ -1,4 +1,4 @@
 export { SyncProgressDisplay } from './SyncProgressDisplay';
 export { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 export { ProgressStatistics } from './ProgressStatistics';
-export default SyncProgressDisplay;
+export { SyncProgressDisplay as default } from './SyncProgressDisplay';
