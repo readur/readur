@@ -24,7 +24,7 @@ export class TestHelpers {
   }
 
   async waitForToast(message?: string) {
-    const toast = this.page.locator('[data-testid="toast"], .toast, [role="alert"]');
+    const toast = this.page.locator('[data-testid="toast"], .toast, [role="alert"]').first();
     await expect(toast).toBeVisible({ timeout: 5000 });
     
     if (message) {
@@ -209,5 +209,91 @@ export class TestHelpers {
       console.log('Error checking for test documents:', error);
       // Don't fail the test if document check fails, just log it
     }
+  }
+
+  async createTestSource(baseName: string, type: string, options?: {
+    mockResponse?: boolean;
+    responseData?: any;
+    uniqueSuffix?: string;
+  }) {
+    // Generate unique source name to avoid conflicts in concurrent tests
+    const timestamp = Date.now();
+    const randomSuffix = options?.uniqueSuffix || Math.random().toString(36).substring(7);
+    const sourceName = `${baseName}_${timestamp}_${randomSuffix}`;
+    
+    // Set up mock if requested
+    if (options?.mockResponse) {
+      const responseData = options.responseData || {
+        id: `source_${timestamp}`,
+        name: sourceName,
+        type: type,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      // Mock the POST request to create source
+      await this.page.route('**/api/sources', async (route, request) => {
+        if (request.method() === 'POST') {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(responseData)
+          });
+        } else {
+          await route.continue();
+        }
+      });
+    }
+    
+    // Click the add source button
+    await this.page.click('button:has-text("Add Source"), [data-testid="add-source"]');
+    
+    // Wait for dialog to appear - target the specific dialog paper element
+    await expect(this.page.getByRole('dialog')).toBeVisible();
+    
+    // Fill in source details - use more reliable selectors
+    const nameInput = this.page.getByLabel('Source Name');
+    await nameInput.fill(sourceName);
+    
+    // For Material-UI Select, we need to click and then select the option
+    const typeSelect = this.page.getByLabel('Source Type');
+    if (await typeSelect.isVisible()) {
+      await typeSelect.click();
+      await this.page.getByRole('option', { name: new RegExp(type, 'i') }).click();
+    }
+    
+    // Add type-specific fields using label-based selectors
+    if (type === 'webdav') {
+      await this.page.getByLabel('Server URL').fill('https://test.webdav.server');
+      await this.page.getByLabel('Username').fill('testuser');
+      await this.page.getByLabel('Password').fill('testpass');
+    } else if (type === 's3') {
+      await this.page.getByLabel('Bucket Name').fill('test-bucket');
+      await this.page.getByLabel('Region').fill('us-east-1');
+      await this.page.getByLabel('Access Key ID').fill('test-access-key');
+      await this.page.getByLabel('Secret Access Key').fill('test-secret-key');
+    } else if (type === 'local_folder') {
+      // For local folder, we need to add a directory path
+      const addFolderInput = this.page.getByLabel(/Add.*Path/i);
+      if (await addFolderInput.isVisible()) {
+        await addFolderInput.fill('/test/path');
+        await this.page.getByRole('button', { name: /Add.*Folder/i }).click();
+      }
+    }
+    
+    // Submit the form
+    const createPromise = this.waitForApiCall('/api/sources', 10000);
+    await this.page.getByRole('button', { name: /Create|Save/i }).click();
+    
+    // Wait for source to be created
+    await createPromise;
+    await this.waitForToast();
+    
+    // Verify the source appears in the list
+    await expect(this.page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`)).toBeVisible();
+    
+    // Return the generated source name so tests can reference it
+    return sourceName;
   }
 }
