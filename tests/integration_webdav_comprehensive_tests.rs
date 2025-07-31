@@ -330,6 +330,8 @@ fn test_webdav_scheduler_creation() {
         server_address: "127.0.0.1:3000".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),
         watch_folder: "/tmp/test_watch".to_string(),
+        user_watch_base_dir: "./user_watch".to_string(),
+        enable_per_user_watch: false,
         jwt_secret: "test_secret".to_string(),
         allowed_file_types: vec!["pdf".to_string(), "png".to_string()],
         watch_interval_seconds: Some(10),

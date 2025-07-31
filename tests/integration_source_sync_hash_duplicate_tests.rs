@@ -126,6 +126,8 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
             jwt_secret: "test-secret".to_string(),
             upload_path: "./test-uploads".to_string(),
             watch_folder: "./test-watch".to_string(),
+            user_watch_base_dir: "./user_watch".to_string(),
+            enable_per_user_watch: false,
             allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
             watch_interval_seconds: Some(30),
             file_stability_check_ms: Some(500),
