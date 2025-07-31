@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'eventemitter3';
 import { SyncProgressInfo } from '../api';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error' | 'failed';
@@ -21,7 +21,7 @@ export interface SyncProgressEvents {
  * Provides a clean interface for components to consume sync progress data
  * without being coupled to WebSocket implementation details
  */
-export abstract class SyncProgressManager extends EventEmitter {
+export abstract class SyncProgressManager extends EventEmitter<keyof SyncProgressEvents> {
   protected state: SyncProgressState = {
     progressInfo: null,
     connectionStatus: 'disconnected',
@@ -30,7 +30,7 @@ export abstract class SyncProgressManager extends EventEmitter {
 
   constructor() {
     super();
-    this.setMaxListeners(20); // Prevent memory leak warnings
+    // EventEmitter3 doesn't have setMaxListeners, but it handles listeners efficiently
   }
 
   /**

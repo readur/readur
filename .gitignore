@@ -9,3 +9,4 @@ readur_uploads/
 readur_watch/
 test-results/
 uploads/
+.claude/settings.local.json
