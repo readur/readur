@@ -67,24 +67,38 @@ const createMockWebSocket = () => {
 // Create the main mock instance
 let currentMockWebSocket = createMockWebSocket();
 
-// Mock the global WebSocket
-global.WebSocket = vi.fn(() => currentMockWebSocket) as any;
+// Mock the global WebSocket constructor
+global.WebSocket = vi.fn().mockImplementation(() => currentMockWebSocket) as any;
 (global.WebSocket as any).CONNECTING = WEBSOCKET_CONNECTING;
 (global.WebSocket as any).OPEN = WEBSOCKET_OPEN;
 (global.WebSocket as any).CLOSING = WEBSOCKET_CLOSING;
 (global.WebSocket as any).CLOSED = WEBSOCKET_CLOSED;
 
-// Mock SyncProgressWebSocket class
+// Mock SyncProgressWebSocket class - also export as the main class name
 export class MockSyncProgressWebSocket {
   private listeners: { [key: string]: ((data: any) => void)[] } = {};
+  private ws: any = null; // Mock WebSocket instance
   
   constructor(private sourceId: string) {
+    console.log('[MOCK] MockSyncProgressWebSocket created for source:', sourceId);
     // Store reference to current instance for test access
     currentMockSyncProgressWebSocket = this;
+    
+    // Create a mock WebSocket instance to match the real class structure
+    this.ws = {
+      close: vi.fn(),
+      readyState: WEBSOCKET_OPEN,
+      onopen: null,
+      onmessage: null,
+      onerror: null,
+      onclose: null,
+    };
   }
 
   connect(): Promise<void> {
-    // Simulate successful connection
+    // Immediately emit connecting status
+    this.emit('connectionStatus', 'connecting');
+    // Simulate successful connection after a short delay
     setTimeout(() => {
       this.emit('connectionStatus', 'connected');
     }, 10);
@@ -111,15 +125,21 @@ export class MockSyncProgressWebSocket {
   }
 
   close(): void {
+    // Mock the same behavior as the real class
+    if (this.ws) {
+      this.ws.close(1000, 'Client requested closure');
+      this.ws = null;
+    }
     this.listeners = {};
+    this.emit('connectionStatus', 'disconnected');
   }
 
   getReadyState(): number {
-    return WEBSOCKET_OPEN;
+    return this.ws?.readyState ?? WEBSOCKET_CLOSED;
   }
 
   isConnected(): boolean {
-    return true;
+    return this.ws?.readyState === WEBSOCKET_OPEN;
   }
 
   // Test helper methods
@@ -149,6 +169,7 @@ export const sourcesService = {
   triggerDeepScan: vi.fn(),
   stopSync: vi.fn(),
   getSyncStatus: vi.fn(),
+  getSyncProgressStream: vi.fn(),
   createSyncProgressWebSocket: vi.fn((sourceId: string) => {
     return new MockSyncProgressWebSocket(sourceId);
   }),
@@ -173,6 +194,30 @@ export const resetMockSyncProgressWebSocket = () => {
   currentMockSyncProgressWebSocket = null;
   return currentMockSyncProgressWebSocket;
 };
+
+// Export the mock class as the main SyncProgressWebSocket class for vitest to use
+export const SyncProgressWebSocket = MockSyncProgressWebSocket;
+
+// Export the SyncProgressInfo type from the mock
+export interface SyncProgressInfo {
+  source_id: string
+  phase: string
+  phase_description: string
+  elapsed_time_secs: number
+  directories_found: number
+  directories_processed: number
+  files_found: number
+  files_processed: number
+  bytes_processed: number
+  processing_rate_files_per_sec: number
+  files_progress_percent: number
+  estimated_time_remaining_secs?: number
+  current_directory: string
+  current_file?: string
+  errors: number
+  warnings: number
+  is_active: boolean
+}
 
 // Re-export types that components might need
 export interface Document {

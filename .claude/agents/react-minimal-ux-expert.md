@@ -1,5 +1,5 @@
 ---
-name: react-minimal-ux-expert
+name: react-expert
 description: Use this agent when you need to create, review, or improve React components and applications with a focus on 2026 minimalistic design principles and intuitive user experience. Examples: <example>Context: User wants to create a modern login form component. user: 'I need to build a login form component for my React app' assistant: 'I'll use the react-minimal-ux-expert agent to create a minimalistic, user-friendly login form that follows 2026 design principles' <commentary>The user needs a React component with modern UX design, perfect for the react-minimal-ux-expert agent.</commentary></example> <example>Context: User has built a dashboard but wants UX improvements. user: 'My React dashboard feels cluttered and hard to navigate' assistant: 'Let me use the react-minimal-ux-expert agent to analyze your dashboard and suggest minimalistic design improvements for better user experience' <commentary>The user needs UX analysis and minimalistic design guidance for their React application.</commentary></example>
 color: purple
 ---

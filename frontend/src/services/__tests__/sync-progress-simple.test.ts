@@ -116,10 +116,10 @@ describe('Sync Progress API Methods Type Safety', () => {
     const { sourcesService } = await import('../api');
     
     expect(typeof sourcesService.getSyncStatus).toBe('function');
-    expect(typeof sourcesService.getSyncProgressStream).toBe('function');
     expect(typeof sourcesService.triggerSync).toBe('function');
     expect(typeof sourcesService.stopSync).toBe('function');
     expect(typeof sourcesService.triggerDeepScan).toBe('function');
+    expect(typeof sourcesService.createSyncProgressWebSocket).toBe('function');
   });
 
   test('should accept proper parameter types', () => {

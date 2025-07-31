@@ -165,6 +165,11 @@ impl WebDAVConfig {
             return Err(anyhow::anyhow!("Invalid URL format: contains multiple protocols"));
         }
 
+        // Reject relative URLs (paths that start with /)
+        if url_without_protocol.starts_with('/') {
+            return Err(anyhow::anyhow!("Server URL cannot be a relative path. Please provide a full server URL like 'https://server.example.com' or 'server.example.com'"));
+        }
+
         Ok(())
     }
 

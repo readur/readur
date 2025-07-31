@@ -34,14 +34,18 @@ import {
   Chip,
   LinearProgress,
   CircularProgress,
+  Tooltip,
+  Divider,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, 
          CloudSync as CloudSyncIcon, Folder as FolderIcon,
          Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon,
-         Pause as PauseIcon, Stop as StopIcon } from '@mui/icons-material';
+         Pause as PauseIcon, Stop as StopIcon, CheckCircle as CheckCircleIcon,
+         Error as ErrorIcon, Visibility as VisibilityIcon, CreateNewFolder as CreateNewFolderIcon,
+         RemoveCircle as RemoveCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import api, { queueService, ErrorHelper, ErrorCodes } from '../services/api';
+import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
 import LanguageSelector from '../components/LanguageSelector';
 
@@ -262,6 +266,21 @@ const SettingsPage: React.FC = () => {
   const [serverConfig, setServerConfig] = useState<ServerConfiguration | null>(null);
   const [configLoading, setConfigLoading] = useState(false);
 
+  // Watch Directory State
+  const [userWatchDirectories, setUserWatchDirectories] = useState<Map<string, UserWatchDirectoryResponse>>(new Map());
+  const [watchDirLoading, setWatchDirLoading] = useState<Map<string, boolean>>(new Map());
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
 
   useEffect(() => {
     fetchSettings();
@@ -269,6 +288,13 @@ const SettingsPage: React.FC = () => {
     fetchOcrStatus();
     fetchServerConfiguration();
   }, []);
+
+  // Fetch watch directory information after users are loaded
+  useEffect(() => {
+    if (users.length > 0) {
+      fetchUserWatchDirectories();
+    }
+  }, [users]);
 
   const fetchSettings = async (): Promise<void> => {
     try {
@@ -558,6 +584,255 @@ const SettingsPage: React.FC = () => {
     } finally {
       setConfigLoading(false);
     }
+  };
+
+  // Watch Directory Functions
+  const fetchUserWatchDirectories = async (): Promise<void> => {
+    try {
+      const watchDirMap = new Map<string, UserWatchDirectoryResponse>();
+      
+      // Fetch watch directory info for each user
+      await Promise.all(
+        users.map(async (user) => {
+          try {
+            const response = await userWatchService.getUserWatchDirectory(user.id);
+            watchDirMap.set(user.id, response.data);
+          } catch (error: any) {
+            // If watch directory doesn't exist or user doesn't have one, that's okay
+            if (error.response?.status === 404) {
+              watchDirMap.set(user.id, {
+                user_id: user.id,
+                username: user.username,
+                watch_directory_path: `./user_watch/${user.username}`,
+                exists: false,
+                enabled: false,
+              });
+            } else {
+              console.error(`Error fetching watch directory for user ${user.username}:`, error);
+            }
+          }
+        })
+      );
+      
+      setUserWatchDirectories(watchDirMap);
+    } catch (error: any) {
+      console.error('Error fetching user watch directories:', error);
+      // Don't show error message as this might not be available for all users
+    }
+  };
+
+  const setUserWatchDirLoading = (userId: string, loading: boolean): void => {
+    setWatchDirLoading(prev => {
+      const newMap = new Map(prev);
+      if (loading) {
+        newMap.set(userId, true);
+      } else {
+        newMap.delete(userId);
+      }
+      return newMap;
+    });
+  };
+
+  const handleCreateWatchDirectory = async (userId: string): Promise<void> => {
+    setUserWatchDirLoading(userId, true);
+    try {
+      const response = await userWatchService.createUserWatchDirectory(userId);
+      if (response.data.success) {
+        showSnackbar('Watch directory created successfully', 'success');
+        // Refresh the watch directory info for this user
+        try {
+          const updatedResponse = await userWatchService.getUserWatchDirectory(userId);
+          setUserWatchDirectories(prev => {
+            const newMap = new Map(prev);
+            newMap.set(userId, updatedResponse.data);
+            return newMap;
+          });
+        } catch (fetchError) {
+          console.error('Error refreshing watch directory info:', fetchError);
+        }
+      } else {
+        showSnackbar(response.data.message || 'Failed to create watch directory', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error creating watch directory:', error);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      if (error.response?.status === 403) {
+        showSnackbar('Admin access required to create watch directories', 'error');
+      } else if (error.response?.status === 409) {
+        showSnackbar('Watch directory already exists for this user', 'warning');
+      } else {
+        showSnackbar(errorInfo.message || 'Failed to create watch directory', 'error');
+      }
+    } finally {
+      setUserWatchDirLoading(userId, false);
+    }
+  };
+
+  const handleViewWatchDirectory = (directoryPath: string): void => {
+    // For now, just show the path in a snackbar
+    // In a real implementation, this could open a file explorer or navigate to a directory view
+    showSnackbar(`Watch directory: ${directoryPath}`, 'info');
+  };
+
+  const handleRemoveWatchDirectory = (userId: string, username: string): void => {
+    setConfirmDialog({
+      open: true,
+      title: 'Remove Watch Directory',
+      message: `Are you sure you want to remove the watch directory for user "${username}"? This action cannot be undone and will stop monitoring their directory for new files.`,
+      onConfirm: () => confirmRemoveWatchDirectory(userId),
+    });
+  };
+
+  const confirmRemoveWatchDirectory = async (userId: string): Promise<void> => {
+    setUserWatchDirLoading(userId, true);
+    try {
+      const response = await userWatchService.deleteUserWatchDirectory(userId);
+      if (response.data.success) {
+        showSnackbar('Watch directory removed successfully', 'success');
+        // Update the watch directory info to reflect removal
+        setUserWatchDirectories(prev => {
+          const newMap = new Map(prev);
+          const current = newMap.get(userId);
+          if (current) {
+            newMap.set(userId, {
+              ...current,
+              exists: false,
+              enabled: false,
+            });
+          }
+          return newMap;
+        });
+      } else {
+        showSnackbar(response.data.message || 'Failed to remove watch directory', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error removing watch directory:', error);
+      
+      const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
+      if (error.response?.status === 403) {
+        showSnackbar('Admin access required to remove watch directories', 'error');
+      } else if (error.response?.status === 404) {
+        showSnackbar('Watch directory not found or already removed', 'warning');
+        // Update state to reflect that it doesn't exist
+        setUserWatchDirectories(prev => {
+          const newMap = new Map(prev);
+          const current = newMap.get(userId);
+          if (current) {
+            newMap.set(userId, {
+              ...current,
+              exists: false,
+              enabled: false,
+            });
+          }
+          return newMap;
+        });
+      } else {
+        showSnackbar(errorInfo.message || 'Failed to remove watch directory', 'error');
+      }
+    } finally {
+      setUserWatchDirLoading(userId, false);
+      setConfirmDialog(prev => ({ ...prev, open: false }));
+    }
+  };
+
+  const handleCloseConfirmDialog = (): void => {
+    setConfirmDialog(prev => ({ ...prev, open: false }));
+  };
+
+  // Helper function to render watch directory status
+  const renderWatchDirectoryStatus = (userId: string, username: string) => {
+    const watchDirInfo = userWatchDirectories.get(userId);
+    const isLoading = watchDirLoading.get(userId) || false;
+
+    if (isLoading) {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CircularProgress size={16} />
+          <Typography variant="body2" color="text.secondary">
+            Loading...
+          </Typography>
+        </Box>
+      );
+    }
+
+    if (!watchDirInfo) {
+      return (
+        <Typography variant="body2" color="text.secondary">
+          Unknown
+        </Typography>
+      );
+    }
+
+    const getStatusIcon = () => {
+      if (watchDirInfo.exists && watchDirInfo.enabled) {
+        return <CheckCircleIcon sx={{ color: 'success.main', fontSize: 16 }} />;
+      } else if (watchDirInfo.exists && !watchDirInfo.enabled) {
+        return <WarningIcon sx={{ color: 'warning.main', fontSize: 16 }} />;
+      } else {
+        return <ErrorIcon sx={{ color: 'error.main', fontSize: 16 }} />;
+      }
+    };
+
+    const getStatusText = () => {
+      if (watchDirInfo.exists && watchDirInfo.enabled) {
+        return 'Active';
+      } else if (watchDirInfo.exists && !watchDirInfo.enabled) {
+        return 'Disabled';
+      } else {
+        return 'Not Created';
+      }
+    };
+
+    const getStatusColor = (): "success" | "warning" | "error" => {
+      if (watchDirInfo.exists && watchDirInfo.enabled) {
+        return 'success';
+      } else if (watchDirInfo.exists && !watchDirInfo.enabled) {
+        return 'warning';
+      } else {
+        return 'error';
+      }
+    };
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: { xs: '120px', sm: '160px' } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Tooltip title={`Status: ${getStatusText()}`}>
+            {getStatusIcon()}
+          </Tooltip>
+          <Chip
+            label={getStatusText()}
+            size="small"
+            color={getStatusColor()}
+            variant="outlined"
+          />
+        </Box>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            fontFamily: 'monospace',
+            fontSize: { xs: '0.7rem', sm: '0.75rem' },
+            wordBreak: 'break-all',
+            display: { xs: 'none', sm: 'block' }
+          }}
+        >
+          {watchDirInfo.watch_directory_path}
+        </Typography>
+        {/* Show truncated path on mobile */}
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            fontFamily: 'monospace',
+            fontSize: '0.7rem',
+            display: { xs: 'block', sm: 'none' }
+          }}
+        >
+          .../user_watch/{username}
+        </Typography>
+      </Box>
+    );
   };
 
   return (
@@ -1174,35 +1449,139 @@ const SettingsPage: React.FC = () => {
                 </Button>
               </Box>
 
-              <TableContainer component={Paper}>
-                <Table>
+              <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 800 }}>
                   <TableHead>
                     <TableRow>
                       <TableCell>Username</TableCell>
-                      <TableCell>Email</TableCell>
-                      <TableCell>Created At</TableCell>
+                      <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Email</TableCell>
+                      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Created At</TableCell>
+                      <TableCell>Watch Directory</TableCell>
                       <TableCell align="right">Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {users.map((user) => (
                       <TableRow key={user.id}>
-                        <TableCell>{user.username}</TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Box>
+                            <Typography variant="body2" fontWeight="medium">
+                              {user.username}
+                            </Typography>
+                            {/* Show email on mobile */}
+                            <Typography 
+                              variant="caption" 
+                              color="text.secondary"
+                              sx={{ display: { xs: 'block', sm: 'none' } }}
+                            >
+                              {user.email}
+                            </Typography>
+                            {/* Show created date on mobile */}
+                            <Typography 
+                              variant="caption" 
+                              color="text.secondary"
+                              sx={{ display: { xs: 'block', md: 'none' } }}
+                            >
+                              Created: {new Date(user.created_at).toLocaleDateString()}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+                          {user.email}
+                        </TableCell>
+                        <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
+                          {new Date(user.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          {renderWatchDirectoryStatus(user.id, user.username)}
+                        </TableCell>
                         <TableCell align="right">
-                          <IconButton
-                            onClick={() => handleOpenUserDialog('edit', user)}
-                            disabled={loading}
-                          >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton
-                            onClick={() => handleDeleteUser(user.id)}
-                            disabled={loading || user.id === currentUser?.id}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            gap: 0.5, 
+                            justifyContent: 'flex-end',
+                            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                            minWidth: { xs: 'auto', sm: '200px' }
+                          }}>
+                            {/* Watch Directory Actions */}
+                            {(() => {
+                              const watchDirInfo = userWatchDirectories.get(user.id);
+                              const isWatchDirLoading = watchDirLoading.get(user.id) || false;
+                              
+                              if (!watchDirInfo || !watchDirInfo.exists) {
+                                // Show Create Directory button
+                                return (
+                                  <Tooltip title="Create watch directory">
+                                    <IconButton
+                                      onClick={() => handleCreateWatchDirectory(user.id)}
+                                      disabled={loading || isWatchDirLoading}
+                                      color="primary"
+                                      size="small"
+                                    >
+                                      {isWatchDirLoading ? (
+                                        <CircularProgress size={16} />
+                                      ) : (
+                                        <CreateNewFolderIcon />
+                                      )}
+                                    </IconButton>
+                                  </Tooltip>
+                                );
+                              } else {
+                                // Show View and Remove buttons
+                                return (
+                                  <>
+                                    <Tooltip title="View watch directory">
+                                      <IconButton
+                                        onClick={() => handleViewWatchDirectory(watchDirInfo.watch_directory_path)}
+                                        disabled={loading || isWatchDirLoading}
+                                        color="info"
+                                        size="small"
+                                      >
+                                        <VisibilityIcon />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Remove watch directory (Admin only)">
+                                      <IconButton
+                                        onClick={() => handleRemoveWatchDirectory(user.id, user.username)}
+                                        disabled={loading || isWatchDirLoading}
+                                        color="error"
+                                        size="small"
+                                      >
+                                        {isWatchDirLoading ? (
+                                          <CircularProgress size={16} />
+                                        ) : (
+                                          <RemoveCircleIcon />
+                                        )}
+                                      </IconButton>
+                                    </Tooltip>
+                                  </>
+                                );
+                              }
+                            })()}
+                            
+                            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                            
+                            {/* User Management Actions */}
+                            <Tooltip title="Edit user">
+                              <IconButton
+                                onClick={() => handleOpenUserDialog('edit', user)}
+                                disabled={loading}
+                                size="small"
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete user">
+                              <IconButton
+                                onClick={() => handleDeleteUser(user.id)}
+                                disabled={loading || user.id === currentUser?.id}
+                                color="error"
+                                size="small"
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1436,6 +1815,40 @@ const SettingsPage: React.FC = () => {
           </Button>
           <Button onClick={handleUserSubmit} variant="contained" disabled={loading}>
             {userDialog.mode === 'create' ? 'Create' : 'Update'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmation Dialog for Watch Directory Actions */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={handleCloseConfirmDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningIcon color="warning" />
+          {confirmDialog.title}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1">
+            {confirmDialog.message}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseConfirmDialog} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              confirmDialog.onConfirm();
+              handleCloseConfirmDialog();
+            }}
+            variant="contained"
+            color="error"
+            startIcon={<RemoveCircleIcon />}
+          >
+            Remove Directory
           </Button>
         </DialogActions>
       </Dialog>

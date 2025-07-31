@@ -1,13 +1,12 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock WebSocket globally
-const mockWebSocket = vi.fn();
 const mockWebSocketInstances: any[] = [];
 
-mockWebSocket.mockImplementation((url: string) => {
+const createMockWebSocketInstance = (url: string) => {
   const instance = {
     url,
-    readyState: WebSocket.CONNECTING,
+    readyState: 0, // CONNECTING
     send: vi.fn(),
     close: vi.fn(),
     addEventListener: vi.fn(),
@@ -24,22 +23,30 @@ mockWebSocket.mockImplementation((url: string) => {
   
   mockWebSocketInstances.push(instance);
   
-  // Simulate connection opening after a short delay
-  setTimeout(() => {
-    instance.readyState = WebSocket.OPEN;
+  // Simulate connection opening after the current call stack finishes
+  queueMicrotask(() => {
+    instance.readyState = 1; // OPEN
     if (instance.onopen) {
       instance.onopen(new Event('open'));
     }
-  }, 10);
+  });
   
   return instance;
-});
+};
+
+const mockWebSocket = vi.fn().mockImplementation(createMockWebSocketInstance);
 
 // Replace global WebSocket
 Object.defineProperty(global, 'WebSocket', {
   value: mockWebSocket,
   writable: true,
 });
+
+// Set WebSocket constants on the global object
+Object.defineProperty(global.WebSocket, 'CONNECTING', { value: 0 });
+Object.defineProperty(global.WebSocket, 'OPEN', { value: 1 });
+Object.defineProperty(global.WebSocket, 'CLOSING', { value: 2 });
+Object.defineProperty(global.WebSocket, 'CLOSED', { value: 3 });
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -160,6 +167,10 @@ describe('WebSocket Sync Progress Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockWebSocketInstances.length = 0;
+    
+    // Reset the mock function
+    mockWebSocket.mockClear();
+    mockWebSocket.mockImplementation(createMockWebSocketInstance);
     
     sourceId = 'test-source-123';
     mockOnMessage = vi.fn();
@@ -315,16 +326,21 @@ describe('WebSocket Sync Progress Service', () => {
     
     // Simulate unexpected disconnection (not code 1000)
     if (wsInstance.onclose) {
+      // IMPORTANT: Update the mock WebSocket's readyState to CLOSED
+      wsInstance.readyState = 3; // WebSocket.CLOSED
+      
       wsInstance.onclose({
         code: 1006, // Abnormal closure
         reason: 'Connection lost'
       });
+      
+      // Advance time to trigger reconnection, ensuring WebSocket stays closed
+      vi.advanceTimersByTime(500);
+      wsInstance.readyState = 3; // Make sure it stays closed (factory might reset it)
+      vi.advanceTimersByTime(1500); // Total 2000ms
     }
     
     expect(mockOnConnectionChange).toHaveBeenCalledWith('disconnected');
-    
-    // Fast-forward time to trigger reconnection
-    vi.advanceTimersByTime(1000);
     
     // Should attempt to reconnect
     expect(mockWebSocket).toHaveBeenCalledTimes(2);
@@ -365,17 +381,27 @@ describe('WebSocket Sync Progress Service', () => {
     
     // Simulate multiple disconnections
     for (let i = 0; i < 6; i++) {
-      const wsInstance = mockWebSocketInstances[mockWebSocketInstances.length - 1];
+      // Get the most recent WebSocket instance 
+      let wsInstance = mockWebSocketInstances[mockWebSocketInstances.length - 1];
       
-      if (wsInstance.onclose) {
+      if (wsInstance && wsInstance.onclose) {
+        // IMPORTANT: Update the mock WebSocket's readyState to CLOSED
+        wsInstance.readyState = 3; // WebSocket.CLOSED
+        
         wsInstance.onclose({
           code: 1006,
           reason: 'Connection lost'
         });
       }
       
-      // Fast-forward to trigger reconnection
-      vi.advanceTimersByTime(10000);
+      // Fast-forward to trigger reconnection with exponential backoff
+      const delay = 1000 * Math.pow(2, i); // Exponential backoff
+      vi.advanceTimersByTime(delay + 100); // Add a bit extra to ensure timing
+      
+      // Make sure the WebSocket stays closed after advancing time
+      if (wsInstance) {
+        wsInstance.readyState = 3; // WebSocket.CLOSED
+      }
     }
     
     // Should stop reconnecting after max attempts
@@ -388,7 +414,7 @@ describe('WebSocket Sync Progress Service', () => {
     service.connect();
     
     const wsInstance = mockWebSocketInstances[0];
-    wsInstance.readyState = WebSocket.OPEN;
+    wsInstance.readyState = 1; // OPEN
     
     service.sendPing();
     
@@ -399,7 +425,7 @@ describe('WebSocket Sync Progress Service', () => {
     service.connect();
     
     const wsInstance = mockWebSocketInstances[0];
-    wsInstance.readyState = WebSocket.CLOSED;
+    wsInstance.readyState = 3; // CLOSED
     
     service.sendPing();
     
@@ -417,24 +443,24 @@ describe('WebSocket Sync Progress Service', () => {
   });
 
   test('should return correct connection state', () => {
-    expect(service.getConnectionState()).toBe(WebSocket.CLOSED);
+    expect(service.getConnectionState()).toBe(3); // CLOSED
     
     service.connect();
     
     const wsInstance = mockWebSocketInstances[0];
-    wsInstance.readyState = WebSocket.CONNECTING;
+    wsInstance.readyState = 0; // CONNECTING
     
-    expect(service.getConnectionState()).toBe(WebSocket.CONNECTING);
+    expect(service.getConnectionState()).toBe(0); // CONNECTING
     
-    wsInstance.readyState = WebSocket.OPEN;
-    expect(service.getConnectionState()).toBe(WebSocket.OPEN);
+    wsInstance.readyState = 1; // OPEN
+    expect(service.getConnectionState()).toBe(1); // OPEN
   });
 
   test('should not create multiple connections when already connected', () => {
     service.connect();
     
-    const wsInstance = mockWebSocketInstances[0];
-    wsInstance.readyState = WebSocket.OPEN;
+    const wsInstance = mockWebSocketInstances[0];  
+    wsInstance.readyState = 1; // OPEN
     
     // Try to connect again
     service.connect();
@@ -453,19 +479,25 @@ describe('WebSocket Sync Progress Service', () => {
     // First reconnection
     const wsInstance1 = mockWebSocketInstances[0];
     if (wsInstance1.onclose) {
+      // IMPORTANT: Update the mock WebSocket's readyState to CLOSED
+      wsInstance1.readyState = 3; // WebSocket.CLOSED
+      
       wsInstance1.onclose({ code: 1006, reason: 'Connection lost' });
     }
     
-    vi.advanceTimersByTime(1000); // 1s delay
+    vi.advanceTimersByTime(2000); // 1s delay * 2^0 = 1s, add extra time
     expect(mockWebSocket).toHaveBeenCalledTimes(initialCallCount + 1);
     
     // Second reconnection
     const wsInstance2 = mockWebSocketInstances[1];
     if (wsInstance2.onclose) {
+      // IMPORTANT: Update the mock WebSocket's readyState to CLOSED
+      wsInstance2.readyState = 3; // WebSocket.CLOSED
+      
       wsInstance2.onclose({ code: 1006, reason: 'Connection lost' });
     }
     
-    vi.advanceTimersByTime(2000); // 2s delay (exponential backoff)
+    vi.advanceTimersByTime(4000); // 1s * 2^1 = 2s, add extra time
     expect(mockWebSocket).toHaveBeenCalledTimes(initialCallCount + 2);
     
     vi.useRealTimers();
@@ -473,18 +505,33 @@ describe('WebSocket Sync Progress Service', () => {
 });
 
 describe('WebSocket Message Types', () => {
-  test('should handle progress messages with all fields', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockWebSocketInstances.length = 0;
+    
+    // Reset the mock function
+    mockWebSocket.mockClear();
+    mockWebSocket.mockImplementation(createMockWebSocketInstance);
+    
+    mockLocalStorage.getItem.mockReturnValue('mock-jwt-token');
+  });
+  
+  test('should handle progress messages with all fields', async () => {
     const mockOnMessage = vi.fn();
-    const service = new WebSocketSyncProgressService(
+    const testService = new WebSocketSyncProgressService(
       'test-source',
       mockOnMessage,
       vi.fn(),
       vi.fn()
     );
     
-    service.connect();
+    testService.connect();
     
-    const wsInstance = mockWebSocketInstances[0];
+    // Wait for connection to complete so onmessage handler is set up
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    // Find the most recent WebSocket instance
+    const wsInstance = mockWebSocketInstances[mockWebSocketInstances.length - 1];
     const progressMessage = {
       type: 'progress',
       data: {
@@ -522,18 +569,22 @@ describe('WebSocket Message Types', () => {
     expect(receivedData.data.current_file).toBe('important-document.pdf');
   });
 
-  test('should handle error messages', () => {
+  test('should handle error messages', async () => {
+    
     const mockOnMessage = vi.fn();
-    const service = new WebSocketSyncProgressService(
+    const testService = new WebSocketSyncProgressService(
       'test-source',
       mockOnMessage,
       vi.fn(),
       vi.fn()
     );
     
-    service.connect();
+    testService.connect();
     
-    const wsInstance = mockWebSocketInstances[0];
+    // Wait for connection to complete so onmessage handler is set up
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    const wsInstance = mockWebSocketInstances[mockWebSocketInstances.length - 1];
     const errorMessage = {
       type: 'error',
       data: {
@@ -550,18 +601,22 @@ describe('WebSocket Message Types', () => {
     expect(mockOnMessage).toHaveBeenCalledWith(errorMessage);
   });
 
-  test('should handle different sync phases', () => {
+  test('should handle different sync phases', async () => {
+    
     const mockOnMessage = vi.fn();
-    const service = new WebSocketSyncProgressService(
+    const testService = new WebSocketSyncProgressService(
       'test-source',
       mockOnMessage,
       vi.fn(),
       vi.fn()
     );
     
-    service.connect();
+    testService.connect();
     
-    const wsInstance = mockWebSocketInstances[0];
+    // Wait for connection to complete so onmessage handler is set up
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    const wsInstance = mockWebSocketInstances[mockWebSocketInstances.length - 1];
     const phases = [
       'initializing',
       'evaluating', 

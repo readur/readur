@@ -8,6 +8,8 @@ pub struct Config {
     pub jwt_secret: String,
     pub upload_path: String,
     pub watch_folder: String,
+    pub user_watch_base_dir: String,
+    pub enable_per_user_watch: bool,
     pub allowed_file_types: Vec<String>,
     pub watch_interval_seconds: Option<u64>,
     pub file_stability_check_ms: Option<u64>,
@@ -160,6 +162,33 @@ impl Config {
                     let default_folder = "./watch".to_string();
                     println!("⚠️  WATCH_FOLDER: {} (using default - env var not set)", default_folder);
                     default_folder
+                }
+            },
+            user_watch_base_dir: match env::var("USER_WATCH_BASE_DIR") {
+                Ok(dir) => {
+                    println!("✅ USER_WATCH_BASE_DIR: {} (loaded from env)", dir);
+                    dir
+                }
+                Err(_) => {
+                    let default_dir = "./user_watch".to_string();
+                    println!("⚠️  USER_WATCH_BASE_DIR: {} (using default - env var not set)", default_dir);
+                    default_dir
+                }
+            },
+            enable_per_user_watch: match env::var("ENABLE_PER_USER_WATCH") {
+                Ok(val) => match val.to_lowercase().as_str() {
+                    "true" | "1" | "yes" | "on" => {
+                        println!("✅ ENABLE_PER_USER_WATCH: true (loaded from env)");
+                        true
+                    }
+                    _ => {
+                        println!("✅ ENABLE_PER_USER_WATCH: false (loaded from env)");
+                        false
+                    }
+                },
+                Err(_) => {
+                    println!("⚠️  ENABLE_PER_USER_WATCH: false (using default - env var not set)");
+                    false
                 }
             },
             allowed_file_types: {
@@ -433,6 +462,10 @@ impl Config {
         println!("🌐 Server will bind to: {}", config.server_address);
         println!("📁 Upload directory: {}", config.upload_path);
         println!("👁️  Watch directory: {}", config.watch_folder);
+        println!("👥 Per-user watch enabled: {}", config.enable_per_user_watch);
+        if config.enable_per_user_watch {
+            println!("📂 User watch base directory: {}", config.user_watch_base_dir);
+        }
         println!("📄 Allowed file types: {:?}", config.allowed_file_types);
         println!("🧠 OCR language: {}", config.ocr_language);
         println!("⚙️  Concurrent OCR jobs: {}", config.concurrent_ocr_jobs);
@@ -485,9 +518,13 @@ impl Config {
         
         let upload_path = Path::new(&self.upload_path);
         let watch_path = Path::new(&self.watch_folder);
+        let user_watch_path = Path::new(&self.user_watch_base_dir);
         
         println!("📁 Checking upload directory: {}", self.upload_path);
         println!("👁️  Checking watch directory: {}", self.watch_folder);
+        if self.enable_per_user_watch {
+            println!("👥 Checking user watch base directory: {}", self.user_watch_base_dir);
+        }
         
         // Check if paths exist and are accessible
         if !upload_path.exists() {
@@ -512,6 +549,19 @@ impl Config {
             println!("✅ Watch directory exists and is accessible");
         }
         
+        if self.enable_per_user_watch {
+            if !user_watch_path.exists() {
+                println!("⚠️  User watch base directory does not exist yet: {}", self.user_watch_base_dir);
+            } else if !user_watch_path.is_dir() {
+                println!("❌ User watch base path exists but is not a directory: {}", self.user_watch_base_dir);
+                return Err(anyhow::anyhow!(
+                    "User watch base directory '{}' exists but is not a directory", self.user_watch_base_dir
+                ));
+            } else {
+                println!("✅ User watch base directory exists and is accessible");
+            }
+        }
+        
         // Normalize paths to handle relative paths and symlinks
         let upload_canonical = upload_path.canonicalize()
             .unwrap_or_else(|_| {
@@ -523,9 +573,21 @@ impl Config {
                 println!("⚠️  Could not canonicalize watch path, using as-is");
                 watch_path.to_path_buf()
             });
+        let user_watch_canonical = if self.enable_per_user_watch {
+            Some(user_watch_path.canonicalize()
+                .unwrap_or_else(|_| {
+                    println!("⚠️  Could not canonicalize user watch path, using as-is");
+                    user_watch_path.to_path_buf()
+                }))
+        } else {
+            None
+        };
             
         println!("📍 Canonical upload path: {}", upload_canonical.display());
         println!("📍 Canonical watch path: {}", watch_canonical.display());
+        if let Some(ref user_watch) = user_watch_canonical {
+            println!("📍 Canonical user watch path: {}", user_watch.display());
+        }
         
         // Check if paths are the same
         if upload_canonical == watch_canonical {
@@ -570,6 +632,61 @@ impl Config {
                  Please move the upload directory outside the watch folder.",
                 self.upload_path, self.watch_folder
             ));
+        }
+        
+        // Additional validation for user watch directory if enabled
+        if let Some(ref user_watch) = user_watch_canonical {
+            // Check if user watch is same as upload or watch
+            if user_watch == &upload_canonical {
+                println!("❌ CRITICAL ERROR: User watch base directory is same as upload directory!");
+                return Err(anyhow::anyhow!(
+                    "❌ Configuration Error: USER_WATCH_BASE_DIR cannot be the same as UPLOAD_PATH.\n\
+                     Current config:\n\
+                     - UPLOAD_PATH: {}\n\
+                     - USER_WATCH_BASE_DIR: {}\n\
+                     Please set them to different directories.",
+                    self.upload_path, self.user_watch_base_dir
+                ));
+            }
+            
+            if user_watch == &watch_canonical {
+                println!("❌ CRITICAL ERROR: User watch base directory is same as global watch directory!");
+                return Err(anyhow::anyhow!(
+                    "❌ Configuration Error: USER_WATCH_BASE_DIR cannot be the same as WATCH_FOLDER.\n\
+                     Current config:\n\
+                     - WATCH_FOLDER: {}\n\
+                     - USER_WATCH_BASE_DIR: {}\n\
+                     Please set them to different directories.",
+                    self.watch_folder, self.user_watch_base_dir
+                ));
+            }
+            
+            // Check if user watch is inside upload or vice versa
+            if user_watch.starts_with(&upload_canonical) {
+                println!("❌ CRITICAL ERROR: User watch base directory is inside upload directory!");
+                return Err(anyhow::anyhow!(
+                    "❌ Configuration Error: USER_WATCH_BASE_DIR cannot be inside UPLOAD_PATH.\n\
+                     This would cause recursion issues.\n\
+                     Current config:\n\
+                     - UPLOAD_PATH: {}\n\
+                     - USER_WATCH_BASE_DIR: {}\n\
+                     Please move the user watch directory outside the upload directory.",
+                    self.upload_path, self.user_watch_base_dir
+                ));
+            }
+            
+            if upload_canonical.starts_with(user_watch) {
+                println!("❌ CRITICAL ERROR: Upload directory is inside user watch base directory!");
+                return Err(anyhow::anyhow!(
+                    "❌ Configuration Error: UPLOAD_PATH cannot be inside USER_WATCH_BASE_DIR.\n\
+                     This would cause recursion issues.\n\
+                     Current config:\n\
+                     - UPLOAD_PATH: {}\n\
+                     - USER_WATCH_BASE_DIR: {}\n\
+                     Please move the upload directory outside the user watch directory.",
+                    self.upload_path, self.user_watch_base_dir
+                ));
+            }
         }
         
         println!("✅ Directory path validation passed - no conflicts detected");

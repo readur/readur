@@ -18,6 +18,8 @@ import {
   Button,
   IconButton,
   CircularProgress,
+  Divider,
+  Skeleton,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -29,9 +31,13 @@ import {
   Visibility as VisibilityIcon,
   CloudUpload as CloudUploadIcon,
   Description as DescriptionIcon,
+  PersonOutline as PersonIcon,
+  CreateNewFolder as CreateFolderIcon,
+  AdminPanelSettings as AdminIcon,
 } from '@mui/icons-material';
 import { useTheme } from '@mui/material/styles';
-import { queueService, QueueStats } from '../services/api';
+import { queueService, QueueStats, userWatchService, UserWatchDirectoryResponse } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface WatchConfig {
   watchFolder: string;
@@ -44,11 +50,21 @@ interface WatchConfig {
 
 const WatchFolderPage: React.FC = () => {
   const theme = useTheme();
+  const { user } = useAuth();
+  
+  // Queue statistics state
   const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [requeuingFailed, setRequeuingFailed] = useState<boolean>(false);
+  
+  // User watch directory state
+  const [userWatchInfo, setUserWatchInfo] = useState<UserWatchDirectoryResponse | null>(null);
+  const [userWatchLoading, setUserWatchLoading] = useState<boolean>(false);
+  const [userWatchError, setUserWatchError] = useState<string | null>(null);
+  const [creatingDirectory, setCreatingDirectory] = useState<boolean>(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Mock configuration data (would typically come from API)
   const watchConfig: WatchConfig = {
@@ -62,9 +78,28 @@ const WatchFolderPage: React.FC = () => {
 
   useEffect(() => {
     fetchQueueStats();
+    if (user) {
+      fetchUserWatchDirectory();
+    }
     const interval = setInterval(fetchQueueStats, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
+
+  const fetchUserWatchDirectory = async (): Promise<void> => {
+    if (!user) return;
+    
+    try {
+      setUserWatchLoading(true);
+      setUserWatchError(null);
+      const response = await userWatchService.getUserWatchDirectory(user.id);
+      setUserWatchInfo(response.data);
+    } catch (err) {
+      console.error('Error fetching user watch directory:', err);
+      setUserWatchError('Failed to fetch user watch directory information');
+    } finally {
+      setUserWatchLoading(false);
+    }
+  };
 
   const fetchQueueStats = async (): Promise<void> => {
     try {
@@ -78,6 +113,33 @@ const WatchFolderPage: React.FC = () => {
       setError('Failed to fetch queue statistics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createUserWatchDirectory = async (): Promise<void> => {
+    if (!user) return;
+    
+    try {
+      setCreatingDirectory(true);
+      setUserWatchError(null);
+      setSuccessMessage(null);
+      
+      const response = await userWatchService.createUserWatchDirectory(user.id);
+      
+      if (response.data.success) {
+        setSuccessMessage(response.data.message);
+        // Refresh user watch directory info
+        await fetchUserWatchDirectory();
+      } else {
+        setUserWatchError(response.data.message || 'Failed to create watch directory');
+      }
+    } catch (err) {
+      console.error('Error creating user watch directory:', err);
+      setUserWatchError('Failed to create user watch directory');
+    } finally {
+      setCreatingDirectory(false);
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000);
     }
   };
 
@@ -152,11 +214,16 @@ const WatchFolderPage: React.FC = () => {
         <Button
           variant="outlined"
           startIcon={<RefreshIcon />}
-          onClick={fetchQueueStats}
-          disabled={loading}
+          onClick={() => {
+            fetchQueueStats();
+            if (user) {
+              fetchUserWatchDirectory();
+            }
+          }}
+          disabled={loading || userWatchLoading}
           sx={{ mr: 2 }}
         >
-          Refresh
+          Refresh All
         </Button>
         
         {queueStats && queueStats.failed_count > 0 && (
@@ -178,13 +245,161 @@ const WatchFolderPage: React.FC = () => {
         </Alert>
       )}
 
-      {/* Watch Folder Configuration */}
+      {successMessage && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          {successMessage}
+        </Alert>
+      )}
+
+      {/* User Watch Directory - Only show for authenticated users */}
+      {user && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PersonIcon color="primary" />
+              Personal Watch Directory
+              {user.role === 'Admin' && (
+                <Chip
+                  icon={<AdminIcon />}
+                  label="Admin"
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ ml: 1 }}
+                />
+              )}
+            </Typography>
+
+            {userWatchError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {userWatchError}
+              </Alert>
+            )}
+
+            {userWatchLoading ? (
+              <Box sx={{ p: 2 }}>
+                <Skeleton variant="text" width="60%" height={24} />
+                <Skeleton variant="text" width="40%" height={20} sx={{ mt: 1 }} />
+                <Skeleton variant="rectangular" width="120px" height={36} sx={{ mt: 2 }} />
+              </Box>
+            ) : userWatchInfo ? (
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={8}>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Your Personal Watch Directory
+                    </Typography>
+                    <Typography variant="body1" sx={{ 
+                      fontFamily: 'monospace', 
+                      bgcolor: theme.palette.mode === 'light' ? 'grey.100' : 'grey.800', 
+                      p: 1, 
+                      borderRadius: 1,
+                      color: 'text.primary',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}>
+                      <FolderIcon fontSize="small" />
+                      {userWatchInfo.watch_directory_path}
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Directory Status
+                      </Typography>
+                      <Chip
+                        icon={userWatchInfo.exists ? <CheckCircleIcon /> : <ErrorIcon />}
+                        label={userWatchInfo.exists ? 'Directory Exists' : 'Directory Missing'}
+                        color={userWatchInfo.exists ? 'success' : 'error'}
+                        variant="filled"
+                        size="small"
+                      />
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Watch Status
+                      </Typography>
+                      <Chip
+                        icon={userWatchInfo.enabled ? <CheckCircleIcon /> : <ScheduleIcon />}
+                        label={userWatchInfo.enabled ? 'Enabled' : 'Disabled'}
+                        color={userWatchInfo.enabled ? 'success' : 'warning'}
+                        variant="filled"
+                        size="small"
+                      />
+                    </Box>
+                  </Box>
+                </Grid>
+                
+                {!userWatchInfo.exists && (
+                  <Grid item xs={12}>
+                    <Box sx={{ 
+                      mt: 2, 
+                      p: 2, 
+                      bgcolor: theme.palette.mode === 'light' ? 'info.light' : 'info.dark',
+                      borderRadius: 2,
+                      border: `1px solid ${theme.palette.info.main}`,
+                    }}>
+                      <Typography variant="body2" sx={{ mb: 2, color: 'info.contrastText' }}>
+                        Your personal watch directory doesn't exist yet. Create it to start uploading files to your own dedicated folder.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={creatingDirectory ? <CircularProgress size={16} /> : <CreateFolderIcon />}
+                        onClick={createUserWatchDirectory}
+                        disabled={creatingDirectory}
+                        sx={{ color: 'primary.contrastText' }}
+                      >
+                        {creatingDirectory ? 'Creating Directory...' : 'Create Personal Directory'}
+                      </Button>
+                    </Box>
+                  </Grid>
+                )}
+              </Grid>
+            ) : (
+              <Alert severity="info">
+                Unable to load personal watch directory information. Please try refreshing the page.
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Divider between Personal and Global sections */}
+      {user && (
+        <Box sx={{ my: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Divider sx={{ flex: 1 }} />
+          <Typography variant="body2" color="text.secondary" sx={{ px: 2 }}>
+            System Configuration
+          </Typography>
+          <Divider sx={{ flex: 1 }} />
+        </Box>
+      )}
+
+      {/* Global Watch Folder Configuration */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <FolderIcon color="primary" />
-            Watch Folder Configuration
+            Global Watch Folder Configuration
+            {user?.role === 'Admin' && (
+              <Chip
+                label="Admin Only"
+                size="small"
+                color="secondary"
+                variant="outlined"
+                sx={{ ml: 1 }}
+              />
+            )}
           </Typography>
+          {user?.role !== 'Admin' && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              This is the system-wide watch folder configuration. All users can view this information.
+            </Alert>
+          )}
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <Box sx={{ mb: 2 }}>

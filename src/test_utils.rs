@@ -274,6 +274,12 @@ impl TestContext {
         let config = config_builder.build(database_url);
         let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
         
+        let user_watch_service = if config.enable_per_user_watch {
+            Some(Arc::new(crate::services::user_watch_service::UserWatchService::new(&config.user_watch_base_dir)))
+        } else {
+            None
+        };
+        
         let state = Arc::new(AppState { 
             db, 
             config,
@@ -282,6 +288,7 @@ impl TestContext {
             queue_service,
             oidc_client: None,
             sync_progress_tracker: Arc::new(crate::services::sync_progress_tracker::SyncProgressTracker::new()),
+            user_watch_service,
         });
         
         let app = Router::new()
@@ -786,6 +793,8 @@ impl TestConfigBuilder {
             jwt_secret: self.jwt_secret,
             upload_path: self.upload_path,
             watch_folder: self.watch_folder,
+            user_watch_base_dir: "./test-user-watch".to_string(),
+            enable_per_user_watch: false,
             allowed_file_types: vec!["pdf".to_string(), "txt".to_string(), "png".to_string()],
             watch_interval_seconds: Some(30),
             file_stability_check_ms: Some(500),

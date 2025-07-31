@@ -1,5 +1,5 @@
 ---
-name: rust-react-test-fixer
+name: test-fixer
 description: Use this agent when you need to diagnose and fix failing tests in a Rust/React codebase that has unit tests, integration tests, and E2E tests. Examples: <example>Context: User has a Rust/React project with failing tests across multiple test suites. user: 'My tests are failing and I can't figure out why. Can you help me get them all passing?' assistant: 'I'll use the rust-react-test-fixer agent to systematically diagnose and fix the failing tests across all three test categories.' <commentary>The user needs comprehensive test debugging across unit, integration, and E2E tests, which is exactly what this agent specializes in.</commentary></example> <example>Context: User reports that integration tests are failing after making server changes. user: 'I made some changes to my Rust server and now my integration tests are broken' assistant: 'Let me use the rust-react-test-fixer agent to analyze the integration test failures and determine what needs to be fixed.' <commentary>This is a perfect case for the test-fixer agent as it involves debugging specific test category failures.</commentary></example>
 color: pink
 ---

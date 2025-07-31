@@ -1,5 +1,15 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, waitFor, act } from '@testing-library/react';
+
+// Create a mock for the hook FIRST, before any component imports
+const mockUseSyncProgressWebSocket = vi.fn();
+vi.mock('../../hooks/useSyncProgressWebSocket', () => ({
+  useSyncProgressWebSocket: mockUseSyncProgressWebSocket,
+}));
+
+// Use the automatic mocking with __mocks__ directory
+vi.mock('../../services/api');
+
 import SyncProgressDisplay from '../SyncProgressDisplay';
 import { renderWithProviders } from '../../test/test-utils';
 // Define SyncProgressInfo type locally for tests
@@ -23,11 +33,24 @@ interface SyncProgressInfo {
   is_active: boolean;
 }
 
-// Mock the API module using the __mocks__ version
+// Use the automatic mocking with __mocks__ directory
 vi.mock('../../services/api');
 
-// Import the mock helpers
-import { getMockSyncProgressWebSocket, resetMockSyncProgressWebSocket, MockSyncProgressWebSocket, sourcesService } from '../../services/__mocks__/api';
+// Import mock helpers directly from the mock file
+import { getMockSyncProgressWebSocket, resetMockSyncProgressWebSocket, MockSyncProgressWebSocket } from '../../services/__mocks__/api';
+
+// Import the mocked services
+import { sourcesService } from '../../services/api';
+
+// Define ConnectionStatus type locally
+type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error' | 'failed';
+
+// Create a mock for the hook
+const mockUseSyncProgressWebSocket = vi.fn();
+vi.mock('../../hooks/useSyncProgressWebSocket', () => ({
+  useSyncProgressWebSocket: mockUseSyncProgressWebSocket,
+  ConnectionStatus: {} as any,
+}));
 
 // Create mock progress data factory
 const createMockProgressInfo = (overrides: Partial<SyncProgressInfo> = {}): SyncProgressInfo => ({
@@ -51,33 +74,61 @@ const createMockProgressInfo = (overrides: Partial<SyncProgressInfo> = {}): Sync
   ...overrides,
 });
 
-// Helper function to simulate progress updates
-const simulateProgressUpdate = (progressData: SyncProgressInfo) => {
+// Helper functions to simulate hook state changes
+let currentMockState = {
+  progressInfo: null as SyncProgressInfo | null,
+  connectionStatus: 'connecting' as ConnectionStatus,
+  isConnected: false,
+  reconnect: vi.fn(),
+  disconnect: vi.fn(),
+};
+
+const mockHookState = (overrides: Partial<typeof currentMockState>) => {
+  currentMockState = {
+    ...currentMockState,
+    ...overrides,
+  };
+  mockUseSyncProgressWebSocket.mockReturnValue(currentMockState);
+};
+
+// Helper functions to simulate WebSocket events that update the hook state
+const simulateProgressUpdate = (progressInfo: SyncProgressInfo) => {
+  mockHookState({ 
+    progressInfo, 
+    connectionStatus: 'connected',
+    isConnected: true 
+  });
+  
+  // Also trigger the mock WebSocket's progress event for completeness
   const mockWS = getMockSyncProgressWebSocket();
   if (mockWS) {
-    act(() => {
-      mockWS.simulateProgress(progressData);
-    });
+    mockWS.simulateProgress(progressInfo);
   }
 };
 
-// Helper function to simulate heartbeat updates
-const simulateHeartbeatUpdate = (data: any) => {
+const simulateConnectionStatusChange = (status: ConnectionStatus) => {
+  mockHookState({ 
+    connectionStatus: status,
+    isConnected: status === 'connected'
+  });
+  
+  // Also trigger the mock WebSocket's connection status event
   const mockWS = getMockSyncProgressWebSocket();
   if (mockWS) {
-    act(() => {
-      mockWS.simulateHeartbeat(data);
-    });
+    mockWS.simulateConnectionStatus(status);
   }
 };
 
-// Helper function to simulate connection status changes
-const simulateConnectionStatusChange = (status: string) => {
+const simulateHeartbeatUpdate = (heartbeatData: { source_id: string; is_active: boolean; timestamp: number }) => {
+  // If heartbeat indicates sync is not active, clear progress info
+  if (!heartbeatData.is_active) {
+    mockHookState({ progressInfo: null });
+  }
+  
+  // Also trigger the mock WebSocket's heartbeat event
   const mockWS = getMockSyncProgressWebSocket();
   if (mockWS) {
-    act(() => {
-      mockWS.simulateConnectionStatus(status);
-    });
+    mockWS.simulateHeartbeat(heartbeatData);
   }
 };
 
@@ -97,6 +148,16 @@ describe('SyncProgressDisplay Component', () => {
     vi.clearAllMocks();
     // Reset the mock WebSocket instance
     resetMockSyncProgressWebSocket();
+    
+    // Initialize the mock hook with default state
+    currentMockState = {
+      progressInfo: null,
+      connectionStatus: 'disconnected',
+      isConnected: false,
+      reconnect: vi.fn(),
+      disconnect: vi.fn(),
+    };
+    mockUseSyncProgressWebSocket.mockReturnValue(currentMockState);
     
     // Mock localStorage for token access
     Object.defineProperty(global, 'localStorage', {
@@ -128,28 +189,47 @@ describe('SyncProgressDisplay Component', () => {
   describe('Visibility and Rendering', () => {
     test('should not render when isVisible is false', () => {
       renderComponent({ isVisible: false });
-      expect(screen.queryByText('Test WebDAV Source - Sync Progress')).not.toBeInTheDocument();
+      expect(screen.queryByText((content, element) => {
+        return element?.textContent === 'Test WebDAV Source - Sync Progress';
+      })).not.toBeInTheDocument();
     });
 
-    test('should render when isVisible is true', () => {
+    test('should render when isVisible is true', async () => {
+      // Start with connecting status so component will be visible
+      mockHookState({ connectionStatus: 'connecting', isConnected: false });
+      
       renderComponent({ isVisible: true });
-      expect(screen.getByText('Test WebDAV Source - Sync Progress')).toBeInTheDocument();
+      
+      // Component should be visible immediately with connecting status
+      await waitFor(() => {
+        expect(screen.getByText(/Test WebDAV Source/)).toBeInTheDocument();
+        expect(screen.getByText(/Sync Progress/)).toBeInTheDocument();
+      });
     });
 
     test('should show connecting status initially', async () => {
+      // Set connecting status for this test
+      mockHookState({ connectionStatus: 'connecting', isConnected: false });
+      
       renderComponent();
       
-      // The hook starts in disconnected state, then moves to connecting
+      // Wait for the component to be visible and show connecting status
       await waitFor(() => {
-        simulateConnectionStatusChange('connecting');
+        expect(screen.getByText('Connecting...')).toBeInTheDocument();
       });
-      
-      expect(screen.getByText('Connecting...')).toBeInTheDocument();
     });
 
-    test('should render with custom source name', () => {
+    test('should render with custom source name', async () => {
+      // Set connecting status so component will be visible
+      mockHookState({ connectionStatus: 'connecting', isConnected: false });
+      
       renderComponent({ sourceName: 'My Custom Source' });
-      expect(screen.getByText('My Custom Source - Sync Progress')).toBeInTheDocument();
+      
+      // Wait for the component to be visible with custom source name
+      await waitFor(() => {
+        expect(screen.getByText(/My Custom Source/)).toBeInTheDocument();
+        expect(screen.getByText(/Sync Progress/)).toBeInTheDocument();
+      });
     });
   });
 

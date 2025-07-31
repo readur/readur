@@ -39,6 +39,7 @@ pub struct AppState {
     pub queue_service: std::sync::Arc<ocr::queue::OcrQueueService>,
     pub oidc_client: Option<std::sync::Arc<OidcClient>>,
     pub sync_progress_tracker: std::sync::Arc<services::sync_progress_tracker::SyncProgressTracker>,
+    pub user_watch_service: Option<std::sync::Arc<services::user_watch_service::UserWatchService>>,
 }
 
 /// Health check endpoint for monitoring

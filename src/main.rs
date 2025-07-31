@@ -338,6 +338,16 @@ async fn main() -> anyhow::Result<()> {
     // Create shared progress tracker
     let sync_progress_tracker = Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new());
     
+    // Initialize user watch service if per-user watch is enabled
+    let user_watch_service = if config.enable_per_user_watch {
+        let service = readur::services::user_watch_service::UserWatchService::new(&config.user_watch_base_dir);
+        println!("✅ User watch service initialized: {}", config.user_watch_base_dir);
+        Some(Arc::new(service))
+    } else {
+        println!("ℹ️  Per-user watch directories are disabled");
+        None
+    };
+    
     // Create web-facing state with shared queue service
     let web_state = AppState { 
         db: web_db, 
@@ -347,6 +357,7 @@ async fn main() -> anyhow::Result<()> {
         queue_service: shared_queue_service.clone(),
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
+        user_watch_service: user_watch_service.clone(),
     };
     let web_state = Arc::new(web_state);
     
@@ -359,6 +370,7 @@ async fn main() -> anyhow::Result<()> {
         queue_service: shared_queue_service.clone(),
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
+        user_watch_service: user_watch_service.clone(),
     };
     let background_state = Arc::new(background_state);
     
@@ -441,6 +453,7 @@ async fn main() -> anyhow::Result<()> {
         queue_service: shared_queue_service.clone(),
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
+        user_watch_service: user_watch_service.clone(),
     };
     let web_state = Arc::new(updated_web_state);
     
