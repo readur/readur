@@ -7,7 +7,7 @@
  * Usage: cargo run --bin enqueue_pending_ocr
  */
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use sqlx::Row;
 use tracing::{info, warn, error};
 use uuid::Uuid;
@@ -17,8 +17,7 @@ use readur::{
     db::Database,
     ocr::queue::OcrQueueService,
     services::file_service::FileService,
-    storage::factory::create_storage_backend,
-    storage::StorageConfig,
+    storage::factory,
 };
 
 #[tokio::main]
@@ -34,24 +33,13 @@ async fn main() -> Result<()> {
     // Connect to database
     let db = Database::new(&config.database_url).await?;
     
-    // Create file service
-    let storage_config = if config.s3_enabled {
-        #[cfg(feature = "s3")]
-        {
-            StorageConfig::S3 { 
-                s3_config: config.s3_config.as_ref().unwrap().clone(),
-                fallback_path: Some(config.upload_path.clone()),
-            }
-        }
-        #[cfg(not(feature = "s3"))]
-        {
-            StorageConfig::Local { upload_path: config.upload_path.clone() }
-        }
-    } else {
-        StorageConfig::Local { upload_path: config.upload_path.clone() }
-    };
-    let storage_backend = create_storage_backend(storage_config).await?;
-    let file_service = std::sync::Arc::new(FileService::with_storage(config.upload_path.clone(), storage_backend));
+    // Create file service using factory pattern
+    let storage_config = factory::storage_config_from_env(&config)
+        .with_context(|| "Failed to create storage configuration from environment")?;
+    let file_service = std::sync::Arc::new(
+        FileService::from_config(storage_config, config.upload_path.clone()).await
+            .with_context(|| "Failed to create file service with storage backend")?
+    );
     
     let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service);
     
