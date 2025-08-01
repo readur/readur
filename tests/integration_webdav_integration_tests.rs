@@ -14,6 +14,7 @@ use readur::{
     models::*,
     routes,
     AppState,
+    test_helpers,
 };
 
 // Removed constant - will use environment variables instead
@@ -80,44 +81,34 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         .or_else(|_| std::env::var("DATABASE_URL"))
         .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
     
-    let config = Config {
-        database_url: database_url.clone(),
-        server_address: "127.0.0.1:0".to_string(),
-        upload_path: "/tmp/test_uploads".to_string(),
-        watch_folder: "/tmp/test_watch".to_string(),
-        user_watch_base_dir: "./user_watch".to_string(),
-        enable_per_user_watch: false,
-        jwt_secret: "test_jwt_secret_for_integration_tests".to_string(),
-        allowed_file_types: vec!["pdf".to_string(), "png".to_string()],
-        watch_interval_seconds: Some(10),
-        file_stability_check_ms: Some(1000),
-        max_file_age_hours: Some(24),
-        cpu_priority: "normal".to_string(),
-        memory_limit_mb: 512,
-        concurrent_ocr_jobs: 4,
-        max_file_size_mb: 50,
-        ocr_language: "eng".to_string(),
-        ocr_timeout_seconds: 300,
-        oidc_enabled: false,
-        oidc_client_id: None,
-        oidc_client_secret: None,
-        oidc_issuer_url: None,
-        oidc_redirect_uri: None,
-    };
+    // Create test configuration with custom database URL
+    let mut config = test_helpers::create_test_config();
+    config.database_url = database_url.clone();
+    config.jwt_secret = "test_jwt_secret_for_integration_tests".to_string();
+    config.allowed_file_types = vec!["pdf".to_string(), "png".to_string()];
+    config.watch_interval_seconds = Some(10);
+    config.file_stability_check_ms = Some(1000);
+    config.max_file_age_hours = Some(24);
+    config.memory_limit_mb = 512;
+    config.concurrent_ocr_jobs = 4;
+    config.max_file_size_mb = 50;
+    config.ocr_timeout_seconds = 300;
 
-    // Use the environment-based database URL
-    let db_url = database_url;
-
-    let db = Database::new(&db_url).await.expect("Failed to connect to test database");
-    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
+    // Create test services
+    let db = test_helpers::create_test_database().await;
+    let file_service = test_helpers::create_test_file_service(Some("/tmp/test_uploads")).await;
+    let queue_service = test_helpers::create_test_queue_service(db.clone(), db.pool.clone(), file_service.clone());
+    
+    // Create AppState
     let state = Arc::new(AppState { 
         db: db.clone(), 
         config,
+        file_service,
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
         oidc_client: None,
-        sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        sync_progress_tracker: Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
         user_watch_service: None,
     });
 

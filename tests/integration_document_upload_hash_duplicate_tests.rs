@@ -9,6 +9,8 @@ use readur::{
     db::Database,
     config::Config,
     models::{Document, CreateUser, UserRole},
+    services::file_service::FileService,
+    storage::{StorageConfig, factory::create_storage_backend},
 };
 
 // Helper function to calculate file hash
@@ -94,16 +96,29 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
             oidc_client_secret: None,
             oidc_issuer_url: None,
             oidc_redirect_uri: None,
+            s3_enabled: false,
+            s3_config: None,
         }
     });
     let db = Database::new(&config.database_url).await?;
+    
+    // Create file service
+    let storage_config = StorageConfig::Local { 
+        upload_path: config.upload_path.clone() 
+    };
+    let storage_backend = create_storage_backend(storage_config)
+        .await
+        .expect("Failed to create test storage backend");
+    let file_service = Arc::new(FileService::with_storage(config.upload_path.clone(), storage_backend));
+    
     let queue_service = std::sync::Arc::new(
-        readur::ocr::queue::OcrQueueService::new(db.clone(), db.get_pool().clone(), 1)
+        readur::ocr::queue::OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service.clone())
     );
     
     Ok(Arc::new(AppState {
         db: db.clone(),
         config,
+        file_service,
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,

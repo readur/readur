@@ -25,6 +25,9 @@ mod tests;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_helpers;
+
 use axum::{http::StatusCode, Json};
 use utoipa;
 use config::Config;
