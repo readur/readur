@@ -193,21 +193,46 @@ impl StorageBackend for LocalStorageBackend {
             }
         }
 
-        // Delete main document file (try to find it first)
+        // Try multiple strategies to find and delete the main document file
         let extension = Path::new(filename)
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
         
+        // Strategy 1: Try document ID-based filename (new structured approach)
         let document_filename = if extension.is_empty() {
             document_id.to_string()
         } else {
             format!("{}.{}", document_id, extension)
         };
+        let main_file_structured = self.get_documents_path().join(&document_filename);
         
-        let main_file = self.get_documents_path().join(&document_filename);
-        if let Some(deleted_path) = safe_delete(&main_file, &mut serious_errors).await {
-            deleted_files.push(deleted_path);
+        // Strategy 2: Try original filename in documents directory
+        let main_file_original = self.get_documents_path().join(filename);
+        
+        // Strategy 3: Try in the base upload directory (legacy flat structure)
+        let main_file_legacy = Path::new(&self.upload_path).join(filename);
+        
+        // Try to delete main document file using all strategies
+        let main_file_candidates = [
+            &main_file_structured,
+            &main_file_original,  
+            &main_file_legacy,
+        ];
+        
+        let mut main_file_deleted = false;
+        for candidate_path in &main_file_candidates {
+            if candidate_path.exists() {
+                if let Some(deleted_path) = safe_delete(candidate_path, &mut serious_errors).await {
+                    deleted_files.push(deleted_path);
+                    main_file_deleted = true;
+                    break; // Only delete the first match we find
+                }
+            }
+        }
+        
+        if !main_file_deleted {
+            info!("Main document file not found in any expected location for document {}", document_id);
         }
 
         // Delete thumbnail if it exists

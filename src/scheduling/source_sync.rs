@@ -605,7 +605,7 @@ impl SourceSyncService {
         debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
 
         // Use the unified ingestion service for consistent deduplication
-        let file_service = FileService::new(state.config.upload_path.clone());
+        let file_service = (*state.file_service).clone();
         let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
         
         let result = ingestion_service
@@ -709,7 +709,7 @@ impl SourceSyncService {
         }
 
         // Use the unified ingestion service for consistent deduplication
-        let file_service = FileService::new(state.config.upload_path.clone());
+        let file_service = (*state.file_service).clone();
         let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
         
         let result = ingestion_service

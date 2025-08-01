@@ -643,9 +643,14 @@ This tests the error handling for files that aren't actually PDFs.";
     async fn test_enhanced_ocr_panic_handling() {
         use crate::ocr::enhanced::EnhancedOcrService;
         use crate::services::file_service::FileService;
+        use crate::storage::factory::create_storage_backend;
+        use crate::storage::StorageConfig;
         use crate::models::Settings;
         
-        let ocr_service = EnhancedOcrService::new("tests".to_string());
+        let storage_config = StorageConfig::Local { upload_path: "tests".to_string() };
+        let storage_backend = create_storage_backend(storage_config).await.unwrap();
+        let file_service = FileService::with_storage("tests".to_string(), storage_backend);
+        let ocr_service = EnhancedOcrService::new("tests".to_string(), file_service);
         let settings = Settings::default();
         
         // Test all malformed PDFs with enhanced OCR

@@ -136,11 +136,7 @@ async fn collect_ocr_metrics(state: &Arc<AppState>) -> Result<OcrMetrics, Status
     // Use existing OCR queue statistics
     use crate::ocr::queue::OcrQueueService;
     
-    let queue_service = OcrQueueService::new(
-        state.db.clone(),
-        state.db.pool.clone(),
-        state.config.concurrent_ocr_jobs
-    );
+    let queue_service = &*state.queue_service;
     
     let stats = queue_service
         .get_stats()

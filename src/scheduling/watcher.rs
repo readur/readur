@@ -19,7 +19,7 @@ use crate::{
     models::FileIngestionInfo,
 };
 
-pub async fn start_folder_watcher(config: Config, db: Database) -> Result<()> {
+pub async fn start_folder_watcher(config: Config, db: Database, file_service: std::sync::Arc<FileService>) -> Result<()> {
     info!("Starting hybrid folder watcher on: {}", config.watch_folder);
     info!("Upload path configured as: {}", config.upload_path);
     
@@ -36,9 +36,8 @@ pub async fn start_folder_watcher(config: Config, db: Database) -> Result<()> {
     info!("Watch folder canonical path: {:?}", watch_canonical);
     info!("Upload folder canonical path: {:?}", upload_canonical);
     
-    // Initialize services with shared database
-    let file_service = FileService::new(config.upload_path.clone());
-    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1);
+    // Use the provided file service
+    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service.clone());
     
     // Initialize user watch components if enabled
     let user_watch_manager = if config.enable_per_user_watch {
@@ -127,7 +126,7 @@ async fn determine_watch_strategy(path: &Path) -> Result<WatchStrategy> {
 async fn start_notify_watcher(
     config: Config,
     db: Database,
-    file_service: FileService,
+    file_service: std::sync::Arc<FileService>,
     queue_service: OcrQueueService,
     user_watch_manager: Option<UserWatchManager>,
 ) -> Result<()> {
@@ -176,7 +175,7 @@ async fn start_notify_watcher(
 async fn start_polling_watcher(
     config: Config,
     db: Database,
-    file_service: FileService,
+    file_service: std::sync::Arc<FileService>,
     queue_service: OcrQueueService,
     user_watch_manager: Option<UserWatchManager>,
 ) -> Result<()> {

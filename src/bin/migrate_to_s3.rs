@@ -72,6 +72,11 @@ async fn main() -> Result<()> {
     info!("☁️  Initializing S3 service...");
     let s3_service = S3Service::new(s3_config.clone()).await?;
     
+    // Initialize FileService with proper storage configuration
+    info!("📁 Initializing file service...");
+    let storage_config = readur::storage::factory::storage_config_from_env(&config)?;
+    let file_service = FileService::from_config(storage_config, config.upload_path.clone()).await?;
+    
     // Test S3 connection
     match s3_service.test_connection().await {
         Ok(_) => info!("✅ S3 connection successful"),
@@ -134,7 +139,7 @@ async fn main() -> Result<()> {
     for doc in local_documents {
         info!("📦 Migrating: {} ({})", doc.original_filename, doc.id);
         
-        match migrate_document(&db, &s3_service, &doc, args.delete_local).await {
+        match migrate_document(&db, &s3_service, &file_service, &doc, args.delete_local).await {
             Ok(_) => {
                 migrated_count += 1;
                 info!("✅ Successfully migrated: {}", doc.original_filename);
@@ -158,6 +163,7 @@ async fn main() -> Result<()> {
 async fn migrate_document(
     db: &Database,
     s3_service: &S3Service,
+    file_service: &FileService,
     document: &readur::models::Document,
     delete_local: bool,
 ) -> Result<()> {
@@ -183,7 +189,7 @@ async fn migrate_document(
     db.update_document_file_path(document.id, &s3_path).await?;
     
     // Migrate associated files (thumbnails, processed images)
-    migrate_associated_files(s3_service, document, delete_local).await?;
+    migrate_associated_files(s3_service, file_service, document, delete_local).await?;
     
     // Delete local file if requested
     if delete_local {
@@ -199,10 +205,10 @@ async fn migrate_document(
 
 async fn migrate_associated_files(
     s3_service: &S3Service,
+    file_service: &FileService,
     document: &readur::models::Document,
     delete_local: bool,
 ) -> Result<()> {
-    let file_service = FileService::new("./uploads".to_string());
     
     // Migrate thumbnail
     let thumbnail_path = file_service.get_thumbnails_path().join(format!("{}_thumb.jpg", document.id));

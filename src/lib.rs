@@ -35,6 +35,7 @@ use oidc::OidcClient;
 pub struct AppState {
     pub db: Database,
     pub config: Config,
+    pub file_service: std::sync::Arc<services::file_service::FileService>,
     pub webdav_scheduler: Option<std::sync::Arc<scheduling::webdav_scheduler::WebDAVScheduler>>,
     pub source_scheduler: Option<std::sync::Arc<scheduling::source_scheduler::SourceScheduler>>,
     pub queue_service: std::sync::Arc<ocr::queue::OcrQueueService>,

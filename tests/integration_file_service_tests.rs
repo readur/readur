@@ -3,6 +3,10 @@ use readur::services::file_service::FileService;
 #[cfg(test)]
 use readur::models::Document;
 #[cfg(test)]
+use readur::storage::factory::create_storage_backend;
+#[cfg(test)]
+use readur::storage::StorageConfig;
+#[cfg(test)]
 use std::fs;
 #[cfg(test)]
 use tempfile::TempDir;
@@ -10,10 +14,12 @@ use tempfile::TempDir;
 use uuid::Uuid;
 
 #[cfg(test)]
-fn create_test_file_service() -> (FileService, TempDir) {
+async fn create_test_file_service() -> (FileService, TempDir) {
     let temp_dir = TempDir::new().unwrap();
     let upload_path = temp_dir.path().to_string_lossy().to_string();
-    let service = FileService::new(upload_path);
+    let storage_config = StorageConfig::Local { upload_path: upload_path.clone() };
+    let storage_backend = create_storage_backend(storage_config).await.unwrap();
+    let service = FileService::with_storage(upload_path, storage_backend);
     (service, temp_dir)
 }
 
@@ -23,7 +29,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_file() {
-        let (service, _temp_dir) = create_test_file_service();
+        let (service, _temp_dir) = create_test_file_service().await;
         let filename = "test.txt";
         let data = b"Hello, World!";
         
@@ -39,7 +45,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_file_with_extension() {
-        let (service, _temp_dir) = create_test_file_service();
+        let (service, _temp_dir) = create_test_file_service().await;
         let filename = "document.pdf";
         let data = b"PDF content";
         
@@ -52,7 +58,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_file_without_extension() {
-        let (service, _temp_dir) = create_test_file_service();
+        let (service, _temp_dir) = create_test_file_service().await;
         let filename = "document";
         let data = b"Some content";
         
@@ -69,9 +75,9 @@ mod tests {
         assert!(!filename_part.contains('.'));
     }
 
-    #[test]
-    fn test_create_document() {
-        let (service, _temp_dir) = create_test_file_service();
+    #[tokio::test]
+    async fn test_create_document() {
+        let (service, _temp_dir) = create_test_file_service().await;
         let user_id = Uuid::new_v4();
         
         let document = service.create_document(
@@ -105,9 +111,9 @@ mod tests {
         assert!(document.tags.is_empty());
     }
 
-    #[test]
-    fn test_is_allowed_file_type() {
-        let (service, _temp_dir) = create_test_file_service();
+    #[tokio::test]
+    async fn test_is_allowed_file_type() {
+        let (service, _temp_dir) = create_test_file_service().await;
         let allowed_types = vec![
             "pdf".to_string(),
             "txt".to_string(),
@@ -127,7 +133,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_file() {
-        let (service, _temp_dir) = create_test_file_service();
+        let (service, _temp_dir) = create_test_file_service().await;
         let filename = "test.txt";
         let original_data = b"Hello, World!";
         
@@ -142,7 +148,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_nonexistent_file() {
-        let (service, _temp_dir) = create_test_file_service();
+        let (service, _temp_dir) = create_test_file_service().await;
         let nonexistent_path = "/path/to/nonexistent/file.txt";
         
         let result = service.read_file(nonexistent_path).await;
@@ -221,7 +227,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_success() {
-        let (service, temp_dir) = create_test_file_service();
+        let (service, temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         
         let (document, main_path, thumb_path, processed_path) = 
@@ -246,7 +252,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_main_file_missing() {
-        let (service, temp_dir) = create_test_file_service();
+        let (service, temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         
         let (document, main_path, thumb_path, processed_path) = 
@@ -271,7 +277,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_thumbnail_missing() {
-        let (service, temp_dir) = create_test_file_service();
+        let (service, temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         
         let (document, main_path, thumb_path, processed_path) = 
@@ -296,7 +302,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_processed_missing() {
-        let (service, temp_dir) = create_test_file_service();
+        let (service, temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         
         let (document, main_path, thumb_path, processed_path) = 
@@ -321,7 +327,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_all_missing() {
-        let (service, _temp_dir) = create_test_file_service();
+        let (service, _temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         
         let document = Document {
@@ -364,7 +370,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_with_different_extensions() {
-        let (service, temp_dir) = create_test_file_service();
+        let (service, temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         let document_id = uuid::Uuid::new_v4();
         
@@ -436,7 +442,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_partial_failure_continues() {
-        let (service, temp_dir) = create_test_file_service();
+        let (service, temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         let document_id = uuid::Uuid::new_v4();
         
@@ -499,7 +505,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_with_no_extension() {
-        let (service, temp_dir) = create_test_file_service();
+        let (service, temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         
         let base_path = temp_dir.path().join("documents");
@@ -555,7 +561,7 @@ mod file_deletion_tests {
 
     #[tokio::test]
     async fn test_delete_document_files_concurrent_calls() {
-        let (service, temp_dir) = create_test_file_service();
+        let (service, temp_dir) = create_test_file_service().await;
         let user_id = uuid::Uuid::new_v4();
         
         let (document, main_path, thumb_path, processed_path) = 

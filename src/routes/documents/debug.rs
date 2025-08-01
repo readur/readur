@@ -46,7 +46,7 @@ pub async fn get_document_debug_info(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     
     // Check file existence and readability
     let file_exists = tokio::fs::metadata(&document.file_path).await.is_ok();
@@ -147,7 +147,7 @@ pub async fn get_document_thumbnail(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     
     // Use the FileService to get or generate thumbnail
     #[cfg(feature = "ocr")]
@@ -218,7 +218,7 @@ pub async fn get_processed_image(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     
     // Try to read processed image from the processed directory
     let processed_path = format!("{}/processed/{}.png", state.config.upload_path, document.id);
@@ -316,7 +316,7 @@ pub async fn validate_document_integrity(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     let mut issues = Vec::new();
     let mut checks = Vec::new();
 

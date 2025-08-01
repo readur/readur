@@ -315,8 +315,8 @@ async fn process_single_file(
     debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
     
     // Use the unified ingestion service for consistent deduplication
-    let file_service = FileService::new(state.config.upload_path.clone());
-    let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
+    let file_service = &state.file_service;
+    let ingestion_service = DocumentIngestionService::new(state.db.clone(), (**file_service).clone());
     
     let result = if let Some(source_id) = webdav_source_id {
         ingestion_service

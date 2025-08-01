@@ -25,6 +25,7 @@ pub struct FileService {
 
 impl FileService {
     /// Create a new FileService with local storage (backward compatible)
+    #[deprecated(note = "Use from_config() with storage factory pattern instead")]
     pub fn new(upload_path: String) -> Self {
         use crate::storage::local::LocalStorageBackend;
         let local_backend = LocalStorageBackend::new(upload_path.clone());
@@ -36,6 +37,7 @@ impl FileService {
     }
 
     /// Create a new FileService with S3 storage (backward compatible)
+    #[deprecated(note = "Use from_config() with storage factory pattern instead")]
     pub fn new_with_s3(upload_path: String, s3_service: Arc<S3Service>) -> Self {
         let storage_backend = s3_service.clone() as Arc<dyn StorageBackend>;
         Self { 

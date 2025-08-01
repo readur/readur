@@ -47,10 +47,11 @@ pub struct OcrQueueService {
     transaction_manager: DocumentTransactionManager,
     processing_throttler: Arc<RequestThrottler>,
     is_paused: Arc<AtomicBool>,
+    file_service: std::sync::Arc<crate::services::file_service::FileService>,
 }
 
 impl OcrQueueService {
-    pub fn new(db: Database, pool: PgPool, max_concurrent_jobs: usize) -> Self {
+    pub fn new(db: Database, pool: PgPool, max_concurrent_jobs: usize, file_service: std::sync::Arc<crate::services::file_service::FileService>) -> Self {
         let worker_id = format!("worker-{}-{}", hostname::get().unwrap_or_default().to_string_lossy(), Uuid::new_v4());
         let transaction_manager = DocumentTransactionManager::new(pool.clone());
         
@@ -70,7 +71,17 @@ impl OcrQueueService {
             transaction_manager,
             processing_throttler,
             is_paused: Arc::new(AtomicBool::new(false)),
+            file_service,
         }
+    }
+    
+    /// Backward-compatible constructor for tests and legacy code
+    /// Creates a FileService with local storage using UPLOAD_PATH env var
+    #[deprecated(note = "Use new() with FileService parameter instead")]
+    pub fn new_legacy(db: Database, pool: PgPool, max_concurrent_jobs: usize) -> Self {
+        let upload_path = std::env::var("UPLOAD_PATH").unwrap_or_else(|_| "./uploads".to_string());
+        let file_service = std::sync::Arc::new(crate::services::file_service::FileService::new(upload_path));
+        Self::new(db, pool, max_concurrent_jobs, file_service)
     }
 
     /// Add a document to the OCR queue
@@ -609,7 +620,7 @@ impl OcrQueueService {
     /// Start the worker loop
     pub async fn start_worker(self: Arc<Self>) -> Result<()> {
         let semaphore = Arc::new(Semaphore::new(self.max_concurrent_jobs));
-        let ocr_service = Arc::new(EnhancedOcrService::new("/tmp".to_string()));
+        let ocr_service = Arc::new(EnhancedOcrService::new("/tmp".to_string(), (*self.file_service).clone()));
         
         info!(
             "Starting OCR worker {} with {} concurrent jobs",
@@ -705,10 +716,7 @@ impl OcrQueueService {
         use std::path::Path;
         
         // Use the FileService to get the proper processed images directory
-        use crate::services::file_service::FileService;
-        let base_upload_dir = std::env::var("UPLOAD_PATH").unwrap_or_else(|_| "uploads".to_string());
-        let file_service = FileService::new(base_upload_dir);
-        let processed_images_dir = file_service.get_processed_images_path();
+        let processed_images_dir = self.file_service.get_processed_images_path();
         
         // Ensure the directory exists with proper error handling
         if let Err(e) = tokio::fs::create_dir_all(&processed_images_dir).await {

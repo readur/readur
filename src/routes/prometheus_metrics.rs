@@ -310,11 +310,7 @@ async fn collect_ocr_metrics(state: &Arc<AppState>) -> Result<OcrMetrics, Status
     
     tracing::debug!("Prometheus: Starting collect_ocr_metrics");
     
-    let queue_service = OcrQueueService::new(
-        state.db.clone(),
-        state.db.pool.clone(),
-        state.config.concurrent_ocr_jobs
-    );
+    let queue_service = &*state.queue_service;
     
     tracing::debug!("Prometheus: Created OCR queue service, calling get_stats()");
     

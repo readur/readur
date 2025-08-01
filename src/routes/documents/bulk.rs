@@ -78,7 +78,7 @@ pub async fn bulk_delete_documents(
         })?;
 
     // Delete associated files
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     let mut files_deleted = 0;
     let mut files_failed = 0;
 
@@ -196,7 +196,7 @@ pub async fn delete_low_confidence_documents(
         })?;
 
     // Delete associated files
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     let mut files_deleted = 0;
     let mut files_failed = 0;
 
@@ -282,7 +282,7 @@ pub async fn delete_failed_ocr_documents(
         })?;
 
     // Delete associated files
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     let mut files_deleted = 0;
     let mut files_failed = 0;
 
