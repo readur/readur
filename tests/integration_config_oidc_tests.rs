@@ -53,8 +53,9 @@ mod tests {
             jwt_secret: "test-secret".to_string(),
             upload_path: "./test-uploads".to_string(),
             watch_folder: "./test-watch".to_string(),
-        user_watch_base_dir: "./user_watch".to_string(),
-        enable_per_user_watch: false,            allowed_file_types: vec!["pdf".to_string()],
+            user_watch_base_dir: "./user_watch".to_string(),
+            enable_per_user_watch: false,
+            allowed_file_types: vec!["pdf".to_string()],
             watch_interval_seconds: Some(30),
             file_stability_check_ms: Some(500),
             max_file_age_hours: None,
@@ -69,6 +70,8 @@ mod tests {
             oidc_client_secret: None,
             oidc_issuer_url: None,
             oidc_redirect_uri: None,
+            s3_enabled: false,
+            s3_config: None,
         }
     }
 

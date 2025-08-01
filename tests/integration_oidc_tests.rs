@@ -37,6 +37,8 @@ mod tests {
             oidc_client_secret: None,
             oidc_issuer_url: None,
             oidc_redirect_uri: None,
+            s3_enabled: false,
+            s3_config: None,
         };
 
         let db = readur::db::Database::new(&config.database_url).await.unwrap();
@@ -54,21 +56,28 @@ mod tests {
             }
         }
         
+        // Create file service
+        let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
+        let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
+        let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
+        
         let app = axum::Router::new()
             .nest("/api/auth", readur::routes::auth::router())
             .with_state(Arc::new(AppState {
                 db: db.clone(),
                 config,
+                file_service: file_service.clone(),
                 webdav_scheduler: None,
                 source_scheduler: None,
                 queue_service: Arc::new(readur::ocr::queue::OcrQueueService::new(
                     db.clone(),
                     db.pool.clone(),
-                    2
+                    2,
+                    file_service.clone()
                 )),
                 oidc_client: None,
                 sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
-        user_watch_service: None,
+                user_watch_service: None,
             }));
 
         (app, ())
@@ -120,6 +129,8 @@ mod tests {
             oidc_client_secret: Some("test-client-secret".to_string()),
             oidc_issuer_url: Some(mock_server.uri()),
             oidc_redirect_uri: Some("http://localhost:8000/auth/oidc/callback".to_string()),
+            s3_enabled: false,
+            s3_config: None,
         };
 
         let oidc_client = match OidcClient::new(&config).await {
@@ -145,22 +156,29 @@ mod tests {
             }
         }
         
+        // Create file service for OIDC app
+        let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
+        let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
+        let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
+        
         // Create app with OIDC configuration
         let app = axum::Router::new()
             .nest("/api/auth", readur::routes::auth::router())
             .with_state(Arc::new(AppState {
                 db: db.clone(),
                 config,
+                file_service: file_service.clone(),
                 webdav_scheduler: None,
                 source_scheduler: None,
                 queue_service: Arc::new(readur::ocr::queue::OcrQueueService::new(
                     db.clone(),
                     db.pool.clone(),
-                    2
+                    2,
+                    file_service.clone()
                 )),
                 oidc_client,
                 sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
-        user_watch_service: None,
+                user_watch_service: None,
             }));
 
         (app, mock_server)

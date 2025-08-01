@@ -48,12 +48,14 @@ impl SimpleThrottleTest {
             .await?;
         
         let db = Database::new(&db_url).await?;
+        let file_service = Arc::new(create_test_file_service("/tmp/test_throttling").await);
         
         // Create queue service with throttling (max 15 concurrent jobs)
         let queue_service = Arc::new(OcrQueueService::new(
             db.clone(), 
             pool.clone(), 
-            15  // This should prevent DB pool exhaustion
+            15,  // This should prevent DB pool exhaustion
+            file_service
         ));
         
         Ok(Self {

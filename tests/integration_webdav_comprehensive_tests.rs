@@ -348,6 +348,8 @@ fn test_webdav_scheduler_creation() {
         oidc_client_secret: None,
         oidc_issuer_url: None,
         oidc_redirect_uri: None,
+        s3_enabled: false,
+        s3_config: None,
     };
 
     // Note: This is a minimal test since we can't easily mock the database

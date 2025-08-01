@@ -28,7 +28,7 @@ use readur::{
     AppState, 
     config::Config,
     db::Database,
-    models::{Source, SourceType, SourceStatus, User, CreateSource, CreateUser, UserRole, AuthProvider},
+    models::{Source, SourceType, SourceStatus, User, CreateSource, CreateUser, UserRole},
     auth::Claims,
 };
 
@@ -60,21 +60,31 @@ async fn create_test_app_state() -> Arc<AppState> {
         oidc_client_secret: None,
         oidc_issuer_url: None,
         oidc_redirect_uri: None,
+        s3_enabled: false,
+        s3_config: None,
     };
 
     let db = Database::new(&config.database_url).await.unwrap();
+    
+    // Create file service
+    let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
+    let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
+    let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
+    
     let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
         db.clone(),
         db.pool.clone(),
         2,
+        file_service.clone(),
     ));
     
     let sync_progress_tracker = Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new());
     
     // Create initial app state
-    let mut app_state = AppState {
+    let app_state = AppState {
         db: db.clone(),
         config,
+        file_service: file_service.clone(),
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
@@ -95,6 +105,7 @@ async fn create_test_app_state() -> Arc<AppState> {
     Arc::new(AppState {
         db: state_arc.db.clone(),
         config: state_arc.config.clone(),
+        file_service: state_arc.file_service.clone(),
         webdav_scheduler: None,
         source_scheduler: Some(source_scheduler),
         queue_service: state_arc.queue_service.clone(),

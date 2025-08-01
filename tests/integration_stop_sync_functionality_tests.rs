@@ -37,7 +37,8 @@ async fn create_test_app_state() -> Arc<AppState> {
         upload_path: "/tmp/test_uploads".to_string(),
         watch_folder: "/tmp/watch".to_string(),
         user_watch_base_dir: "./user_watch".to_string(),
-        enable_per_user_watch: false,        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
+        enable_per_user_watch: false,
+        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
         watch_interval_seconds: Some(10),
         file_stability_check_ms: Some(1000),
         max_file_age_hours: Some(24),
@@ -52,18 +53,28 @@ async fn create_test_app_state() -> Arc<AppState> {
         oidc_client_secret: None,
         oidc_issuer_url: None,
         oidc_redirect_uri: None,
+        s3_enabled: false,
+        s3_config: None,
     };
 
     let db = Database::new(&config.database_url).await.unwrap();
+    
+    // Create file service
+    let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
+    let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
+    let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
+    
     let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
         db.clone(),
         db.pool.clone(),
         4,
+        file_service.clone(),
     ));
     
     Arc::new(AppState {
         db: db.clone(),
         config,
+        file_service,
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,

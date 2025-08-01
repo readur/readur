@@ -13,14 +13,12 @@ use tracing::{info, warn, error};
 use uuid::Uuid;
 
 use readur::{
-    config::Config,
     db::Database,
-    models::Document,
     services::file_service::FileService,
     storage::factory::create_storage_backend,
     storage::StorageConfig,
     ocr::enhanced::EnhancedOcrService,
-    ocr::queue::{OcrQueueService, OcrQueueItem},
+    ocr::queue::OcrQueueService,
     db_guardrails_simple::DocumentTransactionManager,
 };
 
@@ -33,7 +31,7 @@ async fn create_test_file_service(temp_path: &str) -> FileService {
 struct OCRPipelineTestHarness {
     db: Database,
     pool: PgPool,
-    file_service: FileService,
+    file_service: Arc<FileService>,
     ocr_service: EnhancedOcrService,
     queue_service: OcrQueueService,
     transaction_manager: DocumentTransactionManager,
@@ -60,9 +58,9 @@ impl OCRPipelineTestHarness {
             upload_path: upload_path.clone()
         };
         let storage_backend = create_storage_backend(storage_config).await?;
-        let file_service = FileService::with_storage(upload_path, storage_backend);
-        let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service.clone());
-        let queue_service = OcrQueueService::new(db.clone(), pool.clone(), 4, std::sync::Arc::new(file_service));
+        let file_service = Arc::new(FileService::with_storage(upload_path, storage_backend));
+        let ocr_service = EnhancedOcrService::new("/tmp".to_string(), (*file_service).clone());
+        let queue_service = OcrQueueService::new(db.clone(), pool.clone(), 4, file_service.clone());
         let transaction_manager = DocumentTransactionManager::new(pool.clone());
         
         // Ensure test upload directory exists
