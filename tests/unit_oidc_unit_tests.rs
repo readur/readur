@@ -26,6 +26,8 @@ fn create_test_config_with_oidc(issuer_url: &str) -> Config {
         oidc_client_secret: Some("test-client-secret".to_string()),
         oidc_issuer_url: Some(issuer_url.to_string()),
         oidc_redirect_uri: Some("http://localhost:8000/auth/oidc/callback".to_string()),
+        s3_enabled: false,
+        s3_config: None,
     }
 }
 
