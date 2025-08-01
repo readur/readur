@@ -24,6 +24,12 @@ use readur::{
     db_guardrails_simple::DocumentTransactionManager,
 };
 
+async fn create_test_file_service(temp_path: &str) -> FileService {
+    let storage_config = StorageConfig::Local { upload_path: temp_path.to_string() };
+    let storage_backend = create_storage_backend(storage_config).await.unwrap();
+    FileService::with_storage(temp_path.to_string(), storage_backend)
+}
+
 struct OCRPipelineTestHarness {
     db: Database,
     pool: PgPool,
@@ -329,7 +335,8 @@ impl OCRPipelineTestHarness {
             // Clone the components we need rather than the whole harness
             let queue_service = self.queue_service.clone();
             let transaction_manager = self.transaction_manager.clone();
-            let ocr_service = EnhancedOcrService::new("/tmp".to_string());
+            let file_service = create_test_file_service("/tmp").await;
+            let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service);
             let pool = self.pool.clone();
             
             let handle = tokio::spawn(async move {

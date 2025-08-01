@@ -54,35 +54,7 @@ impl Config {
         // Database Configuration
         let database_url = match env::var("DATABASE_URL") {
             Ok(val) => {
-                // Mask sensitive parts of database URL for logging
-                let masked_url = if val.contains('@') {
-                    let parts: Vec<&str> = val.split('@').collect();
-                    if parts.len() >= 2 {
-                        let credentials_part = parts[0];
-                        let remaining_part = parts[1..].join("@");
-                        
-                        // Extract just the username part before the password
-                        if let Some(username_start) = credentials_part.rfind("://") {
-                            let protocol = &credentials_part[..username_start + 3];
-                            let credentials = &credentials_part[username_start + 3..];
-                            if let Some(colon_pos) = credentials.find(':') {
-                                let username = &credentials[..colon_pos];
-                                // Show first and last character of the username
-                                let masked_username = format!("{}{}", &username[..1], &username[username.len() - 1..]);
-                                format!("{}{}:***@{}", protocol, masked_username, remaining_part)
-                            } else {
-                                format!("{}***@{}", protocol, remaining_part)
-                            }
-                        } else {
-                            "***masked***".to_string()
-                        }
-                    } else {
-                        "***masked***".to_string()
-                    }
-                } else {
-                    val.clone()
-                };
-                println!("✅ DATABASE_URL: {} (loaded from env)", masked_url);
+                println!("✅ DATABASE_URL: configured (loaded from env)");
                 val
             }
             Err(_) => {
@@ -462,10 +434,8 @@ impl Config {
                 if !bucket_name.is_empty() && !access_key_id.is_empty() && !secret_access_key.is_empty() {
                     println!("✅ S3_BUCKET_NAME: {} (loaded from env)", bucket_name);
                     println!("✅ S3_REGION: {} (loaded from env)", region);
-                    println!("✅ S3_ACCESS_KEY_ID: {}***{} (loaded from env)", 
-                             &access_key_id[..2.min(access_key_id.len())], 
-                             &access_key_id[access_key_id.len().saturating_sub(2)..]);
-                    println!("✅ S3_SECRET_ACCESS_KEY: ***hidden*** (loaded from env, {} chars)", secret_access_key.len());
+                    println!("✅ S3_ACCESS_KEY_ID: configured (loaded from env)");
+                    println!("✅ S3_SECRET_ACCESS_KEY: configured (loaded from env)");
                     if let Some(ref endpoint) = endpoint_url {
                         println!("✅ S3_ENDPOINT_URL: {} (loaded from env)", endpoint);
                     }

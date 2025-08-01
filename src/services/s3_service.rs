@@ -6,6 +6,8 @@ use serde_json;
 use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;
+use futures::stream::StreamExt;
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
@@ -15,9 +17,17 @@ use aws_credential_types::Credentials;
 use aws_types::region::Region as AwsRegion;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::primitives::ByteStream;
+#[cfg(feature = "s3")]
+use aws_sdk_s3::types::{CompletedPart, CompletedMultipartUpload};
 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
 use crate::storage::StorageBackend;
+
+/// Threshold for using streaming multipart uploads (100MB)
+const STREAMING_THRESHOLD: usize = 100 * 1024 * 1024;
+
+/// Multipart upload chunk size (16MB - AWS minimum is 5MB, we use 16MB for better performance)
+const MULTIPART_CHUNK_SIZE: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct S3Service {
@@ -347,7 +357,15 @@ impl S3Service {
         #[cfg(feature = "s3")]
         {
             let key = self.generate_document_key(user_id, document_id, filename);
-            self.store_file(&key, data, None).await?;
+            
+            // Use streaming upload for large files
+            if data.len() > STREAMING_THRESHOLD {
+                info!("Using streaming multipart upload for large file: {} ({} bytes)", key, data.len());
+                self.store_file_multipart(&key, data, None).await?;
+            } else {
+                self.store_file(&key, data, None).await?;
+            }
+            
             Ok(key)
         }
     }
@@ -434,6 +452,137 @@ impl S3Service {
             }).await?;
 
             info!("Successfully stored file: {}", key);
+            Ok(())
+        }
+    }
+
+    /// Store large files using multipart upload for better performance and memory usage
+    async fn store_file_multipart(&self, key: &str, data: &[u8], metadata: Option<HashMap<String, String>>) -> Result<()> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            info!("Starting multipart upload for file: {}/{} ({} bytes)", self.config.bucket_name, key, data.len());
+
+            let key_owned = key.to_string();
+            let data_owned = data.to_vec();
+            let metadata_owned = metadata.clone();
+            let bucket_name = self.config.bucket_name.clone();
+            let client = self.client.clone();
+
+            self.retry_operation(&format!("store_file_multipart: {}", key), || {
+                let key = key_owned.clone();
+                let data = data_owned.clone();
+                let metadata = metadata_owned.clone();
+                let bucket_name = bucket_name.clone();
+                let client = client.clone();
+                let content_type = self.get_content_type_from_key(&key);
+
+                async move {
+                    // Step 1: Initiate multipart upload
+                    let mut create_request = client
+                        .create_multipart_upload()
+                        .bucket(&bucket_name)
+                        .key(&key);
+
+                    // Add metadata if provided
+                    if let Some(meta) = metadata {
+                        for (k, v) in meta {
+                            create_request = create_request.metadata(k, v);
+                        }
+                    }
+
+                    // Set content type based on file extension
+                    if let Some(ct) = content_type {
+                        create_request = create_request.content_type(ct);
+                    }
+
+                    let create_response = create_request.send().await
+                        .map_err(|e| anyhow!("Failed to initiate multipart upload for {}: {}", key, e))?;
+                    
+                    let upload_id = create_response.upload_id()
+                        .ok_or_else(|| anyhow!("Missing upload ID in multipart upload response"))?;
+                    
+                    info!("Initiated multipart upload for {}: {}", key, upload_id);
+
+                    // Step 2: Upload parts in chunks
+                    let mut completed_parts = Vec::new();
+                    let total_chunks = (data.len() + MULTIPART_CHUNK_SIZE - 1) / MULTIPART_CHUNK_SIZE;
+                    
+                    for (chunk_index, chunk) in data.chunks(MULTIPART_CHUNK_SIZE).enumerate() {
+                        let part_number = (chunk_index + 1) as i32;
+                        
+                        debug!("Uploading part {} of {} for {} ({} bytes)", 
+                               part_number, total_chunks, key, chunk.len());
+
+                        let upload_part_response = client
+                            .upload_part()
+                            .bucket(&bucket_name)
+                            .key(&key)
+                            .upload_id(upload_id)
+                            .part_number(part_number)
+                            .body(ByteStream::from(chunk.to_vec()))
+                            .send()
+                            .await
+                            .map_err(|e| anyhow!("Failed to upload part {} for {}: {}", part_number, key, e))?;
+
+                        let etag = upload_part_response.e_tag()
+                            .ok_or_else(|| anyhow!("Missing ETag in upload part response"))?;
+
+                        completed_parts.push(
+                            CompletedPart::builder()
+                                .part_number(part_number)
+                                .e_tag(etag)
+                                .build()
+                        );
+                        
+                        debug!("Successfully uploaded part {} for {}", part_number, key);
+                    }
+
+                    // Step 3: Complete multipart upload
+                    let completed_multipart_upload = CompletedMultipartUpload::builder()
+                        .set_parts(Some(completed_parts))
+                        .build();
+
+                    client
+                        .complete_multipart_upload()
+                        .bucket(&bucket_name)
+                        .key(&key)
+                        .upload_id(upload_id)
+                        .multipart_upload(completed_multipart_upload)
+                        .send()
+                        .await
+                        .map_err(|e| {
+                            // If completion fails, try to abort the multipart upload
+                            let abort_client = client.clone();
+                            let abort_bucket = bucket_name.clone();
+                            let abort_key = key.clone();
+                            let abort_upload_id = upload_id.to_string();
+                            
+                            tokio::spawn(async move {
+                                if let Err(abort_err) = abort_client
+                                    .abort_multipart_upload()
+                                    .bucket(abort_bucket)
+                                    .key(abort_key)
+                                    .upload_id(abort_upload_id)
+                                    .send()
+                                    .await
+                                {
+                                    error!("Failed to abort multipart upload: {}", abort_err);
+                                }
+                            });
+                            
+                            anyhow!("Failed to complete multipart upload for {}: {}", key, e)
+                        })?;
+
+                    info!("Successfully completed multipart upload for {}", key);
+                    Ok(())
+                }
+            }).await?;
+
             Ok(())
         }
     }
@@ -666,7 +815,15 @@ impl StorageBackend for S3Service {
     async fn store_document(&self, user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String> {
         // Generate S3 key
         let key = self.generate_document_key(user_id, document_id, filename);
-        self.store_file(&key, data, None).await?;
+        
+        // Use streaming upload for large files
+        if data.len() > STREAMING_THRESHOLD {
+            info!("Using streaming multipart upload for large file: {} ({} bytes)", key, data.len());
+            self.store_file_multipart(&key, data, None).await?;
+        } else {
+            self.store_file(&key, data, None).await?;
+        }
+        
         Ok(format!("s3://{}", key))
     }
 

@@ -45,14 +45,6 @@ impl EnhancedOcrService {
         Self { temp_dir, file_service }
     }
     
-    /// Backward-compatible constructor for tests and legacy code
-    /// Creates a FileService with local storage using UPLOAD_PATH env var
-    #[deprecated(note = "Use new() with FileService parameter instead")]
-    pub fn new_legacy(temp_dir: String) -> Self {
-        let upload_path = std::env::var("UPLOAD_PATH").unwrap_or_else(|_| "./uploads".to_string());
-        let file_service = FileService::new(upload_path);
-        Self::new(temp_dir, file_service)
-    }
 
     /// Extract text from image with high-quality OCR settings
     #[cfg(feature = "ocr")]

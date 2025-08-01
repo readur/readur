@@ -121,15 +121,35 @@ async fn main() -> anyhow::Result<()> {
     println!("📁 Upload directory: {}", config.upload_path);
     println!("👁️  Watch directory: {}", config.watch_folder);
     
-    // Initialize file service using the new storage backend architecture
+    // Initialize file service using the new storage backend architecture with fallback
     info!("Initializing file service with storage backend...");
     let storage_config = readur::storage::factory::storage_config_from_env(&config)?;
-    let file_service = readur::services::file_service::FileService::from_config(storage_config, config.upload_path.clone()).await
-        .map_err(|e| {
-            error!("Failed to initialize file service with configured storage backend: {}", e);
-            e
-        })?;
-    info!("✅ File service initialized with {} storage backend", file_service.storage_type());
+    let file_service = match readur::services::file_service::FileService::from_config(storage_config, config.upload_path.clone()).await {
+        Ok(service) => {
+            info!("✅ File service initialized with {} storage backend", service.storage_type());
+            service
+        }
+        Err(e) => {
+            error!("❌ Failed to initialize configured storage backend: {}", e);
+            warn!("🔄 Falling back to local storage...");
+            
+            // Create fallback local storage configuration
+            let fallback_config = readur::storage::StorageConfig::Local {
+                upload_path: config.upload_path.clone(),
+            };
+            
+            match readur::services::file_service::FileService::from_config(fallback_config, config.upload_path.clone()).await {
+                Ok(fallback_service) => {
+                    warn!("✅ Successfully initialized fallback local storage");
+                    fallback_service
+                }
+                Err(fallback_err) => {
+                    error!("💥 CRITICAL: Even fallback local storage failed to initialize: {}", fallback_err);
+                    return Err(fallback_err.into());
+                }
+            }
+        }
+    };
 
     // Initialize the storage backend (creates directories, validates access, etc.)
     if let Err(e) = file_service.initialize_storage().await {
@@ -159,7 +179,6 @@ async fn main() -> anyhow::Result<()> {
         }
         Err(e) => {
             println!("❌ CRITICAL: Failed to connect to database for web operations!");
-            println!("Database URL: {}", db_info);  // Use the already-masked URL
             println!("Error: {}", e);
             println!("\n🔧 Please verify:");
             println!("   - Database server is running");

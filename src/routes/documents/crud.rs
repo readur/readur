@@ -202,10 +202,10 @@ pub async fn upload_document(
     }
     
     // Create ingestion service
-    let file_service = &state.file_service;
+    let file_service_clone = state.file_service.as_ref().clone();
     let ingestion_service = DocumentIngestionService::new(
         state.db.clone(),
-        (**file_service).clone(),
+        file_service_clone,
     );
     
     debug!("[UPLOAD_DEBUG] Calling ingestion service for file: {}", filename);

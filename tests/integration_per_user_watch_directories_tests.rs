@@ -296,7 +296,7 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
     
     // Create user watch manager to test file path mapping
     let user_watch_service = state.user_watch_service.as_ref().unwrap();
-    let user_watch_manager = readur::scheduling::user_watch_manager::UserWatchManager::new(state.db.clone(), (**user_watch_service).clone());
+    let user_watch_manager = readur::scheduling::user_watch_manager::UserWatchManager::new(state.db.clone(), Arc::clone(user_watch_service));
     
     // Create test user
     let test_user = readur::models::User {

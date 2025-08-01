@@ -2,6 +2,8 @@
 mod pdf_word_count_integration_tests {
     use readur::ocr::enhanced::EnhancedOcrService;
     use readur::models::Settings;
+    use readur::services::file_service::FileService;
+    use readur::storage::{StorageConfig, factory::create_storage_backend};
     use std::io::Write;
     use tempfile::{NamedTempFile, TempDir};
 
@@ -11,6 +13,12 @@ mod pdf_word_count_integration_tests {
 
     fn create_temp_dir() -> TempDir {
         TempDir::new().expect("Failed to create temp directory")
+    }
+
+    async fn create_test_file_service(temp_path: &str) -> FileService {
+        let storage_config = StorageConfig::Local { upload_path: temp_path.to_string() };
+        let storage_backend = create_storage_backend(storage_config).await.unwrap();
+        FileService::with_storage(temp_path.to_string(), storage_backend)
     }
 
     /// Create a mock PDF with specific text patterns for testing
@@ -82,7 +90,8 @@ mod pdf_word_count_integration_tests {
     async fn test_pdf_extraction_with_normal_text() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         let settings = create_test_settings();
 
         // Create a PDF with normal spaced text
@@ -108,7 +117,8 @@ mod pdf_word_count_integration_tests {
     async fn test_pdf_extraction_with_continuous_text() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         let settings = create_test_settings();
 
         // Create a PDF with continuous text (no spaces)
@@ -136,7 +146,8 @@ mod pdf_word_count_integration_tests {
     async fn test_pdf_extraction_with_mixed_content() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         let settings = create_test_settings();
 
         // Create a PDF with mixed content (letters, numbers, punctuation)
@@ -159,7 +170,8 @@ mod pdf_word_count_integration_tests {
     async fn test_pdf_extraction_empty_content() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         let settings = create_test_settings();
 
         // Create a PDF with only whitespace/empty content
@@ -185,7 +197,8 @@ mod pdf_word_count_integration_tests {
     async fn test_pdf_extraction_punctuation_only() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         let settings = create_test_settings();
 
         // Create a PDF with only punctuation
@@ -212,7 +225,8 @@ mod pdf_word_count_integration_tests {
     async fn test_pdf_quality_validation() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         let settings = create_test_settings();
 
         // Use a real test PDF file if available
@@ -261,7 +275,8 @@ mod pdf_word_count_integration_tests {
     async fn test_pdf_file_size_validation() {
         let temp_dir = create_temp_dir();
         let _temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let _service = EnhancedOcrService::new(_temp_path);
+        let _file_service = create_test_file_service(&_temp_path).await;
+        let _service = EnhancedOcrService::new(_temp_path.clone(), _file_service);
         let _settings = create_test_settings();
 
         // Create a small PDF file to test file operations
@@ -278,11 +293,12 @@ mod pdf_word_count_integration_tests {
         assert!(metadata.len() < 100 * 1024 * 1024, "Test PDF should be under size limit");
     }
 
-    #[test]
-    fn test_word_counting_regression_cases() {
+    #[tokio::test]
+    async fn test_word_counting_regression_cases() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
 
         // Regression test cases for the specific PDF issue
         let test_cases = vec![

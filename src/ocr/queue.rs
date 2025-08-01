@@ -75,14 +75,6 @@ impl OcrQueueService {
         }
     }
     
-    /// Backward-compatible constructor for tests and legacy code
-    /// Creates a FileService with local storage using UPLOAD_PATH env var
-    #[deprecated(note = "Use new() with FileService parameter instead")]
-    pub fn new_legacy(db: Database, pool: PgPool, max_concurrent_jobs: usize) -> Self {
-        let upload_path = std::env::var("UPLOAD_PATH").unwrap_or_else(|_| "./uploads".to_string());
-        let file_service = std::sync::Arc::new(crate::services::file_service::FileService::new(upload_path));
-        Self::new(db, pool, max_concurrent_jobs, file_service)
-    }
 
     /// Add a document to the OCR queue
     pub async fn enqueue_document(&self, document_id: Uuid, priority: i32, file_size: i64) -> Result<Uuid> {
