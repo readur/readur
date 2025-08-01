@@ -1,11 +1,13 @@
 use anyhow::Result;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::fs;
 use uuid::Uuid;
 use tracing::{info, warn, error};
 
 use crate::models::Document;
+use crate::services::s3_service::S3Service;
 
 #[cfg(feature = "ocr")]
 use image::{DynamicImage, ImageFormat, imageops::FilterType};
@@ -13,11 +15,27 @@ use image::{DynamicImage, ImageFormat, imageops::FilterType};
 #[derive(Clone)]
 pub struct FileService {
     upload_path: String,
+    s3_service: Option<Arc<S3Service>>,
 }
 
 impl FileService {
     pub fn new(upload_path: String) -> Self {
-        Self { upload_path }
+        Self { 
+            upload_path,
+            s3_service: None,
+        }
+    }
+
+    pub fn new_with_s3(upload_path: String, s3_service: Arc<S3Service>) -> Self {
+        Self { 
+            upload_path,
+            s3_service: Some(s3_service),
+        }
+    }
+
+    /// Check if S3 storage is enabled
+    pub fn is_s3_enabled(&self) -> bool {
+        self.s3_service.is_some()
     }
 
     /// Initialize the upload directory structure
@@ -148,6 +166,67 @@ impl FileService {
         Ok(file_path.to_string_lossy().to_string())
     }
 
+    /// Save file for a specific document (works with both local and S3)
+    pub async fn save_document_file(&self, user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String> {
+        if let Some(s3_service) = &self.s3_service {
+            // Use S3 storage
+            let s3_key = s3_service.store_document(user_id, document_id, filename, data).await?;
+            info!("Saved document to S3: {}", s3_key);
+            Ok(format!("s3://{}", s3_key))
+        } else {
+            // Use local storage
+            self.save_file(filename, data).await
+        }
+    }
+
+    /// Save thumbnail (works with both local and S3)
+    pub async fn save_thumbnail(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
+        if let Some(s3_service) = &self.s3_service {
+            // Use S3 storage
+            let s3_key = s3_service.store_thumbnail(user_id, document_id, data).await?;
+            info!("Saved thumbnail to S3: {}", s3_key);
+            Ok(format!("s3://{}", s3_key))
+        } else {
+            // Use local storage
+            let thumbnails_dir = self.get_thumbnails_path();
+            if let Err(e) = fs::create_dir_all(&thumbnails_dir).await {
+                error!("Failed to create thumbnails directory: {}", e);
+                return Err(anyhow::anyhow!("Failed to create thumbnails directory: {}", e));
+            }
+
+            let thumbnail_filename = format!("{}_thumb.jpg", document_id);
+            let thumbnail_path = thumbnails_dir.join(&thumbnail_filename);
+            
+            fs::write(&thumbnail_path, data).await?;
+            info!("Saved thumbnail locally: {}", thumbnail_path.display());
+            Ok(thumbnail_path.to_string_lossy().to_string())
+        }
+    }
+
+    /// Save processed image (works with both local and S3)
+    pub async fn save_processed_image(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
+        if let Some(s3_service) = &self.s3_service {
+            // Use S3 storage
+            let s3_key = s3_service.store_processed_image(user_id, document_id, data).await?;
+            info!("Saved processed image to S3: {}", s3_key);
+            Ok(format!("s3://{}", s3_key))
+        } else {
+            // Use local storage
+            let processed_dir = self.get_processed_images_path();
+            if let Err(e) = fs::create_dir_all(&processed_dir).await {
+                error!("Failed to create processed images directory: {}", e);
+                return Err(anyhow::anyhow!("Failed to create processed images directory: {}", e));
+            }
+
+            let processed_filename = format!("{}_processed.png", document_id);
+            let processed_path = processed_dir.join(&processed_filename);
+            
+            fs::write(&processed_path, data).await?;
+            info!("Saved processed image locally: {}", processed_path.display());
+            Ok(processed_path.to_string_lossy().to_string())
+        }
+    }
+
     pub fn create_document(
         &self,
         filename: &str,
@@ -167,8 +246,49 @@ impl FileService {
         file_group: Option<String>,
         source_metadata: Option<serde_json::Value>,
     ) -> Document {
+        self.create_document_with_id(
+            Uuid::new_v4(),
+            filename,
+            original_filename,
+            file_path,
+            file_size,
+            mime_type,
+            user_id,
+            file_hash,
+            original_created_at,
+            original_modified_at,
+            source_path,
+            source_type,
+            source_id,
+            file_permissions,
+            file_owner,
+            file_group,
+            source_metadata,
+        )
+    }
+
+    pub fn create_document_with_id(
+        &self,
+        document_id: Uuid,
+        filename: &str,
+        original_filename: &str,
+        file_path: &str,
+        file_size: i64,
+        mime_type: &str,
+        user_id: Uuid,
+        file_hash: Option<String>,
+        original_created_at: Option<chrono::DateTime<chrono::Utc>>,
+        original_modified_at: Option<chrono::DateTime<chrono::Utc>>,
+        source_path: Option<String>,
+        source_type: Option<String>,
+        source_id: Option<Uuid>,
+        file_permissions: Option<i32>,
+        file_owner: Option<String>,
+        file_group: Option<String>,
+        source_metadata: Option<serde_json::Value>,
+    ) -> Document {
         Document {
-            id: Uuid::new_v4(),
+            id: document_id,
             filename: filename.to_string(),
             original_filename: original_filename.to_string(),
             file_path: file_path.to_string(),
@@ -243,6 +363,17 @@ impl FileService {
     }
 
     pub async fn read_file(&self, file_path: &str) -> Result<Vec<u8>> {
+        // Check if this is an S3 path
+        if file_path.starts_with("s3://") {
+            if let Some(s3_service) = &self.s3_service {
+                let s3_key = file_path.strip_prefix("s3://").unwrap_or(file_path);
+                return s3_service.retrieve_file(s3_key).await;
+            } else {
+                return Err(anyhow::anyhow!("S3 path provided but S3 service not configured: {}", file_path));
+            }
+        }
+
+        // Handle local file path
         let resolved_path = self.resolve_file_path(file_path).await?;
         let data = fs::read(&resolved_path).await?;
         Ok(data)
@@ -508,6 +639,17 @@ impl FileService {
     }
 
     pub async fn delete_document_files(&self, document: &Document) -> Result<()> {
+        // Check if this document uses S3 storage
+        if document.file_path.starts_with("s3://") {
+            if let Some(s3_service) = &self.s3_service {
+                // Use S3 deletion
+                return s3_service.delete_document_files(document.user_id, document.id, &document.filename).await;
+            } else {
+                return Err(anyhow::anyhow!("Document stored in S3 but S3 service not configured"));
+            }
+        }
+
+        // Handle local file deletion
         let mut deleted_files = Vec::new();
         let mut serious_errors = Vec::new();
 

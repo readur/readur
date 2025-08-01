@@ -121,14 +121,45 @@ async fn main() -> anyhow::Result<()> {
     println!("📁 Upload directory: {}", config.upload_path);
     println!("👁️  Watch directory: {}", config.watch_folder);
     
-    // Initialize upload directory structure
-    info!("Initializing upload directory structure...");
-    let file_service = readur::services::file_service::FileService::new(config.upload_path.clone());
-    if let Err(e) = file_service.initialize_directory_structure().await {
-        error!("Failed to initialize directory structure: {}", e);
-        return Err(e.into());
+    // Initialize file service with S3 support if configured
+    info!("Initializing file service...");
+    let file_service = if config.s3_enabled {
+        if let Some(s3_config) = &config.s3_config {
+            info!("S3 storage enabled, initializing S3Service...");
+            match readur::services::s3_service::S3Service::new(s3_config.clone()).await {
+                Ok(s3_service) => {
+                    info!("✅ S3Service initialized successfully");
+                    readur::services::file_service::FileService::new_with_s3(
+                        config.upload_path.clone(),
+                        Arc::new(s3_service)
+                    )
+                }
+                Err(e) => {
+                    error!("Failed to initialize S3Service: {}", e);
+                    warn!("Falling back to local storage only");
+                    readur::services::file_service::FileService::new(config.upload_path.clone())
+                }
+            }
+        } else {
+            warn!("S3 enabled but no S3 configuration provided, using local storage");
+            readur::services::file_service::FileService::new(config.upload_path.clone())
+        }
+    } else {
+        info!("Using local file storage");
+        readur::services::file_service::FileService::new(config.upload_path.clone())
+    };
+
+    if !file_service.is_s3_enabled() {
+        // Only initialize local directory structure if not using S3
+        info!("Initializing local upload directory structure...");
+        if let Err(e) = file_service.initialize_directory_structure().await {
+            error!("Failed to initialize directory structure: {}", e);
+            return Err(e.into());
+        }
+        info!("✅ Local upload directory structure initialized");
+    } else {
+        info!("✅ File service initialized with S3 storage backend");
     }
-    info!("✅ Upload directory structure initialized");
     
     // Migrate existing files to new structure (one-time operation)
     info!("Migrating existing files to structured directories...");

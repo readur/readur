@@ -816,6 +816,10 @@ impl TestConfigBuilder {
             oidc_client_secret: None,
             oidc_issuer_url: None,
             oidc_redirect_uri: None,
+            
+            // S3 Configuration
+            s3_enabled: false,
+            s3_config: None,
         }
     }
 }

@@ -1,7 +1,10 @@
 use anyhow::{anyhow, Result};
-use chrono::DateTime;
-use tracing::{debug, info, warn};
+use chrono::{DateTime, Datelike};
+use tracing::{debug, info, warn, error};
 use serde_json;
+use std::collections::HashMap;
+use std::time::Duration;
+use uuid::Uuid;
 
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
@@ -9,6 +12,8 @@ use aws_sdk_s3::Client;
 use aws_credential_types::Credentials;
 #[cfg(feature = "s3")]
 use aws_types::region::Region as AwsRegion;
+#[cfg(feature = "s3")]
+use aws_sdk_s3::primitives::ByteStream;
 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
 
@@ -324,6 +329,329 @@ impl S3Service {
 
     pub fn get_config(&self) -> &S3SourceConfig {
         &self.config
+    }
+
+    // ========================================
+    // DIRECT STORAGE OPERATIONS
+    // ========================================
+
+    /// Store a file directly to S3 with structured path
+    pub async fn store_document(&self, user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            let key = self.generate_document_key(user_id, document_id, filename);
+            self.store_file(&key, data, None).await?;
+            Ok(key)
+        }
+    }
+
+    /// Store a thumbnail to S3
+    pub async fn store_thumbnail(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            let key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
+            self.store_file(&key, data, Some(self.get_image_metadata())).await?;
+            Ok(key)
+        }
+    }
+
+    /// Store a processed image to S3
+    pub async fn store_processed_image(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            let key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
+            self.store_file(&key, data, Some(self.get_image_metadata())).await?;
+            Ok(key)
+        }
+    }
+
+    /// Generic file storage method
+    async fn store_file(&self, key: &str, data: &[u8], metadata: Option<HashMap<String, String>>) -> Result<()> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            info!("Storing file to S3: {}/{}", self.config.bucket_name, key);
+
+            let key_owned = key.to_string();
+            let data_owned = data.to_vec();
+            let metadata_owned = metadata.clone();
+            let bucket_name = self.config.bucket_name.clone();
+            let client = self.client.clone();
+
+            self.retry_operation(&format!("store_file: {}", key), || {
+                let key = key_owned.clone();
+                let data = data_owned.clone();
+                let metadata = metadata_owned.clone();
+                let bucket_name = bucket_name.clone();
+                let client = client.clone();
+                let content_type = self.get_content_type_from_key(&key);
+
+                async move {
+                    let mut put_request = client
+                        .put_object()
+                        .bucket(&bucket_name)
+                        .key(&key)
+                        .body(ByteStream::from(data));
+
+                    // Add metadata if provided
+                    if let Some(meta) = metadata {
+                        for (k, v) in meta {
+                            put_request = put_request.metadata(k, v);
+                        }
+                    }
+
+                    // Set content type based on file extension
+                    if let Some(ct) = content_type {
+                        put_request = put_request.content_type(ct);
+                    }
+
+                    put_request.send().await
+                        .map_err(|e| anyhow!("Failed to store file {}: {}", key, e))?;
+
+                    Ok(())
+                }
+            }).await?;
+
+            info!("Successfully stored file: {}", key);
+            Ok(())
+        }
+    }
+
+    /// Retrieve a file from S3
+    pub async fn retrieve_file(&self, key: &str) -> Result<Vec<u8>> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            info!("Retrieving file from S3: {}/{}", self.config.bucket_name, key);
+
+            let key_owned = key.to_string();
+            let bucket_name = self.config.bucket_name.clone();
+            let client = self.client.clone();
+
+            let bytes = self.retry_operation(&format!("retrieve_file: {}", key), || {
+                let key = key_owned.clone();
+                let bucket_name = bucket_name.clone();
+                let client = client.clone();
+
+                async move {
+                    let response = client
+                        .get_object()
+                        .bucket(&bucket_name)
+                        .key(&key)
+                        .send()
+                        .await
+                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, e))?;
+
+                    let body = response.body.collect().await
+                        .map_err(|e| anyhow!("Failed to read file body: {}", e))?;
+
+                    Ok(body.into_bytes().to_vec())
+                }
+            }).await?;
+
+            info!("Successfully retrieved file: {} ({} bytes)", key, bytes.len());
+            Ok(bytes)
+        }
+    }
+
+    /// Delete a file from S3
+    pub async fn delete_file(&self, key: &str) -> Result<()> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            info!("Deleting file from S3: {}/{}", self.config.bucket_name, key);
+
+            self.client
+                .delete_object()
+                .bucket(&self.config.bucket_name)
+                .key(key)
+                .send()
+                .await
+                .map_err(|e| anyhow!("Failed to delete file {}: {}", key, e))?;
+
+            info!("Successfully deleted file: {}", key);
+            Ok(())
+        }
+    }
+
+    /// Check if a file exists in S3
+    pub async fn file_exists(&self, key: &str) -> Result<bool> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            match self.client
+                .head_object()
+                .bucket(&self.config.bucket_name)
+                .key(key)
+                .send()
+                .await
+            {
+                Ok(_) => Ok(true),
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if error_msg.contains("NotFound") || error_msg.contains("404") {
+                        Ok(false)
+                    } else {
+                        Err(anyhow!("Failed to check file existence {}: {}", key, e))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Delete all files for a document (document, thumbnail, processed image)
+    pub async fn delete_document_files(&self, user_id: Uuid, document_id: Uuid, filename: &str) -> Result<()> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            let document_key = self.generate_document_key(user_id, document_id, filename);
+            let thumbnail_key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
+            let processed_key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
+
+            let mut errors = Vec::new();
+
+            // Delete document file
+            if let Err(e) = self.delete_file(&document_key).await {
+                if !e.to_string().contains("NotFound") {
+                    errors.push(format!("Document: {}", e));
+                }
+            }
+
+            // Delete thumbnail
+            if let Err(e) = self.delete_file(&thumbnail_key).await {
+                if !e.to_string().contains("NotFound") {
+                    errors.push(format!("Thumbnail: {}", e));
+                }
+            }
+
+            // Delete processed image
+            if let Err(e) = self.delete_file(&processed_key).await {
+                if !e.to_string().contains("NotFound") {
+                    errors.push(format!("Processed image: {}", e));
+                }
+            }
+
+            if !errors.is_empty() {
+                return Err(anyhow!("Failed to delete some files: {}", errors.join("; ")));
+            }
+
+            info!("Successfully deleted all files for document {}", document_id);
+            Ok(())
+        }
+    }
+
+    // ========================================
+    // HELPER METHODS
+    // ========================================
+
+    /// Generate a structured S3 key for a document
+    fn generate_document_key(&self, user_id: Uuid, document_id: Uuid, filename: &str) -> String {
+        let now = chrono::Utc::now();
+        let year = now.year();
+        let month = now.month();
+        
+        // Extract file extension
+        let extension = std::path::Path::new(filename)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("");
+        
+        if extension.is_empty() {
+            format!("documents/{}/{:04}/{:02}/{}", user_id, year, month, document_id)
+        } else {
+            format!("documents/{}/{:04}/{:02}/{}.{}", user_id, year, month, document_id, extension)
+        }
+    }
+
+    /// Get content type from S3 key/filename
+    fn get_content_type_from_key(&self, key: &str) -> Option<String> {
+        let extension = std::path::Path::new(key)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        
+        Some(Self::get_mime_type(&extension))
+    }
+
+    /// Get metadata for image files
+    fn get_image_metadata(&self) -> HashMap<String, String> {
+        let mut metadata = HashMap::new();
+        metadata.insert("generated-by".to_string(), "readur".to_string());
+        metadata.insert("created-at".to_string(), chrono::Utc::now().to_rfc3339());
+        metadata
+    }
+
+    /// Retry wrapper for S3 operations with exponential backoff
+    async fn retry_operation<T, F, Fut>(&self, operation_name: &str, operation: F) -> Result<T>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+    {
+        const MAX_RETRIES: u32 = 3;
+        const BASE_DELAY_MS: u64 = 100;
+        
+        let mut last_error = None;
+        
+        for attempt in 0..=MAX_RETRIES {
+            match operation().await {
+                Ok(result) => {
+                    if attempt > 0 {
+                        info!("S3 operation '{}' succeeded after {} retries", operation_name, attempt);
+                    }
+                    return Ok(result);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    
+                    if attempt < MAX_RETRIES {
+                        let delay_ms = BASE_DELAY_MS * 2u64.pow(attempt);
+                        warn!("S3 operation '{}' failed (attempt {}/{}), retrying in {}ms: {}", 
+                              operation_name, attempt + 1, MAX_RETRIES + 1, delay_ms, last_error.as_ref().unwrap());
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
+        }
+        
+        error!("S3 operation '{}' failed after {} attempts: {}", 
+               operation_name, MAX_RETRIES + 1, last_error.as_ref().unwrap());
+        Err(last_error.unwrap())
     }
 }
 
