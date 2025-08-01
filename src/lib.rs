@@ -14,6 +14,7 @@ pub mod routes;
 pub mod scheduling;
 pub mod seed;
 pub mod services;
+pub mod storage;
 pub mod swagger;
 pub mod utils;
 pub mod webdav_xml_parser;

@@ -8,6 +8,7 @@ use tracing::{info, warn, error};
 
 use crate::models::Document;
 use crate::services::s3_service::S3Service;
+use crate::storage::{StorageBackend, StorageConfig, factory};
 
 #[cfg(feature = "ocr")]
 use image::{DynamicImage, ImageFormat, imageops::FilterType};
@@ -15,31 +16,75 @@ use image::{DynamicImage, ImageFormat, imageops::FilterType};
 #[derive(Clone)]
 pub struct FileService {
     upload_path: String,
+    /// Storage backend for all file operations
+    storage: Arc<dyn StorageBackend>,
+    /// Legacy S3 service reference for backward compatibility
+    /// TODO: Remove this after all usage sites are migrated
     s3_service: Option<Arc<S3Service>>,
 }
 
 impl FileService {
+    /// Create a new FileService with local storage (backward compatible)
     pub fn new(upload_path: String) -> Self {
+        use crate::storage::local::LocalStorageBackend;
+        let local_backend = LocalStorageBackend::new(upload_path.clone());
         Self { 
             upload_path,
+            storage: Arc::new(local_backend),
             s3_service: None,
         }
     }
 
+    /// Create a new FileService with S3 storage (backward compatible)
     pub fn new_with_s3(upload_path: String, s3_service: Arc<S3Service>) -> Self {
+        let storage_backend = s3_service.clone() as Arc<dyn StorageBackend>;
         Self { 
             upload_path,
+            storage: storage_backend,
             s3_service: Some(s3_service),
         }
+    }
+    
+    /// Create a new FileService with a specific storage backend (new API)
+    pub fn with_storage(upload_path: String, storage: Arc<dyn StorageBackend>) -> Self {
+        Self {
+            upload_path,
+            storage,
+            s3_service: None, // New API doesn't need legacy S3 reference
+        }
+    }
+    
+    /// Create FileService from storage configuration (factory pattern)
+    pub async fn from_config(config: StorageConfig, upload_path: String) -> Result<Self> {
+        let storage = factory::create_storage_backend(config).await?;
+        Ok(Self::with_storage(upload_path, storage))
     }
 
     /// Check if S3 storage is enabled
     pub fn is_s3_enabled(&self) -> bool {
-        self.s3_service.is_some()
+        // Check if storage backend is S3 type
+        self.storage.storage_type() == "s3" || self.s3_service.is_some()
+    }
+    
+    /// Get the storage backend type
+    pub fn storage_type(&self) -> &'static str {
+        self.storage.storage_type()
     }
 
-    /// Initialize the upload directory structure
+    /// Initialize the storage backend and directory structure
+    pub async fn initialize_storage(&self) -> Result<()> {
+        // Initialize the storage backend first
+        self.storage.initialize().await?;
+        Ok(())
+    }
+    
+    /// Initialize the upload directory structure (legacy method for local storage)
     pub async fn initialize_directory_structure(&self) -> Result<()> {
+        // For non-local storage, this is a no-op
+        if self.storage.storage_type() != "local" {
+            info!("Skipping directory structure initialization for {} storage", self.storage.storage_type());
+            return Ok(());
+        }
         let base_path = Path::new(&self.upload_path);
         
         // Create subdirectories for organized file storage
@@ -168,63 +213,23 @@ impl FileService {
 
     /// Save file for a specific document (works with both local and S3)
     pub async fn save_document_file(&self, user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String> {
-        if let Some(s3_service) = &self.s3_service {
-            // Use S3 storage
-            let s3_key = s3_service.store_document(user_id, document_id, filename, data).await?;
-            info!("Saved document to S3: {}", s3_key);
-            Ok(format!("s3://{}", s3_key))
-        } else {
-            // Use local storage
-            self.save_file(filename, data).await
-        }
+        let storage_path = self.storage.store_document(user_id, document_id, filename, data).await?;
+        info!("Saved document via storage backend: {}", storage_path);
+        Ok(storage_path)
     }
 
     /// Save thumbnail (works with both local and S3)
     pub async fn save_thumbnail(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
-        if let Some(s3_service) = &self.s3_service {
-            // Use S3 storage
-            let s3_key = s3_service.store_thumbnail(user_id, document_id, data).await?;
-            info!("Saved thumbnail to S3: {}", s3_key);
-            Ok(format!("s3://{}", s3_key))
-        } else {
-            // Use local storage
-            let thumbnails_dir = self.get_thumbnails_path();
-            if let Err(e) = fs::create_dir_all(&thumbnails_dir).await {
-                error!("Failed to create thumbnails directory: {}", e);
-                return Err(anyhow::anyhow!("Failed to create thumbnails directory: {}", e));
-            }
-
-            let thumbnail_filename = format!("{}_thumb.jpg", document_id);
-            let thumbnail_path = thumbnails_dir.join(&thumbnail_filename);
-            
-            fs::write(&thumbnail_path, data).await?;
-            info!("Saved thumbnail locally: {}", thumbnail_path.display());
-            Ok(thumbnail_path.to_string_lossy().to_string())
-        }
+        let storage_path = self.storage.store_thumbnail(user_id, document_id, data).await?;
+        info!("Saved thumbnail via storage backend: {}", storage_path);
+        Ok(storage_path)
     }
 
     /// Save processed image (works with both local and S3)
     pub async fn save_processed_image(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
-        if let Some(s3_service) = &self.s3_service {
-            // Use S3 storage
-            let s3_key = s3_service.store_processed_image(user_id, document_id, data).await?;
-            info!("Saved processed image to S3: {}", s3_key);
-            Ok(format!("s3://{}", s3_key))
-        } else {
-            // Use local storage
-            let processed_dir = self.get_processed_images_path();
-            if let Err(e) = fs::create_dir_all(&processed_dir).await {
-                error!("Failed to create processed images directory: {}", e);
-                return Err(anyhow::anyhow!("Failed to create processed images directory: {}", e));
-            }
-
-            let processed_filename = format!("{}_processed.png", document_id);
-            let processed_path = processed_dir.join(&processed_filename);
-            
-            fs::write(&processed_path, data).await?;
-            info!("Saved processed image locally: {}", processed_path.display());
-            Ok(processed_path.to_string_lossy().to_string())
-        }
+        let storage_path = self.storage.store_processed_image(user_id, document_id, data).await?;
+        info!("Saved processed image via storage backend: {}", storage_path);
+        Ok(storage_path)
     }
 
     pub fn create_document(
@@ -363,20 +368,24 @@ impl FileService {
     }
 
     pub async fn read_file(&self, file_path: &str) -> Result<Vec<u8>> {
-        // Check if this is an S3 path
+        // Check if this is a storage backend path (s3:// or other prefixes)
         if file_path.starts_with("s3://") {
-            if let Some(s3_service) = &self.s3_service {
-                let s3_key = file_path.strip_prefix("s3://").unwrap_or(file_path);
-                return s3_service.retrieve_file(s3_key).await;
-            } else {
-                return Err(anyhow::anyhow!("S3 path provided but S3 service not configured: {}", file_path));
-            }
+            // Strip the s3:// prefix and delegate to storage backend
+            let storage_key = file_path.strip_prefix("s3://").unwrap_or(file_path);
+            return self.storage.retrieve_file(storage_key).await;
         }
 
-        // Handle local file path
-        let resolved_path = self.resolve_file_path(file_path).await?;
-        let data = fs::read(&resolved_path).await?;
-        Ok(data)
+        // For local files, we might need to use the storage backend or fall back to direct file access
+        // Try storage backend first, then fall back to legacy file resolution
+        match self.storage.retrieve_file(file_path).await {
+            Ok(data) => Ok(data),
+            Err(_) => {
+                // Fall back to legacy file resolution for backward compatibility
+                let resolved_path = self.resolve_file_path(file_path).await?;
+                let data = fs::read(&resolved_path).await?;
+                Ok(data)
+            }
+        }
     }
 
     #[cfg(feature = "ocr")]
@@ -639,13 +648,15 @@ impl FileService {
     }
 
     pub async fn delete_document_files(&self, document: &Document) -> Result<()> {
-        // Check if this document uses S3 storage
-        if document.file_path.starts_with("s3://") {
-            if let Some(s3_service) = &self.s3_service {
-                // Use S3 deletion
-                return s3_service.delete_document_files(document.user_id, document.id, &document.filename).await;
-            } else {
-                return Err(anyhow::anyhow!("Document stored in S3 but S3 service not configured"));
+        // Use storage backend for deletion - it handles both S3 and local storage
+        match self.storage.delete_document_files(document.user_id, document.id, &document.filename).await {
+            Ok(_) => {
+                info!("Successfully deleted files for document {} via storage backend", document.id);
+                return Ok(());
+            }
+            Err(e) => {
+                warn!("Storage backend deletion failed for document {}: {}. Falling back to legacy deletion.", document.id, e);
+                // Fall back to legacy deletion logic for backward compatibility
             }
         }
 
@@ -707,7 +718,7 @@ impl FileService {
         if deleted_files.is_empty() {
             info!("No files needed deletion for document {} (all files already removed)", document.id);
         } else {
-            info!("Successfully deleted {} files for document {}", deleted_files.len(), document.id);
+            info!("Successfully deleted {} files for document {} via legacy method", deleted_files.len(), document.id);
         }
 
         Ok(())

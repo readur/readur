@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use chrono::{DateTime, Datelike};
 use tracing::{debug, info, warn, error};
 use serde_json;
@@ -16,6 +17,7 @@ use aws_types::region::Region as AwsRegion;
 use aws_sdk_s3::primitives::ByteStream;
 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
+use crate::storage::StorageBackend;
 
 #[derive(Debug, Clone)]
 pub struct S3Service {
@@ -652,6 +654,168 @@ impl S3Service {
         error!("S3 operation '{}' failed after {} attempts: {}", 
                operation_name, MAX_RETRIES + 1, last_error.as_ref().unwrap());
         Err(last_error.unwrap())
+    }
+}
+
+// Implement StorageBackend trait for S3Service
+#[async_trait]
+impl StorageBackend for S3Service {
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
+    async fn store_document(&self, user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String> {
+        // Generate S3 key
+        let key = self.generate_document_key(user_id, document_id, filename);
+        self.store_file(&key, data, None).await?;
+        Ok(format!("s3://{}", key))
+    }
+
+    async fn store_thumbnail(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
+        let key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
+        self.store_file(&key, data, Some(self.get_image_metadata())).await?;
+        Ok(format!("s3://{}", key))
+    }
+
+    async fn store_processed_image(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
+        let key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
+        self.store_file(&key, data, Some(self.get_image_metadata())).await?;
+        Ok(format!("s3://{}", key))
+    }
+
+    async fn retrieve_file(&self, path: &str) -> Result<Vec<u8>> {
+        // Handle s3:// prefix if present
+        let key = if path.starts_with("s3://") {
+            path.strip_prefix("s3://").unwrap_or(path)
+        } else {
+            path
+        };
+        
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            info!("Retrieving file from S3: {}/{}", self.config.bucket_name, key);
+
+            let key_owned = key.to_string();
+            let bucket_name = self.config.bucket_name.clone();
+            let client = self.client.clone();
+
+            let bytes = self.retry_operation(&format!("retrieve_file: {}", key), || {
+                let key = key_owned.clone();
+                let bucket_name = bucket_name.clone();
+                let client = client.clone();
+
+                async move {
+                    let response = client
+                        .get_object()
+                        .bucket(&bucket_name)
+                        .key(&key)
+                        .send()
+                        .await
+                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, e))?;
+
+                    let body = response.body.collect().await
+                        .map_err(|e| anyhow!("Failed to read file body: {}", e))?;
+
+                    Ok(body.into_bytes().to_vec())
+                }
+            }).await?;
+
+            info!("Successfully retrieved file: {} ({} bytes)", key, bytes.len());
+            Ok(bytes)
+        }
+    }
+
+    async fn delete_document_files(&self, user_id: Uuid, document_id: Uuid, filename: &str) -> Result<()> {
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            let document_key = self.generate_document_key(user_id, document_id, filename);
+            let thumbnail_key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
+            let processed_key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
+
+            let mut errors = Vec::new();
+
+            // Delete document file
+            if let Err(e) = self.delete_file(&document_key).await {
+                if !e.to_string().contains("NotFound") {
+                    errors.push(format!("Document: {}", e));
+                }
+            }
+
+            // Delete thumbnail
+            if let Err(e) = self.delete_file(&thumbnail_key).await {
+                if !e.to_string().contains("NotFound") {
+                    errors.push(format!("Thumbnail: {}", e));
+                }
+            }
+
+            // Delete processed image
+            if let Err(e) = self.delete_file(&processed_key).await {
+                if !e.to_string().contains("NotFound") {
+                    errors.push(format!("Processed image: {}", e));
+                }
+            }
+
+            if !errors.is_empty() {
+                return Err(anyhow!("Failed to delete some files: {}", errors.join("; ")));
+            }
+
+            info!("Successfully deleted all files for document {}", document_id);
+            Ok(())
+        }
+    }
+
+    async fn file_exists(&self, path: &str) -> Result<bool> {
+        // Handle s3:// prefix if present
+        let key = if path.starts_with("s3://") {
+            path.strip_prefix("s3://").unwrap_or(path)
+        } else {
+            path
+        };
+        
+        #[cfg(not(feature = "s3"))]
+        {
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+        
+        #[cfg(feature = "s3")]
+        {
+            match self.client
+                .head_object()
+                .bucket(&self.config.bucket_name)
+                .key(key)
+                .send()
+                .await
+            {
+                Ok(_) => Ok(true),
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if error_msg.contains("NotFound") || error_msg.contains("404") {
+                        Ok(false)
+                    } else {
+                        Err(anyhow!("Failed to check file existence {}: {}", key, e))
+                    }
+                }
+            }
+        }
+    }
+
+    fn storage_type(&self) -> &'static str {
+        "s3"
+    }
+
+    async fn initialize(&self) -> Result<()> {
+        self.test_connection().await?;
+        info!("S3 storage backend initialized successfully");
+        Ok(())
     }
 }
 
