@@ -16,6 +16,8 @@ use readur::{
     db::Database,
     ocr::queue::OcrQueueService,
     ocr::enhanced::EnhancedOcrService,
+    services::file_service::FileService,
+    storage::{StorageConfig, factory::create_storage_backend},
 };
 
 // Use the same database URL as the running server
@@ -23,6 +25,12 @@ fn get_test_db_url() -> String {
     std::env::var("DATABASE_URL")
         .or_else(|_| std::env::var("TEST_DATABASE_URL"))
         .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string())
+}
+
+async fn create_test_file_service(temp_path: &str) -> FileService {
+    let storage_config = StorageConfig::Local { upload_path: temp_path.to_string() };
+    let storage_backend = create_storage_backend(storage_config).await.unwrap();
+    FileService::with_storage(temp_path.to_string(), storage_backend)
 }
 
 struct SimpleThrottleTest {
@@ -140,7 +148,8 @@ impl SimpleThrottleTest {
             
             let handle = tokio::spawn(async move {
                 let worker_name = format!("worker-{}", worker_id);
-                let ocr_service = EnhancedOcrService::new("/tmp".to_string());
+                let file_service = create_test_file_service("/tmp").await;
+                let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service);
                 let mut jobs_processed = 0;
                 
                 info!("Worker {} starting", worker_name);

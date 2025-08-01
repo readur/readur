@@ -1,6 +1,8 @@
 use anyhow::Result;
 use std::env;
 
+use crate::models::S3SourceConfig;
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub database_url: String,
@@ -31,6 +33,10 @@ pub struct Config {
     pub oidc_client_secret: Option<String>,
     pub oidc_issuer_url: Option<String>,
     pub oidc_redirect_uri: Option<String>,
+    
+    // S3 Configuration
+    pub s3_enabled: bool,
+    pub s3_config: Option<S3SourceConfig>,
 }
 
 impl Config {
@@ -48,35 +54,7 @@ impl Config {
         // Database Configuration
         let database_url = match env::var("DATABASE_URL") {
             Ok(val) => {
-                // Mask sensitive parts of database URL for logging
-                let masked_url = if val.contains('@') {
-                    let parts: Vec<&str> = val.split('@').collect();
-                    if parts.len() >= 2 {
-                        let credentials_part = parts[0];
-                        let remaining_part = parts[1..].join("@");
-                        
-                        // Extract just the username part before the password
-                        if let Some(username_start) = credentials_part.rfind("://") {
-                            let protocol = &credentials_part[..username_start + 3];
-                            let credentials = &credentials_part[username_start + 3..];
-                            if let Some(colon_pos) = credentials.find(':') {
-                                let username = &credentials[..colon_pos];
-                                // Show first and last character of the username
-                                let masked_username = format!("{}{}", &username[..1], &username[username.len() - 1..]);
-                                format!("{}{}:***@{}", protocol, masked_username, remaining_part)
-                            } else {
-                                format!("{}***@{}", protocol, remaining_part)
-                            }
-                        } else {
-                            "***masked***".to_string()
-                        }
-                    } else {
-                        "***masked***".to_string()
-                    }
-                } else {
-                    val.clone()
-                };
-                println!("✅ DATABASE_URL: {} (loaded from env)", masked_url);
+                println!("✅ DATABASE_URL: configured (loaded from env)");
                 val
             }
             Err(_) => {
@@ -430,6 +408,59 @@ impl Config {
                     println!("⚠️  OIDC_REDIRECT_URI: Not set");
                     None
                 }
+            },
+            
+            // S3 Configuration
+            s3_enabled: match env::var("S3_ENABLED") {
+                Ok(val) => {
+                    let enabled = val.to_lowercase() == "true";
+                    println!("✅ S3_ENABLED: {} (loaded from env)", enabled);
+                    enabled
+                }
+                Err(_) => {
+                    println!("⚠️  S3_ENABLED: false (using default - env var not set)");
+                    false
+                }
+            },
+            s3_config: if env::var("S3_ENABLED").unwrap_or_default().to_lowercase() == "true" {
+                // Only load S3 config if S3 is enabled
+                let bucket_name = env::var("S3_BUCKET_NAME").unwrap_or_default();
+                let region = env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+                let access_key_id = env::var("S3_ACCESS_KEY_ID").unwrap_or_default();
+                let secret_access_key = env::var("S3_SECRET_ACCESS_KEY").unwrap_or_default();
+                let endpoint_url = env::var("S3_ENDPOINT_URL").ok();
+                let prefix = env::var("S3_PREFIX").ok();
+                
+                if !bucket_name.is_empty() && !access_key_id.is_empty() && !secret_access_key.is_empty() {
+                    println!("✅ S3_BUCKET_NAME: {} (loaded from env)", bucket_name);
+                    println!("✅ S3_REGION: {} (loaded from env)", region);
+                    println!("✅ S3_ACCESS_KEY_ID: configured (loaded from env)");
+                    println!("✅ S3_SECRET_ACCESS_KEY: configured (loaded from env)");
+                    if let Some(ref endpoint) = endpoint_url {
+                        println!("✅ S3_ENDPOINT_URL: {} (loaded from env)", endpoint);
+                    }
+                    if let Some(ref pref) = prefix {
+                        println!("✅ S3_PREFIX: {} (loaded from env)", pref);
+                    }
+
+                    Some(S3SourceConfig {
+                        bucket_name,
+                        region,
+                        access_key_id,
+                        secret_access_key,
+                        endpoint_url,
+                        prefix,
+                        watch_folders: vec![], // Will be configured separately for sources
+                        file_extensions: vec![], // Will be configured separately for sources
+                        auto_sync: false, // Not used for general storage
+                        sync_interval_minutes: 0, // Not used for general storage
+                    })
+                } else {
+                    println!("❌ S3 enabled but missing required configuration (bucket_name, access_key_id, or secret_access_key)");
+                    None
+                }
+            } else {
+                None
             },
         };
         

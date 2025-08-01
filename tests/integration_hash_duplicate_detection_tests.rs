@@ -7,6 +7,8 @@ use tempfile::TempDir;
 use readur::{
     db::Database,
     services::file_service::FileService,
+    storage::factory::create_storage_backend,
+    storage::StorageConfig,
     models::{Document, CreateUser, UserRole},
     test_utils::TestContext,
 };
@@ -308,7 +310,9 @@ fn test_calculate_file_hash_empty_content() {
 async fn test_file_service_create_document_with_hash() {
     let temp_dir = TempDir::new().unwrap();
     let upload_path = temp_dir.path().to_string_lossy().to_string();
-    let file_service = FileService::new(upload_path);
+    let storage_config = StorageConfig::Local { upload_path: upload_path.clone() };
+    let storage_backend = create_storage_backend(storage_config).await.unwrap();
+    let file_service = FileService::with_storage(upload_path, storage_backend);
     let user_id = Uuid::new_v4();
     let test_hash = "test_hash_1234567890";
 
@@ -341,7 +345,9 @@ async fn test_file_service_create_document_with_hash() {
 async fn test_file_service_create_document_without_hash() {
     let temp_dir = TempDir::new().unwrap();
     let upload_path = temp_dir.path().to_string_lossy().to_string();
-    let file_service = FileService::new(upload_path);
+    let storage_config = StorageConfig::Local { upload_path: upload_path.clone() };
+    let storage_backend = create_storage_backend(storage_config).await.unwrap();
+    let file_service = FileService::with_storage(upload_path, storage_backend);
     let user_id = Uuid::new_v4();
 
     let document = file_service.create_document(

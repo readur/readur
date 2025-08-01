@@ -398,7 +398,7 @@ pub async fn view_failed_document(
     // Check if file_path exists (some failed documents might not have been saved)
     let file_path = file_path.ok_or(StatusCode::NOT_FOUND)?;
     
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     let file_data = file_service
         .read_file(&file_path)
         .await

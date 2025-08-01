@@ -8,7 +8,7 @@ use std::path::Path;
 #[cfg(any(test, feature = "test-utils"))]
 use std::sync::Arc;
 #[cfg(any(test, feature = "test-utils"))]
-use crate::{AppState, models::UserResponse};
+use crate::{AppState, models::UserResponse, storage::StorageConfig};
 #[cfg(any(test, feature = "test-utils"))]
 use axum::Router;
 #[cfg(any(test, feature = "test-utils"))]
@@ -272,7 +272,6 @@ impl TestContext {
         };
         
         let config = config_builder.build(database_url);
-        let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
         
         let user_watch_service = if config.enable_per_user_watch {
             Some(Arc::new(crate::services::user_watch_service::UserWatchService::new(&config.user_watch_base_dir)))
@@ -280,9 +279,28 @@ impl TestContext {
             None
         };
         
+        // Create FileService with local storage for testing
+        let storage_config = StorageConfig::Local { 
+            upload_path: config.upload_path.clone() 
+        };
+        let storage_backend = crate::storage::factory::create_storage_backend(storage_config).await
+            .expect("Failed to create storage backend for tests");
+        let file_service = Arc::new(crate::services::file_service::FileService::with_storage(
+            config.upload_path.clone(), 
+            storage_backend
+        ));
+        
+        let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(
+            db.clone(), 
+            db.pool.clone(), 
+            2, 
+            file_service.clone()
+        ));
+
         let state = Arc::new(AppState { 
             db, 
             config,
+            file_service,
             webdav_scheduler: None,
             source_scheduler: None,
             queue_service,
@@ -816,6 +834,10 @@ impl TestConfigBuilder {
             oidc_client_secret: None,
             oidc_issuer_url: None,
             oidc_redirect_uri: None,
+            
+            // S3 Configuration
+            s3_enabled: false,
+            s3_config: None,
         }
     }
 }

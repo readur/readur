@@ -201,4 +201,21 @@ impl Database {
 
         Ok(rows.iter().map(map_row_to_document).collect())
     }
+
+    /// Update document file path (useful for S3 migration)
+    pub async fn update_document_file_path(&self, document_id: Uuid, new_file_path: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE documents 
+            SET file_path = $2, updated_at = NOW()
+            WHERE id = $1
+            "#
+        )
+        .bind(document_id)
+        .bind(new_file_path)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }

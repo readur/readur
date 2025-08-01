@@ -17,10 +17,18 @@ use readur::{
     db::Database,
     models::Document,
     services::file_service::FileService,
+    storage::factory::create_storage_backend,
+    storage::StorageConfig,
     ocr::enhanced::EnhancedOcrService,
     ocr::queue::{OcrQueueService, OcrQueueItem},
     db_guardrails_simple::DocumentTransactionManager,
 };
+
+async fn create_test_file_service(temp_path: &str) -> FileService {
+    let storage_config = StorageConfig::Local { upload_path: temp_path.to_string() };
+    let storage_backend = create_storage_backend(storage_config).await.unwrap();
+    FileService::with_storage(temp_path.to_string(), storage_backend)
+}
 
 struct OCRPipelineTestHarness {
     db: Database,
@@ -47,9 +55,14 @@ impl OCRPipelineTestHarness {
         let db = Database::new(&database_url).await?;
         
         // Initialize services
-        let file_service = FileService::new("./test_uploads".to_string());
-        let ocr_service = EnhancedOcrService::new("/tmp".to_string());
-        let queue_service = OcrQueueService::new(db.clone(), pool.clone(), 4);
+        let upload_path = "./test_uploads".to_string();
+        let storage_config = StorageConfig::Local { 
+            upload_path: upload_path.clone()
+        };
+        let storage_backend = create_storage_backend(storage_config).await?;
+        let file_service = FileService::with_storage(upload_path, storage_backend);
+        let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service.clone());
+        let queue_service = OcrQueueService::new(db.clone(), pool.clone(), 4, std::sync::Arc::new(file_service));
         let transaction_manager = DocumentTransactionManager::new(pool.clone());
         
         // Ensure test upload directory exists
@@ -322,7 +335,8 @@ impl OCRPipelineTestHarness {
             // Clone the components we need rather than the whole harness
             let queue_service = self.queue_service.clone();
             let transaction_manager = self.transaction_manager.clone();
-            let ocr_service = EnhancedOcrService::new("/tmp".to_string());
+            let file_service = create_test_file_service("/tmp").await;
+            let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service);
             let pool = self.pool.clone();
             
             let handle = tokio::spawn(async move {

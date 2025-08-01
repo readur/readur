@@ -7,7 +7,7 @@
  * Usage: cargo run --bin enqueue_pending_ocr
  */
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use sqlx::Row;
 use tracing::{info, warn, error};
 use uuid::Uuid;
@@ -16,6 +16,8 @@ use readur::{
     config::Config,
     db::Database,
     ocr::queue::OcrQueueService,
+    services::file_service::FileService,
+    storage::factory,
 };
 
 #[tokio::main]
@@ -30,7 +32,16 @@ async fn main() -> Result<()> {
     
     // Connect to database
     let db = Database::new(&config.database_url).await?;
-    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1);
+    
+    // Create file service using factory pattern
+    let storage_config = factory::storage_config_from_env(&config)
+        .with_context(|| "Failed to create storage configuration from environment")?;
+    let file_service = std::sync::Arc::new(
+        FileService::from_config(storage_config, config.upload_path.clone()).await
+            .with_context(|| "Failed to create file service with storage backend")?
+    );
+    
+    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service);
     
     // Find documents with pending OCR status that aren't in the queue
     let pending_documents = sqlx::query(

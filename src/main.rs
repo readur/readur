@@ -121,14 +121,45 @@ async fn main() -> anyhow::Result<()> {
     println!("📁 Upload directory: {}", config.upload_path);
     println!("👁️  Watch directory: {}", config.watch_folder);
     
-    // Initialize upload directory structure
-    info!("Initializing upload directory structure...");
-    let file_service = readur::services::file_service::FileService::new(config.upload_path.clone());
-    if let Err(e) = file_service.initialize_directory_structure().await {
-        error!("Failed to initialize directory structure: {}", e);
+    // Initialize file service using the new storage backend architecture with fallback
+    info!("Initializing file service with storage backend...");
+    let storage_config = readur::storage::factory::storage_config_from_env(&config)?;
+    let file_service = match readur::services::file_service::FileService::from_config(storage_config, config.upload_path.clone()).await {
+        Ok(service) => {
+            info!("✅ File service initialized with {} storage backend", service.storage_type());
+            service
+        }
+        Err(e) => {
+            error!("❌ Failed to initialize configured storage backend: {}", e);
+            warn!("🔄 Falling back to local storage...");
+            
+            // Create fallback local storage configuration
+            let fallback_config = readur::storage::StorageConfig::Local {
+                upload_path: config.upload_path.clone(),
+            };
+            
+            match readur::services::file_service::FileService::from_config(fallback_config, config.upload_path.clone()).await {
+                Ok(fallback_service) => {
+                    warn!("✅ Successfully initialized fallback local storage");
+                    fallback_service
+                }
+                Err(fallback_err) => {
+                    error!("💥 CRITICAL: Even fallback local storage failed to initialize: {}", fallback_err);
+                    return Err(fallback_err.into());
+                }
+            }
+        }
+    };
+
+    // Initialize the storage backend (creates directories, validates access, etc.)
+    if let Err(e) = file_service.initialize_storage().await {
+        error!("Failed to initialize storage backend: {}", e);
         return Err(e.into());
     }
-    info!("✅ Upload directory structure initialized");
+    info!("✅ Storage backend initialized successfully");
+    
+    // Wrap file service in Arc for sharing across application state
+    let file_service = std::sync::Arc::new(file_service);
     
     // Migrate existing files to new structure (one-time operation)
     info!("Migrating existing files to structured directories...");
@@ -148,7 +179,6 @@ async fn main() -> anyhow::Result<()> {
         }
         Err(e) => {
             println!("❌ CRITICAL: Failed to connect to database for web operations!");
-            println!("Database URL: {}", db_info);  // Use the already-masked URL
             println!("Error: {}", e);
             println!("\n🔧 Please verify:");
             println!("   - Database server is running");
@@ -314,7 +344,8 @@ async fn main() -> anyhow::Result<()> {
     let shared_queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
         background_db.clone(), 
         background_db.get_pool().clone(), 
-        concurrent_jobs
+        concurrent_jobs,
+        file_service.clone()
     ));
     
     // Initialize OIDC client if enabled
@@ -352,6 +383,7 @@ async fn main() -> anyhow::Result<()> {
     let web_state = AppState { 
         db: web_db, 
         config: config.clone(),
+        file_service: file_service.clone(),
         webdav_scheduler: None, // Will be set after creating scheduler
         source_scheduler: None, // Will be set after creating scheduler
         queue_service: shared_queue_service.clone(),
@@ -365,6 +397,7 @@ async fn main() -> anyhow::Result<()> {
     let background_state = AppState {
         db: background_db,
         config: config.clone(),
+        file_service: file_service.clone(),
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service: shared_queue_service.clone(),
@@ -376,8 +409,9 @@ async fn main() -> anyhow::Result<()> {
     
     let watcher_config = config.clone();
     let watcher_db = background_state.db.clone();
+    let watcher_file_service = background_state.file_service.clone();
     tokio::spawn(async move {
-        if let Err(e) = readur::scheduling::watcher::start_folder_watcher(watcher_config, watcher_db).await {
+        if let Err(e) = readur::scheduling::watcher::start_folder_watcher(watcher_config, watcher_db, watcher_file_service).await {
             error!("Folder watcher error: {}", e);
         }
     });
@@ -448,6 +482,7 @@ async fn main() -> anyhow::Result<()> {
     let updated_web_state = AppState {
         db: web_state.db.clone(),
         config: web_state.config.clone(),
+        file_service: file_service.clone(),
         webdav_scheduler: Some(webdav_scheduler.clone()),
         source_scheduler: Some(source_scheduler.clone()),
         queue_service: shared_queue_service.clone(),

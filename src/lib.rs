@@ -14,6 +14,7 @@ pub mod routes;
 pub mod scheduling;
 pub mod seed;
 pub mod services;
+pub mod storage;
 pub mod swagger;
 pub mod utils;
 pub mod webdav_xml_parser;
@@ -23,6 +24,9 @@ mod tests;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_helpers;
 
 use axum::{http::StatusCode, Json};
 use utoipa;
@@ -34,6 +38,7 @@ use oidc::OidcClient;
 pub struct AppState {
     pub db: Database,
     pub config: Config,
+    pub file_service: std::sync::Arc<services::file_service::FileService>,
     pub webdav_scheduler: Option<std::sync::Arc<scheduling::webdav_scheduler::WebDAVScheduler>>,
     pub source_scheduler: Option<std::sync::Arc<scheduling::source_scheduler::SourceScheduler>>,
     pub queue_service: std::sync::Arc<ocr::queue::OcrQueueService>,

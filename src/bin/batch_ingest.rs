@@ -64,10 +64,19 @@ async fn main() -> Result<()> {
     
     let config = Config::from_env()?;
     let db = Database::new(&config.database_url).await?;
-    let file_service = FileService::new(config.upload_path.clone());
-    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1);
     
-    let ingester = BatchIngester::new(db, queue_service, file_service, config);
+    // Use storage factory to create file service with proper backend
+    let storage_config = readur::storage::factory::storage_config_from_env(&config)?;
+    let file_service = std::sync::Arc::new(
+        FileService::from_config(storage_config, config.upload_path.clone()).await?
+    );
+    
+    // Initialize storage backend
+    file_service.initialize_storage().await?;
+    
+    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service.clone());
+    
+    let ingester = BatchIngester::new(db, queue_service, (*file_service).clone(), config);
     
     println!("Starting batch ingestion from: {}", directory);
     // Only show the first and last character of the user ID

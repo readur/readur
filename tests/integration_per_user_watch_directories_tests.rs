@@ -30,10 +30,11 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
     config.enable_per_user_watch = true;
     
     // Update the state with the new config and user watch service
-    let user_watch_service = Some(Arc::new(readur::services::user_watch_service::UserWatchService::new(&config.user_watch_base_dir)));
+    let user_watch_service = Some(Arc::new(UserWatchService::new(&config.user_watch_base_dir)));
     let updated_state = Arc::new(AppState {
         db: ctx.state.db.clone(),
         config,
+        file_service: ctx.state.file_service.clone(),
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service: ctx.state.queue_service.clone(),
@@ -282,10 +283,11 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
     config.enable_per_user_watch = true;
     
     // Update the state with the new config and user watch service
-    let user_watch_service = Some(Arc::new(readur::services::user_watch_service::UserWatchService::new(&config.user_watch_base_dir)));
+    let user_watch_service = Some(Arc::new(UserWatchService::new(&config.user_watch_base_dir)));
     let state = Arc::new(AppState {
         db: ctx.state.db.clone(),
         config: config.clone(),
+        file_service: ctx.state.file_service.clone(),
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service: ctx.state.queue_service.clone(),
@@ -367,6 +369,7 @@ async fn test_per_user_watch_disabled() -> Result<()> {
     let updated_state = Arc::new(AppState {
         db: ctx.state.db.clone(),
         config,
+        file_service: ctx.state.file_service.clone(),
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service: ctx.state.queue_service.clone(),

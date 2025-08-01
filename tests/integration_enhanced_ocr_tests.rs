@@ -2,6 +2,8 @@
 mod tests {
     use readur::ocr::enhanced::{EnhancedOcrService, OcrResult, ImageQualityStats};
     use readur::models::Settings;
+    use readur::services::file_service::FileService;
+    use readur::storage::{StorageConfig, factory::create_storage_backend};
     use std::fs;
     use tempfile::{NamedTempFile, TempDir};
 
@@ -13,18 +15,25 @@ mod tests {
         TempDir::new().expect("Failed to create temp directory")
     }
 
-    #[test]
-    fn test_enhanced_ocr_service_creation() {
+    async fn create_test_file_service(temp_path: &str) -> FileService {
+        let storage_config = StorageConfig::Local { upload_path: temp_path.to_string() };
+        let storage_backend = create_storage_backend(storage_config).await.unwrap();
+        FileService::with_storage(temp_path.to_string(), storage_backend)
+    }
+
+    #[tokio::test]
+    async fn test_enhanced_ocr_service_creation() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         
         // Service should be created successfully
         assert!(!service.temp_dir.is_empty());
     }
 
-    #[test]
-    fn test_image_quality_stats_creation() {
+    #[tokio::test]
+    async fn test_image_quality_stats_creation() {
         let stats = ImageQualityStats {
             average_brightness: 128.0,
             contrast_ratio: 0.5,
@@ -38,11 +47,12 @@ mod tests {
         assert_eq!(stats.sharpness, 0.8);
     }
 
-    #[test]
-    fn test_count_words_safely_whitespace_separated() {
+    #[tokio::test]
+    async fn test_count_words_safely_whitespace_separated() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         
         // Test normal whitespace-separated text
         let text = "Hello world this is a test";
@@ -55,11 +65,12 @@ mod tests {
         assert_eq!(count, 3);
     }
 
-    #[test]
-    fn test_count_words_safely_continuous_text() {
+    #[tokio::test]
+    async fn test_count_words_safely_continuous_text() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         
         // Test continuous text without spaces (like some PDF extractions)
         let text = "HelloWorldThisIsAContinuousText";
@@ -72,11 +83,12 @@ mod tests {
         assert!(count > 0, "Should detect alphanumeric patterns as words");
     }
 
-    #[test]
-    fn test_count_words_safely_edge_cases() {
+    #[tokio::test]
+    async fn test_count_words_safely_edge_cases() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         
         // Test empty text
         let count = service.count_words_safely("");
@@ -102,11 +114,12 @@ mod tests {
         assert!(count > 0, "Should detect words in mixed content");
     }
 
-    #[test]
-    fn test_count_words_safely_large_text() {
+    #[tokio::test]
+    async fn test_count_words_safely_large_text() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
         
         // Test with large text (over 1MB) to trigger sampling
         let word = "test ";
@@ -118,11 +131,12 @@ mod tests {
         assert!(count <= 10_000_000, "Should cap at max limit: got {}", count);
     }
 
-    #[test]
-    fn test_count_words_safely_fallback_patterns() {
+    #[tokio::test]
+    async fn test_count_words_safely_fallback_patterns() {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let service = EnhancedOcrService::new(temp_path);
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         
         // Test letter transition detection
         let text = "OneWordAnotherWordFinalWord";
@@ -140,8 +154,8 @@ mod tests {
         assert!(count >= 1, "Should detect words in mixed alphanumeric: got {}", count);
     }
 
-    #[test]
-    fn test_ocr_result_structure() {
+    #[tokio::test]
+    async fn test_ocr_result_structure() {
         let result = OcrResult {
             text: "Test text".to_string(),
             confidence: 85.5,
@@ -162,7 +176,9 @@ mod tests {
     #[tokio::test]
     async fn test_extract_text_from_plain_text() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
@@ -185,7 +201,9 @@ mod tests {
     #[tokio::test]
     async fn test_extract_text_with_context() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
@@ -211,7 +229,9 @@ mod tests {
     #[tokio::test]
     async fn test_extract_text_unsupported_mime_type() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::new().unwrap();
@@ -229,7 +249,9 @@ mod tests {
     #[tokio::test]
     async fn test_extract_text_nonexistent_file() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let result = service
@@ -242,7 +264,9 @@ mod tests {
     #[tokio::test]
     async fn test_extract_text_large_file_truncation() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
@@ -262,10 +286,12 @@ mod tests {
     }
 
     #[cfg(feature = "ocr")]
-    #[test]
-    fn test_validate_ocr_quality_high_confidence() {
+    #[tokio::test]
+    async fn test_validate_ocr_quality_high_confidence() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let mut settings = create_test_settings();
         settings.ocr_min_confidence = 30.0;
         
@@ -283,10 +309,12 @@ mod tests {
     }
 
     #[cfg(feature = "ocr")]
-    #[test]
-    fn test_validate_ocr_quality_low_confidence() {
+    #[tokio::test]
+    async fn test_validate_ocr_quality_low_confidence() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let mut settings = create_test_settings();
         settings.ocr_min_confidence = 50.0;
         
@@ -304,10 +332,12 @@ mod tests {
     }
 
     #[cfg(feature = "ocr")]
-    #[test]
-    fn test_validate_ocr_quality_no_words() {
+    #[tokio::test]
+    async fn test_validate_ocr_quality_no_words() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let result = OcrResult {
@@ -324,10 +354,12 @@ mod tests {
     }
 
     #[cfg(feature = "ocr")]
-    #[test]
-    fn test_validate_ocr_quality_poor_character_distribution() {
+    #[tokio::test]
+    async fn test_validate_ocr_quality_poor_character_distribution() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let result = OcrResult {
@@ -344,10 +376,12 @@ mod tests {
     }
 
     #[cfg(feature = "ocr")]
-    #[test]
-    fn test_validate_ocr_quality_good_character_distribution() {
+    #[tokio::test]
+    async fn test_validate_ocr_quality_good_character_distribution() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let result = OcrResult {
@@ -366,7 +400,9 @@ mod tests {
     #[tokio::test]
     async fn test_word_count_calculation() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let test_cases = vec![
@@ -395,7 +431,9 @@ mod tests {
     #[tokio::test]
     async fn test_pdf_extraction_with_invalid_pdf() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
@@ -413,7 +451,9 @@ mod tests {
     #[tokio::test]
     async fn test_pdf_extraction_with_minimal_valid_pdf() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         // Minimal PDF with "Hello" text
@@ -485,7 +525,9 @@ startxref
     #[tokio::test]
     async fn test_pdf_size_limit() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
@@ -503,8 +545,8 @@ startxref
         assert!(error_msg.contains("too large"));
     }
 
-    #[test]
-    fn test_settings_default_values() {
+    #[tokio::test]
+    async fn test_settings_default_values() {
         let settings = Settings::default();
         
         // Test that OCR-related settings have reasonable defaults
@@ -521,7 +563,9 @@ startxref
     #[tokio::test]
     async fn test_concurrent_ocr_processing() {
         let temp_dir = create_temp_dir();
-        let service = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
         
         let mut handles = vec![];
@@ -532,7 +576,9 @@ startxref
             let content = format!("Concurrent test content {}", i);
             fs::write(temp_file.path(), &content).unwrap();
             
-            let service_clone = EnhancedOcrService::new(temp_dir.path().to_str().unwrap().to_string());
+            let temp_path_clone = temp_dir.path().to_str().unwrap().to_string();
+            let file_service_clone = create_test_file_service(&temp_path_clone).await;
+            let service_clone = EnhancedOcrService::new(temp_path_clone, file_service_clone);
             let settings_clone = settings.clone();
             let file_path = temp_file.path().to_str().unwrap().to_string();
             

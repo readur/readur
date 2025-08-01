@@ -41,11 +41,10 @@ pub struct EnhancedOcrService {
 }
 
 impl EnhancedOcrService {
-    pub fn new(temp_dir: String) -> Self {
-        let upload_path = std::env::var("UPLOAD_PATH").unwrap_or_else(|_| "./uploads".to_string());
-        let file_service = FileService::new(upload_path);
+    pub fn new(temp_dir: String, file_service: FileService) -> Self {
         Self { temp_dir, file_service }
     }
+    
 
     /// Extract text from image with high-quality OCR settings
     #[cfg(feature = "ocr")]
@@ -72,12 +71,11 @@ impl EnhancedOcrService {
         
         let ocr_result = tokio::task::spawn_blocking(move || -> Result<(String, f32)> {
             // Configure Tesseract with optimal settings
-            let ocr_service = EnhancedOcrService::new(temp_dir);
-            let mut tesseract = ocr_service.configure_tesseract(&processed_image_path_clone, &settings_clone)?;
+            let mut tesseract = Self::configure_tesseract_static(&processed_image_path_clone, &settings_clone)?;
             
             // Extract text with confidence
             let text = tesseract.get_text()?.trim().to_string();
-            let confidence = ocr_service.calculate_overall_confidence(&mut tesseract)?;
+            let confidence = Self::calculate_overall_confidence_static(&mut tesseract)?;
             
             Ok((text, confidence))
         }).await??;
@@ -1632,4 +1630,85 @@ fn is_valid_pdf(data: &[u8]) -> bool {
     }
     
     false
+}
+
+impl EnhancedOcrService {
+    /// Static version of configure_tesseract for use in spawn_blocking
+    #[cfg(feature = "ocr")]
+    fn configure_tesseract_static(image_path: &str, settings: &Settings) -> Result<Tesseract> {
+        let language_combination = Self::build_language_combination_static(settings);
+        let mut tesseract = Tesseract::new(None, Some(&language_combination))?;
+        
+        // Set the image
+        tesseract = tesseract.set_image(image_path)?;
+        
+        // Configure Page Segmentation Mode (PSM)
+        let psm = match settings.ocr_page_segmentation_mode {
+            0 => PageSegMode::PsmOsdOnly,
+            1 => PageSegMode::PsmAutoOsd,
+            2 => PageSegMode::PsmAutoOnly,
+            3 => PageSegMode::PsmAuto,
+            4 => PageSegMode::PsmSingleColumn,
+            5 => PageSegMode::PsmSingleBlockVertText,
+            6 => PageSegMode::PsmSingleBlock,
+            7 => PageSegMode::PsmSingleLine,
+            8 => PageSegMode::PsmSingleWord,
+            9 => PageSegMode::PsmCircleWord,
+            10 => PageSegMode::PsmSingleChar,
+            11 => PageSegMode::PsmSparseText,
+            12 => PageSegMode::PsmSparseTextOsd,
+            13 => PageSegMode::PsmRawLine,
+            _ => PageSegMode::PsmAuto, // Default fallback
+        };
+        tesseract.set_page_seg_mode(psm);
+        
+        // Configure OCR Engine Mode (OEM)  
+        let _oem = match settings.ocr_engine_mode {
+            0 => OcrEngineMode::TesseractOnly,
+            1 => OcrEngineMode::LstmOnly,
+            2 => OcrEngineMode::TesseractOnly, // Fallback since TesseractLstm doesn't exist
+            3 => OcrEngineMode::Default,
+            _ => OcrEngineMode::Default, // Default fallback
+        };
+        
+        Ok(tesseract)
+    }
+    
+    /// Static version of calculate_overall_confidence for use in spawn_blocking
+    #[cfg(feature = "ocr")]
+    fn calculate_overall_confidence_static(tesseract: &mut Tesseract) -> Result<f32> {
+        // Use Tesseract's built-in mean confidence calculation
+        let confidence = tesseract.mean_text_conf();
+        
+        // Convert from i32 to f32 and ensure it's within valid range
+        let confidence_f32 = confidence as f32;
+        
+        // Clamp confidence to valid range (0.0 to 100.0)
+        let clamped_confidence = confidence_f32.max(0.0).min(100.0);
+        
+        debug!("Tesseract confidence: {} -> {:.1}%", confidence, clamped_confidence);
+        
+        Ok(clamped_confidence)
+    }
+    
+    /// Static version of build_language_combination for use in spawn_blocking
+    fn build_language_combination_static(settings: &Settings) -> String {
+        if settings.preferred_languages.len() > 1 {
+            // Use preferred_languages with primary_language first
+            let mut languages = settings.preferred_languages.clone();
+            
+            // Ensure primary language is first
+            languages.retain(|lang| lang != &settings.primary_language);
+            languages.insert(0, settings.primary_language.clone());
+            
+            // Join with + for Tesseract multi-language format
+            languages.join("+")
+        } else if !settings.preferred_languages.is_empty() {
+            // Single language from preferred_languages
+            settings.preferred_languages[0].clone()
+        } else {
+            // Fallback to ocr_language field for backward compatibility
+            settings.ocr_language.clone()
+        }
+    }
 }

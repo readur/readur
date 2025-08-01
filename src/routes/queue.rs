@@ -47,7 +47,7 @@ async fn get_queue_stats(
     auth_user: AuthUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     require_admin(&auth_user)?;
-    let queue_service = OcrQueueService::new(state.db.clone(), state.db.get_pool().clone(), 1);
+    let queue_service = &*state.queue_service;
     
     let stats = queue_service
         .get_stats()
@@ -83,7 +83,7 @@ async fn requeue_failed(
     auth_user: AuthUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     require_admin(&auth_user)?;
-    let queue_service = OcrQueueService::new(state.db.clone(), state.db.get_pool().clone(), 1);
+    let queue_service = &*state.queue_service;
     
     let count = match queue_service.requeue_failed_items().await {
         Ok(count) => count,

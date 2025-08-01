@@ -168,9 +168,12 @@ impl DocumentIngestionService {
             }
         }
 
-        // Save file to storage
+        // Generate document ID upfront so we can use it for storage path
+        let document_id = Uuid::new_v4();
+        
+        // Save file to storage - use S3 if configured, otherwise local storage
         let file_path = match self.file_service
-            .save_file(&request.filename, &request.file_data)
+            .save_document_file(request.user_id, document_id, &request.filename, &request.file_data)
             .await {
                 Ok(path) => path,
                 Err(e) => {
@@ -212,8 +215,9 @@ impl DocumentIngestionService {
                 }
             };
 
-        // Create document record
-        let document = self.file_service.create_document(
+        // Create document record with the same ID used for storage
+        let document = self.file_service.create_document_with_id(
+            document_id,
             &request.filename,
             &request.original_filename,
             &file_path,

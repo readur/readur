@@ -202,10 +202,10 @@ pub async fn upload_document(
     }
     
     // Create ingestion service
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service_clone = state.file_service.as_ref().clone();
     let ingestion_service = DocumentIngestionService::new(
         state.db.clone(),
-        file_service,
+        file_service_clone,
     );
     
     debug!("[UPLOAD_DEBUG] Calling ingestion service for file: {}", filename);
@@ -541,7 +541,7 @@ pub async fn delete_document(
     }
 
     // Delete associated files
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     if let Err(e) = file_service.delete_document_files(&document).await {
         warn!("Failed to delete files for document {}: {}", document_id, e);
         // Continue anyway - database deletion succeeded
@@ -584,7 +584,7 @@ pub async fn download_document(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     let file_data = file_service
         .read_file(&document.file_path)
         .await
@@ -641,7 +641,7 @@ pub async fn view_document(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let file_service = FileService::new(state.config.upload_path.clone());
+    let file_service = &state.file_service;
     let file_data = file_service
         .read_file(&document.file_path)
         .await

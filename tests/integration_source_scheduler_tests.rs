@@ -190,15 +190,24 @@ async fn create_test_app_state() -> Arc<AppState> {
         oidc_client_secret: None,
         oidc_issuer_url: None,
         oidc_redirect_uri: None,
+        s3_enabled: false,
+        s3_config: None,
     };
 
     // Use smaller connection pool for tests to avoid exhaustion  
     let db = Database::new_with_pool_config(&database_url, 10, 2).await.unwrap();
-    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2));
+    
+    // Create test file service
+    let storage_config = readur::storage::StorageConfig::Local { upload_path: "/tmp/test_uploads".to_string() };
+    let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
+    let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage("/tmp/test_uploads".to_string(), storage_backend));
+    
+    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2, file_service.clone()));
     
     Arc::new(AppState {
         db: db.clone(),
         config,
+        file_service,
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
