@@ -19,70 +19,20 @@ use tokio::time::{sleep, timeout};
 
 use readur::{
     AppState,
-    config::Config,
-    db::Database,
     models::{Source, SourceType, SourceStatus, WebDAVSourceConfig, CreateNotification},
     scheduling::source_scheduler::SourceScheduler,
+    test_helpers::{create_test_app_state_with_options, TestAppStateOptions},
 };
 
 /// Create a test app state
 async fn create_test_app_state() -> Arc<AppState> {
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+    let options = TestAppStateOptions::new()
+        .with_upload_path("/tmp/test_uploads")
+        .with_concurrent_ocr_jobs(4);
     
-    let config = Config {
-        database_url,
-        server_address: "127.0.0.1:8080".to_string(),
-        jwt_secret: "test_secret".to_string(),
-        upload_path: "/tmp/test_uploads".to_string(),
-        watch_folder: "/tmp/test_watch".to_string(),
-        user_watch_base_dir: "./user_watch".to_string(),
-        enable_per_user_watch: false,
-        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
-        watch_interval_seconds: None,
-        file_stability_check_ms: None,
-        max_file_age_hours: None,
-        ocr_language: "eng".to_string(),
-        concurrent_ocr_jobs: 4,
-        ocr_timeout_seconds: 300,
-        max_file_size_mb: 50,
-        memory_limit_mb: 512,
-        cpu_priority: "normal".to_string(),
-        oidc_enabled: false,
-        oidc_client_id: None,
-        oidc_client_secret: None,
-        oidc_issuer_url: None,
-        oidc_redirect_uri: None,
-        s3_enabled: false,
-        s3_config: None,
-    };
-
-    let db = Database::new(&config.database_url).await.unwrap();
-    
-    // Create file service
-    let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
-    let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
-    let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
-    
-    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
-        db.clone(),
-        db.pool.clone(),
-        4,
-        file_service.clone(),
-    ));
-    
-    Arc::new(AppState {
-        db: db.clone(),
-        config,
-        file_service,
-        webdav_scheduler: None,
-        source_scheduler: None,
-        queue_service,
-        oidc_client: None,
-        sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
-        user_watch_service: None,
-    })
+    return create_test_app_state_with_options(options)
+        .await
+        .expect("Failed to create test app state");
 }
 
 /// Create a source that appears to be interrupted during sync
