@@ -63,9 +63,14 @@ jobs:
             ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}-
             ${{ runner.os }}-cargo-target-
 
-      - name: Run Rust unit tests
+      - name: Run Rust unit tests - lib only
         run: |
           cargo test --lib --no-fail-fast
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Run Rust unit tests - tests only
+        run: |
           cargo test --tests unit_tests --no-fail-fast
         env:
           RUST_BACKTRACE: 1
