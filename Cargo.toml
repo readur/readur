@@ -34,7 +34,7 @@ futures-util = "0.3"
 futures = "0.3"
 notify = "8"
 mime_guess = "2"
-infer = "0.15"
+infer = "0.19"
 tesseract = { version = "0.15", optional = true }
 image = { version = "0.25", features = ["png", "jpeg", "tiff", "bmp"], optional = true }
 imageproc = { version = "0.25", optional = true }
