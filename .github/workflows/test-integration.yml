@@ -16,6 +16,7 @@ env:
 
 jobs:
   integration-tests:
+    name: Integration Tests
     runs-on: ubuntu-latest
 
     services:
@@ -171,6 +172,7 @@ jobs:
           fi
 
   frontend-integration-tests:
+    name: Frontend Integration Tests
     runs-on: ubuntu-latest
 
     defaults:

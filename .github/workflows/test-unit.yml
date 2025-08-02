@@ -15,6 +15,7 @@ env:
 
 jobs:
   rust-unit-tests:
+    name: Rust unit tests
     runs-on: ubuntu-latest
 
     steps:
@@ -69,13 +70,14 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
-      - name: Run Rust unit tests - tests only
+      - name: Run Rust unit tests - unit_tests only
         run: |
           cargo test --tests unit_tests --no-fail-fast
         env:
           RUST_BACKTRACE: 1
 
   frontend-unit-tests:
+    name: Frontend unit tests
     runs-on: ubuntu-latest
 
     defaults:

@@ -15,6 +15,7 @@ env:
 
 jobs:
   e2e-tests:
+    name: E2E Tests
     runs-on: ubuntu-latest
 
     services:
