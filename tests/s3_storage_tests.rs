@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use readur::services::file_service::FileService;
 use readur::storage::factory::create_storage_backend;
-use readur::config::StorageConfig;
+use readur::storage::StorageConfig;
 
 #[cfg(feature = "s3")]
 use readur::services::s3_service::S3Service;
@@ -37,9 +37,9 @@ async fn test_s3_service_new_validation() {
 async fn test_file_service_local_creation() {
     // Test local-only FileService creation and functionality
     let upload_path = "./test_uploads".to_string();
-    let storage_config = StorageConfig::Local { upload_path };
+    let storage_config = StorageConfig::Local { upload_path: upload_path.clone() };
     let storage_backend = create_storage_backend(storage_config).await.unwrap();
-    let _local_service = FileService::with_storage(storage_backend);
+    let _local_service = FileService::with_storage(upload_path, storage_backend);
     // Note: is_s3_enabled() method is no longer available in the new architecture
     // as we use trait-based abstraction instead of conditional logic
 }
@@ -73,8 +73,8 @@ async fn test_s3_service_configuration() {
             // Test FileService integration with S3 storage backend
             #[cfg(feature = "s3")]
             {
-                let storage_backend = Arc::new(service) as Arc<dyn crate::storage::StorageBackend>;
-                let _s3_file_service = FileService::with_storage(storage_backend);
+                let storage_backend = Arc::new(service) as Arc<dyn readur::storage::StorageBackend>;
+                let _s3_file_service = FileService::with_storage("./test_uploads".to_string(), storage_backend);
                 // Note: is_s3_enabled() method is no longer available in the new architecture
                 // as we use trait-based abstraction instead of conditional logic
             }

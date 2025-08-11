@@ -181,10 +181,18 @@ pub fn validate_path_within_base(path: &str, base_dir: &str) -> Result<()> {
         normalize_path(&base_buf)
     });
     
+    // Add debug logging to diagnose path validation issues
+    eprintln!("DEBUG: Path validation:");
+    eprintln!("  Input path: '{}'", path);
+    eprintln!("  Input base: '{}'", base_dir);
+    eprintln!("  Canonical path: '{}'", canonical_path.display());
+    eprintln!("  Canonical base: '{}'", canonical_base.display());
+    eprintln!("  Starts with check: {}", canonical_path.starts_with(&canonical_base));
+    
     if !canonical_path.starts_with(&canonical_base) {
         return Err(anyhow::anyhow!(
-            "Path '{}' is not within allowed base directory '{}'", 
-            path, base_dir
+            "Path '{}' is not within allowed base directory '{}' (failed after {:?})", 
+            path, base_dir, std::time::Instant::now().elapsed()
         ));
     }
     
