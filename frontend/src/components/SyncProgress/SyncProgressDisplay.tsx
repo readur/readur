@@ -119,6 +119,7 @@ export const SyncProgressDisplay: React.FC<SyncProgressDisplayProps> = ({
 
   return (
     <Card
+      data-testid="sync-progress"
       sx={{
         mb: 2,
         border: progressInfo?.is_active ? `2px solid ${phaseColor}` : '1px solid',

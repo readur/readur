@@ -516,7 +516,12 @@ export class SyncProgressWebSocket {
 
   private buildWebSocketUrl(sourceId: string): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
+    
+    // In development, frontend (5173) and backend (8000) run on different ports
+    // WebSocket connections can't use Vite proxy, so we need to connect directly to backend
+    const isDevelopment = import.meta.env.DEV || window.location.port === '5173';
+    const host = isDevelopment ? 'localhost:8000' : window.location.host;
+    
     return `${protocol}//${host}/api/sources/${sourceId}/sync/progress/ws`;
   }
   

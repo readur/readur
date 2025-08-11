@@ -1031,6 +1031,7 @@ const SourcesPage: React.FC = () => {
                 <Tooltip title="Trigger Sync">
                   <span>
                     <IconButton
+                      data-testid="sync-button"
                       onClick={() => handleOpenSyncModal(source)}
                       disabled={syncingSource === source.id || deepScanning || !source.enabled}
                       sx={{
@@ -1041,7 +1042,7 @@ const SourcesPage: React.FC = () => {
                       {syncingSource === source.id ? (
                         <CircularProgress size={20} />
                       ) : (
-                        <PlayArrowIcon />
+                        <PlayArrowIcon data-testid="PlayArrowIcon" />
                       )}
                     </IconButton>
                   </span>

@@ -515,7 +515,7 @@ pub async fn sync_progress_websocket(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, StatusCode> {
     // Extract and verify token from Sec-WebSocket-Protocol header for secure WebSocket auth
-    let token = extract_websocket_token(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+    let (token, auth_protocol) = extract_websocket_token_and_protocol(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
     
     let claims = crate::auth::verify_jwt(&token, &state.config.jwt_secret)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
@@ -532,8 +532,10 @@ pub async fn sync_progress_websocket(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Upgrade the connection to WebSocket
-    Ok(ws.on_upgrade(move |socket| handle_websocket(socket, source_id, state)))
+    // Upgrade the connection to WebSocket with protocol acknowledgment
+    Ok(ws
+        .protocols([auth_protocol.clone()])
+        .on_upgrade(move |socket| handle_websocket(socket, source_id, state)))
 }
 
 /// Handle WebSocket connection for sync progress updates
@@ -655,6 +657,12 @@ async fn handle_websocket(mut socket: WebSocket, source_id: Uuid, state: Arc<App
 /// Extract JWT token from WebSocket headers securely
 /// Uses Sec-WebSocket-Protocol header to avoid token exposure in logs/URLs
 fn extract_websocket_token(headers: &HeaderMap) -> Option<String> {
+    extract_websocket_token_and_protocol(headers).map(|(token, _)| token)
+}
+
+/// Extract JWT token and protocol string from WebSocket headers
+/// Returns both the token and the original protocol for handshake acknowledgment
+fn extract_websocket_token_and_protocol(headers: &HeaderMap) -> Option<(String, String)> {
     // Check for token in Sec-WebSocket-Protocol header (most secure)
     if let Some(protocol_header) = headers.get("sec-websocket-protocol") {
         if let Ok(protocols) = protocol_header.to_str() {
@@ -662,10 +670,12 @@ fn extract_websocket_token(headers: &HeaderMap) -> Option<String> {
             for protocol in protocols.split(',') {
                 let protocol = protocol.trim();
                 if protocol.starts_with("bearer.") {
-                    return Some(protocol.trim_start_matches("bearer.").to_string());
+                    let token = protocol.trim_start_matches("bearer.").to_string();
+                    return Some((token, protocol.to_string()));
                 }
                 if protocol.starts_with("bearer ") {
-                    return Some(protocol.trim_start_matches("bearer ").to_string());
+                    let token = protocol.trim_start_matches("bearer ").to_string();
+                    return Some((token, protocol.to_string()));
                 }
             }
         }
@@ -675,7 +685,9 @@ fn extract_websocket_token(headers: &HeaderMap) -> Option<String> {
     if let Some(auth_header) = headers.get("authorization") {
         if let Ok(auth_str) = auth_header.to_str() {
             if auth_str.starts_with("Bearer ") {
-                return Some(auth_str.trim_start_matches("Bearer ").to_string());
+                let token = auth_str.trim_start_matches("Bearer ").to_string();
+                // For Authorization header fallback, create a protocol format
+                return Some((token.clone(), format!("bearer.{}", token)));
             }
         }
     }
