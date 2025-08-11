@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use std::path::{Path, PathBuf, Component};
-use tracing::warn;
+use tracing::{warn, debug};
 
 /// Validate and sanitize file paths to prevent path traversal attacks
 pub fn validate_and_sanitize_path(input_path: &str) -> Result<String> {
@@ -171,28 +171,54 @@ pub fn validate_path_within_base(path: &str, base_dir: &str) -> Result<()> {
     let path_buf = PathBuf::from(path);
     let base_buf = PathBuf::from(base_dir);
     
-    // Canonicalize if possible, but don't fail if paths don't exist yet
-    let canonical_path = path_buf.canonicalize().unwrap_or_else(|_| {
-        // If canonicalization fails, do our best with normalization
-        normalize_path(&path_buf)
+    // Convert both paths to absolute paths for consistent comparison
+    let current_dir = std::env::current_dir().unwrap_or_default();
+    
+    let absolute_base = if base_buf.is_absolute() {
+        base_buf
+    } else {
+        current_dir.join(&base_buf)
+    };
+    
+    let absolute_path = if path_buf.is_absolute() {
+        path_buf
+    } else {
+        current_dir.join(&path_buf)
+    };
+    
+    // Try to canonicalize both paths, with consistent fallback behavior
+    let canonical_base = absolute_base.canonicalize().unwrap_or_else(|_| {
+        // If canonicalization fails, use the absolute path through normalize_path
+        normalize_path(&absolute_base)
     });
     
-    let canonical_base = base_buf.canonicalize().unwrap_or_else(|_| {
-        normalize_path(&base_buf)
-    });
+    let canonical_path = if absolute_path.exists() {
+        // If the file exists, canonicalize it
+        absolute_path.canonicalize().unwrap_or_else(|_| normalize_path(&absolute_path))
+    } else {
+        // If file doesn't exist, try to canonicalize its parent directory and append the filename
+        if let Some(parent) = absolute_path.parent() {
+            if let Some(filename) = absolute_path.file_name() {
+                let canonical_parent = parent.canonicalize().unwrap_or_else(|_| normalize_path(parent));
+                canonical_parent.join(filename)
+            } else {
+                normalize_path(&absolute_path)
+            }
+        } else {
+            normalize_path(&absolute_path)
+        }
+    };
     
     // Add debug logging to diagnose path validation issues
-    eprintln!("DEBUG: Path validation:");
-    eprintln!("  Input path: '{}'", path);
-    eprintln!("  Input base: '{}'", base_dir);
-    eprintln!("  Canonical path: '{}'", canonical_path.display());
-    eprintln!("  Canonical base: '{}'", canonical_base.display());
-    eprintln!("  Starts with check: {}", canonical_path.starts_with(&canonical_base));
+    debug!("Path validation: input_path='{}', base_dir='{}'", path, base_dir);
+    debug!("Path validation: absolute_path='{}', absolute_base='{}'", absolute_path.display(), absolute_base.display());
+    debug!("Path validation: canonical_path='{}', canonical_base='{}'", canonical_path.display(), canonical_base.display());
+    debug!("Path validation: starts_with_check={}", canonical_path.starts_with(&canonical_base));
     
     if !canonical_path.starts_with(&canonical_base) {
         return Err(anyhow::anyhow!(
-            "Path '{}' is not within allowed base directory '{}' (failed after {:?})", 
-            path, base_dir, std::time::Instant::now().elapsed()
+            "Path '{}' is not within allowed base directory '{}'", 
+            path, base_dir
         ));
     }
     
@@ -235,5 +261,92 @@ mod tests {
         assert_eq!(sanitize_filename("file<>name.txt"), "file__name.txt");
         assert_eq!(sanitize_filename("  report.pdf  "), "report.pdf");
         assert_eq!(sanitize_filename("file:name|test.doc"), "file_name_test.doc");
+    }
+
+    #[test]
+    fn test_validate_path_within_base() {
+        use std::fs;
+        
+        // Setup test directories
+        let test_base = "test_uploads_validation";
+        let test_docs = format!("{}/documents", test_base);
+        
+        // Clean up any existing test directories
+        fs::remove_dir_all(test_base).unwrap_or(());
+        
+        // Test 1: Neither base nor parent exists
+        let result = validate_path_within_base(
+            "./test_uploads_validation/documents/test.txt",
+            "./test_uploads_validation"
+        );
+        assert!(result.is_ok(), "Should allow paths within base even when directories don't exist");
+        
+        // Test 2: Base exists but parent doesn't (the problematic case)
+        fs::create_dir_all(test_base).unwrap();
+        let result = validate_path_within_base(
+            "./test_uploads_validation/documents/test.txt",
+            "./test_uploads_validation"
+        );
+        assert!(result.is_ok(), "Should allow subdirectory paths when base exists but parent doesn't");
+        
+        // Test 3: Both base and parent exist
+        fs::create_dir_all(&test_docs).unwrap();
+        let result = validate_path_within_base(
+            "./test_uploads_validation/documents/test.txt",
+            "./test_uploads_validation"
+        );
+        assert!(result.is_ok(), "Should allow paths when both base and parent exist");
+        
+        // Test 4: Path outside base directory should fail
+        let result = validate_path_within_base(
+            "../outside.txt",
+            "./test_uploads_validation"
+        );
+        assert!(result.is_err(), "Should reject paths outside base directory");
+        
+        // Test 5: Absolute paths
+        let current_dir = std::env::current_dir().unwrap();
+        let abs_base = current_dir.join(test_base);
+        let abs_path = abs_base.join("documents/test.txt");
+        
+        let result = validate_path_within_base(
+            &abs_path.to_string_lossy(),
+            &abs_base.to_string_lossy()
+        );
+        assert!(result.is_ok(), "Should handle absolute paths correctly");
+        
+        // Test 6: Mixed absolute and relative paths
+        let result = validate_path_within_base(
+            &abs_path.to_string_lossy(),
+            "./test_uploads_validation"
+        );
+        assert!(result.is_ok(), "Should handle mixed absolute/relative paths");
+        
+        // Clean up
+        fs::remove_dir_all(test_base).unwrap_or(());
+    }
+
+    #[test]
+    fn test_validate_path_within_base_traversal_attempts() {
+        use std::fs;
+        
+        let test_base = "test_security_validation";
+        fs::create_dir_all(test_base).unwrap_or(());
+        
+        // Test various path traversal attempts
+        let traversal_attempts = vec![
+            "../../../etc/passwd",
+            "./test_security_validation/../../../etc/passwd", 
+            "test_security_validation/../outside.txt",
+            "./test_security_validation/documents/../../outside.txt",
+        ];
+        
+        for attempt in traversal_attempts {
+            let result = validate_path_within_base(attempt, "./test_security_validation");
+            assert!(result.is_err(), "Should reject path traversal attempt: {}", attempt);
+        }
+        
+        // Clean up
+        fs::remove_dir_all(test_base).unwrap_or(());
     }
 }
