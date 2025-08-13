@@ -7,6 +7,7 @@ This directory contains technical documentation for developers working on Readur
 ### 🏗️ Architecture & Design
 - [**Architecture Overview**](architecture.md) - System design, components, and data flow
 - [**Database Guardrails**](DATABASE_GUARDRAILS.md) - Concurrency safety and database best practices
+- [**Storage Architecture**](../s3-storage-guide.md) - S3 and local storage backend implementation
 
 ### 🛠️ Development
 - [**Development Guide**](development.md) - Setup, contributing, code style guidelines
@@ -16,6 +17,8 @@ This directory contains technical documentation for developers working on Readur
 - [**OCR Optimization**](OCR_OPTIMIZATION_GUIDE.md) - Performance tuning and best practices
 - [**Queue Improvements**](QUEUE_IMPROVEMENTS.md) - Background job processing architecture
 - [**Deployment Summary**](DEPLOYMENT_SUMMARY.md) - Technical deployment overview
+- [**Migration Guide**](../migration-guide.md) - Storage migration procedures
+- [**S3 Troubleshooting**](../s3-troubleshooting.md) - Debugging S3 storage issues
 
 ## 🚀 Quick Start for Developers
 
@@ -28,8 +31,10 @@ This directory contains technical documentation for developers working on Readur
 
 - [Installation Guide](../installation.md) - How to install and run Readur
 - [Configuration Guide](../configuration.md) - Environment variables and settings
+- [Configuration Reference](../configuration-reference.md) - Complete configuration options
 - [User Guide](../user-guide.md) - How to use Readur features
 - [API Reference](../api-reference.md) - REST API documentation
+- [New Features in 2.5.4](../new-features-2.5.4.md) - Latest features and improvements
 
 ## 🤝 Contributing
 

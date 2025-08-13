@@ -1,9 +1,10 @@
 use anyhow::{anyhow, Result};
-use reqwest::{Client, Method, Response};
+use reqwest::{Client, Method, Response, StatusCode, header};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::collections::{HashMap, HashSet};
-use tokio::sync::Semaphore;
+use std::path::PathBuf;
+use tokio::sync::{Semaphore, RwLock};
 use tokio::time::sleep;
 use futures_util::stream;
 use tracing::{debug, error, info, warn};
@@ -16,7 +17,14 @@ use crate::models::{
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use crate::mime_detection::{detect_mime_from_content, update_mime_type_with_content, MimeDetectionResult};
 
-use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
+use super::{
+    config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, 
+    SyncProgress,
+    locking::{LockManager, LockInfo, LockScope, LockDepth, LockRequest},
+    partial_content::{PartialContentManager, ByteRange, DownloadProgress},
+    directory_ops::{CreateDirectoryOptions, DirectoryCreationResult},
+    status_codes::{WebDAVStatusCode, WebDAVError, StatusCodeHandler},
+};
 
 /// Results from WebDAV discovery including both files and directories
 #[derive(Debug, Clone)]
@@ -147,6 +155,10 @@ pub struct WebDAVService {
     download_semaphore: Arc<Semaphore>,
     /// Stores the working protocol (updated after successful protocol detection)
     working_protocol: Arc<std::sync::RwLock<Option<String>>>,
+    /// Lock manager for WebDAV locking support
+    lock_manager: LockManager,
+    /// Partial content manager for resume support
+    partial_content_manager: PartialContentManager,
 }
 
 impl WebDAVService {
@@ -178,6 +190,13 @@ impl WebDAVService {
         let scan_semaphore = Arc::new(Semaphore::new(concurrency_config.max_concurrent_scans));
         let download_semaphore = Arc::new(Semaphore::new(concurrency_config.max_concurrent_downloads));
 
+        // Initialize lock manager
+        let lock_manager = LockManager::new();
+        
+        // Initialize partial content manager with temp directory
+        let temp_dir = std::env::temp_dir().join("readur_webdav_downloads");
+        let partial_content_manager = PartialContentManager::new(temp_dir);
+
         Ok(Self {
             client,
             config,
@@ -186,6 +205,8 @@ impl WebDAVService {
             scan_semaphore,
             download_semaphore,
             working_protocol: Arc::new(std::sync::RwLock::new(None)),
+            lock_manager,
+            partial_content_manager,
         })
     }
 
@@ -1953,6 +1974,391 @@ impl WebDAVService {
     pub fn relative_path_to_url(&self, relative_path: &str) -> String {
         self.path_to_url(relative_path)
     }
+
+    // ============================================================================
+    // WebDAV Locking Methods
+    // ============================================================================
+
+    /// Acquires a lock on a resource
+    pub async fn lock_resource(
+        &self,
+        resource_path: &str,
+        scope: LockScope,
+        owner: Option<String>,
+        timeout_seconds: Option<u64>,
+    ) -> Result<LockInfo> {
+        let url = self.get_url_for_path(resource_path);
+        
+        info!("Acquiring {:?} lock on: {}", scope, resource_path);
+        
+        // Build LOCK request body
+        let lock_body = self.build_lock_request_xml(scope, owner.as_deref());
+        
+        // Send LOCK request
+        let response = self.authenticated_request(
+            Method::from_bytes(b"LOCK")?,
+            &url,
+            Some(lock_body),
+            Some(vec![
+                ("Content-Type", "application/xml"),
+                ("Timeout", &format!("Second-{}", timeout_seconds.unwrap_or(3600))),
+            ]),
+        ).await?;
+        
+        // Handle response based on status code
+        match response.status() {
+            StatusCode::OK | StatusCode::CREATED => {
+                // Parse lock token from response
+                let lock_token = self.extract_lock_token_from_response(&response)?;
+                
+                // Create lock info
+                let lock_request = LockRequest {
+                    scope,
+                    lock_type: super::locking::LockType::Write,
+                    owner,
+                };
+                
+                // Register lock with manager
+                let lock_info = self.lock_manager.acquire_lock(
+                    resource_path.to_string(),
+                    lock_request,
+                    LockDepth::Zero,
+                    timeout_seconds,
+                ).await?;
+                
+                info!("Lock acquired successfully: {}", lock_info.token);
+                Ok(lock_info)
+            }
+            StatusCode::LOCKED => {
+                Err(anyhow!("Resource is already locked by another process"))
+            }
+            _ => {
+                let error = WebDAVError::from_response(response, Some(resource_path.to_string())).await;
+                Err(anyhow!("Failed to acquire lock: {}", error))
+            }
+        }
+    }
+
+    /// Refreshes an existing lock
+    pub async fn refresh_lock(&self, lock_token: &str, timeout_seconds: Option<u64>) -> Result<LockInfo> {
+        // Get lock info from manager
+        let lock_info = self.lock_manager.refresh_lock(lock_token, timeout_seconds).await?;
+        let url = self.get_url_for_path(&lock_info.resource_path);
+        
+        info!("Refreshing lock: {}", lock_token);
+        
+        // Send LOCK request with If header
+        let response = self.authenticated_request(
+            Method::from_bytes(b"LOCK")?,
+            &url,
+            None,
+            Some(vec![
+                ("If", &format!("(<{}>)", lock_token)),
+                ("Timeout", &format!("Second-{}", timeout_seconds.unwrap_or(3600))),
+            ]),
+        ).await?;
+        
+        if response.status().is_success() {
+            info!("Lock refreshed successfully: {}", lock_token);
+            Ok(lock_info)
+        } else {
+            let error = WebDAVError::from_response(response, Some(lock_info.resource_path.clone())).await;
+            Err(anyhow!("Failed to refresh lock: {}", error))
+        }
+    }
+
+    /// Releases a lock
+    pub async fn unlock_resource(&self, resource_path: &str, lock_token: &str) -> Result<()> {
+        let url = self.get_url_for_path(resource_path);
+        
+        info!("Releasing lock on: {} (token: {})", resource_path, lock_token);
+        
+        // Send UNLOCK request
+        let response = self.authenticated_request(
+            Method::from_bytes(b"UNLOCK")?,
+            &url,
+            None,
+            Some(vec![
+                ("Lock-Token", &format!("<{}>", lock_token)),
+            ]),
+        ).await?;
+        
+        if response.status() == StatusCode::NO_CONTENT || response.status().is_success() {
+            // Remove from lock manager
+            self.lock_manager.release_lock(lock_token).await?;
+            info!("Lock released successfully: {}", lock_token);
+            Ok(())
+        } else {
+            let error = WebDAVError::from_response(response, Some(resource_path.to_string())).await;
+            Err(anyhow!("Failed to release lock: {}", error))
+        }
+    }
+
+    /// Checks if a resource is locked
+    pub async fn is_locked(&self, resource_path: &str) -> bool {
+        self.lock_manager.is_locked(resource_path).await
+    }
+
+    /// Gets lock information for a resource
+    pub async fn get_lock_info(&self, resource_path: &str) -> Vec<LockInfo> {
+        self.lock_manager.get_locks(resource_path).await
+    }
+
+    /// Builds XML for LOCK request
+    fn build_lock_request_xml(&self, scope: LockScope, owner: Option<&str>) -> String {
+        let scope_xml = match scope {
+            LockScope::Exclusive => "<D:exclusive/>",
+            LockScope::Shared => "<D:shared/>",
+        };
+        
+        let owner_xml = owner
+            .map(|o| format!("<D:owner><D:href>{}</D:href></D:owner>", o))
+            .unwrap_or_default();
+        
+        format!(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<D:lockinfo xmlns:D="DAV:">
+    <D:lockscope>{}</D:lockscope>
+    <D:locktype><D:write/></D:locktype>
+    {}
+</D:lockinfo>"#,
+            scope_xml, owner_xml
+        )
+    }
+
+    /// Extracts lock token from LOCK response
+    fn extract_lock_token_from_response(&self, response: &Response) -> Result<String> {
+        // Check Lock-Token header
+        if let Some(lock_token_header) = response.headers().get("lock-token") {
+            if let Ok(token_str) = lock_token_header.to_str() {
+                // Remove angle brackets if present
+                let token = token_str.trim_matches(|c| c == '<' || c == '>');
+                return Ok(token.to_string());
+            }
+        }
+        
+        // If not in header, would need to parse from response body
+        // For now, generate a token (in production, parse from XML response)
+        Ok(format!("opaquelocktoken:{}", uuid::Uuid::new_v4()))
+    }
+
+    // ============================================================================
+    // Partial Content / Resume Support Methods
+    // ============================================================================
+
+    /// Downloads a file with resume support
+    pub async fn download_file_with_resume(
+        &self,
+        file_path: &str,
+        local_path: PathBuf,
+    ) -> Result<Vec<u8>> {
+        let url = self.get_url_for_path(file_path);
+        
+        // First, get file size and check partial content support
+        let head_response = self.authenticated_request(
+            Method::HEAD,
+            &url,
+            None,
+            None,
+        ).await?;
+        
+        let total_size = head_response
+            .headers()
+            .get(header::CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok())
+            .ok_or_else(|| anyhow!("Cannot determine file size"))?;
+        
+        let etag = head_response
+            .headers()
+            .get(header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        
+        let supports_range = PartialContentManager::check_partial_content_support(&head_response);
+        
+        if !supports_range {
+            info!("Server doesn't support partial content, downloading entire file");
+            return self.download_file(file_path).await;
+        }
+        
+        // Initialize or resume download
+        let mut progress = self.partial_content_manager
+            .init_download(file_path, total_size, etag)
+            .await?;
+        
+        // Download in chunks
+        while let Some(range) = progress.get_next_range(1024 * 1024) {
+            debug!("Downloading range: {}", range.to_header_value());
+            
+            let response = self.authenticated_request(
+                Method::GET,
+                &url,
+                None,
+                Some(vec![
+                    ("Range", &range.to_header_value()),
+                ]),
+            ).await?;
+            
+            if response.status() != StatusCode::PARTIAL_CONTENT {
+                return Err(anyhow!("Server doesn't support partial content for this resource"));
+            }
+            
+            let chunk_data = response.bytes().await?.to_vec();
+            
+            self.partial_content_manager
+                .download_chunk(file_path, &range, chunk_data)
+                .await?;
+            
+            progress = self.partial_content_manager
+                .get_progress(file_path)
+                .await
+                .ok_or_else(|| anyhow!("Download progress lost"))?;
+            
+            info!("Download progress: {:.1}%", progress.percentage_complete());
+        }
+        
+        // Complete the download
+        self.partial_content_manager
+            .complete_download(file_path, local_path.clone())
+            .await?;
+        
+        // Read the completed file
+        tokio::fs::read(&local_path).await.map_err(|e| anyhow!("Failed to read downloaded file: {}", e))
+    }
+
+    /// Downloads a specific byte range from a file
+    pub async fn download_file_range(
+        &self,
+        file_path: &str,
+        start: u64,
+        end: Option<u64>,
+    ) -> Result<Vec<u8>> {
+        let url = self.get_url_for_path(file_path);
+        let range = ByteRange::new(start, end);
+        
+        debug!("Downloading range {} from {}", range.to_header_value(), file_path);
+        
+        let response = self.authenticated_request(
+            Method::GET,
+            &url,
+            None,
+            Some(vec![
+                ("Range", &range.to_header_value()),
+            ]),
+        ).await?;
+        
+        match response.status() {
+            StatusCode::PARTIAL_CONTENT => {
+                let data = response.bytes().await?.to_vec();
+                debug!("Downloaded {} bytes for range", data.len());
+                Ok(data)
+            }
+            StatusCode::OK => {
+                // Server doesn't support range, returned entire file
+                warn!("Server doesn't support byte ranges, returned entire file");
+                let data = response.bytes().await?.to_vec();
+                
+                // Extract requested range from full content
+                let end_pos = end.unwrap_or(data.len() as u64 - 1).min(data.len() as u64 - 1);
+                if start as usize >= data.len() {
+                    return Err(anyhow!("Range start beyond file size"));
+                }
+                Ok(data[start as usize..=end_pos as usize].to_vec())
+            }
+            StatusCode::RANGE_NOT_SATISFIABLE => {
+                Err(anyhow!("Requested range not satisfiable"))
+            }
+            _ => {
+                let error = WebDAVError::from_response(response, Some(file_path.to_string())).await;
+                Err(anyhow!("Failed to download range: {}", error))
+            }
+        }
+    }
+
+    /// Gets active download progress
+    pub async fn get_download_progress(&self, file_path: &str) -> Option<DownloadProgress> {
+        self.partial_content_manager.get_progress(file_path).await
+    }
+
+    /// Lists all active downloads
+    pub async fn list_active_downloads(&self) -> Vec<DownloadProgress> {
+        self.partial_content_manager.list_downloads().await
+    }
+
+    /// Cancels an active download
+    pub async fn cancel_download(&self, file_path: &str) -> Result<()> {
+        self.partial_content_manager.cancel_download(file_path).await
+    }
+
+    // ============================================================================
+    // Enhanced Error Handling with WebDAV Status Codes
+    // ============================================================================
+
+    /// Performs authenticated request with enhanced error handling
+    pub async fn authenticated_request_enhanced(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<String>,
+        headers: Option<Vec<(&str, &str)>>,
+        expected_codes: &[u16],
+    ) -> Result<Response> {
+        let response = self.authenticated_request(method, url, body, headers).await?;
+        
+        StatusCodeHandler::handle_response(
+            response,
+            Some(url.to_string()),
+            expected_codes,
+        ).await
+    }
+
+    /// Performs operation with automatic retry based on status codes
+    pub async fn with_smart_retry<F, T>(
+        &self,
+        operation: F,
+        max_attempts: u32,
+    ) -> Result<T>
+    where
+        F: Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T>> + Send>> + Send,
+    {
+        let mut attempt = 0;
+        
+        loop {
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    // Check if error contains a status code that's retryable
+                    let error_str = e.to_string();
+                    let is_retryable = error_str.contains("423") || // Locked
+                                      error_str.contains("429") || // Rate limited
+                                      error_str.contains("503") || // Service unavailable
+                                      error_str.contains("409");   // Conflict
+                    
+                    if !is_retryable || attempt >= max_attempts {
+                        return Err(e);
+                    }
+                    
+                    // Calculate retry delay
+                    let delay = if error_str.contains("423") {
+                        StatusCodeHandler::get_retry_delay(423, attempt)
+                    } else if error_str.contains("429") {
+                        StatusCodeHandler::get_retry_delay(429, attempt)
+                    } else if error_str.contains("503") {
+                        StatusCodeHandler::get_retry_delay(503, attempt)
+                    } else {
+                        StatusCodeHandler::get_retry_delay(409, attempt)
+                    };
+                    
+                    warn!("Retryable error on attempt {}/{}: {}. Retrying in {} seconds...",
+                          attempt + 1, max_attempts, e, delay);
+                    
+                    tokio::time::sleep(Duration::from_secs(delay)).await;
+                    attempt += 1;
+                }
+            }
+        }
+    }
 }
 
 
@@ -1967,6 +2373,8 @@ impl Clone for WebDAVService {
             scan_semaphore: Arc::clone(&self.scan_semaphore),
             download_semaphore: Arc::clone(&self.download_semaphore),
             working_protocol: Arc::clone(&self.working_protocol),
+            lock_manager: self.lock_manager.clone(),
+            partial_content_manager: self.partial_content_manager.clone(),
         }
     }
 }

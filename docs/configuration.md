@@ -2,6 +2,8 @@
 
 This guide covers all configuration options available in Readur through environment variables and runtime settings.
 
+> 📖 **See Also**: For a complete reference of all configuration options including S3 storage and advanced settings, see the [Configuration Reference](configuration-reference.md).
+
 ## Table of Contents
 
 - [Environment Variables](#environment-variables)

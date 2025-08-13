@@ -24,7 +24,8 @@ Sources allow Readur to automatically discover, download, and process documents 
 - **Automated Syncing**: Scheduled synchronization with configurable intervals
 - **Health Monitoring**: Proactive monitoring and validation of source connections
 - **Intelligent Processing**: Duplicate detection, incremental syncs, and OCR integration
-- **Real-time Status**: Live sync progress and comprehensive statistics
+- **Real-time Status**: Live sync progress via WebSocket connections
+- **Per-User Watch Directories**: Individual watch folders for each user (v2.5.4+)
 
 ### How Sources Work
 
@@ -105,6 +106,7 @@ Local folder sources monitor directories on the Readur server's filesystem, incl
 - **Network Mounts**: Sync from NFS, SMB/CIFS, or other mounted filesystems
 - **Batch Processing**: Automatically process documents placed in specific folders
 - **Archive Integration**: Monitor existing document archives
+- **Per-User Ingestion**: Individual watch directories for each user (v2.5.4+)
 
 #### Local Folder Configuration
 
@@ -162,9 +164,55 @@ sudo mount -t cifs //server/documents /mnt/smb-docs -o username=user
 Watch Folders: /mnt/smb-docs/processing
 ```
 
+#### Per-User Watch Directories (v2.5.4+)
+
+Each user can have their own dedicated watch directory for automatic document ingestion. This feature is ideal for multi-tenant deployments, department separation, and maintaining clear data boundaries.
+
+**Configuration:**
+```bash
+# Enable per-user watch directories
+ENABLE_PER_USER_WATCH=true
+USER_WATCH_BASE_DIR=/data/user_watches
+```
+
+**Directory Structure:**
+```
+/data/user_watches/
+├── john_doe/
+│   ├── invoice.pdf
+│   └── report.docx
+├── jane_smith/
+│   └── presentation.pptx
+└── admin/
+    └── policy.pdf
+```
+
+**API Management:**
+```http
+# Get user watch directory info
+GET /api/users/{userId}/watch-directory
+
+# Create/ensure watch directory exists
+POST /api/users/{userId}/watch-directory
+{
+  "ensure_created": true
+}
+
+# Delete user watch directory
+DELETE /api/users/{userId}/watch-directory
+```
+
+**Use Cases:**
+- **Multi-tenant deployments**: Isolate document ingestion per customer
+- **Department separation**: Each department has its own ingestion folder
+- **Compliance**: Maintain clear data separation between users
+- **Automation**: Connect scanners or automation tools to user-specific folders
+
 ### S3 Sources
 
 S3 sources connect to Amazon S3 or S3-compatible storage services for document synchronization.
+
+> 📖 **Complete S3 Guide**: For detailed S3 storage backend configuration, migration from local storage, and advanced features, see the [S3 Storage Guide](s3-storage-guide.md).
 
 #### Supported S3 Services
 
@@ -326,6 +374,39 @@ Auto Sync: Every 1 hour
 - Current operation (scanning, downloading, processing)
 - Estimated completion time
 - Transfer speeds and statistics
+
+### Real-Time Sync Progress (v2.5.4+)
+
+Readur uses WebSocket connections for real-time sync progress updates, providing lower latency and bidirectional communication compared to the previous Server-Sent Events implementation.
+
+**WebSocket Connection:**
+```javascript
+// Connect to sync progress WebSocket
+const ws = new WebSocket('wss://readur.example.com/api/sources/{sourceId}/sync/progress');
+
+ws.onmessage = (event) => {
+  const progress = JSON.parse(event.data);
+  console.log(`Sync progress: ${progress.percentage}%`);
+};
+```
+
+**Progress Event Format:**
+```json
+{
+  "phase": "discovering",
+  "progress": 45,
+  "current_file": "document.pdf",
+  "total_files": 150,
+  "processed_files": 68,
+  "status": "in_progress"
+}
+```
+
+**Benefits:**
+- Bidirectional communication for interactive control
+- 50% reduction in bandwidth compared to SSE
+- Automatic reconnection handling
+- Lower server CPU usage
 
 ### Stopping Sync
 

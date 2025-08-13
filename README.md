@@ -15,7 +15,7 @@ A powerful, modern document management system built with Rust and React. Readur 
 | 🔍 **Advanced OCR** | Automatic text extraction using Tesseract for searchable document content | [OCR Optimization](docs/dev/OCR_OPTIMIZATION_GUIDE.md) |
 | 🌍 **Multi-Language OCR** | Process documents in multiple languages simultaneously with automatic language detection | [Multi-Language OCR Guide](docs/multi-language-ocr-guide.md) |
 | 🔎 **Powerful Search** | PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean) | [Advanced Search Guide](docs/advanced-search.md) |
-| 🔗 **Multi-Source Sync** | WebDAV, Local Folders, and S3-compatible storage integration | [Sources Guide](docs/sources-guide.md) |
+| 🔗 **Multi-Source Sync** | WebDAV, Local Folders, and S3-compatible storage integration | [Sources Guide](docs/sources-guide.md), [S3 Storage Guide](docs/s3-storage-guide.md) |
 | 🏷️ **Labels & Organization** | Comprehensive tagging system with color-coding and hierarchical structure | [Labels & Organization](docs/labels-and-organization.md) |
 | 👁️ **Folder Monitoring** | Non-destructive file watching with intelligent sync scheduling | [Watch Folder Guide](docs/WATCH_FOLDER.md) |
 | 📊 **Health Monitoring** | Proactive source validation and system health tracking | [Health Monitoring Guide](docs/health-monitoring-guide.md) |
@@ -51,10 +51,12 @@ open http://localhost:8000
 ### Getting Started
 - [📦 Installation Guide](docs/installation.md) - Docker & manual installation instructions
 - [🔧 Configuration](docs/configuration.md) - Environment variables and settings
+- [⚙️ Configuration Reference](docs/configuration-reference.md) - Complete configuration options reference
 - [📖 User Guide](docs/user-guide.md) - How to use Readur effectively
 
 ### Core Features
 - [🔗 Sources Guide](docs/sources-guide.md) - WebDAV, Local Folders, and S3 integration
+- [☁️ S3 Storage Guide](docs/s3-storage-guide.md) - Complete S3 and S3-compatible storage setup
 - [👥 User Management](docs/user-management-guide.md) - Authentication, roles, and administration
 - [🏷️ Labels & Organization](docs/labels-and-organization.md) - Document tagging and categorization
 - [🔎 Advanced Search](docs/advanced-search.md) - Search modes, syntax, and optimization
@@ -65,6 +67,8 @@ open http://localhost:8000
 - [🚀 Deployment Guide](docs/deployment.md) - Production deployment, SSL, monitoring
 - [🔄 Reverse Proxy Setup](docs/REVERSE_PROXY.md) - Nginx, Traefik, and more
 - [📁 Watch Folder Guide](docs/WATCH_FOLDER.md) - Automatic document ingestion
+- [🔄 Migration Guide](docs/migration-guide.md) - Migrate from local storage to S3
+- [🛠️ S3 Troubleshooting](docs/s3-troubleshooting.md) - Debug and resolve S3 storage issues
 
 ### Development
 - [🏗️ Developer Documentation](docs/dev/) - Architecture, development setup, testing

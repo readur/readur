@@ -32,10 +32,28 @@ Readur provides an intuitive drag-and-drop file upload system that supports mult
 ## Processing Pipeline
 
 1. **File Validation** - Verify file type and size limits
-2. **Storage** - Secure file storage with backup
-3. **OCR Processing** - Automatic text extraction using Tesseract
-4. **Indexing** - Full-text search indexing in PostgreSQL
-5. **Metadata Extraction** - File properties and document information
+2. **Enhanced File Type Detection** (v2.5.4+) - Magic number detection using Rust 'infer' crate
+3. **Storage** - Secure file storage with backup (local or S3)
+4. **OCR Processing** - Automatic text extraction using Tesseract
+5. **Indexing** - Full-text search indexing in PostgreSQL
+6. **Metadata Extraction** - File properties and document information
+
+### Enhanced File Type Detection (v2.5.4+)
+
+Readur now uses content-based file type detection rather than relying solely on file extensions:
+
+- **Magic Number Detection**: Identifies files by their content signature, not just extension
+- **Broader Format Support**: Automatically recognizes more document and image formats
+- **Security Enhancement**: Prevents malicious files with incorrect extensions from being processed
+- **Performance**: Fast, native Rust implementation for minimal overhead
+
+**Automatically Detected Formats:**
+- Documents: PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP
+- Images: PNG, JPEG, GIF, BMP, TIFF, WebP, HEIC
+- Archives: ZIP, RAR, 7Z, TAR, GZ
+- Text: TXT, MD, CSV, JSON, XML
+
+This enhancement ensures files are correctly identified even when extensions are missing or incorrect, improving both reliability and security.
 
 ## Best Practices
 

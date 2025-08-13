@@ -2,6 +2,8 @@
 
 This guide covers production deployment strategies, SSL setup, monitoring, backups, and best practices for running Readur in production.
 
+> 🆕 **New in 2.5.4**: S3 storage backend support! See the [Migration Guide](migration-guide.md) to migrate from local storage to S3, and the [S3 Storage Guide](s3-storage-guide.md) for complete setup instructions.
+
 ## Table of Contents
 
 - [Production Docker Compose](#production-docker-compose)
