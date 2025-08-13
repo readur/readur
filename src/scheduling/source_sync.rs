@@ -10,7 +10,6 @@ use uuid::Uuid;
 use crate::{
     AppState,
     models::{FileIngestionInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
-    services::file_service::FileService,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::local_folder_service::LocalFolderService,
     services::s3_service::S3Service,

@@ -1,13 +1,12 @@
 use axum::{
     http::StatusCode,
-    response::{IntoResponse, Json, Response},
+    response::IntoResponse,
 };
 use serde_json::json;
 use thiserror::Error;
-use uuid::Uuid;
 
 use crate::monitoring::error_management::{
-    ErrorCategory, ErrorSeverity, ManagedError, get_error_manager,
+    ErrorCategory, ErrorSeverity, ManagedError,
 };
 
 /// Common trait for all custom error types in the application
@@ -59,7 +58,7 @@ macro_rules! impl_into_response {
             fn into_response(self) -> axum::response::Response {
                 use crate::errors::AppError;
                 use crate::monitoring::error_management::get_error_manager;
-                use axum::{http::StatusCode, response::Json};
+                use axum::response::Json;
                 use serde_json::json;
                 
                 // Send error to management system

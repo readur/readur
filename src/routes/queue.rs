@@ -8,7 +8,7 @@ use axum::{
 use sqlx::Row;
 use std::{sync::Arc, error::Error};
 
-use crate::{auth::AuthUser, ocr::queue::OcrQueueService, AppState, models::UserRole};
+use crate::{auth::AuthUser, AppState, models::UserRole};
 
 pub fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
     if auth_user.user.role != UserRole::Admin {

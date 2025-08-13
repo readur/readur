@@ -306,7 +306,7 @@ async fn collect_document_metrics(state: &Arc<AppState>) -> Result<DocumentMetri
 }
 
 async fn collect_ocr_metrics(state: &Arc<AppState>) -> Result<OcrMetrics, StatusCode> {
-    use crate::ocr::queue::OcrQueueService;
+    
     
     tracing::debug!("Prometheus: Starting collect_ocr_metrics");
     

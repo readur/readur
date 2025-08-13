@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;
 use futures::stream::StreamExt;
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::AsyncReadExt;
 
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;

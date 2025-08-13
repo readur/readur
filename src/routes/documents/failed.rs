@@ -12,7 +12,6 @@ use sqlx::Row;
 use crate::{
     auth::AuthUser,
     models::UserRole,
-    services::file_service::FileService,
     AppState,
 };
 use super::types::FailedDocumentsQuery;

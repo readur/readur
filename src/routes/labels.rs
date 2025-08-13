@@ -12,7 +12,7 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, Row};
 
-use crate::{auth::AuthUser, errors::label::LabelError, AppState};
+use crate::{auth::AuthUser, AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Label {

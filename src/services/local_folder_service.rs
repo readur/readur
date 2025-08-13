@@ -37,7 +37,7 @@ impl LocalFolderService {
             return Err(anyhow!("Folder does not exist: {}", folder_path));
         }
 
-        let mut files: Vec<FileIngestionInfo> = Vec::new();
+        let files: Vec<FileIngestionInfo> = Vec::new();
         
         info!("Scanning local folder: {} (recursive: {})", folder_path, self.config.recursive);
 

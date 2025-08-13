@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
-use std::time::Duration;
 use serde::{Serialize, Deserialize};
 
 use crate::services::webdav::{SyncProgress, ProgressStats, SyncPhase};

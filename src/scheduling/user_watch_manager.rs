@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::collections::HashMap;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::{

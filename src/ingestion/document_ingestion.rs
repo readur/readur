@@ -8,7 +8,7 @@
 
 use uuid::Uuid;
 use sha2::{Digest, Sha256};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use serde_json;
 use chrono::Utc;
 

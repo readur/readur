@@ -11,7 +11,6 @@ use tracing::{debug, error, info, warn};
 use crate::{
     auth::AuthUser,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
-    services::file_service::FileService,
     models::DocumentResponse,
     AppState,
 };

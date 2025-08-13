@@ -55,7 +55,7 @@ impl EnhancedOcrService {
         let mut preprocessing_applied = Vec::new();
         
         // Load and preprocess the image
-        let (processed_image_path, mut preprocess_steps) = if settings.enable_image_preprocessing {
+        let (processed_image_path, preprocess_steps) = if settings.enable_image_preprocessing {
             let (processed_path, steps) = self.preprocess_image(file_path, settings).await?;
             (processed_path, steps)
         } else {

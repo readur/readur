@@ -8,7 +8,6 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     auth::AuthUser,
-    services::file_service::FileService,
     AppState,
 };
 use super::types::{BulkDeleteRequest, DeleteLowConfidenceRequest, BulkDeleteResponse};
