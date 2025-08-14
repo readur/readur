@@ -696,6 +696,117 @@ export const userWatchService = {
   },
 }
 
+// WebDAV Scan Failure Types
+export interface WebDAVScanFailure {
+  id: string
+  directory_path: string
+  failure_type: WebDAVScanFailureType
+  failure_severity: WebDAVScanFailureSeverity
+  failure_count: number
+  consecutive_failures: number
+  first_failure_at: string
+  last_failure_at: string
+  next_retry_at?: string
+  error_message?: string
+  http_status_code?: number
+  user_excluded: boolean
+  user_notes?: string
+  resolved: boolean
+  diagnostic_summary: WebDAVFailureDiagnostics
+}
+
+export type WebDAVScanFailureType =
+  | 'timeout'
+  | 'path_too_long'
+  | 'permission_denied'
+  | 'invalid_characters'
+  | 'network_error'
+  | 'server_error'
+  | 'xml_parse_error'
+  | 'too_many_items'
+  | 'depth_limit'
+  | 'size_limit'
+  | 'unknown'
+
+export type WebDAVScanFailureSeverity =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical'
+
+export interface WebDAVFailureDiagnostics {
+  path_length?: number
+  directory_depth?: number
+  estimated_item_count?: number
+  response_time_ms?: number
+  response_size_mb?: number
+  server_type?: string
+  recommended_action: string
+  can_retry: boolean
+  user_action_required: boolean
+}
+
+export interface WebDAVScanFailureStats {
+  active_failures: number
+  resolved_failures: number
+  excluded_directories: number
+  critical_failures: number
+  high_failures: number
+  medium_failures: number
+  low_failures: number
+  ready_for_retry: number
+}
+
+export interface WebDAVScanFailuresResponse {
+  failures: WebDAVScanFailure[]
+  stats: WebDAVScanFailureStats
+}
+
+export interface RetryFailureRequest {
+  notes?: string
+}
+
+export interface ExcludeFailureRequest {
+  notes?: string
+  permanent: boolean
+}
+
+export interface RetryResponse {
+  success: boolean
+  message: string
+  directory_path: string
+}
+
+export interface ExcludeResponse {
+  success: boolean
+  message: string
+  directory_path: string
+  permanent: boolean
+}
+
+// WebDAV Scan Failures Service
+export const webdavService = {
+  getScanFailures: () => {
+    return api.get<WebDAVScanFailuresResponse>('/webdav/scan-failures')
+  },
+
+  getScanFailure: (id: string) => {
+    return api.get<WebDAVScanFailure>(`/webdav/scan-failures/${id}`)
+  },
+
+  retryFailure: (id: string, request: RetryFailureRequest) => {
+    return api.post<RetryResponse>(`/webdav/scan-failures/${id}/retry`, request)
+  },
+
+  excludeFailure: (id: string, request: ExcludeFailureRequest) => {
+    return api.post<ExcludeResponse>(`/webdav/scan-failures/${id}/exclude`, request)
+  },
+
+  getRetryCandidates: () => {
+    return api.get<{ directories: string[], count: number }>('/webdav/scan-failures/retry-candidates')
+  }
+}
+
 export const sourcesService = {
   triggerSync: (sourceId: string) => {
     return api.post(`/sources/${sourceId}/sync`)

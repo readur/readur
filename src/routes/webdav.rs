@@ -30,6 +30,12 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/sync-status", get(get_webdav_sync_status))
         .route("/start-sync", post(start_webdav_sync))
         .route("/cancel-sync", post(cancel_webdav_sync))
+        // Scan failure tracking endpoints
+        .route("/scan-failures", get(crate::routes::webdav_scan_failures::list_scan_failures))
+        .route("/scan-failures/:id", get(crate::routes::webdav_scan_failures::get_scan_failure))
+        .route("/scan-failures/:id/retry", post(crate::routes::webdav_scan_failures::retry_scan_failure))
+        .route("/scan-failures/:id/exclude", post(crate::routes::webdav_scan_failures::exclude_scan_failure))
+        .route("/scan-failures/retry-candidates", get(crate::routes::webdav_scan_failures::get_retry_candidates))
 }
 
 async fn get_user_webdav_config(state: &Arc<AppState>, user_id: uuid::Uuid) -> Result<WebDAVConfig, StatusCode> {
