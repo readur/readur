@@ -215,18 +215,31 @@ services:
 
 ## Health Checks
 
-Add health checks to your Docker configuration:
+Add health checks to your Docker configuration. The Readur Docker image includes `curl` for health checking.
+
+**Important:** The port in the healthcheck URL must match your `SERVER_PORT` or the port specified in `SERVER_ADDRESS`:
 
 ```yaml
 services:
   readur:
+    environment:
+      # If using SERVER_ADDRESS
+      - SERVER_ADDRESS=0.0.0.0:8000  # Port 8000
+      # Or if using SERVER_PORT
+      # - SERVER_PORT=8000            # Port 8000
+    
     healthcheck:
+      # Port in URL must match the SERVER_PORT/SERVER_ADDRESS port above
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 ```
+
+For example, if you change the server to run on port 3000:
+- Set `SERVER_PORT=3000` or `SERVER_ADDRESS=0.0.0.0:3000`
+- Update healthcheck to: `http://localhost:3000/api/health`
 
 ## Backup Strategy
 
