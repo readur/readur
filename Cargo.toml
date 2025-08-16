@@ -60,6 +60,7 @@ sha2 = "0.10"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 testcontainers = { version = "0.24", optional = true }
 testcontainers-modules = { version = "0.12", features = ["postgres"], optional = true }
+rand = "0.8"
 
 [features]
 default = ["ocr", "s3"]
@@ -72,7 +73,6 @@ tempfile = "3"
 wiremock = "0.6" 
 tokio-test = "0.4"
 futures = "0.3"
-rand = "0.8"
 # Database testing dependencies
 testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }

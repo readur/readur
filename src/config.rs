@@ -1,7 +1,11 @@
 use anyhow::Result;
 use std::env;
+use std::fs;
+use std::path::Path;
+use rand::Rng;
 
 use crate::models::S3SourceConfig;
+use crate::cpu_allocation::CpuAllocation;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -37,9 +41,86 @@ pub struct Config {
     // S3 Configuration
     pub s3_enabled: bool,
     pub s3_config: Option<S3SourceConfig>,
+    
+    // CPU Core Allocation
+    pub cpu_allocation: CpuAllocation,
 }
 
 impl Config {
+    fn get_or_generate_jwt_secret() -> String {
+        // First check environment variable
+        if let Ok(secret) = env::var("JWT_SECRET") {
+            if !secret.is_empty() && secret != "your-secret-key-change-this-in-production" {
+                println!("✅ JWT_SECRET: ***hidden*** (loaded from env, {} chars)", secret.len());
+                return secret;
+            }
+        }
+        
+        // Path for persistent JWT secret (in /app/secrets for Docker, or local for development)
+        let secret_dir = if Path::new("/app/secrets").exists() {
+            "/app/secrets"
+        } else {
+            "./secrets"
+        };
+        
+        // Create directory if it doesn't exist
+        if let Err(e) = fs::create_dir_all(secret_dir) {
+            println!("⚠️  Could not create secrets directory: {}", e);
+        }
+        
+        let secret_file = format!("{}/jwt_secret", secret_dir);
+        
+        // Check if we have a persisted secret
+        if Path::new(&secret_file).exists() {
+            if let Ok(saved_secret) = fs::read_to_string(&secret_file) {
+                let trimmed = saved_secret.trim();
+                if !trimmed.is_empty() {
+                    println!("✅ JWT_SECRET: ***hidden*** (loaded from {} file, {} chars)", secret_file, trimmed.len());
+                    return trimmed.to_string();
+                }
+            }
+        }
+        
+        // Generate a new secure secret (256 bits of entropy)
+        let mut rng = rand::thread_rng();
+        let secret: String = (0..43)  // 43 chars in base64 = ~256 bits
+            .map(|_| {
+                let idx = rng.gen_range(0..64);
+                match idx {
+                    0..26 => (b'A' + idx) as char,
+                    26..52 => (b'a' + idx - 26) as char,
+                    52..62 => (b'0' + idx - 52) as char,
+                    62 => '+',
+                    63 => '/',
+                    _ => unreachable!(),
+                }
+            })
+            .collect();
+        
+        // Try to save it for next time
+        match fs::write(&secret_file, &secret) {
+            Ok(_) => {
+                // Set restrictive permissions on Unix systems
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(metadata) = fs::metadata(&secret_file) {
+                        let mut perms = metadata.permissions();
+                        perms.set_mode(0o600); // Read/write for owner only
+                        let _ = fs::set_permissions(&secret_file, perms);
+                    }
+                }
+                println!("✅ JWT_SECRET: Generated and saved new secure secret to {}", secret_file);
+            }
+            Err(e) => {
+                println!("⚠️  JWT_SECRET: Generated new secret but couldn't save to {}: {}", secret_file, e);
+                println!("   The secret will be regenerated on restart unless you set JWT_SECRET env var");
+            }
+        }
+        
+        secret
+    }
+    
     pub fn from_env() -> Result<Self> {
         // Load .env file if present
         match dotenvy::dotenv() {
@@ -105,21 +186,7 @@ impl Config {
                     }
                 }
             },
-            jwt_secret: match env::var("JWT_SECRET") {
-                Ok(secret) => {
-                    if secret == "your-secret-key" {
-                        println!("⚠️  JWT_SECRET: Using default value (SECURITY RISK in production!)");
-                    } else {
-                        println!("✅ JWT_SECRET: ***hidden*** (loaded from env, {} chars)", secret.len());
-                    }
-                    secret
-                }
-                Err(_) => {
-                    let default_secret = "your-secret-key".to_string();
-                    println!("⚠️  JWT_SECRET: Using default value (SECURITY RISK - env var not set!)");
-                    default_secret
-                }
-            },
+            jwt_secret: Self::get_or_generate_jwt_secret(),
             upload_path: match env::var("UPLOAD_PATH") {
                 Ok(path) => {
                     println!("✅ UPLOAD_PATH: {} (loaded from env)", path);
@@ -462,7 +529,40 @@ impl Config {
             } else {
                 None
             },
+            
+            // Placeholder CPU allocation - will be replaced after detection
+            cpu_allocation: CpuAllocation::from_auto_allocation(4).unwrap(),
         };
+        
+        // Initialize CPU allocation
+        println!("\n🧮 CPU CORE ALLOCATION:");
+        println!("{}", "=".repeat(50));
+        let cpu_allocation = match CpuAllocation::detect_and_allocate() {
+            Ok(allocation) => {
+                allocation.log_allocation();
+                allocation.validate_allocation()?;
+                allocation
+            }
+            Err(e) => {
+                println!("❌ Failed to detect and allocate CPU cores: {}", e);
+                return Err(e);
+            }
+        };
+        
+        // Update concurrent OCR jobs based on CPU allocation if not manually set
+        let concurrent_ocr_jobs = if env::var("CONCURRENT_OCR_JOBS").is_ok() {
+            config.concurrent_ocr_jobs  // Keep user-specified value
+        } else {
+            let recommended = cpu_allocation.recommended_concurrent_ocr_jobs();
+            println!("🧠 Adjusting concurrent OCR jobs from {} to {} based on CPU allocation", 
+                     config.concurrent_ocr_jobs, recommended);
+            recommended
+        };
+        
+        // Update the config with CPU allocation and adjusted OCR jobs
+        let mut config = config;
+        config.cpu_allocation = cpu_allocation;
+        config.concurrent_ocr_jobs = concurrent_ocr_jobs;
         
         println!("\n🔍 CONFIGURATION VALIDATION:");
         println!("{}", "=".repeat(50));

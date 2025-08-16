@@ -29,8 +29,8 @@ services:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8000
       
-      # Security
-      JWT_SECRET: your-secret-key-change-this-in-production
+      # Security - JWT_SECRET will be auto-generated on first run if not provided
+      # JWT_SECRET: your-custom-secret-here  # Optional: override auto-generated secret
       
       # File paths
       UPLOAD_PATH: /app/uploads
@@ -63,6 +63,9 @@ services:
       
       # Watch folder - can be mapped to a host directory
       - ./readur_watch:/app/watch
+      
+      # Secrets directory for JWT secret persistence
+      - ./readur_secrets:/app/secrets
       
       # Or use a named volume for watch folder
       # - readur_watch:/app/watch
