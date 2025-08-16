@@ -422,11 +422,20 @@ ws.onmessage = (event) => {
 
 Sources are continuously monitored and assigned health scores (0-100):
 
-- **90-100**: ✅ Excellent - No issues detected
-- **75-89**: ⚠️ Good - Minor issues or warnings
-- **50-74**: ⚠️ Fair - Moderate issues requiring attention
-- **25-49**: ❌ Poor - Significant problems
-- **0-24**: ❌ Critical - Severe issues, manual intervention required
+- **90-100**: ✅ Excellent  
+  No issues detected
+  
+- **75-89**: ⚠️ Good  
+  Minor issues or warnings
+  
+- **50-74**: ⚠️ Fair  
+  Moderate issues requiring attention
+  
+- **25-49**: ❌ Poor  
+  Significant problems
+  
+- **0-24**: ❌ Critical  
+  Severe issues, manual intervention required
 
 ### Health Checks
 

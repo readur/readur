@@ -41,28 +41,56 @@ Access health information through:
 ## System Health Metrics
 
 ### Performance Indicators
-- **CPU Usage** - System load monitoring
-- **Memory Usage** - RAM utilization tracking
-- **Disk Space** - Storage capacity alerts
-- **Queue Length** - Processing backlog size
+
+- **CPU Usage**  
+  System load monitoring
+  
+- **Memory Usage**  
+  RAM utilization tracking
+  
+- **Disk Space**  
+  Storage capacity alerts
+  
+- **Queue Length**  
+  Processing backlog size
 
 ### Processing Health
-- **OCR Success Rate** - Text extraction reliability
-- **Processing Speed** - Documents per minute
-- **Error Rates** - Failed operation tracking
-- **Retry Attempts** - Automatic recovery metrics
+
+- **OCR Success Rate**  
+  Text extraction reliability
+  
+- **Processing Speed**  
+  Documents per minute
+  
+- **Error Rates**  
+  Failed operation tracking
+  
+- **Retry Attempts**  
+  Automatic recovery metrics
 
 ## Alert Configuration
 
 ### Alert Types
-- **Critical** - System failures requiring immediate attention
-- **Warning** - Performance degradation or resource limits
-- **Info** - Status updates and maintenance notifications
+
+- **Critical**  
+  System failures requiring immediate attention
+  
+- **Warning**  
+  Performance degradation or resource limits
+  
+- **Info**  
+  Status updates and maintenance notifications
 
 ### Notification Methods
-- **In-App Notifications** - Real-time dashboard alerts
-- **Email Alerts** - Configurable email notifications
-- **Webhook Integration** - External system notifications
+
+- **In-App Notifications**  
+  Real-time dashboard alerts
+  
+- **Email Alerts**  
+  Configurable email notifications
+  
+- **Webhook Integration**  
+  External system notifications
 
 ## Health Check Endpoints
 
@@ -98,15 +126,29 @@ GET /api/health/sources/{source_id}
 ## Troubleshooting
 
 ### Common Issues
-- **Source Disconnected** - Check network connectivity and credentials
-- **High Queue Length** - Scale processing resources or optimize OCR
-- **Memory Warnings** - Review document processing batch sizes
-- **Disk Space Low** - Clean up temporary files or expand storage
+
+- **Source Disconnected**  
+  Check network connectivity and credentials
+  
+- **High Queue Length**  
+  Scale processing resources or optimize OCR
+  
+- **Memory Warnings**  
+  Review document processing batch sizes
+  
+- **Disk Space Low**  
+  Clean up temporary files or expand storage
 
 ### Recovery Actions
-- **Automatic Retry** - Failed operations retry with exponential backoff
-- **Graceful Degradation** - System continues operating with reduced functionality
-- **Manual Intervention** - Admin tools for resolving complex issues
+
+- **Automatic Retry**  
+  Failed operations retry with exponential backoff
+  
+- **Graceful Degradation**  
+  System continues operating with reduced functionality
+  
+- **Manual Intervention**  
+  Admin tools for resolving complex issues
 
 ## Configuration
 

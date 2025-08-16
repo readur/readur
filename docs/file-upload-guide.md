@@ -4,10 +4,17 @@ Readur provides an intuitive drag-and-drop file upload system that supports mult
 
 ## Supported File Types
 
-- **PDF Files** (.pdf) - Direct text extraction and OCR for scanned PDFs
-- **Images** (.png, .jpg, .jpeg, .tiff, .bmp, .webp) - Full OCR text extraction
-- **Text Files** (.txt, .rtf) - Direct text import
-- **Office Documents** (.docx, .doc, .xlsx, .xls, .pptx, .ppt) - Text extraction and OCR
+- **PDF Files** (.pdf)  
+  Direct text extraction and OCR for scanned PDFs
+  
+- **Images** (.png, .jpg, .jpeg, .tiff, .bmp, .webp)  
+  Full OCR text extraction
+  
+- **Text Files** (.txt, .rtf)  
+  Direct text import
+  
+- **Office Documents** (.docx, .doc, .xlsx, .xls, .pptx, .ppt)  
+  Text extraction and OCR
 
 ## Upload Methods
 
@@ -57,10 +64,17 @@ This enhancement ensures files are correctly identified even when extensions are
 
 ## Best Practices
 
-- **File Size**: Keep individual files under 50MB for optimal performance
-- **File Names**: Use descriptive names for better organization
-- **Batch Size**: Upload 10-20 files at once for best performance
-- **Network**: Stable internet connection recommended for large uploads
+- **File Size**  
+  Keep individual files under 50MB for optimal performance
+  
+- **File Names**  
+  Use descriptive names for better organization
+  
+- **Batch Size**  
+  Upload 10-20 files at once for best performance
+  
+- **Network**  
+  Stable internet connection recommended for large uploads
 
 ## Troubleshooting
 

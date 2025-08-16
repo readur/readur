@@ -111,15 +111,29 @@ graph LR
 ## Getting Help
 
 ### Documentation
-- [User Guide](user-guide.md) - Complete feature documentation
-- [Configuration Reference](configuration-reference.md) - All environment variables
-- [Troubleshooting](s3-troubleshooting.md) - Common issues and solutions
-- [Migration Guide](migration-guide.md) - Upgrade and migration procedures
+
+- [User Guide](user-guide.md)  
+  Complete feature documentation
+  
+- [Configuration Reference](configuration-reference.md)  
+  All environment variables
+  
+- [Troubleshooting](s3-troubleshooting.md)  
+  Common issues and solutions
+  
+- [Migration Guide](migration-guide.md)  
+  Upgrade and migration procedures
 
 ### Community & Support
-- [GitHub Issues](https://github.com/readur/readur/issues) - Bug reports and feature requests
-- [GitHub Discussions](https://github.com/readur/readur/discussions) - Community help
-- [Developer Documentation](dev/) - Architecture and development setup
+
+- [GitHub Issues](https://github.com/readur/readur/issues)  
+  Bug reports and feature requests
+  
+- [GitHub Discussions](https://github.com/readur/readur/discussions)  
+  Community help
+  
+- [Developer Documentation](dev/)  
+  Architecture and development setup
 
 ## Latest Updates
 

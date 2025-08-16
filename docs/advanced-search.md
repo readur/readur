@@ -244,8 +244,9 @@ accessed:last-week            # Accessed in the last week
 ### Size Filters
 
 **Size Categories**:
+
 - **Small**: < 1MB
-- **Medium**: 1MB - 10MB  
+- **Medium**: 1MB - 10MB
 - **Large**: 10MB - 50MB
 - **Very Large**: > 50MB
 

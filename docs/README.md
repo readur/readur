@@ -52,12 +52,23 @@ wrangler pages deploy site --project-name=readur-docs
 
 ## Structure
 
-- `docs/` - Documentation source files (Markdown)
-- `mkdocs.yml` - MkDocs configuration
-- `requirements.txt` - Python dependencies
-- `overrides/` - Theme customizations
-- `stylesheets/` - Custom CSS
-- `javascripts/` - Custom JavaScript
+- `docs/`  
+  Documentation source files (Markdown)
+  
+- `mkdocs.yml`  
+  MkDocs configuration
+  
+- `requirements.txt`  
+  Python dependencies
+  
+- `overrides/`  
+  Theme customizations
+  
+- `stylesheets/`  
+  Custom CSS
+  
+- `javascripts/`  
+  Custom JavaScript
 
 ## Writing Documentation
 
@@ -71,11 +82,20 @@ wrangler pages deploy site --project-name=readur-docs
 
 We use several markdown extensions for enhanced functionality:
 
-- **Admonitions** - For notes, warnings, tips
-- **Code blocks** - With syntax highlighting
-- **Tabs** - For grouped content
-- **Tables** - For structured data
-- **Emoji** - For visual elements
+- **Admonitions**  
+  For notes, warnings, tips
+  
+- **Code blocks**  
+  With syntax highlighting
+  
+- **Tabs**  
+  For grouped content
+  
+- **Tables**  
+  For structured data
+  
+- **Emoji**  
+  For visual elements
 
 Example:
 ```markdown

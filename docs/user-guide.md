@@ -392,20 +392,46 @@ Readur supports both local and OIDC users in the same installation:
 ## Next Steps
 
 ### Explore Advanced Features
-- [🔗 Sources Guide](sources-guide.md) - Set up WebDAV, Local Folder, and S3 synchronization
-- [🔎 Advanced Search](advanced-search.md) - Master search modes, syntax, and optimization
-- [🏷️ Labels & Organization](labels-and-organization.md) - Implement effective document organization
-- [👥 User Management](user-management-guide.md) - Configure authentication and user administration
-- [🔐 OIDC Setup](oidc-setup.md) - Integrate with enterprise identity providers
+
+- [🔗 Sources Guide](sources-guide.md)  
+  Set up WebDAV, Local Folder, and S3 synchronization
+  
+- [🔎 Advanced Search](advanced-search.md)  
+  Master search modes, syntax, and optimization
+  
+- [🏷️ Labels & Organization](labels-and-organization.md)  
+  Implement effective document organization
+  
+- [👥 User Management](user-management-guide.md)  
+  Configure authentication and user administration
+  
+- [🔐 OIDC Setup](oidc-setup.md)  
+  Integrate with enterprise identity providers
 
 ### System Administration
-- [📦 Installation Guide](installation.md) - Full installation and setup instructions
-- [🔧 Configuration](configuration.md) - Environment variables and advanced configuration
-- [🚀 Deployment Guide](deployment.md) - Production deployment with SSL and monitoring
-- [📁 Watch Folder Guide](WATCH_FOLDER.md) - Legacy folder watching setup
+
+- [📦 Installation Guide](installation.md)  
+  Full installation and setup instructions
+  
+- [🔧 Configuration](configuration.md)  
+  Environment variables and advanced configuration
+  
+- [🚀 Deployment Guide](deployment.md)  
+  Production deployment with SSL and monitoring
+  
+- [📁 Watch Folder Guide](WATCH_FOLDER.md)  
+  Legacy folder watching setup
 
 ### Development and Integration
-- [🔌 API Reference](api-reference.md) - REST API for automation and integration
-- [🏗️ Developer Documentation](dev/) - Architecture and development setup
-- [🔍 OCR Optimization](dev/OCR_OPTIMIZATION_GUIDE.md) - Improve OCR performance
-- [📊 Queue Architecture](dev/QUEUE_IMPROVEMENTS.md) - Background processing optimization
+
+- [🔌 API Reference](api-reference.md)  
+  REST API for automation and integration
+  
+- [🏗️ Developer Documentation](dev/)  
+  Architecture and development setup
+  
+- [🔍 OCR Optimization](dev/OCR_OPTIMIZATION_GUIDE.md)  
+  Improve OCR performance
+  
+- [📊 Queue Architecture](dev/QUEUE_IMPROVEMENTS.md)  
+  Background processing optimization

@@ -45,7 +45,14 @@ Please read our [Development Guide](development.md) for:
 
 ## 🏷️ Document Categories
 
-- **📘 User Docs**: Installation, configuration, user guide
-- **🔧 Operations**: Deployment, monitoring, troubleshooting  
-- **💻 Developer**: Architecture, development setup, testing
-- **🔌 Integration**: API reference, webhooks, extensions
+- **📘 User Docs**  
+  Installation, configuration, user guide
+  
+- **🔧 Operations**  
+  Deployment, monitoring, troubleshooting
+  
+- **💻 Developer**  
+  Architecture, development setup, testing
+  
+- **🔌 Integration**  
+  API reference, webhooks, extensions
