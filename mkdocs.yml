@@ -1,0 +1,250 @@
+# MkDocs configuration for readur.app documentation
+site_name: Readur Documentation
+site_url: https://readur.app
+site_description: Intelligent Document Management System with OCR - Transform your documents into a searchable knowledge base
+site_author: Readur Team
+
+# Repository information (optional, adds edit links)
+repo_name: readur/readur
+repo_url: https://github.com/readur/readur
+edit_uri: edit/main/docs/
+
+# Copyright
+copyright: Copyright &copy; 2025 Readur
+
+# Theme configuration
+theme:
+  name: material
+  
+  # Color scheme
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  
+  # Font configuration
+  font:
+    text: Roboto
+    code: Roboto Mono
+  
+  # Features
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.prune
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+    - toc.integrate
+  
+  # Icons
+  icon:
+    logo: material/book-open-page-variant
+    repo: fontawesome/brands/github
+
+# Plugins
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+      lang:
+        - en
+  - minify:
+      minify_html: true
+      minify_js: true
+      minify_css: true
+      htmlmin_opts:
+        remove_comments: true
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: iso_datetime
+      fallback_to_build_date: true
+
+# Extensions
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      permalink_title: Anchor link to this section for reference
+  
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Extra CSS and JavaScript
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js
+  # MathJax for mathematical notation (optional)
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+# Extra configuration
+extra:
+  # Social links
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/readur/readur
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/readur
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/readur
+  
+  # Analytics (optional)
+  analytics:
+    provider: google
+    property: G-XXXXXXXXXX  # Replace with your Google Analytics ID
+    feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/emoticon-happy-outline
+          name: This page was helpful
+          data: 1
+          note: >-
+            Thanks for your feedback!
+        - icon: material/emoticon-sad-outline
+          name: This page could be improved
+          data: 0
+          note: >-
+            Thanks for your feedback! Help us improve this page by
+            <a href="https://github.com/readur/readur/issues/new/?title=[Feedback]+{title}+-+{url}" target="_blank" rel="noopener">opening an issue</a>.
+  
+  # Versioning (optional)
+  version:
+    provider: mike
+    default: stable
+  
+  # Cookie consent (optional)
+  consent:
+    title: Cookie consent
+    description: >-
+      We use cookies to recognize your repeated visits and preferences, as well
+      as to measure the effectiveness of our documentation and whether users
+      find what they're searching for. With your consent, you're helping us to
+      make our documentation better.
+
+# Navigation structure
+nav:
+  - Home: index.md
+  
+  - Getting Started:
+    - Installation Guide: getting-started/installation.md
+    - Quick Start (5 min): getting-started/quickstart.md
+    - Configuration: getting-started/configuration.md
+    
+  - User Guide:
+    - Overview: guide/overview.md
+    - Complete Guide: user-guide.md
+    - Labels & Organization: labels-and-organization.md
+    
+  - Features:
+    - Advanced Search: advanced-search.md
+    - Sources & Sync: sources-guide.md
+    - File Upload: file-upload-guide.md
+    - Multi-Language OCR: multi-language-ocr-guide.md
+    - Analytics Dashboard: analytics-dashboard-guide.md
+    - Notifications: notifications-guide.md
+    
+  - Administration:
+    - Deployment: deployment.md
+    - User Management: user-management-guide.md
+    - OIDC/SSO Setup: oidc-setup.md
+    - Health Monitoring: health-monitoring-guide.md
+    - Storage Migration: administration/storage-migration.md
+    - CLI Tools: administration/cli-tools.md
+    
+  - Storage & Backend:
+    - S3 Storage Guide: s3-storage-guide.md
+    - S3 Troubleshooting: s3-troubleshooting.md
+    - Watch Folders: WATCH_FOLDER.md
+    - Per-User Directories: per-user-watch-directories.md
+    - Migration Guide: migration-guide.md
+    
+  - API & Integration:
+    - API Reference: api-reference.md
+    - Swagger UI: swagger-ui-guide.md
+    - Reverse Proxy: REVERSE_PROXY.md
+    - Configuration Reference: configuration-reference.md
+    
+  - Development:
+    - Developer Guide: dev/README.md
+    - Architecture: dev/architecture.md
+    - Development Setup: dev/development.md
+    - Testing: dev/TESTING.md
+    - E2E Testing: dev/README-E2E.md
+    - Test Infrastructure: dev/test-infrastructure.md
+    
+  - Optimization:
+    - OCR Optimization: dev/OCR_OPTIMIZATION_GUIDE.md
+    - Queue Architecture: dev/QUEUE_IMPROVEMENTS.md
+    - Database Guardrails: dev/DATABASE_GUARDRAILS.md
+    - Error System: dev/ERROR_SYSTEM.md
+    - Label Testing: dev/LABEL_TESTING.md
+    
+  - Troubleshooting:
+    - Migration Issues: administration/migration-troubleshooting.md
+    - S3 Issues: s3-troubleshooting.md

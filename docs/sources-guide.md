@@ -573,7 +573,7 @@ Sources are continuously monitored and assigned health scores (0-100):
 
 ## Next Steps
 
-- Configure [notifications](notifications.md) for sync events
+- Configure [notifications](notifications-guide.md) for sync events
 - Set up [advanced search](advanced-search.md) to find synced documents
 - Review [OCR optimization](dev/OCR_OPTIMIZATION_GUIDE.md) for processing improvements
 - Explore [labels and organization](labels-and-organization.md) for document management

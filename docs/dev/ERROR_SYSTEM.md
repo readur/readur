@@ -612,7 +612,4 @@ Planned improvements to the error system:
 
 ## References
 
-- [Error Management Documentation](./ERROR_MANAGEMENT.md)
-- [API Error Response Standards](../api-reference.md#error-responses)
-- [Frontend Error Handling Guide](../../frontend/ERROR_HANDLING.md)
-- [Monitoring and Observability](./MONITORING.md)
+- [API Reference](../api-reference.md)

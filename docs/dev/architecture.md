@@ -344,7 +344,7 @@ Potential service boundaries:
 
 ## Next Steps
 
-- Review [deployment options](deployment.md)
+- Review [deployment options](../deployment.md)
 - Explore [performance tuning](OCR_OPTIMIZATION_GUIDE.md)
 - Understand [database design](DATABASE_GUARDRAILS.md)
 - Learn about [testing strategy](TESTING.md)
