@@ -427,7 +427,7 @@ docker run --read-only --tmpfs /tmp ...
 
 ## Next Steps
 
-- Configure [monitoring and alerting](monitoring-usage)
-- Review [security best practices](security)
+- Configure [monitoring and alerting](health-monitoring-guide.md)
+- Review [security best practices](security-guide.md)
 - Set up [automated backups](#backup-strategy)
 - Explore [database guardrails](dev/DATABASE_GUARDRAILS.md)

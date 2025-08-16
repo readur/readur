@@ -259,7 +259,7 @@ docker system prune -a
 For production use:
 1. [Configure HTTPS](../self-hosting/reverse-proxy.md)
 2. [Set up backups](../self-hosting/backup.md)
-3. [Enable monitoring](../administration/monitoring.md)
+3. [Enable monitoring](../health-monitoring-guide.md)
 4. [Configure authentication](../self-hosting/authentication.md)
 
 ### Scaling
@@ -272,6 +272,6 @@ Handle more documents:
 ## Related Documentation
 
 - [Self-Hosting Guide](../self-hosting/index.md) - Complete deployment guide
-- [Docker Compose Reference](../reference/docker-compose.md) - All configuration options
+- [Configuration Reference](../configuration-reference.md) - All configuration options
 - [Container Architecture](../architecture.md) - How services interact
 - [Troubleshooting Guide](../troubleshooting.md) - Common issues and solutions

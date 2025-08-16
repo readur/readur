@@ -427,7 +427,7 @@ Readur supports both local and OIDC users in the same installation:
 - [🔌 API Reference](api-reference.md)  
   REST API for automation and integration
   
-- [🏗️ Developer Documentation](dev/)  
+- [🏗️ Developer Documentation](dev/README.md)  
   Architecture and development setup
   
 - [🔍 OCR Optimization](dev/OCR_OPTIMIZATION_GUIDE.md)  

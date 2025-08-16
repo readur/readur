@@ -24,7 +24,7 @@ Direct installation on Linux servers:
 - **From source**: Build and install manually
 - **SystemD services**: Managed by system init
 
-[Bare Metal Installation →](./bare-metal.md)
+[Bare Metal Installation →](../deployment.md)
 
 ### Cloud Platform Deployment
 
@@ -35,7 +35,7 @@ Deploy on managed cloud services:
 - **Azure**: Virtual Machines, Database, Blob Storage
 - **DigitalOcean**: Droplets, Managed Database, Spaces
 
-[Cloud Deployment Guide →](./cloud-deployment.md)
+[Cloud Deployment Guide →](../deployment.md)
 
 ## System Requirements
 
@@ -92,7 +92,7 @@ docker-compose ps
 curl http://localhost:8000/health
 ```
 
-[Detailed Docker Guide →](./docker-setup.md)
+[Detailed Docker Guide →](../quickstart/docker.md)
 
 ### Method 2: Kubernetes (Container Orchestration)
 
@@ -121,7 +121,7 @@ spec:
         - containerPort: 8000
 ```
 
-[Kubernetes Deployment →](./kubernetes.md)
+[Kubernetes Deployment →](../deployment.md#kubernetes)
 
 ### Method 3: Ansible Automation
 
@@ -139,7 +139,7 @@ Automated deployment across multiple servers:
     postgres_version: "14"
 ```
 
-[Ansible Playbook →](./ansible.md)
+[Ansible Playbook →](../deployment.md)
 
 ## Configuration
 
@@ -163,7 +163,7 @@ S3_ACCESS_KEY_ID=<your-key>
 S3_SECRET_ACCESS_KEY=<your-secret>
 ```
 
-[Complete Configuration Reference →](./configuration.md)
+[Complete Configuration Reference →](../configuration-reference.md)
 
 ### Storage Configuration
 
@@ -306,7 +306,7 @@ docker-compose exec readur psql -U readur -d readur -c "SELECT COUNT(*) FROM doc
 - [ ] Regular security updates
 - [ ] Implement rate limiting
 
-[Security Best Practices →](./security.md)
+[Security Best Practices →](../security-guide.md)
 
 ### SSL/TLS Configuration
 
@@ -378,7 +378,7 @@ docker-compose exec readur alembic upgrade head
 docker-compose down && docker-compose up -d
 ```
 
-[Update Procedures →](./updates.md)
+[Update Procedures →](../migration-guide.md)
 
 ## Troubleshooting
 
@@ -415,7 +415,7 @@ psql $DATABASE_URL -c "SELECT 1"
 telnet postgres_host 5432
 ```
 
-[Complete Troubleshooting Guide →](./troubleshooting.md)
+[Complete Troubleshooting Guide →](../troubleshooting.md)
 
 ## Migration from Other Systems
 
@@ -438,7 +438,7 @@ python migrate_mayan.py \
   --target-db postgresql://readur_db
 ```
 
-[Migration Guide →](./migration.md)
+[Migration Guide →](../migration-guide.md)
 
 ## Support and Resources
 
