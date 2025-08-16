@@ -23,7 +23,7 @@ docker-compose down
 systemctl stop readur
 ```
 
-2. **Backup current state**
+**Backup current state:** Create comprehensive backups of both database and file data before proceeding.
 ```bash
 # Database backup
 pg_dump $DATABASE_URL > backup_v2_$(date +%Y%m%d).sql
@@ -32,7 +32,7 @@ pg_dump $DATABASE_URL > backup_v2_$(date +%Y%m%d).sql
 tar -czf files_backup_v2_$(date +%Y%m%d).tar.gz /var/readur/uploads
 ```
 
-3. **Update configuration**
+**Update configuration:** Add new environment variables and configuration options required for the new version.
 ```bash
 # New environment variables in v3
 echo "OIDC_ENABLED=false" >> .env
@@ -40,7 +40,7 @@ echo "FEATURE_MULTI_LANGUAGE_OCR=true" >> .env
 echo "FEATURE_LABELS=true" >> .env
 ```
 
-4. **Run database migrations**
+**Run database migrations:** Apply database schema changes required for the new version.
 ```bash
 # Pull new version
 docker pull readur:v3.0.0
@@ -52,7 +52,7 @@ docker run --rm \
   cargo run --bin migrate
 ```
 
-5. **Update and start application**
+**Update and start application:** Deploy the new version and restart the application services.
 ```bash
 # Update docker-compose.yml
 sed -i 's/readur:v2/readur:v3.0.0/g' docker-compose.yml
@@ -61,7 +61,7 @@ sed -i 's/readur:v2/readur:v3.0.0/g' docker-compose.yml
 docker-compose up -d
 ```
 
-6. **Verify upgrade**
+**Verify upgrade:** Confirm that the upgrade completed successfully and all systems are functioning correctly.
 ```bash
 # Check version
 curl http://localhost:8080/api/version

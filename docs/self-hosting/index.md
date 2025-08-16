@@ -1,102 +1,73 @@
 # Self-Hosting Guide
 
-## Overview
+This guide walks you through everything you need to know to run Readur on your own infrastructure. Whether you're setting up a personal document system, deploying for your team, or running Readur for an entire organization, you'll find practical guidance for installation, configuration, and ongoing maintenance.
 
-This comprehensive guide covers everything you need to successfully self-host Readur in your own infrastructure. Whether you're deploying for personal use, your organization, or offering it as a service, this guide provides complete instructions for setup, configuration, and maintenance.
-
-## Self-Hosting Options
+## Choosing Your Deployment Method
 
 ### Docker Deployment (Recommended)
 
-The simplest and most reliable deployment method:
+Docker provides the simplest and most reliable way to deploy Readur. All components run on a single server using Docker Compose to manage the containers. This approach works well because Readur is designed as a single-instance application - you don't need to worry about clustering or load balancing across multiple servers. The containerized setup ensures consistency and makes updates straightforward.
 
-- **Single-server setup**: All components on one machine (standard deployment)
-- **Docker Compose**: Manage containers easily
-- **Note**: Readur is a single-instance application and does not support clustering or multiple server instances
-
-[Quick Start with Docker →](../quickstart/docker.md)
+[Get started with Docker →](../quickstart/docker.md)
 
 ### Bare Metal Installation
 
-Direct installation on Linux servers:
+For organizations that prefer traditional server installations, you can install Readur directly on Linux servers. This method gives you complete control over the system packages and lets you integrate with existing infrastructure management tools. You'll install Readur from distribution repositories or build from source, then manage it with SystemD services like other server applications.
 
-- **System packages**: Install from distribution repositories
-- **From source**: Build and install manually
-- **SystemD services**: Managed by system init
-
-[Bare Metal Installation →](../deployment.md)
+[Bare metal installation guide →](../deployment.md)
 
 ### Cloud Platform Deployment
 
-Deploy on managed cloud services:
+Major cloud providers offer managed services that can significantly simplify your Readur deployment. Use EC2, RDS, and S3 on AWS, or Compute Engine, Cloud SQL, and Cloud Storage on Google Cloud. Azure provides Virtual Machines, managed databases, and Blob Storage. DigitalOcean offers Droplets, managed databases, and Spaces storage. These managed services handle infrastructure maintenance while you focus on managing your documents.
 
-- **AWS**: EC2, RDS, S3, and ECS
-- **Google Cloud**: Compute Engine, Cloud SQL, GCS
-- **Azure**: Virtual Machines, Database, Blob Storage
-- **DigitalOcean**: Droplets, Managed Database, Spaces
-
-[Cloud Deployment Guide →](../deployment.md)
+[Cloud deployment guide →](../deployment.md)
 
 ## System Requirements
 
-### Minimum Requirements
+### For Personal Use and Small Teams
 
-For personal use or small teams (1-10 users):
+If you're setting up Readur for personal use or a small team of 1-10 users, you can start with modest hardware. A 2-core CPU (either x86_64 or ARM64), 4GB of RAM, and 20GB of storage will handle basic document processing. Add more storage based on how many documents you plan to manage. Any modern Linux distribution works - Ubuntu 20.04+, Debian 11+, or RHEL 8+ are well-tested options. If you're using Docker, make sure you have version 20.10 or newer.
 
-- **CPU**: 2 cores (x86_64 or ARM64)
-- **RAM**: 4GB
-- **Storage**: 20GB for system + document storage
-- **OS**: Linux (Ubuntu 20.04+, Debian 11+, RHEL 8+)
-- **Docker**: Version 20.10+ (if using containers)
+### Production Deployments for Organizations
 
-### Recommended Production Setup
+Organizations with 10-100 users should plan for more substantial hardware to handle concurrent document processing and user activity. A 4-8 core CPU and 16GB of RAM provide comfortable performance headroom. Use SSD storage for the system and database (100GB minimum), with additional storage for documents based on your collection size - 1TB is a reasonable starting point for most organizations.
 
-For organizations (10-100 users):
+Your PostgreSQL database should have at least 50GB of dedicated storage, and Redis needs about 2GB of RAM for caching and queue management. A reliable network connection (100Mbps or better) ensures responsive performance when multiple users are working simultaneously.
 
-- **CPU**: 4-8 cores
-- **RAM**: 16GB
-- **Storage**: 100GB SSD for system, 1TB+ for documents
-- **Database**: PostgreSQL 14+ with 50GB storage
-- **Cache**: Redis 6+ with 2GB RAM
-- **Network**: 100Mbps+ connection
+### Enterprise Scale Deployments
 
-### Enterprise Scale
+Large deployments serving 100+ users require a single high-performance server with substantial resources. Plan for 8-16 CPU cores to handle concurrent OCR processing efficiently, and 32GB or more RAM for processing large batches of documents without performance degradation.
 
-For large deployments (100+ users):
-
-- **Server**: Single high-performance server with ample resources
-- **CPU**: 8-16 cores for concurrent processing
-- **RAM**: 32GB+ for large document processing
-- **Database**: PostgreSQL with performance tuning
-- **Storage**: S3-compatible object storage for scalability
-- **Note**: Vertical scaling only - add more resources to the single server
+For storage, consider S3-compatible object storage for unlimited scalability and better backup options. Remember that Readur scales vertically rather than horizontally - you add more resources to a single powerful server rather than distributing load across multiple machines.
 
 ## Installation Methods
 
-### Method 1: Docker Compose (Simplest)
+### Docker Compose (Recommended for Most Users)
 
-Perfect for single-server deployments:
+Docker Compose provides the simplest path to a working Readur installation. This method handles all the service dependencies automatically and works well for single-server deployments:
 
 ```bash
-# Download and configure
+# Clone the repository and configure
 git clone https://github.com/readur/readur.git
 cd readur
 cp .env.example .env
-nano .env  # Configure settings
+nano .env  # Edit configuration settings
 
-# Start services
+# Start all services
 docker-compose up -d
 
-# Verify installation
+# Verify everything is working
 docker-compose ps
 curl http://localhost:8000/health
 ```
 
-[Detailed Docker Guide →](../quickstart/docker.md)
+This approach downloads pre-built containers, sets up the database, configures networking between services, and starts everything with a single command.
 
-### Method 2: Kubernetes (Container Orchestration)
+[Follow the detailed Docker guide →](../quickstart/docker.md)
 
-For production deployments with container orchestration:
+### Kubernetes for Organizations with Container Orchestration
+
+If your organization already uses Kubernetes for container management, you can deploy Readur within your existing cluster. This approach provides consistent container lifecycle management and integrates with your existing monitoring and backup systems:
 
 ```yaml
 # readur-deployment.yaml
@@ -121,11 +92,13 @@ spec:
         - containerPort: 8000
 ```
 
-[Kubernetes Deployment →](../deployment.md#kubernetes)
+This Kubernetes configuration creates a single instance deployment (note the `replicas: 1` setting - Readur is designed as a single-instance application and doesn't support horizontal scaling). You'll also need to configure services, persistent volumes for document storage, and secrets for database credentials.
 
-### Method 3: Ansible Automation
+[Complete Kubernetes deployment guide →](../deployment.md#kubernetes)
 
-Automated deployment across multiple servers:
+### Ansible for Automated Infrastructure
+
+Organizations managing multiple servers or standardized deployments benefit from Ansible automation. This approach lets you deploy Readur consistently across different environments:
 
 ```yaml
 # playbook.yml
@@ -139,44 +112,54 @@ Automated deployment across multiple servers:
     postgres_version: "14"
 ```
 
-[Ansible Playbook →](../deployment.md)
+This playbook installs PostgreSQL, Redis, and Readur with specified versions across all servers in your `readur_servers` inventory group. You can customize variables for different environments (development, staging, production) while maintaining consistency in the deployment process.
+
+[Complete Ansible playbook →](../deployment.md)
 
 ## Configuration
 
-### Essential Configuration
+### Critical Settings You Must Configure
 
-These settings must be configured before first run:
+Before starting Readur for the first time, you need to configure several essential settings for security and functionality. These settings control how Readur encrypts session data, connects to the database, and stores documents:
 
 ```bash
-# Security
+# Security settings - generate these securely
 APP_SECRET_KEY=<generate-with-openssl-rand-hex-32>
 ADMIN_PASSWORD=<strong-password>
 
-# Database
+# Database connection
 DATABASE_URL=postgresql://user:pass@localhost/readur
 POSTGRES_PASSWORD=<secure-password>
 
-# Storage
+# Document storage location
 STORAGE_BACKEND=s3  # or 'local'
 S3_BUCKET=readur-documents
 S3_ACCESS_KEY_ID=<your-key>
 S3_SECRET_ACCESS_KEY=<your-secret>
 ```
 
-[Complete Configuration Reference →](../configuration-reference.md)
+The APP_SECRET_KEY encrypts session cookies and other sensitive data - generate this using `openssl rand -hex 32` for security. Choose a strong admin password since this account has full system access. The database URL tells Readur how to connect to PostgreSQL, while storage settings determine where uploaded documents are kept.
 
-### Storage Configuration
+[Complete configuration options →](../configuration-reference.md)
 
-Choose and configure your storage backend:
+### Choosing Your Storage Backend
 
-#### Local Storage
+Readur supports two primary storage backends, each suited for different deployment scenarios. Your choice affects scalability, backup complexity, and operational requirements.
+
+#### Local File Storage
+
+Local storage keeps documents on the server's filesystem, which is simple to set up and backup:
 
 ```bash
 STORAGE_BACKEND=local
 LOCAL_STORAGE_PATH=/data/readur/documents
 ```
 
-#### S3-Compatible Storage
+This approach works well for smaller deployments where the server has adequate storage capacity. Ensure the specified directory exists and is writable by the Readur process. Local storage makes backup straightforward - just include the document directory in your regular backup routine.
+
+#### S3-Compatible Cloud Storage
+
+S3 storage provides unlimited scalability and built-in redundancy, making it ideal for larger deployments:
 
 ```bash
 STORAGE_BACKEND=s3
@@ -186,13 +169,17 @@ S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 ```
 
-[Storage Setup Guide →](./storage.md)
+This configuration works with Amazon S3, or you can change the endpoint to use compatible services like MinIO, DigitalOcean Spaces, or Wasabi. Ensure your S3 credentials have appropriate permissions to create, read, and delete objects in the specified bucket.
 
-### Authentication Setup
+[Detailed storage configuration →](./storage.md)
 
-Configure authentication methods:
+### Setting Up Authentication
 
-#### Local Authentication
+Readur offers flexible authentication options to match your organizational needs. Choose local authentication for simple deployments or OIDC integration for enterprise environments with existing identity providers.
+
+#### Local Authentication for Simple Deployments
+
+Local authentication is straightforward and works well for smaller teams or personal installations:
 
 ```bash
 AUTH_METHOD=local
@@ -200,7 +187,11 @@ ENABLE_REGISTRATION=false
 REQUIRE_EMAIL_VERIFICATION=true
 ```
 
-#### OIDC/SSO Integration
+This configuration uses username and password authentication managed entirely within Readur. Disable registration to maintain control over who can create accounts, and enable email verification for additional security. You can always enable self-registration later if you want to allow users to create their own accounts.
+
+#### Enterprise SSO Integration
+
+For organizations with existing identity providers, OIDC integration provides seamless single sign-on:
 
 ```bash
 AUTH_METHOD=oidc
@@ -209,13 +200,15 @@ OIDC_CLIENT_ID=readur
 OIDC_CLIENT_SECRET=<secret>
 ```
 
-[Authentication Guide →](./authentication.md)
+This configuration connects Readur to your corporate identity provider (like Azure AD, Okta, or Keycloak). Users authenticate with their existing corporate credentials, and Readur automatically creates accounts on first login. You'll need to register Readur as an application in your identity provider and configure the client ID and secret.
+
+[Complete authentication setup →](./authentication.md)
 
 ## Network Configuration
 
-### Reverse Proxy Setup
+### Setting Up HTTPS with a Reverse Proxy
 
-Configure NGINX for HTTPS:
+Production deployments should use HTTPS to protect user credentials and document content. NGINX provides a robust reverse proxy solution that handles SSL termination while forwarding requests to Readur:
 
 ```nginx
 server {
@@ -235,107 +228,122 @@ server {
 }
 ```
 
-[Reverse Proxy Guide →](./reverse-proxy.md)
+This NGINX configuration listens on port 443 for HTTPS connections, terminates SSL encryption, and forwards requests to Readur running on port 8000. The proxy headers ensure Readur receives proper client information for logging and security. Replace the SSL certificate paths with your actual certificate files.
 
-### Firewall Configuration
+[Complete reverse proxy setup →](./reverse-proxy.md)
 
-Essential firewall rules:
+### Securing Network Access
+
+Proper firewall configuration is essential for production deployments. Allow HTTPS traffic so users can access Readur securely, and restrict SSH access to known IP addresses for administrative access:
 
 ```bash
-# Allow HTTPS
+# Allow HTTPS traffic from anywhere
 sudo ufw allow 443/tcp
 
-# Allow SSH (restrict to your IP)
+# Allow SSH only from your administrative IP
 sudo ufw allow from YOUR_IP to any port 22
 
-# Enable firewall
+# Activate the firewall with these rules
 sudo ufw enable
 ```
 
+Replace YOUR_IP with your actual administrative IP address. If you need to allow multiple administrative IPs, add additional rules for each one. Avoid allowing SSH from anywhere (0.0.0.0/0) as this creates unnecessary security exposure.
+
 ## Backup and Recovery
 
-### Automated Backups
+### Creating Automated Backup Routines
 
-Set up daily backups with retention:
+Regular backups are critical for any production system. This script creates daily backups of both your database and documents, then uploads them to secure storage with automatic cleanup:
 
 ```bash
 #!/bin/bash
-# backup.sh
+# backup.sh - Run daily via cron
 
-# Backup database
+# Create timestamped database backup
 pg_dump $DATABASE_URL > backup-$(date +%Y%m%d).sql
 
-# Backup documents (if local storage)
+# Backup documents if using local storage
 tar -czf documents-$(date +%Y%m%d).tar.gz /data/readur/documents
 
-# Upload to S3
+# Upload backups to secure offsite storage
 aws s3 cp backup-*.sql s3://backups/readur/
 aws s3 cp documents-*.tar.gz s3://backups/readur/
 
-# Clean old backups (keep 30 days)
+# Remove local backups older than 30 days
 find . -name "backup-*.sql" -mtime +30 -delete
 ```
 
-[Backup Strategy Guide →](./backup.md)
+Schedule this script to run daily using cron: `0 2 * * * /path/to/backup.sh`. The 2 AM timing avoids peak usage hours. If you're using S3 storage for documents, you only need to back up the database since S3 provides built-in redundancy.
 
-### Disaster Recovery
+[Complete backup strategy →](./backup.md)
 
-Restore from backup:
+### Disaster Recovery Procedures
+
+When you need to restore from backup, follow these steps carefully to ensure complete recovery:
 
 ```bash
-# Restore database
+# Stop Readur services first
+docker-compose down
+
+# Restore database from backup
 PGPASSWORD="${DB_PASSWORD}" psql -h localhost -U readur -d readur < backup-20240315.sql
 
-# Restore documents
+# Restore documents (if using local storage)
 tar -xzf documents-20240315.tar.gz -C /
 
-# Verify integrity by checking document count
+# Restart services
+docker-compose up -d
+
+# Verify restoration by checking document count
 docker-compose exec readur psql -U readur -d readur -c "SELECT COUNT(*) FROM documents;"
 ```
 
+Always stop Readur services before restoration to prevent data corruption. After restoration, verify that the document count matches your expectations and test key functionality like search and document access.
+
 ## Security Hardening
 
-### Security Checklist
+### Essential Security Measures
 
-- [ ] Change all default passwords
-- [ ] Enable HTTPS with valid certificates
-- [ ] Configure firewall rules
-- [ ] Disable unnecessary services
-- [ ] Enable audit logging
-- [ ] Set up intrusion detection
-- [ ] Regular security updates
-- [ ] Implement rate limiting
+Securing your Readur deployment requires attention to multiple layers of protection. Start with the fundamentals: change all default passwords immediately after installation, including the admin account and any service accounts. Enable HTTPS with valid SSL certificates - never run Readur in production over plain HTTP as this exposes user credentials and document content.
 
-[Security Best Practices →](../security-guide.md)
+Configure firewall rules to limit network access to only required ports and sources. Disable any unnecessary services running on your server to reduce the attack surface. Enable audit logging to track access and changes, and consider implementing intrusion detection if your organization requires it.
 
-### SSL/TLS Configuration
+Establish a regular security update schedule for both Readur and the underlying operating system. Implement rate limiting on your reverse proxy to protect against brute force attacks and resource exhaustion.
 
-Obtain and configure SSL certificates:
+[Complete security hardening guide →](../security-guide.md)
+
+### SSL Certificate Management
+
+SSL certificates protect data in transit and establish trust with users. Let's Encrypt provides free, automated certificates that work well for most deployments:
 
 ```bash
-# Using Let's Encrypt
+# Obtain certificate for your domain
 sudo certbot certonly --webroot -w /var/www/html -d readur.company.com
 
-# Auto-renewal
+# Test automatic renewal
 sudo certbot renew --dry-run
 ```
 
+Let's Encrypt certificates expire every 90 days, but certbot automatically sets up renewal via cron. The dry-run test verifies that renewal will work when needed. For enterprise deployments, you might prefer certificates from your organization's existing CA.
+
 ## Monitoring and Maintenance
 
-### Health Monitoring
+### Setting Up Health Monitoring
 
-Set up monitoring endpoints:
+Readur provides several endpoints for monitoring system health and performance. Use these endpoints with your existing monitoring tools to track system status:
 
 ```bash
-# Health check
+# Basic health check - returns 200 if system is operational
 curl http://localhost:8000/health
 
-# Metrics
+# Detailed metrics in Prometheus format
 curl http://localhost:8000/metrics
 
-# Status page
+# Human-readable status information
 curl http://localhost:8000/status
 ```
+
+The health endpoint provides a simple up/down status check suitable for load balancer health checks. The metrics endpoint exports detailed performance data compatible with Prometheus and Grafana. The status endpoint gives human-readable information about queue status, database connectivity, and storage health.
 
 [Monitoring Setup →](./monitoring.md)
 

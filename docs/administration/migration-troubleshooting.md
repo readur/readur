@@ -39,7 +39,7 @@
    }
    ```
 
-2. **Test S3 Access**
+**Test S3 Access:** Verify that your application can successfully connect to and interact with the S3 bucket.
    ```bash
    # Test bucket access
    aws s3 ls s3://your-bucket-name/
@@ -51,7 +51,7 @@
    aws s3 rm s3://your-bucket-name/test.txt
    ```
 
-3. **Check Environment Variables**
+**Check Environment Variables:** Ensure all required S3 configuration variables are properly set.
    ```bash
    # Verify credentials are set
    docker exec readur-app env | grep S3_
@@ -92,14 +92,14 @@ aws s3 mb s3://your-bucket-name --region eu-west-1
      --resume-from /tmp/migration_state_20241201_143022.json
    ```
 
-2. **Reduce Batch Size**
+**Reduce Batch Size:** Process files in smaller batches to reduce the impact of network interruptions.
    ```bash
    # Process smaller batches
    docker exec readur-app cargo run --bin migrate_to_s3 -- \
      --enable-rollback --batch-size 500
    ```
 
-3. **Check Network Stability**
+**Check Network Stability:** Test and improve network connectivity to prevent timeout issues.
    ```bash
    # Test S3 connectivity
    ping s3.amazonaws.com
@@ -138,13 +138,13 @@ docker exec readur-app cargo run --bin migrate_to_s3 -- \
      "SELECT setting FROM pg_settings WHERE name = 'max_connections';"
    ```
 
-2. **Increase Connection Timeout**
+**Increase Connection Timeout:** Configure longer timeouts to accommodate longer-running migration operations.
    ```bash
    # Add to environment variables
    export DATABASE_TIMEOUT=300  # 5 minutes
    ```
 
-3. **Check Transaction Locks**
+**Check Transaction Locks:** Identify and resolve database locks that may be blocking the migration.
    ```bash
    # Look for long-running transactions
    docker exec readur-app psql -d readur -c \
@@ -178,7 +178,7 @@ docker exec readur-app cargo run --bin migrate_to_s3 -- \
    docker exec readur-app cargo run --bin migrate_to_s3 -- --audit-files
    ```
 
-2. **Clean Up Database**
+**Clean Up Database:** Remove database records that reference non-existent files to resolve consistency issues.
    ```bash
    # Remove orphaned records (BE CAREFUL!)
    docker exec readur-app psql -d readur -c \
@@ -216,14 +216,14 @@ docker exec readur-app chown -R readur:readur /app/uploads/
    aws s3 rm s3://your-bucket/speedtest.dat
    ```
 
-2. **Optimize Migration Settings**
+**Optimize Migration Settings:** Adjust migration parameters to improve upload performance.
    ```bash
    # Increase parallel uploads
    docker exec readur-app cargo run --bin migrate_to_s3 -- \
      --enable-rollback --parallel-uploads 10
    ```
 
-3. **Use Multipart Upload Threshold**
+**Use Multipart Upload Threshold:** Configure smaller thresholds for multipart uploads to improve reliability and speed.
    ```bash
    # Lower threshold for multipart uploads
    docker exec readur-app cargo run --bin migrate_to_s3 -- \
@@ -371,7 +371,7 @@ When reporting issues, include:
    docker exec readur-app cargo --version
    docker exec readur-app psql --version
    ```
-5. **Environment configuration** (sanitized):
+**Environment configuration** (sanitized): Provide your configuration settings with sensitive values hidden.
    ```bash
    docker exec readur-app env | grep -E "(S3_|DATABASE_)" | sed 's/=.*/=***/'
    ```

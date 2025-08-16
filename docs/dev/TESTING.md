@@ -361,7 +361,7 @@ curl http://localhost:8000/api/health
 
 **Common Integration Test Issues:**
 
-1. **"Server is not running"**
+**"Server is not running":** The integration tests require a running server instance to connect to.
    ```bash
    # Start the server first
    cargo run
@@ -400,26 +400,26 @@ curl http://localhost:8000/api/health
 
 #### Common Issues and Solutions
 
-1. **"vi is not defined" errors**
+**"vi is not defined" errors:** This occurs when test files use the wrong testing framework imports.
    ```bash
    # Fixed: Updated imports from jest to vitest
    # Before: import { jest } from '@jest/globals'
    # After:  import { vi } from 'vitest'
    ```
 
-2. **"useAuth must be used within AuthProvider"**
+**"useAuth must be used within AuthProvider":** React components that use authentication hooks need proper context mocking in tests.
    ```bash
    # Fixed: Added proper AuthProvider mocking
    # Tests now include MockAuthProvider wrapper
    ```
 
-3. **API mocking not working**
+**API mocking not working:** Tests should not make real HTTP requests and need proper API mocking setup.
    ```bash
    # Fixed: Added global axios mock in setup.ts
    # Prevents real HTTP requests during testing
    ```
 
-4. **Module not found errors**
+**Module not found errors:** Missing or corrupted dependencies can cause import failures.
    ```bash
    # Clear and reinstall dependencies
    cd frontend
@@ -584,7 +584,7 @@ cd frontend && npm test -- --run
 
 ### For New API Endpoints
 
-1. **Unit Tests** - Add to appropriate module in `src/tests/`
+**Unit Tests:** Add focused tests for business logic in the appropriate module under `src/tests/`.
    ```rust
    #[test]
    fn test_new_endpoint_data_model() {
@@ -594,7 +594,7 @@ cd frontend && npm test -- --run
    }
    ```
 
-2. **Integration Tests** - Add to `tests/integration_tests.rs`
+**Integration Tests:** Add full workflow tests that exercise the complete API endpoint in `tests/integration_tests.rs`.
    ```rust
    #[tokio::test]
    async fn test_new_endpoint_workflow() {
@@ -613,7 +613,7 @@ cd frontend && npm test -- --run
    }
    ```
 
-3. **Frontend Tests** - Add component tests if UI is involved
+**Frontend Tests:** Add component tests when the feature includes user interface changes.
    ```typescript
    test('new feature component renders correctly', () => {
      render(<NewFeatureComponent />)
@@ -623,7 +623,7 @@ cd frontend && npm test -- --run
 
 ### For New OCR Features
 
-1. **Happy Path Testing**
+**Happy Path Testing:** Test the successful flow from document upload through OCR processing to result retrieval.
    ```rust
    #[tokio::test]
    async fn test_new_ocr_feature_success() {
@@ -634,7 +634,7 @@ cd frontend && npm test -- --run
    }
    ```
 
-2. **Error Condition Testing**
+**Error Condition Testing:** Verify that the feature handles invalid inputs and edge cases gracefully.
    ```rust
    #[test]
    fn test_new_ocr_feature_invalid_format() {
@@ -643,7 +643,7 @@ cd frontend && npm test -- --run
    }
    ```
 
-3. **Performance Testing**
+**Performance Testing:** Ensure that OCR features meet performance requirements and handle large documents efficiently.
    ```rust
    #[tokio::test]
    async fn test_new_ocr_feature_performance() {

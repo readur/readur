@@ -61,7 +61,7 @@ docker inspect readur-app
 
 **Solutions:**
 
-1. **Port conflict:**
+**Port conflict:** Check if the port is already in use and resolve the conflict.
 ```bash
 # Check if port is in use
 sudo lsof -i :8080
@@ -71,7 +71,7 @@ ports:
   - "8081:8080"  # Use different external port
 ```
 
-2. **Database connection failure:**
+**Database connection failure:** Verify that the database service is running and accessible.
 ```bash
 # Verify database is running
 docker ps | grep postgres
@@ -83,7 +83,7 @@ docker exec readur-app psql $DATABASE_URL -c "SELECT 1"
 export DATABASE_URL="postgresql://readur:password@db:5432/readur"
 ```
 
-3. **Permission issues:**
+**Permission issues:** Resolve file and directory permission problems that prevent the container from accessing required resources.
 ```bash
 # Fix volume permissions
 sudo chown -R 1000:1000 ./uploads
@@ -97,7 +97,7 @@ docker run --user $(id -u):$(id -g) readur:latest
 
 **Solutions:**
 
-1. **Update Rust toolchain:**
+**Update Rust toolchain:** Ensure you're using the latest stable Rust version to avoid compatibility issues.
 ```bash
 rustup update
 rustup default stable
@@ -105,14 +105,14 @@ cargo clean
 cargo build --release
 ```
 
-2. **Clear build cache:**
+**Clear build cache:** Remove stale build artifacts that may be causing compilation problems.
 ```bash
 rm -rf target/
 rm Cargo.lock
 cargo build --release
 ```
 
-3. **Install missing dependencies:**
+**Install missing dependencies:** Ensure all required system dependencies are installed for compilation.
 ```bash
 # Ubuntu/Debian
 sudo apt-get install build-essential pkg-config libssl-dev
@@ -142,7 +142,7 @@ sudo netstat -tlnp | grep 5432
 
 **Solutions:**
 
-1. **PostgreSQL not running:**
+**PostgreSQL not running:** Start the PostgreSQL service and ensure it's configured to start automatically.
 ```bash
 # Start PostgreSQL
 sudo systemctl start postgresql
@@ -151,7 +151,7 @@ sudo systemctl start postgresql
 sudo systemctl enable postgresql
 ```
 
-2. **Authentication failure:**
+**Authentication failure:** Configure PostgreSQL to accept connections from the Readur application.
 ```bash
 # Edit pg_hba.conf
 sudo nano /etc/postgresql/15/main/pg_hba.conf
@@ -164,7 +164,7 @@ host    all   readur   127.0.0.1/32   md5
 sudo systemctl reload postgresql
 ```
 
-3. **Database doesn't exist:**
+**Database doesn't exist:** Create the required database and user with appropriate permissions.
 ```bash
 # Create database and user
 sudo -u postgres psql <<EOF
@@ -187,7 +187,7 @@ tail -n 100 /var/log/readur/migration.log
 
 **Solutions:**
 
-1. **Rollback failed migration:**
+**Rollback failed migration:** When a database migration fails, identify the problematic migration and roll it back safely.
 ```bash
 # Identify failed migration
 psql -U readur -d readur -c "SELECT version FROM _sqlx_migrations WHERE success = false;"
@@ -202,7 +202,7 @@ psql -U readur -d readur -c "DELETE FROM _sqlx_migrations WHERE version = 202501
 cargo run --bin migrate
 ```
 
-2. **Fix constraint violations:**
+**Fix constraint violations:** Resolve database integrity issues that prevent migrations from completing.
 ```sql
 -- Find duplicate entries
 SELECT file_hash, COUNT(*) 
@@ -241,7 +241,7 @@ EOF
 
 **Solutions:**
 
-1. **Reset stuck jobs:**
+**Reset stuck jobs:** Reset OCR jobs that have been stuck in processing state for an extended period.
 ```bash
 # Reset jobs stuck in processing
 psql -U readur -d readur <<EOF
@@ -257,7 +257,7 @@ EOF
 docker exec readur-app cargo run --bin enqueue_pending_ocr
 ```
 
-2. **Clear failed jobs:**
+**Clear failed jobs:** Reset failed OCR jobs to allow them to be retried.
 ```bash
 # Retry failed jobs with reset
 psql -U readur -d readur <<EOF
@@ -274,7 +274,7 @@ EOF
 
 **Solutions:**
 
-1. **Wrong language configuration:**
+**Wrong language configuration:** Verify and correct the OCR language settings for better text recognition.
 ```bash
 # Check current language
 echo $OCR_LANGUAGE
@@ -290,7 +290,7 @@ EOF
 cargo run --bin enqueue_pending_ocr --document-id document_id --language "eng+fra+deu"
 ```
 
-2. **Poor image quality:**
+**Poor image quality:** Improve the input image quality to enhance OCR accuracy.
 ```bash
 # Debug PDF extraction
 cargo run --bin debug_pdf_extraction problem_document.pdf --verbose
@@ -299,7 +299,7 @@ cargo run --bin debug_pdf_extraction problem_document.pdf --verbose
 convert input.pdf -density 300 -depth 8 -strip -background white -alpha off output.pdf
 ```
 
-3. **Install additional language packs:**
+**Install additional language packs:** Add support for additional languages if your documents contain text in multiple languages.
 ```bash
 # Install language data
 sudo apt-get install tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-spa
@@ -328,7 +328,7 @@ ORDER BY idx_scan;
 
 **Solutions:**
 
-1. **Missing indexes:**
+**Missing indexes:** Create or rebuild database indexes to improve query performance.
 ```sql
 -- Create missing indexes
 CREATE INDEX CONCURRENTLY idx_documents_content_gin 
@@ -338,7 +338,7 @@ ON documents USING gin(to_tsvector('english', content));
 REINDEX INDEX CONCURRENTLY idx_documents_content_gin;
 ```
 
-2. **Table bloat:**
+**Table bloat:** Reduce database table bloat that can slow down queries.
 ```sql
 -- Check table size
 SELECT pg_size_pretty(pg_total_relation_size('documents'));
@@ -350,7 +350,7 @@ VACUUM (FULL, ANALYZE) documents;
 VACUUM (ANALYZE) documents;
 ```
 
-3. **Optimize configuration:**
+**Optimize configuration:** Tune PostgreSQL configuration parameters for better performance.
 ```ini
 # postgresql.conf
 shared_buffers = 2GB
@@ -376,7 +376,7 @@ pmap -x $(pgrep readur)
 
 **Solutions:**
 
-1. **Limit concurrent operations:**
+**Limit concurrent operations:** Reduce the number of simultaneous operations to decrease memory pressure.
 ```yaml
 # Reduce concurrent OCR jobs
 CONCURRENT_OCR_JOBS: 2
@@ -388,7 +388,7 @@ DATABASE_MAX_CONNECTIONS: 20
 BATCH_SIZE: 50
 ```
 
-2. **Configure memory limits:**
+**Configure memory limits:** Set explicit memory limits to prevent the application from consuming excessive resources.
 ```bash
 # Docker memory limit
 docker run -m 2g readur:latest
@@ -417,7 +417,7 @@ grep -i "size" /etc/nginx/nginx.conf
 
 **Solutions:**
 
-1. **Insufficient disk space:**
+**Insufficient disk space:** Free up disk space or move the storage location to a disk with more capacity.
 ```bash
 # Clean up old files
 find /uploads/temp -type f -mtime +7 -delete
@@ -427,7 +427,7 @@ mv /uploads /mnt/large-disk/uploads
 ln -s /mnt/large-disk/uploads /uploads
 ```
 
-2. **Permission denied:**
+**Permission denied:** Ensure the application has the necessary permissions to read and write files.
 ```bash
 # Fix ownership
 sudo chown -R readur:readur /uploads
@@ -436,7 +436,7 @@ sudo chown -R readur:readur /uploads
 sudo chmod -R 755 /uploads
 ```
 
-3. **File size limit exceeded:**
+**File size limit exceeded:** Increase the maximum file size limits in your web server or application configuration.
 ```nginx
 # nginx.conf
 client_max_body_size 500M;
@@ -461,7 +461,7 @@ aws s3 cp test.txt s3://readur-bucket/test.txt
 
 **Solutions:**
 
-1. **Authentication errors:**
+**Authentication errors:** Verify and update your S3 credentials or IAM role configuration.
 ```bash
 # Update credentials
 export AWS_ACCESS_KEY_ID="your_key"
@@ -471,7 +471,7 @@ export AWS_SECRET_ACCESS_KEY="your_secret"
 aws configure set role_arn arn:aws:iam::123456789:role/ReadurRole
 ```
 
-2. **Network issues:**
+**Network issues:** Troubleshoot network connectivity problems that prevent S3 access.
 ```bash
 # Test connectivity
 curl -I https://s3.amazonaws.com
@@ -498,7 +498,7 @@ cargo run --bin test_auth
 
 **Solutions:**
 
-1. **JWT secret mismatch:**
+**JWT secret mismatch:** Ensure all application instances use the same JWT secret for token validation.
 ```bash
 # Ensure consistent secret across instances
 export JWT_SECRET="same-secret-all-instances"
@@ -507,7 +507,7 @@ export JWT_SECRET="same-secret-all-instances"
 docker-compose restart
 ```
 
-2. **Password reset:**
+**Password reset:** Reset user passwords when authentication issues prevent normal login.
 ```bash
 # Generate new password hash
 cargo run --bin reset_password --username admin
@@ -524,7 +524,7 @@ EOF
 
 **Solutions:**
 
-1. **Verify OIDC configuration:**
+**Verify OIDC configuration:** Check that your OIDC provider settings are correctly configured and accessible.
 ```bash
 # Test OIDC endpoint
 curl https://auth.example.com/.well-known/openid-configuration
@@ -533,7 +533,7 @@ curl https://auth.example.com/.well-known/openid-configuration
 echo $OIDC_REDIRECT_URI  # Must match exactly in provider
 ```
 
-2. **Certificate issues:**
+**Certificate issues:** Resolve SSL/TLS certificate problems that prevent OIDC authentication.
 ```bash
 # Trust self-signed certificates
 export NODE_TLS_REJECT_UNAUTHORIZED=0
@@ -558,7 +558,7 @@ ws.onmessage = (e) => console.log('Message:', e.data);
 
 **Solutions:**
 
-1. **Proxy configuration:**
+**Proxy configuration:** Configure your reverse proxy to properly handle WebSocket connections.
 ```nginx
 # nginx.conf
 location /ws {
@@ -570,7 +570,7 @@ location /ws {
 }
 ```
 
-2. **Firewall rules:**
+**Firewall rules:** Ensure firewall settings allow WebSocket connections on the required ports.
 ```bash
 # Allow WebSocket port
 sudo ufw allow 8080/tcp

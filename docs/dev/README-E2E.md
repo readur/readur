@@ -29,7 +29,7 @@ The E2E test suite covers:
    npx playwright install
    ```
 
-2. **Set up test database**:
+**Set up test database:** Create a dedicated database for E2E testing to avoid conflicts with development data.
    ```bash
    # Create test database
    createdb readur_e2e_test
@@ -51,7 +51,7 @@ Use the provided script for automated setup:
 #### Manual Setup
 If you prefer manual control:
 
-1. **Start backend server**:
+**Start backend server:** Launch the backend configured for E2E testing on a different port.
    ```bash
    DATABASE_URL="postgresql://postgres:postgres@localhost:5432/readur_e2e_test" \
    TEST_MODE=true \
@@ -59,14 +59,14 @@ If you prefer manual control:
    cargo run --release
    ```
 
-2. **Start frontend dev server**:
+**Start frontend dev server:** Launch the frontend development server configured to connect to the test backend.
    ```bash
    cd frontend
    VITE_API_BASE_URL="http://localhost:8001" \
    npm run dev -- --port 5174
    ```
 
-3. **Run tests**:
+**Run tests:** Execute the end-to-end test suite against the running application.
    ```bash
    cd frontend
    npm run test:e2e

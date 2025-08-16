@@ -381,7 +381,7 @@ readur --show-config
 
 Common validation errors:
 
-1. **Invalid database URL**
+**Invalid database URL:** The database connection string format is incorrect or malformed.
    ```
    Error: Invalid DATABASE_URL format
    Expected: postgresql://user:pass@host:port/database
@@ -401,7 +401,7 @@ Common validation errors:
 
 ### Security
 
-1. **Never commit secrets**
+**Never commit secrets:** Always use environment variables or secret management systems to protect sensitive information.
    ```bash
    # Use environment variables
    JWT_SECRET=${JWT_SECRET}
@@ -410,13 +410,13 @@ Common validation errors:
    JWT_SECRET=$(vault kv get -field=jwt_secret secret/readur)
    ```
 
-2. **Use strong secrets**
+**Use strong secrets:** Generate cryptographically secure secrets with sufficient entropy.
    ```bash
    # Generate secure secrets
    openssl rand -hex 32
    ```
 
-3. **Rotate secrets regularly**
+**Rotate secrets regularly:** Implement a schedule for rotating sensitive credentials.
    ```bash
    # Quarterly rotation
    0 0 1 */3 * /scripts/rotate-secrets.sh
@@ -424,19 +424,19 @@ Common validation errors:
 
 ### Performance
 
-1. **Tune database connections**
+**Tune database connections:** Configure the optimal number of database connections based on your system's resources.
    ```bash
    # Formula: connections = (worker_threads * 2) + management_connections
    DATABASE_MAX_CONNECTIONS=$(($(nproc) * 2 + 5))
    ```
 
-2. **Optimize OCR workers**
+**Optimize OCR workers:** Set the appropriate number of concurrent OCR workers to balance performance and resource usage.
    ```bash
    # Formula: ocr_workers = cpu_cores / 2
    CONCURRENT_OCR_JOBS=$(($(nproc) / 2))
    ```
 
-3. **Configure caching**
+**Configure caching:** Set up appropriate cache sizes to improve response times while managing memory usage.
    ```bash
    # Cache size based on available memory
    CACHE_SIZE_MB=$(($(free -m | awk 'NR==2{print $7}') / 4))
@@ -444,13 +444,13 @@ Common validation errors:
 
 ### Monitoring
 
-1. **Enable metrics in production**
+**Enable metrics in production:** Turn on metrics collection to monitor system performance and health.
    ```bash
    METRICS_ENABLED=true
    PROMETHEUS_ENABLED=true
    ```
 
-2. **Set appropriate log levels**
+**Set appropriate log levels:** Configure logging verbosity based on your environment and debugging needs.
    ```bash
    # Production
    LOG_LEVEL=warn
@@ -459,7 +459,7 @@ Common validation errors:
    LOG_LEVEL=debug
    ```
 
-3. **Configure alerts**
+**Configure alerts:** Set up alerting to be notified of critical system events.
    ```bash
    WEBHOOK_URL=https://alerts.example.com/readur
    ```

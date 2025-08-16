@@ -223,6 +223,7 @@ nav:
   - Using Readur:
     - Getting Started: guide/overview.md
     - Complete Guide: user-guide.md
+    - Gallery: gallery.md
     - Documents & OCR:
       - file-upload-guide.md
       - multi-language-ocr-guide.md
