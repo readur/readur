@@ -89,22 +89,20 @@ jobs:
       - name: Deploy to Cloudflare Pages
         id: deploy
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         uses: cloudflare/wrangler-action@v3
         with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy site --project-name=readur-docs --branch=${{ github.ref_name }}
       
       # Deploy preview for PRs
       - name: Deploy Preview to Cloudflare Pages
         id: preview-deployment
         if: github.event_name == 'pull_request'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         uses: cloudflare/wrangler-action@v3
         with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy site --project-name=readur-docs --branch=pr-${{ github.event.pull_request.number }}
       
       # Post deployment URL as PR comment
