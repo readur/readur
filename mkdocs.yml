@@ -191,60 +191,80 @@ extra:
 nav:
   - Home: index.md
   
-  - Getting Started:
-    - Installation Guide: getting-started/installation.md
-    - Quick Start (5 min): getting-started/quickstart.md
-    - Configuration: getting-started/configuration.md
+  - Quick Start:
+    - Self-Hosting: quickstart/self-hosting.md
+    - Docker Setup: quickstart/docker.md
+    - Development: quickstart/development.md
     
-  - User Guide:
-    - Overview: guide/overview.md
+  - Self-Hosting:
+    - Overview: self-hosting/index.md
+    - Installation:
+      - getting-started/installation.md
+      - deployment.md
+    - Configuration:
+      - getting-started/configuration.md
+      - configuration-reference.md
+    - Storage Setup:
+      - s3-storage-guide.md
+      - WATCH_FOLDER.md
+      - per-user-watch-directories.md
+    - Authentication:
+      - oidc-setup.md
+      - user-management-guide.md
+    - Networking:
+      - REVERSE_PROXY.md
+    - Backup & Updates:
+      - backup-recovery.md
+      - migration-guide.md
+      - administration/storage-migration.md
+    - Security:
+      - security-guide.md
+    
+  - Using Readur:
+    - Getting Started: guide/overview.md
     - Complete Guide: user-guide.md
-    - Labels & Organization: labels-and-organization.md
-    
-  - Features:
-    - Advanced Search: advanced-search.md
+    - Gallery: gallery.md
+    - Documents & OCR:
+      - file-upload-guide.md
+      - multi-language-ocr-guide.md
+    - Search & Organization:
+      - advanced-search.md
+      - labels-and-organization.md
     - Sources & Sync: sources-guide.md
-    - File Upload: file-upload-guide.md
-    - Multi-Language OCR: multi-language-ocr-guide.md
-    - Analytics Dashboard: analytics-dashboard-guide.md
+    - Analytics: analytics-dashboard-guide.md
     - Notifications: notifications-guide.md
     
   - Administration:
-    - Deployment: deployment.md
-    - User Management: user-management-guide.md
-    - OIDC/SSO Setup: oidc-setup.md
     - Health Monitoring: health-monitoring-guide.md
-    - Storage Migration: administration/storage-migration.md
+    - Performance Tuning: performance-tuning.md
     - CLI Tools: administration/cli-tools.md
+    - Troubleshooting:
+      - troubleshooting.md
+      - s3-troubleshooting.md
+      - administration/migration-troubleshooting.md
     
-  - Storage & Backend:
-    - S3 Storage Guide: s3-storage-guide.md
-    - S3 Troubleshooting: s3-troubleshooting.md
-    - Watch Folders: WATCH_FOLDER.md
-    - Per-User Directories: per-user-watch-directories.md
-    - Migration Guide: migration-guide.md
-    
-  - API & Integration:
+  - API & Integrations:
     - API Reference: api-reference.md
+    - Integration Guide: integrations.md
     - Swagger UI: swagger-ui-guide.md
-    - Reverse Proxy: REVERSE_PROXY.md
-    - Configuration Reference: configuration-reference.md
+    
+  - Reference:
+    - Architecture: architecture.md
+    - Configuration: configuration-reference.md
+    - CLI Reference: administration/cli-tools.md
     
   - Development:
-    - Developer Guide: dev/README.md
-    - Architecture: dev/architecture.md
+    - Contributing: dev/README.md
     - Development Setup: dev/development.md
-    - Testing: dev/TESTING.md
-    - E2E Testing: dev/README-E2E.md
-    - Test Infrastructure: dev/test-infrastructure.md
-    
-  - Optimization:
-    - OCR Optimization: dev/OCR_OPTIMIZATION_GUIDE.md
-    - Queue Architecture: dev/QUEUE_IMPROVEMENTS.md
-    - Database Guardrails: dev/DATABASE_GUARDRAILS.md
-    - Error System: dev/ERROR_SYSTEM.md
-    - Label Testing: dev/LABEL_TESTING.md
-    
-  - Troubleshooting:
-    - Migration Issues: administration/migration-troubleshooting.md
-    - S3 Issues: s3-troubleshooting.md
+    - Testing:
+      - dev/TESTING.md
+      - dev/README-E2E.md
+      - dev/test-infrastructure.md
+      - dev/LABEL_TESTING.md
+    - Architecture:
+      - dev/architecture.md
+      - dev/QUEUE_IMPROVEMENTS.md
+      - dev/DATABASE_GUARDRAILS.md
+    - Optimization:
+      - dev/OCR_OPTIMIZATION_GUIDE.md
+      - dev/ERROR_SYSTEM.md

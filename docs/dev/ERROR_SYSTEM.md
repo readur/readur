@@ -411,7 +411,7 @@ When updating existing endpoints:
    async fn my_handler() -> Result<Json<Response>, UserError>
    ```
 
-3. **Replace generic error mapping**:
+**Replace generic error mapping:** Replace basic HTTP status codes with structured error responses.
    ```rust
    // Before
    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -420,7 +420,7 @@ When updating existing endpoints:
    .map_err(|e| UserError::internal_server_error(format!("Operation failed: {}", e)))?
    ```
 
-4. **Update tests** to expect new error format:
+**Update tests:** Modify existing tests to expect the new structured error format instead of simple status codes.
    ```rust
    // Before
    assert_eq!(response.status(), StatusCode::CONFLICT);

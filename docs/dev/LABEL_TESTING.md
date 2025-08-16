@@ -343,7 +343,7 @@ Before merging label system changes:
 
 ## 🚀 Getting Started
 
-1. **Setup Development Environment**
+**Setup Development Environment:** Install all required tools and dependencies for label system development.
    ```bash
    # Install Rust and cargo
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -355,7 +355,7 @@ Before merging label system changes:
    # (Follow Docker installation instructions)
    ```
 
-2. **Run Initial Tests**
+**Run Initial Tests:** Verify that the development environment is working correctly by running the test suite.
    ```bash
    # Clone and setup project
    git clone <repository>
@@ -365,7 +365,7 @@ Before merging label system changes:
    ./run_label_tests.sh
    ```
 
-3. **Development Workflow**
+**Development Workflow:** Follow this workflow when making changes to the label system.
    ```bash
    # Make changes to label system
    # Run quick tests

@@ -81,7 +81,7 @@ aws s3api get-bucket-location --bucket your-bucket-name
 
 **Solutions:**
 
-1. **Incorrect credentials:**
+**Incorrect credentials:** Verify that your AWS credentials are properly configured and accessible.
    ```bash
    # Verify environment variables
    echo $S3_ACCESS_KEY_ID
@@ -93,7 +93,7 @@ aws s3api get-bucket-location --bucket your-bucket-name
    aws s3 ls
    ```
 
-2. **Wrong region:**
+**Wrong region:** Ensure the S3 region configuration matches your bucket's actual region.
    ```bash
    # Find correct region
    aws s3api get-bucket-location --bucket your-bucket-name
@@ -102,7 +102,7 @@ aws s3api get-bucket-location --bucket your-bucket-name
    export S3_REGION=correct-region
    ```
 
-3. **Network issues:**
+**Network issues:** Test network connectivity to S3 endpoints and resolve any connection problems.
    ```bash
    # Test network connectivity
    curl -I https://s3.amazonaws.com
@@ -136,7 +136,7 @@ aws s3api delete-object --bucket your-bucket --key test.txt
 
 **Solutions:**
 
-1. **Update IAM policy:**
+**Update IAM policy:** Ensure your IAM user or role has all the necessary permissions for S3 operations.
    ```json
    {
      "Version": "2012-10-17",
@@ -205,19 +205,19 @@ aws s3 cp /tmp/large-test s3://your-bucket-name/test-large
 
 **Solutions:**
 
-1. **Increase timeouts:**
+**Increase timeouts:** Configure longer timeout values to accommodate large file uploads.
    ```rust
    // In code configuration
    const UPLOAD_TIMEOUT: Duration = Duration::from_secs(3600);
    ```
 
-2. **Optimize chunk size:**
+**Optimize chunk size:** Adjust multipart upload chunk sizes based on your network conditions.
    ```bash
    # For slow connections, use smaller chunks
    export S3_MULTIPART_CHUNK_SIZE=8388608  # 8MB chunks
    ```
 
-3. **Resume failed uploads:**
+**Resume failed uploads:** Clean up incomplete multipart uploads and retry failed transfers.
    ```bash
    # List incomplete multipart uploads
    aws s3api list-multipart-uploads --bucket your-bucket-name
@@ -250,13 +250,13 @@ aws s3 cp /tmp/large-test s3://your-bucket-name/test-large
    S3_FORCE_PATH_STYLE=true
    ```
 
-2. **Wasabi configuration:**
+**Wasabi configuration:** Configure the correct endpoint and region for Wasabi storage.
    ```bash
    S3_ENDPOINT=https://s3.wasabisys.com
    S3_REGION=us-east-1  # Or your Wasabi region
    ```
 
-3. **SSL certificate issues:**
+**SSL certificate issues:** Handle SSL certificate validation problems with self-signed or custom certificates.
    ```bash
    # Disable SSL verification (development only!)
    export AWS_CA_BUNDLE=/path/to/custom-ca.crt
@@ -288,7 +288,7 @@ find ./uploads -type f -name "*.pdf" | head -10
 
 **Solutions:**
 
-1. **Resume from last successful point:**
+**Resume from last successful point:** Continue migration from where it left off to avoid re-processing completed files.
    ```bash
    # Get last successful migration
    LAST_ID=$(cat migration_state.json | jq -r '.completed_migrations[-1].document_id')
@@ -297,7 +297,7 @@ find ./uploads -type f -name "*.pdf" | head -10
    cargo run --bin migrate_to_s3 --features s3 -- --resume-from $LAST_ID
    ```
 
-2. **Fix missing local files:**
+**Fix missing local files:** Identify and handle documents that reference missing local files.
    ```sql
    -- Find documents with missing files
    SELECT id, filename, file_path 
@@ -308,7 +308,7 @@ find ./uploads -type f -name "*.pdf" | head -10
    );
    ```
 
-3. **Rollback failed migration:**
+**Rollback failed migration:** Safely revert a partially completed migration to restore the previous state.
    ```bash
    # Automatic rollback
    cargo run --bin migrate_to_s3 --features s3 -- --rollback
@@ -344,7 +344,7 @@ aws cloudwatch get-metric-statistics \
 
 **Solutions:**
 
-1. **Enable S3 Transfer Acceleration:**
+**Enable S3 Transfer Acceleration:** Use AWS Transfer Acceleration to improve upload and download speeds globally.
    ```bash
    aws s3api put-bucket-accelerate-configuration \
      --bucket your-bucket-name \
@@ -354,7 +354,7 @@ aws cloudwatch get-metric-statistics \
    S3_ENDPOINT=https://your-bucket.s3-accelerate.amazonaws.com
    ```
 
-2. **Implement caching:**
+**Implement caching:** Add caching layers to reduce repeated S3 requests and improve response times.
    ```nginx
    # Nginx caching configuration
    proxy_cache_path /var/cache/nginx/s3 levels=1:2 keys_zone=s3_cache:10m max_size=1g;
@@ -366,7 +366,7 @@ aws cloudwatch get-metric-statistics \
    }
    ```
 
-3. **Use CloudFront CDN:**
+**Use CloudFront CDN:** Deploy a CDN to cache frequently accessed documents closer to users.
    ```bash
    # Create CloudFront distribution
    aws cloudfront create-distribution \

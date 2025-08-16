@@ -47,88 +47,65 @@ Login with default credentials:
 
 #### Via Web Interface
 
-1. Click the **Upload** button in the top navigation
-2. Drag and drop a PDF or image file
-3. Click **Upload** to start processing
-4. Wait for the OCR indicator to turn green
+Now you can test Readur's core functionality by uploading a document. Click the **Upload** button in the top navigation, then drag and drop a PDF or image file onto the upload area. After clicking **Upload** to start processing, you'll see the document appear in your document list with a status indicator showing OCR progress. Wait for the indicator to turn green, which means text extraction is complete and the document is searchable.
 
 #### Via API (Optional)
 
+If you prefer working with APIs or want to automate document uploads, you can use Readur's REST API. First, authenticate to get an access token:
+
 ```bash
-# Get authentication token
+# Authenticate and get a session token
 TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"readur2024"}' | jq -r .token)
 
-# Upload a document
+# Upload a document using the API
 curl -X POST http://localhost:8000/api/documents/upload \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@your-document.pdf"
 ```
 
+This approach is particularly useful for integrating Readur with other systems or creating automated document processing workflows.
+
 ### Step 5: Search Your Documents
 
-Once OCR processing completes (green indicator):
-
-1. Use the **Search** bar at the top
-2. Enter any text from your document
-3. Press Enter to see results
-4. Click on a result to view the document
+Once the OCR indicator shows green (processing complete), you can test Readur's search capabilities. Use the search bar at the top of any page and enter text you know exists in your uploaded document. Press Enter to see search results, which will show document snippets containing your search terms. Click on any result to view the full document with your search terms highlighted.
 
 ## Common First Tasks
 
 ### Change Admin Password
 
-**Important**: Do this immediately after installation.
-
-1. Navigate to **Settings** → **User Management**
-2. Click on the admin user
-3. Enter a new secure password
-4. Click **Save**
+Security should be your first priority after getting Readur running. The default admin password is publicly documented, so change it immediately to protect your installation. Navigate to **Settings** → **User Management**, click on the admin user entry, enter a strong new password, and save your changes. This single step prevents unauthorized access to your document collection.
 
 ### Add Your First Source
 
-Automatically import documents from external storage:
+While manual uploads work fine for testing, most users benefit from setting up automatic document imports. Go to **Settings** → **Sources** and click **Add Source** to configure external storage integration. Choose Local Folder if you want to monitor directories on your server, WebDAV for cloud services like Nextcloud or ownCloud, or S3 for cloud object storage.
 
-1. Go to **Settings** → **Sources**
-2. Click **Add Source**
-3. Choose your source type:
-   - **Local Folder**: For directories on the server
-   - **WebDAV**: For Nextcloud/ownCloud
-   - **S3**: For cloud storage
-4. Configure connection details
-5. Test and save
+Each source type requires different connection details - local folders need directory paths, WebDAV sources need server URLs and credentials, while S3 sources require bucket names and access keys. Always test your connection before saving to ensure Readur can access your storage successfully.
 
 ### Create Document Labels
 
-Organize your documents with labels:
+Labels help organize your growing document collection by letting you assign categories and tags. Navigate to **Settings** → **Labels**, click **Create Label**, enter a descriptive name, and choose a color for visual identification. Save the label to make it available throughout Readur.
 
-1. Navigate to **Settings** → **Labels**
-2. Click **Create Label**
-3. Enter a name and choose a color
-4. Save the label
-5. Apply to documents via:
-   - Document details page
-   - Bulk selection
-   - During upload
+You can apply labels in several ways: from individual document detail pages when reviewing content, through bulk selection when organizing multiple documents at once, or during the upload process to categorize documents immediately. Consistent labeling makes finding documents much easier as your collection grows.
 
 ### Set Up Watch Folder
 
-Monitor a directory for automatic document import:
+Watch folders provide automatic document import when files are dropped into specific directories. Create a watch directory and configure Docker to mount it into your Readur container:
 
 ```bash
-# Create a watch directory
+# Create a local watch directory
 mkdir -p ./data/watch
 
-# Add to docker-compose.yml volumes:
+# Add this volume mapping to your docker-compose.yml:
 volumes:
   - ./data/watch:/app/watch
 
-# Restart Readur
+# Restart Readur to apply the new volume
 docker-compose restart readur
 ```
 
-Drop files into `./data/watch` - they'll be automatically imported.
+Once configured, any files dropped into `./data/watch` will be automatically imported and processed. This setup is perfect for scanner integration or automated document workflows.
 
 ## Essential Keyboard Shortcuts
 
@@ -144,72 +121,88 @@ Drop files into `./data/watch` - they'll be automatically imported.
 
 ### Legal Document Management
 
+Here's how a law firm might configure Readur for contract and invoice management:
+
 ```bash
-# 1. Create label structure
+# Create an organized label structure
 Labels: "Contracts", "Invoices", "Legal", "2024"
 
-# 2. Set up source folder
+# Connect to existing document storage
 Source: /shared/legal-docs (WebDAV)
 Sync: Every 30 minutes
 
-# 3. Configure OCR
+# Optimize OCR for legal documents
 Language: English
 Quality: High
 Concurrent Jobs: 4
 
-# 4. Upload initial batch
+# Process existing documents
 Select all PDFs → Upload → Apply "2024" label
 
-# 5. Create saved search
+# Create smart collections for quick access
 Search: label:Contracts AND date:2024
 Save as: "2024 Contracts"
 ```
 
+This setup automatically imports new documents from shared storage, processes them with high-quality OCR, and organizes them with consistent labeling.
+
 ### Research Paper Archive
 
+Academic researchers can configure Readur to handle multilingual papers and complex search needs:
+
 ```bash
-# 1. Configure for academic documents
+# Configure for multilingual academic content
 OCR Language: Multiple (eng+deu+fra)
 Max File Size: 100MB
 
-# 2. Create categories
+# Create research-focused categories
 Labels: "Published", "Draft", "Review", "Citations"
 
-# 3. Set up automated import
+# Set up automated import from research directories
 Watch Folder: /research/papers
 Process: Auto-OCR and label by folder
 
-# 4. Advanced search setup
+# Enable advanced search for academic work
 Boolean search: enabled
 Fuzzy matching: 2 (for OCR errors)
 ```
 
+This configuration handles papers in multiple languages, supports large files common in academic work, and provides sophisticated search capabilities for research workflows.
+
 ## Performance Tips
 
-### For Faster OCR Processing
+### Optimizing OCR Processing Speed
+
+If you have adequate CPU resources, increase concurrent processing to handle multiple documents simultaneously:
 
 ```bash
-# Increase concurrent jobs (if you have CPU cores)
+# Increase concurrent jobs to match your CPU cores
 CONCURRENT_OCR_JOBS=8
 
-# Optimize for your document types
-OCR_LANGUAGE=eng  # Single language is faster
-ENABLE_PREPROCESSING=false  # Skip if documents are clean
+# Optimize for your specific document types
+OCR_LANGUAGE=eng  # Single language is faster than auto-detection
+ENABLE_PREPROCESSING=false  # Skip for clean, well-scanned documents
 ```
 
-### For Large Document Collections
+These settings work best when your server has multiple CPU cores and you're processing documents with consistent quality and language.
+
+### Scaling for Large Document Collections
+
+For organizations with thousands of documents, cloud storage and increased resources improve performance:
 
 ```bash
-# Use S3 storage instead of local
+# Use cloud storage for unlimited capacity
 S3_ENABLED=true
 S3_BUCKET_NAME=readur-docs
 
-# Increase memory limits
+# Allocate more memory for large processing batches
 MEMORY_LIMIT_MB=4096
 
-# Enable compression
+# Enable compression to reduce storage costs
 ENABLE_COMPRESSION=true
 ```
+
+S3 storage eliminates local disk space constraints, while increased memory limits allow processing larger batches of documents efficiently.
 
 ## Troubleshooting Quick Fixes
 
