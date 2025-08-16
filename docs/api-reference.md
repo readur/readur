@@ -8,6 +8,7 @@ Readur provides a comprehensive REST API for integrating with external systems a
 - [Authentication](#authentication)
 - [Error Handling](#error-handling)
 - [Rate Limiting](#rate-limiting)
+- [Pagination](#pagination)
 - [Endpoints](#endpoints)
   - [Authentication](#authentication-endpoints)
   - [Documents](#document-endpoints)
@@ -17,26 +18,32 @@ Readur provides a comprehensive REST API for integrating with external systems a
   - [Sources](#sources-endpoints)
   - [Labels](#labels-endpoints)
   - [Users](#user-endpoints)
+  - [Notifications](#notification-endpoints)
+  - [Metrics](#metrics-endpoints)
 - [WebSocket API](#websocket-api)
 - [Examples](#examples)
 
 ## Base URL
 
 ```
-http://localhost:8000/api
+http://localhost:8080/api
 ```
 
 For production deployments, replace with your configured domain and ensure HTTPS is used.
 
 ## Authentication
 
-Readur uses JWT (JSON Web Token) authentication. Include the token in the Authorization header:
+Readur supports multiple authentication methods:
+
+### JWT Authentication
+
+Include the token in the Authorization header:
 
 ```
 Authorization: Bearer <jwt_token>
 ```
 
-### Obtaining a Token
+#### Obtaining a Token
 
 ```bash
 POST /api/auth/login
@@ -48,18 +55,36 @@ Content-Type: application/json
 }
 ```
 
-Response:
+**Response:**
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
-    "id": 1,
+    "id": "550e8400-e29b-41d4-a716-446655440000",
     "username": "admin",
     "email": "admin@example.com",
     "role": "admin"
-  }
+  },
+  "expires_at": "2025-01-16T12:00:00Z"
 }
 ```
+
+#### Refresh Token
+
+```bash
+POST /api/auth/refresh
+Authorization: Bearer <expired_token>
+```
+
+### OIDC Authentication
+
+For OIDC/SSO authentication:
+
+```bash
+GET /api/auth/oidc/login
+```
+
+This will redirect to your configured OIDC provider. After successful authentication, the callback URL will receive the token.
 
 ## Error Handling
 
@@ -68,354 +93,369 @@ All API errors follow a consistent format:
 ```json
 {
   "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid request parameters",
+    "code": "DOCUMENT_NOT_FOUND",
+    "message": "Document with ID 'abc123' not found",
     "details": {
-      "field": "email",
-      "reason": "Invalid email format"
-    }
+      "document_id": "abc123",
+      "user_id": "user456"
+    },
+    "timestamp": "2025-01-15T10:30:45Z",
+    "request_id": "req_xyz789"
   }
 }
 ```
 
-Common HTTP status codes:
-- `200` - Success
-- `201` - Created
-- `400` - Bad Request
-- `401` - Unauthorized
-- `403` - Forbidden
-- `404` - Not Found
-- `422` - Validation Error
-- `500` - Internal Server Error
+### Error Codes
+
+| Code | HTTP Status | Description |
+|------|------------|-------------|
+| `UNAUTHORIZED` | 401 | Invalid or missing authentication |
+| `FORBIDDEN` | 403 | Insufficient permissions |
+| `NOT_FOUND` | 404 | Resource not found |
+| `VALIDATION_ERROR` | 400 | Invalid request parameters |
+| `DUPLICATE_RESOURCE` | 409 | Resource already exists |
+| `RATE_LIMITED` | 429 | Too many requests |
+| `INTERNAL_ERROR` | 500 | Server error |
+| `SERVICE_UNAVAILABLE` | 503 | Service temporarily unavailable |
 
 ## Rate Limiting
 
-API requests are rate-limited to prevent abuse:
-- Authenticated users: 1000 requests per hour
-- Unauthenticated users: 100 requests per hour
+API requests are rate limited per user:
 
-Rate limit headers:
+- **Default limit**: 100 requests per minute
+- **Burst limit**: 20 requests
+- **Upload endpoints**: 10 requests per minute
+
+Rate limit headers are included in responses:
+
 ```
-X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 999
-X-RateLimit-Reset: 1640995200
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1642248360
+```
+
+## Pagination
+
+List endpoints support pagination using query parameters:
+
+```bash
+GET /api/documents?page=1&per_page=20&sort=created_at&order=desc
+```
+
+**Pagination Parameters:**
+- `page`: Page number (default: 1)
+- `per_page`: Items per page (default: 20, max: 100)
+- `sort`: Sort field
+- `order`: Sort order (`asc` or `desc`)
+
+**Response includes pagination metadata:**
+```json
+{
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 150,
+    "total_pages": 8,
+    "has_next": true,
+    "has_prev": false
+  }
+}
 ```
 
 ## Endpoints
 
 ### Authentication Endpoints
 
-#### Register New User
-
-```bash
-POST /api/auth/register
-Content-Type: application/json
-
-{
-  "username": "john_doe",
-  "email": "john@example.com",
-  "password": "secure_password"
-}
-```
-
 #### Login
 
-```bash
+```http
 POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "john_doe",
-  "password": "secure_password"
-}
 ```
 
-#### Get Current User
-
-```bash
-GET /api/auth/me
-Authorization: Bearer <jwt_token>
-```
-
-#### OIDC Login (Redirect)
-
-```bash
-GET /api/auth/oidc/login
-```
-
-Redirects to the configured OIDC provider for authentication.
-
-#### OIDC Callback
-
-```bash
-GET /api/auth/oidc/callback?code=<auth_code>&state=<state>
-```
-
-Handles the callback from the OIDC provider and issues a JWT token.
-
-#### Logout
-
-```bash
-POST /api/auth/logout
-Authorization: Bearer <jwt_token>
-```
-
-### Document Endpoints
-
-#### Upload Document
-
-```bash
-POST /api/documents
-Authorization: Bearer <jwt_token>
-Content-Type: multipart/form-data
-
-file: <binary_file_data>
-tags: ["invoice", "2024"]  # Optional
-```
-
-Response:
+**Request Body:**
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "filename": "invoice_2024.pdf",
-  "mime_type": "application/pdf",
-  "size": 1048576,
-  "uploaded_at": "2024-01-01T00:00:00Z",
-  "ocr_status": "pending"
+  "username": "string",
+  "password": "string"
 }
 ```
 
-#### List Documents
-
-```bash
-GET /api/documents?limit=50&offset=0&sort=-uploaded_at
-Authorization: Bearer <jwt_token>
-```
-
-Query parameters:
-- `limit` - Number of results (default: 50, max: 100)
-- `offset` - Pagination offset
-- `sort` - Sort field (prefix with `-` for descending)
-- `mime_type` - Filter by MIME type
-- `ocr_status` - Filter by OCR status
-- `tag` - Filter by tag
-
-#### Get Document Details
-
-```bash
-GET /api/documents/{id}
-Authorization: Bearer <jwt_token>
-```
-
-#### Download Document
-
-```bash
-GET /api/documents/{id}/download
-Authorization: Bearer <jwt_token>
-```
-
-#### Delete Document
-
-```bash
-DELETE /api/documents/{id}
-Authorization: Bearer <jwt_token>
-```
-
-#### Update Document
-
-```bash
-PATCH /api/documents/{id}
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "tags": ["invoice", "paid", "2024"]
-}
-```
-
-#### Get Document Debug Information
-
-```bash
-GET /api/documents/{id}/debug
-Authorization: Bearer <jwt_token>
-```
-
-Response:
+**Response:** `200 OK`
 ```json
 {
-  "document_id": "550e8400-e29b-41d4-a716-446655440000",
-  "processing_pipeline": {
-    "upload": "completed",
-    "ocr_queue": "completed", 
-    "ocr_processing": "completed",
-    "validation": "completed"
-  },
-  "ocr_details": {
-    "confidence": 89.5,
-    "word_count": 342,
-    "processing_time": 4.2
-  },
-  "file_info": {
-    "mime_type": "application/pdf",
-    "size": 1048576,
-    "pages": 3
+  "token": "string",
+  "user": {
+    "id": "uuid",
+    "username": "string",
+    "email": "string",
+    "role": "admin|editor|viewer"
   }
 }
 ```
 
+#### Register
+
+```http
+POST /api/auth/register
+```
+
+**Request Body:**
+```json
+{
+  "username": "string",
+  "email": "string",
+  "password": "string"
+}
+```
+
+**Response:** `201 Created`
+
+#### Logout
+
+```http
+POST /api/auth/logout
+Authorization: Bearer <token>
+```
+
+**Response:** `200 OK`
+
+### Document Endpoints
+
+#### List Documents
+
+```http
+GET /api/documents
+```
+
+**Query Parameters:**
+- `page`: Page number
+- `per_page`: Items per page
+- `status`: Filter by status (`pending`, `processing`, `completed`, `failed`)
+- `source_id`: Filter by source
+- `label_ids`: Comma-separated label IDs
+- `date_from`: Start date (ISO 8601)
+- `date_to`: End date (ISO 8601)
+
+**Response:** `200 OK`
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "title": "Document Title",
+      "filename": "document.pdf",
+      "content": "Extracted text content...",
+      "status": "completed",
+      "mime_type": "application/pdf",
+      "size": 1048576,
+      "created_at": "2025-01-15T10:00:00Z",
+      "updated_at": "2025-01-15T10:05:00Z",
+      "ocr_confidence": 0.95,
+      "labels": ["label1", "label2"],
+      "metadata": {
+        "author": "John Doe",
+        "pages": 10
+      }
+    }
+  ],
+  "pagination": {...}
+}
+```
+
+#### Get Document
+
+```http
+GET /api/documents/{id}
+```
+
+**Response:** `200 OK`
+
+#### Upload Document
+
+```http
+POST /api/documents/upload
+Content-Type: multipart/form-data
+```
+
+**Request Body:**
+- `file`: File to upload (required)
+- `title`: Document title (optional)
+- `labels`: Comma-separated label IDs (optional)
+- `ocr_enabled`: Enable OCR (default: true)
+- `language`: OCR language code (default: "eng")
+
+**Response:** `201 Created`
+```json
+{
+  "id": "uuid",
+  "message": "Document uploaded successfully",
+  "ocr_queued": true
+}
+```
+
+#### Bulk Upload
+
+```http
+POST /api/documents/bulk-upload
+Content-Type: multipart/form-data
+```
+
+**Request Body:**
+- `files`: Multiple files
+- `default_labels`: Labels to apply to all files
+
+**Response:** `201 Created`
+```json
+{
+  "uploaded": 5,
+  "failed": 0,
+  "documents": [...]
+}
+```
+
+#### Update Document
+
+```http
+PUT /api/documents/{id}
+```
+
+**Request Body:**
+```json
+{
+  "title": "Updated Title",
+  "labels": ["label1", "label3"],
+  "metadata": {
+    "custom_field": "value"
+  }
+}
+```
+
+**Response:** `200 OK`
+
+#### Delete Document
+
+```http
+DELETE /api/documents/{id}
+```
+
+**Response:** `204 No Content`
+
+#### Download Document
+
+```http
+GET /api/documents/{id}/download
+```
+
+**Response:** `200 OK` with file attachment
+
 #### Get Document Thumbnail
 
-```bash
+```http
 GET /api/documents/{id}/thumbnail
-Authorization: Bearer <jwt_token>
 ```
 
-#### Get Document OCR Text
+**Query Parameters:**
+- `width`: Thumbnail width (default: 200)
+- `height`: Thumbnail height (default: 200)
 
-```bash
-GET /api/documents/{id}/ocr
-Authorization: Bearer <jwt_token>
+**Response:** `200 OK` with image
+
+#### Retry OCR
+
+```http
+POST /api/documents/{id}/retry-ocr
 ```
 
-#### Get Document Processed Image
-
-```bash
-GET /api/documents/{id}/processed-image
-Authorization: Bearer <jwt_token>
-```
-
-#### View Document in Browser
-
-```bash
-GET /api/documents/{id}/view
-Authorization: Bearer <jwt_token>
-```
-
-#### Get Failed Documents
-
-```bash
-GET /api/documents/failed?limit=50&offset=0
-Authorization: Bearer <jwt_token>
-```
-
-Query parameters:
-- `limit` - Number of results (default: 50)
-- `offset` - Pagination offset
-- `stage` - Filter by failure stage
-- `reason` - Filter by failure reason
-
-#### View Failed Document
-
-```bash
-GET /api/documents/failed/{id}/view
-Authorization: Bearer <jwt_token>
-```
-
-#### Get Duplicate Documents
-
-```bash
-GET /api/documents/duplicates?limit=50&offset=0
-Authorization: Bearer <jwt_token>
-```
-
-#### Delete Low Confidence Documents
-
-```bash
-POST /api/documents/delete-low-confidence
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
+**Request Body:**
+```json
 {
-  "confidence_threshold": 70.0,
-  "preview_only": false
+  "language": "eng+spa",
+  "priority": "high"
 }
 ```
 
-#### Delete Failed OCR Documents
-
-```bash
-POST /api/documents/delete-failed-ocr
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "preview_only": false
-}
-```
-
-#### Bulk Delete Documents
-
-```bash
-DELETE /api/documents
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "document_ids": ["550e8400-e29b-41d4-a716-446655440000", "..."]
-}
-```
+**Response:** `200 OK`
 
 ### Search Endpoints
 
 #### Search Documents
 
-```bash
-GET /api/search?query=invoice&limit=20
-Authorization: Bearer <jwt_token>
+```http
+GET /api/search
 ```
 
-Query parameters:
-- `query` - Search query (required)
-- `limit` - Number of results
-- `offset` - Pagination offset
-- `mime_types` - Comma-separated MIME types
-- `tags` - Comma-separated tags
-- `date_from` - Start date (ISO 8601)
-- `date_to` - End date (ISO 8601)
+**Query Parameters:**
+- `q`: Search query (required)
+- `page`: Page number
+- `per_page`: Items per page
+- `filters`: JSON-encoded filters
+- `highlight`: Enable highlighting (default: true)
+- `fuzzy`: Enable fuzzy search (default: false)
 
-Response:
+**Response:** `200 OK`
 ```json
 {
   "results": [
     {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "filename": "invoice_2024.pdf",
-      "snippet": "...invoice for services rendered in Q1 2024...",
+      "document_id": "uuid",
+      "title": "Document Title",
       "score": 0.95,
-      "highlights": ["invoice", "2024"]
+      "highlights": [
+        {
+          "field": "content",
+          "snippet": "...matched <mark>text</mark> here..."
+        }
+      ]
     }
   ],
   "total": 42,
-  "limit": 20,
-  "offset": 0
+  "facets": {
+    "mime_types": {
+      "application/pdf": 30,
+      "text/plain": 12
+    },
+    "labels": {
+      "important": 15,
+      "archive": 27
+    }
+  }
 }
 ```
 
 #### Advanced Search
 
-```bash
+```http
 POST /api/search/advanced
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+```
 
+**Request Body:**
+```json
 {
-  "query": "invoice",
+  "query": {
+    "must": [
+      {"field": "content", "value": "invoice", "type": "match"}
+    ],
+    "should": [
+      {"field": "title", "value": "2024", "type": "contains"}
+    ],
+    "must_not": [
+      {"field": "labels", "value": "draft", "type": "exact"}
+    ]
+  },
   "filters": {
-    "mime_types": ["application/pdf"],
-    "tags": ["unpaid"],
     "date_range": {
       "from": "2024-01-01",
       "to": "2024-12-31"
     },
-    "file_size": {
-      "min": 1024,
-      "max": 10485760
-    }
+    "mime_types": ["application/pdf"],
+    "min_confidence": 0.8
   },
-  "options": {
-    "fuzzy": true,
-    "snippet_length": 200
-  }
+  "sort": [
+    {"field": "created_at", "order": "desc"}
+  ],
+  "page": 1,
+  "per_page": 20
 }
 ```
 
@@ -423,103 +463,83 @@ Content-Type: application/json
 
 #### Get Queue Status
 
-```bash
-GET /api/queue/status
-Authorization: Bearer <jwt_token>
+```http
+GET /api/ocr/queue/status
 ```
 
-Response:
+**Response:** `200 OK`
 ```json
 {
   "pending": 15,
   "processing": 3,
-  "completed_today": 127,
-  "failed_today": 2,
-  "average_processing_time": 4.5
+  "completed_today": 142,
+  "failed": 2,
+  "average_processing_time": 5.2,
+  "estimated_completion": "2025-01-15T11:30:00Z"
 }
 ```
 
-#### Retry OCR Processing
+#### List Queue Items
 
-```bash
-POST /api/documents/{id}/ocr/retry
-Authorization: Bearer <jwt_token>
+```http
+GET /api/ocr/queue
 ```
 
-#### Get Failed OCR Jobs
+**Query Parameters:**
+- `status`: Filter by status
+- `priority`: Filter by priority
 
-```bash
-GET /api/queue/failed
-Authorization: Bearer <jwt_token>
+**Response:** `200 OK`
+
+#### Update Queue Priority
+
+```http
+PUT /api/ocr/queue/{id}/priority
 ```
 
-#### Get Queue Statistics
-
-```bash
-GET /api/queue/stats
-Authorization: Bearer <jwt_token>
-```
-
-Response:
+**Request Body:**
 ```json
 {
-  "pending_count": 15,
-  "processing_count": 3,
-  "failed_count": 2,
-  "completed_today": 127,
-  "average_processing_time_seconds": 4.5,
-  "queue_health": "healthy"
+  "priority": "high"
 }
 ```
 
-#### Requeue Failed Items
+#### Cancel OCR Job
 
-```bash
-POST /api/queue/requeue/failed
-Authorization: Bearer <jwt_token>
-```
-
-#### Enqueue Pending Documents
-
-```bash
-POST /api/queue/enqueue-pending
-Authorization: Bearer <jwt_token>
-```
-
-#### Pause OCR Processing
-
-```bash
-POST /api/queue/pause
-Authorization: Bearer <jwt_token>
-```
-
-#### Resume OCR Processing
-
-```bash
-POST /api/queue/resume
-Authorization: Bearer <jwt_token>
+```http
+DELETE /api/ocr/queue/{id}
 ```
 
 ### Settings Endpoints
 
 #### Get User Settings
 
-```bash
+```http
 GET /api/settings
-Authorization: Bearer <jwt_token>
 ```
 
-#### Update User Settings
-
-```bash
-PUT /api/settings
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
+**Response:** `200 OK`
+```json
 {
-  "ocr_language": "eng",
-  "search_results_per_page": 50,
-  "enable_notifications": true
+  "theme": "dark",
+  "language": "en",
+  "notifications_enabled": true,
+  "ocr_default_language": "eng",
+  "items_per_page": 20
+}
+```
+
+#### Update Settings
+
+```http
+PUT /api/settings
+```
+
+**Request Body:**
+```json
+{
+  "theme": "light",
+  "notifications_enabled": false
 }
 ```
 
@@ -527,512 +547,484 @@ Content-Type: application/json
 
 #### List Sources
 
-```bash
+```http
 GET /api/sources
-Authorization: Bearer <jwt_token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "sources": [
+    {
+      "id": "uuid",
+      "name": "Shared Documents",
+      "type": "webdav",
+      "url": "https://nextcloud.example.com/remote.php/dav/files/user/",
+      "status": "active",
+      "last_sync": "2025-01-15T10:00:00Z",
+      "next_sync": "2025-01-15T11:00:00Z",
+      "document_count": 150
+    }
+  ]
+}
 ```
 
 #### Create Source
 
-```bash
+```http
 POST /api/sources
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+```
 
+**Request Body:**
+```json
 {
-  "name": "Network Drive",
-  "type": "local_folder",
-  "config": {
-    "path": "/mnt/network/documents",
-    "scan_interval": 3600
-  },
-  "enabled": true
+  "name": "Company Drive",
+  "type": "webdav",
+  "url": "https://drive.company.com/dav/",
+  "username": "user",
+  "password": "encrypted_password",
+  "sync_interval": 3600,
+  "recursive": true,
+  "file_patterns": ["*.pdf", "*.docx"]
 }
 ```
 
 #### Update Source
 
-```bash
+```http
 PUT /api/sources/{id}
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "enabled": false
-}
 ```
 
 #### Delete Source
 
-```bash
+```http
 DELETE /api/sources/{id}
-Authorization: Bearer <jwt_token>
 ```
 
-#### Sync Source
+#### Trigger Source Sync
 
-```bash
+```http
 POST /api/sources/{id}/sync
-Authorization: Bearer <jwt_token>
 ```
 
-#### Stop Source Sync
-
-```bash
-POST /api/sources/{id}/sync/stop
-Authorization: Bearer <jwt_token>
-```
-
-#### Test Source Connection
-
-```bash
-POST /api/sources/{id}/test
-Authorization: Bearer <jwt_token>
-```
-
-#### Estimate Source Crawl
-
-```bash
-POST /api/sources/{id}/estimate
-Authorization: Bearer <jwt_token>
-```
-
-#### Estimate Crawl with Configuration
-
-```bash
-POST /api/sources/estimate
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
+**Response:** `202 Accepted`
+```json
 {
-  "source_type": "webdav",
-  "config": {
-    "url": "https://example.com/webdav",
-    "username": "user",
-    "password": "pass"
-  }
+  "message": "Sync started",
+  "job_id": "job_123"
 }
 ```
 
-#### Test Connection with Configuration
+#### Get Sync Status
 
-```bash
-POST /api/sources/test-connection
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "source_type": "webdav", 
-  "config": {
-    "url": "https://example.com/webdav",
-    "username": "user",
-    "password": "pass"
-  }
-}
-```
-
-### WebDAV Endpoints
-
-#### Test WebDAV Connection
-
-```bash
-POST /api/webdav/test-connection
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "url": "https://example.com/webdav",
-  "username": "user",
-  "password": "pass"
-}
-```
-
-#### Estimate WebDAV Crawl
-
-```bash
-POST /api/webdav/estimate-crawl
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "url": "https://example.com/webdav",
-  "username": "user", 
-  "password": "pass"
-}
-```
-
-#### Get WebDAV Sync Status
-
-```bash
-GET /api/webdav/sync-status
-Authorization: Bearer <jwt_token>
-```
-
-#### Start WebDAV Sync
-
-```bash
-POST /api/webdav/start-sync
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "url": "https://example.com/webdav",
-  "username": "user",
-  "password": "pass"
-}
-```
-
-#### Cancel WebDAV Sync
-
-```bash
-POST /api/webdav/cancel-sync
-Authorization: Bearer <jwt_token>
+```http
+GET /api/sources/{id}/sync-status
 ```
 
 ### Labels Endpoints
 
 #### List Labels
 
-```bash
+```http
 GET /api/labels
-Authorization: Bearer <jwt_token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "labels": [
+    {
+      "id": "uuid",
+      "name": "Important",
+      "color": "#FF5733",
+      "description": "High priority documents",
+      "document_count": 42,
+      "created_by": "admin",
+      "created_at": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
 ```
 
 #### Create Label
 
-```bash
+```http
 POST /api/labels
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+```
 
+**Request Body:**
+```json
 {
-  "name": "Important",
-  "color": "#FF0000"
+  "name": "Archive",
+  "color": "#808080",
+  "description": "Archived documents"
 }
 ```
 
 #### Update Label
 
-```bash
+```http
 PUT /api/labels/{id}
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "name": "Very Important",
-  "color": "#FF00FF"
-}
 ```
 
 #### Delete Label
 
-```bash
+```http
 DELETE /api/labels/{id}
-Authorization: Bearer <jwt_token>
+```
+
+#### Assign Label to Documents
+
+```http
+POST /api/labels/{id}/assign
+```
+
+**Request Body:**
+```json
+{
+  "document_ids": ["doc1", "doc2", "doc3"]
+}
 ```
 
 ### User Endpoints
 
-#### List Users (Admin Only)
+#### List Users (Admin only)
 
-```bash
+```http
 GET /api/users
-Authorization: Bearer <jwt_token>
 ```
 
-#### Get User
+#### Get User Profile
 
-```bash
-GET /api/users/{id}
-Authorization: Bearer <jwt_token>
+```http
+GET /api/users/profile
 ```
 
-#### Update User
+#### Update Profile
 
-```bash
-PUT /api/users/{id}
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+```http
+PUT /api/users/profile
+```
 
+**Request Body:**
+```json
 {
   "email": "newemail@example.com",
-  "role": "user"
+  "display_name": "John Doe"
 }
 ```
 
-#### Delete User (Admin Only)
+#### Change Password
 
-```bash
-DELETE /api/users/{id}
-Authorization: Bearer <jwt_token>
+```http
+POST /api/users/change-password
 ```
 
-### Notifications Endpoints
+**Request Body:**
+```json
+{
+  "current_password": "old_password",
+  "new_password": "new_secure_password"
+}
+```
+
+### Notification Endpoints
 
 #### List Notifications
 
-```bash
-GET /api/notifications?limit=50&offset=0
-Authorization: Bearer <jwt_token>
+```http
+GET /api/notifications
 ```
 
-#### Get Notification Summary
+**Query Parameters:**
+- `unread_only`: Show only unread notifications
 
-```bash
-GET /api/notifications/summary
-Authorization: Bearer <jwt_token>
-```
-
-Response:
+**Response:** `200 OK`
 ```json
 {
-  "unread_count": 5,
-  "total_count": 23,
-  "latest_notification": {
-    "id": 1,
-    "type": "ocr_completed",
-    "message": "OCR processing completed for document.pdf",
-    "created_at": "2024-01-01T12:00:00Z"
-  }
+  "notifications": [
+    {
+      "id": "uuid",
+      "type": "ocr_completed",
+      "title": "OCR Processing Complete",
+      "message": "Document 'Invoice.pdf' has been processed",
+      "read": false,
+      "created_at": "2025-01-15T10:00:00Z",
+      "data": {
+        "document_id": "doc123"
+      }
+    }
+  ]
 }
 ```
 
-#### Mark Notification as Read
+#### Mark as Read
 
-```bash
-POST /api/notifications/{id}/read
-Authorization: Bearer <jwt_token>
+```http
+PUT /api/notifications/{id}/read
 ```
 
-#### Mark All Notifications as Read
+#### Mark All as Read
 
-```bash
-POST /api/notifications/read-all
-Authorization: Bearer <jwt_token>
-```
-
-#### Delete Notification
-
-```bash
-DELETE /api/notifications/{id}
-Authorization: Bearer <jwt_token>
-```
-
-### Ignored Files Endpoints
-
-#### List Ignored Files
-
-```bash
-GET /api/ignored-files?limit=50&offset=0
-Authorization: Bearer <jwt_token>
-```
-
-Query parameters:
-- `limit` - Number of results (default: 50)
-- `offset` - Pagination offset
-- `filename` - Filter by filename
-- `source_type` - Filter by source type
-
-#### Get Ignored Files Statistics
-
-```bash
-GET /api/ignored-files/stats
-Authorization: Bearer <jwt_token>
-```
-
-Response:
-```json
-{
-  "total_ignored_files": 42,
-  "total_size_bytes": 104857600,
-  "most_recent_ignored_at": "2024-01-01T12:00:00Z"
-}
-```
-
-#### Get Ignored File Details
-
-```bash
-GET /api/ignored-files/{id}
-Authorization: Bearer <jwt_token>
-```
-
-#### Remove File from Ignored List
-
-```bash
-DELETE /api/ignored-files/{id}
-Authorization: Bearer <jwt_token>
-```
-
-#### Bulk Remove Files from Ignored List
-
-```bash
-DELETE /api/ignored-files/bulk-delete
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "ignored_file_ids": [1, 2, 3, 4]
-}
+```http
+PUT /api/notifications/read-all
 ```
 
 ### Metrics Endpoints
 
-#### Get System Metrics
+#### System Metrics
 
-```bash
-GET /api/metrics
-Authorization: Bearer <jwt_token>
+```http
+GET /api/metrics/system
 ```
 
-#### Get Prometheus Metrics
-
-```bash
-GET /metrics
-```
-
-Returns Prometheus-formatted metrics (no authentication required).
-
-### Health Check
-
-#### Health Check
-
-```bash
-GET /api/health
-```
-
-Response:
+**Response:** `200 OK`
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2024-01-01T12:00:00Z",
-  "version": "1.0.0"
+  "cpu_usage": 45.2,
+  "memory_usage": 67.8,
+  "disk_usage": 34.5,
+  "active_connections": 23,
+  "uptime_seconds": 864000
 }
 ```
+
+#### OCR Analytics
+
+```http
+GET /api/metrics/ocr
+```
+
+**Response:** `200 OK`
+```json
+{
+  "total_processed": 5432,
+  "success_rate": 0.98,
+  "average_processing_time": 4.5,
+  "languages_used": {
+    "eng": 4500,
+    "spa": 700,
+    "fra": 232
+  },
+  "daily_stats": [...]
+}
+```
+
+## WebSocket API
+
+Connect to real-time updates:
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080/ws');
+
+ws.onopen = () => {
+  // Authenticate
+  ws.send(JSON.stringify({
+    type: 'auth',
+    token: 'your_jwt_token'
+  }));
+  
+  // Subscribe to events
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    events: ['ocr_progress', 'sync_progress', 'notifications']
+  }));
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  
+  switch(data.type) {
+    case 'ocr_progress':
+      console.log(`OCR Progress: ${data.progress}% for document ${data.document_id}`);
+      break;
+    case 'sync_progress':
+      console.log(`Sync Progress: ${data.processed}/${data.total} files`);
+      break;
+    case 'notification':
+      console.log(`New notification: ${data.message}`);
+      break;
+  }
+};
+```
+
+### WebSocket Events
+
+| Event Type | Description | Data Structure |
+|------------|-------------|----------------|
+| `ocr_progress` | OCR processing updates | `{document_id, progress, status}` |
+| `sync_progress` | Source sync updates | `{source_id, processed, total, current_file}` |
+| `notification` | Real-time notifications | `{id, type, title, message}` |
+| `document_created` | New document added | `{document_id, title, source}` |
+| `document_updated` | Document modified | `{document_id, changes}` |
+| `queue_status` | OCR queue updates | `{pending, processing, completed}` |
 
 ## Examples
 
-### Python Example
+### Python Client Example
 
 ```python
 import requests
+import json
 
-# Configuration
-BASE_URL = "http://localhost:8000/api"
-USERNAME = "admin"
-PASSWORD = "your_password"
+class ReadurClient:
+    def __init__(self, base_url, username, password):
+        self.base_url = base_url
+        self.token = self._authenticate(username, password)
+        self.headers = {'Authorization': f'Bearer {self.token}'}
+    
+    def _authenticate(self, username, password):
+        response = requests.post(
+            f'{self.base_url}/auth/login',
+            json={'username': username, 'password': password}
+        )
+        return response.json()['token']
+    
+    def upload_document(self, file_path):
+        with open(file_path, 'rb') as f:
+            files = {'file': f}
+            response = requests.post(
+                f'{self.base_url}/documents/upload',
+                headers=self.headers,
+                files=files
+            )
+        return response.json()
+    
+    def search(self, query):
+        response = requests.get(
+            f'{self.base_url}/search',
+            headers=self.headers,
+            params={'q': query}
+        )
+        return response.json()
 
-# Login
-response = requests.post(f"{BASE_URL}/auth/login", json={
-    "username": USERNAME,
-    "password": PASSWORD
-})
-token = response.json()["token"]
-headers = {"Authorization": f"Bearer {token}"}
+# Usage
+client = ReadurClient('http://localhost:8080/api', 'admin', 'password')
+result = client.upload_document('/path/to/document.pdf')
+print(f"Document uploaded: {result['id']}")
 
-# Upload document
-with open("document.pdf", "rb") as f:
-    files = {"file": ("document.pdf", f, "application/pdf")}
-    response = requests.post(
-        f"{BASE_URL}/documents",
-        headers=headers,
-        files=files
-    )
-    document_id = response.json()["id"]
-
-# Search documents
-response = requests.get(
-    f"{BASE_URL}/search",
-    headers=headers,
-    params={"query": "invoice 2024"}
-)
-results = response.json()["results"]
+search_results = client.search('invoice 2024')
+for result in search_results['results']:
+    print(f"Found: {result['title']} (score: {result['score']})")
 ```
 
-### JavaScript Example
+### JavaScript/TypeScript Example
 
-```javascript
-// Configuration
-const BASE_URL = 'http://localhost:8000/api';
+```typescript
+class ReadurAPI {
+  private token: string;
+  private baseURL: string;
 
-// Login
-async function login(username, password) {
-  const response = await fetch(`${BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
-  const data = await response.json();
-  return data.token;
+  constructor(baseURL: string) {
+    this.baseURL = baseURL;
+  }
+
+  async login(username: string, password: string): Promise<void> {
+    const response = await fetch(`${this.baseURL}/auth/login`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await response.json();
+    this.token = data.token;
+  }
+
+  async uploadDocument(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${this.baseURL}/documents/upload`, {
+      method: 'POST',
+      headers: {'Authorization': `Bearer ${this.token}`},
+      body: formData
+    });
+    return response.json();
+  }
+
+  async search(query: string): Promise<any> {
+    const response = await fetch(
+      `${this.baseURL}/search?q=${encodeURIComponent(query)}`,
+      {headers: {'Authorization': `Bearer ${this.token}`}}
+    );
+    return response.json();
+  }
 }
 
-// Upload document
-async function uploadDocument(token, file) {
-  const formData = new FormData();
-  formData.append('file', file);
-  
-  const response = await fetch(`${BASE_URL}/documents`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` },
-    body: formData
-  });
-  return response.json();
-}
+// Usage
+const api = new ReadurAPI('http://localhost:8080/api');
+await api.login('admin', 'password');
 
-// Search documents
-async function searchDocuments(token, query) {
-  const response = await fetch(
-    `${BASE_URL}/search?query=${encodeURIComponent(query)}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
-  );
-  return response.json();
+const fileInput = document.getElementById('file-input') as HTMLInputElement;
+if (fileInput.files?.[0]) {
+  const result = await api.uploadDocument(fileInput.files[0]);
+  console.log('Uploaded:', result.id);
 }
 ```
 
 ### cURL Examples
 
 ```bash
-# Login
-TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+# Login and save token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your_password"}' \
-  | jq -r .token)
+  -d '{"username":"admin","password":"password"}' \
+  | jq -r '.token')
 
 # Upload document
-curl -X POST http://localhost:8000/api/documents \
+curl -X POST http://localhost:8080/api/documents/upload \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@document.pdf"
+  -F "file=@document.pdf" \
+  -F "labels=important,invoice"
 
 # Search documents
-curl -X GET "http://localhost:8000/api/search?query=invoice" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X GET "http://localhost:8080/api/search?q=invoice%202024" \
+  -H "Authorization: Bearer $TOKEN" | jq
 
-# Get document
-curl -X GET http://localhost:8000/api/documents/550e8400-e29b-41d4-a716-446655440000 \
-  -H "Authorization: Bearer $TOKEN"
+# Get OCR queue status
+curl -X GET http://localhost:8080/api/ocr/queue/status \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Create a new source
+curl -X POST http://localhost:8080/api/sources \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Company Drive",
+    "type": "webdav",
+    "url": "https://drive.company.com/dav/",
+    "username": "user",
+    "password": "pass",
+    "sync_interval": 3600
+  }'
 ```
 
-## OpenAPI Specification
+## API Versioning
 
-The complete OpenAPI specification is available at:
-```
-GET /api-docs/openapi.json
-```
+The API uses URL versioning. The current version is v1. Future versions will be available at:
 
-Interactive Swagger UI documentation is available at:
 ```
-GET /swagger-ui
+/api/v2/...
 ```
 
-You can use this with tools like Swagger UI or to generate client libraries.
+Deprecated endpoints will include a `Deprecation` header with the sunset date:
+
+```
+Deprecation: Sun, 01 Jul 2025 00:00:00 GMT
+```
 
 ## SDK Support
 
-Official SDKs are planned for:
-- Python
-- JavaScript/TypeScript
-- Go
-- Ruby
+Official SDKs are available for:
 
-Check the [GitHub repository](https://github.com/perfectra1n/readur) for the latest SDK availability.
+- Python: `pip install readur-sdk`
+- JavaScript/TypeScript: `npm install @readur/sdk`
+- Go: `go get github.com/readur/readur-go-sdk`
+
+## API Limits
+
+- Maximum request size: 100MB (configurable)
+- Maximum file upload: 500MB
+- Maximum bulk upload: 10 files
+- Maximum search results: 1000
+- WebSocket connections per user: 5
+- API calls per minute: 100 (configurable)

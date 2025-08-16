@@ -4,21 +4,21 @@
 
 Readur is a powerful document management system that transforms your unstructured documents into a searchable, organized knowledge base. Built for teams and individuals who need to efficiently manage, search, and access large document collections.
 
-## Key Capabilities
+## Quick Start Guides
 
 <div class="grid cards" markdown>
 
-- **[Getting Started](getting-started/installation.md)**  
-  Deploy Readur with Docker in minutes - single command setup
+- **[Self-Hosting Guide](self-hosting/index.md)**  
+  Complete guide for running Readur on your own infrastructure
+
+- **[Docker Quick Start](quickstart/docker.md)**  
+  Get Readur running with Docker in 5 minutes
 
 - **[User Guide](user-guide.md)**  
-  Master document management, OCR processing, and search features
+  Learn to use Readur's document management features
 
-- **[API Reference](api-reference.md)**  
-  Automate workflows with REST API integration
-
-- **[Deployment Guide](deployment.md)**  
-  Production deployment with SSL, monitoring, and scaling
+- **[API Documentation](api-reference.md)**  
+  Integrate Readur with your applications
 
 </div>
 
@@ -108,32 +108,31 @@ graph LR
 - **Docker Native**: Container-based architecture for easy deployment
 - **Resource Management**: Configurable memory and CPU limits
 
-## Getting Help
+## Getting Started by User Type
 
-### Documentation
+### For Self-Hosters
+Start with our **[Self-Hosting Quick Start](quickstart/self-hosting.md)** to get Readur running on your server in 15 minutes. Then explore the **[Complete Self-Hosting Guide](self-hosting/index.md)** for production deployment, backup strategies, and performance optimization.
 
-- [User Guide](user-guide.md)  
-  Complete feature documentation
-  
-- [Configuration Reference](configuration-reference.md)  
-  All environment variables
-  
-- [Troubleshooting](s3-troubleshooting.md)  
-  Common issues and solutions
-  
-- [Migration Guide](migration-guide.md)  
-  Upgrade and migration procedures
+### For Docker Users
+Jump straight to the **[Docker Quick Start](quickstart/docker.md)** for the fastest deployment path using Docker Compose.
+
+### For Developers
+Check out the **[Development Quick Start](quickstart/development.md)** to set up your development environment and start contributing to Readur.
+
+## Documentation Structure
+
+### Essential Guides
+
+- **[Self-Hosting](self-hosting/index.md)** - Everything needed for self-hosted deployments
+- **[User Guide](user-guide.md)** - Complete guide to using Readur
+- **[Administration](administration/cli-tools.md)** - System administration and maintenance
+- **[API Reference](api-reference.md)** - REST API documentation
 
 ### Community & Support
 
-- [GitHub Issues](https://github.com/readur/readur/issues)  
-  Bug reports and feature requests
-  
-- [GitHub Discussions](https://github.com/readur/readur/discussions)  
-  Community help
-  
-- [Developer Documentation](dev/)  
-  Architecture and development setup
+- [GitHub Issues](https://github.com/readur/readur/issues) - Bug reports and feature requests
+- [GitHub Discussions](https://github.com/readur/readur/discussions) - Community help
+- [Development Guide](dev/README.md) - Contributing to Readur
 
 ## Latest Updates
 
