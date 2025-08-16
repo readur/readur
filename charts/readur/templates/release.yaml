@@ -31,6 +31,19 @@ controllers:
           tag: latest
           pullPolicy: IfNotPresent
         
+        env:
+          {{- if not .Values.database.existingSecret }}
+          DATABASE_URL: {{ .Values.database.url | quote }}
+          {{- end }}
+        
+        envFrom:
+          - secretRef:
+              name: {{ .Values.jwtSecret.existingSecret | default (printf "%s-jwt" (include "bjw-s.common.lib.chart.names.fullname" .)) }}
+          {{- if .Values.database.existingSecret }}
+          - secretRef:
+              name: {{ .Values.database.existingSecret }}
+          {{- end }}
+        
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000

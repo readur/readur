@@ -18,5 +18,11 @@ readur_watch/
 test-results/
 uploads/
 
+# Secrets - NEVER commit these
+secrets/
+readur_secrets/
+jwt_secret
+.jwt_secret
+
 # Misc.
 .claude/settings.local.json
