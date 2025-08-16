@@ -59,6 +59,11 @@ services:
       - MEMORY_LIMIT_MB=1024
       - CPU_PRIORITY=normal
       - ENABLE_COMPRESSION=true
+      
+      # Threading Configuration (fixed values)
+      - OCR_RUNTIME_THREADS=3      # OCR processing threads
+      - BACKGROUND_RUNTIME_THREADS=2 # Background task threads
+      - DB_RUNTIME_THREADS=2        # Database connection threads
     
     volumes:
       # Document storage
@@ -317,13 +322,15 @@ scrape_configs:
 
 ### Docker Swarm
 
+**Note:** Readur is a single-instance application. If using Docker Swarm, ensure replicas is set to 1.
+
 ```yaml
 version: '3.8'
 services:
   readur:
     image: readur:latest
     deploy:
-      replicas: 2
+      replicas: 1  # MUST be 1 - Readur doesn't support multiple instances
       restart_policy:
         condition: on-failure
       placement:
@@ -343,13 +350,15 @@ secrets:
 
 ### Kubernetes
 
+**Important:** Readur is a single-instance application. Always set replicas to 1.
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: readur
 spec:
-  replicas: 3
+  replicas: 1  # MUST be 1 - Readur doesn't support multiple instances
   selector:
     matchLabels:
       app: readur
@@ -366,11 +375,11 @@ spec:
               key: jwt-secret
         resources:
           limits:
-            memory: "2Gi"
-            cpu: "2"
+            memory: "4Gi"  # Increase for single instance
+            cpu: "4"        # Increase for single instance
           requests:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "1Gi"
+            cpu: "1"
 ```
 
 ### Cloud Platforms
@@ -384,9 +393,11 @@ spec:
 
 ### Production Checklist
 
+- [ ] **CRITICAL: Change JWT_SECRET from default value**
 - [ ] Change default admin password
-- [ ] Generate strong JWT secret
+- [ ] Generate strong JWT secret (use `openssl rand -base64 32`)
 - [ ] Use HTTPS/SSL in production
+- [ ] **Never disable SSL verification in production** (S3_VERIFY_SSL must be true)
 - [ ] Restrict database network access
 - [ ] Set proper file permissions
 - [ ] Enable firewall rules
@@ -394,13 +405,17 @@ spec:
 - [ ] Monitor access logs
 - [ ] Implement rate limiting
 - [ ] Enable audit logging
+- [ ] **Never expose secrets in command lines** (use env vars or config files)
 
 ### Recommended Production Setup
 
 ```bash
-# Generate secure secrets
-JWT_SECRET=$(openssl rand -base64 64)
+# Generate secure secrets - ALWAYS DO THIS!
+JWT_SECRET=$(openssl rand -base64 64)  # NEVER use default values
 DB_PASSWORD=$(openssl rand -base64 32)
+
+# WARNING: Default JWT_SECRET values are insecure
+# Always generate new secrets for production
 
 # Restrict file permissions
 chmod 600 .env

@@ -2,7 +2,15 @@
 
 ## Overview
 
-Readur includes several command-line utilities for system administration and maintenance. These tools are designed for system administrators and DevOps teams managing Readur deployments.
+Readur includes several Rust-based command-line utilities for system administration and maintenance. These are compiled binaries (not Python scripts) designed for system administrators and DevOps teams managing Readur deployments.
+
+**Available CLI Tools:**
+- `migrate_to_s3` - Migrate documents between storage backends
+- `batch_ingest` - Bulk import documents
+- `debug_pdf_extraction` - Debug PDF processing issues
+- `enqueue_pending_ocr` - Re-queue documents for OCR processing
+- `test_metadata` - Test metadata extraction
+- `test_runner` - Run test suites
 
 ## migrate_to_s3
 
@@ -192,30 +200,33 @@ docker exec readur-app cargo run --bin test_runner -- --parallel 2
 For Docker-based Readur deployments:
 
 ```bash
-# General pattern
-docker exec readur-app cargo run --bin <tool-name> -- [OPTIONS]
+# Using compiled binaries (production)
+docker exec readur-app /app/migrate_to_s3 [OPTIONS]
+
+# Or during development with cargo
+docker exec readur-app cargo run --bin migrate_to_s3 -- [OPTIONS]
 
 # With environment variables
 docker exec -e S3_BUCKET_NAME=my-bucket readur-app \
-  cargo run --bin migrate_to_s3 -- --dry-run
+  /app/migrate_to_s3 --dry-run
 
 # Interactive mode (if needed)
-docker exec -it readur-app cargo run --bin migrate_to_s3 -- --help
+docker exec -it readur-app /app/migrate_to_s3 --help
 ```
 
 ### Direct Deployments
 For direct server deployments:
 
 ```bash
-# Ensure proper working directory
-cd /path/to/readur
+# Using compiled binaries
+/opt/readur/bin/migrate_to_s3 --dry-run
 
-# Run with production environment
-RUST_ENV=production ./target/release/migrate_to_s3 --dry-run
+# With environment variables
+S3_ACCESS_KEY_ID="your_key" S3_SECRET_ACCESS_KEY="your_secret" \
+  /opt/readur/bin/migrate_to_s3 --status
 
-# With custom configuration
-DATABASE_URL="postgresql://..." ./target/release/migrate_to_s3 --status
-```
+# Never pass secrets in command line - use environment variables or config files
+DATABASE_URL="postgresql://user:pass@host/db" /opt/readur/bin/migrate_to_s3
 
 ### Kubernetes Deployments
 For Kubernetes environments:
@@ -261,12 +272,14 @@ Common environment variables used by CLI tools:
 |----------|---------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/readur` |
 | `S3_BUCKET_NAME` | Target S3 bucket | `my-company-readur` |
-| `S3_ACCESS_KEY_ID` | AWS access key | `AKIA...` |
-| `S3_SECRET_ACCESS_KEY` | AWS secret key | `...` |
+| `S3_ACCESS_KEY_ID` | AWS/S3 access key ID | `AKIA...` |
+| `S3_SECRET_ACCESS_KEY` | AWS/S3 secret access key | `...` |
 | `S3_REGION` | AWS region | `us-east-1` |
 | `S3_ENDPOINT` | Custom S3 endpoint | `https://minio.company.com` |
 | `RUST_LOG` | Logging level | `debug`, `info`, `warn`, `error` |
 | `RUST_BACKTRACE` | Error backtraces | `1` or `full` |
+
+**Security Warning:** Never pass secrets like `S3_SECRET_ACCESS_KEY` directly in command lines as they may be visible in process lists. Always use environment variables, configuration files, or secret management systems.
 
 ## Troubleshooting
 
@@ -284,25 +297,33 @@ Common environment variables used by CLI tools:
 2. **Tool Not Found**
    ```bash
    # List available binaries
-   docker exec readur-app find target/release -name "*migrate*" -type f
+   docker exec readur-app ls -la /app/ | grep -E '(migrate_to_s3|batch_ingest|debug_pdf|enqueue|test_)'
    
-   # Build tools if missing
-   docker exec readur-app cargo build --release --bins
+   # For development, build tools if missing
+   docker exec readur-app cargo build --release --bin migrate_to_s3
+   docker exec readur-app cargo build --release --bin enqueue_pending_ocr
+   docker exec readur-app cargo build --release --bin batch_ingest
    ```
 
 3. **Database Connection Issues**
    ```bash
-   # Test database connectivity
-   docker exec readur-app psql -d readur -c "SELECT version();"
+   # Test database connectivity (requires PGPASSWORD or .pgpass)
+   docker exec -e PGPASSWORD="${DB_PASSWORD}" readur-app \
+     psql -h postgres -U readur -d readur -c "SELECT version();"
    
-   # Check environment variables
-   docker exec readur-app env | grep DATABASE_URL
+   # Check environment variables (be careful not to expose secrets)
+   docker exec readur-app env | grep -E '(DATABASE_URL|POSTGRES_)' | sed 's/=.*/=***/'  
    ```
 
 ### Getting Help
 
 For each tool, use the `--help` flag:
 ```bash
+# Production binaries
+docker exec readur-app /app/migrate_to_s3 --help
+docker exec readur-app /app/enqueue_pending_ocr --help
+
+# Development with cargo
 docker exec readur-app cargo run --bin migrate_to_s3 -- --help
 docker exec readur-app cargo run --bin enqueue_pending_ocr -- --help
 ```

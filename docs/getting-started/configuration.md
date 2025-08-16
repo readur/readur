@@ -22,12 +22,18 @@ These MUST be changed from defaults in production:
 JWT_SECRET=$(openssl rand -base64 32)
 DB_PASSWORD=$(openssl rand -base64 32)
 
+# CRITICAL: Always change JWT_SECRET from default!
+# Default values are insecure and should never be used in production
+
 # Set admin password
 ADMIN_PASSWORD=your_secure_password_here
 
 # Enable HTTPS (reverse proxy recommended)
 FORCE_HTTPS=true
 SECURE_COOKIES=true
+
+# WARNING: Only disable SSL verification for development/testing
+# S3_VERIFY_SSL=false  # NEVER use in production
 ```
 
 ### Database Configuration
@@ -35,6 +41,7 @@ SECURE_COOKIES=true
 ```bash
 # PostgreSQL connection
 DATABASE_URL=postgresql://readur:${DB_PASSWORD}@postgres:5432/readur
+# WARNING: Never include passwords directly in DATABASE_URL in config files
 
 # Connection pool settings
 DB_POOL_SIZE=20
@@ -73,8 +80,8 @@ S3_ENABLED=true
 # AWS S3
 S3_BUCKET_NAME=readur-documents
 S3_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
+S3_ACCESS_KEY_ID=your_access_key
+S3_SECRET_ACCESS_KEY=your_secret_key
 
 # Or S3-compatible (MinIO, Wasabi, etc.)
 S3_ENDPOINT=https://s3.example.com
@@ -109,8 +116,9 @@ OCR_LANGUAGE=eng+deu+fra+spa
 
 ```bash
 # Concurrent processing
-CONCURRENT_OCR_JOBS=4  # Match CPU cores
-OCR_WORKER_THREADS=2   # Threads per job
+CONCURRENT_OCR_JOBS=3  # OCR runtime uses 3 threads
+OCR_WORKER_THREADS=2   # Background runtime uses 2 threads
+# Note: Database runtime also uses 2 threads
 
 # Timeouts and limits
 OCR_TIMEOUT_SECONDS=300
@@ -438,10 +446,13 @@ WARNING: CONCURRENT_OCR_JOBS=8 but only 2 CPU cores available
 ### Security
 
 1. **Never commit secrets** - Use `.env` files and add to `.gitignore`
-2. **Rotate secrets regularly** - Especially JWT_SECRET
-3. **Use strong passwords** - Minimum 16 characters for admin
-4. **Enable HTTPS** - Always in production
-5. **Restrict file types** - Only allow necessary formats
+2. **Change JWT_SECRET immediately** - Never use default values
+3. **Rotate secrets regularly** - Especially JWT_SECRET and API keys
+4. **Use strong passwords** - Minimum 16 characters for admin
+5. **Enable HTTPS** - Always in production
+6. **Restrict file types** - Only allow necessary formats
+7. **Never expose secrets in command lines** - They appear in process lists
+8. **Always verify SSL certificates** - Only disable for local development
 
 ### Performance
 
