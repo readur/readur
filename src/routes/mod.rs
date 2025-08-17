@@ -10,6 +10,7 @@ pub mod prometheus_metrics;
 pub mod queue;
 pub mod search;
 pub mod settings;
+pub mod source_errors;
 pub mod sources;
 pub mod users;
 pub mod webdav;

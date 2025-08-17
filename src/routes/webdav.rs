@@ -11,9 +11,9 @@ use tracing::{error, info, warn};
 
 use crate::{
     auth::AuthUser,
-    models::{
+    models::source::{
         WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVSyncStatus,
-        WebDAVTestConnection,
+        WebDAVTestConnection, UpdateWebDAVSyncState,
     },
     AppState,
 };
@@ -428,7 +428,7 @@ async fn cancel_webdav_sync(
     match state.db.get_webdav_sync_state(auth_user.user.id).await {
         Ok(Some(sync_state)) if sync_state.is_running => {
             // Mark sync as cancelled
-            let cancelled_state = crate::models::UpdateWebDAVSyncState {
+            let cancelled_state = UpdateWebDAVSyncState {
                 last_sync_at: Some(chrono::Utc::now()),
                 sync_cursor: sync_state.sync_cursor,
                 is_running: false,

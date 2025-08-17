@@ -12,6 +12,7 @@ use utoipa::ToSchema;
 use crate::{
     auth::AuthUser,
     models::SourceType,
+    models::source::WebDAVTestConnection,
     AppState,
 };
 
@@ -57,7 +58,7 @@ pub async fn test_connection(
             let config: crate::models::WebDAVSourceConfig = serde_json::from_value(source.config)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-            let test_config = crate::models::WebDAVTestConnection {
+            let test_config = WebDAVTestConnection {
                 server_url: config.server_url,
                 username: config.username,
                 password: config.password,
@@ -153,7 +154,7 @@ pub async fn test_connection_with_config(
             let config: crate::models::WebDAVSourceConfig = serde_json::from_value(request.config)
                 .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-            let test_config = crate::models::WebDAVTestConnection {
+            let test_config = WebDAVTestConnection {
                 server_url: config.server_url,
                 username: config.username,
                 password: config.password,
