@@ -266,5 +266,18 @@ export const setupTestEnvironment = () => {
   return setupApiMocks()
 }
 
+// Mock API utilities for easier test integration
+export const renderWithMockApi = (ui: React.ReactElement, options?: {
+  authValues?: Partial<MockAuthContextType>
+  scenario?: string
+}) => {
+  // For now, use the existing renderWithProviders
+  // Later, we can add MSW scenario setup here
+  return renderWithProviders(ui, options)
+}
+
+// Get the default test user for consistent testing
+export const getDefaultTestUser = () => createMockUser()
+
 // re-export everything
 export * from '@testing-library/react'

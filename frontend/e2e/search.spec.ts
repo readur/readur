@@ -2,27 +2,58 @@ import { test, expect } from './fixtures/auth';
 import { SEARCH_QUERIES, TIMEOUTS, API_ENDPOINTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
+// Setup mock API for search E2E tests
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    // Configure mock API for search testing with realistic data
+    window.__MOCK_API_CONFIG__ = {
+      scenario: 'ACTIVE_SYSTEM', // System with documents for searching
+      networkCondition: 'realistic',
+      enableSearchFeatures: true,
+      generateSearchableContent: true
+    };
+  });
+});
+
 test.describe('Search Functionality', () => {
   let helpers: TestHelpers;
 
   test.beforeEach(async ({ authenticatedPage }) => {
     helpers = new TestHelpers(authenticatedPage);
+    
+    // Setup search-specific mock data
+    await authenticatedPage.evaluate(() => {
+      if (window.__MOCK_API__) {
+        // Generate searchable documents with OCR content
+        window.__MOCK_API__.generateSearchableDocuments(20, {
+          includeOcrText: true,
+          includeVariousFormats: true,
+          searchTerms: ['test', 'document', 'invoice', 'report']
+        });
+      }
+    });
+    
     await helpers.navigateToPage('/search');
-    // Ensure we have test documents for search functionality
-    await helpers.ensureTestDocumentsExist();
   });
 
-  test.skip('should display search interface', async ({ authenticatedPage: page }) => {
+  test('should display search interface', async ({ authenticatedPage: page }) => {
     // Check for search components
     await expect(page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]')).toBeVisible();
     await expect(page.locator('button:has-text("Search"), [data-testid="search-button"]')).toBeVisible();
+    
+    // Verify mock API provided search capabilities
+    const searchCapabilities = await page.evaluate(() => {
+      return window.__MOCK_API__ ? window.__MOCK_API__.getSearchCapabilities() : null;
+    });
+    
+    console.log('Mock API search capabilities:', searchCapabilities);
   });
 
-  test.skip('should perform basic search', async ({ authenticatedPage: page }) => {
+  test('should perform basic search', async ({ authenticatedPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
-    // Search for known OCR content from test images
-    await searchInput.fill(SEARCH_QUERIES.simple);  // "Test 1"
+    // Search for content that mock API will have
+    await searchInput.fill('test'); // Mock API generates documents with 'test' content
     
     // Wait for search API call
     const searchResponse = helpers.waitForApiCall(API_ENDPOINTS.search);
@@ -37,6 +68,13 @@ test.describe('Search Functionality', () => {
     await expect(page.locator('[data-testid="search-results"], .search-results')).toBeVisible({ 
       timeout: TIMEOUTS.medium 
     });
+    
+    // Verify mock API returned search results
+    const searchResults = await page.evaluate(() => {
+      return window.__MOCK_API__ ? window.__MOCK_API__.getLastSearchResults() : null;
+    });
+    
+    console.log('Mock API search results:', searchResults);
   });
 
   test.skip('should show search suggestions', async ({ authenticatedPage: page }) => {

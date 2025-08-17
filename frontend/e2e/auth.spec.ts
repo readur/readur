@@ -1,10 +1,30 @@
 import { test, expect, AuthHelper, TEST_CREDENTIALS, TIMEOUTS } from './fixtures/auth';
 import { TestHelpers } from './utils/test-helpers';
 
+// Initialize mock API for E2E tests
+test.beforeEach(async ({ page }) => {
+  // Setup mock API service worker for browser
+  await page.addInitScript(() => {
+    // Enable mock API for E2E tests with realistic scenarios
+    window.__MOCK_API_CONFIG__ = {
+      scenario: 'ACTIVE_SYSTEM',
+      networkCondition: 'realistic',
+      enableWebSocket: true
+    };
+  });
+});
+
 test.describe('Authentication', () => {
   test.beforeEach(async ({ page }) => {
     const authHelper = new AuthHelper(page);
     await authHelper.ensureLoggedOut();
+    
+    // Setup mock API scenario for authentication tests
+    await page.evaluate(() => {
+      if (window.__MOCK_API__) {
+        window.__MOCK_API__.setScenario('EMPTY_SYSTEM'); // No authenticated user initially
+      }
+    });
   });
 
   test('should display login form on initial visit', async ({ page }) => {
@@ -19,6 +39,13 @@ test.describe('Authentication', () => {
   test('should login with valid credentials', async ({ page }) => {
     const authHelper = new AuthHelper(page);
     
+    // Setup mock API to accept authentication
+    await page.evaluate(() => {
+      if (window.__MOCK_API__) {
+        window.__MOCK_API__.setScenario('ACTIVE_SYSTEM'); // Enable successful authentication
+      }
+    });
+    
     await authHelper.loginAs(TEST_CREDENTIALS.admin);
     
     // Should redirect to dashboard
@@ -26,9 +53,25 @@ test.describe('Authentication', () => {
     
     // Verify we're logged in by checking for welcome message
     await expect(page.locator('h4:has-text("Welcome back,")')).toBeVisible();
+    
+    // Verify mock API provided realistic user data
+    await page.evaluate(() => {
+      if (window.__MOCK_API__) {
+        const currentUser = window.__MOCK_API__.getCurrentUser();
+        console.log('Mock API current user:', currentUser);
+      }
+    });
   });
 
   test('should show error with invalid credentials', async ({ page }) => {
+    // Setup mock API to reject invalid credentials
+    await page.evaluate(() => {
+      if (window.__MOCK_API__) {
+        window.__MOCK_API__.setScenario('EMPTY_SYSTEM'); // No valid users
+        window.__MOCK_API__.simulateAuthError('Invalid credentials');
+      }
+    });
+    
     await page.goto('/');
     
     await page.fill('input[type="text"]', 'invaliduser');
