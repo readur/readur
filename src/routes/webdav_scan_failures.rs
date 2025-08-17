@@ -12,7 +12,7 @@ use uuid::Uuid;
 use utoipa::ToSchema;
 
 use crate::auth::AuthUser;
-use crate::models::{WebDAVScanFailure, WebDAVScanFailureResponse};
+use crate::models::WebDAVScanFailureResponse;
 use crate::AppState;
 
 #[derive(Debug, Deserialize, ToSchema)]

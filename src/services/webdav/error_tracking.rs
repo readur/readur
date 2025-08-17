@@ -1,12 +1,11 @@
-use anyhow::{anyhow, Result};
-use std::time::{Duration, Instant};
+use anyhow::Result;
+use std::time::Duration;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::db::Database;
 use crate::models::{
-    CreateWebDAVScanFailure, WebDAVScanFailureType, WebDAVScanFailure,
-    WebDAVScanFailureResponse, WebDAVFailureDiagnostics,
+    CreateWebDAVScanFailure, WebDAVScanFailureType, WebDAVScanFailureSeverity, WebDAVScanFailure,
 };
 
 /// Helper for tracking and analyzing WebDAV scan failures
@@ -39,10 +38,9 @@ impl WebDAVErrorTracker {
         });
         
         // Add stack trace if available
-        if let Some(backtrace) = error.backtrace().to_string().as_str() {
-            if !backtrace.is_empty() {
-                diagnostic_data["backtrace"] = serde_json::json!(backtrace);
-            }
+        let backtrace = error.backtrace().to_string();
+        if !backtrace.is_empty() && backtrace != "disabled backtrace" {
+            diagnostic_data["backtrace"] = serde_json::json!(backtrace);
         }
         
         // Estimate item count from error message if possible

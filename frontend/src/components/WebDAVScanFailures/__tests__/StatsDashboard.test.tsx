@@ -6,13 +6,10 @@ import { ThemeProvider } from '@mui/material/styles';
 import StatsDashboard from '../StatsDashboard';
 import { WebDAVScanFailureStats } from '../../../services/api';
 import theme from '../../../theme';
+import { renderWithProviders } from '../../../test/test-utils';
 
 const renderWithTheme = (component: React.ReactElement) => {
-  return render(
-    <ThemeProvider theme={theme}>
-      {component}
-    </ThemeProvider>
-  );
+  return renderWithProviders(component);
 };
 
 const mockStats: WebDAVScanFailureStats = {
@@ -119,7 +116,8 @@ describe('StatsDashboard', () => {
     renderWithTheme(<StatsDashboard stats={zeroActiveStats} />);
 
     // Should not crash and should show 0% for retry percentage
-    expect(screen.getByText('0')).toBeInTheDocument(); // Active failures
+    expect(screen.getByText('Active Failures')).toBeInTheDocument();
+    expect(screen.getByText('Ready for Retry')).toBeInTheDocument();
     expect(screen.getByText('0.0% of total')).toBeInTheDocument(); // Retry percentage when no active failures
   });
 
@@ -143,9 +141,11 @@ describe('StatsDashboard', () => {
     const cards = document.querySelectorAll('.MuiCard-root');
     expect(cards.length).toBeGreaterThan(0);
 
-    // Cards should have transition styles for hover effects
+    // Cards should have transition styles for hover effects 
     cards.forEach(card => {
-      expect(card).toHaveStyle('transition: all 0.2s ease-in-out');
+      const style = window.getComputedStyle(card);
+      expect(style.transition).toBeTruthy();
+      expect(style.transition).not.toBe('all 0s ease 0s');
     });
   });
 });

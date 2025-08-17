@@ -1,12 +1,19 @@
+# Rust
 target/
+
+# React
 client/node_modules/
 node_modules/
 .env
 assets/
 frontend/dist/
-.claude/settings.local.json # This file is used to store the local Claude settings.
+
+# CI
 readur_uploads/
 readur_watch/
 test-results/
 uploads/
+
+# Misc
 .claude/settings.local.json
+site/

@@ -20,12 +20,12 @@ import {
   Schedule as ScheduleIcon,
   Folder as FolderIcon,
   Security as SecurityIcon,
-  Network as NetworkIcon,
+  NetworkCheck as NetworkIcon,
   Settings as SettingsIcon,
   Speed as SpeedIcon,
   Warning as WarningIcon,
   Info as InfoIcon,
-  ExternalLink as ExternalLinkIcon,
+  OpenInNew as ExternalLinkIcon,
 } from '@mui/icons-material';
 
 import { WebDAVScanFailure, WebDAVScanFailureType } from '../../services/api';
