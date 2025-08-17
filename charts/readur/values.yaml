@@ -3,22 +3,6 @@
 ## Refer there for more detail about the supported values.
 ## Any values that you find in the above `values.yaml` can be provided to this chart and are then rendered.
 
-# JWT Secret Configuration
-jwtSecret:
-  # Set to use an existing Kubernetes secret containing JWT_SECRET
-  # If not set, a secret will be auto-generated
-  existingSecret: ""
-  # Optionally provide your own JWT secret value
-  # If not provided, a secure random secret will be generated
-  value: ""
-
-# Database Configuration  
-database:
-  # Reference to existing secret containing DATABASE_URL
-  existingSecret: ""
-  # Or provide database URL directly (not recommended for production)
-  url: "postgresql://readur:readur@postgres/readur"
-
 controllers:
   main:
     containers:
