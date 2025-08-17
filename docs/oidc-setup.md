@@ -267,18 +267,21 @@ Should return JSON with `authorization_endpoint`, `token_endpoint`, and `userinf
 
 ### 3. Test Login Flow
 
-1. Navigate to your Readur login page
-2. Click "Sign in with OIDC"
-3. You should be redirected to your identity provider
-4. After authentication, you should be redirected back to Readur dashboard
+Testing the complete authentication flow ensures everything is configured correctly. Navigate to your Readur login page where you should see the "Sign in with OIDC" button alongside the standard login form.
+
+Click "Sign in with OIDC" to initiate the authentication process. You should be immediately redirected to your identity provider's login page. The URL should match your configured provider, and you should see your application's consent screen if this is the first time.
+
+After successfully authenticating with your corporate credentials, the identity provider will redirect you back to Readur's callback URL. If everything is configured correctly, you'll land on the Readur dashboard as an authenticated user. Check that your username and email are correctly populated from the OIDC claims.
 
 ### 4. Check User Creation
 
-Verify that OIDC users are created correctly:
+Verify that OIDC users are created correctly in your system:
 
-- Check database for new users with `auth_provider = 'oidc'`
-- Ensure `oidc_subject`, `oidc_issuer`, and `oidc_email` fields are populated
-- Verify users can access the dashboard
+First, check your database for new users with `auth_provider = 'oidc'` to confirm the authentication method is properly recorded. You can run a query like `SELECT * FROM users WHERE auth_provider = 'oidc'` to see all OIDC-authenticated users.
+
+Ensure the OIDC-specific fields are properly populated: `oidc_subject` should contain the unique identifier from your provider, `oidc_issuer` should match your configured issuer URL, and `oidc_email` should contain the user's email address from the identity provider.
+
+Finally, verify that newly created users can actually access the dashboard and perform basic operations like uploading documents or searching. Check that their permissions are correctly set according to your default role configuration. You should also verify that the user's display name and other profile information were correctly extracted from the OIDC claims.
 
 ## User Experience
 

@@ -608,13 +608,13 @@ The system enforces strict username validation to prevent security issues:
    # Should show: ENABLE_PER_USER_WATCH=true
    ```
 
-2. Check base directory exists and has correct permissions:
+**Check base directory exists and has correct permissions:** Verify that the base watch directory has been created with proper ownership.
    ```bash
    ls -la /data/user_watch
    # Should show readur as owner with 755 permissions
    ```
 
-3. Review logs for errors:
+**Review logs for errors:** Search for watch directory related error messages in the application logs.
    ```bash
    grep -i "user watch" /var/log/readur/readur.log
    ```
