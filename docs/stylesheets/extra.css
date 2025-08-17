@@ -1,0 +1,119 @@
+/* Custom styles for Readur documentation */
+
+/* Brand colors */
+:root {
+  --readur-primary: #4051b5;
+  --readur-accent: #526cfe;
+}
+
+/* Grid cards for homepage */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.grid.cards > * {
+  padding: 1rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.grid.cards > *:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Custom admonitions */
+.md-typeset .admonition.example,
+.md-typeset details.example {
+  border-color: rgb(43, 155, 70);
+}
+
+.md-typeset .example > .admonition-title,
+.md-typeset .example > summary {
+  background-color: rgba(43, 155, 70, 0.1);
+  border-color: rgb(43, 155, 70);
+}
+
+.md-typeset .example > .admonition-title::before,
+.md-typeset .example > summary::before {
+  background-color: rgb(43, 155, 70);
+  -webkit-mask-image: var(--md-admonition-icon--example);
+  mask-image: var(--md-admonition-icon--example);
+}
+
+/* Code block enhancements */
+.md-typeset pre > code {
+  font-size: 0.85rem;
+}
+
+/* Better table styling */
+.md-typeset table:not([class]) {
+  font-size: 0.9rem;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+/* Responsive images */
+.md-typeset img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Custom badges */
+.badge {
+  display: inline-block;
+  padding: 0.25em 0.5em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 0.25rem;
+}
+
+.badge-new {
+  background-color: #28a745;
+  color: white;
+}
+
+.badge-beta {
+  background-color: #ffc107;
+  color: #333;
+}
+
+.badge-deprecated {
+  background-color: #dc3545;
+  color: white;
+}
+
+/* Improve search results */
+.md-search-result__meta {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.75rem;
+}
+
+/* Custom footer */
+.md-footer-meta__inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Announcement bar */
+.md-banner {
+  background-color: var(--readur-accent);
+  color: white;
+}
+
+.md-banner a {
+  color: white;
+  text-decoration: underline;
+}

@@ -59,6 +59,11 @@ services:
       - MEMORY_LIMIT_MB=1024
       - CPU_PRIORITY=normal
       - ENABLE_COMPRESSION=true
+      
+      # Threading Configuration (fixed values)
+      - OCR_RUNTIME_THREADS=3      # OCR processing threads
+      - BACKGROUND_RUNTIME_THREADS=2 # Background task threads
+      - DB_RUNTIME_THREADS=2        # Database connection threads
     
     volumes:
       # Document storage
@@ -215,18 +220,31 @@ services:
 
 ## Health Checks
 
-Add health checks to your Docker configuration:
+Add health checks to your Docker configuration. The Readur Docker image includes `curl` for health checking.
+
+**Important:** The port in the healthcheck URL must match your `SERVER_PORT` or the port specified in `SERVER_ADDRESS`:
 
 ```yaml
 services:
   readur:
+    environment:
+      # If using SERVER_ADDRESS
+      - SERVER_ADDRESS=0.0.0.0:8000  # Port 8000
+      # Or if using SERVER_PORT
+      # - SERVER_PORT=8000            # Port 8000
+    
     healthcheck:
+      # Port in URL must match the SERVER_PORT/SERVER_ADDRESS port above
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 ```
+
+For example, if you change the server to run on port 3000:
+- Set `SERVER_PORT=3000` or `SERVER_ADDRESS=0.0.0.0:3000`
+- Update healthcheck to: `http://localhost:3000/api/health`
 
 ## Backup Strategy
 
@@ -304,13 +322,15 @@ scrape_configs:
 
 ### Docker Swarm
 
+**Note:** Readur is a single-instance application. If using Docker Swarm, ensure replicas is set to 1.
+
 ```yaml
 version: '3.8'
 services:
   readur:
     image: readur:latest
     deploy:
-      replicas: 2
+      replicas: 1  # MUST be 1 - Readur doesn't support multiple instances
       restart_policy:
         condition: on-failure
       placement:
@@ -330,13 +350,15 @@ secrets:
 
 ### Kubernetes
 
+**Important:** Readur is a single-instance application. Always set replicas to 1.
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: readur
 spec:
-  replicas: 3
+  replicas: 1  # MUST be 1 - Readur doesn't support multiple instances
   selector:
     matchLabels:
       app: readur
@@ -353,11 +375,11 @@ spec:
               key: jwt-secret
         resources:
           limits:
-            memory: "2Gi"
-            cpu: "2"
+            memory: "4Gi"  # Increase for single instance
+            cpu: "4"        # Increase for single instance
           requests:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "1Gi"
+            cpu: "1"
 ```
 
 ### Cloud Platforms
@@ -371,9 +393,11 @@ spec:
 
 ### Production Checklist
 
+- [ ] **CRITICAL: Change JWT_SECRET from default value**
 - [ ] Change default admin password
-- [ ] Generate strong JWT secret
+- [ ] Generate strong JWT secret (use `openssl rand -base64 32`)
 - [ ] Use HTTPS/SSL in production
+- [ ] **Never disable SSL verification in production** (S3_VERIFY_SSL must be true)
 - [ ] Restrict database network access
 - [ ] Set proper file permissions
 - [ ] Enable firewall rules
@@ -381,13 +405,17 @@ spec:
 - [ ] Monitor access logs
 - [ ] Implement rate limiting
 - [ ] Enable audit logging
+- [ ] **Never expose secrets in command lines** (use env vars or config files)
 
 ### Recommended Production Setup
 
 ```bash
-# Generate secure secrets
-JWT_SECRET=$(openssl rand -base64 64)
+# Generate secure secrets - ALWAYS DO THIS!
+JWT_SECRET=$(openssl rand -base64 64)  # NEVER use default values
 DB_PASSWORD=$(openssl rand -base64 32)
+
+# WARNING: Default JWT_SECRET values are insecure
+# Always generate new secrets for production
 
 # Restrict file permissions
 chmod 600 .env
@@ -399,7 +427,7 @@ docker run --read-only --tmpfs /tmp ...
 
 ## Next Steps
 
-- Configure [monitoring and alerting](monitoring-usage)
-- Review [security best practices](security)
+- Configure [monitoring and alerting](health-monitoring-guide.md)
+- Review [security best practices](security-guide.md)
 - Set up [automated backups](#backup-strategy)
 - Explore [database guardrails](dev/DATABASE_GUARDRAILS.md)

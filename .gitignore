@@ -1,19 +1,22 @@
 # Rust
 target/
 
-# React
+# Node
 client/node_modules/
 node_modules/
 .env
 assets/
 frontend/dist/
 
-# CI
+# Python
+venv/
+site/
+
+# Testing
 readur_uploads/
 readur_watch/
 test-results/
 uploads/
 
-# Misc
+# Misc.
 .claude/settings.local.json
-site/

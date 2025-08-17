@@ -58,10 +58,10 @@ invoice 2024
 Finds: "Invoice Q1 2024", "invoicing for 2024", "2024 invoice data"
 
 **Features**:
-- **Auto-stemming**: "running" matches "run", "runs", "runner"
-- **Fuzzy tolerance**: "recieve" matches "receive"
-- **Partial matching**: "doc" matches "document", "documentation"
-- **Relevance ranking**: More relevant matches appear first
+
+The simple search mode includes powerful **Auto-stemming** capabilities, where "running" automatically matches variations like "run", "runs", and "runner". This linguistic intelligence extends to **Fuzzy tolerance**, correcting common typos so "recieve" successfully finds "receive".
+
+**Partial matching** allows shorter queries to find longer terms - typing "doc" will match "document", "documentation", and other related terms. The system's **Relevance ranking** ensures the most pertinent results appear first, using sophisticated algorithms that consider term frequency, document importance, and contextual relevance. Additionally, the search engine applies **Synonym expansion** for common terms and includes **Stop word filtering** to improve search quality.
 
 ### Phrase Search (Exact Match)
 
@@ -100,19 +100,20 @@ contract~    # Finds "contract", "contarct", "conract"
 ```
 
 **Configuration**:
-- **Threshold adjustment**: Configure sensitivity via user settings
-- **Language-specific**: Different languages may need different thresholds
-- **OCR optimization**: Higher tolerance for OCR-processed documents
+
+Fuzzy search can be fine-tuned through **Threshold adjustment** in your user settings, allowing you to configure how sensitive the system is to spelling variations. This is particularly important because **Language-specific** requirements vary - for instance, Germanic languages might need different thresholds than Romance languages due to their structural differences.
+
+The system provides **OCR optimization** with higher tolerance settings specifically for OCR-processed documents, which often contain character recognition errors. You can also configure **Context-aware matching** that adjusts fuzzy thresholds based on surrounding words, and set up **Custom dictionaries** for industry-specific terminology that might not be in standard dictionaries.
 
 ### Boolean Search (Logical Operators)
 
 **Best for**: Complex queries with multiple conditions and precise control
 
 **Operators**:
-- **AND**: Both terms must be present
-- **OR**: Either term can be present  
-- **NOT**: Exclude documents with the term
-- **Parentheses**: Group conditions
+
+Boolean search provides precise control through logical operators. The **AND** operator requires both terms to be present in matching documents, perfect for narrowing results to specific criteria. Conversely, the **OR** operator broadens your search by accepting documents containing either term.
+
+For exclusion logic, the **NOT** operator removes documents containing unwanted terms from your results. To handle complex queries, **Parentheses** allow you to group conditions and control the order of operations. The system also supports **NEAR** operators for proximity searches and **XOR** for exclusive or logic, giving you complete control over your search logic.
 
 **Examples**:
 ```
@@ -205,15 +206,18 @@ budget NOT personal           # Budget documents excluding personal
 Filter by specific file formats:
 
 **Common File Types**:
-- **Documents**: PDF, DOC, DOCX, TXT, RTF
-- **Images**: PNG, JPG, JPEG, TIFF, BMP, GIF
-- **Spreadsheets**: XLS, XLSX, CSV
-- **Presentations**: PPT, PPTX
+
+The file type filter supports a comprehensive range of formats. **Documents** include standard formats like PDF, DOC, DOCX, TXT, and RTF, covering most text-based files you'll encounter in a business environment.
+
+**Images** are fully supported with common formats including PNG, JPG, JPEG, TIFF, BMP, and GIF - all of which can be processed through OCR for text extraction. For data analysis, **Spreadsheets** in XLS, XLSX, and CSV formats are searchable, with the system able to extract and index tabular data.
+
+**Presentations** in PPT and PPTX formats are also indexed, including slide text and speaker notes. Beyond these categories, the system handles **Archive files** (ZIP, RAR, 7Z), **Email formats** (EML, MSG), and **eBook formats** (EPUB, MOBI) for comprehensive document management.
 
 **Filter Interface**:
-1. **Checkbox Filters**: Select multiple file types
-2. **MIME Type Groups**: Filter by general categories
-3. **Custom Extensions**: Add specific file extensions
+
+The filtering interface provides multiple ways to narrow your search by file type. You can use **Checkbox Filters** to quickly select or deselect multiple file types with a single click, making it easy to focus on specific document formats.
+
+For broader categorization, **MIME Type Groups** let you filter by general categories like "all documents" or "all images" without selecting individual formats. The system also supports **Custom Extensions** where you can add specific file extensions that might be unique to your organization. Additionally, there's a **Quick Toggle** feature for common combinations and **Saved Filter Sets** that remember your frequently used filter configurations.
 
 **Search Syntax**:
 ```
@@ -244,10 +248,12 @@ accessed:last-week            # Accessed in the last week
 ### Size Filters
 
 **Size Categories**:
-- **Small**: < 1MB
-- **Medium**: 1MB - 10MB  
-- **Large**: 10MB - 50MB
-- **Very Large**: > 50MB
+
+File size filtering uses intuitive categories to help you find documents of specific sizes. **Small** files under 1MB typically include text documents, simple PDFs, and low-resolution images - perfect for quick reference materials.
+
+The **Medium** category (1MB - 10MB) encompasses most business documents, including formatted reports, presentations, and high-quality images. **Large** files (10MB - 50MB) often contain detailed technical documentation, multi-page scanned documents, or multimedia presentations.
+
+Documents in the **Very Large** category (over 50MB) usually include comprehensive manuals, video content, or high-resolution design files. The system also provides **Micro** (<100KB) and **Gigantic** (>500MB) categories for edge cases, along with custom size range inputs for precise filtering.
 
 **Custom Size Ranges**:
 ```
@@ -276,10 +282,12 @@ label:(urgent OR critical)     # Documents with either label
 Filter by document source or origin:
 
 **Source Types**:
-- **Manual Upload**: Documents uploaded directly
-- **WebDAV Sync**: Documents from WebDAV sources
-- **Local Folder**: Documents from watched folders
-- **S3 Sync**: Documents from S3 buckets
+
+Documents can enter your system through various channels, each tracked separately for filtering. **Manual Upload** identifies documents that users have uploaded directly through the web interface or API, typically one-off additions or user-generated content.
+
+**WebDAV Sync** marks documents automatically synchronized from WebDAV servers like Nextcloud or ownCloud, often representing shared team resources. The **Local Folder** source indicates documents ingested from watched directories on the server, useful for automated workflows and bulk imports.
+
+**S3 Sync** identifies documents pulled from Amazon S3 or compatible cloud storage, commonly used for large-scale document repositories. The system also tracks **Email Attachments**, **API Uploads**, and **Migration Imports** as distinct sources for complete visibility into document origins.
 
 **Source-Specific Filters**:
 ```
@@ -293,15 +301,20 @@ source:"My Nextcloud"          # Specific named source
 Filter by OCR processing status:
 
 **Status Options**:
-- **Completed**: OCR successfully completed
-- **Pending**: Waiting for OCR processing
-- **Failed**: OCR processing failed
-- **Not Applicable**: Text documents that don't need OCR
+
+OCR status filtering helps you manage document processing states effectively. Documents marked as **Completed** have been successfully processed with text extraction finished and content indexed for searching.
+
+The **Pending** status indicates documents still waiting in the OCR queue, which might need attention if the queue is backing up. **Failed** status highlights documents where OCR processing encountered errors - these might need manual review or reprocessing with different settings.
+
+Documents marked **Not Applicable** are text-based files that don't require OCR processing, such as native PDFs with embedded text or plain text files. The system also tracks **In Progress** for actively processing documents, **Partial** for documents with mixed success, and **Skipped** for documents excluded by configuration rules.
 
 **OCR Quality Filters**:
-- **High Confidence**: OCR confidence > 90%
-- **Medium Confidence**: OCR confidence 70-90%
-- **Low Confidence**: OCR confidence < 70%
+
+Filter documents based on OCR extraction confidence levels to focus on quality. **High Confidence** documents (over 90% confidence) contain reliably extracted text suitable for critical searches and automated workflows.
+
+**Medium Confidence** results (70-90%) represent acceptable quality with occasional errors, typically from slightly degraded originals or handwritten sections. Documents with **Low Confidence** (below 70%) may contain significant extraction errors and often benefit from manual review or reprocessing.
+
+The system provides additional quality indicators including **Language Match** confidence, **Layout Preservation** quality, and **Character Recognition** accuracy scores, helping you identify documents that might need attention or alternative processing strategies.
 
 ## Search Interface
 
@@ -315,10 +328,12 @@ Filter by OCR processing status:
 - **Search history**: Recent searches for quick access
 
 **Usage**:
-1. Click on the search bar in the header
-2. Start typing your query
-3. View instant suggestions and results
-4. Click a result to navigate directly to the document
+
+The global search bar provides instant access to your documents from anywhere in the application. Simply click on the search bar located in the header to activate it and place your cursor ready for input.
+
+As you start typing your query, the system immediately begins processing, showing instant suggestions based on your input and search history. The dropdown displays the top matching results with highlighted snippets, giving you a preview of each document's relevance.
+
+Clicking any result navigates directly to the document viewer, while pressing Enter takes you to the full search results page with all matches. The interface also supports keyboard shortcuts - use arrow keys to navigate suggestions, Tab to autocomplete, and Escape to close the search dropdown.
 
 ### Advanced Search Page
 
@@ -332,48 +347,58 @@ Filter by OCR processing status:
 **Interface Sections**:
 
 #### Search Input Area
-- **Query builder**: Visual query construction
-- **Mode selector**: Choose search type (simple, phrase, fuzzy, boolean)
-- **Suggestions**: Auto-complete and query recommendations
+
+The search input area serves as your command center for building sophisticated queries. The **Query builder** provides visual query construction tools, including drag-and-drop operators and clickable filter tags that make complex searches accessible to all users.
+
+A **Mode selector** lets you instantly switch between search types - simple for everyday use, phrase for exact matches, fuzzy for typo tolerance, and boolean for complex logic. The **Suggestions** system offers intelligent auto-complete based on your search history, popular queries, and document content.
+
+Additionally, the interface includes a **Query validator** that checks syntax in real-time, **Search templates** for common query patterns, and a **Query history** dropdown for quick access to recent searches.
 
 #### Filter Sidebar
-- **File type filters**: Checkboxes for different formats
-- **Date range picker**: Calendar interface for date selection
-- **Size sliders**: Visual size range selection
-- **Label selector**: Hierarchical label browser
-- **Source filters**: Filter by upload source
+
+The filter sidebar consolidates all filtering options in an intuitive, collapsible panel. **File type filters** present checkboxes for different formats, organized by category with select-all options and quick presets for common combinations.
+
+The **Date range picker** offers a calendar interface for precise date selection, including preset ranges like "Last 7 days" or "This quarter" for convenience. **Size sliders** provide visual range selection with logarithmic scaling to handle the wide range of file sizes effectively.
+
+For organization, the **Label selector** displays your hierarchical label structure in a tree view, supporting multi-select with AND/OR logic. **Source filters** let you filter by upload source with usage statistics shown for each source. The sidebar also includes **OCR status filters** and **Custom metadata fields** for advanced filtering capabilities.
 
 #### Results Area
-- **Sort options**: Relevance, date, filename, size
-- **View modes**: List view, grid view, detail view
-- **Pagination**: Navigate through result pages
-- **Export options**: CSV, JSON export of results
+
+The results area adapts to your preferred way of viewing search results. **Sort options** include relevance scoring, upload date, filename alphabetically, and file size, with secondary sort criteria available for tie-breaking.
+
+**View modes** cater to different preferences - list view for maximum information density, grid view for visual browsing of documents with thumbnails, and detail view for in-depth document examination without leaving search results. The **Pagination** controls offer flexible navigation through result pages, with options for 10, 25, 50, or 100 results per page.
+
+For data portability, **Export options** allow you to download search results in CSV format for spreadsheet analysis or JSON for programmatic processing. The results area also features **Bulk actions** for operating on multiple documents, **Quick preview** on hover, and **Keyboard navigation** for power users.
 
 ### Search Results
 
 #### Result Display Elements
 
 **Document Cards**:
-- **Filename**: Primary document identifier
-- **Snippet**: Highlighted text excerpt showing search matches
-- **Metadata**: File size, type, upload date, labels
-- **Relevance Score**: Numerical relevance ranking
-- **Quick Actions**: Download, view, edit labels
+
+Each search result is presented as an information-rich card designed for quick evaluation. The **Filename** serves as the primary identifier, displayed prominently with file type icon and extension for immediate recognition.
+
+A **Snippet** shows highlighted text excerpts where your search terms appear, with intelligent context extraction ensuring you see the most relevant portions of each document. The **Metadata** section efficiently displays essential information including file size, document type, upload date, and applied labels in a scannable format.
+
+The **Relevance Score** provides a numerical ranking (0-100) helping you understand why certain documents rank higher than others. **Quick Actions** are available on hover or click, offering immediate access to download, view, or edit operations without leaving the search interface. Cards also display **OCR confidence**, **Source information**, and **Last modified** timestamps for complete context.
 
 **Highlighting**:
-- **Search terms**: Highlighted in yellow
-- **Context**: Surrounding text for context
-- **Multiple matches**: All instances highlighted
-- **Snippet length**: Configurable in user settings
+
+Search result highlighting makes it easy to spot relevant content within documents. **Search terms** are prominently highlighted in yellow (or your chosen color scheme) throughout snippets and document previews, ensuring quick visual scanning.
+
+The system includes sufficient **Context** around matched terms, showing surrounding sentences to help you understand the relevance without opening the document. When documents contain **Multiple matches**, all instances are highlighted with a match counter showing how many times your search terms appear.
+
+**Snippet length** can be adjusted in user settings from compact 100-character excerpts to detailed 500-character passages based on your preference. The highlighting system also supports **Synonym highlighting** in different colors, **Phrase boundary markers** for exact matches, and **Fuzzy match indicators** showing approximate matches with confidence scores.
 
 #### Result Sorting
 
 **Sort Options**:
-- **Relevance**: Best matches first (default)
-- **Date**: Newest or oldest first
-- **Filename**: Alphabetical order
-- **Size**: Largest or smallest first
-- **Score**: Highest search score first
+
+Flexible sorting options help you organize search results according to your needs. **Relevance** sorting (the default) uses sophisticated algorithms to place the best matches first, considering term frequency, document importance, and search context.
+
+**Date** sorting can display newest or oldest documents first, essential for finding recent updates or historical documents. **Filename** ordering arranges results alphabetically, useful when you know partial filenames or want to group similar documents.
+
+**Size** sorting helps identify the largest or smallest files, valuable for storage management or finding specific document types. Beyond these primary options, you can sort by **Score** for numerical relevance ranking, **Modification time** for recently edited documents, and **Access frequency** to surface popular documents.
 
 **Secondary Sorting**:
 - Apply secondary criteria when primary sort values are equal
@@ -384,17 +409,20 @@ Filter by OCR processing status:
 #### User Preferences
 
 **Search Settings** (accessible via Settings → Search):
-- **Results per page**: 10, 25, 50, 100
-- **Snippet length**: 100, 200, 300, 500 characters
-- **Fuzzy threshold**: Sensitivity for approximate matching
-- **Default sort**: Preferred default sorting option
-- **Search history**: Enable/disable query history
+
+Personalize your search experience through comprehensive user preferences. **Results per page** can be set to 10, 25, 50, or 100 items depending on your screen size and browsing preference, with the system remembering your choice across sessions.
+
+**Snippet length** options range from concise 100-character excerpts to detailed 500-character passages, letting you balance information density with readability. The **Fuzzy threshold** slider adjusts sensitivity for approximate matching, particularly useful if you frequently search OCR documents or deal with technical terms.
+
+Your **Default sort** preference ensures results always appear in your preferred order, whether that's relevance, date, or another criterion. **Search history** can be enabled or disabled based on privacy preferences and workflow needs. Additional settings include **Highlighting colors**, **Auto-suggestion delay**, and **Advanced mode defaults** for power users.
 
 #### Search Behavior
-- **Auto-complete**: Enable search suggestions
-- **Real-time search**: Search as you type
-- **Search highlighting**: Highlight search terms in results
-- **Context snippets**: Show surrounding text in results
+
+Configure how the search system responds to your interactions for an optimized experience. **Auto-complete** functionality can be toggled to show search suggestions as you type, drawing from your history, popular queries, and document content to speed up query creation.
+
+**Real-time search** enables instant result updates as you modify your query, perfect for exploratory searching where you're refining terms to find the right documents. This feature can be disabled if you prefer to complete your query before searching.
+
+**Search highlighting** ensures your search terms stand out in results, with customizable colors and styles to match your visual preferences. **Context snippets** control how much surrounding text appears with matches, helping you evaluate relevance without opening documents. The system also offers **Spell checking** with automatic correction suggestions, **Search shortcuts** for frequently used queries, and **Predictive filtering** that suggests relevant filters based on your query.
 
 ## Search Optimization
 
@@ -431,18 +459,27 @@ Filter by OCR processing status:
 
 #### Efficient Searching
 
-1. **Start Broad, Then Narrow**: Begin with general terms, then add filters
-2. **Use Filters Early**: Apply filters before complex text queries
-3. **Avoid Wildcards at Start**: `*report` is slower than `report*`
-4. **Combine Short Queries**: Use multiple short terms rather than long phrases
+#### Efficient Searching
+
+Optimize your search strategy for best performance and results. **Start Broad, Then Narrow** by beginning with general terms to gauge the document landscape, then progressively add filters and specific terms to refine results to exactly what you need.
+
+**Use Filters Early** in your search process - applying file type, date, or label filters before complex text queries reduces the dataset size and speeds up text matching. This is particularly effective when you know the general characteristics of the documents you're seeking.
+
+When using wildcards, **Avoid Wildcards at Start** of terms as `*report` requires scanning all terms in the index, while `report*` can use the index efficiently. This seemingly small difference can impact search speed significantly on large document collections.
+
+**Combine Short Queries** strategically - multiple focused terms often work better than long phrases, as they're more flexible in matching and allow the relevance algorithm to work effectively. Additionally, consider using **field-specific searches** to target particular document attributes, and leverage **search templates** for commonly repeated queries.
 
 #### Search Index Optimization
 
-The search system automatically optimizes for:
-- **Frequent Terms**: Common words are indexed for fast retrieval
-- **Document Updates**: New documents are indexed immediately
-- **Language Support**: Multi-language stemming and analysis
-- **Cache Management**: Frequent searches are cached
+#### Search Index Optimization
+
+The search system employs multiple automatic optimizations to ensure fast, accurate results. **Frequent Terms** that appear often in queries are specially indexed with optimized data structures for lightning-fast retrieval, reducing search latency for common queries.
+
+**Document Updates** trigger immediate reindexing, ensuring new content becomes searchable within seconds of upload or modification. This real-time indexing eliminates the delays common in batch-processing systems.
+
+Comprehensive **Language Support** includes language-specific stemming algorithms and analysis rules for over 20 languages, ensuring accurate search regardless of document language. The system automatically detects document language and applies appropriate processing.
+
+**Cache Management** intelligently stores results from frequent searches, dramatically reducing response time for popular queries while managing memory usage efficiently. The system also performs **Index compaction** during low-usage periods, **Query optimization** through automatic rewriting, and **Distributed indexing** for large deployments to maintain consistent performance at scale.
 
 ### OCR Search Optimization
 
@@ -457,9 +494,12 @@ OCR-extracted text may contain errors that affect search:
 4. **Check Original**: Compare with original document when possible
 
 **Common OCR Issues**:
-- **Character confusion**: "m" vs "rn", "cl" vs "d"
-- **Word boundaries**: "some thing" vs "something"
-- **Special characters**: Missing or incorrect punctuation
+
+Understanding typical OCR errors helps you craft better searches for scanned documents. **Character confusion** frequently occurs with similar-looking letter combinations - "m" might be read as "rn", "cl" as "d", or "li" as "h", particularly in lower-quality scans.
+
+**Word boundaries** present another challenge where OCR might incorrectly split or merge words, reading "something" as "some thing" or "can not" as "cannot". These errors are especially common with justified text or unusual fonts.
+
+**Special characters** including punctuation, symbols, and diacritical marks often get misread or omitted entirely, turning "don't" into "dont" or "café" into "cafe". The system also commonly encounters **Case confusion** where uppercase I becomes lowercase l, **Number-letter swaps** like 0/O or 1/I/l, and **Ligature problems** where connected letters in certain fonts get misinterpreted.
 
 **Optimization Examples**:
 ```
@@ -485,10 +525,14 @@ invoice~
 ### Managing Saved Searches
 
 **Saved Search Features**:
-- **Quick Access**: Available in sidebar or dashboard
-- **Automatic Updates**: Results update as new documents are added
-- **Shared Access**: Share searches with other users (future feature)
-- **Export Options**: Export results automatically
+
+Saved searches transform one-time queries into powerful ongoing tools. **Quick Access** from the sidebar or dashboard means your most important searches are always one click away, eliminating the need to recreate complex queries.
+
+**Automatic Updates** ensure your saved searches stay current - as new documents matching your criteria are added to the system, they automatically appear in saved search results. This creates dynamic document collections without manual maintenance.
+
+The **Shared Access** capability (coming soon) will allow you to share carefully crafted searches with team members, ensuring everyone uses consistent search criteria for common tasks. **Export Options** enable automatic result export on a schedule, perfect for regular reporting needs.
+
+Saved searches also support **Change notifications** alerting you when new matches appear, **Version tracking** to see how results change over time, and **Search analytics** showing usage patterns and result quality metrics.
 
 **Search Organization**:
 - **Categories**: Group related searches
@@ -509,18 +553,26 @@ Saved searches that automatically include new documents:
 ### Search Performance Metrics
 
 **Available Metrics**:
-- **Query Performance**: Average search response times
-- **Popular Searches**: Most frequently used search terms
-- **Result Quality**: Click-through rates and user engagement
-- **Search Patterns**: Common search behaviors and trends
+
+Comprehensive analytics help you understand and optimize search usage across your organization. **Query Performance** tracking shows average response times broken down by query complexity, time of day, and result set size, helping identify optimization opportunities.
+
+**Popular Searches** analysis reveals the most frequently used search terms and queries, providing insights into what information users need most often. This data can inform document organization, labeling strategies, and training priorities.
+
+**Result Quality** metrics including click-through rates, dwell time, and refinement patterns indicate whether searches are successfully connecting users with needed documents. Low engagement might suggest indexing issues or user training needs.
+
+**Search Patterns** analysis uncovers common search behaviors, query refinement sequences, and feature usage trends. The system also tracks **Failed searches** with no results, **Search abandonment** rates, and **Filter usage** patterns to provide a complete picture of search effectiveness.
 
 ### User Search History
 
 **History Features**:
-- **Recent Searches**: Quick access to previous queries
-- **Search Suggestions**: Based on search history
-- **Query Refinement**: Improve searches based on past patterns
-- **Export History**: Download search history for analysis
+
+Your search history becomes a powerful tool for improving search efficiency. **Recent Searches** provides instant access to previous queries through a dropdown menu, eliminating the need to retype complex searches and making it easy to revisit earlier research.
+
+**Search Suggestions** leverage your personal search history along with successful searches from across the system to offer intelligent query recommendations as you type. These suggestions learn from your patterns over time, becoming more accurate and personalized.
+
+**Query Refinement** tools analyze your search patterns to suggest improvements - if you frequently refine searches in similar ways, the system learns and suggests these refinements proactively. **Export History** functionality lets you download your complete search history for analysis, audit purposes, or migration to other systems.
+
+The history system also includes **Collaborative filtering** to suggest searches based on similar users' patterns, **Temporal analysis** showing how your search needs change over time, and **Privacy controls** allowing you to clear or disable history tracking as needed.
 
 ## API Search
 
@@ -600,43 +652,69 @@ Content-Type: application/json
 
 #### No Results Found
 
+#### No Results Found
+
 **Possible Causes**:
-1. **Typos**: Check spelling in search query
-2. **Too Specific**: Query might be too restrictive
-3. **Wrong Mode**: Using exact search when fuzzy would be better
-4. **Filters**: Remove filters to check if they're excluding results
+
+When searches return no results, systematic troubleshooting usually reveals the issue. **Typos** in search queries are the most common cause - even small spelling errors can prevent matches if you're using exact or phrase search modes.
+
+Your query might be **Too Specific**, combining multiple restrictive terms that no single document satisfies. This often happens when copying and pasting long phrases or using very technical terminology. Consider whether you're using the **Wrong Mode** - exact phrase searches won't find variations, while fuzzy search might be needed for OCR documents with recognition errors.
+
+**Filters** can inadvertently exclude all results, especially when multiple filters combine with AND logic. Date ranges might be too narrow, or label filters might reference labels that have been renamed or deleted. It's also worth checking if **Permission restrictions** are limiting visible results, or if **Index lag** means recently uploaded documents aren't yet searchable.
 
 **Solutions**:
-1. **Simplify Query**: Start with broader terms
-2. **Check Spelling**: Use fuzzy search for typo tolerance
-3. **Remove Filters**: Test without date, type, or label filters
-4. **Try Synonyms**: Use alternative terms for the same concept
+
+Resolving "no results" issues requires a systematic approach to identify what's blocking matches. **Simplify Query** by starting with just one or two broad terms, then gradually add specificity once you confirm documents exist in your target area.
+
+**Check Spelling** carefully, or switch to fuzzy search mode which tolerates typos and variations. This is particularly important for proper names, technical terms, or content extracted from OCR where errors are common.
+
+**Remove Filters** systematically - temporarily disable all filters to see if results appear, then reapply them one at a time to identify which filter is too restrictive. Pay special attention to date ranges and source filters.
+
+**Try Synonyms** and alternative phrasings for your concepts - what you call a "report" might be labeled as "summary", "analysis", or "review" in the actual documents. Additionally, consider searching for **Related terms** that often appear alongside your target content, use **Wildcard searches** to catch variations, and check the **Search scope** to ensure you're searching all available document fields.
+
+#### Irrelevant Results
 
 #### Irrelevant Results
 
 **Possible Causes**:
-1. **Too Broad**: Query matches too many unrelated documents
-2. **Common Terms**: Using very common words that appear everywhere
-3. **Wrong Mode**: Using fuzzy when exact match is needed
+
+Receiving irrelevant results often stems from queries that cast too wide a net. **Too Broad** queries using generic terms like "document" or "file" match nearly everything in your repository, burying relevant results in noise.
+
+Searching with **Common Terms** that appear in most documents - words like "page", "date", or "company" - dilutes result relevance. These terms add little discriminatory value to your search. Using the **Wrong Mode** can also cause relevance issues; fuzzy search might match too many variations when you need exact phrase matching for specific terminology.
+
+Other factors include **Missing context** where single words lack the surrounding terms that would clarify intent, **Outdated relevance** when old but highly-referenced documents outrank newer relevant ones, and **Language confusion** where multilingual content causes unexpected matches.
 
 **Solutions**:
-1. **Add Specificity**: Include more specific terms or context
-2. **Use Filters**: Add file type, date, or label filters
-3. **Phrase Search**: Use quotes for exact phrases
-4. **Boolean Logic**: Use AND/OR/NOT for better control
+
+Improving result relevance requires refining your search strategy to be more targeted. **Add Specificity** by including additional context terms that distinguish your desired documents from others - instead of just "budget", try "budget 2024 marketing" for precision.
+
+**Use Filters** aggressively to narrow the result set before text matching occurs. File type, date ranges, and label filters can eliminate large swaths of irrelevant documents, letting text search focus on a smaller, more relevant set.
+
+**Phrase Search** with quotation marks ensures multi-word concepts stay together, preventing matches where terms appear separately in unrelated contexts. This is essential for finding specific titles, names, or technical phrases.
+
+**Boolean Logic** provides surgical precision in defining what should and shouldn't appear in results. Combine AND to require multiple concepts, OR for alternatives, and NOT to exclude irrelevant documents. Beyond these techniques, consider **Field-specific searches** to target just filenames or content, **Relevance tuning** in search settings, and **Proximity operators** to require terms appear near each other.
+
+#### Slow Search Performance
 
 #### Slow Search Performance
 
 **Possible Causes**:
-1. **Complex Queries**: Very complex boolean queries
-2. **Large Result Sets**: Queries matching many documents
-3. **Wildcard Overuse**: Starting queries with wildcards
+
+Search performance can degrade for several reasons that are usually correctable. **Complex Queries** with deeply nested boolean logic, multiple wildcards, or extensive OR conditions require more processing time as the system evaluates numerous combinations.
+
+**Large Result Sets** slow down both search execution and result rendering. When queries match thousands of documents, the system must score and sort all matches before displaying even the first page. **Wildcard Overuse**, particularly leading wildcards like `*report`, forces full index scans rather than efficient prefix matching.
+
+Performance also suffers from **Fuzzy search overhead** with very low similarity thresholds, **Uncached queries** that are unique or rarely used, and **Resource contention** when multiple users run complex searches simultaneously.
 
 **Solutions**:
-1. **Simplify Queries**: Break complex queries into simpler ones
-2. **Add Filters**: Use filters to reduce result set size
-3. **Avoid Leading Wildcards**: Use `term*` instead of `*term`
-4. **Use Pagination**: Request smaller result sets
+
+Optimizing slow searches often involves adjusting your search strategy rather than waiting for results. **Simplify Queries** by breaking complex boolean expressions into multiple simpler searches, then combine results mentally or through saved searches.
+
+**Add Filters** before text search to reduce the document pool being searched. Date ranges, file types, and source filters can eliminate 90% of documents before expensive text matching begins, dramatically improving speed.
+
+**Avoid Leading Wildcards** which require examining every term in the index. Replace `*report` with `report*` or search for "report" without wildcards, using fuzzy matching if variation tolerance is needed.
+
+**Use Pagination** effectively by requesting smaller result sets (25-50 results) rather than large sets (100+). Most relevant results appear early, so you rarely need to see everything at once. Additional optimizations include **Caching frequent searches** by saving them, **Scheduling complex searches** for off-peak hours, and **Using search templates** that are pre-optimized for common query patterns.
 
 ### OCR Search Issues
 

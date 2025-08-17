@@ -18,22 +18,17 @@ Readur's Sources feature provides powerful automated document ingestion from mul
 
 ## Overview
 
-Sources allow Readur to automatically discover, download, and process documents from external storage systems. Key features include:
+Sources transform Readur from a simple upload-based system into a comprehensive document management platform that automatically stays synchronized with your existing storage. Instead of manually uploading documents, you connect Readur to where your documents already live, and it handles discovery, processing, and indexing automatically.
 
-- **Multi-Protocol Support**: WebDAV, Local Folders, and S3-compatible storage
-- **Automated Syncing**: Scheduled synchronization with configurable intervals
-- **Health Monitoring**: Proactive monitoring and validation of source connections
-- **Intelligent Processing**: Duplicate detection, incremental syncs, and OCR integration
-- **Real-time Status**: Live sync progress via WebSocket connections
-- **Per-User Watch Directories**: Individual watch folders for each user (v2.5.4+)
+The Sources feature supports multiple storage protocols including WebDAV (for cloud services like Nextcloud), local folders and network mounts, and S3-compatible storage. Synchronization runs on schedules you configure, with built-in health monitoring to alert you when connections have issues. The system intelligently handles duplicate detection across sources and integrates seamlessly with OCR processing.
 
-### How Sources Work
+Real-time status updates keep you informed of sync progress through WebSocket connections, providing immediate feedback when large batches are processing. The latest version adds per-user watch directories, allowing individual users to have their own dedicated document ingestion folders.
 
-1. **Configuration**: Set up a source with connection details and preferences
-2. **Discovery**: Readur scans the source for supported file types
-3. **Synchronization**: New and changed files are downloaded and processed
-4. **OCR Processing**: Documents are automatically queued for text extraction
-5. **Search Integration**: Processed documents become searchable in your collection
+### How the Source System Works
+
+When you configure a source, you provide connection details and specify which folders or storage areas to monitor. Readur then scans these locations periodically to discover new or changed files that match supported document types. During synchronization, any new or modified files are downloaded and queued for processing.
+
+The OCR system automatically processes documents as they arrive, extracting text and making them searchable. Once processing completes, documents become immediately available through Readur's search interface, with all the same capabilities as manually uploaded files.
 
 ## Source Types
 
@@ -54,115 +49,110 @@ WebDAV sources connect to cloud storage services and self-hosted servers that su
 
 #### WebDAV Configuration
 
-**Required Fields:**
-- **Name**: Descriptive name for the source
-- **Server URL**: Full WebDAV server URL (e.g., `https://cloud.example.com/remote.php/dav/files/username/`)
-- **Username**: WebDAV authentication username
-- **Password**: WebDAV authentication password or app password
+Setting up a WebDAV source requires several key pieces of information. You'll need a descriptive name to identify the source in your Readur interface, and the complete WebDAV server URL. The URL format varies by provider - Nextcloud and ownCloud typically use paths like `https://cloud.example.com/remote.php/dav/files/username/`, while generic WebDAV servers might use simpler paths.
 
-**Optional Configuration:**
-- **Watch Folders**: Specific directories to monitor (leave empty to sync entire accessible space)
-- **File Extensions**: Limit to specific file types (default: all supported types)
-- **Auto Sync**: Enable automatic scheduled synchronization
-- **Sync Interval**: How often to check for changes (15 minutes to 24 hours)
-- **Server Type**: Specify server type for optimizations (auto-detected)
+Authentication requires your WebDAV username and password. For security, many cloud providers let you generate app-specific passwords rather than using your main account password - this approach is strongly recommended since it allows you to revoke access to Readur without affecting other applications.
+
+For monitoring scope, you can specify particular directories to watch, or leave this empty to sync all accessible files. File extension filtering lets you limit synchronization to specific document types if you want to avoid processing certain files. The sync interval determines how frequently Readur checks for changes - more frequent intervals provide faster updates but use more server resources.
+
+Readur can often auto-detect your server type (Nextcloud, ownCloud, etc.) to optimize connection handling, but you can specify this manually if auto-detection doesn't work correctly.
 
 #### Setting Up WebDAV Sources
 
-1. **Navigate to Sources**: Go to Settings → Sources in the Readur interface
-2. **Add New Source**: Click "Add Source" and select "WebDAV"
-3. **Configure Connection**:
-   ```
-   Name: My Nextcloud Documents
-   Server URL: https://cloud.mycompany.com/remote.php/dav/files/john/
-   Username: john
-   Password: app-password-here
-   ```
-4. **Test Connection**: Use the "Test Connection" button to verify credentials
-5. **Configure Folders**: Specify directories to monitor:
-   ```
-   Watch Folders:
-   - Documents/
-   - Projects/2024/
-   - Invoices/
-   ```
-6. **Set Sync Schedule**: Choose automatic sync interval (recommended: 30 minutes)
-7. **Save and Sync**: Save configuration and trigger initial sync
+To create a WebDAV source, start by navigating to Settings → Sources in the Readur interface, then click "Add Source" and select "WebDAV" from the available options. In the configuration form, provide connection details like this example for a Nextcloud server:
+
+```
+Name: My Nextcloud Documents
+Server URL: https://cloud.mycompany.com/remote.php/dav/files/john/
+Username: john
+Password: app-password-here
+```
+
+Always use the "Test Connection" button to verify your credentials work before proceeding. This test confirms that Readur can authenticate and access your WebDAV server successfully.
+
+Next, configure which directories to monitor by specifying watch folders. You might set up monitoring like this:
+
+```
+Watch Folders:
+- Documents/
+- Projects/2024/
+- Invoices/
+```
+
+Choose an appropriate sync schedule - 30 minutes is a good balance between staying current and not overwhelming your server with requests. Finally, save your configuration and trigger an initial sync to import existing documents.
 
 #### WebDAV Best Practices
 
-- **Use App Passwords**: Create dedicated app passwords instead of using main account passwords
-- **Limit Scope**: Specify watch folders to avoid syncing unnecessary files
-- **Server Optimization**: Let Readur auto-detect server type for optimal performance
-- **Network Considerations**: Use longer sync intervals for slow connections
+For security, always create dedicated app passwords in your cloud provider rather than using your main account password. This practice lets you revoke Readur's access independently if needed. Limit the scope of synchronization by specifying watch folders rather than syncing your entire cloud storage - this avoids processing personal files or unrelated documents.
+
+Let Readur auto-detect your server type when possible, as this enables optimizations specific to your WebDAV implementation. For slow or unreliable network connections, use longer sync intervals to reduce the chance of timeout errors during synchronization.
 
 ### Local Folder Sources
 
 Local folder sources monitor directories on the Readur server's filesystem, including mounted network drives.
 
-#### Use Cases
+#### Common Use Cases for Local Folders
 
-- **Watch Folders**: Monitor directories where documents are dropped
-- **Network Mounts**: Sync from NFS, SMB/CIFS, or other mounted filesystems
-- **Batch Processing**: Automatically process documents placed in specific folders
-- **Archive Integration**: Monitor existing document archives
-- **Per-User Ingestion**: Individual watch directories for each user (v2.5.4+)
+Local folder sources work well for traditional file server environments where documents are regularly deposited into specific directories. Watch folders provide automatic processing for documents dropped by scanners, email systems, or other automated processes. Network mounts let you sync from shared storage systems using protocols like NFS or SMB/CIFS without requiring additional credentials.
 
-#### Local Folder Configuration
+Batch processing scenarios benefit from local sources when you need to process large numbers of documents placed in staging directories. Archive integration helps bring existing document collections under Readur's search capabilities by monitoring established document repositories. The latest version also supports per-user ingestion directories, giving each user their own dedicated drop folder.
 
-**Required Fields:**
-- **Name**: Descriptive name for the source
-- **Watch Folders**: Absolute paths to monitor directories
+#### Configuring Local Folder Sources
 
-**Optional Configuration:**
-- **File Extensions**: Filter by specific file types
-- **Auto Sync**: Enable scheduled monitoring
-- **Sync Interval**: Frequency of directory scans
-- **Recursive**: Include subdirectories in scans
-- **Follow Symlinks**: Follow symbolic links (use with caution)
+Setting up a local folder source requires a descriptive name and the absolute paths to directories you want to monitor. The paths must be accessible from the Readur server and should use complete filesystem paths rather than relative references.
+
+You can filter monitoring to specific file types using file extension lists, which helps avoid processing irrelevant files in mixed-use directories. Enable automatic sync with appropriate intervals based on how frequently documents arrive - frequent arrivals might warrant 5-minute intervals, while archive monitoring might only need hourly checks.
+
+The recursive option includes subdirectories in monitoring, which is useful for hierarchical document structures. Use the symlink following option cautiously, as it can lead to infinite loops if symbolic links create circular references in your filesystem.
 
 #### Setting Up Local Folder Sources
 
-1. **Prepare Directory**: Ensure the directory exists and is accessible
-   ```bash
-   # Create watch folder
-   mkdir -p /mnt/documents/inbox
-   
-   # Set permissions (if needed)
-   chmod 755 /mnt/documents/inbox
-   ```
+Before configuring a local folder source in Readur, ensure the target directory exists and has appropriate permissions. Create the directory structure and set permissions that allow the Readur process to read files:
 
-2. **Configure Source**:
-   ```
-   Name: Document Inbox
-   Watch Folders: /mnt/documents/inbox
-   File Extensions: pdf,jpg,png,txt,docx
-   Auto Sync: Enabled
-   Sync Interval: 5 minutes
-   Recursive: Yes
-   ```
-
-3. **Test Setup**: Place a test document in the folder and verify detection
-
-#### Network Mount Examples
-
-**NFS Mount:**
 ```bash
-# Mount NFS share
+# Create the watch folder structure
+mkdir -p /mnt/documents/inbox
+
+# Set appropriate permissions for Readur access
+chmod 755 /mnt/documents/inbox
+```
+
+In the Readur interface, configure your source with settings appropriate for your use case:
+
+```
+Name: Document Inbox
+Watch Folders: /mnt/documents/inbox
+File Extensions: pdf,jpg,png,txt,docx
+Auto Sync: Enabled
+Sync Interval: 5 minutes
+Recursive: Yes
+```
+
+This configuration monitors the inbox directory every 5 minutes, processes common document types, and includes any subdirectories. After saving the configuration, test your setup by placing a document in the watched folder and confirming that Readur detects and processes it.
+
+#### Working with Network Mounts
+
+Network-mounted storage expands local folder capabilities to include remote file systems. For NFS shares, mount the remote filesystem and then configure Readur to monitor specific paths within it:
+
+```bash
+# Mount an NFS share to your local filesystem
 sudo mount -t nfs 192.168.1.100:/documents /mnt/nfs-docs
 
-# Configure in Readur
+# Configure Readur to watch a specific path in the mounted share
 Watch Folders: /mnt/nfs-docs/inbox
 ```
 
-**SMB/CIFS Mount:**
+SMB/CIFS shares work similarly, requiring mount commands with appropriate credentials:
+
 ```bash
-# Mount SMB share
+# Mount SMB share with authentication
 sudo mount -t cifs //server/documents /mnt/smb-docs -o username=user
 
-# Configure in Readur
+# Point Readur to a processing directory within the mount
 Watch Folders: /mnt/smb-docs/processing
 ```
+
+Ensure network mounts are stable and available when Readur starts, as missing mounts can cause source health issues.
 
 #### Per-User Watch Directories (v2.5.4+)
 
@@ -224,41 +214,34 @@ S3 sources connect to Amazon S3 or S3-compatible storage services for document s
 | **Wasabi** | ✅ Supported | Custom endpoint configuration |
 | **Google Cloud Storage** | ⚠️ Limited | S3-compatible mode only |
 
-#### S3 Configuration
+#### S3 Configuration Requirements
 
-**Required Fields:**
-- **Name**: Descriptive name for the source
-- **Bucket Name**: S3 bucket to monitor
-- **Region**: AWS region (e.g., `us-east-1`)
-- **Access Key ID**: AWS/S3 access key
-- **Secret Access Key**: AWS/S3 secret key
+Setting up an S3 source requires several essential pieces of information. You'll need a descriptive name for the source, the exact name of the S3 bucket to monitor, and the AWS region where the bucket is located (such as `us-east-1` or `us-west-2`). Authentication requires both an access key ID and secret access key with appropriate permissions to list and download objects from the bucket.
 
-**Optional Configuration:**
-- **Endpoint URL**: Custom endpoint for S3-compatible services
-- **Prefix**: Bucket path prefix to limit scope
-- **Watch Folders**: Specific S3 "directories" to monitor
-- **File Extensions**: Filter by file types
-- **Auto Sync**: Enable scheduled synchronization
-- **Sync Interval**: Frequency of bucket scans
+For S3-compatible services that aren't Amazon S3, you'll also need to specify a custom endpoint URL. The prefix option lets you limit monitoring to a specific "directory" within the bucket, which is useful for large buckets with mixed content. Watch folders provide additional filtering to monitor only specific paths within your chosen prefix.
+
+File extension filtering and sync intervals work the same as other source types, letting you control which files are processed and how frequently Readur checks for changes.
 
 #### Setting Up S3 Sources
 
-1. **Prepare S3 Bucket**: Ensure bucket exists and credentials have access
-2. **Configure Source**:
-   ```
-   Name: Company Documents S3
-   Bucket Name: company-documents
-   Region: us-west-2
-   Access Key ID: AKIAIOSFODNN7EXAMPLE
-   Secret Access Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-   Prefix: documents/
-   Watch Folders: 
-   - invoices/
-   - contracts/
-   - reports/
-   ```
+Before configuring the source in Readur, ensure your S3 bucket exists and your access credentials have the necessary permissions. Your IAM user or role should be able to list bucket contents and download objects from the monitored paths.
 
-3. **Test Connection**: Verify credentials and bucket access
+Configure your S3 source with details appropriate for your storage setup:
+
+```
+Name: Company Documents S3
+Bucket Name: company-documents
+Region: us-west-2
+Access Key ID: AKIAIOSFODNN7EXAMPLE
+Secret Access Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+Prefix: documents/
+Watch Folders: 
+- invoices/
+- contracts/
+- reports/
+```
+
+This configuration monitors specific "directories" within the documents prefix of your bucket. Always use the "Test Connection" button to verify that your credentials work and Readur can access the specified bucket before saving the configuration.
 
 #### S3-Compatible Services
 
@@ -280,12 +263,11 @@ Region: nyc3
 
 ### Adding Your First Source
 
-1. **Access Sources Management**: Navigate to Settings → Sources
-2. **Choose Source Type**: Select WebDAV, Local Folder, or S3 based on your needs
-3. **Configure Connection**: Enter required credentials and connection details
-4. **Test Connection**: Verify connectivity before saving
-5. **Configure Sync**: Set up folders to monitor and sync schedule
-6. **Initial Sync**: Trigger first synchronization to import existing documents
+Creating your first source begins with accessing the Sources management interface by navigating to Settings → Sources in Readur. From there, choose the source type that matches your storage system - WebDAV for cloud services like Nextcloud, Local Folder for server directories or network mounts, or S3 for cloud object storage.
+
+Enter the required connection details and credentials for your chosen source type. Each source type has different requirements, but they generally include authentication information and the location of your documents. Always use the "Test Connection" feature to verify that Readur can successfully connect to your storage before proceeding.
+
+Configure which folders or areas to monitor and set an appropriate sync schedule based on how frequently your documents change. Finally, trigger an initial synchronization to import existing documents from your source. This first sync might take a while depending on how many documents are already stored in your source location.
 
 ### Quick Setup Examples
 
@@ -422,11 +404,20 @@ ws.onmessage = (event) => {
 
 Sources are continuously monitored and assigned health scores (0-100):
 
-- **90-100**: ✅ Excellent - No issues detected
-- **75-89**: ⚠️ Good - Minor issues or warnings
-- **50-74**: ⚠️ Fair - Moderate issues requiring attention
-- **25-49**: ❌ Poor - Significant problems
-- **0-24**: ❌ Critical - Severe issues, manual intervention required
+- **90-100**: ✅ Excellent  
+  No issues detected
+  
+- **75-89**: ⚠️ Good  
+  Minor issues or warnings
+  
+- **50-74**: ⚠️ Fair  
+  Moderate issues requiring attention
+  
+- **25-49**: ❌ Poor  
+  Significant problems
+  
+- **0-24**: ❌ Critical  
+  Severe issues, manual intervention required
 
 ### Health Checks
 
@@ -573,7 +564,7 @@ Sources are continuously monitored and assigned health scores (0-100):
 
 ## Next Steps
 
-- Configure [notifications](notifications.md) for sync events
+- Configure [notifications](notifications-guide.md) for sync events
 - Set up [advanced search](advanced-search.md) to find synced documents
 - Review [OCR optimization](dev/OCR_OPTIMIZATION_GUIDE.md) for processing improvements
 - Explore [labels and organization](labels-and-organization.md) for document management

@@ -42,7 +42,7 @@ git clone https://github.com/perfectra1n/readur.git
 cd readur
 ```
 
-2. **Set up the database**:
+**Set up the database:** Create a dedicated PostgreSQL database for development work.
 ```bash
 # Create development database
 sudo -u postgres psql
@@ -52,7 +52,7 @@ GRANT ALL PRIVILEGES ON DATABASE readur_dev TO readur_dev;
 \q
 ```
 
-3. **Configure environment**:
+**Configure environment:** Set up environment variables for local development.
 ```bash
 # Copy example environment
 cp .env.example .env.development
@@ -62,7 +62,7 @@ DATABASE_URL=postgresql://readur_dev:dev_password@localhost/readur_dev
 JWT_SECRET=dev-secret-key
 ```
 
-4. **Run database migrations**:
+**Run database migrations:** Apply database schema changes to your development database.
 ```bash
 # Install sqlx-cli if needed
 cargo install sqlx-cli
@@ -71,7 +71,7 @@ cargo install sqlx-cli
 sqlx migrate run
 ```
 
-5. **Start the backend**:
+**Start the backend:** Launch the Rust backend server in development mode.
 ```bash
 # Development mode with auto-reload
 cargo watch -x run
@@ -80,7 +80,7 @@ cargo watch -x run
 cargo run
 ```
 
-6. **Start the frontend**:
+**Start the frontend:** Launch the React frontend development server.
 ```bash
 cd frontend
 npm install
@@ -268,7 +268,7 @@ Style preferences:
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](../CONTRIBUTING.md) for details.
+We welcome contributions!
 
 ### Getting Started
 
@@ -369,7 +369,7 @@ RUST_LOG=debug cargo run
 }
 ```
 
-3. **Database query logging**:
+**Database query logging:** Enable detailed SQL query logging for debugging database interactions.
 ```bash
 RUST_LOG=sqlx=debug cargo run
 ```

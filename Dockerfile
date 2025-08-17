@@ -8,7 +8,7 @@ COPY frontend ./
 RUN npm run build
 
 # --- Backend build stage ---
-FROM rust:1.88-bookworm as backend-builder
+FROM rust:1.89-bookworm as backend-builder
 
 # Install system dependencies for OCR and PDF processing
 RUN apt-get update && apt-get install -y \
@@ -85,6 +85,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     poppler-utils \
     ocrmypdf \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

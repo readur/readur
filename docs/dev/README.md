@@ -34,7 +34,6 @@ This directory contains technical documentation for developers working on Readur
 - [Configuration Reference](../configuration-reference.md) - Complete configuration options
 - [User Guide](../user-guide.md) - How to use Readur features
 - [API Reference](../api-reference.md) - REST API documentation
-- [New Features in 2.5.4](../new-features-2.5.4.md) - Latest features and improvements
 
 ## 🤝 Contributing
 
@@ -46,7 +45,14 @@ Please read our [Development Guide](development.md) for:
 
 ## 🏷️ Document Categories
 
-- **📘 User Docs**: Installation, configuration, user guide
-- **🔧 Operations**: Deployment, monitoring, troubleshooting  
-- **💻 Developer**: Architecture, development setup, testing
-- **🔌 Integration**: API reference, webhooks, extensions
+- **📘 User Docs**  
+  Installation, configuration, user guide
+  
+- **🔧 Operations**  
+  Deployment, monitoring, troubleshooting
+  
+- **💻 Developer**  
+  Architecture, development setup, testing
+  
+- **🔌 Integration**  
+  API reference, webhooks, extensions

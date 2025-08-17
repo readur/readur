@@ -8,10 +8,10 @@ This guide covers all configuration options available in Readur through environm
 
 - [Environment Variables](#environment-variables)
   - [Core Configuration](#core-configuration)
-  - [File Storage & Upload](#file-storage--upload)
+  - [File Storage & Upload](#file-storage-upload)
   - [Watch Folder Configuration](#watch-folder-configuration)
-  - [OCR & Processing Settings](#ocr--processing-settings)
-  - [Search & Performance](#search--performance)
+  - [OCR & Processing Settings](#ocr-processing-settings)
+  - [Search & Performance](#search-performance)
   - [Data Management](#data-management)
 - [Port Configuration](#port-configuration)
 - [Example Configurations](#example-configurations)

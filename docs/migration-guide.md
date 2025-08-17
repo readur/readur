@@ -1,471 +1,671 @@
-# Migration Guide: Local Storage to S3
+# Migration Guide
 
-## Overview
+This comprehensive guide covers all migration scenarios for Readur, including version upgrades, storage migrations, database migrations, and platform migrations.
 
-This guide provides step-by-step instructions for migrating your Readur installation from local filesystem storage to S3 storage. The migration process is designed to be safe, resumable, and reversible.
+## Version Upgrades
 
-## Pre-Migration Checklist
+### Upgrading from v2.x to v3.x
 
-### 1. System Requirements
+#### Pre-Upgrade Checklist
 
-- [ ] Readur compiled with S3 feature: `cargo build --release --features s3`
-- [ ] Sufficient disk space for temporary operations (at least 2x largest file)
-- [ ] Network bandwidth for uploading all documents to S3
-- [ ] AWS CLI installed and configured (for verification)
+- [ ] Review breaking changes in release notes
+- [ ] Backup database and files
+- [ ] Test upgrade in staging environment
+- [ ] Schedule maintenance window
+- [ ] Notify users of planned downtime
 
-### 2. S3 Prerequisites
+#### Upgrade Steps
+
+1. **Stop the application**
+```bash
+docker-compose down
+# or
+systemctl stop readur
+```
+
+**Backup current state:** Create comprehensive backups of both database and file data before proceeding.
+```bash
+# Database backup
+pg_dump $DATABASE_URL > backup_v2_$(date +%Y%m%d).sql
+
+# File backup
+tar -czf files_backup_v2_$(date +%Y%m%d).tar.gz /var/readur/uploads
+```
+
+**Update configuration:** Add new environment variables and configuration options required for the new version.
+```bash
+# New environment variables in v3
+echo "OIDC_ENABLED=false" >> .env
+echo "FEATURE_MULTI_LANGUAGE_OCR=true" >> .env
+echo "FEATURE_LABELS=true" >> .env
+```
+
+**Run database migrations:** Apply database schema changes required for the new version.
+```bash
+# Pull new version
+docker pull readur:v3.0.0
+
+# Run migrations
+docker run --rm \
+  -e DATABASE_URL=$DATABASE_URL \
+  readur:v3.0.0 \
+  cargo run --bin migrate
+```
+
+**Update and start application:** Deploy the new version and restart the application services.
+```bash
+# Update docker-compose.yml
+sed -i 's/readur:v2/readur:v3.0.0/g' docker-compose.yml
+
+# Start application
+docker-compose up -d
+```
+
+**Verify upgrade:** Confirm that the upgrade completed successfully and all systems are functioning correctly.
+```bash
+# Check version
+curl http://localhost:8080/api/version
+
+# Check health
+curl http://localhost:8080/health
+
+# Verify migrations
+psql $DATABASE_URL -c "SELECT * FROM _sqlx_migrations ORDER BY installed_on DESC LIMIT 5;"
+```
+
+### Rollback Procedure
+
+If issues occur during upgrade:
+
+```bash
+# Stop v3
+docker-compose down
+
+# Restore database
+psql $DATABASE_URL < backup_v2_$(date +%Y%m%d).sql
+
+# Restore configuration
+git checkout v2.x.x docker-compose.yml
+git checkout v2.x.x .env
+
+# Start v2
+docker-compose up -d
+```
+
+## Storage Migration
+
+### Local to S3 Migration
+
+#### Prerequisites
 
 - [ ] S3 bucket created and accessible
-- [ ] IAM user with appropriate permissions
-- [ ] Access keys generated and tested
-- [ ] Bucket region identified
-- [ ] Encryption settings configured (if required)
-- [ ] Lifecycle policies reviewed
+- [ ] IAM credentials with appropriate permissions
+- [ ] Sufficient network bandwidth
+- [ ] Migration tool installed: `cargo install --path . --bin migrate_to_s3`
 
-### 3. Backup Requirements
-
-- [ ] Database backed up
-- [ ] Local files backed up (optional but recommended)
-- [ ] Configuration files saved
-- [ ] Document count and total size recorded
-
-## Migration Process
-
-### Step 1: Prepare Environment
-
-#### 1.1 Backup Database
+#### Step 1: Prepare S3 Environment
 
 ```bash
-# Create timestamped backup
-BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
-pg_dump $DATABASE_URL > readur_backup_${BACKUP_DATE}.sql
+# Test S3 access
+aws s3 ls s3://readur-documents/
 
-# Verify backup
-pg_restore --list readur_backup_${BACKUP_DATE}.sql | head -20
+# Create bucket structure
+aws s3api put-object --bucket readur-documents --key documents/
+aws s3api put-object --bucket readur-documents --key thumbnails/
+aws s3api put-object --bucket readur-documents --key processed/
 ```
 
-#### 1.2 Document Current State
+#### Step 2: Configure S3 Settings
 
-```sql
--- Record current statistics
-SELECT 
-    COUNT(*) as total_documents,
-    SUM(file_size) / 1024.0 / 1024.0 / 1024.0 as total_size_gb,
-    COUNT(DISTINCT user_id) as unique_users
-FROM documents;
-
--- Save document list
-\copy (SELECT id, filename, file_path, file_size FROM documents) TO 'documents_pre_migration.csv' CSV HEADER;
+```yaml
+# Update environment variables
+S3_ENABLED: true
+S3_BUCKET_NAME: readur-documents
+S3_REGION: us-east-1
+S3_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+S3_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+S3_PREFIX: production/
+S3_STORAGE_CLASS: STANDARD_IA
 ```
 
-#### 1.3 Calculate Migration Time
+#### Step 3: Run Migration
 
 ```bash
-# Estimate migration duration
-TOTAL_SIZE_GB=100  # From query above
-UPLOAD_SPEED_MBPS=100  # Your upload speed
-ESTIMATED_HOURS=$(echo "scale=2; ($TOTAL_SIZE_GB * 1024 * 8) / ($UPLOAD_SPEED_MBPS * 3600)" | bc)
-echo "Estimated migration time: $ESTIMATED_HOURS hours"
-```
+# Dry run first
+./migrate_to_s3 --dry-run
 
-### Step 2: Configure S3
-
-#### 2.1 Create S3 Bucket
-
-```bash
-# Create bucket
-aws s3api create-bucket \
-    --bucket readur-production \
-    --region us-east-1 \
-    --create-bucket-configuration LocationConstraint=us-east-1
-
-# Enable versioning
-aws s3api put-bucket-versioning \
-    --bucket readur-production \
-    --versioning-configuration Status=Enabled
-
-# Enable encryption
-aws s3api put-bucket-encryption \
-    --bucket readur-production \
-    --server-side-encryption-configuration '{
-        "Rules": [{
-            "ApplyServerSideEncryptionByDefault": {
-                "SSEAlgorithm": "AES256"
-            }
-        }]
-    }'
-```
-
-#### 2.2 Set Up IAM User
-
-```bash
-# Create policy file
-cat > readur-s3-policy.json << 'EOF'
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "s3:ListBucket",
-                "s3:GetBucketLocation"
-            ],
-            "Resource": "arn:aws:s3:::readur-production"
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject",
-                "s3:DeleteObject",
-                "s3:GetObjectVersion",
-                "s3:PutObjectAcl"
-            ],
-            "Resource": "arn:aws:s3:::readur-production/*"
-        }
-    ]
-}
-EOF
-
-# Create IAM user and attach policy
-aws iam create-user --user-name readur-s3-user
-aws iam put-user-policy \
-    --user-name readur-s3-user \
-    --policy-name ReadurS3Access \
-    --policy-document file://readur-s3-policy.json
-
-# Generate access keys
-aws iam create-access-key --user-name readur-s3-user > s3-credentials.json
-```
-
-#### 2.3 Configure Readur for S3
-
-```bash
-# Add to .env file
-cat >> .env << 'EOF'
-# S3 Configuration
-S3_ENABLED=true
-S3_BUCKET_NAME=readur-production
-S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
-S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-S3_REGION=us-east-1
-EOF
-
-# Test configuration
-source .env
-aws s3 ls s3://$S3_BUCKET_NAME --region $S3_REGION
-```
-
-### Step 3: Run Migration
-
-#### 3.1 Dry Run
-
-```bash
-# Preview migration without making changes
-cargo run --bin migrate_to_s3 --features s3 -- --dry-run
-
-# Review output
 # Expected output:
-# 🔍 DRY RUN - Would migrate the following files:
-#   - document1.pdf (User: 123e4567..., Size: 2.5 MB)
-#   - report.docx (User: 987fcdeb..., Size: 1.2 MB)
-# 💡 Run without --dry-run to perform actual migration
+# Files to migrate: 5,432
+# Total size: 45.6 GB
+# Estimated time: 2.5 hours
+
+# Run actual migration with progress tracking
+./migrate_to_s3 \
+  --enable-rollback \
+  --batch-size 100 \
+  --parallel-uploads 10 \
+  --verbose \
+  2>&1 | tee migration_$(date +%Y%m%d).log
 ```
 
-#### 3.2 Partial Migration (Testing)
+#### Step 4: Verify Migration
 
 ```bash
-# Migrate only 10 files first
-cargo run --bin migrate_to_s3 --features s3 -- --limit 10
+# Check file count
+aws s3 ls s3://readur-documents/documents/ --recursive | wc -l
 
-# Verify migrated files
-aws s3 ls s3://$S3_BUCKET_NAME/documents/ --recursive | head -20
+# Verify random samples
+./migrate_to_s3 --verify --sample-size 100
 
-# Check database updates
-psql $DATABASE_URL -c "SELECT id, filename, file_path FROM documents WHERE file_path LIKE 's3://%' LIMIT 10;"
+# Check database references
+psql $DATABASE_URL <<EOF
+SELECT COUNT(*) FROM documents WHERE file_path LIKE 's3://%';
+SELECT COUNT(*) FROM documents WHERE file_path NOT LIKE 's3://%';
+EOF
 ```
 
-#### 3.3 Full Migration
+#### Step 5: Switch to S3 Storage
 
 ```bash
-# Run full migration with progress tracking
-cargo run --bin migrate_to_s3 --features s3 -- \
-    --enable-rollback \
-    2>&1 | tee migration_$(date +%Y%m%d_%H%M%S).log
+# Update configuration
+docker-compose down
+vim docker-compose.yml  # Set S3_ENABLED=true
+docker-compose up -d
 
-# Monitor progress in another terminal
-watch -n 5 'cat migration_state.json | jq "{processed: .processed_files, total: .total_files, failed: .failed_migrations | length}"'
+# Test file upload
+curl -X POST http://localhost:8080/api/documents/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@test.pdf"
 ```
 
-#### 3.4 Migration with Local File Deletion
+### S3 to Local Migration
 
 ```bash
-# Only after verifying successful migration
-cargo run --bin migrate_to_s3 --features s3 -- \
-    --delete-local \
-    --enable-rollback
+# Reverse migration if needed
+./migrate_to_s3 \
+  --direction s3-to-local \
+  --enable-rollback \
+  --verify
 ```
 
-### Step 4: Verify Migration
-
-#### 4.1 Database Verification
-
-```sql
--- Check migration completeness
-SELECT 
-    COUNT(*) FILTER (WHERE file_path LIKE 's3://%') as s3_documents,
-    COUNT(*) FILTER (WHERE file_path NOT LIKE 's3://%') as local_documents,
-    COUNT(*) as total_documents
-FROM documents;
-
--- Find any failed migrations
-SELECT id, filename, file_path 
-FROM documents 
-WHERE file_path NOT LIKE 's3://%'
-ORDER BY created_at DESC
-LIMIT 20;
-
--- Verify path format
-SELECT DISTINCT 
-    substring(file_path from 1 for 50) as path_prefix,
-    COUNT(*) as document_count
-FROM documents
-GROUP BY path_prefix
-ORDER BY document_count DESC;
-```
-
-#### 4.2 S3 Verification
+### Cross-Region S3 Migration
 
 ```bash
-# Count objects in S3
-aws s3 ls s3://$S3_BUCKET_NAME/documents/ --recursive --summarize | grep "Total Objects"
-
-# Verify file structure
-aws s3 ls s3://$S3_BUCKET_NAME/ --recursive | head -50
-
-# Check specific document
-DOCUMENT_ID="123e4567-e89b-12d3-a456-426614174000"
-aws s3 ls s3://$S3_BUCKET_NAME/documents/ --recursive | grep $DOCUMENT_ID
-```
-
-#### 4.3 Application Testing
-
-```bash
-# Restart Readur with S3 configuration
-systemctl restart readur
-
-# Test document upload
-curl -X POST https://readur.example.com/api/documents \
-    -H "Authorization: Bearer $TOKEN" \
-    -F "file=@test-document.pdf"
-
-# Test document retrieval
-curl -X GET https://readur.example.com/api/documents/$DOCUMENT_ID/download \
-    -H "Authorization: Bearer $TOKEN" \
-    -o downloaded-test.pdf
-
-# Verify downloaded file
-md5sum test-document.pdf downloaded-test.pdf
-```
-
-### Step 5: Post-Migration Tasks
-
-#### 5.1 Update Backup Procedures
-
-```bash
-# Create S3 backup script
-cat > backup-s3.sh << 'EOF'
 #!/bin/bash
-# Backup S3 data to another bucket
-BACKUP_BUCKET="readur-backup-$(date +%Y%m%d)"
-aws s3api create-bucket --bucket $BACKUP_BUCKET --region us-east-1
-aws s3 sync s3://readur-production s3://$BACKUP_BUCKET --storage-class GLACIER
+# migrate-s3-regions.sh
+
+SOURCE_BUCKET="readur-us-east-1"
+DEST_BUCKET="readur-eu-west-1"
+SOURCE_REGION="us-east-1"
+DEST_REGION="eu-west-1"
+
+# Set up replication
+aws s3api put-bucket-replication \
+  --bucket $SOURCE_BUCKET \
+  --replication-configuration file://replication.json
+
+# Wait for replication
+aws s3api get-bucket-replication-status \
+  --bucket $SOURCE_BUCKET
+
+# Update application configuration
+sed -i "s/$SOURCE_BUCKET/$DEST_BUCKET/g" .env
+sed -i "s/$SOURCE_REGION/$DEST_REGION/g" .env
+
+# Restart application
+docker-compose restart
+```
+
+## Database Migrations
+
+### PostgreSQL Version Upgrade
+
+#### Upgrading from PostgreSQL 14 to 15
+
+```bash
+# 1. Dump database
+pg_dumpall -h old_host -U postgres > dump.sql
+
+# 2. Stop old PostgreSQL
+systemctl stop postgresql-14
+
+# 3. Install PostgreSQL 15
+apt-get install postgresql-15
+
+# 4. Initialize new cluster
+/usr/lib/postgresql/15/bin/initdb -D /var/lib/postgresql/15/data
+
+# 5. Restore database
+psql -h new_host -U postgres < dump.sql
+
+# 6. Update connection string
+export DATABASE_URL="postgresql://readur:password@localhost:5432/readur?sslmode=require"
+
+# 7. Test connection
+psql $DATABASE_URL -c "SELECT version();"
+```
+
+### Database Server Migration
+
+```bash
+#!/bin/bash
+# migrate-database.sh
+
+OLD_DB="postgresql://user:pass@old-server/readur"
+NEW_DB="postgresql://user:pass@new-server/readur"
+
+# 1. Create new database
+psql $NEW_DB -c "CREATE DATABASE readur;"
+
+# 2. Dump schema and data
+pg_dump $OLD_DB --no-owner --clean --if-exists > readur_dump.sql
+
+# 3. Restore to new server
+psql $NEW_DB < readur_dump.sql
+
+# 4. Verify data
+psql $NEW_DB <<EOF
+SELECT COUNT(*) as documents FROM documents;
+SELECT COUNT(*) as users FROM users;
+SELECT MAX(created_at) as latest FROM documents;
 EOF
 
-chmod +x backup-s3.sh
+# 5. Update application configuration
+export DATABASE_URL=$NEW_DB
+
+# 6. Test application
+curl http://localhost:8080/health
 ```
 
-#### 5.2 Set Up Monitoring
+### Schema Migrations
+
+#### Running Pending Migrations
 
 ```bash
-# Create CloudWatch dashboard
-aws cloudwatch put-dashboard \
-    --dashboard-name ReadurS3 \
-    --dashboard-body file://cloudwatch-dashboard.json
+# Check migration status
+cargo run --bin migrate status
+
+# Run pending migrations
+cargo run --bin migrate up
+
+# Rollback last migration
+cargo run --bin migrate down
 ```
 
-#### 5.3 Clean Up Local Storage
+#### Creating Custom Migrations
+
+```sql
+-- migrations/20250116_custom_index.up.sql
+CREATE INDEX CONCURRENTLY idx_documents_created_month 
+ON documents(date_trunc('month', created_at));
+
+-- migrations/20250116_custom_index.down.sql
+DROP INDEX IF EXISTS idx_documents_created_month;
+```
+
+## Platform Migration
+
+### Docker to Kubernetes
+
+#### Step 1: Prepare Kubernetes Manifests
+
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: readur
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: readur
+  template:
+    metadata:
+      labels:
+        app: readur
+    spec:
+      containers:
+      - name: readur
+        image: readur:latest
+        envFrom:
+        - configMapRef:
+            name: readur-config
+        - secretRef:
+            name: readur-secrets
+        volumeMounts:
+        - name: uploads
+          mountPath: /app/uploads
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: readur-uploads
+```
+
+#### Step 2: Migrate Configuration
 
 ```bash
-# After confirming successful migration
-# Remove old upload directories (CAREFUL!)
-du -sh ./uploads ./thumbnails ./processed_images
+# Create ConfigMap from .env
+kubectl create configmap readur-config --from-env-file=.env
 
-# Archive before deletion
-tar -czf pre_migration_files_$(date +%Y%m%d).tar.gz ./uploads ./thumbnails ./processed_images
+# Create Secrets
+kubectl create secret generic readur-secrets \
+  --from-literal=DATABASE_URL=$DATABASE_URL \
+  --from-literal=JWT_SECRET=$JWT_SECRET \
+  --from-literal=S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+```
 
-# Remove directories
-rm -rf ./uploads/* ./thumbnails/* ./processed_images/*
+#### Step 3: Migrate Storage
+
+```yaml
+# persistent-volume.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: readur-uploads
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: nfs-storage
+```
+
+#### Step 4: Deploy to Kubernetes
+
+```bash
+# Apply manifests
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl apply -f ingress.yaml
+
+# Verify deployment
+kubectl get pods -l app=readur
+kubectl logs -l app=readur --tail=50
+```
+
+### On-Premise to Cloud
+
+#### AWS Migration
+
+```bash
+# 1. Set up RDS PostgreSQL
+aws rds create-db-instance \
+  --db-instance-identifier readur-prod \
+  --db-instance-class db.t3.medium \
+  --engine postgres \
+  --engine-version 15.2 \
+  --allocated-storage 100 \
+  --master-username readur \
+  --master-user-password $DB_PASSWORD
+
+# 2. Migrate database
+pg_dump $LOCAL_DATABASE_URL | \
+  psql postgresql://readur:$DB_PASSWORD@readur-prod.xyz.rds.amazonaws.com/readur
+
+# 3. Set up ECS/Fargate
+aws ecs create-cluster --cluster-name readur-cluster
+
+# 4. Create task definition
+aws ecs register-task-definition \
+  --cli-input-json file://task-definition.json
+
+# 5. Create service
+aws ecs create-service \
+  --cluster readur-cluster \
+  --service-name readur \
+  --task-definition readur:1 \
+  --desired-count 3
+```
+
+#### Azure Migration
+
+```bash
+# 1. Create Resource Group
+az group create --name readur-rg --location eastus
+
+# 2. Create PostgreSQL
+az postgres server create \
+  --resource-group readur-rg \
+  --name readur-db \
+  --admin-user readur \
+  --admin-password $DB_PASSWORD \
+  --sku-name B_Gen5_2
+
+# 3. Create Container Instances
+az container create \
+  --resource-group readur-rg \
+  --name readur \
+  --image readur:latest \
+  --cpu 2 \
+  --memory 4 \
+  --environment-variables \
+    DATABASE_URL=$AZURE_DB_URL \
+    S3_ENABLED=false
+```
+
+## Data Migration
+
+### Bulk Document Import
+
+```bash
+#!/bin/bash
+# bulk-import.sh
+
+SOURCE_DIR="/legacy/documents"
+USER_ID="admin"
+BATCH_SIZE=1000
+
+# Import with progress tracking
+find $SOURCE_DIR -type f \( -name "*.pdf" -o -name "*.docx" \) | \
+  xargs -P 4 -n $BATCH_SIZE \
+  cargo run --bin batch_ingest -- \
+    --user-id $USER_ID \
+    --ocr-enabled \
+    --skip-duplicates
+```
+
+### User Migration
+
+```sql
+-- Migrate users from legacy system
+INSERT INTO users (id, username, email, password_hash, role, created_at)
+SELECT 
+  gen_random_uuid(),
+  legacy_username,
+  legacy_email,
+  crypt(legacy_password, gen_salt('bf')),
+  CASE 
+    WHEN legacy_role = 'admin' THEN 'admin'
+    WHEN legacy_role = 'power_user' THEN 'editor'
+    ELSE 'viewer'
+  END,
+  legacy_created_date
+FROM legacy_users;
+```
+
+### Metadata Migration
+
+```python
+# migrate_metadata.py
+import psycopg2
+import json
+
+def migrate_metadata():
+    # Connect to databases
+    legacy_conn = psycopg2.connect("dbname=legacy")
+    readur_conn = psycopg2.connect("dbname=readur")
+    
+    # Fetch legacy metadata
+    legacy_cur = legacy_conn.cursor()
+    legacy_cur.execute("SELECT file_id, metadata FROM legacy_documents")
+    
+    # Transform and insert
+    readur_cur = readur_conn.cursor()
+    for file_id, old_metadata in legacy_cur:
+        new_metadata = transform_metadata(old_metadata)
+        readur_cur.execute(
+            "UPDATE documents SET metadata = %s WHERE legacy_id = %s",
+            (json.dumps(new_metadata), file_id)
+        )
+    
+    readur_conn.commit()
+
+def transform_metadata(old):
+    """Transform legacy metadata format"""
+    return {
+        "title": old.get("document_title"),
+        "author": old.get("created_by"),
+        "tags": old.get("keywords", "").split(","),
+        "legacy_id": old.get("id")
+    }
+```
+
+## Migration Validation
+
+### Validation Checklist
+
+```bash
+#!/bin/bash
+# validate-migration.sh
+
+echo "=== Migration Validation ==="
+
+# 1. Document count
+echo -n "Document count match: "
+OLD_COUNT=$(psql $OLD_DB -t -c "SELECT COUNT(*) FROM documents")
+NEW_COUNT=$(psql $NEW_DB -t -c "SELECT COUNT(*) FROM documents")
+[ "$OLD_COUNT" -eq "$NEW_COUNT" ] && echo "✓" || echo "✗"
+
+# 2. User count
+echo -n "User count match: "
+OLD_USERS=$(psql $OLD_DB -t -c "SELECT COUNT(*) FROM users")
+NEW_USERS=$(psql $NEW_DB -t -c "SELECT COUNT(*) FROM users")
+[ "$OLD_USERS" -eq "$NEW_USERS" ] && echo "✓" || echo "✗"
+
+# 3. File integrity
+echo -n "File integrity check: "
+MISSING=$(comm -23 \
+  <(find /old/uploads -type f -name "*.pdf" | sort) \
+  <(find /new/uploads -type f -name "*.pdf" | sort) | wc -l)
+[ "$MISSING" -eq 0 ] && echo "✓" || echo "✗ ($MISSING missing)"
+
+# 4. Search functionality
+echo -n "Search working: "
+RESULTS=$(curl -s "http://localhost:8080/api/search?q=test" | jq '.results | length')
+[ "$RESULTS" -gt 0 ] && echo "✓" || echo "✗"
+
+# 5. OCR queue
+echo -n "OCR queue healthy: "
+PENDING=$(psql $NEW_DB -t -c "SELECT COUNT(*) FROM ocr_queue WHERE status='pending'")
+echo "$PENDING pending jobs"
 ```
 
 ## Rollback Procedures
 
-### Automatic Rollback
-
-If migration fails with `--enable-rollback`:
+### Emergency Rollback
 
 ```bash
-# Rollback will automatically:
-# 1. Restore database paths to original values
-# 2. Delete uploaded S3 objects
-# 3. Save rollback state to rollback_errors.json
+#!/bin/bash
+# emergency-rollback.sh
+
+BACKUP_DATE=$1
+if [ -z "$BACKUP_DATE" ]; then
+    echo "Usage: $0 YYYYMMDD"
+    exit 1
+fi
+
+echo "⚠️  WARNING: This will rollback to backup from $BACKUP_DATE"
+read -p "Continue? (y/N) " -n 1 -r
+echo
+
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    exit 1
+fi
+
+# Stop application
+docker-compose down
+
+# Restore database
+psql $DATABASE_URL < backup_${BACKUP_DATE}.sql
+
+# Restore files
+tar -xzf files_backup_${BACKUP_DATE}.tar.gz -C /
+
+# Restore configuration
+cp .env.backup_${BACKUP_DATE} .env
+
+# Start application
+docker-compose up -d
+
+echo "✓ Rollback completed"
 ```
 
-### Manual Rollback
-
-#### Step 1: Restore Database
+### Partial Rollback
 
 ```sql
--- Revert file paths to local
-UPDATE documents 
-SET file_path = regexp_replace(file_path, '^s3://[^/]+/', './uploads/')
-WHERE file_path LIKE 's3://%';
-
--- Or restore from backup
-psql $DATABASE_URL < readur_backup_${BACKUP_DATE}.sql
+-- Rollback specific migration
+BEGIN;
+DELETE FROM _sqlx_migrations WHERE version = '20250115100000';
+-- Run down migration SQL here
+COMMIT;
 ```
 
-#### Step 2: Remove S3 Objects
+## Post-Migration Tasks
+
+### Performance Optimization
+
+```sql
+-- Rebuild indexes
+REINDEX DATABASE readur;
+
+-- Update statistics
+ANALYZE;
+
+-- Vacuum database
+VACUUM (FULL, ANALYZE);
+```
+
+### Security Audit
 
 ```bash
-# Delete all migrated objects
-aws s3 rm s3://$S3_BUCKET_NAME/documents/ --recursive
-aws s3 rm s3://$S3_BUCKET_NAME/thumbnails/ --recursive
-aws s3 rm s3://$S3_BUCKET_NAME/processed_images/ --recursive
+# Check permissions
+psql $DATABASE_URL -c "\dp"
+
+# Verify encryption
+aws s3api get-bucket-encryption --bucket readur-documents
+
+# Test authentication
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"test"}'
 ```
 
-#### Step 3: Restore Configuration
+### Monitoring Setup
 
-```bash
-# Disable S3 in configuration
-sed -i 's/S3_ENABLED=true/S3_ENABLED=false/' .env
-
-# Restart application
-systemctl restart readur
+```yaml
+# Set up alerts for migrated system
+- alert: HighErrorRate
+  expr: rate(errors_total[5m]) > 0.05
+  annotations:
+    summary: "High error rate after migration"
+    
+- alert: SlowQueries
+  expr: pg_stat_database_blks_hit_ratio < 0.95
+  annotations:
+    summary: "Database cache hit ratio low after migration"
 ```
 
-## Troubleshooting Migration Issues
+## Migration Best Practices
 
-### Issue: Migration Hangs
-
-```bash
-# Check current progress
-tail -f migration_*.log
-
-# View migration state
-cat migration_state.json | jq '.processed_files, .failed_migrations'
-
-# Resume from last successful
-LAST_ID=$(cat migration_state.json | jq -r '.completed_migrations[-1].document_id')
-cargo run --bin migrate_to_s3 --features s3 -- --resume-from $LAST_ID
-```
-
-### Issue: Permission Errors
-
-```bash
-# Verify IAM permissions
-aws s3api put-object \
-    --bucket $S3_BUCKET_NAME \
-    --key test.txt \
-    --body /tmp/test.txt
-
-# Check bucket policy
-aws s3api get-bucket-policy --bucket $S3_BUCKET_NAME
-```
-
-### Issue: Network Timeouts
-
-```bash
-# Use screen/tmux for long migrations
-screen -S migration
-cargo run --bin migrate_to_s3 --features s3
-
-# Detach: Ctrl+A, D
-# Reattach: screen -r migration
-```
-
-## Migration Optimization
-
-### Parallel Upload
-
-```bash
-# Split migration by user
-for USER_ID in $(psql $DATABASE_URL -t -c "SELECT DISTINCT user_id FROM documents"); do
-    cargo run --bin migrate_to_s3 --features s3 -- --user-id $USER_ID &
-done
-```
-
-### Bandwidth Management
-
-```bash
-# Limit upload bandwidth (if needed)
-trickle -u 10240 cargo run --bin migrate_to_s3 --features s3
-```
-
-### Progress Monitoring
-
-```bash
-# Real-time statistics
-watch -n 10 'echo "=== Migration Progress ===" && \
-    cat migration_state.json | jq "{
-        progress_pct: ((.processed_files / .total_files) * 100),
-        processed: .processed_files,
-        total: .total_files,
-        failed: .failed_migrations | length,
-        elapsed: now - (.started_at | fromdate),
-        rate_per_hour: (.processed_files / ((now - (.started_at | fromdate)) / 3600))
-    }"'
-```
-
-## Post-Migration Validation
-
-### Data Integrity Check
-
-```bash
-# Generate checksums for S3 objects
-aws s3api list-objects-v2 --bucket $S3_BUCKET_NAME --prefix documents/ \
-    --query 'Contents[].{Key:Key, ETag:ETag}' \
-    --output json > s3_checksums.json
-
-# Compare with database
-psql $DATABASE_URL -c "SELECT id, file_path, file_hash FROM documents" > db_checksums.txt
-```
-
-### Performance Testing
-
-```bash
-# Benchmark S3 retrieval
-time for i in {1..100}; do
-    curl -s https://readur.example.com/api/documents/random/download > /dev/null
-done
-```
-
-## Success Criteria
-
-Migration is considered successful when:
-
-- [ ] All documents have S3 paths in database
-- [ ] No failed migrations in migration_state.json
-- [ ] Application can upload new documents to S3
-- [ ] Application can retrieve existing documents from S3
-- [ ] Thumbnails and processed images are accessible
-- [ ] Performance meets acceptable thresholds
-- [ ] Backup procedures are updated and tested
-
-## Next Steps
-
-1. Monitor S3 costs and usage
-2. Implement CloudFront CDN if needed
-3. Set up cross-region replication for disaster recovery
-4. Configure S3 lifecycle policies for cost optimization
-5. Update documentation and runbooks
+1. **Always test in staging** before production migration
+2. **Take comprehensive backups** before starting
+3. **Document the process** for future reference
+4. **Monitor closely** after migration
+5. **Have a rollback plan** ready
+6. **Communicate with users** about downtime
+7. **Validate data integrity** at each step
+8. **Keep migration logs** for troubleshooting
+9. **Update documentation** after migration
+10. **Plan for peak traffic** when coming back online
