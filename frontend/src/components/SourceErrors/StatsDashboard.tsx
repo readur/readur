@@ -4,11 +4,11 @@ import {
   Card,
   CardContent,
   Typography,
-  Grid,
   LinearProgress,
   Stack,
   Skeleton,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   Error as ErrorIcon,
   Warning as WarningIcon,

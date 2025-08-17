@@ -356,7 +356,7 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({ failure
 
         <Stack spacing={3}>
           {sortedFailureTypes.map((failureType, index) => {
-            const recommendation = getRecommendationsForFailureType(failureType);
+            const recommendation = getRecommendationsForFailureType(failureType as SourceErrorType);
             const Icon = recommendation.icon;
             const count = failureTypeStats[failureType];
 

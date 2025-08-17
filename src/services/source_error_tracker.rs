@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::db::Database;
 use crate::models::{
     CreateSourceScanFailure, SourceScanFailure, SourceScanFailureResponse,
-    SourceScanFailureStats, MonitoredSourceType, SourceErrorType, SourceErrorSeverity,
+    SourceScanFailureStats, ErrorSourceType, SourceErrorType, SourceErrorSeverity,
     SourceErrorClassifier, ErrorContext, ErrorClassification,
     ListFailuresQuery, RetryFailureRequest, ExcludeResourceRequest,
 };
@@ -17,7 +17,7 @@ use crate::models::{
 #[derive(Clone)]
 pub struct SourceErrorTracker {
     db: Database,
-    classifiers: HashMap<MonitoredSourceType, Arc<dyn SourceErrorClassifier>>,
+    classifiers: HashMap<ErrorSourceType, Arc<dyn SourceErrorClassifier>>,
 }
 
 impl SourceErrorTracker {
@@ -39,7 +39,7 @@ impl SourceErrorTracker {
     pub async fn track_error(
         &self,
         user_id: Uuid,
-        source_type: MonitoredSourceType,
+        source_type: ErrorSourceType,
         source_id: Option<Uuid>,
         resource_path: &str,
         error: &anyhow::Error,
@@ -89,7 +89,7 @@ impl SourceErrorTracker {
     pub async fn should_skip_resource(
         &self,
         user_id: Uuid,
-        source_type: MonitoredSourceType,
+        source_type: ErrorSourceType,
         source_id: Option<Uuid>,
         resource_path: &str,
     ) -> Result<bool> {
@@ -118,7 +118,7 @@ impl SourceErrorTracker {
     pub async fn mark_success(
         &self,
         user_id: Uuid,
-        source_type: MonitoredSourceType,
+        source_type: ErrorSourceType,
         source_id: Option<Uuid>,
         resource_path: &str,
     ) -> Result<()> {
@@ -152,7 +152,7 @@ impl SourceErrorTracker {
     pub async fn get_retry_candidates(
         &self,
         user_id: Uuid,
-        source_type: Option<MonitoredSourceType>,
+        source_type: Option<ErrorSourceType>,
         limit: Option<i32>,
     ) -> Result<Vec<SourceScanFailure>> {
         self.db.get_source_retry_candidates(user_id, source_type, limit.unwrap_or(10)).await
@@ -293,7 +293,7 @@ impl SourceErrorTracker {
     }
 
     /// Get failure statistics
-    pub async fn get_stats(&self, user_id: Uuid, source_type: Option<MonitoredSourceType>) -> Result<SourceScanFailureStats> {
+    pub async fn get_stats(&self, user_id: Uuid, source_type: Option<ErrorSourceType>) -> Result<SourceScanFailureStats> {
         self.db.get_source_scan_failure_stats(user_id, source_type).await
     }
 

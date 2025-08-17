@@ -6,7 +6,6 @@ import {
   IconButton,
   Divider,
   Chip,
-  Grid,
   Card,
   CardContent,
   Collapse,
@@ -22,6 +21,7 @@ import {
   Tooltip,
   Paper,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   ContentCopy as CopyIcon,
   ExpandMore as ExpandMoreIcon,

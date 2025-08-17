@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use super::Database;
 use crate::models::{
     CreateSourceScanFailure, SourceScanFailure, SourceScanFailureStats,
-    MonitoredSourceType, SourceErrorType, SourceErrorSeverity, ListFailuresQuery,
+    ErrorSourceType, SourceErrorType, SourceErrorSeverity, ListFailuresQuery,
 };
 
 impl Database {
@@ -179,7 +179,7 @@ impl Database {
     pub async fn is_source_known_failure(
         &self,
         user_id: Uuid,
-        source_type: MonitoredSourceType,
+        source_type: ErrorSourceType,
         source_id: Option<Uuid>,
         resource_path: &str,
     ) -> Result<bool> {
@@ -210,7 +210,7 @@ impl Database {
     pub async fn get_source_retry_candidates(
         &self,
         user_id: Uuid,
-        source_type: Option<MonitoredSourceType>,
+        source_type: Option<ErrorSourceType>,
         limit: i32,
     ) -> Result<Vec<SourceScanFailure>> {
         self.with_retry(|| async {
@@ -262,7 +262,7 @@ impl Database {
     pub async fn reset_source_scan_failure(
         &self,
         user_id: Uuid,
-        source_type: MonitoredSourceType,
+        source_type: ErrorSourceType,
         source_id: Option<Uuid>,
         resource_path: &str,
     ) -> Result<bool> {
@@ -286,7 +286,7 @@ impl Database {
     pub async fn resolve_source_scan_failure(
         &self,
         user_id: Uuid,
-        source_type: MonitoredSourceType,
+        source_type: ErrorSourceType,
         source_id: Option<Uuid>,
         resource_path: &str,
         resolution_method: &str,
@@ -312,7 +312,7 @@ impl Database {
     pub async fn exclude_source_from_scan(
         &self,
         user_id: Uuid,
-        source_type: MonitoredSourceType,
+        source_type: ErrorSourceType,
         source_id: Option<Uuid>,
         resource_path: &str,
         user_notes: Option<&str>,
@@ -344,7 +344,7 @@ impl Database {
     pub async fn get_source_scan_failure_stats(
         &self,
         user_id: Uuid,
-        source_type: Option<MonitoredSourceType>,
+        source_type: Option<ErrorSourceType>,
     ) -> Result<SourceScanFailureStats> {
         self.with_retry(|| async {
             let mut sql = String::from(

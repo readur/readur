@@ -47,9 +47,9 @@ fn map_to_webdav_severity(source_severity: &SourceErrorSeverity) -> WebDAVScanFa
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(list_scan_failures))
-        .route("/:id", get(get_scan_failure))
-        .route("/:id/retry", post(retry_scan_failure))
-        .route("/:id/exclude", post(exclude_scan_failure))
+        .route("/{id}", get(get_scan_failure))
+        .route("/{id}/retry", post(retry_scan_failure))
+        .route("/{id}/exclude", post(exclude_scan_failure))
         .route("/retry-candidates", get(get_retry_candidates))
 }
 
@@ -109,9 +109,9 @@ pub async fn list_scan_failures(
     );
     
     // Get WebDAV failures from generic system using source type filter
-    use crate::models::{MonitoredSourceType, ListFailuresQuery};
+    use crate::models::{ErrorSourceType, ListFailuresQuery};
     let query = ListFailuresQuery {
-        source_type: Some(MonitoredSourceType::WebDAV),
+        source_type: Some(ErrorSourceType::WebDAV),
         include_resolved: Some(false),
         ..Default::default()
     };
@@ -124,7 +124,7 @@ pub async fn list_scan_failures(
         })?;
     
     // Get statistics for WebDAV
-    let generic_stats = error_tracker.get_stats(auth_user.user.id, Some(MonitoredSourceType::WebDAV)).await
+    let generic_stats = error_tracker.get_stats(auth_user.user.id, Some(ErrorSourceType::WebDAV)).await
         .map_err(|e| {
             error!("Failed to get scan failure stats: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -413,7 +413,7 @@ pub async fn get_retry_candidates(
     
     let error_tracker = crate::services::source_error_tracker::SourceErrorTracker::new(state.db.clone());
     
-    match error_tracker.get_retry_candidates(auth_user.user.id, Some(crate::models::MonitoredSourceType::WebDAV), Some(20)).await {
+    match error_tracker.get_retry_candidates(auth_user.user.id, Some(crate::models::ErrorSourceType::WebDAV), Some(20)).await {
         Ok(candidates) => {
             let directories: Vec<String> = candidates.iter()
                 .map(|failure| failure.resource_path.clone())

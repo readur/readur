@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::models::{
-    MonitoredSourceType, SourceErrorType, SourceErrorSeverity, SourceErrorClassifier,
+    ErrorSourceType, SourceErrorType, SourceErrorSeverity, SourceErrorClassifier,
     ErrorContext, ErrorClassification, SourceScanFailure, RetryStrategy,
 };
 
@@ -356,7 +356,7 @@ impl SourceErrorClassifier for LocalFolderErrorClassifier {
         }
     }
 
-    fn source_type(&self) -> MonitoredSourceType {
-        MonitoredSourceType::Local
+    fn source_type(&self) -> ErrorSourceType {
+        ErrorSourceType::Local
     }
 }

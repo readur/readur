@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::models::{
-    MonitoredSourceType, SourceErrorType, SourceErrorSeverity, SourceErrorClassifier,
+    ErrorSourceType, SourceErrorType, SourceErrorSeverity, SourceErrorClassifier,
     ErrorContext, ErrorClassification, SourceScanFailure, RetryStrategy,
 };
 use crate::models::source::{
@@ -327,8 +327,8 @@ impl SourceErrorClassifier for WebDAVErrorClassifier {
         }
     }
 
-    fn source_type(&self) -> MonitoredSourceType {
-        MonitoredSourceType::WebDAV
+    fn source_type(&self) -> ErrorSourceType {
+        ErrorSourceType::WebDAV
     }
 }
 

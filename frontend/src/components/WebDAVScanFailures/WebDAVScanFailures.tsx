@@ -17,13 +17,13 @@ import {
   MenuItem,
   Card,
   CardContent,
-  Grid,
   LinearProgress,
   Skeleton,
   Stack,
   Fade,
   Collapse,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 import {
   ExpandMore as ExpandMoreIcon,
   Search as SearchIcon,

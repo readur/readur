@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{AppState, models::{FileIngestionInfo}};
 use crate::models::source::{CreateWebDAVDirectory};
-use crate::models::source_error::{MonitoredSourceType, ErrorContext};
+use crate::models::source_error::{ErrorSourceType, ErrorContext};
 use crate::webdav_xml_parser::compare_etags;
 use crate::services::source_error_tracker::SourceErrorTracker;
 use super::{WebDAVService, SyncProgress};
@@ -171,7 +171,7 @@ impl SmartSyncService {
                 
                 if let Err(track_error) = self.error_tracker.track_error(
                     user_id,
-                    MonitoredSourceType::WebDAV,
+                    ErrorSourceType::WebDAV,
                     None, // source_id - we don't have a specific source ID for this operation
                     folder_path,
                     &e,
@@ -243,7 +243,7 @@ impl SmartSyncService {
                 // Mark successful scan to resolve any previous failures
                 if let Err(track_error) = self.error_tracker.mark_success(
                     user_id,
-                    MonitoredSourceType::WebDAV,
+                    ErrorSourceType::WebDAV,
                     None,
                     folder_path,
                 ).await {
@@ -266,7 +266,7 @@ impl SmartSyncService {
                 
                 if let Err(track_error) = self.error_tracker.track_error(
                     user_id,
-                    MonitoredSourceType::WebDAV,
+                    ErrorSourceType::WebDAV,
                     None,
                     folder_path,
                     &e,
@@ -401,7 +401,7 @@ impl SmartSyncService {
                     // Mark successful scan to resolve any previous failures
                     if let Err(track_error) = self.error_tracker.mark_success(
                         user_id,
-                        MonitoredSourceType::WebDAV,
+                        ErrorSourceType::WebDAV,
                         None,
                         target_dir,
                     ).await {
@@ -425,7 +425,7 @@ impl SmartSyncService {
                     
                     if let Err(track_error) = self.error_tracker.track_error(
                         user_id,
-                        MonitoredSourceType::WebDAV,
+                        ErrorSourceType::WebDAV,
                         None,
                         target_dir,
                         &e,

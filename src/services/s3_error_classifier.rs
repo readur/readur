@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::models::{
-    MonitoredSourceType, SourceErrorType, SourceErrorSeverity, SourceErrorClassifier,
+    ErrorSourceType, SourceErrorType, SourceErrorSeverity, SourceErrorClassifier,
     ErrorContext, ErrorClassification, SourceScanFailure, RetryStrategy,
 };
 
@@ -301,7 +301,7 @@ impl SourceErrorClassifier for S3ErrorClassifier {
         }
     }
 
-    fn source_type(&self) -> MonitoredSourceType {
-        MonitoredSourceType::S3
+    fn source_type(&self) -> ErrorSourceType {
+        ErrorSourceType::S3
     }
 }

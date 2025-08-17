@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 /// Generic source types that can be monitored for errors
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, ToSchema)]
 #[sqlx(type_name = "source_type", rename_all = "lowercase")]
-pub enum MonitoredSourceType {
+pub enum ErrorSourceType {
     #[sqlx(rename = "webdav")]
     WebDAV,
     #[sqlx(rename = "s3")]
@@ -25,15 +25,15 @@ pub enum MonitoredSourceType {
     OneDrive,
 }
 
-impl fmt::Display for MonitoredSourceType {
+impl fmt::Display for ErrorSourceType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MonitoredSourceType::WebDAV => write!(f, "webdav"),
-            MonitoredSourceType::S3 => write!(f, "s3"),
-            MonitoredSourceType::Local => write!(f, "local"),
-            MonitoredSourceType::Dropbox => write!(f, "dropbox"),
-            MonitoredSourceType::GDrive => write!(f, "gdrive"),
-            MonitoredSourceType::OneDrive => write!(f, "onedrive"),
+            ErrorSourceType::WebDAV => write!(f, "webdav"),
+            ErrorSourceType::S3 => write!(f, "s3"),
+            ErrorSourceType::Local => write!(f, "local"),
+            ErrorSourceType::Dropbox => write!(f, "dropbox"),
+            ErrorSourceType::GDrive => write!(f, "gdrive"),
+            ErrorSourceType::OneDrive => write!(f, "onedrive"),
         }
     }
 }
@@ -163,7 +163,7 @@ impl std::str::FromStr for RetryStrategy {
 pub struct SourceScanFailure {
     pub id: Uuid,
     pub user_id: Uuid,
-    pub source_type: MonitoredSourceType,
+    pub source_type: ErrorSourceType,
     pub source_id: Option<Uuid>,
     pub resource_path: String,
     
@@ -219,7 +219,7 @@ pub struct SourceScanFailure {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateSourceScanFailure {
     pub user_id: Uuid,
-    pub source_type: MonitoredSourceType,
+    pub source_type: ErrorSourceType,
     pub source_id: Option<Uuid>,
     pub resource_path: String,
     pub error_type: SourceErrorType,
@@ -236,7 +236,7 @@ pub struct CreateSourceScanFailure {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SourceScanFailureResponse {
     pub id: Uuid,
-    pub source_type: MonitoredSourceType,
+    pub source_type: ErrorSourceType,
     pub source_name: Option<String>, // From joined sources table
     pub resource_path: String,
     pub error_type: SourceErrorType,
@@ -296,7 +296,7 @@ pub trait SourceErrorClassifier: Send + Sync {
     fn should_retry(&self, failure: &SourceScanFailure) -> bool;
     
     /// Get the source type this classifier handles
-    fn source_type(&self) -> MonitoredSourceType;
+    fn source_type(&self) -> ErrorSourceType;
 }
 
 /// Context information available during error classification
@@ -391,7 +391,7 @@ pub struct ExcludeResourceRequest {
 /// Query parameters for listing failures
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ListFailuresQuery {
-    pub source_type: Option<MonitoredSourceType>,
+    pub source_type: Option<ErrorSourceType>,
     pub source_id: Option<Uuid>,
     pub error_type: Option<SourceErrorType>,
     pub severity: Option<SourceErrorSeverity>,

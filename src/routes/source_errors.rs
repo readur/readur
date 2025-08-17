@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     auth::AuthUser,
     models::{
-        SourceScanFailureResponse, SourceScanFailureStats, MonitoredSourceType,
+        SourceScanFailureResponse, SourceScanFailureStats, ErrorSourceType,
         ListFailuresQuery, RetryFailureRequest, ExcludeResourceRequest,
     },
     services::source_error_tracker::SourceErrorTracker,
@@ -25,12 +25,12 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/", get(list_source_failures))
         .route("/stats", get(get_failure_stats))
         .route("/retry-candidates", get(get_retry_candidates))
-        .route("/:failure_id", get(get_source_failure))
-        .route("/:failure_id/retry", post(retry_source_failure))
-        .route("/:failure_id/exclude", post(exclude_source_failure))
-        .route("/:failure_id/resolve", post(resolve_source_failure))
-        .route("/type/:source_type", get(list_source_type_failures))
-        .route("/type/:source_type/stats", get(get_source_type_stats))
+        .route("/{failure_id}", get(get_source_failure))
+        .route("/{failure_id}/retry", post(retry_source_failure))
+        .route("/{failure_id}/exclude", post(exclude_source_failure))
+        .route("/{failure_id}/resolve", post(resolve_source_failure))
+        .route("/type/{source_type}", get(list_source_type_failures))
+        .route("/type/{source_type}/stats", get(get_source_type_stats))
 }
 
 #[utoipa::path(
@@ -105,9 +105,9 @@ async fn get_failure_stats(
     let source_type = params.get("source_type")
         .and_then(|v| v.as_str())
         .and_then(|s| match s.to_lowercase().as_str() {
-            "webdav" => Some(MonitoredSourceType::WebDAV),
-            "s3" => Some(MonitoredSourceType::S3),
-            "local" => Some(MonitoredSourceType::Local),
+            "webdav" => Some(ErrorSourceType::WebDAV),
+            "s3" => Some(ErrorSourceType::S3),
+            "local" => Some(ErrorSourceType::Local),
             _ => None,
         });
 
@@ -152,9 +152,9 @@ async fn get_retry_candidates(
     let source_type = params.get("source_type")
         .and_then(|v| v.as_str())
         .and_then(|s| match s.to_lowercase().as_str() {
-            "webdav" => Some(MonitoredSourceType::WebDAV),
-            "s3" => Some(MonitoredSourceType::S3),
-            "local" => Some(MonitoredSourceType::Local),
+            "webdav" => Some(ErrorSourceType::WebDAV),
+            "s3" => Some(ErrorSourceType::S3),
+            "local" => Some(ErrorSourceType::Local),
             _ => None,
         });
 
@@ -419,9 +419,9 @@ async fn list_source_type_failures(
 
     // Parse source type
     let source_type = match source_type_str.to_lowercase().as_str() {
-        "webdav" => MonitoredSourceType::WebDAV,
-        "s3" => MonitoredSourceType::S3,
-        "local" => MonitoredSourceType::Local,
+        "webdav" => ErrorSourceType::WebDAV,
+        "s3" => ErrorSourceType::S3,
+        "local" => ErrorSourceType::Local,
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
@@ -468,9 +468,9 @@ async fn get_source_type_stats(
 
     // Parse source type
     let source_type = match source_type_str.to_lowercase().as_str() {
-        "webdav" => MonitoredSourceType::WebDAV,
-        "s3" => MonitoredSourceType::S3,
-        "local" => MonitoredSourceType::Local,
+        "webdav" => ErrorSourceType::WebDAV,
+        "s3" => ErrorSourceType::S3,
+        "local" => ErrorSourceType::Local,
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
