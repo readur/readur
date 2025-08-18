@@ -2,17 +2,23 @@
 -- This migration creates a comprehensive failure tracking system for all source types (WebDAV, S3, Local Filesystem)
 
 -- Create enum for generic source types
-CREATE TYPE source_type AS ENUM (
+-- Use DO block to handle existing type gracefully
+DO $$ BEGIN
+    CREATE TYPE source_error_source_type AS ENUM (
     'webdav',       -- WebDAV/CalDAV servers
     's3',           -- S3-compatible object storage
     'local',        -- Local filesystem folders
     'dropbox',      -- Future: Dropbox integration
     'gdrive',       -- Future: Google Drive integration
     'onedrive'      -- Future: OneDrive integration
-);
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Create enum for generic error types
-CREATE TYPE source_error_type AS ENUM (
+DO $$ BEGIN
+    CREATE TYPE source_error_type AS ENUM (
     'timeout',              -- Request or operation took too long
     'permission_denied',    -- Access denied or authentication failure
     'network_error',        -- Network connectivity issues
@@ -30,21 +36,28 @@ CREATE TYPE source_error_type AS ENUM (
     'conflict',             -- Conflict with existing resource
     'unsupported_operation', -- Operation not supported by source
     'unknown'               -- Unknown error type
-);
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Create enum for error severity levels
-CREATE TYPE source_error_severity AS ENUM (
+DO $$ BEGIN
+    CREATE TYPE source_error_severity AS ENUM (
     'low',      -- Can be retried, likely temporary (network issues)
     'medium',   -- May succeed with adjustments (timeouts, server errors)
     'high',     -- Unlikely to succeed without intervention (permissions, too many items)
     'critical'  -- Will never succeed, permanent issue (path too long, invalid characters)
-);
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Main table for tracking scan failures across all source types
 CREATE TABLE IF NOT EXISTS source_scan_failures (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    source_type source_type NOT NULL,
+    source_type source_error_source_type NOT NULL,
     source_id UUID REFERENCES sources(id) ON DELETE CASCADE, -- Links to specific source configuration
     resource_path TEXT NOT NULL,  -- Path/key/identifier within the source
     
@@ -100,18 +113,18 @@ CREATE TABLE IF NOT EXISTS source_scan_failures (
 );
 
 -- Create indexes for efficient querying
-CREATE INDEX idx_source_scan_failures_user_id ON source_scan_failures(user_id);
-CREATE INDEX idx_source_scan_failures_source_type ON source_scan_failures(source_type);
-CREATE INDEX idx_source_scan_failures_source_id ON source_scan_failures(source_id);
-CREATE INDEX idx_source_scan_failures_error_type ON source_scan_failures(error_type);
-CREATE INDEX idx_source_scan_failures_error_severity ON source_scan_failures(error_severity);
-CREATE INDEX idx_source_scan_failures_resolved ON source_scan_failures(resolved);
-CREATE INDEX idx_source_scan_failures_next_retry ON source_scan_failures(next_retry_at) WHERE NOT resolved AND NOT user_excluded;
-CREATE INDEX idx_source_scan_failures_resource_path ON source_scan_failures(resource_path);
-CREATE INDEX idx_source_scan_failures_composite_active ON source_scan_failures(user_id, source_type, resolved, user_excluded) WHERE NOT resolved;
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_user_id ON source_scan_failures(user_id);
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_source_type ON source_scan_failures(source_type);
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_source_id ON source_scan_failures(source_id);
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_error_type ON source_scan_failures(error_type);
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_error_severity ON source_scan_failures(error_severity);
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_resolved ON source_scan_failures(resolved);
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_next_retry ON source_scan_failures(next_retry_at) WHERE NOT resolved AND NOT user_excluded;
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_resource_path ON source_scan_failures(resource_path);
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_composite_active ON source_scan_failures(user_id, source_type, resolved, user_excluded) WHERE NOT resolved;
 
 -- GIN index for flexible JSON diagnostic data queries
-CREATE INDEX idx_source_scan_failures_diagnostic_data ON source_scan_failures USING GIN (diagnostic_data);
+CREATE INDEX IF NOT EXISTS idx_source_scan_failures_diagnostic_data ON source_scan_failures USING GIN (diagnostic_data);
 
 -- Function to calculate next retry time with configurable backoff strategies
 CREATE OR REPLACE FUNCTION calculate_source_retry_time(
@@ -203,7 +216,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- Function to record or update a source scan failure
 CREATE OR REPLACE FUNCTION record_source_scan_failure(
     p_user_id UUID,
-    p_source_type source_type,
+    p_source_type source_error_source_type,
     p_source_id UUID,
     p_resource_path TEXT,
     p_error_type source_error_type,
@@ -315,7 +328,7 @@ $$ LANGUAGE plpgsql;
 -- Function to reset a failure for retry
 CREATE OR REPLACE FUNCTION reset_source_scan_failure(
     p_user_id UUID,
-    p_source_type source_type,
+    p_source_type source_error_source_type,
     p_source_id UUID,
     p_resource_path TEXT
 ) RETURNS BOOLEAN AS $$
@@ -344,7 +357,7 @@ $$ LANGUAGE plpgsql;
 -- Function to mark a failure as resolved
 CREATE OR REPLACE FUNCTION resolve_source_scan_failure(
     p_user_id UUID,
-    p_source_type source_type,
+    p_source_type source_error_source_type,
     p_source_id UUID,
     p_resource_path TEXT,
     p_resolution_method TEXT DEFAULT 'automatic'
@@ -371,7 +384,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- View for active failures that need attention across all source types
-CREATE VIEW active_source_scan_failures AS
+CREATE OR REPLACE VIEW active_source_scan_failures AS
 SELECT 
     ssf.*,
     u.username,
@@ -405,6 +418,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_source_scan_failures_updated_at ON source_scan_failures;
 CREATE TRIGGER update_source_scan_failures_updated_at
     BEFORE UPDATE ON source_scan_failures
     FOR EACH ROW
