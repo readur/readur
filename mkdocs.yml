@@ -30,7 +30,7 @@ theme:
     # Dark mode - warmer, less depressing colors
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: cyan
+      primary: blue-grey
       accent: light-blue
       toggle:
         icon: material/brightness-4

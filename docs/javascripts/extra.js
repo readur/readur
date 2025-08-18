@@ -49,10 +49,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Add external link indicators
+    // Add external link indicators (without forcing new tab)
     const externalLinks = document.querySelectorAll('a[href^="http"]:not([href*="readur.app"])');
     externalLinks.forEach(link => {
-        link.setAttribute('target', '_blank');
+        // Only add rel attribute for security, don't force target="_blank"
         link.setAttribute('rel', 'noopener noreferrer');
         link.classList.add('external-link');
     });

@@ -288,6 +288,21 @@
   border-bottom: 1px solid #323842;
 }
 
+/* Tone down the primary color in header for dark mode */
+[data-md-color-scheme="slate"] .md-header {
+  --md-primary-fg-color: #4a8a9c;  /* Muted cyan-gray */
+  --md-primary-bg-color: #1e2329;
+}
+
+/* Also adjust tabs if present */
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #252b33;
+}
+
+[data-md-color-scheme="slate"] .md-tabs__link--active {
+  color: #64b5f6;
+}
+
 /* Footer styling */
 [data-md-color-scheme="slate"] .md-footer {
   background-color: #1a1f25;
