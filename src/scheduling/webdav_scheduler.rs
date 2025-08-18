@@ -6,6 +6,7 @@ use tracing::{error, info, warn};
 use crate::{
     db::Database,
     AppState,
+    models::source::UpdateWebDAVSyncState,
 };
 use crate::services::webdav::{WebDAVConfig, WebDAVService};
 use crate::routes::webdav::webdav_sync::perform_webdav_sync_with_tracking;
@@ -69,7 +70,7 @@ impl WebDAVScheduler {
                         .filter(|e| !e.contains("server restart"))
                         .collect();
                     
-                    let reset_state = crate::models::UpdateWebDAVSyncState {
+                    let reset_state = UpdateWebDAVSyncState {
                         last_sync_at: sync_state.last_sync_at,
                         sync_cursor: sync_state.sync_cursor,
                         is_running: false,

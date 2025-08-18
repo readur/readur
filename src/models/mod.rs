@@ -5,6 +5,7 @@ pub mod document;
 pub mod search;
 pub mod settings;
 pub mod source;
+pub mod source_error;
 pub mod responses;
 
 // Re-export commonly used types
@@ -13,4 +14,6 @@ pub use document::*;
 pub use search::*;
 pub use settings::*;
 pub use source::*;
+pub use source_error::*;
+
 pub use responses::*;
