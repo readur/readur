@@ -3,11 +3,24 @@
 /* Enhanced color scheme for better readability and warmth */
 :root {
   --readur-primary: #00acc1;  /* Cyan - more vibrant */
-  --readur-accent: #ffa726;   /* Amber - warm accent */
+  --readur-accent: #64b5f6;   /* Light blue - consistent accent */
   --readur-success: #66bb6a;
   --readur-info: #42a5f5;
   --readur-warning: #ffa726;
   --readur-danger: #ef5350;
+}
+
+/* Light theme overrides - warmer, more inviting */
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #fafbfc;  /* Slightly warm white */
+  --md-default-bg-color--light: #f5f7f9;
+  --md-default-bg-color--lighter: #eceff3;
+  --md-default-fg-color: #2d3748;  /* Warmer dark text */
+  --md-default-fg-color--light: #4a5568;
+  --md-default-fg-color--lighter: #718096;
+  --md-code-bg-color: #f7f9fb;  /* Light blue-gray code bg */
+  --md-code-fg-color: #2d3748;
+  --md-typeset-a-color: #0284c7;  /* Friendly blue links */
 }
 
 /* Dark theme overrides - warmer, less depressing */
@@ -25,28 +38,41 @@
 
 /* Typography improvements */
 .md-typeset {
-  font-size: 1rem;  /* Slightly larger base font */
-  line-height: 1.7;  /* Better line spacing */
+  font-size: 0.95rem;  /* Comfortable reading size */
+  line-height: 1.65;  /* Better line spacing */
 }
 
 .md-typeset h1 {
-  font-size: 2.2rem;
+  font-size: 2rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 1.5rem 0 1rem;
 }
 
+/* Softer title colors in dark mode */
+[data-md-color-scheme="slate"] .md-typeset h1 {
+  color: #cbd2db;  /* Slightly muted for less brightness */
+}
+
 .md-typeset h2 {
-  font-size: 1.8rem;
+  font-size: 1.65rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 1.25rem 0 0.75rem;
 }
 
+[data-md-color-scheme="slate"] .md-typeset h2 {
+  color: #d4dae2;
+}
+
 .md-typeset h3 {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   font-weight: 600;
   margin: 1rem 0 0.5rem;
+}
+
+[data-md-color-scheme="slate"] .md-typeset h3 {
+  color: #dde2e8;
 }
 
 .md-typeset p {
@@ -67,6 +93,14 @@
   border-radius: 0.25rem;
 }
 
+[data-md-color-scheme="default"] .md-typeset code {
+  background-color: #e8f4f8;
+  color: #0891b2;  /* Teal code in light mode */
+  padding: 0.2em 0.4em;
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+
 /* Navigation improvements */
 .md-nav__link {
   font-size: 0.95rem;
@@ -75,7 +109,7 @@
 }
 
 .md-nav__link:hover {
-  color: var(--md-accent-fg-color);
+  color: #64b5f6;  /* Consistent light blue */
 }
 
 [data-md-color-scheme="slate"] .md-nav__link--active {
@@ -130,6 +164,12 @@
   background: var(--md-default-bg-color--light);
 }
 
+[data-md-color-scheme="default"] .grid.cards > * {
+  border-color: #e2e8f0;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
 [data-md-color-scheme="slate"] .grid.cards > * {
   border-color: #3a4149;
   background: #272d35;
@@ -138,7 +178,7 @@
 .grid.cards > *:hover {
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
   transform: translateY(-3px);
-  border-color: var(--md-accent-fg-color);
+  border-color: #64b5f6;
 }
 
 /* Custom admonitions with warmer colors */
@@ -161,9 +201,19 @@
 
 /* Better table styling */
 .md-typeset table:not([class]) {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   border-radius: 0.5rem;
   overflow: hidden;
+}
+
+[data-md-color-scheme="default"] .md-typeset table:not([class]) th {
+  background-color: #f1f5f9;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+[data-md-color-scheme="default"] .md-typeset table:not([class]) td {
+  border-color: #e2e8f0;
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
@@ -271,9 +321,28 @@ html {
 
 /* Focus improvements for accessibility */
 *:focus-visible {
-  outline: 2px solid var(--md-accent-fg-color);
+  outline: 2px solid #64b5f6;
   outline-offset: 2px;
   border-radius: 0.25rem;
+}
+
+/* Scrollbar styling */
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
+  background-color: #4a6fa5;
+  border-radius: 0.25rem;
+}
+
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #64b5f6;
+}
+
+[data-md-color-scheme="default"] ::-webkit-scrollbar-thumb {
+  background-color: #90cdf4;
+  border-radius: 0.25rem;
+}
+
+[data-md-color-scheme="default"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #64b5f6;
 }
 
 /* Animation for page transitions */
