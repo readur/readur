@@ -21,25 +21,25 @@ theme:
     # Light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: teal
+      accent: amber
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     
-    # Dark mode
+    # Dark mode - warmer, less depressing colors
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: cyan
+      accent: amber
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   
-  # Font configuration
+  # Font configuration - more readable, friendly fonts
   font:
-    text: Roboto
-    code: Roboto Mono
+    text: Inter
+    code: JetBrains Mono
   
   # Features
   features:
