@@ -3,9 +3,13 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use super::Database;
+use crate::models::source::{
+    WebDAVSyncState, UpdateWebDAVSyncState, WebDAVFile, CreateWebDAVFile,
+    WebDAVDirectory, CreateWebDAVDirectory, UpdateWebDAVDirectory,
+};
 
 impl Database {
-    pub async fn get_webdav_sync_state(&self, user_id: Uuid) -> Result<Option<crate::models::WebDAVSyncState>> {
+    pub async fn get_webdav_sync_state(&self, user_id: Uuid) -> Result<Option<WebDAVSyncState>> {
         self.with_retry(|| async {
             let row = sqlx::query(
                 r#"SELECT id, user_id, last_sync_at, sync_cursor, is_running, files_processed, 
@@ -18,7 +22,7 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
 
         match row {
-            Some(row) => Ok(Some(crate::models::WebDAVSyncState {
+            Some(row) => Ok(Some(WebDAVSyncState {
                 id: row.get("id"),
                 user_id: row.get("user_id"),
                 last_sync_at: row.get("last_sync_at"),
@@ -36,7 +40,7 @@ impl Database {
         }).await
     }
 
-    pub async fn update_webdav_sync_state(&self, user_id: Uuid, state: &crate::models::UpdateWebDAVSyncState) -> Result<()> {
+    pub async fn update_webdav_sync_state(&self, user_id: Uuid, state: &UpdateWebDAVSyncState) -> Result<()> {
         self.with_retry(|| async {
             sqlx::query(
                 r#"INSERT INTO webdav_sync_state (user_id, last_sync_at, sync_cursor, is_running, 
@@ -109,7 +113,7 @@ impl Database {
     }
 
     // WebDAV file tracking operations
-    pub async fn get_webdav_file_by_path(&self, user_id: Uuid, webdav_path: &str) -> Result<Option<crate::models::WebDAVFile>> {
+    pub async fn get_webdav_file_by_path(&self, user_id: Uuid, webdav_path: &str) -> Result<Option<WebDAVFile>> {
         let row = sqlx::query(
             r#"SELECT id, user_id, webdav_path, etag, last_modified, file_size, 
                mime_type, document_id, sync_status, sync_error, created_at, updated_at
@@ -121,7 +125,7 @@ impl Database {
         .await?;
 
         match row {
-            Some(row) => Ok(Some(crate::models::WebDAVFile {
+            Some(row) => Ok(Some(WebDAVFile {
                 id: row.get("id"),
                 user_id: row.get("user_id"),
                 webdav_path: row.get("webdav_path"),
@@ -139,7 +143,7 @@ impl Database {
         }
     }
 
-    pub async fn create_or_update_webdav_file(&self, file: &crate::models::CreateWebDAVFile) -> Result<crate::models::WebDAVFile> {
+    pub async fn create_or_update_webdav_file(&self, file: &CreateWebDAVFile) -> Result<WebDAVFile> {
         let row = sqlx::query(
             r#"INSERT INTO webdav_files (user_id, webdav_path, etag, last_modified, file_size, 
                mime_type, document_id, sync_status, sync_error)
@@ -168,7 +172,7 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(crate::models::WebDAVFile {
+        Ok(WebDAVFile {
             id: row.get("id"),
             user_id: row.get("user_id"),
             webdav_path: row.get("webdav_path"),
@@ -184,7 +188,7 @@ impl Database {
         })
     }
 
-    pub async fn get_pending_webdav_files(&self, user_id: Uuid, limit: i64) -> Result<Vec<crate::models::WebDAVFile>> {
+    pub async fn get_pending_webdav_files(&self, user_id: Uuid, limit: i64) -> Result<Vec<WebDAVFile>> {
         let rows = sqlx::query(
             r#"SELECT id, user_id, webdav_path, etag, last_modified, file_size, 
                mime_type, document_id, sync_status, sync_error, created_at, updated_at
@@ -200,7 +204,7 @@ impl Database {
 
         let mut files = Vec::new();
         for row in rows {
-            files.push(crate::models::WebDAVFile {
+            files.push(WebDAVFile {
                 id: row.get("id"),
                 user_id: row.get("user_id"),
                 webdav_path: row.get("webdav_path"),
@@ -220,7 +224,7 @@ impl Database {
     }
 
     // Directory tracking functions for efficient sync optimization
-    pub async fn get_webdav_directory(&self, user_id: Uuid, directory_path: &str) -> Result<Option<crate::models::WebDAVDirectory>> {
+    pub async fn get_webdav_directory(&self, user_id: Uuid, directory_path: &str) -> Result<Option<WebDAVDirectory>> {
         self.with_retry(|| async {
             let row = sqlx::query(
                 r#"SELECT id, user_id, directory_path, directory_etag, last_scanned_at, 
@@ -234,7 +238,7 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
 
             match row {
-                Some(row) => Ok(Some(crate::models::WebDAVDirectory {
+                Some(row) => Ok(Some(WebDAVDirectory {
                     id: row.get("id"),
                     user_id: row.get("user_id"),
                     directory_path: row.get("directory_path"),
@@ -250,7 +254,7 @@ impl Database {
         }).await
     }
 
-    pub async fn create_or_update_webdav_directory(&self, directory: &crate::models::CreateWebDAVDirectory) -> Result<crate::models::WebDAVDirectory> {
+    pub async fn create_or_update_webdav_directory(&self, directory: &CreateWebDAVDirectory) -> Result<WebDAVDirectory> {
         let row = sqlx::query(
             r#"INSERT INTO webdav_directories (user_id, directory_path, directory_etag, 
                file_count, total_size_bytes, last_scanned_at, updated_at)
@@ -272,7 +276,7 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(crate::models::WebDAVDirectory {
+        Ok(WebDAVDirectory {
             id: row.get("id"),
             user_id: row.get("user_id"),
             directory_path: row.get("directory_path"),
@@ -285,7 +289,7 @@ impl Database {
         })
     }
 
-    pub async fn update_webdav_directory(&self, user_id: Uuid, directory_path: &str, update: &crate::models::UpdateWebDAVDirectory) -> Result<()> {
+    pub async fn update_webdav_directory(&self, user_id: Uuid, directory_path: &str, update: &UpdateWebDAVDirectory) -> Result<()> {
         self.with_retry(|| async {
             sqlx::query(
                 r#"UPDATE webdav_directories SET 
@@ -310,7 +314,7 @@ impl Database {
         }).await
     }
 
-    pub async fn list_webdav_directories(&self, user_id: Uuid) -> Result<Vec<crate::models::WebDAVDirectory>> {
+    pub async fn list_webdav_directories(&self, user_id: Uuid) -> Result<Vec<WebDAVDirectory>> {
         let rows = sqlx::query(
             r#"SELECT id, user_id, directory_path, directory_etag, last_scanned_at,
                file_count, total_size_bytes, created_at, updated_at
@@ -324,7 +328,7 @@ impl Database {
 
         let mut directories = Vec::new();
         for row in rows {
-            directories.push(crate::models::WebDAVDirectory {
+            directories.push(WebDAVDirectory {
                 id: row.get("id"),
                 user_id: row.get("user_id"),
                 directory_path: row.get("directory_path"),
@@ -445,7 +449,7 @@ impl Database {
 
     /// Bulk create or update WebDAV directories in a single transaction
     /// This ensures atomic updates and prevents race conditions during directory sync
-    pub async fn bulk_create_or_update_webdav_directories(&self, directories: &[crate::models::CreateWebDAVDirectory]) -> Result<Vec<crate::models::WebDAVDirectory>> {
+    pub async fn bulk_create_or_update_webdav_directories(&self, directories: &[CreateWebDAVDirectory]) -> Result<Vec<WebDAVDirectory>> {
         if directories.is_empty() {
             return Ok(Vec::new());
         }
@@ -475,7 +479,7 @@ impl Database {
             .fetch_one(&mut *tx)
             .await?;
 
-            results.push(crate::models::WebDAVDirectory {
+            results.push(WebDAVDirectory {
                 id: row.get("id"),
                 user_id: row.get("user_id"),
                 directory_path: row.get("directory_path"),
@@ -528,8 +532,8 @@ impl Database {
     pub async fn sync_webdav_directories(
         &self, 
         user_id: Uuid, 
-        discovered_directories: &[crate::models::CreateWebDAVDirectory]
-    ) -> Result<(Vec<crate::models::WebDAVDirectory>, i64)> {
+        discovered_directories: &[CreateWebDAVDirectory]
+    ) -> Result<(Vec<WebDAVDirectory>, i64)> {
         let mut tx = self.pool.begin().await?;
         let mut updated_directories = Vec::new();
 
@@ -556,7 +560,7 @@ impl Database {
             .fetch_one(&mut *tx)
             .await?;
 
-            updated_directories.push(crate::models::WebDAVDirectory {
+            updated_directories.push(WebDAVDirectory {
                 id: row.get("id"),
                 user_id: row.get("user_id"),
                 directory_path: row.get("directory_path"),

@@ -12,10 +12,12 @@ use crate::{
         FacetItem, SearchFacetsResponse, Notification, NotificationSummary, CreateNotification,
         Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
         WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
-        WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
         ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery,
         DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
         BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse
+    },
+    models::source::{
+        WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
     },
     routes::{
         metrics::{

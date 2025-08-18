@@ -7,7 +7,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 
 use crate::{
     AppState,
-    models::{CreateWebDAVFile, UpdateWebDAVSyncState},
+    models::source::{CreateWebDAVFile, UpdateWebDAVSyncState},
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::webdav::{WebDAVConfig, WebDAVService, SmartSyncService, SyncProgress, SyncPhase},
 };

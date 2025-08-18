@@ -436,9 +436,11 @@ describe('LabelCreateDialog Component', () => {
       const createButton = screen.getByText('Create');
       await user.click(createButton);
       
-      // Try to close during loading - should be disabled due to pointer-events: none
-      const cancelButton = screen.getByText('Cancel');
-      expect(cancelButton).toBeDisabled();
+      // Wait for loading state to be set and check Cancel button is disabled
+      await waitFor(() => {
+        const cancelButton = screen.getByText('Cancel');
+        expect(cancelButton).toBeDisabled();
+      });
       
       expect(onClose).not.toHaveBeenCalled();
       

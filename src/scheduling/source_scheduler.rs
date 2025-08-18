@@ -12,6 +12,7 @@ use sqlx::Row;
 use crate::{
     AppState,
     models::{SourceType, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
+    models::source::WebDAVTestConnection,
 };
 use super::source_sync::SourceSyncService;
 
@@ -1035,7 +1036,7 @@ impl SourceScheduler {
         let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config)
             .map_err(|e| format!("Service creation failed: {}", e))?;
 
-        let test_config = crate::models::WebDAVTestConnection {
+        let test_config = WebDAVTestConnection {
             server_url: config.server_url,
             username: config.username,
             password: config.password,
