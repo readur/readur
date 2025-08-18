@@ -241,7 +241,7 @@ describe('FailureDetailsPanel', () => {
     const notesInput = screen.getByLabelText('Notes (optional)');
     await userEvent.type(notesInput, 'Path too long to fix easily');
 
-    const permanentSwitch = screen.getByRole('checkbox');
+    const permanentSwitch = screen.getByLabelText('Permanently exclude (recommended)');
     await userEvent.click(permanentSwitch); // Toggle off
     await userEvent.click(permanentSwitch); // Toggle back on
 
