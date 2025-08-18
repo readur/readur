@@ -3,7 +3,8 @@ use uuid::Uuid;
 use tokio;
 
 use crate::test_utils::TestContext;
-use crate::models::{CreateWebDAVDirectory, CreateUser, UserRole};
+use crate::models::{CreateUser, UserRole};
+use crate::models::source::CreateWebDAVDirectory;
 use crate::services::webdav::{SmartSyncService, SmartSyncDecision, SmartSyncStrategy, WebDAVService};
 use crate::services::webdav::config::WebDAVConfig;
 

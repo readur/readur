@@ -4,8 +4,11 @@ use anyhow::Result;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::{AppState, models::{CreateWebDAVDirectory, FileIngestionInfo}};
+use crate::{AppState, models::{FileIngestionInfo}};
+use crate::models::source::{CreateWebDAVDirectory};
+use crate::models::source_error::{ErrorSourceType, ErrorContext};
 use crate::webdav_xml_parser::compare_etags;
+use crate::services::source_error_tracker::SourceErrorTracker;
 use super::{WebDAVService, SyncProgress};
 
 /// Smart sync service that provides intelligent WebDAV synchronization
@@ -13,6 +16,7 @@ use super::{WebDAVService, SyncProgress};
 #[derive(Clone)]
 pub struct SmartSyncService {
     state: Arc<AppState>,
+    error_tracker: SourceErrorTracker,
 }
 
 /// Result of smart sync evaluation
@@ -45,7 +49,8 @@ pub struct SmartSyncResult {
 
 impl SmartSyncService {
     pub fn new(state: Arc<AppState>) -> Self {
-        Self { state }
+        let error_tracker = SourceErrorTracker::new(state.db.clone());
+        Self { state, error_tracker }
     }
 
     /// Get access to the application state (primarily for testing)
@@ -113,7 +118,7 @@ impl SmartSyncService {
                 
                 let mut deleted_directories = Vec::new();
                 for (known_path, _) in &relevant_dirs {
-                    if !discovered_paths.contains(known_path) {
+                    if !discovered_paths.contains(known_path.as_str()) {
                         info!("Directory deleted: {}", known_path);
                         deleted_directories.push(known_path.clone());
                     }
@@ -151,6 +156,30 @@ impl SmartSyncService {
             }
             Err(e) => {
                 warn!("Smart sync evaluation failed, falling back to deep scan: {}", e);
+                
+                // Track the error using the generic error tracker
+                let context = ErrorContext {
+                    resource_path: folder_path.to_string(),
+                    source_id: None,
+                    operation: "evaluate_sync_need".to_string(),
+                    response_time: None,
+                    response_size: None,
+                    server_type: None,
+                    server_version: None,
+                    additional_context: std::collections::HashMap::new(),
+                };
+                
+                if let Err(track_error) = self.error_tracker.track_error(
+                    user_id,
+                    ErrorSourceType::WebDAV,
+                    None, // source_id - we don't have a specific source ID for this operation
+                    folder_path,
+                    &e,
+                    context,
+                ).await {
+                    warn!("Failed to track sync evaluation error: {}", track_error);
+                }
+                
                 return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan));
             }
         }
@@ -209,7 +238,46 @@ impl SmartSyncService {
         folder_path: &str,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
     ) -> Result<SmartSyncResult> {
-        let discovery_result = webdav_service.discover_files_and_directories_with_progress(folder_path, true, _progress).await?;
+        let discovery_result = match webdav_service.discover_files_and_directories_with_progress(folder_path, true, _progress).await {
+            Ok(result) => {
+                // Mark successful scan to resolve any previous failures
+                if let Err(track_error) = self.error_tracker.mark_success(
+                    user_id,
+                    ErrorSourceType::WebDAV,
+                    None,
+                    folder_path,
+                ).await {
+                    debug!("Failed to mark full deep scan as successful: {}", track_error);
+                }
+                result
+            }
+            Err(e) => {
+                // Track the error using the generic error tracker
+                let context = ErrorContext {
+                    resource_path: folder_path.to_string(),
+                    source_id: None,
+                    operation: "full_deep_scan".to_string(),
+                    response_time: None,
+                    response_size: None,
+                    server_type: None,
+                    server_version: None,
+                    additional_context: std::collections::HashMap::new(),
+                };
+                
+                if let Err(track_error) = self.error_tracker.track_error(
+                    user_id,
+                    ErrorSourceType::WebDAV,
+                    None,
+                    folder_path,
+                    &e,
+                    context,
+                ).await {
+                    warn!("Failed to track full deep scan error: {}", track_error);
+                }
+                
+                return Err(e);
+            }
+        };
         
         info!("Deep scan found {} files and {} directories in folder {}", 
               discovery_result.files.len(), discovery_result.directories.len(), folder_path);
@@ -329,9 +397,42 @@ impl SmartSyncService {
                     
                     all_directories.extend(discovery_result.directories);
                     directories_scanned += 1;
+                    
+                    // Mark successful scan to resolve any previous failures
+                    if let Err(track_error) = self.error_tracker.mark_success(
+                        user_id,
+                        ErrorSourceType::WebDAV,
+                        None,
+                        target_dir,
+                    ).await {
+                        debug!("Failed to mark target directory scan as successful: {}", track_error);
+                    }
                 }
                 Err(e) => {
                     warn!("Failed to scan target directory {}: {}", target_dir, e);
+                    
+                    // Track the error using the generic error tracker
+                    let context = ErrorContext {
+                        resource_path: target_dir.to_string(),
+                        source_id: None,
+                        operation: "targeted_scan".to_string(),
+                        response_time: None,
+                        response_size: None,
+                        server_type: None,
+                        server_version: None,
+                        additional_context: std::collections::HashMap::new(),
+                    };
+                    
+                    if let Err(track_error) = self.error_tracker.track_error(
+                        user_id,
+                        ErrorSourceType::WebDAV,
+                        None,
+                        target_dir,
+                        &e,
+                        context,
+                    ).await {
+                        warn!("Failed to track target directory scan error: {}", track_error);
+                    }
                 }
             }
         }

@@ -321,7 +321,7 @@ async fn test_first_time_scan_scenario_logic() {
     let parent_path = "/FullerDocuments/JonDocuments";
     
     // Simulate an empty list of known directories (first-time scan scenario)
-    let known_directories: Vec<crate::models::WebDAVDirectory> = vec![];
+    let known_directories: Vec<crate::models::source::WebDAVDirectory> = vec![];
     
     // Filter to subdirectories of this parent (this was returning empty)
     let subdirectories: Vec<_> = known_directories.iter()

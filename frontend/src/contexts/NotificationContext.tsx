@@ -200,3 +200,22 @@ export const useNotifications = () => {
   }
   return context;
 };
+
+// Simplified hook for basic notification usage
+export const useNotification = () => {
+  const { addNotification } = useNotifications();
+  
+  const showNotification = useCallback((notification: { 
+    type: NotificationType; 
+    message: string; 
+    title?: string;
+  }) => {
+    addNotification({
+      type: notification.type,
+      title: notification.title || '',
+      message: notification.message,
+    });
+  }, [addNotification]);
+
+  return { showNotification };
+};

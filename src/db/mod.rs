@@ -10,6 +10,7 @@ pub mod settings;
 pub mod notifications;
 pub mod webdav;
 pub mod sources;
+pub mod source_errors;
 pub mod images;
 pub mod ignored_files;
 pub mod constraint_validation;

@@ -10,7 +10,10 @@ use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::models::{
-    FileIngestionInfo, WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVTestConnection,
+    FileIngestionInfo,
+};
+use crate::models::source::{
+    WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVTestConnection,
     WebDAVFolderInfo,
 };
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
@@ -1286,7 +1289,7 @@ impl WebDAVService {
             folders: vec![], // Simplified: not building detailed folder info for basic estimation
             total_files: (total_files * self.config.watch_folders.len()) as i64,
             total_supported_files: (total_files * self.config.watch_folders.len()) as i64, // Assume all files are supported
-            total_estimated_time_hours: estimated_total_scan_time.as_secs_f32() / 3600.0,
+            total_estimated_time_hours: (estimated_total_scan_time.as_secs_f64() / 3600.0) as f32,
             total_size_mb: (total_files * 2) as f64, // Rough estimate in MB
         })
     }
