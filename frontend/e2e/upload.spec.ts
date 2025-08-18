@@ -2,11 +2,39 @@ import { test, expect } from './fixtures/auth';
 import { TEST_FILES, TIMEOUTS, API_ENDPOINTS, EXPECTED_OCR_CONTENT } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
+// Setup mock API for upload E2E tests
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    // Configure mock API for upload testing
+    window.__MOCK_API_CONFIG__ = {
+      scenario: 'ACTIVE_SYSTEM',
+      networkCondition: 'realistic',
+      enableFileUpload: true,
+      enableOcrProcessing: true,
+      uploadProcessingDelay: 1000 // Realistic upload processing time
+    };
+  });
+});
+
 test.describe('Document Upload', () => {
   let helpers: TestHelpers;
 
   test.beforeEach(async ({ dynamicAdminPage }) => {
     helpers = new TestHelpers(dynamicAdminPage);
+    
+    // Setup upload-specific mock data
+    await dynamicAdminPage.evaluate(() => {
+      if (window.__MOCK_API__) {
+        // Configure upload behavior
+        window.__MOCK_API__.setUploadSettings({
+          acceptedFormats: ['pdf', 'png', 'jpg', 'txt'],
+          maxFileSize: 10 * 1024 * 1024, // 10MB
+          enableOcrProcessing: true,
+          processingDelay: 1000
+        });
+      }
+    });
+    
     // Navigate to upload page after authentication
     await dynamicAdminPage.goto('/upload');
     await helpers.waitForLoadingToComplete();
@@ -21,6 +49,13 @@ test.describe('Document Upload', () => {
     
     // Check for upload components - react-dropzone creates hidden file input
     await expect(page.locator('input[type="file"]')).toBeAttached({ timeout: 10000 });
+    
+    // Verify mock API upload capabilities
+    const uploadCapabilities = await page.evaluate(() => {
+      return window.__MOCK_API__ ? window.__MOCK_API__.getUploadCapabilities() : null;
+    });
+    
+    console.log('Mock API upload capabilities:', uploadCapabilities);
     
     // Check for upload interface elements - based on the artifact, we have specific UI elements
     const uploadInterfaceElements = [
