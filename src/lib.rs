@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod config;
+pub mod cpu_allocation;
 pub mod db;
 pub mod db_guardrails_simple;
 pub mod errors;
