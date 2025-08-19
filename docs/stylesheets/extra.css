@@ -108,14 +108,7 @@
   transition: all 0.2s ease;
 }
 
-.md-nav__link:hover {
-  color: #64b5f6;  /* Consistent light blue */
-}
-
-[data-md-color-scheme="slate"] .md-nav__link--active {
-  color: #64b5f6;
-  font-weight: 500;
-}
+/* Remove custom hover color - let Material theme handle it */
 
 /* Sidebar styling */
 .md-sidebar {
@@ -283,25 +276,7 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-[data-md-color-scheme="slate"] .md-header {
-  background-color: #454a4d;  /* Lighter gray matching scrollbar thumb rgb(69, 74, 77) */
-  border-bottom: 1px solid #5a6165;
-}
-
-/* Tone down the primary color in header for dark mode */
-[data-md-color-scheme="slate"] .md-header {
-  --md-primary-fg-color: #dbd8d3;  /* Match main text color for consistency */
-  --md-primary-bg-color: #454a4d;  /* Match the header background */
-}
-
-/* Also adjust tabs if present */
-[data-md-color-scheme="slate"] .md-tabs {
-  background-color: #2d3748;  /* Slightly darker than header for hierarchy */
-}
-
-[data-md-color-scheme="slate"] .md-tabs__link--active {
-  color: #64b5f6;
-}
+/* Let Material theme handle dark mode header colors - no custom overrides */
 
 /* Footer styling */
 [data-md-color-scheme="slate"] .md-footer {
