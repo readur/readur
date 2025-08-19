@@ -25,14 +25,14 @@
 
 /* Dark theme overrides - warmer, less depressing */
 [data-md-color-scheme="slate"] {
-  --md-default-bg-color: #1e2329;  /* Warmer dark background */
+  --md-default-bg-color: #202324;  /* Dark background matching viewer */
   --md-default-bg-color--light: #272d35;
   --md-default-bg-color--lighter: #323842;
-  --md-default-fg-color: #e8eaed;  /* Softer white text */
+  --md-default-fg-color: #dbd8d3;  /* Text color rgb(219, 216, 211) */
   --md-default-fg-color--light: #b8bec7;
   --md-default-fg-color--lighter: #8b939e;
   --md-code-bg-color: #2a3038;  /* Warmer code background */
-  --md-code-fg-color: #e8eaed;
+  --md-code-fg-color: #dbd8d3;
   --md-typeset-a-color: #64b5f6;  /* Softer blue links */
 }
 
@@ -284,19 +284,19 @@
 }
 
 [data-md-color-scheme="slate"] .md-header {
-  background-color: #1e2329;
-  border-bottom: 1px solid #323842;
+  background-color: #454a4d;  /* Lighter gray matching scrollbar thumb rgb(69, 74, 77) */
+  border-bottom: 1px solid #5a6165;
 }
 
 /* Tone down the primary color in header for dark mode */
 [data-md-color-scheme="slate"] .md-header {
-  --md-primary-fg-color: #4a8a9c;  /* Muted cyan-gray */
-  --md-primary-bg-color: #1e2329;
+  --md-primary-fg-color: #dbd8d3;  /* Match main text color for consistency */
+  --md-primary-bg-color: #454a4d;  /* Match the header background */
 }
 
 /* Also adjust tabs if present */
 [data-md-color-scheme="slate"] .md-tabs {
-  background-color: #252b33;
+  background-color: #2d3748;  /* Slightly darker than header for hierarchy */
 }
 
 [data-md-color-scheme="slate"] .md-tabs__link--active {
@@ -342,13 +342,17 @@ html {
 }
 
 /* Scrollbar styling */
+[data-md-color-scheme="slate"] ::-webkit-scrollbar {
+  background-color: #202324;  /* rgb(32, 35, 36) */
+}
+
 [data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
-  background-color: #4a6fa5;
+  background-color: #454a4d;  /* rgb(69, 74, 77) */
   border-radius: 0.25rem;
 }
 
 [data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb:hover {
-  background-color: #64b5f6;
+  background-color: #5a6165;  /* Slightly lighter on hover */
 }
 
 [data-md-color-scheme="default"] ::-webkit-scrollbar-thumb {

@@ -1,30 +1,30 @@
 # Readur 📄
 
-A powerful, modern document management system built with Rust and React. Readur provides intelligent document processing with OCR capabilities, full-text search, and a beautiful web interface designed for 2026 tech standards.
+Readur is a powerful and modern document management system designed to help individuals and teams efficiently organize, process, and access their digital documents. It combines a high-performance backend with a sleek and intuitive web interface to deliver a smooth and reliable user experience.
 
-![](./docs/images/readur_dashboard.png)
+![](./docs/images/gallery/image_2.png)
 
 
 ## ✨ Features
 
 | Feature | Description | Documentation |
 |---------|-------------|---------------|
-| 🔐 **Secure Authentication** | JWT-based user authentication with bcrypt password hashing + OIDC/SSO support | [User Management](docs/user-management-guide.md), [OIDC Setup](docs/oidc-setup.md) |
-| 👥 **User Management** | Role-based access control with Admin and User roles | [User Management Guide](docs/user-management-guide.md) |
-| 📤 **Smart File Upload** | Drag-and-drop support for PDF, images, text files, and Office documents | [File Upload Guide](docs/file-upload-guide.md) |
-| 🔍 **Advanced OCR** | Automatic text extraction using Tesseract for searchable document content | [OCR Optimization](docs/dev/OCR_OPTIMIZATION_GUIDE.md) |
-| 🌍 **Multi-Language OCR** | Process documents in multiple languages simultaneously with automatic language detection | [Multi-Language OCR Guide](docs/multi-language-ocr-guide.md) |
-| 🔎 **Powerful Search** | PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean) | [Advanced Search Guide](docs/advanced-search.md) |
-| 🔗 **Multi-Source Sync** | WebDAV, Local Folders, and S3-compatible storage integration | [Sources Guide](docs/sources-guide.md), [S3 Storage Guide](docs/s3-storage-guide.md) |
-| 🏷️ **Labels & Organization** | Comprehensive tagging system with color-coding and hierarchical structure | [Labels & Organization](docs/labels-and-organization.md) |
-| 👁️ **Folder Monitoring** | Non-destructive file watching with intelligent sync scheduling | [Watch Folder Guide](docs/WATCH_FOLDER.md) |
-| 📊 **Health Monitoring** | Proactive source validation and system health tracking | [Health Monitoring Guide](docs/health-monitoring-guide.md) |
-| 🔔 **Notifications** | Real-time alerts for sync events, OCR completion, and system status | [Notifications Guide](docs/notifications-guide.md) |
-| 🔌 **Swagger UI** | Built-in interactive API documentation accessible from your profile menu | [Swagger UI Guide](docs/swagger-ui-guide.md) |
-| 🎨 **Modern UI** | Beautiful React frontend with Material-UI components and responsive design | [User Guide](docs/user-guide.md) |
-| 🐳 **Docker Ready** | Complete containerization with production-ready multi-stage builds | [Installation Guide](docs/installation.md), [Deployment Guide](docs/deployment.md) |
-| ⚡ **High Performance** | Rust backend for speed and reliability | [Architecture Documentation](docs/dev/architecture.md) |
-| 📊 **Analytics Dashboard** | Document statistics and processing status overview | [Analytics Dashboard Guide](docs/analytics-dashboard-guide.md) |
+| 🔐 **Secure Authentication** | JWT-based user authentication with bcrypt password hashing + OIDC/SSO support | [User Management](https://docs.readur.app/user-management-guide/), [OIDC Setup](https://docs.readur.app/oidc-setup/) |
+| 👥 **User Management** | Role-based access control with Admin and User roles | [User Management Guide](https://docs.readur.app/user-management-guide/) |
+| 📤 **Smart File Upload** | Drag-and-drop support for PDF, images, text files, and Office documents | [File Upload Guide](https://docs.readur.app/file-upload-guide/) |
+| 🔍 **Advanced OCR** | Automatic text extraction using Tesseract for searchable document content | [OCR Optimization](https://docs.readur.app/dev/OCR_OPTIMIZATION_GUIDE/) |
+| 🌍 **Multi-Language OCR** | Process documents in multiple languages simultaneously with automatic language detection | [Multi-Language OCR Guide](https://docs.readur.app/multi-language-ocr-guide/) |
+| 🔎 **Powerful Search** | PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean) | [Advanced Search Guide](https://docs.readur.app/advanced-search/) |
+| 🔗 **Multi-Source Sync** | WebDAV, Local Folders, and S3-compatible storage integration | [Sources Guide](https://docs.readur.app/sources-guide/), [S3 Storage Guide](https://docs.readur.app/s3-storage-guide/) |
+| 🏷️ **Labels & Organization** | Comprehensive tagging system with color-coding and hierarchical structure | [Labels & Organization](https://docs.readur.app/labels-and-organization/) |
+| 👁️ **Folder Monitoring** | Non-destructive file watching with intelligent sync scheduling | [Watch Folder Guide](https://docs.readur.app/WATCH_FOLDER/) |
+| 📊 **Health Monitoring** | Proactive source validation and system health tracking | [Health Monitoring Guide](https://docs.readur.app/health-monitoring-guide/) |
+| 🔔 **Notifications** | Real-time alerts for sync events, OCR completion, and system status | [Notifications Guide](https://docs.readur.app/notifications-guide/) |
+| 🔌 **Swagger UI** | Built-in interactive API documentation accessible from your profile menu | [Swagger UI Guide](https://docs.readur.app/swagger-ui-guide/) |
+| 🎨 **Modern UI** | Beautiful React frontend with Material-UI components and responsive design | [User Guide](https://docs.readur.app/user-guide/) |
+| 🐳 **Docker Ready** | Complete containerization with production-ready multi-stage builds | [Installation Guide](https://docs.readur.app/installation/), [Deployment Guide](https://docs.readur.app/deployment/) |
+| ⚡ **High Performance** | Rust backend for speed and reliability | [Architecture Documentation](https://docs.readur.app/dev/architecture/) |
+| 📊 **Analytics Dashboard** | Document statistics and processing status overview | [Analytics Dashboard Guide](https://docs.readur.app/analytics-dashboard-guide/) |
 
 ## 🚀 Quick Start
 
@@ -49,36 +49,36 @@ open http://localhost:8000
 ## 📚 Documentation
 
 ### Getting Started
-- [📦 Installation Guide](docs/installation.md) - Docker & manual installation instructions
-- [🔧 Configuration](docs/configuration.md) - Environment variables and settings
-- [⚙️ Configuration Reference](docs/configuration-reference.md) - Complete configuration options reference
-- [📖 User Guide](docs/user-guide.md) - How to use Readur effectively
+- [📦 Installation Guide](https://docs.readur.app/installation/) - Docker & manual installation instructions
+- [🔧 Configuration](https://docs.readur.app/configuration/) - Environment variables and settings
+- [⚙️ Configuration Reference](https://docs.readur.app/configuration-reference/) - Complete configuration options reference
+- [📖 User Guide](https://docs.readur.app/user-guide/) - How to use Readur effectively
 
 ### Core Features
-- [🔗 Sources Guide](docs/sources-guide.md) - WebDAV, Local Folders, and S3 integration
-- [☁️ S3 Storage Guide](docs/s3-storage-guide.md) - Complete S3 and S3-compatible storage setup
-- [👥 User Management](docs/user-management-guide.md) - Authentication, roles, and administration
-- [🏷️ Labels & Organization](docs/labels-and-organization.md) - Document tagging and categorization
-- [🔎 Advanced Search](docs/advanced-search.md) - Search modes, syntax, and optimization
-- [🌍 Multi-Language OCR Guide](docs/multi-language-ocr-guide.md) - Process documents in multiple languages simultaneously
-- [🔐 OIDC Setup](docs/oidc-setup.md) - Single Sign-On integration
+- [🔗 Sources Guide](https://docs.readur.app/sources-guide/) - WebDAV, Local Folders, and S3 integration
+- [☁️ S3 Storage Guide](https://docs.readur.app/s3-storage-guide/) - Complete S3 and S3-compatible storage setup
+- [👥 User Management](https://docs.readur.app/user-management-guide/) - Authentication, roles, and administration
+- [🏷️ Labels & Organization](https://docs.readur.app/labels-and-organization/) - Document tagging and categorization
+- [🔎 Advanced Search](https://docs.readur.app/advanced-search/) - Search modes, syntax, and optimization
+- [🌍 Multi-Language OCR Guide](https://docs.readur.app/multi-language-ocr-guide/) - Process documents in multiple languages simultaneously
+- [🔐 OIDC Setup](https://docs.readur.app/oidc-setup/) - Single Sign-On integration
 
 ### Deployment & Operations
-- [🚀 Deployment Guide](docs/deployment.md) - Production deployment, SSL, monitoring
-- [🔄 Reverse Proxy Setup](docs/REVERSE_PROXY.md) - Nginx, Traefik, and more
-- [📁 Watch Folder Guide](docs/WATCH_FOLDER.md) - Automatic document ingestion
-- [🔄 Migration Guide](docs/migration-guide.md) - Migrate from local storage to S3
-- [🛠️ S3 Troubleshooting](docs/s3-troubleshooting.md) - Debug and resolve S3 storage issues
+- [🚀 Deployment Guide](https://docs.readur.app/deployment/) - Production deployment, SSL, monitoring
+- [🔄 Reverse Proxy Setup](https://docs.readur.app/REVERSE_PROXY/) - Nginx, Traefik, and more
+- [📁 Watch Folder Guide](https://docs.readur.app/WATCH_FOLDER/) - Automatic document ingestion
+- [🔄 Migration Guide](https://docs.readur.app/migration-guide/) - Migrate from local storage to S3
+- [🛠️ S3 Troubleshooting](https://docs.readur.app/s3-troubleshooting/) - Debug and resolve S3 storage issues
 
 ### Development
-- [🏗️ Developer Documentation](docs/dev/) - Architecture, development setup, testing
-- [🔌 API Reference](docs/api-reference.md) - REST API documentation
+- [🏗️ Developer Documentation](https://docs.readur.app/dev/) - Architecture, development setup, testing
+- [🔌 API Reference](https://docs.readur.app/api-reference/) - REST API documentation
 
 ### Advanced Topics
-- [🔍 OCR Optimization](docs/dev/OCR_OPTIMIZATION_GUIDE.md) - Improve OCR performance
-- [🗄️ Database Best Practices](docs/dev/DATABASE_GUARDRAILS.md) - Concurrency and safety
-- [📊 Queue Architecture](docs/dev/QUEUE_IMPROVEMENTS.md) - Background job processing
-- [⚠️ Error System Guide](docs/dev/ERROR_SYSTEM.md) - Comprehensive error handling architecture
+- [🔍 OCR Optimization](https://docs.readur.app/dev/OCR_OPTIMIZATION_GUIDE/) - Improve OCR performance
+- [🗄️ Database Best Practices](https://docs.readur.app/dev/DATABASE_GUARDRAILS/) - Concurrency and safety
+- [📊 Queue Architecture](https://docs.readur.app/dev/QUEUE_IMPROVEMENTS/) - Background job processing
+- [⚠️ Error System Guide](https://docs.readur.app/dev/ERROR_SYSTEM/) - Comprehensive error handling architecture
 
 ## 🏗️ Architecture
 
@@ -102,18 +102,18 @@ open http://localhost:8000
 
 ### Recommended for Production
 - 4+ CPU cores, 4GB+ RAM, 50GB+ SSD
-- See [deployment guide](docs/deployment.md) for details
+- See [deployment guide](https://docs.readur.app/deployment/) for details
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) and [Development Setup](docs/dev/development.md) for details.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) and [Development Setup](https://docs.readur.app/dev/development/) for details.
 
 ## 🔒 Security
 
 - Change default credentials immediately
 - Use HTTPS in production
 - Regular security updates
-- See [deployment guide](docs/deployment.md#security-considerations) for security best practices
+- See [deployment guide](https://docs.readur.app/deployment/#security-considerations) for security best practices
 
 ## 📝 License
 
@@ -132,9 +132,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Documentation**: Start with the [User Guide](docs/user-guide.md)
-- **Issues**: Report bugs on [GitHub Issues](https://github.com/perfectra1n/readur/issues)
-- **Discussions**: Join our [GitHub Discussions](https://github.com/perfectra1n/readur/discussions)
+- **Documentation**: Start with the [User Guide](https://docs.readur.app/user-guide/)
+- **Issues**: Report bugs on [GitHub Issues](https://github.com/readur/readur/issues)
+- **Discussions**: Join our [GitHub Discussions](https://github.com/readur/readur/discussions)
 
 ---
 
