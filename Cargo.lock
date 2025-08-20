@@ -3644,6 +3644,7 @@ dependencies = [
  "mime_guess",
  "notify",
  "oauth2",
+ "once_cell",
  "quick-xml",
  "rand 0.8.5",
  "raw-cpuid",

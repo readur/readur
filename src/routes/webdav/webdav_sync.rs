@@ -1,9 +1,11 @@
 use std::sync::Arc;
 use std::path::Path;
+use std::time::Instant;
 use tracing::{debug, error, info, warn};
 use chrono::Utc;
 use tokio::sync::Semaphore;
 use futures::stream::{FuturesUnordered, StreamExt};
+use uuid::Uuid;
 
 use crate::{
     AppState,
@@ -20,7 +22,14 @@ pub async fn perform_webdav_sync_with_tracking(
     enable_background_ocr: bool,
     webdav_source_id: Option<uuid::Uuid>,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-    info!("Performing WebDAV sync for user {} on {} folders", user_id, config.watch_folders.len());
+    let sync_start_time = Instant::now();
+    let request_id = Uuid::new_v4();
+    
+    info!("🚀 [{}] Starting WebDAV sync for user {} on {} folders (source: {:?})", 
+          request_id, user_id, config.watch_folders.len(), webdav_source_id);
+    
+    debug!("[{}] WebDAV config: server={}, user_agent='readur-webdav-client', folders={:?}, extensions={:?}", 
+           request_id, config.server_url, config.watch_folders, config.file_extensions);
     
     // Update sync state to running
     let sync_state_update = UpdateWebDAVSyncState {
@@ -65,13 +74,18 @@ pub async fn perform_webdav_sync_with_tracking(
     };
 
     // Perform sync with proper cleanup
-    let sync_result = perform_sync_internal(state.clone(), user_id, webdav_service, config, enable_background_ocr, webdav_source_id).await;
+    let sync_result = perform_sync_internal(state.clone(), user_id, webdav_service, config, enable_background_ocr, webdav_source_id, request_id).await;
     
+    let elapsed = sync_start_time.elapsed();
     match &sync_result {
         Ok(files_processed) => {
+            info!("✅ [{}] WebDAV sync completed successfully: {} files processed in {:.2}s", 
+                  request_id, files_processed, elapsed.as_secs_f64());
             cleanup_sync_state(Vec::new(), *files_processed);
         }
         Err(e) => {
+            error!("❌ [{}] WebDAV sync failed after {:.2}s: {}", 
+                   request_id, elapsed.as_secs_f64(), e);
             let error_msg = format!("Sync failed: {}", e);
             cleanup_sync_state(vec![error_msg], 0);
         }
@@ -87,10 +101,15 @@ async fn perform_sync_internal(
     config: WebDAVConfig,
     enable_background_ocr: bool,
     webdav_source_id: Option<uuid::Uuid>,
+    request_id: Uuid,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     
     let mut total_files_processed = 0;
+    let mut total_directories_scanned = 0;
+    let mut total_directories_skipped = 0;
     let mut sync_errors = Vec::new();
+    let mut sync_warnings = Vec::new();
+    let folder_start_time = Instant::now();
     
     // Create progress tracker for this sync session
     let progress = Arc::new(SyncProgress::new());
@@ -101,19 +120,24 @@ async fn perform_sync_internal(
         state.sync_progress_tracker.register_sync(source_id, progress.clone());
     }
     
-    info!("🚀 Starting WebDAV sync with progress tracking for {} folders", config.watch_folders.len());
+    info!("[{}] Starting WebDAV sync with progress tracking for {} folders", 
+          request_id, config.watch_folders.len());
     
     // Process each watch folder
-    for folder_path in &config.watch_folders {
+    for (folder_index, folder_path) in config.watch_folders.iter().enumerate() {
+        let folder_start = Instant::now();
+        
         // Check if sync has been cancelled before processing each folder
         if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
             if !sync_state.is_running {
-                info!("WebDAV sync cancelled, stopping folder processing");
+                info!("[{}] WebDAV sync cancelled, stopping folder processing at {}/{}", 
+                      request_id, folder_index + 1, config.watch_folders.len());
                 return Err("Sync cancelled by user".into());
             }
         }
         
-        info!("Syncing folder: {}", folder_path);
+        info!("[{}] 📁 Processing folder {}/{}: '{}'", 
+              request_id, folder_index + 1, config.watch_folders.len(), folder_path);
         
         // Update current folder in sync state
         let folder_update = UpdateWebDAVSyncState {
@@ -135,8 +159,19 @@ async fn perform_sync_internal(
         
         match smart_sync_service.evaluate_and_sync(user_id, &webdav_service, folder_path, Some(&progress)).await {
             Ok(Some(sync_result)) => {
-                info!("🧠 Smart sync completed for {}: {} files found using {:?}", 
-                      folder_path, sync_result.files.len(), sync_result.strategy_used);
+                let folder_elapsed = folder_start.elapsed();
+                total_directories_scanned += sync_result.directories_scanned;
+                total_directories_skipped += sync_result.directories_skipped;
+                
+                info!("[{}] 🧠 Smart sync completed for '{}': {} files found, {} dirs scanned, {} dirs skipped using {:?} in {:.2}s", 
+                      request_id, folder_path, sync_result.files.len(), 
+                      sync_result.directories_scanned, sync_result.directories_skipped,
+                      sync_result.strategy_used, folder_elapsed.as_secs_f64());
+                
+                if sync_result.directories_skipped > 0 {
+                    debug!("[{}] Directory skip details for '{}': {} directories were skipped due to error tracking or cooldown periods", 
+                           request_id, folder_path, sync_result.directories_skipped);
+                }
                 
                 // Filter files for processing (directories already handled by smart sync service)
                 let files_to_process: Vec<_> = sync_result.files.into_iter()
@@ -152,7 +187,13 @@ async fn perform_sync_internal(
                     })
                     .collect();
                 
-                info!("Processing {} files from folder {}", files_to_process.len(), folder_path);
+                info!("[{}] 📄 Processing {} files from folder '{}'", 
+                      request_id, files_to_process.len(), folder_path);
+                
+                if files_to_process.len() > 50 {
+                    info!("[{}] Large file batch detected ({} files), processing with concurrency limit of {}", 
+                          request_id, files_to_process.len(), concurrent_limit);
+                }
                 
                 // Update progress for file processing phase
                 progress.set_phase(SyncPhase::ProcessingFiles);
@@ -193,7 +234,8 @@ async fn perform_sync_internal(
                     // Check if sync has been cancelled
                     if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
                         if !sync_state.is_running {
-                            info!("WebDAV sync cancelled during file processing, stopping");
+                            info!("[{}] WebDAV sync cancelled during file processing, stopping ({} files completed)", 
+                                  request_id, folder_files_processed);
                             // Cancel remaining futures
                             file_futures.clear();
                             sync_errors.push("Sync cancelled by user during file processing".to_string());
@@ -206,12 +248,18 @@ async fn perform_sync_internal(
                             if processed {
                                 folder_files_processed += 1;
                                 progress.add_files_processed(1, 0); // We don't track bytes here yet
-                                debug!("Successfully processed file ({} completed in this folder)", folder_files_processed);
+                                
+                                // Log periodic progress for large batches
+                                if folder_files_processed % 10 == 0 || folder_files_processed == files_to_process.len() {
+                                    debug!("[{}] Progress: {}/{} files processed in folder '{}'", 
+                                           request_id, folder_files_processed, files_to_process.len(), folder_path);
+                                }
                             }
                         }
                         Err(error) => {
-                            error!("File processing error: {}", error);
-                            sync_errors.push(error.clone());
+                            error!("[{}] File processing error in folder '{}': {}", 
+                                   request_id, folder_path, error);
+                            sync_errors.push(format!("Folder '{}': {}", folder_path, error));
                             progress.add_error(&error);
                         }
                     }
@@ -233,29 +281,59 @@ async fn perform_sync_internal(
                 }
                 
                 total_files_processed += folder_files_processed;
+                
+                let folder_throughput = if folder_elapsed.as_secs_f64() > 0.0 {
+                    folder_files_processed as f64 / folder_elapsed.as_secs_f64()
+                } else {
+                    0.0
+                };
+                
+                info!("[{}] ✅ Folder '{}' completed: {} files processed in {:.2}s ({:.1} files/sec)", 
+                      request_id, folder_path, folder_files_processed, 
+                      folder_elapsed.as_secs_f64(), folder_throughput);
             }
             Ok(None) => {
-                info!("✅ Smart sync: No changes detected for {}, skipping folder", folder_path);
+                let folder_elapsed = folder_start.elapsed();
+                info!("[{}] ✅ Smart sync: No changes detected for '{}', folder skipped in {:.2}s", 
+                      request_id, folder_path, folder_elapsed.as_secs_f64());
                 // No files to process, continue to next folder
             }
             Err(e) => {
-                let error_msg = format!("Smart sync failed for folder {}: {}", folder_path, e);
-                error!("{}", error_msg);
+                let folder_elapsed = folder_start.elapsed();
+                let error_msg = format!("Smart sync failed for folder '{}' after {:.2}s: {}", 
+                                       folder_path, folder_elapsed.as_secs_f64(), e);
+                error!("[{}] {}", request_id, error_msg);
                 sync_errors.push(error_msg.clone());
                 progress.add_error(&error_msg);
             }
         }
     }
     
-    info!("WebDAV sync completed for user {}: {} files processed", user_id, total_files_processed);
+    let total_elapsed = folder_start_time.elapsed();
+    let total_throughput = if total_elapsed.as_secs_f64() > 0.0 {
+        total_files_processed as f64 / total_elapsed.as_secs_f64()
+    } else {
+        0.0
+    };
     
     // Mark sync as completed
     progress.set_phase(SyncPhase::Completed);
     
-    // Log final statistics
+    // Log comprehensive sync summary
+    info!("[{}] 📊 WebDAV sync completed for user {}: {} files processed, {} directories scanned, {} directories skipped, {} errors in {:.2}s ({:.1} files/sec)", 
+          request_id, user_id, total_files_processed, total_directories_scanned, 
+          total_directories_skipped, sync_errors.len(), total_elapsed.as_secs_f64(), total_throughput);
+    
+    if !sync_errors.is_empty() {
+        warn!("[{}] Sync completed with {} errors. Recent errors: {:?}", 
+              request_id, sync_errors.len(), 
+              sync_errors.iter().take(3).collect::<Vec<_>>());
+    }
+    
+    // Log final statistics from progress tracker
     if let Some(stats) = progress.get_stats() {
-        info!("📊 Final Sync Statistics: {} files processed, {} errors, {} warnings, elapsed: {}s", 
-              stats.files_processed, stats.errors.len(), stats.warnings, stats.elapsed_time.as_secs());
+        info!("[{}] 📈 Detailed statistics: {} files processed, {} errors, {} warnings, total elapsed: {:.2}s", 
+              request_id, stats.files_processed, stats.errors.len(), stats.warnings, stats.elapsed_time.as_secs_f64());
     }
     
     Ok(total_files_processed)
@@ -271,47 +349,73 @@ async fn process_single_file(
     semaphore: Arc<Semaphore>,
     webdav_source_id: Option<uuid::Uuid>,
 ) -> Result<bool, String> {
+    let file_start_time = Instant::now();
+    let file_request_id = Uuid::new_v4();
+    
     // Acquire semaphore permit to limit concurrent downloads
-    let _permit = semaphore.acquire().await.map_err(|e| format!("Semaphore error: {}", e))?;
+    let _permit = semaphore.acquire().await.map_err(|e| {
+        error!("[{}] Semaphore acquisition failed for file '{}': {}", 
+               file_request_id, file_info.path, e);
+        format!("Semaphore error: {}", e)
+    })?;
     
     // Check if sync has been cancelled before processing this file
     if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
         if !sync_state.is_running {
-            info!("Sync cancelled, skipping file: {}", file_info.path);
+            info!("[{}] Sync cancelled, skipping file: '{}'", file_request_id, file_info.path);
             return Err("Sync cancelled by user".to_string());
         }
     }
     
-    debug!("Processing file: {}", file_info.path);
+    debug!("[{}] 📁 Processing file: '{}' (size: {} bytes, etag: {})", 
+           file_request_id, file_info.path, file_info.size, file_info.etag);
     
     // Check if we've already processed this file
-    debug!("Checking WebDAV tracking for: {}", file_info.path);
-    match state.db.get_webdav_file_by_path(user_id, &file_info.path).await {
+    debug!("[{}] Checking WebDAV tracking for: '{}'", file_request_id, file_info.path);
+    let file_change_reason = match state.db.get_webdav_file_by_path(user_id, &file_info.path).await {
         Ok(Some(existing_file)) => {
-            debug!("Found existing WebDAV file record: {} (current ETag: {}, remote ETag: {})", 
-                file_info.path, existing_file.etag, file_info.etag);
+            debug!("[{}] Found existing WebDAV file record: '{}' (current ETag: {}, remote ETag: {})", 
+                file_request_id, file_info.path, existing_file.etag, file_info.etag);
             
             // Check if file has changed (compare ETags)
             if existing_file.etag == file_info.etag {
-                debug!("Skipping unchanged WebDAV file: {} (ETag: {})", file_info.path, file_info.etag);
+                debug!("[{}] ⏭️ Skipping unchanged WebDAV file: '{}' (ETag: {})", 
+                       file_request_id, file_info.path, file_info.etag);
                 return Ok(false); // Not processed (no change)
             }
-            debug!("WebDAV file has changed: {} (old ETag: {}, new ETag: {})", 
-                file_info.path, existing_file.etag, file_info.etag);
+            debug!("[{}] 🔄 WebDAV file has changed: '{}' (old ETag: {}, new ETag: {})", 
+                file_request_id, file_info.path, existing_file.etag, file_info.etag);
+            "ETag_changed"
         }
         Ok(None) => {
-            debug!("New WebDAV file detected: {}", file_info.path);
+            debug!("[{}] ✨ New WebDAV file detected: '{}'", file_request_id, file_info.path);
+            "new_file"
         }
         Err(e) => {
-            warn!("Error checking existing WebDAV file {}: {}", file_info.path, e);
+            warn!("[{}] Error checking existing WebDAV file '{}': {}", 
+                  file_request_id, file_info.path, e);
+            "tracking_error"
         }
-    }
+    };
     
     // Download the file
+    let download_start = Instant::now();
     let file_data = webdav_service.download_file(&file_info.path).await
-        .map_err(|e| format!("Failed to download {}: {}", file_info.path, e))?;
+        .map_err(|e| {
+            error!("[{}] Failed to download '{}': {}", file_request_id, file_info.path, e);
+            format!("Failed to download {}: {}", file_info.path, e)
+        })?;
     
-    debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
+    let download_elapsed = download_start.elapsed();
+    let download_speed = if download_elapsed.as_secs_f64() > 0.0 {
+        file_data.len() as f64 / download_elapsed.as_secs_f64() / 1024.0 // KB/s
+    } else {
+        0.0
+    };
+    
+    debug!("[{}] ⬇️ Downloaded file: '{}' ({} bytes in {:.2}s, {:.1} KB/s)", 
+           file_request_id, file_info.name, file_data.len(), 
+           download_elapsed.as_secs_f64(), download_speed);
     
     // Use the unified ingestion service for consistent deduplication
     let file_service_clone = state.file_service.as_ref().clone();
@@ -346,30 +450,50 @@ async fn process_single_file(
 
     let (document, should_queue_ocr, webdav_sync_status) = match result {
         IngestionResult::Created(doc) => {
-            debug!("Created new document for {}: {}", file_info.name, doc.id);
+            debug!("[{}] ✅ Created new document for '{}': {} (reason: {})", 
+                   file_request_id, file_info.name, doc.id, file_change_reason);
             (doc, true, "synced") // New document - queue for OCR
         }
         IngestionResult::ExistingDocument(doc) => {
-            debug!("Found existing document for {}: {}", file_info.name, doc.id);
+            debug!("[{}] 🔗 Found existing document for '{}': {} (reason: {})", 
+                   file_request_id, file_info.name, doc.id, file_change_reason);
             (doc, false, "duplicate_content") // Existing document - don't re-queue OCR
         }
         IngestionResult::TrackedAsDuplicate { existing_document_id } => {
-            debug!("Tracked {} as duplicate of existing document: {}", file_info.name, existing_document_id);
+            debug!("[{}] 📋 Tracked '{}' as duplicate of existing document: {} (reason: {})", 
+                   file_request_id, file_info.name, existing_document_id, file_change_reason);
             
             // For duplicates, we still need to get the document info for WebDAV tracking
             let existing_doc = state.db.get_document_by_id(existing_document_id, user_id, crate::models::UserRole::User).await
-                .map_err(|e| format!("Failed to get existing document: {}", e))?
-                .ok_or_else(|| "Document not found".to_string())?;
+                .map_err(|e| {
+                    error!("[{}] Failed to get existing document {}: {}", 
+                           file_request_id, existing_document_id, e);
+                    format!("Failed to get existing document: {}", e)
+                })?
+                .ok_or_else(|| {
+                    error!("[{}] Document {} not found for duplicate tracking", 
+                           file_request_id, existing_document_id);
+                    "Document not found".to_string()
+                })?;
             
             (existing_doc, false, "duplicate_content") // Track as duplicate
         }
         IngestionResult::Skipped { existing_document_id, reason: _ } => {
-            debug!("Skipped duplicate file {}: existing document {}", file_info.name, existing_document_id);
+            debug!("[{}] ⏭️ Skipped duplicate file '{}': existing document {} (reason: {})", 
+                   file_request_id, file_info.name, existing_document_id, file_change_reason);
             
             // For skipped files, we still need to get the document info for WebDAV tracking
             let existing_doc = state.db.get_document_by_id(existing_document_id, user_id, crate::models::UserRole::User).await
-                .map_err(|e| format!("Failed to get existing document: {}", e))?
-                .ok_or_else(|| "Document not found".to_string())?;
+                .map_err(|e| {
+                    error!("[{}] Failed to get existing document {}: {}", 
+                           file_request_id, existing_document_id, e);
+                    format!("Failed to get existing document: {}", e)
+                })?
+                .ok_or_else(|| {
+                    error!("[{}] Document {} not found for skipped file tracking", 
+                           file_request_id, existing_document_id);
+                    "Document not found".to_string()
+                })?;
             
             (existing_doc, false, "duplicate_content") // Track as duplicate
         }
@@ -389,12 +513,17 @@ async fn process_single_file(
     };
     
     if let Err(e) = state.db.create_or_update_webdav_file(&webdav_file).await {
-        error!("Failed to record WebDAV file: {}", e);
+        error!("[{}] Failed to record WebDAV file '{}': {}", 
+               file_request_id, file_info.path, e);
+    } else {
+        debug!("[{}] 📝 Recorded WebDAV file tracking for '{}'", 
+               file_request_id, file_info.path);
     }
     
     // Queue for OCR processing if enabled and this is a new document
     if enable_background_ocr && should_queue_ocr {
-        debug!("Background OCR is enabled, queueing document {} for processing", document.id);
+        debug!("[{}] 🤖 Background OCR is enabled, queueing document {} for processing", 
+               file_request_id, document.id);
         
         // Determine priority based on file size
         let priority = if file_info.size <= 1024 * 1024 { 10 } // ≤ 1MB: High priority
@@ -404,13 +533,20 @@ async fn process_single_file(
         else { 2 }; // > 50MB: Lowest priority
         
         if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
-            error!("Failed to enqueue document for OCR: {}", e);
+            error!("[{}] Failed to enqueue document {} for OCR: {}", 
+                   file_request_id, document.id, e);
         } else {
-            debug!("Enqueued document {} for OCR processing", document.id);
+            debug!("[{}] ✅ Enqueued document {} for OCR processing (priority: {})", 
+                   file_request_id, document.id, priority);
         }
     } else {
-        debug!("Background OCR is disabled or document already processed, skipping OCR queue for document {}", document.id);
+        debug!("[{}] ⏭️ Background OCR is disabled or document already processed, skipping OCR queue for document {}", 
+               file_request_id, document.id);
     }
+    
+    let total_elapsed = file_start_time.elapsed();
+    debug!("[{}] ✅ Successfully processed file '{}' in {:.2}s", 
+           file_request_id, file_info.path, total_elapsed.as_secs_f64());
     
     Ok(true) // Successfully processed
 }
@@ -424,12 +560,21 @@ pub async fn process_files_for_deep_scan(
     enable_background_ocr: bool,
     webdav_source_id: Option<uuid::Uuid>,
 ) -> Result<usize, anyhow::Error> {
-    info!("Processing {} files for deep scan", files_to_process.len());
+    let deep_scan_start = Instant::now();
+    let deep_scan_request_id = Uuid::new_v4();
+    
+    info!("[{}] 🔍 Starting deep scan processing of {} files", 
+          deep_scan_request_id, files_to_process.len());
     
     let concurrent_limit = 5; // Max 5 concurrent downloads
     let semaphore = Arc::new(Semaphore::new(concurrent_limit));
     let mut files_processed = 0;
     let mut sync_errors = Vec::new();
+    
+    if files_to_process.len() > 20 {
+        info!("[{}] Large deep scan batch ({} files), using concurrency limit of {}", 
+              deep_scan_request_id, files_to_process.len(), concurrent_limit);
+    }
     
     // Create futures for processing each file concurrently
     let mut file_futures = FuturesUnordered::new();
@@ -462,21 +607,37 @@ pub async fn process_files_for_deep_scan(
             Ok(processed) => {
                 if processed {
                     files_processed += 1;
-                    debug!("Deep scan: Successfully processed file ({} completed)", files_processed);
+                    
+                    // Log periodic progress for large batches
+                    if files_processed % 10 == 0 || files_processed == files_to_process.len() {
+                        debug!("[{}] Deep scan progress: {}/{} files processed", 
+                               deep_scan_request_id, files_processed, files_to_process.len());
+                    }
                 }
             }
             Err(error) => {
-                error!("Deep scan file processing error: {}", error);
+                error!("[{}] Deep scan file processing error: {}", deep_scan_request_id, error);
                 sync_errors.push(error);
             }
         }
     }
     
+    let deep_scan_elapsed = deep_scan_start.elapsed();
+    let deep_scan_throughput = if deep_scan_elapsed.as_secs_f64() > 0.0 {
+        files_processed as f64 / deep_scan_elapsed.as_secs_f64()
+    } else {
+        0.0
+    };
+    
     if !sync_errors.is_empty() {
-        warn!("Deep scan completed with {} errors: {:?}", sync_errors.len(), sync_errors);
+        warn!("[{}] Deep scan completed with {} errors in {:.2}s. Sample errors: {:?}", 
+              deep_scan_request_id, sync_errors.len(), deep_scan_elapsed.as_secs_f64(),
+              sync_errors.iter().take(3).collect::<Vec<_>>());
     }
     
-    info!("Deep scan file processing completed: {} files processed successfully", files_processed);
+    info!("[{}] ✅ Deep scan processing completed: {} files processed successfully in {:.2}s ({:.1} files/sec)", 
+          deep_scan_request_id, files_processed, deep_scan_elapsed.as_secs_f64(), deep_scan_throughput);
+    
     Ok(files_processed)
 }
 

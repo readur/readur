@@ -8,6 +8,7 @@ use tokio::time::sleep;
 use futures_util::stream;
 use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use rand::Rng;
 
 use crate::models::{
     FileIngestionInfo,
@@ -16,6 +17,8 @@ use crate::models::source::{
     WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVTestConnection,
     WebDAVFolderInfo,
 };
+use crate::models::source_error::{ErrorSourceType, ErrorContext};
+use crate::services::source_error_tracker::SourceErrorTracker;
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use crate::mime_detection::{detect_mime_from_content, update_mime_type_with_content, MimeDetectionResult};
 
@@ -631,6 +634,23 @@ impl WebDAVService {
     // HTTP Request Methods with Simple Retry Logic
     // ============================================================================
 
+    /// Calculates retry delay with jitter to prevent thundering herd problems
+    /// 
+    /// Uses the formula: delay = base_delay * multiplier^attempt * (0.9 + rand(0.0..0.2))
+    /// This adds 10-20% randomization to break up synchronized retries while maintaining
+    /// exponential backoff behavior.
+    fn calculate_retry_delay_with_jitter(&self, attempt: u32, base_delay: u64) -> u64 {
+        let exponential_delay = (base_delay as f64 * self.retry_config.backoff_multiplier.powi(attempt as i32)) as u64;
+        
+        // Add jitter: 0.9 to 1.1 multiplier (10-20% randomization)
+        let jitter_multiplier = 0.9 + rand::thread_rng().gen::<f64>() * 0.2;
+        
+        let jittered_delay = (exponential_delay as f64 * jitter_multiplier) as u64;
+        
+        // Ensure we don't exceed max_delay_ms
+        std::cmp::min(jittered_delay, self.retry_config.max_delay_ms)
+    }
+
     /// Performs authenticated request with simple retry logic (simplified from complex error recovery)
     pub async fn authenticated_request(
         &self,
@@ -642,11 +662,15 @@ impl WebDAVService {
         let mut attempt = 0;
         let mut delay = self.retry_config.initial_delay_ms;
 
+        // Build custom User-Agent header
+        let user_agent = format!("Readur/{} (WebDAV-Sync; +https://github.com/readur)", env!("CARGO_PKG_VERSION"));
+
         // Enhanced debug logging for HTTP requests
         debug!("🌐 HTTP Request Details:");
         debug!("   Method: {}", method);
         debug!("   URL: {}", url);
         debug!("   Username: {}", self.config.username);
+        debug!("   User-Agent: {}", user_agent);
         if let Some(ref headers_list) = headers {
             debug!("   Headers: {:?}", headers_list);
         }
@@ -663,7 +687,8 @@ impl WebDAVService {
         loop {
             let mut request = self.client
                 .request(method.clone(), url)
-                .basic_auth(&self.config.username, Some(&self.config.password));
+                .basic_auth(&self.config.username, Some(&self.config.password))
+                .header("User-Agent", &user_agent);
 
             if let Some(ref body_content) = body {
                 request = request.body(body_content.clone());
@@ -742,10 +767,11 @@ impl WebDAVService {
 
                     // Handle server errors (retry)
                     if status.is_server_error() && attempt < self.retry_config.max_retries {
-                        warn!("Server error {}, retrying in {}ms (attempt {}/{})", 
-                            status, delay, attempt + 1, self.retry_config.max_retries);
+                        let jittered_delay = self.calculate_retry_delay_with_jitter(attempt, self.retry_config.initial_delay_ms);
+                        warn!("Server error {}, retrying in {}ms with jitter (attempt {}/{}, base exponential: {}ms)", 
+                            status, jittered_delay, attempt + 1, self.retry_config.max_retries, delay);
                         
-                        sleep(Duration::from_millis(delay)).await;
+                        sleep(Duration::from_millis(jittered_delay)).await;
                         delay = std::cmp::min(
                             (delay as f64 * self.retry_config.backoff_multiplier) as u64,
                             self.retry_config.max_delay_ms
@@ -759,10 +785,11 @@ impl WebDAVService {
                 }
                 Err(e) => {
                     if attempt < self.retry_config.max_retries {
-                        warn!("Request error: {}, retrying in {}ms (attempt {}/{})", 
-                            e, delay, attempt + 1, self.retry_config.max_retries);
+                        let jittered_delay = self.calculate_retry_delay_with_jitter(attempt, self.retry_config.initial_delay_ms);
+                        warn!("Request error: {}, retrying in {}ms with jitter (attempt {}/{}, base exponential: {}ms)", 
+                            e, jittered_delay, attempt + 1, self.retry_config.max_retries, delay);
                         
-                        sleep(Duration::from_millis(delay)).await;
+                        sleep(Duration::from_millis(jittered_delay)).await;
                         delay = std::cmp::min(
                             (delay as f64 * self.retry_config.backoff_multiplier) as u64,
                             self.retry_config.max_delay_ms
@@ -923,13 +950,31 @@ impl WebDAVService {
 
     /// Discovers both files and directories with their ETags for directory tracking
     pub async fn discover_files_and_directories(&self, directory_path: &str, recursive: bool) -> Result<WebDAVDiscoveryResult> {
-        info!("🔍 Discovering files and directories in: {}", directory_path);
+        let discovery_request_id = uuid::Uuid::new_v4();
+        info!("[{}] 🔍 Discovering files and directories in: '{}' (recursive: {}, user_agent: 'readur-webdav-client')", 
+              discovery_request_id, directory_path, recursive);
         
-        if recursive {
+        let start_time = std::time::Instant::now();
+        let result = if recursive {
             self.discover_files_and_directories_recursive(directory_path).await
         } else {
             self.discover_files_and_directories_single(directory_path).await
+        };
+        
+        let elapsed = start_time.elapsed();
+        match &result {
+            Ok(discovery_result) => {
+                info!("[{}] ✅ Discovery completed for '{}': {} files, {} directories in {:.2}s", 
+                      discovery_request_id, directory_path, discovery_result.files.len(), 
+                      discovery_result.directories.len(), elapsed.as_secs_f64());
+            }
+            Err(e) => {
+                error!("[{}] ❌ Discovery failed for '{}' after {:.2}s: {}", 
+                       discovery_request_id, directory_path, elapsed.as_secs_f64(), e);
+            }
         }
+        
+        result
     }
 
     /// Discovers both files and directories with basic progress tracking (simplified)
@@ -939,13 +984,31 @@ impl WebDAVService {
         recursive: bool, 
         _progress: Option<&SyncProgress> // Simplified: just placeholder for API compatibility
     ) -> Result<WebDAVDiscoveryResult> {
-        info!("🔍 Discovering files and directories in: {} (progress tracking simplified)", directory_path);
+        let discovery_request_id = uuid::Uuid::new_v4();
+        info!("[{}] 🔍 Discovering files and directories in: '{}' (progress tracking simplified, recursive: {}, user_agent: 'readur-webdav-client')", 
+              discovery_request_id, directory_path, recursive);
         
-        if recursive {
+        let start_time = std::time::Instant::now();
+        let result = if recursive {
             self.discover_files_and_directories_recursive(directory_path).await
         } else {
             self.discover_files_and_directories_single(directory_path).await
+        };
+        
+        let elapsed = start_time.elapsed();
+        match &result {
+            Ok(discovery_result) => {
+                info!("[{}] ✅ Progress-tracked discovery completed for '{}': {} files, {} directories in {:.2}s", 
+                      discovery_request_id, directory_path, discovery_result.files.len(), 
+                      discovery_result.directories.len(), elapsed.as_secs_f64());
+            }
+            Err(e) => {
+                error!("[{}] ❌ Progress-tracked discovery failed for '{}' after {:.2}s: {}", 
+                       discovery_request_id, directory_path, elapsed.as_secs_f64(), e);
+            }
         }
+        
+        result
     }
 
     /// Discovers files in a single directory (non-recursive)
@@ -1307,6 +1370,548 @@ impl WebDAVService {
         files.into_iter().filter(|file| {
             file.last_modified.map_or(false, |modified| modified > since)
         }).collect()
+    }
+
+    // ============================================================================
+    // Enhanced Discovery Methods with Error Tracking
+    // ============================================================================
+
+    /// Enhanced version of discover_files_and_directories that includes error tracking
+    /// This method integrates with SourceErrorTracker to prevent repeated scanning of problematic directories
+    pub async fn discover_files_and_directories_with_error_tracking(
+        &self, 
+        directory_path: &str, 
+        recursive: bool,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
+    ) -> Result<WebDAVDiscoveryResult> {
+        let start_time = std::time::Instant::now();
+        let discovery_request_id = uuid::Uuid::new_v4();
+        
+        info!("[{}] 🔍 Starting WebDAV discovery for '{}' (user: {}, source: {:?}, recursive: {}, user_agent: 'readur-webdav-client')", 
+              discovery_request_id, directory_path, user_id, source_id, recursive);
+        
+        // Check if we should skip this directory due to previous failures
+        let error_check_start = std::time::Instant::now();
+        match error_tracker.should_skip_resource(
+            user_id,
+            ErrorSourceType::WebDAV,
+            source_id,
+            directory_path,
+        ).await {
+            Ok(should_skip) => {
+                let error_check_elapsed = error_check_start.elapsed();
+                if should_skip {
+                    info!("[{}] ⏭️ Skipping directory '{}' due to previous failures (error check: {:.2}ms)", 
+                          discovery_request_id, directory_path, error_check_elapsed.as_millis());
+                    
+                    // Log skip reason details if available
+                    debug!("[{}] Skip reason: Directory has previous failures tracked in error system", 
+                           discovery_request_id);
+                    
+                    return Ok(WebDAVDiscoveryResult {
+                        files: Vec::new(),
+                        directories: Vec::new(),
+                    });
+                } else {
+                    debug!("[{}] ✅ Directory '{}' cleared for discovery (error check: {:.2}ms)", 
+                           discovery_request_id, directory_path, error_check_elapsed.as_millis());
+                }
+            }
+            Err(e) => {
+                let error_check_elapsed = error_check_start.elapsed();
+                warn!("[{}] Failed to check failure status for directory '{}' after {:.2}ms: {}", 
+                      discovery_request_id, directory_path, error_check_elapsed.as_millis(), e);
+                // Continue with the operation if we can't check
+            }
+        }
+
+        // Perform the discovery operation
+        let discovery_start = std::time::Instant::now();
+        debug!("[{}] 🔍 Performing {} discovery for '{}'", 
+               discovery_request_id, if recursive { "recursive" } else { "single" }, directory_path);
+        
+        let result = if recursive {
+            self.discover_files_and_directories_recursive_with_error_tracking(
+                directory_path, user_id, error_tracker, source_id, start_time
+            ).await
+        } else {
+            self.discover_files_and_directories_single_with_error_tracking(
+                directory_path, user_id, error_tracker, source_id, start_time
+            ).await
+        };
+        
+        let discovery_elapsed = discovery_start.elapsed();
+
+        match &result {
+            Ok(discovery_result) => {
+                let total_elapsed = start_time.elapsed();
+                info!("[{}] ✅ WebDAV discovery completed for '{}': {} files, {} directories found in {:.2}s (discovery: {:.2}s)", 
+                      discovery_request_id, directory_path, discovery_result.files.len(), 
+                      discovery_result.directories.len(), total_elapsed.as_secs_f64(), discovery_elapsed.as_secs_f64());
+                
+                // Mark successful operation
+                if let Err(e) = error_tracker.mark_success(
+                    user_id,
+                    ErrorSourceType::WebDAV,
+                    source_id,
+                    directory_path,
+                ).await {
+                    debug!("[{}] Failed to mark operation as successful: {}", discovery_request_id, e);
+                }
+                
+                // Log performance metrics for large operations
+                if discovery_result.files.len() > 100 || discovery_elapsed.as_secs() > 5 {
+                    let throughput = discovery_result.files.len() as f64 / discovery_elapsed.as_secs_f64();
+                    info!("[{}] 📊 Performance: {:.1} files/sec, {} total items discovered", 
+                          discovery_request_id, throughput, 
+                          discovery_result.files.len() + discovery_result.directories.len());
+                }
+            }
+            Err(e) => {
+                let total_elapsed = start_time.elapsed();
+                error!("[{}] ❌ WebDAV discovery failed for '{}' after {:.2}s: {}", 
+                       discovery_request_id, directory_path, total_elapsed.as_secs_f64(), e);
+                
+                // Track the error with enhanced context
+                let mut additional_context = std::collections::HashMap::new();
+                additional_context.insert("request_id".to_string(), serde_json::Value::String(discovery_request_id.to_string()));
+                additional_context.insert("user_agent".to_string(), serde_json::Value::String("readur-webdav-client".to_string()));
+                additional_context.insert("recursive".to_string(), serde_json::Value::Bool(recursive));
+                
+                let context = ErrorContext {
+                    resource_path: directory_path.to_string(),
+                    source_id,
+                    operation: if recursive { "discover_recursive" } else { "discover_single" }.to_string(),
+                    response_time: Some(total_elapsed),
+                    response_size: None,
+                    server_type: self.config.server_type.clone(),
+                    server_version: None,
+                    additional_context,
+                };
+
+                if let Err(track_error) = error_tracker.track_error(
+                    user_id,
+                    ErrorSourceType::WebDAV,
+                    source_id,
+                    directory_path,
+                    e,
+                    context,
+                ).await {
+                    warn!("[{}] Failed to track discovery error: {}", discovery_request_id, track_error);
+                } else {
+                    debug!("[{}] Error tracked for future skip logic", discovery_request_id);
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Enhanced recursive discovery with error tracking
+    async fn discover_files_and_directories_recursive_with_error_tracking(
+        &self,
+        directory_path: &str,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
+        start_time: std::time::Instant,
+    ) -> Result<WebDAVDiscoveryResult> {
+        let mut all_files = Vec::new();
+        let mut all_directories = Vec::new();
+        let mut directories_to_scan = vec![directory_path.to_string()];
+        let mut scanned_directories = std::collections::HashSet::new();
+        let semaphore = Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
+        
+        debug!("Starting recursive scan with error tracking from: {}", directory_path);
+        
+        while !directories_to_scan.is_empty() {
+            // Take a batch of directories to process
+            let batch_size = std::cmp::min(directories_to_scan.len(), self.concurrency_config.max_concurrent_scans);
+            let current_batch: Vec<String> = directories_to_scan.drain(..batch_size).collect();
+            
+            debug!("Processing batch of {} directories, {} remaining in queue", 
+                   current_batch.len(), directories_to_scan.len());
+
+            // Process directories concurrently
+            let tasks = current_batch.into_iter().filter_map(|dir| {
+                // Skip if already scanned
+                if scanned_directories.contains(&dir) {
+                    debug!("Skipping already scanned directory: {}", dir);
+                    return None;
+                }
+                scanned_directories.insert(dir.clone());
+                
+                let permit = semaphore.clone();
+                let service = self.clone();
+                let error_tracker = error_tracker.clone();
+                
+                Some(async move {
+                    let _permit = permit.acquire().await.unwrap();
+                    
+                    // Check if we should skip this specific directory
+                    match error_tracker.should_skip_resource(
+                        user_id,
+                        ErrorSourceType::WebDAV,
+                        source_id,
+                        &dir,
+                    ).await {
+                        Ok(should_skip) => {
+                            if should_skip {
+                                debug!("⏭️ Skipping directory '{}' due to previous failures", dir);
+                                return (dir, Ok(WebDAVDiscoveryResult {
+                                    files: Vec::new(),
+                                    directories: Vec::new(),
+                                }));
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to check failure status for directory '{}': {}", dir, e);
+                            // Continue with the operation if we can't check
+                        }
+                    }
+                    
+                    let dir_start_time = std::time::Instant::now();
+                    let result = service.discover_files_and_directories_single(&dir).await;
+                    
+                    // Track success or failure for this specific directory
+                    match &result {
+                        Ok(_) => {
+                            if let Err(e) = error_tracker.mark_success(
+                                user_id,
+                                ErrorSourceType::WebDAV,
+                                source_id,
+                                &dir,
+                            ).await {
+                                debug!("Failed to mark directory scan as successful: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            let duration = dir_start_time.elapsed();
+                            let context = ErrorContext {
+                                resource_path: dir.clone(),
+                                source_id,
+                                operation: "discover_directory".to_string(),
+                                response_time: Some(duration),
+                                response_size: None,
+                                server_type: service.config.server_type.clone(),
+                                server_version: None,
+                                additional_context: std::collections::HashMap::new(),
+                            };
+
+                            if let Err(track_error) = error_tracker.track_error(
+                                user_id,
+                                ErrorSourceType::WebDAV,
+                                source_id,
+                                &dir,
+                                e,
+                                context,
+                            ).await {
+                                warn!("Failed to track error for directory '{}': {}", dir, track_error);
+                            }
+                        }
+                    }
+                    
+                    (dir, result)
+                })
+            });
+
+            let results = futures_util::future::join_all(tasks).await;
+
+            for (scanned_dir, result) in results {
+                match result {
+                    Ok(discovery_result) => {
+                        debug!("Directory '{}' scan complete: {} files, {} subdirectories", 
+                               scanned_dir, discovery_result.files.len(), discovery_result.directories.len());
+                        
+                        all_files.extend(discovery_result.files);
+                        
+                        // Add subdirectories to the queue for the next iteration
+                        for dir in discovery_result.directories {
+                            if dir.is_directory && !scanned_directories.contains(&dir.relative_path) {
+                                directories_to_scan.push(dir.relative_path.clone());
+                                debug!("Added subdirectory to scan queue: {}", dir.relative_path);
+                            }
+                            all_directories.push(dir);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to scan directory '{}': {}", scanned_dir, e);
+                        // Error already tracked in the task above
+                    }
+                }
+            }
+            
+            debug!("Batch complete. Total progress: {} files, {} directories found. Queue size: {}", 
+                   all_files.len(), all_directories.len(), directories_to_scan.len());
+        }
+
+        info!("Recursive scan with error tracking completed. Found {} files and {} directories", all_files.len(), all_directories.len());
+        Ok(WebDAVDiscoveryResult { 
+            files: all_files, 
+            directories: all_directories 
+        })
+    }
+
+    /// Enhanced single directory discovery with error tracking
+    async fn discover_files_and_directories_single_with_error_tracking(
+        &self,
+        directory_path: &str,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
+        start_time: std::time::Instant,
+    ) -> Result<WebDAVDiscoveryResult> {
+        // Try the primary URL first, then fallback URLs if we get a 405 error
+        let primary_url = self.get_url_for_path(directory_path);
+        
+        match self.discover_files_and_directories_single_with_url_and_error_tracking(
+            directory_path, &primary_url, user_id, error_tracker, source_id, start_time
+        ).await {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                // Check if this is a 405 Method Not Allowed error
+                if e.to_string().contains("405") || e.to_string().contains("Method Not Allowed") {
+                    warn!("🔄 Primary WebDAV URL failed with 405 error, trying fallback URLs...");
+                    self.try_fallback_discovery_with_error_tracking(directory_path, user_id, error_tracker, source_id, start_time).await
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Enhanced PROPFIND request with detailed error tracking
+    async fn discover_files_and_directories_single_with_url_and_error_tracking(
+        &self, 
+        directory_path: &str, 
+        url: &str,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
+        start_time: std::time::Instant,
+    ) -> Result<WebDAVDiscoveryResult> {
+        // Enhanced debug logging for WebDAV URL construction
+        debug!("🔍 WebDAV directory scan with error tracking - Path: '{}', URL: '{}', Server type: {:?}", 
+               directory_path, url, self.config.server_type);
+        debug!("🔧 WebDAV config - Server URL: '{}', Username: '{}', WebDAV base URL: '{}'", 
+               self.config.server_url, self.config.username, self.config.webdav_url());
+        
+        let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
+            <D:propfind xmlns:D="DAV:">
+                <D:prop>
+                    <D:displayname/>
+                    <D:getcontentlength/>
+                    <D:getlastmodified/>
+                    <D:getetag/>
+                    <D:resourcetype/>
+                    <D:creationdate/>
+                </D:prop>
+            </D:propfind>"#;
+
+        debug!("📤 Sending PROPFIND request to URL: {}", url);
+        debug!("📋 PROPFIND body length: {} bytes", propfind_body.len());
+
+        let request_start_time = std::time::Instant::now();
+        let response = self.authenticated_request(
+            Method::from_bytes(b"PROPFIND")?,
+            url,
+            Some(propfind_body.to_string()),
+            Some(vec![
+                ("Depth", "1"),
+                ("Content-Type", "application/xml"),
+            ]),
+        ).await.map_err(|e| {
+            let request_duration = request_start_time.elapsed();
+            error!("❌ PROPFIND request failed for directory '{}' at URL '{}': {} (duration: {}ms)", 
+                   directory_path, url, e, request_duration.as_millis());
+            
+            // Track the PROPFIND request failure
+            let context = ErrorContext {
+                resource_path: directory_path.to_string(),
+                source_id,
+                operation: "propfind_request".to_string(),
+                response_time: Some(request_duration),
+                response_size: None,
+                server_type: self.config.server_type.clone(),
+                server_version: None,
+                additional_context: {
+                    let mut ctx = std::collections::HashMap::new();
+                    ctx.insert("url".to_string(), serde_json::Value::String(url.to_string()));
+                    ctx.insert("method".to_string(), serde_json::Value::String("PROPFIND".to_string()));
+                    ctx
+                },
+            };
+
+            tokio::spawn({
+                let error_tracker = error_tracker.clone();
+                let error_clone = anyhow::anyhow!("{}", e);
+                let directory_path = directory_path.to_string();
+                async move {
+                    if let Err(track_error) = error_tracker.track_error(
+                        user_id,
+                        ErrorSourceType::WebDAV,
+                        source_id,
+                        &directory_path,
+                        &error_clone,
+                        context,
+                    ).await {
+                        warn!("Failed to track PROPFIND error: {}", track_error);
+                    }
+                }
+            });
+            
+            e
+        })?;
+
+        let body = response.text().await?;
+        let all_items = parse_propfind_response_with_directories(&body)?;
+        
+        // Process the items to convert href to relative paths
+        let processed_items = self.process_file_infos(all_items);
+        
+        // Separate files and directories, excluding the parent directory itself
+        let mut files = Vec::new();
+        let mut directories = Vec::new();
+        
+        for item in processed_items {
+            // Skip the directory itself (handle both with and without trailing slash)
+            let normalized_item_path = item.relative_path.trim_end_matches('/');
+            let normalized_directory_path = directory_path.trim_end_matches('/');
+            
+            if normalized_item_path == normalized_directory_path {
+                continue; // Skip the directory itself
+            }
+            
+            if item.is_directory {
+                directories.push(item);
+            } else {
+                files.push(item);
+            }
+        }
+
+        debug!("Found {} files and {} directories in: {}", files.len(), directories.len(), directory_path);
+        Ok(WebDAVDiscoveryResult { files, directories })
+    }
+
+    /// Tries fallback URLs with error tracking when the primary WebDAV URL fails with 405
+    async fn try_fallback_discovery_with_error_tracking(
+        &self, 
+        directory_path: &str,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
+        start_time: std::time::Instant,
+    ) -> Result<WebDAVDiscoveryResult> {
+        let fallback_urls = self.config.webdav_fallback_urls();
+        
+        for (i, fallback_base_url) in fallback_urls.iter().enumerate() {
+            let fallback_url = if directory_path == "/" || directory_path.is_empty() {
+                fallback_base_url.clone()
+            } else {
+                format!("{}/{}", fallback_base_url.trim_end_matches('/'), directory_path.trim_start_matches('/'))
+            };
+            
+            info!("🔄 Trying fallback URL #{}: {}", i + 1, fallback_url);
+            
+            match self.discover_files_and_directories_single_with_url_and_error_tracking(
+                directory_path, &fallback_url, user_id, error_tracker, source_id, start_time
+            ).await {
+                Ok(result) => {
+                    info!("✅ Fallback URL #{} succeeded: {}", i + 1, fallback_url);
+                    warn!("💡 Consider updating your server type configuration to use this URL pattern");
+                    return Ok(result);
+                }
+                Err(e) => {
+                    warn!("❌ Fallback URL #{} failed: {} - {}", i + 1, fallback_url, e);
+                    // Error tracking is already handled in the single_with_url method
+                }
+            }
+        }
+        
+        Err(anyhow::anyhow!(
+            "All WebDAV URLs failed for directory '{}'. Primary URL and {} fallback URLs were tried. \
+            This suggests WebDAV is not properly configured on the server or the server type is incorrect.",
+            directory_path, fallback_urls.len()
+        ))
+    }
+
+    // ============================================================================
+    // Error Tracking Helper Methods
+    // ============================================================================
+
+    /// Creates a SourceErrorTracker for use with enhanced discovery methods
+    /// This is a convenience method to create properly configured error trackers
+    pub fn create_error_tracker(&self, db: crate::db::Database) -> SourceErrorTracker {
+        SourceErrorTracker::new(db)
+    }
+
+    /// Helper method to check if a directory should be skipped due to previous failures
+    /// This is useful for individual operations that want to integrate error tracking
+    pub async fn should_skip_directory_for_failures(
+        &self,
+        directory_path: &str,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
+    ) -> Result<bool> {
+        error_tracker.should_skip_resource(
+            user_id,
+            ErrorSourceType::WebDAV,
+            source_id,
+            directory_path,
+        ).await
+    }
+
+    /// Helper method to mark a directory operation as successful
+    /// This resolves any previous failure tracking for the directory
+    pub async fn mark_directory_operation_success(
+        &self,
+        directory_path: &str,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
+    ) -> Result<()> {
+        error_tracker.mark_success(
+            user_id,
+            ErrorSourceType::WebDAV,
+            source_id,
+            directory_path,
+        ).await
+    }
+
+    /// Helper method to track a directory operation failure
+    /// This records the error and applies appropriate retry logic
+    pub async fn mark_directory_operation_failure(
+        &self,
+        directory_path: &str,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
+        error: &anyhow::Error,
+        operation: &str,
+        duration: std::time::Duration,
+    ) -> Result<uuid::Uuid> {
+        let context = ErrorContext {
+            resource_path: directory_path.to_string(),
+            source_id,
+            operation: operation.to_string(),
+            response_time: Some(duration),
+            response_size: None,
+            server_type: self.config.server_type.clone(),
+            server_version: None,
+            additional_context: std::collections::HashMap::new(),
+        };
+
+        error_tracker.track_error(
+            user_id,
+            ErrorSourceType::WebDAV,
+            source_id,
+            directory_path,
+            error,
+            context,
+        ).await
     }
 
     // ============================================================================
@@ -1977,4 +2582,104 @@ impl Clone for WebDAVService {
 /// Tests WebDAV connection with provided configuration (standalone function for backward compatibility)
 pub async fn test_webdav_connection(test_config: &WebDAVTestConnection) -> Result<WebDAVConnectionResult> {
     WebDAVService::test_connection_with_config(test_config).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::webdav::config::WebDAVConfig;
+    
+    #[test]
+    fn test_user_agent_format() {
+        // Test that the User-Agent header format matches the expected pattern
+        let expected_version = env!("CARGO_PKG_VERSION");
+        let expected_user_agent = format!("Readur/{} (WebDAV-Sync; +https://github.com/readur)", expected_version);
+        
+        // Create a simple WebDAV config for testing
+        let config = WebDAVConfig {
+            server_url: "https://test.example.com".to_string(),
+            username: "test_user".to_string(),
+            password: "test_password".to_string(),
+            watch_folders: vec!["/".to_string()],
+            file_extensions: vec![],
+            timeout_seconds: 30,
+            server_type: Some("generic".to_string()),
+        };
+        
+        let service = WebDAVService::new(config).expect("Failed to create WebDAV service");
+        
+        // Test that we can build the User-Agent string properly
+        let user_agent = format!("Readur/{} (WebDAV-Sync; +https://github.com/readur)", env!("CARGO_PKG_VERSION"));
+        assert_eq!(user_agent, expected_user_agent);
+        assert!(user_agent.starts_with("Readur/"));
+        assert!(user_agent.contains("(WebDAV-Sync; +https://github.com/readur)"));
+        assert!(user_agent.contains(expected_version));
+        
+        println!("✅ User-Agent format test passed: {}", user_agent);
+    }
+
+    #[test]
+    fn test_retry_delay_with_jitter() {
+        // Create a test WebDAV config
+        let config = WebDAVConfig {
+            server_url: "https://test.example.com".to_string(),
+            username: "test_user".to_string(),
+            password: "test_password".to_string(),
+            watch_folders: vec!["/".to_string()],
+            file_extensions: vec![],
+            timeout_seconds: 30,
+            server_type: Some("generic".to_string()),
+        };
+        
+        let retry_config = RetryConfig {
+            max_retries: 3,
+            initial_delay_ms: 1000,
+            max_delay_ms: 10000,
+            backoff_multiplier: 2.0,
+            timeout_seconds: 30,
+            rate_limit_backoff_ms: 5000,
+        };
+        
+        let service = WebDAVService::new_with_retry(config, retry_config).expect("Failed to create WebDAV service");
+        
+        // Test jitter calculation for different attempts
+        for attempt in 0..5 {
+            let delay = service.calculate_retry_delay_with_jitter(attempt, 1000);
+            let expected_base = (1000.0 * 2.0_f64.powi(attempt as i32)) as u64;
+            let capped_base = std::cmp::min(expected_base, 10000);
+            let expected_min = (capped_base as f64 * 0.9) as u64;
+            let expected_max = (capped_base as f64 * 1.1) as u64;
+            
+            println!("Attempt {}: delay = {}ms (expected range: {}-{}ms, base: {}ms)", 
+                     attempt, delay, expected_min, expected_max, expected_base);
+            
+            // Verify the delay is within the expected jitter range
+            assert!(delay >= expected_min, 
+                   "Delay {} for attempt {} is below minimum expected {}", 
+                   delay, attempt, expected_min);
+            assert!(delay <= expected_max, 
+                   "Delay {} for attempt {} is above maximum expected {}", 
+                   delay, attempt, expected_max);
+            
+            // Ensure it doesn't exceed max_delay_ms
+            assert!(delay <= 10000, 
+                   "Delay {} for attempt {} exceeds max_delay_ms {}", 
+                   delay, attempt, 10000);
+        }
+        
+        // Test that jitter produces different values (run multiple times for same attempt)
+        let mut delays = Vec::new();
+        for _ in 0..10 {
+            delays.push(service.calculate_retry_delay_with_jitter(2, 1000));
+        }
+        
+        // Check that we get some variation (not all values are identical)
+        let first_delay = delays[0];
+        let has_variation = delays.iter().any(|&d| d != first_delay);
+        assert!(has_variation, 
+               "Jitter should produce some variation, but all delays were {}", first_delay);
+        
+        println!("✅ Retry delay with jitter test passed - variation observed");
+        println!("   Sample delays for attempt 2: {:?}", delays);
+    }
 }

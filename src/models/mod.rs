@@ -6,6 +6,7 @@ pub mod search;
 pub mod settings;
 pub mod source;
 pub mod source_error;
+pub mod webdav_metrics;
 pub mod responses;
 
 // Re-export commonly used types
@@ -15,5 +16,6 @@ pub use search::*;
 pub use settings::*;
 pub use source::*;
 pub use source_error::*;
+pub use webdav_metrics::*;
 
 pub use responses::*;
