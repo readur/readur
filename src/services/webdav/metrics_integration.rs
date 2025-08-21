@@ -82,7 +82,7 @@ impl WebDAVServiceWithMetrics for WebDAVService {
 
         // Record the discovery request
         let discovery_start = Instant::now();
-        let discovery_result = self.discover(path, depth, file_extensions).await;
+        let discovery_result = self.discover_files_and_directories(path, depth.is_some()).await;
         let discovery_duration = discovery_start.elapsed();
 
         // Record HTTP request metric for the discovery operation
@@ -123,8 +123,7 @@ impl WebDAVServiceWithMetrics for WebDAVService {
                 let files_count = result.files.len() as i32;
                 let dirs_count = result.directories.len() as i32;
                 let total_size: u64 = result.files.iter()
-                    .filter_map(|f| f.file_size)
-                    .map(|size| size as u64)
+                    .map(|f| f.size as u64)
                     .sum();
 
                 metrics_tracker
@@ -203,7 +202,24 @@ impl WebDAVServiceWithMetrics for WebDAVService {
         expected_size: Option<u64>,
     ) -> Result<super::WebDAVDownloadResult> {
         let download_start = Instant::now();
-        let download_result = self.download_file(file_url).await;
+        // Create a temporary FileIngestionInfo for download with mime detection
+        let temp_file_info = crate::models::FileIngestionInfo {
+            relative_path: file_url.to_string(),
+            full_path: file_url.to_string(),
+            path: file_url.to_string(),
+            name: file_url.split('/').last().unwrap_or("unknown").to_string(),
+            size: expected_size.unwrap_or(0) as i64,
+            mime_type: "application/octet-stream".to_string(),
+            last_modified: Some(chrono::Utc::now()),
+            etag: "".to_string(),
+            is_directory: false,
+            created_at: None,
+            permissions: None,
+            owner: None,
+            group: None,
+            metadata: None,
+        };
+        let download_result = self.download_file_with_mime_detection(&temp_file_info).await;
         let download_duration = download_start.elapsed();
 
         let (success, error_type, error_message, response_size) = match &download_result {
@@ -335,7 +351,7 @@ impl WebDAVServiceWithMetrics for WebDAVService {
         let test_duration = test_start.elapsed();
 
         let (success, error_type, error_message) = match &test_result {
-            Ok(status) => (status.healthy, None, if status.healthy { None } else { Some(status.message.clone()) }),
+            Ok(status) => (status.success, None, if status.success { None } else { Some(status.message.clone()) }),
             Err(e) => (false, Some("connection_test_error".to_string()), Some(e.to_string())),
         };
 
@@ -371,7 +387,24 @@ impl WebDAVServiceWithMetrics for WebDAVService {
             success, test_duration.as_millis()
         );
 
-        test_result
+        // Convert WebDAVConnectionResult to HealthStatus
+        match test_result {
+            Ok(conn_result) => Ok(super::HealthStatus {
+                healthy: conn_result.success,
+                message: conn_result.message,
+                response_time_ms: test_duration.as_millis() as u64,
+                details: Some(serde_json::json!({
+                    "server_version": conn_result.server_version,
+                    "server_type": conn_result.server_type
+                })),
+            }),
+            Err(e) => Ok(super::HealthStatus {
+                healthy: false,
+                message: e.to_string(),
+                response_time_ms: test_duration.as_millis() as u64,
+                details: None,
+            }),
+        }
     }
 }
 

@@ -108,7 +108,7 @@ async fn perform_sync_internal(
     let mut total_directories_scanned = 0;
     let mut total_directories_skipped = 0;
     let mut sync_errors = Vec::new();
-    let mut sync_warnings = Vec::new();
+    let mut sync_warnings: Vec<String> = Vec::new();
     let folder_start_time = Instant::now();
     
     // Create progress tracker for this sync session
@@ -190,6 +190,9 @@ async fn perform_sync_internal(
                 info!("[{}] 📄 Processing {} files from folder '{}'", 
                       request_id, files_to_process.len(), folder_path);
                 
+                // Process files concurrently with a limit to avoid overwhelming the system
+                let concurrent_limit = 5; // Max 5 concurrent downloads
+                
                 if files_to_process.len() > 50 {
                     info!("[{}] Large file batch detected ({} files), processing with concurrency limit of {}", 
                           request_id, files_to_process.len(), concurrent_limit);
@@ -198,9 +201,6 @@ async fn perform_sync_internal(
                 // Update progress for file processing phase
                 progress.set_phase(SyncPhase::ProcessingFiles);
                 progress.add_files_found(files_to_process.len());
-                
-                // Process files concurrently with a limit to avoid overwhelming the system
-                let concurrent_limit = 5; // Max 5 concurrent downloads
                 let semaphore = Arc::new(Semaphore::new(concurrent_limit));
                 let mut folder_files_processed = 0;
                 

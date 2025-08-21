@@ -419,7 +419,7 @@ pub async fn get_webdav_performance_overview(
     let metrics_tracker = WebDAVMetricsTracker::new(state.db.clone());
     
     // Get recent sessions (last 10) - enforce reasonable limit
-    let limited_sessions_limit = Some(10.min(query.limit.unwrap_or(10)));
+    let limited_sessions_limit = Some(10);
     let recent_sessions_query = WebDAVMetricsQuery {
         user_id: Some(auth_user.user.id),
         source_id: query.source_id,

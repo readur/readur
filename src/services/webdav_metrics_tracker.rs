@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+use reqwest::header::HeaderMap;
 
 use crate::db::Database;
 use crate::models::webdav_metrics::*;
@@ -426,7 +427,7 @@ impl WebDAVMetricsTracker {
         retry_attempt: i32,
         error_type: Option<String>,
         error_message: Option<String>,
-        server_headers: Option<&reqwest::HeaderMap>,
+        server_headers: Option<&HeaderMap>,
         remote_ip: Option<String>,
     ) -> Result<Uuid> {
         // Extract server information from headers
@@ -474,7 +475,7 @@ impl WebDAVMetricsTracker {
             time_to_first_byte_ms: None, // Could be enhanced with detailed timing
             success,
             retry_attempt,
-            error_type,
+            error_type: error_type.clone(),
             error_message,
             server_header,
             dav_header,

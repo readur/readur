@@ -1,5 +1,6 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
+use sqlx::Row;
 use uuid::Uuid;
 
 use crate::db::Database;
@@ -9,23 +10,23 @@ impl Database {
     /// Create a new WebDAV sync session
     pub async fn create_webdav_sync_session(&self, session: &CreateWebDAVSyncSession) -> Result<Uuid> {
         self.with_retry(|| async {
-            let row = sqlx::query!(
+            let row = sqlx::query(
                 r#"
                 INSERT INTO webdav_sync_sessions (
                     user_id, source_id, sync_type, root_path, max_depth
                 ) VALUES ($1, $2, $3, $4, $5)
                 RETURNING id
-                "#,
-                session.user_id,
-                session.source_id,
-                session.sync_type,
-                session.root_path,
-                session.max_depth
+                "#
             )
+            .bind(session.user_id)
+            .bind(session.source_id)
+            .bind(&session.sync_type)
+            .bind(&session.root_path)
+            .bind(session.max_depth)
             .fetch_one(&self.pool)
             .await?;
             
-            Ok(row.id)
+            Ok(row.get::<Uuid, _>("id"))
         }).await
     }
 
@@ -36,7 +37,7 @@ impl Database {
         update: &UpdateWebDAVSyncSession
     ) -> Result<bool> {
         self.with_retry(|| async {
-            let rows_affected = sqlx::query!(
+            let rows_affected = sqlx::query(
                 r#"
                 UPDATE webdav_sync_sessions SET
                     directories_discovered = COALESCE($2, directories_discovered),
@@ -52,20 +53,20 @@ impl Database {
                     final_error_message = COALESCE($12, final_error_message),
                     updated_at = NOW()
                 WHERE id = $1
-                "#,
-                session_id,
-                update.directories_discovered,
-                update.directories_processed,
-                update.files_discovered,
-                update.files_processed,
-                update.total_bytes_discovered,
-                update.total_bytes_processed,
-                update.directories_skipped,
-                update.files_skipped,
-                update.skip_reasons,
-                update.status.as_ref().map(|s| s.to_string()),
-                update.final_error_message
+                "#
             )
+            .bind(session_id)
+            .bind(update.directories_discovered)
+            .bind(update.directories_processed)
+            .bind(update.files_discovered)
+            .bind(update.files_processed)
+            .bind(update.total_bytes_discovered)
+            .bind(update.total_bytes_processed)
+            .bind(update.directories_skipped)
+            .bind(update.files_skipped)
+            .bind(&update.skip_reasons)
+            .bind(update.status.as_ref().map(|s| s.to_string()))
+            .bind(&update.final_error_message)
             .execute(&self.pool)
             .await?;
             
@@ -76,10 +77,10 @@ impl Database {
     /// Finalize a WebDAV sync session (calculate final metrics)
     pub async fn finalize_webdav_sync_session(&self, session_id: Uuid) -> Result<()> {
         self.with_retry(|| async {
-            sqlx::query!(
-                "SELECT finalize_webdav_session_metrics($1)",
-                session_id
+            sqlx::query(
+                "SELECT finalize_webdav_session_metrics($1)"
             )
+            .bind(session_id)
             .execute(&self.pool)
             .await?;
             
@@ -94,12 +95,11 @@ impl Database {
         user_id: Uuid
     ) -> Result<Option<WebDAVSyncSession>> {
         self.with_retry(|| async {
-            let session = sqlx::query_as!(
-                WebDAVSyncSession,
-                "SELECT * FROM webdav_sync_sessions WHERE id = $1 AND user_id = $2",
-                session_id,
-                user_id
+            let session = sqlx::query_as::<_, WebDAVSyncSession>(
+                "SELECT * FROM webdav_sync_sessions WHERE id = $1 AND user_id = $2"
             )
+            .bind(session_id)
+            .bind(user_id)
             .fetch_optional(&self.pool)
             .await?;
             
@@ -118,8 +118,7 @@ impl Database {
             let limit = query.limit.unwrap_or(100).min(1000); // Cap at 1000
             let offset = query.offset.unwrap_or(0);
 
-            let sessions = sqlx::query_as!(
-                WebDAVSyncSession,
+            let sessions = sqlx::query_as::<_, WebDAVSyncSession>(
                 r#"
                 SELECT * FROM webdav_sync_sessions 
                 WHERE started_at BETWEEN $1 AND $2
@@ -127,14 +126,14 @@ impl Database {
                 AND ($4::UUID IS NULL OR source_id = $4)
                 ORDER BY started_at DESC
                 LIMIT $5 OFFSET $6
-                "#,
-                start_time,
-                end_time,
-                query.user_id,
-                query.source_id,
-                limit as i64,
-                offset as i64
+                "#
             )
+            .bind(start_time)
+            .bind(end_time)
+            .bind(query.user_id)
+            .bind(query.source_id)
+            .bind(limit as i64)
+            .bind(offset as i64)
             .fetch_all(&self.pool)
             .await?;
             
@@ -148,25 +147,25 @@ impl Database {
         metric: &CreateWebDAVDirectoryMetric
     ) -> Result<Uuid> {
         self.with_retry(|| async {
-            let row = sqlx::query!(
+            let row = sqlx::query(
                 r#"
                 INSERT INTO webdav_directory_metrics (
                     session_id, user_id, source_id, directory_path, 
                     directory_depth, parent_directory_path
                 ) VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING id
-                "#,
-                metric.session_id,
-                metric.user_id,
-                metric.source_id,
-                metric.directory_path,
-                metric.directory_depth,
-                metric.parent_directory_path
+                "#
             )
+            .bind(metric.session_id)
+            .bind(metric.user_id)
+            .bind(metric.source_id)
+            .bind(&metric.directory_path)
+            .bind(metric.directory_depth)
+            .bind(&metric.parent_directory_path)
             .fetch_one(&self.pool)
             .await?;
             
-            Ok(row.id)
+            Ok(row.get::<Uuid, _>("id"))
         }).await
     }
 
@@ -177,7 +176,7 @@ impl Database {
         update: &UpdateWebDAVDirectoryMetric
     ) -> Result<bool> {
         self.with_retry(|| async {
-            let rows_affected = sqlx::query!(
+            let rows_affected = sqlx::query(
                 r#"
                 UPDATE webdav_directory_metrics SET
                     completed_at = CASE 
@@ -208,28 +207,28 @@ impl Database {
                     skip_reason = COALESCE($19, skip_reason),
                     error_message = COALESCE($20, error_message)
                 WHERE id = $1
-                "#,
-                metric_id,
-                update.files_found,
-                update.subdirectories_found,
-                update.total_size_bytes,
-                update.files_processed,
-                update.files_skipped,
-                update.files_failed,
-                update.http_requests_made,
-                update.propfind_requests,
-                update.get_requests,
-                update.errors_encountered,
-                update.error_types,
-                update.warnings_count,
-                update.etag_matches,
-                update.etag_mismatches,
-                update.cache_hits,
-                update.cache_misses,
-                update.status,
-                update.skip_reason,
-                update.error_message
+                "#
             )
+            .bind(metric_id)
+            .bind(update.files_found)
+            .bind(update.subdirectories_found)
+            .bind(update.total_size_bytes)
+            .bind(update.files_processed)
+            .bind(update.files_skipped)
+            .bind(update.files_failed)
+            .bind(update.http_requests_made)
+            .bind(update.propfind_requests)
+            .bind(update.get_requests)
+            .bind(update.errors_encountered)
+            .bind(&update.error_types)
+            .bind(update.warnings_count)
+            .bind(update.etag_matches)
+            .bind(update.etag_mismatches)
+            .bind(update.cache_hits)
+            .bind(update.cache_misses)
+            .bind(&update.status)
+            .bind(&update.skip_reason)
+            .bind(&update.error_message)
             .execute(&self.pool)
             .await?;
             
@@ -244,16 +243,15 @@ impl Database {
         user_id: Uuid
     ) -> Result<Vec<WebDAVDirectoryMetric>> {
         self.with_retry(|| async {
-            let metrics = sqlx::query_as!(
-                WebDAVDirectoryMetric,
+            let metrics = sqlx::query_as::<_, WebDAVDirectoryMetric>(
                 r#"
                 SELECT * FROM webdav_directory_metrics 
                 WHERE session_id = $1 AND user_id = $2
                 ORDER BY started_at ASC
-                "#,
-                session_id,
-                user_id
+                "#
             )
+            .bind(session_id)
+            .bind(user_id)
             .fetch_all(&self.pool)
             .await?;
             
@@ -267,7 +265,7 @@ impl Database {
         metric: &CreateWebDAVRequestMetric
     ) -> Result<Uuid> {
         self.with_retry(|| async {
-            let row = sqlx::query!(
+            let row = sqlx::query(
                 r#"
                 INSERT INTO webdav_request_metrics (
                     session_id, directory_metric_id, user_id, source_id,
@@ -283,38 +281,38 @@ impl Database {
                     $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, NOW()
                 )
                 RETURNING id
-                "#,
-                metric.session_id,
-                metric.directory_metric_id,
-                metric.user_id,
-                metric.source_id,
-                metric.request_type.to_string(),
-                metric.operation_type.to_string(),
-                metric.target_path,
-                metric.duration_ms,
-                metric.request_size_bytes,
-                metric.response_size_bytes,
-                metric.http_status_code,
-                metric.dns_lookup_ms,
-                metric.tcp_connect_ms,
-                metric.tls_handshake_ms,
-                metric.time_to_first_byte_ms,
-                metric.success,
-                metric.retry_attempt,
-                metric.error_type,
-                metric.error_message,
-                metric.server_header,
-                metric.dav_header,
-                metric.etag_value,
-                metric.last_modified,
-                metric.content_type,
-                metric.remote_ip,
-                metric.user_agent
+                "#
             )
+            .bind(metric.session_id)
+            .bind(metric.directory_metric_id)
+            .bind(metric.user_id)
+            .bind(metric.source_id)
+            .bind(metric.request_type.to_string())
+            .bind(metric.operation_type.to_string())
+            .bind(&metric.target_path)
+            .bind(metric.duration_ms)
+            .bind(metric.request_size_bytes)
+            .bind(metric.response_size_bytes)
+            .bind(metric.http_status_code)
+            .bind(metric.dns_lookup_ms)
+            .bind(metric.tcp_connect_ms)
+            .bind(metric.tls_handshake_ms)
+            .bind(metric.time_to_first_byte_ms)
+            .bind(metric.success)
+            .bind(metric.retry_attempt)
+            .bind(&metric.error_type)
+            .bind(&metric.error_message)
+            .bind(&metric.server_header)
+            .bind(&metric.dav_header)
+            .bind(&metric.etag_value)
+            .bind(metric.last_modified)
+            .bind(&metric.content_type)
+            .bind(&metric.remote_ip)
+            .bind(&metric.user_agent)
             .fetch_one(&self.pool)
             .await?;
             
-            Ok(row.id)
+            Ok(row.get::<Uuid, _>("id"))
         }).await
     }
 
@@ -329,8 +327,7 @@ impl Database {
         self.with_retry(|| async {
             let limit = limit.unwrap_or(1000).min(10000); // Cap at 10k
 
-            let metrics = sqlx::query_as!(
-                WebDAVRequestMetric,
+            let metrics = sqlx::query_as::<_, WebDAVRequestMetric>(
                 r#"
                 SELECT * FROM webdav_request_metrics 
                 WHERE user_id = $1
@@ -338,12 +335,12 @@ impl Database {
                 AND ($3::UUID IS NULL OR directory_metric_id = $3)
                 ORDER BY started_at DESC
                 LIMIT $4
-                "#,
-                user_id,
-                session_id,
-                directory_metric_id,
-                limit as i64
+                "#
             )
+            .bind(user_id)
+            .bind(session_id)
+            .bind(directory_metric_id)
+            .bind(limit as i64)
             .fetch_all(&self.pool)
             .await?;
             
@@ -360,16 +357,15 @@ impl Database {
             let start_time = query.start_time.unwrap_or_else(|| Utc::now() - chrono::Duration::days(1));
             let end_time = query.end_time.unwrap_or_else(|| Utc::now());
 
-            let summary = sqlx::query_as!(
-                WebDAVMetricsSummary,
+            let summary = sqlx::query_as::<_, WebDAVMetricsSummary>(
                 r#"
                 SELECT * FROM get_webdav_metrics_summary($1, $2, $3, $4)
-                "#,
-                query.user_id,
-                query.source_id,
-                start_time,
-                end_time
+                "#
             )
+            .bind(query.user_id)
+            .bind(query.source_id)
+            .bind(start_time)
+            .bind(end_time)
             .fetch_optional(&self.pool)
             .await?;
             
@@ -509,14 +505,14 @@ impl Database {
         self.with_retry(|| async {
             let cutoff_date = Utc::now() - chrono::Duration::days(days_to_keep as i64);
             
-            let result = sqlx::query!(
+            let result = sqlx::query(
                 r#"
                 DELETE FROM webdav_sync_sessions 
                 WHERE created_at < $1 
                 AND status IN ('completed', 'failed', 'cancelled')
-                "#,
-                cutoff_date
+                "#
             )
+            .bind(cutoff_date)
             .execute(&self.pool)
             .await?;
             
