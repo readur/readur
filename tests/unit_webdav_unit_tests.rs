@@ -1,7 +1,6 @@
 use readur::services::webdav::{WebDAVService, WebDAVConfig};
-use readur::models::FileIngestionInfo;
+use readur::models::source::WebDAVSyncStatus;
 use readur::models::*;
-use tokio;
 
 // Mock WebDAV server responses for testing
 fn mock_propfind_response() -> String {

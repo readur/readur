@@ -17,13 +17,13 @@ async fn create_test_db() -> Result<Database> {
 /// Helper to create a test user
 async fn create_test_user(db: &Database) -> Result<Uuid> {
     let user_id = Uuid::new_v4();
-    sqlx::query!(
-        "INSERT INTO users (id, username, email, password_hash, role) VALUES ($1, $2, $3, $4, 'user')",
-        user_id,
-        format!("testuser_{}", user_id),
-        format!("test_{}@example.com", user_id),
-        "dummy_hash"
+    sqlx::query(
+        "INSERT INTO users (id, username, email, password_hash, role) VALUES ($1, $2, $3, $4, 'user')"
     )
+    .bind(user_id)
+    .bind(format!("testuser_{}", user_id))
+    .bind(format!("test_{}@example.com", user_id))
+    .bind("dummy_hash")
     .execute(&db.pool)
     .await?;
     
@@ -408,15 +408,15 @@ async fn test_metrics_summary() -> Result<()> {
     assert_eq!(summary.failed_sessions, 1);
     assert_eq!(summary.total_files_processed, 30); // 10 files per session
     assert_eq!(summary.total_http_requests, 15); // 5 requests per session
-    assert!(summary.request_success_rate.to_f64().unwrap() > 0.0);
-    assert!(summary.avg_request_duration_ms.to_f64().unwrap() > 0.0);
+    assert!(summary.request_success_rate > 0.0);
+    assert!(summary.avg_request_duration_ms > 0.0);
     
     println!("✅ Metrics summary test passed");
     println!("Summary: {} total sessions, {} successful, {} failed", 
              summary.total_sessions, summary.successful_sessions, summary.failed_sessions);
     println!("Success rate: {:.1}%, Avg request time: {:.0}ms",
-             summary.request_success_rate.to_f64().unwrap(),
-             summary.avg_request_duration_ms.to_f64().unwrap());
+             summary.request_success_rate,
+             summary.avg_request_duration_ms);
     
     Ok(())
 }
@@ -765,9 +765,9 @@ async fn test_complete_metrics_workflow() -> Result<()> {
     println!("  - Sessions: {} total, {} successful", summary.total_sessions, summary.successful_sessions);
     println!("  - Files: {} processed", summary.total_files_processed);
     println!("  - Requests: {} total, {:.1}% success rate", 
-             summary.total_http_requests, summary.request_success_rate.to_f64().unwrap());
+             summary.total_http_requests, summary.request_success_rate);
     println!("  - Performance: {:.0}ms avg request time", 
-             summary.avg_request_duration_ms.to_f64().unwrap());
+             summary.avg_request_duration_ms);
     
     println!("🎉 Complete metrics workflow test passed!");
     
