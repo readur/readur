@@ -45,10 +45,10 @@ fn validate_offset(offset: Option<i32>) -> Option<i32> {
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/sessions", get(list_webdav_sessions))
-        .route("/sessions/:session_id", get(get_webdav_session))
-        .route("/sessions/:session_id/insights", get(get_session_performance_insights))
-        .route("/sessions/:session_id/directories", get(get_session_directory_metrics))
-        .route("/sessions/:session_id/requests", get(get_session_request_metrics))
+        .route("/sessions/{session_id}", get(get_webdav_session))
+        .route("/sessions/{session_id}/insights", get(get_session_performance_insights))
+        .route("/sessions/{session_id}/directories", get(get_session_directory_metrics))
+        .route("/sessions/{session_id}/requests", get(get_session_request_metrics))
         .route("/summary", get(get_webdav_metrics_summary))
         .route("/performance", get(get_webdav_performance_overview))
 }
