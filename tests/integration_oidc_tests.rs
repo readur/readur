@@ -78,6 +78,7 @@ mod tests {
                 oidc_client: None,
                 sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
                 user_watch_service: None,
+        webdav_metrics_collector: None,
             }));
 
         (app, ())
@@ -179,6 +180,7 @@ mod tests {
                 oidc_client,
                 sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
                 user_watch_service: None,
+        webdav_metrics_collector: None,
             }));
 
         (app, mock_server)

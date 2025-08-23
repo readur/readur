@@ -379,6 +379,12 @@ async fn main() -> anyhow::Result<()> {
         None
     };
     
+    // Create simplified WebDAV metrics collector
+    let webdav_metrics_collector = {
+        let metrics = std::sync::Arc::new(crate::services::webdav_metrics_simple::WebDAVMetrics::new());
+        Some(std::sync::Arc::new(crate::services::webdav_metrics_integration::WebDAVMetricsCollector::new(metrics)))
+    };
+
     // Create web-facing state with shared queue service
     let web_state = AppState { 
         db: web_db, 
@@ -390,6 +396,7 @@ async fn main() -> anyhow::Result<()> {
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
+        webdav_metrics_collector: webdav_metrics_collector.clone(),
     };
     let web_state = Arc::new(web_state);
     
@@ -404,6 +411,7 @@ async fn main() -> anyhow::Result<()> {
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
+        webdav_metrics_collector: webdav_metrics_collector.clone(),
     };
     let background_state = Arc::new(background_state);
     
@@ -489,6 +497,7 @@ async fn main() -> anyhow::Result<()> {
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
+        webdav_metrics_collector: webdav_metrics_collector.clone(),
     };
     let web_state = Arc::new(updated_web_state);
     
@@ -529,7 +538,6 @@ async fn main() -> anyhow::Result<()> {
         .nest("/api/users", readur::routes::users::router())
         .nest("/api/webdav", readur::routes::webdav::router())
         .nest("/api/webdav/scan/failures", readur::routes::webdav_scan_failures::router())
-        .nest("/api/webdav-metrics", readur::routes::webdav_metrics::router())
         .merge(readur::swagger::create_swagger_router())
         .fallback_service(
             ServeDir::new(&static_dir)

@@ -62,6 +62,7 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
         oidc_client: None,
         sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
         user_watch_service: None,
+        webdav_metrics_collector: None,
     }))
 }
 
