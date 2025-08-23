@@ -363,6 +363,7 @@ pub async fn create_test_app_state_with_config(config: Config) -> Result<Arc<App
         source_scheduler: None,
         queue_service,
         oidc_client: None,
+        webdav_metrics_collector: None,
         sync_progress_tracker,
         user_watch_service: None,
     }))
@@ -399,6 +400,7 @@ pub async fn create_test_app_state_with_options(options: TestAppStateOptions) ->
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
+        webdav_metrics_collector: None,
         oidc_client: None,
         sync_progress_tracker,
         user_watch_service,

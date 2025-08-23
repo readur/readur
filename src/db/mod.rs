@@ -9,7 +9,6 @@ pub mod documents;
 pub mod settings;
 pub mod notifications;
 pub mod webdav;
-pub mod webdav_metrics;
 pub mod sources;
 pub mod source_errors;
 pub mod images;
