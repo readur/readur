@@ -41,6 +41,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         oidc_client: None,
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service,
+        webdav_metrics_collector: None,
     });
     
     let app = Router::new()
@@ -294,6 +295,7 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
         oidc_client: None,
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service,
+        webdav_metrics_collector: None,
     });
     
     // Create user watch manager to test file path mapping
@@ -376,6 +378,7 @@ async fn test_per_user_watch_disabled() -> Result<()> {
         oidc_client: None,
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service: None, // Disabled
+        webdav_metrics_collector: None,
     });
     
     let app = Router::new()
