@@ -529,6 +529,7 @@ async fn main() -> anyhow::Result<()> {
         .nest("/api/users", readur::routes::users::router())
         .nest("/api/webdav", readur::routes::webdav::router())
         .nest("/api/webdav/scan/failures", readur::routes::webdav_scan_failures::router())
+        .nest("/api/webdav-metrics", readur::routes::webdav_metrics::router())
         .merge(readur::swagger::create_swagger_router())
         .fallback_service(
             ServeDir::new(&static_dir)

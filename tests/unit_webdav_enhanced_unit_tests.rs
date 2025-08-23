@@ -1,6 +1,7 @@
 use readur::services::webdav::{WebDAVService, WebDAVConfig, RetryConfig};
 use readur::webdav_xml_parser::parse_propfind_response;
 use readur::models::FileIngestionInfo;
+use readur::models::source::WebDAVSyncStatus;
 use readur::models::*;
 use chrono::Utc;
 use uuid::Uuid;
@@ -652,7 +653,7 @@ fn test_backoff_delay_calculation() {
     assert_eq!(delays[1], 2000);  // 2s
     assert_eq!(delays[2], 4000);  // 4s
     assert_eq!(delays[3], 8000);  // 8s
-    assert_eq!(delays[4], 16000); // 16s
+    assert_eq!(delays[4], 10000); // 10s (capped at max_delay_ms)
     
     // Verify max delay is respected
     for _ in 0..10 {

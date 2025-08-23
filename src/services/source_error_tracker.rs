@@ -1,4 +1,6 @@
 use anyhow::Result;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,6 +14,29 @@ use crate::models::{
     SourceErrorClassifier, ErrorContext, ErrorClassification,
     ListFailuresQuery, RetryFailureRequest, ExcludeResourceRequest,
 };
+
+/// Pre-compiled regex patterns for performance
+static HTTP_STATUS_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\b([4-5]\d{2})\b").expect("HTTP status regex should be valid")
+});
+
+static ERROR_CODE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)error[:\s]+([A-Z0-9_]+)").expect("Error code regex should be valid")
+});
+
+static OS_ERROR_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)os error (\d+)").expect("OS error regex should be valid")
+});
+
+/// Detailed information about why a resource should or shouldn't be skipped
+#[derive(Debug, Clone)]
+pub struct SkipDecision {
+    pub should_skip: bool,
+    pub reason: String,
+    pub failure_count: i32,
+    pub time_since_last_failure_minutes: i64,
+    pub cooldown_remaining_minutes: Option<i64>,
+}
 
 /// Generic error tracking service for all source types
 #[derive(Clone)]
@@ -93,15 +118,51 @@ impl SourceErrorTracker {
         source_id: Option<Uuid>,
         resource_path: &str,
     ) -> Result<bool> {
+        self.should_skip_resource_with_details(user_id, source_type, source_id, resource_path).await
+            .map(|result| result.should_skip)
+    }
+    
+    /// Check if a resource should be skipped with detailed information about why
+    pub async fn should_skip_resource_with_details(
+        &self,
+        user_id: Uuid,
+        source_type: ErrorSourceType,
+        source_id: Option<Uuid>,
+        resource_path: &str,
+    ) -> Result<SkipDecision> {
+        // Check if there are any failures for this resource path
         match self.db.is_source_known_failure(user_id, source_type, source_id, resource_path).await {
-            Ok(should_skip) => {
-                if should_skip {
-                    debug!(
-                        "⏭️ Skipping {} resource '{}' due to previous failures",
-                        source_type, resource_path
-                    );
-                }
-                Ok(should_skip)
+            Ok(true) => {
+                // There is a known failure, but we need more details
+                // For now, implement a simple cooldown based on the fact that there's a failure
+                // In a real implementation, we'd need a method that returns failure details
+                let skip_reason = format!("Resource has previous failures recorded in system");
+                
+                info!(
+                    "⏭️ Skipping {} resource '{}' due to error tracking: {}",
+                    source_type, resource_path, skip_reason
+                );
+                
+                Ok(SkipDecision {
+                    should_skip: true,
+                    reason: skip_reason,
+                    failure_count: 1, // We don't have exact count, use 1 as placeholder
+                    time_since_last_failure_minutes: 0, // We don't have exact time
+                    cooldown_remaining_minutes: Some(60), // Default 1 hour cooldown
+                })
+            }
+            Ok(false) => {
+                debug!(
+                    "✅ No previous failures for {} resource '{}', proceeding with scan",
+                    source_type, resource_path
+                );
+                Ok(SkipDecision {
+                    should_skip: false,
+                    reason: "No previous failures recorded".to_string(),
+                    failure_count: 0,
+                    time_since_last_failure_minutes: 0,
+                    cooldown_remaining_minutes: None,
+                })
             }
             Err(e) => {
                 warn!(
@@ -109,7 +170,13 @@ impl SourceErrorTracker {
                     source_type, resource_path, e
                 );
                 // If we can't check, err on the side of trying to scan
-                Ok(false)
+                Ok(SkipDecision {
+                    should_skip: false,
+                    reason: format!("Error checking failure status: {}", e),
+                    failure_count: 0,
+                    time_since_last_failure_minutes: 0,
+                    cooldown_remaining_minutes: None,
+                })
             }
         }
     }
@@ -514,7 +581,7 @@ impl SourceErrorTracker {
     fn extract_http_status(&self, error: &anyhow::Error) -> Option<i32> {
         let error_str = error.to_string();
         
-        // Look for common HTTP status code patterns
+        // Look for common HTTP status code patterns first (fast path)
         if error_str.contains("404") {
             Some(404)
         } else if error_str.contains("401") {
@@ -530,9 +597,8 @@ impl SourceErrorTracker {
         } else if error_str.contains("504") {
             Some(504)
         } else {
-            // Try to extract any 3-digit number that looks like an HTTP status
-            let re = regex::Regex::new(r"\b([4-5]\d{2})\b").ok()?;
-            re.captures(&error_str)
+            // Use pre-compiled regex for any other 4xx/5xx status codes
+            HTTP_STATUS_REGEX.captures(&error_str)
                 .and_then(|cap| cap.get(1))
                 .and_then(|m| m.as_str().parse::<i32>().ok())
         }
@@ -542,19 +608,13 @@ impl SourceErrorTracker {
     fn extract_error_code(&self, error: &anyhow::Error) -> Option<String> {
         let error_str = error.to_string();
         
-        // Look for common error code patterns
-        if let Some(caps) = regex::Regex::new(r"(?i)error[:\s]+([A-Z0-9_]+)")
-            .ok()
-            .and_then(|re| re.captures(&error_str))
-        {
+        // Look for common error code patterns using pre-compiled regex
+        if let Some(caps) = ERROR_CODE_REGEX.captures(&error_str) {
             return caps.get(1).map(|m| m.as_str().to_string());
         }
         
-        // Look for OS error codes
-        if let Some(caps) = regex::Regex::new(r"(?i)os error (\d+)")
-            .ok()
-            .and_then(|re| re.captures(&error_str))
-        {
+        // Look for OS error codes using pre-compiled regex
+        if let Some(caps) = OS_ERROR_REGEX.captures(&error_str) {
             return caps.get(1).map(|m| format!("OS_{}", m.as_str()));
         }
         

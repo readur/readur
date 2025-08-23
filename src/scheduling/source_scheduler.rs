@@ -761,6 +761,7 @@ impl SourceScheduler {
                 for watch_folder in &webdav_config.watch_folders {
                     match smart_sync_service.perform_smart_sync(
                         source_clone.user_id, 
+                        Some(source_clone.id),
                         &webdav_service, 
                         watch_folder, 
                         crate::services::webdav::SmartSyncStrategy::FullDeepScan, // Force deep scan for automatic triggers

@@ -52,7 +52,7 @@ impl Default for RetryConfig {
         Self {
             max_retries: 3,
             initial_delay_ms: 1000, // 1 second
-            max_delay_ms: 30000,    // 30 seconds
+            max_delay_ms: 10000,    // 10 seconds (reduced from 30s to prevent excessive wait times)
             backoff_multiplier: 2.0,
             timeout_seconds: 30,
             rate_limit_backoff_ms: 5000, // 5 seconds
