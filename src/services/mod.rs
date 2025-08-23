@@ -9,4 +9,5 @@ pub mod source_error_tracker;
 pub mod sync_progress_tracker;
 pub mod user_watch_service;
 pub mod webdav;
-pub mod webdav_metrics_tracker;
+pub mod webdav_metrics_simple;
+pub mod webdav_metrics_integration;

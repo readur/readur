@@ -54,7 +54,6 @@ mod tests {
         let _sources_router = crate::routes::sources::router();
         let _users_router = crate::routes::users::router();
         let _webdav_router = crate::routes::webdav::router();
-        let _webdav_metrics_router = crate::routes::webdav_metrics::router();
         let _ignored_files_router = crate::routes::ignored_files::ignored_files_routes();
     }
     
