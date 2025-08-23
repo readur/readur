@@ -670,20 +670,20 @@ async fn collect_webdav_metrics(state: &Arc<AppState>) -> Result<WebDAVMetrics, 
             COUNT(*) as total_sessions,
             COUNT(*) FILTER (WHERE status = 'completed') as successful_sessions,
             COUNT(*) FILTER (WHERE status = 'failed') as failed_sessions,
-            COALESCE(SUM(files_processed), 0) as total_files_processed,
-            COALESCE(SUM(total_bytes_processed), 0) as total_bytes_processed,
-            COALESCE(AVG(duration_ms / 1000.0), 0) as avg_session_duration_sec,
-            COALESCE(AVG(processing_rate_files_per_sec), 0) as avg_processing_rate,
-            COALESCE(SUM(total_http_requests), 0) as total_http_requests,
+            COALESCE(SUM(files_processed)::BIGINT, 0) as total_files_processed,
+            COALESCE(SUM(total_bytes_processed)::BIGINT, 0) as total_bytes_processed,
+            COALESCE(AVG(duration_ms / 1000.0)::DOUBLE PRECISION, 0) as avg_session_duration_sec,
+            COALESCE(AVG(processing_rate_files_per_sec)::DOUBLE PRECISION, 0) as avg_processing_rate,
+            COALESCE(SUM(total_http_requests)::BIGINT, 0) as total_http_requests,
             CASE 
-                WHEN SUM(total_http_requests) > 0 
-                THEN (SUM(successful_requests)::DECIMAL / SUM(total_http_requests) * 100)
-                ELSE 0 
+                WHEN SUM(total_http_requests)::BIGINT > 0 
+                THEN (SUM(successful_requests)::BIGINT::DECIMAL / SUM(total_http_requests)::BIGINT * 100)::DOUBLE PRECISION
+                ELSE 0::DOUBLE PRECISION
             END as request_success_rate,
             COALESCE(
-                (SELECT AVG(duration_ms) FROM webdav_request_metrics 
+                (SELECT AVG(duration_ms)::DOUBLE PRECISION FROM webdav_request_metrics 
                  WHERE started_at > NOW() - INTERVAL '24 hours'),
-                0
+                0::DOUBLE PRECISION
             ) as avg_request_duration_ms
         FROM webdav_sync_sessions 
         WHERE started_at > NOW() - INTERVAL '24 hours'

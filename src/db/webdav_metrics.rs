@@ -482,14 +482,14 @@ impl Database {
                             COALESCE(COUNT(*)::INTEGER, 0) as total_sessions,
                             COALESCE(COUNT(*) FILTER (WHERE s.status = 'completed')::INTEGER, 0) as successful_sessions,
                             COALESCE(COUNT(*) FILTER (WHERE s.status = 'failed')::INTEGER, 0) as failed_sessions,
-                            COALESCE(SUM(s.files_processed), 0)::BIGINT as total_files_processed,
-                            COALESCE(SUM(s.total_bytes_processed), 0)::BIGINT as total_bytes_processed,
-                            COALESCE(AVG(s.duration_ms / 1000.0), 0.0)::DOUBLE PRECISION as avg_session_duration_sec,
-                            COALESCE(AVG(s.processing_rate_files_per_sec), 0.0)::DOUBLE PRECISION as avg_processing_rate,
-                            COALESCE(SUM(s.total_http_requests), 0)::BIGINT as total_http_requests,
+                            COALESCE(SUM(s.files_processed)::BIGINT, 0) as total_files_processed,
+                            COALESCE(SUM(s.total_bytes_processed)::BIGINT, 0) as total_bytes_processed,
+                            COALESCE(AVG(s.duration_ms / 1000.0)::DOUBLE PRECISION, 0.0) as avg_session_duration_sec,
+                            COALESCE(AVG(s.processing_rate_files_per_sec)::DOUBLE PRECISION, 0.0) as avg_processing_rate,
+                            COALESCE(SUM(s.total_http_requests)::BIGINT, 0) as total_http_requests,
                             CASE 
-                                WHEN SUM(s.total_http_requests) > 0 
-                                THEN (SUM(s.successful_requests)::DOUBLE PRECISION / SUM(s.total_http_requests) * 100.0)
+                                WHEN SUM(s.total_http_requests)::BIGINT > 0 
+                                THEN (SUM(s.successful_requests)::BIGINT::DOUBLE PRECISION / SUM(s.total_http_requests)::BIGINT * 100.0)
                                 ELSE 0.0
                             END as request_success_rate,
                             COALESCE((SELECT AVG(duration_ms) FROM webdav_request_metrics r 
