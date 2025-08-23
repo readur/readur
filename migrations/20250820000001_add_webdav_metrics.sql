@@ -1,26 +1,36 @@
 -- WebDAV Metrics Collection System
 -- This migration adds tables for tracking detailed WebDAV sync performance metrics
 
--- Enum for WebDAV operation types
-CREATE TYPE webdav_operation_type AS ENUM (
-    'discovery',           -- Directory/file discovery operations
-    'download',           -- File download operations
-    'metadata_fetch',     -- Getting file metadata (properties)
-    'connection_test',    -- Testing connection/authentication
-    'validation',         -- Directory validation operations
-    'full_sync'           -- Complete sync session
-);
+-- Create enum for WebDAV operation types
+-- Use DO block to handle existing type gracefully
+DO $$ BEGIN
+    CREATE TYPE webdav_operation_type AS ENUM (
+        'discovery',           -- Directory/file discovery operations
+        'download',           -- File download operations
+        'metadata_fetch',     -- Getting file metadata (properties)
+        'connection_test',    -- Testing connection/authentication
+        'validation',         -- Directory validation operations
+        'full_sync'           -- Complete sync session
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- Enum for WebDAV request types (HTTP methods)
-CREATE TYPE webdav_request_type AS ENUM (
-    'PROPFIND',
-    'GET',
-    'HEAD',
-    'OPTIONS',
-    'POST',
-    'PUT',
-    'DELETE'
-);
+-- Create enum for WebDAV request types (HTTP methods)
+-- Use DO block to handle existing type gracefully
+DO $$ BEGIN
+    CREATE TYPE webdav_request_type AS ENUM (
+        'PROPFIND',
+        'GET',
+        'HEAD',
+        'OPTIONS',
+        'POST',
+        'PUT',
+        'DELETE'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Table for tracking overall WebDAV sync sessions
 CREATE TABLE IF NOT EXISTS webdav_sync_sessions (
@@ -48,7 +58,7 @@ CREATE TABLE IF NOT EXISTS webdav_sync_sessions (
     total_bytes_discovered BIGINT NOT NULL DEFAULT 0,
     total_bytes_processed BIGINT NOT NULL DEFAULT 0,
     avg_file_size_bytes BIGINT,
-    processing_rate_files_per_sec DECIMAL(10,2),
+    processing_rate_files_per_sec FLOAT8,
     
     -- Request statistics
     total_http_requests INTEGER NOT NULL DEFAULT 0,
@@ -114,7 +124,7 @@ CREATE TABLE IF NOT EXISTS webdav_directory_metrics (
     warnings_count INTEGER NOT NULL DEFAULT 0,
     
     -- Performance characteristics
-    avg_response_time_ms DECIMAL(10,2),
+    avg_response_time_ms FLOAT8,
     slowest_request_ms BIGINT,
     fastest_request_ms BIGINT,
     
@@ -217,7 +227,6 @@ CREATE INDEX IF NOT EXISTS idx_webdav_request_metrics_session_id ON webdav_reque
 CREATE INDEX IF NOT EXISTS idx_webdav_request_metrics_user_id ON webdav_request_metrics(user_id);
 CREATE INDEX IF NOT EXISTS idx_webdav_request_metrics_source_id ON webdav_request_metrics(source_id);
 CREATE INDEX IF NOT EXISTS idx_webdav_request_metrics_started_at ON webdav_request_metrics(started_at);
-CREATE INDEX IF NOT EXISTS idx_webdav_request_metrics_request_type ON webdav_request_metrics(request_type);
 CREATE INDEX IF NOT EXISTS idx_webdav_request_metrics_operation_type ON webdav_request_metrics(operation_type);
 CREATE INDEX IF NOT EXISTS idx_webdav_request_metrics_success ON webdav_request_metrics(success);
 
@@ -230,6 +239,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS webdav_sync_sessions_updated_at ON webdav_sync_sessions;
 CREATE TRIGGER webdav_sync_sessions_updated_at
     BEFORE UPDATE ON webdav_sync_sessions
     FOR EACH ROW
@@ -252,30 +262,38 @@ BEGIN
     SELECT * INTO v_session FROM webdav_sync_sessions WHERE id = p_session_id;
     
     IF NOT FOUND THEN
+        RAISE NOTICE 'Session not found: %', p_session_id;
         RETURN;
     END IF;
     
+    
     -- Calculate request statistics from webdav_request_metrics
+    -- Use explicit casting to avoid any type issues
     SELECT 
-        COUNT(*),
-        COUNT(*) FILTER (WHERE success = true),
-        COUNT(*) FILTER (WHERE success = false),
-        COUNT(*) FILTER (WHERE retry_attempt > 0),
-        COALESCE(SUM(duration_ms), 0),
-        MAX(duration_ms),
-        target_path
+        CAST(COUNT(*) AS INTEGER),
+        CAST(COUNT(CASE WHEN success = true THEN 1 END) AS INTEGER),
+        CAST(COUNT(CASE WHEN success = false THEN 1 END) AS INTEGER), 
+        CAST(COUNT(CASE WHEN retry_attempt > 0 THEN 1 END) AS INTEGER),
+        CAST(COALESCE(SUM(duration_ms), 0) AS BIGINT)
     INTO 
         v_total_requests,
         v_successful_requests,
         v_failed_requests,
         v_retry_attempts,
-        v_network_time_ms,
+        v_network_time_ms
+    FROM webdav_request_metrics 
+    WHERE session_id = p_session_id;
+    
+    -- Get the slowest operation separately
+    SELECT 
+        duration_ms,
+        target_path
+    INTO 
         v_slowest_operation_ms,
         v_slowest_operation_path
     FROM webdav_request_metrics 
     WHERE session_id = p_session_id
-    GROUP BY target_path
-    ORDER BY MAX(duration_ms) DESC
+    ORDER BY duration_ms DESC
     LIMIT 1;
     
     -- Update session with final metrics
@@ -305,6 +323,8 @@ BEGIN
         END,
         updated_at = NOW()
     WHERE id = p_session_id;
+    
+    RAISE NOTICE 'Session % finalized with % total requests, % successful', p_session_id, v_total_requests, v_successful_requests;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -321,11 +341,11 @@ RETURNS TABLE (
     failed_sessions INTEGER,
     total_files_processed BIGINT,
     total_bytes_processed BIGINT,
-    avg_session_duration_sec DECIMAL,
-    avg_processing_rate DECIMAL,
+    avg_session_duration_sec DOUBLE PRECISION,
+    avg_processing_rate DOUBLE PRECISION,
     total_http_requests BIGINT,
-    request_success_rate DECIMAL,
-    avg_request_duration_ms DECIMAL,
+    request_success_rate DOUBLE PRECISION,
+    avg_request_duration_ms DOUBLE PRECISION,
     common_error_types JSONB
 ) AS $$
 BEGIN
@@ -334,23 +354,23 @@ BEGIN
         COUNT(*)::INTEGER as total_sessions,
         COUNT(*) FILTER (WHERE s.status = 'completed')::INTEGER as successful_sessions,
         COUNT(*) FILTER (WHERE s.status = 'failed')::INTEGER as failed_sessions,
-        COALESCE(SUM(s.files_processed), 0) as total_files_processed,
-        COALESCE(SUM(s.total_bytes_processed), 0) as total_bytes_processed,
-        COALESCE(AVG(s.duration_ms / 1000.0), 0)::DECIMAL as avg_session_duration_sec,
-        COALESCE(AVG(s.processing_rate_files_per_sec), 0)::DECIMAL as avg_processing_rate,
-        COALESCE(SUM(s.total_http_requests), 0) as total_http_requests,
+        COALESCE(SUM(s.files_processed), 0)::BIGINT as total_files_processed,
+        COALESCE(SUM(s.total_bytes_processed), 0)::BIGINT as total_bytes_processed,
+        COALESCE(AVG(s.duration_ms / 1000.0), 0.0)::DOUBLE PRECISION as avg_session_duration_sec,
+        COALESCE(AVG(s.processing_rate_files_per_sec), 0.0)::DOUBLE PRECISION as avg_processing_rate,
+        COALESCE(SUM(s.total_http_requests), 0)::BIGINT as total_http_requests,
         CASE 
             WHEN SUM(s.total_http_requests) > 0 
-            THEN (SUM(s.successful_requests)::DECIMAL / SUM(s.total_http_requests) * 100)
-            ELSE 0 
-        END as request_success_rate,
+            THEN (SUM(s.successful_requests)::DOUBLE PRECISION / SUM(s.total_http_requests) * 100.0)
+            ELSE 0.0
+        END::DOUBLE PRECISION as request_success_rate,
         COALESCE(
-            (SELECT AVG(duration_ms) FROM webdav_request_metrics r 
+            (SELECT AVG(duration_ms)::DOUBLE PRECISION FROM webdav_request_metrics r 
              WHERE r.started_at BETWEEN p_start_time AND p_end_time
              AND (p_user_id IS NULL OR r.user_id = p_user_id)
              AND (p_source_id IS NULL OR r.source_id = p_source_id)),
-            0
-        )::DECIMAL as avg_request_duration_ms,
+            0.0
+        )::DOUBLE PRECISION as avg_request_duration_ms,
         COALESCE(
             (SELECT jsonb_agg(jsonb_build_object('error_type', error_type, 'count', error_count))
              FROM (

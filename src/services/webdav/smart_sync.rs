@@ -213,6 +213,7 @@ impl SmartSyncService {
     pub async fn perform_smart_sync(
         &self,
         user_id: Uuid,
+        source_id: Option<Uuid>,
         webdav_service: &WebDAVService,
         folder_path: &str,
         strategy: SmartSyncStrategy,
@@ -222,13 +223,13 @@ impl SmartSyncService {
         match strategy {
             SmartSyncStrategy::FullDeepScan => {
                 info!("[{}] 🔍 Performing full deep scan for: '{}'", sync_request_id, folder_path);
-                self.perform_full_deep_scan(user_id, webdav_service, folder_path, _progress, sync_request_id).await
+                self.perform_full_deep_scan(user_id, source_id, webdav_service, folder_path, _progress, sync_request_id).await
             }
             SmartSyncStrategy::TargetedScan(target_dirs) => {
                 info!("[{}] 🎯 Performing targeted scan of {} directories: {:?}", 
                       sync_request_id, target_dirs.len(), 
                       target_dirs.iter().take(3).collect::<Vec<_>>());
-                self.perform_targeted_scan(user_id, webdav_service, target_dirs, _progress, sync_request_id).await
+                self.perform_targeted_scan(user_id, source_id, webdav_service, target_dirs, _progress, sync_request_id).await
             }
         }
     }
@@ -237,6 +238,7 @@ impl SmartSyncService {
     pub async fn evaluate_and_sync(
         &self,
         user_id: Uuid,
+        source_id: Option<Uuid>,
         webdav_service: &WebDAVService,
         folder_path: &str,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
@@ -252,7 +254,7 @@ impl SmartSyncService {
                 Ok(None)
             }
             SmartSyncDecision::RequiresSync(strategy) => {
-                let result = self.perform_smart_sync(user_id, webdav_service, folder_path, strategy, _progress).await?;
+                let result = self.perform_smart_sync(user_id, source_id, webdav_service, folder_path, strategy, _progress).await?;
                 let total_elapsed = eval_and_sync_start.elapsed();
                 info!("[{}] ✅ Smart sync completed for '{}' - {} files found, {} dirs scanned in {:.2}s", 
                       eval_sync_request_id, folder_path, result.files.len(), 
@@ -266,6 +268,7 @@ impl SmartSyncService {
     async fn perform_full_deep_scan(
         &self,
         user_id: Uuid,
+        source_id: Option<Uuid>,
         webdav_service: &WebDAVService,
         folder_path: &str,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
@@ -277,7 +280,7 @@ impl SmartSyncService {
             true, // recursive
             user_id, 
             &self.error_tracker, 
-            None, // source_id - using None for smart sync operations
+            source_id, // Pass the actual source_id
         ).await?;
         
         info!("Deep scan found {} files and {} directories in folder {}", 
@@ -341,6 +344,7 @@ impl SmartSyncService {
     async fn perform_targeted_scan(
         &self,
         user_id: Uuid,
+        source_id: Option<Uuid>,
         webdav_service: &WebDAVService,
         target_directories: Vec<String>,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
@@ -361,7 +365,7 @@ impl SmartSyncService {
                 true, // recursive
                 user_id, 
                 &self.error_tracker, 
-                None, // source_id - using None for smart sync operations
+                source_id, // Pass the actual source_id
             ).await {
                 Ok(discovery_result) => {
                     all_files.extend(discovery_result.files);

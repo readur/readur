@@ -77,12 +77,93 @@ impl Database {
     /// Finalize a WebDAV sync session (calculate final metrics)
     pub async fn finalize_webdav_sync_session(&self, session_id: Uuid) -> Result<()> {
         self.with_retry(|| async {
-            sqlx::query(
-                "SELECT finalize_webdav_session_metrics($1)"
+            // Debug: Check how many requests exist for this session before finalizing
+            let request_count: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM webdav_request_metrics WHERE session_id = $1"
             )
             .bind(session_id)
+            .fetch_one(&self.pool)
+            .await?;
+            
+            tracing::debug!("Finalizing session {}: found {} HTTP requests", session_id, request_count.0);
+            
+            // Instead of using the PostgreSQL function, do the aggregation in Rust
+            // to avoid transaction isolation issues
+            let (successful_requests, failed_requests, total_requests, network_time_ms): (i64, i64, i64, i64) = sqlx::query_as(
+                r#"
+                SELECT 
+                    COUNT(*) FILTER (WHERE success = true),
+                    COUNT(*) FILTER (WHERE success = false), 
+                    COUNT(*),
+                    CAST(COALESCE(SUM(duration_ms), 0) AS BIGINT)
+                FROM webdav_request_metrics 
+                WHERE session_id = $1
+                "#
+            )
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await?;
+            
+            tracing::debug!("Direct aggregation - total: {}, successful: {}, failed: {}", total_requests, successful_requests, failed_requests);
+            
+            // Get the slowest operation
+            let slowest_operation: Option<(i64, String)> = sqlx::query_as(
+                "SELECT duration_ms, target_path FROM webdav_request_metrics WHERE session_id = $1 ORDER BY duration_ms DESC LIMIT 1"
+            )
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await?;
+            
+            // Update the session directly with Rust-calculated values
+            sqlx::query(
+                r#"
+                UPDATE webdav_sync_sessions SET
+                    completed_at = NOW(),
+                    duration_ms = EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000,
+                    total_http_requests = $2,
+                    successful_requests = $3,
+                    failed_requests = $4,
+                    retry_attempts = 0,
+                    network_time_ms = $5,
+                    slowest_operation_ms = $6,
+                    slowest_operation_path = $7,
+                    processing_rate_files_per_sec = CASE 
+                        WHEN files_processed > 0 AND EXTRACT(EPOCH FROM (NOW() - started_at)) > 0 
+                        THEN files_processed / EXTRACT(EPOCH FROM (NOW() - started_at))
+                        ELSE 0 
+                    END,
+                    avg_file_size_bytes = CASE 
+                        WHEN files_processed > 0 
+                        THEN total_bytes_processed / files_processed 
+                        ELSE 0 
+                    END,
+                    status = CASE 
+                        WHEN status = 'in_progress' THEN 'completed'
+                        ELSE status 
+                    END,
+                    updated_at = NOW()
+                WHERE id = $1
+                "#
+            )
+            .bind(session_id)
+            .bind(total_requests as i32)
+            .bind(successful_requests as i32)
+            .bind(failed_requests as i32) 
+            .bind(network_time_ms)
+            .bind(slowest_operation.as_ref().map(|(ms, _)| *ms))
+            .bind(slowest_operation.as_ref().map(|(_, path)| path.as_str()))
             .execute(&self.pool)
             .await?;
+            
+            // Check the session after finalization
+            let session_after: (i32, i32, i32) = sqlx::query_as(
+                "SELECT total_http_requests, successful_requests, failed_requests FROM webdav_sync_sessions WHERE id = $1"
+            )
+            .bind(session_id)
+            .fetch_one(&self.pool)
+            .await?;
+            
+            tracing::debug!("After finalization - total: {}, successful: {}, failed: {}", session_after.0, session_after.1, session_after.2);
             
             Ok(())
         }).await
@@ -277,7 +358,7 @@ impl Database {
                     content_type, remote_ip, user_agent,
                     completed_at
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                    $1, $2, $3, $4, $5::webdav_request_type, $6::webdav_operation_type, $7, $8, $9, $10, $11, $12, $13, $14, $15,
                     $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, NOW()
                 )
                 RETURNING id
@@ -287,8 +368,8 @@ impl Database {
             .bind(metric.directory_metric_id)
             .bind(metric.user_id)
             .bind(metric.source_id)
-            .bind(metric.request_type.to_string())
-            .bind(metric.operation_type.to_string())
+            .bind(metric.request_type.to_string().as_str())
+            .bind(metric.operation_type.to_string().as_str())
             .bind(&metric.target_path)
             .bind(metric.duration_ms)
             .bind(metric.request_size_bytes)
@@ -329,7 +410,17 @@ impl Database {
 
             let metrics = sqlx::query_as::<_, WebDAVRequestMetric>(
                 r#"
-                SELECT * FROM webdav_request_metrics 
+                SELECT 
+                    id, session_id, directory_metric_id, user_id, source_id,
+                    request_type::TEXT as request_type,
+                    operation_type::TEXT as operation_type,
+                    target_path, started_at, completed_at, duration_ms,
+                    request_size_bytes, response_size_bytes, http_status_code,
+                    dns_lookup_ms, tcp_connect_ms, tls_handshake_ms, time_to_first_byte_ms,
+                    success, retry_attempt, error_type, error_message,
+                    server_header, dav_header, etag_value, last_modified,
+                    content_type, remote_ip, user_agent
+                FROM webdav_request_metrics 
                 WHERE user_id = $1
                 AND ($2::UUID IS NULL OR session_id = $2)
                 AND ($3::UUID IS NULL OR directory_metric_id = $3)
@@ -357,9 +448,22 @@ impl Database {
             let start_time = query.start_time.unwrap_or_else(|| Utc::now() - chrono::Duration::days(1));
             let end_time = query.end_time.unwrap_or_else(|| Utc::now());
 
-            let summary = sqlx::query_as::<_, WebDAVMetricsSummary>(
+            // First try to call the function directly and see what happens
+            let summary = match sqlx::query_as::<_, WebDAVMetricsSummary>(
                 r#"
-                SELECT * FROM get_webdav_metrics_summary($1, $2, $3, $4)
+                SELECT 
+                    total_sessions,
+                    successful_sessions,
+                    failed_sessions,
+                    total_files_processed,
+                    total_bytes_processed,
+                    avg_session_duration_sec,
+                    avg_processing_rate,
+                    total_http_requests,
+                    request_success_rate,
+                    avg_request_duration_ms,
+                    common_error_types
+                FROM get_webdav_metrics_summary($1, $2, $3, $4)
                 "#
             )
             .bind(query.user_id)
@@ -367,7 +471,58 @@ impl Database {
             .bind(start_time)
             .bind(end_time)
             .fetch_optional(&self.pool)
-            .await?;
+            .await {
+                Ok(result) => result,
+                Err(e) => {
+                    tracing::error!("Failed to call get_webdav_metrics_summary function: {}", e);
+                    // Fall back to manual query if function fails
+                    sqlx::query_as::<_, WebDAVMetricsSummary>(
+                        r#"
+                        SELECT 
+                            COALESCE(COUNT(*)::INTEGER, 0) as total_sessions,
+                            COALESCE(COUNT(*) FILTER (WHERE s.status = 'completed')::INTEGER, 0) as successful_sessions,
+                            COALESCE(COUNT(*) FILTER (WHERE s.status = 'failed')::INTEGER, 0) as failed_sessions,
+                            COALESCE(SUM(s.files_processed), 0)::BIGINT as total_files_processed,
+                            COALESCE(SUM(s.total_bytes_processed), 0)::BIGINT as total_bytes_processed,
+                            COALESCE(AVG(s.duration_ms / 1000.0), 0.0)::DOUBLE PRECISION as avg_session_duration_sec,
+                            COALESCE(AVG(s.processing_rate_files_per_sec), 0.0)::DOUBLE PRECISION as avg_processing_rate,
+                            COALESCE(SUM(s.total_http_requests), 0)::BIGINT as total_http_requests,
+                            CASE 
+                                WHEN SUM(s.total_http_requests) > 0 
+                                THEN (SUM(s.successful_requests)::DOUBLE PRECISION / SUM(s.total_http_requests) * 100.0)
+                                ELSE 0.0
+                            END as request_success_rate,
+                            COALESCE((SELECT AVG(duration_ms) FROM webdav_request_metrics r 
+                                     WHERE r.started_at BETWEEN $3 AND $4
+                                     AND ($1 IS NULL OR r.user_id = $1)
+                                     AND ($2 IS NULL OR r.source_id = $2)), 0.0)::DOUBLE PRECISION as avg_request_duration_ms,
+                            COALESCE((SELECT jsonb_agg(jsonb_build_object('error_type', error_type, 'count', error_count))
+                                     FROM (
+                                         SELECT error_type, COUNT(*) as error_count
+                                         FROM webdav_request_metrics r
+                                         WHERE r.started_at BETWEEN $3 AND $4
+                                         AND r.success = false
+                                         AND r.error_type IS NOT NULL
+                                         AND ($1 IS NULL OR r.user_id = $1)
+                                         AND ($2 IS NULL OR r.source_id = $2)
+                                         GROUP BY error_type
+                                         ORDER BY error_count DESC
+                                         LIMIT 10
+                                     ) error_summary), '[]'::jsonb) as common_error_types
+                        FROM webdav_sync_sessions s
+                        WHERE s.started_at BETWEEN $3 AND $4
+                        AND ($1 IS NULL OR s.user_id = $1)
+                        AND ($2 IS NULL OR s.source_id = $2)
+                        "#
+                    )
+                    .bind(query.user_id)
+                    .bind(query.source_id)
+                    .bind(start_time)
+                    .bind(end_time)
+                    .fetch_optional(&self.pool)
+                    .await?
+                }
+            };
             
             Ok(summary)
         }).await

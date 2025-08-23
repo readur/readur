@@ -291,6 +291,7 @@ pub async fn trigger_deep_scan(
                     
                     match smart_sync_service.perform_smart_sync(
                         user_id, 
+                        Some(source_id),
                         &webdav_service, 
                         watch_folder, 
                         crate::services::webdav::SmartSyncStrategy::FullDeepScan, // Force deep scan for directory reset

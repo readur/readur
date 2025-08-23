@@ -23,6 +23,7 @@ use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_
 use crate::mime_detection::{detect_mime_from_content, update_mime_type_with_content, MimeDetectionResult};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
+use super::common::build_user_agent;
 
 /// Results from WebDAV discovery including both files and directories
 #[derive(Debug, Clone)]
@@ -662,8 +663,8 @@ impl WebDAVService {
         let mut attempt = 0;
         let mut delay = self.retry_config.initial_delay_ms;
 
-        // Build custom User-Agent header
-        let user_agent = format!("Readur/{} (WebDAV-Sync; +https://github.com/readur)", env!("CARGO_PKG_VERSION"));
+        // Build custom User-Agent header using centralized function
+        let user_agent = build_user_agent();
 
         // Enhanced debug logging for HTTP requests
         debug!("🌐 HTTP Request Details:");
@@ -951,8 +952,8 @@ impl WebDAVService {
     /// Discovers both files and directories with their ETags for directory tracking
     pub async fn discover_files_and_directories(&self, directory_path: &str, recursive: bool) -> Result<WebDAVDiscoveryResult> {
         let discovery_request_id = uuid::Uuid::new_v4();
-        info!("[{}] 🔍 Discovering files and directories in: '{}' (recursive: {}, user_agent: 'readur-webdav-client')", 
-              discovery_request_id, directory_path, recursive);
+        info!("[{}] 🔍 Discovering files and directories in: '{}' (recursive: {}, user_agent: '{}')", 
+              discovery_request_id, directory_path, recursive, build_user_agent());
         
         let start_time = std::time::Instant::now();
         let result = if recursive {
@@ -985,8 +986,8 @@ impl WebDAVService {
         _progress: Option<&SyncProgress> // Simplified: just placeholder for API compatibility
     ) -> Result<WebDAVDiscoveryResult> {
         let discovery_request_id = uuid::Uuid::new_v4();
-        info!("[{}] 🔍 Discovering files and directories in: '{}' (progress tracking simplified, recursive: {}, user_agent: 'readur-webdav-client')", 
-              discovery_request_id, directory_path, recursive);
+        info!("[{}] 🔍 Discovering files and directories in: '{}' (progress tracking simplified, recursive: {}, user_agent: '{}')", 
+              discovery_request_id, directory_path, recursive, build_user_agent());
         
         let start_time = std::time::Instant::now();
         let result = if recursive {
@@ -1389,8 +1390,8 @@ impl WebDAVService {
         let start_time = std::time::Instant::now();
         let discovery_request_id = uuid::Uuid::new_v4();
         
-        info!("[{}] 🔍 Starting WebDAV discovery for '{}' (user: {}, source: {:?}, recursive: {}, user_agent: 'readur-webdav-client')", 
-              discovery_request_id, directory_path, user_id, source_id, recursive);
+        info!("[{}] 🔍 Starting WebDAV discovery for '{}' (user: {}, source: {:?}, recursive: {}, user_agent: '{}')", 
+              discovery_request_id, directory_path, user_id, source_id, recursive, build_user_agent());
         
         // Check if we should skip this directory due to previous failures
         let error_check_start = std::time::Instant::now();
@@ -1477,7 +1478,7 @@ impl WebDAVService {
                 // Track the error with enhanced context
                 let mut additional_context = std::collections::HashMap::new();
                 additional_context.insert("request_id".to_string(), serde_json::Value::String(discovery_request_id.to_string()));
-                additional_context.insert("user_agent".to_string(), serde_json::Value::String("readur-webdav-client".to_string()));
+                additional_context.insert("user_agent".to_string(), serde_json::Value::String(build_user_agent()));
                 additional_context.insert("recursive".to_string(), serde_json::Value::Bool(recursive));
                 
                 let context = ErrorContext {
@@ -2593,7 +2594,7 @@ mod tests {
     fn test_user_agent_format() {
         // Test that the User-Agent header format matches the expected pattern
         let expected_version = env!("CARGO_PKG_VERSION");
-        let expected_user_agent = format!("Readur/{} (WebDAV-Sync; +https://github.com/readur)", expected_version);
+        let expected_user_agent = build_user_agent();
         
         // Create a simple WebDAV config for testing
         let config = WebDAVConfig {
@@ -2609,7 +2610,7 @@ mod tests {
         let service = WebDAVService::new(config).expect("Failed to create WebDAV service");
         
         // Test that we can build the User-Agent string properly
-        let user_agent = format!("Readur/{} (WebDAV-Sync; +https://github.com/readur)", env!("CARGO_PKG_VERSION"));
+        let user_agent = build_user_agent();
         assert_eq!(user_agent, expected_user_agent);
         assert!(user_agent.starts_with("Readur/"));
         assert!(user_agent.contains("(WebDAV-Sync; +https://github.com/readur)"));

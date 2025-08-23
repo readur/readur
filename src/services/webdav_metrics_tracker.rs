@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -9,6 +9,7 @@ use reqwest::header::HeaderMap;
 
 use crate::db::Database;
 use crate::models::webdav_metrics::*;
+use crate::services::webdav::build_user_agent;
 
 /// Maximum number of response times to keep in memory to prevent unbounded growth
 const MAX_RESPONSE_TIMES: usize = 1000;
@@ -89,7 +90,7 @@ struct DirectoryCounters {
     errors_encountered: i32,
     error_types: Vec<String>,
     warnings_count: i32,
-    response_times: Vec<i64>, // This will be bounded by MAX_RESPONSE_TIMES
+    response_times: VecDeque<i64>, // Use VecDeque for O(1) front removal
     etag_matches: i32,
     etag_mismatches: i32,
     cache_hits: i32,
@@ -228,6 +229,12 @@ impl WebDAVMetricsTracker {
             };
 
             self.db.update_webdav_sync_session(session_id, &update).await?;
+            
+            // Small delay to ensure all previous HTTP request inserts are committed
+            // This addresses a transaction isolation issue where the finalize function
+            // can't see the requests that were just inserted
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            
             self.db.finalize_webdav_sync_session(session_id).await?;
 
             info!(
@@ -483,9 +490,10 @@ impl WebDAVMetricsTracker {
             last_modified,
             content_type,
             remote_ip,
-            user_agent: Some("readur-webdav-client".to_string()),
+            user_agent: Some(build_user_agent()),
         };
 
+        tracing::debug!("Recording request with session_id: {:?}", session_id);
         let request_id = self.db.record_webdav_request_metric(&metric).await?;
 
         // Update active directory counters if applicable
@@ -495,10 +503,10 @@ impl WebDAVMetricsTracker {
                 scan.last_activity = Instant::now();
                 scan.counters.http_requests_made += 1;
                 
-                // Implement bounded circular buffer for response times
-                scan.counters.response_times.push(duration.as_millis() as i64);
+                // Implement bounded circular buffer for response times using VecDeque for O(1) operations
+                scan.counters.response_times.push_back(duration.as_millis() as i64);
                 if scan.counters.response_times.len() > MAX_RESPONSE_TIMES {
-                    scan.counters.response_times.remove(0); // Remove oldest entry
+                    scan.counters.response_times.pop_front(); // O(1) removal of oldest entry
                 }
 
                 match request_type {

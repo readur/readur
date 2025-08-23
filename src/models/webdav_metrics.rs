@@ -244,7 +244,6 @@ pub struct WebDAVRequestMetric {
     pub content_type: Option<String>,
     pub remote_ip: Option<String>,
     pub user_agent: Option<String>,
-    pub created_at: DateTime<Utc>,
 }
 
 /// Summary metrics for WebDAV operations

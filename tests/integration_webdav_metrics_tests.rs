@@ -1,43 +1,64 @@
 use anyhow::Result;
+use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 
-use readur::db::Database;
-use readur::models::webdav_metrics::*;
-use readur::services::webdav_metrics_tracker::WebDAVMetricsTracker;
+use readur::{
+    db::Database,
+    models::webdav_metrics::*,
+    models::{CreateUser, UserRole},
+    services::webdav_metrics_tracker::WebDAVMetricsTracker,
+    test_helpers::create_test_app_state,
+};
 
-/// Helper to create a test database with temporary configuration
-async fn create_test_db() -> Result<Database> {
-    let db_url = std::env::var("DATABASE_TEST_URL")
-        .unwrap_or_else(|_| "postgresql://postgres:password@localhost:5432/readur_test".to_string());
+/// Helper to create a test user using the proper models
+async fn create_test_user(db: &Database) -> Result<Uuid> {
+    let user_suffix = Uuid::new_v4().simple().to_string();
+    let create_user = CreateUser {
+        username: format!("testuser_{}", user_suffix),
+        email: format!("test_{}@example.com", user_suffix),
+        password: "test_password".to_string(),
+        role: Some(UserRole::User),
+    };
     
-    Database::new_with_pool_config(&db_url, 5, 1).await
+    let created_user = db.create_user(create_user).await?;
+    Ok(created_user.id)
 }
 
-/// Helper to create a test user
-async fn create_test_user(db: &Database) -> Result<Uuid> {
-    let user_id = Uuid::new_v4();
+/// Helper to create a test WebDAV source
+async fn create_test_source(db: &Database, user_id: Uuid) -> Result<Uuid> {
+    let source_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO users (id, username, email, password_hash, role) VALUES ($1, $2, $3, $4, 'user')"
+        "INSERT INTO sources (id, user_id, name, source_type, config, enabled, created_at, updated_at) 
+         VALUES ($1, $2, $3, 'webdav', $4, true, NOW(), NOW())"
     )
+    .bind(source_id)
     .bind(user_id)
-    .bind(format!("testuser_{}", user_id))
-    .bind(format!("test_{}@example.com", user_id))
-    .bind("dummy_hash")
+    .bind(format!("Test WebDAV Source {}", source_id))
+    .bind(serde_json::json!({
+        "server_url": "https://example.com/webdav",
+        "username": "testuser",
+        "password": "testpass",
+        "watch_folders": ["/Documents"],
+        "file_extensions": ["pdf", "txt", "doc", "docx"],
+        "auto_sync": true,
+        "sync_interval_minutes": 60
+    }))
     .execute(&db.pool)
     .await?;
     
-    Ok(user_id)
+    Ok(source_id)
 }
 
 /// Test basic session creation and management
 #[tokio::test]
 async fn test_webdav_session_lifecycle() -> Result<()> {
-    let db = create_test_db().await?;
-    let user_id = create_test_user(&db).await?;
-    let source_id = Some(Uuid::new_v4());
+    let app_state = create_test_app_state().await
+        .map_err(|e| anyhow::anyhow!("Failed to create test app state: {}", e))?;
+    let user_id = create_test_user(&app_state.db).await?;
+    let source_id = Some(create_test_source(&app_state.db, user_id).await?);
     
-    let metrics_tracker = WebDAVMetricsTracker::new(db.clone());
+    let metrics_tracker = WebDAVMetricsTracker::new(app_state.db.clone());
     
     // Start a sync session
     let session_id = metrics_tracker
@@ -108,11 +129,12 @@ async fn test_webdav_session_lifecycle() -> Result<()> {
 /// Test directory metrics tracking
 #[tokio::test]
 async fn test_directory_metrics_tracking() -> Result<()> {
-    let db = create_test_db().await?;
-    let user_id = create_test_user(&db).await?;
-    let source_id = Some(Uuid::new_v4());
+    let app_state = create_test_app_state().await
+        .map_err(|e| anyhow::anyhow!("Failed to create test app state: {}", e))?;
+    let user_id = create_test_user(&app_state.db).await?;
+    let source_id = Some(create_test_source(&app_state.db, user_id).await?);
     
-    let metrics_tracker = WebDAVMetricsTracker::new(db.clone());
+    let metrics_tracker = WebDAVMetricsTracker::new(app_state.db.clone());
     
     // Start session
     let session_id = metrics_tracker
@@ -213,11 +235,12 @@ async fn test_directory_metrics_tracking() -> Result<()> {
 /// Test HTTP request metrics recording
 #[tokio::test]
 async fn test_http_request_metrics() -> Result<()> {
-    let db = create_test_db().await?;
-    let user_id = create_test_user(&db).await?;
-    let source_id = Some(Uuid::new_v4());
+    let app_state = create_test_app_state().await
+        .map_err(|e| anyhow::anyhow!("Failed to create test app state: {}", e))?;
+    let user_id = create_test_user(&app_state.db).await?;
+    let source_id = Some(create_test_source(&app_state.db, user_id).await?);
     
-    let metrics_tracker = WebDAVMetricsTracker::new(db.clone());
+    let metrics_tracker = WebDAVMetricsTracker::new(app_state.db.clone());
     
     // Start session and directory
     let session_id = metrics_tracker
@@ -326,11 +349,12 @@ async fn test_http_request_metrics() -> Result<()> {
 /// Test metrics summary generation
 #[tokio::test]
 async fn test_metrics_summary() -> Result<()> {
-    let db = create_test_db().await?;
-    let user_id = create_test_user(&db).await?;
-    let source_id = Some(Uuid::new_v4());
+    let app_state = create_test_app_state().await
+        .map_err(|e| anyhow::anyhow!("Failed to create test app state: {}", e))?;
+    let user_id = create_test_user(&app_state.db).await?;
+    let source_id = Some(create_test_source(&app_state.db, user_id).await?);
     
-    let metrics_tracker = WebDAVMetricsTracker::new(db.clone());
+    let metrics_tracker = WebDAVMetricsTracker::new(app_state.db.clone());
     
     // Create multiple sessions with various outcomes
     for i in 0..3 {
@@ -424,11 +448,12 @@ async fn test_metrics_summary() -> Result<()> {
 /// Test performance insights generation
 #[tokio::test]
 async fn test_performance_insights() -> Result<()> {
-    let db = create_test_db().await?;
-    let user_id = create_test_user(&db).await?;
-    let source_id = Some(Uuid::new_v4());
+    let app_state = create_test_app_state().await
+        .map_err(|e| anyhow::anyhow!("Failed to create test app state: {}", e))?;
+    let user_id = create_test_user(&app_state.db).await?;
+    let source_id = Some(create_test_source(&app_state.db, user_id).await?);
     
-    let metrics_tracker = WebDAVMetricsTracker::new(db.clone());
+    let metrics_tracker = WebDAVMetricsTracker::new(app_state.db.clone());
     
     // Create a session with detailed metrics
     let session_id = metrics_tracker
@@ -515,11 +540,12 @@ async fn test_performance_insights() -> Result<()> {
 /// Integration test demonstrating the complete metrics collection workflow
 #[tokio::test]
 async fn test_complete_metrics_workflow() -> Result<()> {
-    let db = create_test_db().await?;
-    let user_id = create_test_user(&db).await?;
-    let source_id = Some(Uuid::new_v4());
+    let app_state = create_test_app_state().await
+        .map_err(|e| anyhow::anyhow!("Failed to create test app state: {}", e))?;
+    let user_id = create_test_user(&app_state.db).await?;
+    let source_id = Some(create_test_source(&app_state.db, user_id).await?);
     
-    let metrics_tracker = WebDAVMetricsTracker::new(db.clone());
+    let metrics_tracker = WebDAVMetricsTracker::new(app_state.db.clone());
     
     println!("🚀 Starting complete WebDAV metrics workflow test");
     

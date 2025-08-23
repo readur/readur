@@ -141,7 +141,7 @@ impl SourceSyncService {
                     // Use smart sync service for intelligent discovery
                     let smart_sync_service = crate::services::webdav::SmartSyncService::new(state_clone);
                     
-                    match smart_sync_service.evaluate_and_sync(user_id, &service, &folder_path, Some(&progress)).await {
+                    match smart_sync_service.evaluate_and_sync(user_id, Some(source.id), &service, &folder_path, Some(&progress)).await {
                         Ok(Some(sync_result)) => {
                             info!("✅ Smart sync completed for {}: {} files found using {:?}", 
                                   folder_path, sync_result.files.len(), sync_result.strategy_used);

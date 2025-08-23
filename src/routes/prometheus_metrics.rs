@@ -39,14 +39,15 @@ pub async fn get_prometheus_metrics(
     tracing::debug!("Prometheus: Starting to collect all metrics");
     
     // Collect all metrics
-    let (document_metrics, ocr_metrics, user_metrics, database_metrics, system_metrics, storage_metrics, security_metrics) = tokio::try_join!(
+    let (document_metrics, ocr_metrics, user_metrics, database_metrics, system_metrics, storage_metrics, security_metrics, webdav_metrics) = tokio::try_join!(
         collect_document_metrics(&state),
         collect_ocr_metrics(&state),
         collect_user_metrics(&state),
         collect_database_metrics(&state),
         collect_system_metrics(&state),
         collect_storage_metrics(&state),
-        collect_security_metrics(&state)
+        collect_security_metrics(&state),
+        collect_webdav_metrics(&state)
     ).map_err(|e| {
         tracing::error!("Prometheus: Failed to collect metrics: {:?}", e);
         e
@@ -193,6 +194,59 @@ pub async fn get_prometheus_metrics(
     writeln!(&mut output, "# TYPE readur_document_access_today counter").unwrap();
     writeln!(&mut output, "readur_document_access_today {} {}", security_metrics.document_access_today, timestamp).unwrap();
     
+    // WebDAV metrics
+    writeln!(&mut output, "# HELP readur_webdav_sessions_total Total number of WebDAV sync sessions").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_sessions_total counter").unwrap();
+    writeln!(&mut output, "readur_webdav_sessions_total {} {}", webdav_metrics.total_sessions, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_sessions_successful Successful WebDAV sync sessions").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_sessions_successful counter").unwrap();
+    writeln!(&mut output, "readur_webdav_sessions_successful {} {}", webdav_metrics.successful_sessions, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_sessions_failed Failed WebDAV sync sessions").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_sessions_failed counter").unwrap();
+    writeln!(&mut output, "readur_webdav_sessions_failed {} {}", webdav_metrics.failed_sessions, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_success_rate WebDAV sync success rate (percentage)").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_success_rate gauge").unwrap();
+    writeln!(&mut output, "readur_webdav_success_rate {} {}", webdav_metrics.success_rate, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_files_processed Total files processed by WebDAV syncs").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_files_processed counter").unwrap();
+    writeln!(&mut output, "readur_webdav_files_processed {} {}", webdav_metrics.total_files_processed, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_bytes_processed Total bytes processed by WebDAV syncs").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_bytes_processed counter").unwrap();
+    writeln!(&mut output, "readur_webdav_bytes_processed {} {}", webdav_metrics.total_bytes_processed, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_avg_session_duration_seconds Average WebDAV session duration in seconds").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_avg_session_duration_seconds gauge").unwrap();
+    writeln!(&mut output, "readur_webdav_avg_session_duration_seconds {} {}", webdav_metrics.avg_session_duration_sec, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_avg_processing_rate Average WebDAV processing rate (files per second)").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_avg_processing_rate gauge").unwrap();
+    writeln!(&mut output, "readur_webdav_avg_processing_rate {} {}", webdav_metrics.avg_processing_rate, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_http_requests_total Total HTTP requests made by WebDAV syncs").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_http_requests_total counter").unwrap();
+    writeln!(&mut output, "readur_webdav_http_requests_total {} {}", webdav_metrics.total_http_requests, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_request_success_rate WebDAV HTTP request success rate (percentage)").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_request_success_rate gauge").unwrap();
+    writeln!(&mut output, "readur_webdav_request_success_rate {} {}", webdav_metrics.request_success_rate, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_avg_request_duration_ms Average WebDAV request duration in milliseconds").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_avg_request_duration_ms gauge").unwrap();
+    writeln!(&mut output, "readur_webdav_avg_request_duration_ms {} {}", webdav_metrics.avg_request_duration_ms, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_sessions_active_last_hour WebDAV sessions active in the last hour").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_sessions_active_last_hour gauge").unwrap();
+    writeln!(&mut output, "readur_webdav_sessions_active_last_hour {} {}", webdav_metrics.sessions_last_hour, timestamp).unwrap();
+    
+    writeln!(&mut output, "# HELP readur_webdav_error_rate_last_hour WebDAV error rate in the last hour (percentage)").unwrap();
+    writeln!(&mut output, "# TYPE readur_webdav_error_rate_last_hour gauge").unwrap();
+    writeln!(&mut output, "readur_webdav_error_rate_last_hour {} {}", webdav_metrics.error_rate_last_hour, timestamp).unwrap();
+    
     // Return the metrics with the correct content type
     Ok((
         [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
@@ -250,6 +304,22 @@ struct StorageMetrics {
 struct SecurityMetrics {
     failed_logins_today: i64,
     document_access_today: i64,
+}
+
+struct WebDAVMetrics {
+    total_sessions: i64,
+    successful_sessions: i64,
+    failed_sessions: i64,
+    success_rate: f64,
+    total_files_processed: i64,
+    total_bytes_processed: i64,
+    avg_session_duration_sec: f64,
+    avg_processing_rate: f64,
+    total_http_requests: i64,
+    request_success_rate: f64,
+    avg_request_duration_ms: f64,
+    sessions_last_hour: i64,
+    error_rate_last_hour: f64,
 }
 
 async fn collect_document_metrics(state: &Arc<AppState>) -> Result<DocumentMetrics, StatusCode> {
@@ -575,5 +645,124 @@ async fn collect_security_metrics(state: &Arc<AppState>) -> Result<SecurityMetri
     Ok(SecurityMetrics {
         failed_logins_today,
         document_access_today,
+    })
+}
+
+async fn collect_webdav_metrics(state: &Arc<AppState>) -> Result<WebDAVMetrics, StatusCode> {
+    // Get WebDAV session metrics for the last 24 hours
+    #[derive(sqlx::FromRow)]
+    struct WebDAVStats {
+        total_sessions: Option<i64>,
+        successful_sessions: Option<i64>, 
+        failed_sessions: Option<i64>,
+        total_files_processed: Option<i64>,
+        total_bytes_processed: Option<i64>,
+        avg_session_duration_sec: Option<f64>,
+        avg_processing_rate: Option<f64>,
+        total_http_requests: Option<i64>,
+        request_success_rate: Option<f64>,
+        avg_request_duration_ms: Option<f64>,
+    }
+    
+    let webdav_stats = sqlx::query_as::<_, WebDAVStats>(
+        r#"
+        SELECT 
+            COUNT(*) as total_sessions,
+            COUNT(*) FILTER (WHERE status = 'completed') as successful_sessions,
+            COUNT(*) FILTER (WHERE status = 'failed') as failed_sessions,
+            COALESCE(SUM(files_processed), 0) as total_files_processed,
+            COALESCE(SUM(total_bytes_processed), 0) as total_bytes_processed,
+            COALESCE(AVG(duration_ms / 1000.0), 0) as avg_session_duration_sec,
+            COALESCE(AVG(processing_rate_files_per_sec), 0) as avg_processing_rate,
+            COALESCE(SUM(total_http_requests), 0) as total_http_requests,
+            CASE 
+                WHEN SUM(total_http_requests) > 0 
+                THEN (SUM(successful_requests)::DECIMAL / SUM(total_http_requests) * 100)
+                ELSE 0 
+            END as request_success_rate,
+            COALESCE(
+                (SELECT AVG(duration_ms) FROM webdav_request_metrics 
+                 WHERE started_at > NOW() - INTERVAL '24 hours'),
+                0
+            ) as avg_request_duration_ms
+        FROM webdav_sync_sessions 
+        WHERE started_at > NOW() - INTERVAL '24 hours'
+        "#
+    )
+    .fetch_one(&state.db.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to get WebDAV session metrics: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    
+    // Get sessions active in last hour
+    let sessions_last_hour = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM webdav_sync_sessions WHERE started_at > NOW() - INTERVAL '1 hour'"
+    )
+    .fetch_one(&state.db.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to get recent WebDAV sessions: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    
+    // Calculate error rate for last hour
+    #[derive(sqlx::FromRow)]
+    struct ErrorRate {
+        total_requests: Option<i64>,
+        failed_requests: Option<i64>,
+    }
+    
+    let error_stats = sqlx::query_as::<_, ErrorRate>(
+        r#"
+        SELECT 
+            COUNT(*) as total_requests,
+            COUNT(*) FILTER (WHERE success = false) as failed_requests
+        FROM webdav_request_metrics 
+        WHERE started_at > NOW() - INTERVAL '1 hour'
+        "#
+    )
+    .fetch_one(&state.db.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to get WebDAV error rates: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    
+    let error_rate_last_hour = if let (Some(total), Some(failed)) = (error_stats.total_requests, error_stats.failed_requests) {
+        if total > 0 {
+            (failed as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    
+    let total_sessions = webdav_stats.total_sessions.unwrap_or(0);
+    let successful_sessions = webdav_stats.successful_sessions.unwrap_or(0);
+    let failed_sessions = webdav_stats.failed_sessions.unwrap_or(0);
+    
+    let success_rate = if total_sessions > 0 {
+        (successful_sessions as f64 / total_sessions as f64) * 100.0
+    } else {
+        0.0
+    };
+    
+    Ok(WebDAVMetrics {
+        total_sessions,
+        successful_sessions,
+        failed_sessions,
+        success_rate,
+        total_files_processed: webdav_stats.total_files_processed.unwrap_or(0),
+        total_bytes_processed: webdav_stats.total_bytes_processed.unwrap_or(0),
+        avg_session_duration_sec: webdav_stats.avg_session_duration_sec.unwrap_or(0.0),
+        avg_processing_rate: webdav_stats.avg_processing_rate.unwrap_or(0.0),
+        total_http_requests: webdav_stats.total_http_requests.unwrap_or(0),
+        request_success_rate: webdav_stats.request_success_rate.unwrap_or(0.0),
+        avg_request_duration_ms: webdav_stats.avg_request_duration_ms.unwrap_or(0.0),
+        sessions_last_hour,
+        error_rate_last_hour,
     })
 }

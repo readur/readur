@@ -68,10 +68,14 @@ impl WebDAVErrorClassifier {
             WebDAVScanFailureType::TooManyItems
         } else if error_str.contains("depth") || error_str.contains("nested") {
             WebDAVScanFailureType::DepthLimit
-        } else if error_str.contains("size") || error_str.contains("too large") {
+        } else if error_str.contains("size") || error_str.contains("too large") || error_str.contains("507") || error_str.contains("insufficient storage") || error_str.contains("quota exceeded") {
             WebDAVScanFailureType::SizeLimit
         } else if error_str.contains("404") || error_str.contains("not found") {
             WebDAVScanFailureType::ServerError // Will be further classified by HTTP status
+        } else if error_str.contains("405") || error_str.contains("method not allowed") || error_str.contains("propfind not allowed") {
+            WebDAVScanFailureType::ServerError // Method not allowed - likely PROPFIND disabled
+        } else if error_str.contains("423") || error_str.contains("locked") || error_str.contains("lock") {
+            WebDAVScanFailureType::ServerError // Resource locked
         } else {
             WebDAVScanFailureType::Unknown
         }
@@ -125,13 +129,17 @@ impl WebDAVErrorClassifier {
     fn extract_http_status(&self, error: &anyhow::Error) -> Option<i32> {
         let error_str = error.to_string();
         
-        // Look for common HTTP status code patterns
+        // Look for common HTTP status code patterns including WebDAV-specific codes
         if error_str.contains("404") {
             Some(404)
         } else if error_str.contains("401") {
             Some(401)
         } else if error_str.contains("403") {
             Some(403)
+        } else if error_str.contains("405") {
+            Some(405)  // Method Not Allowed (PROPFIND disabled)
+        } else if error_str.contains("423") {
+            Some(423)  // Locked
         } else if error_str.contains("500") {
             Some(500)
         } else if error_str.contains("502") {
@@ -140,8 +148,8 @@ impl WebDAVErrorClassifier {
             Some(503)
         } else if error_str.contains("504") {
             Some(504)
-        } else if error_str.contains("405") {
-            Some(405)
+        } else if error_str.contains("507") {
+            Some(507)  // Insufficient Storage
         } else {
             // Try to extract any 3-digit number that looks like an HTTP status
             let re = regex::Regex::new(r"\b([4-5]\d{2})\b").ok()?;
@@ -367,6 +375,24 @@ impl WebDAVErrorClassifier {
             WebDAVScanFailureType::ServerError if http_status == Some(404) => {
                 format!(
                     "WebDAV directory '{}' was not found on the server. It may have been deleted or moved.",
+                    directory_path
+                )
+            }
+            WebDAVScanFailureType::ServerError if http_status == Some(405) => {
+                format!(
+                    "WebDAV PROPFIND method is not allowed for '{}'. The server may not support WebDAV or it's disabled for this path.",
+                    directory_path
+                )
+            }
+            WebDAVScanFailureType::ServerError if http_status == Some(423) => {
+                format!(
+                    "WebDAV resource '{}' is locked. Another process may be using it.",
+                    directory_path
+                )
+            }
+            WebDAVScanFailureType::SizeLimit if http_status == Some(507) => {
+                format!(
+                    "Insufficient storage quota for WebDAV path '{}'. The server has run out of space.",
                     directory_path
                 )
             }

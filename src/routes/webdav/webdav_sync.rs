@@ -157,7 +157,7 @@ async fn perform_sync_internal(
         // Use smart sync service for intelligent scanning
         let smart_sync_service = SmartSyncService::new(state.clone());
         
-        match smart_sync_service.evaluate_and_sync(user_id, &webdav_service, folder_path, Some(&progress)).await {
+        match smart_sync_service.evaluate_and_sync(user_id, None, &webdav_service, folder_path, Some(&progress)).await {
             Ok(Some(sync_result)) => {
                 let folder_elapsed = folder_start.elapsed();
                 total_directories_scanned += sync_result.directories_scanned;

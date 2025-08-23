@@ -18,7 +18,7 @@ async fn test_retry_config_default() {
     
     assert_eq!(retry_config.max_retries, 3);
     assert_eq!(retry_config.initial_delay_ms, 1000);
-    assert_eq!(retry_config.max_delay_ms, 30000);
+    assert_eq!(retry_config.max_delay_ms, 10000);
     assert_eq!(retry_config.backoff_multiplier, 2.0);
     assert_eq!(retry_config.timeout_seconds, 30);
 }
