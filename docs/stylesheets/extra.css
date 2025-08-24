@@ -110,9 +110,11 @@
 
 /* Remove custom hover color - let Material theme handle it */
 
-/* Sidebar styling */
-.md-sidebar {
-  width: 15rem;
+/* Sidebar styling - only apply fixed width on desktop */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar {
+    width: 15rem;
+  }
 }
 
 .md-sidebar--primary .md-sidebar__scrollwrap {
