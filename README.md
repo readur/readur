@@ -2,6 +2,8 @@
 
 Readur is a powerful and modern document management system designed to help individuals and teams efficiently organize, process, and access their digital documents. It combines a high-performance backend with a sleek and intuitive web interface to deliver a smooth and reliable user experience.
 
+You can check our our docs at [docs.readur.app](https://docs.readur.app).
+
 ![](./docs/images/gallery/image_2.png)
 
 
