@@ -14,7 +14,7 @@ impl Database {
     pub async fn record_source_scan_failure(&self, failure: &CreateSourceScanFailure) -> Result<Uuid> {
         self.with_retry(|| async {
             let row = sqlx::query(
-                r#"SELECT record_source_scan_failure($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) as failure_id"#
+                r#"SELECT record_source_scan_failure($1, $2::source_error_source_type, $3, $4, $5::source_error_type, $6, $7, $8, $9, $10, $11, $12) as failure_id"#
             )
             .bind(failure.user_id)
             .bind(failure.source_type.to_string())
@@ -60,7 +60,7 @@ impl Database {
             let mut conditions = Vec::new();
 
             if let Some(source_type) = &query.source_type {
-                conditions.push(format!("source_type = ${}", bind_index));
+                conditions.push(format!("source_type = ${}::source_error_source_type", bind_index));
                 bind_index += 1;
             }
 
@@ -70,12 +70,12 @@ impl Database {
             }
 
             if let Some(error_type) = &query.error_type {
-                conditions.push(format!("error_type = ${}", bind_index));
+                conditions.push(format!("error_type = ${}::source_error_type", bind_index));
                 bind_index += 1;
             }
 
             if let Some(severity) = &query.severity {
-                conditions.push(format!("error_severity = ${}", bind_index));
+                conditions.push(format!("error_severity = ${}::source_error_severity", bind_index));
                 bind_index += 1;
             }
 
@@ -186,7 +186,7 @@ impl Database {
         self.with_retry(|| async {
             let row = sqlx::query(
                 r#"SELECT 1 FROM source_scan_failures 
-                   WHERE user_id = $1 AND source_type = $2 
+                   WHERE user_id = $1 AND source_type = $2::source_error_source_type 
                    AND (source_id = $3 OR (source_id IS NULL AND $3 IS NULL))
                    AND resource_path = $4
                    AND NOT resolved 
@@ -234,7 +234,7 @@ impl Database {
 
             let mut bind_index = 2;
             if let Some(_) = source_type {
-                sql.push_str(&format!(" AND source_type = ${}", bind_index));
+                sql.push_str(&format!(" AND source_type = ${}::source_error_source_type", bind_index));
                 bind_index += 1;
             }
 
@@ -268,7 +268,7 @@ impl Database {
     ) -> Result<bool> {
         self.with_retry(|| async {
             let row = sqlx::query(
-                r#"SELECT reset_source_scan_failure($1, $2, $3, $4) as success"#
+                r#"SELECT reset_source_scan_failure($1, $2::source_error_source_type, $3, $4) as success"#
             )
             .bind(user_id)
             .bind(source_type.to_string())
@@ -293,7 +293,7 @@ impl Database {
     ) -> Result<bool> {
         self.with_retry(|| async {
             let row = sqlx::query(
-                r#"SELECT resolve_source_scan_failure($1, $2, $3, $4, $5) as success"#
+                r#"SELECT resolve_source_scan_failure($1, $2::source_error_source_type, $3, $4, $5) as success"#
             )
             .bind(user_id)
             .bind(source_type.to_string())
@@ -323,7 +323,7 @@ impl Database {
                    SET user_excluded = TRUE,
                        user_notes = COALESCE($5, user_notes),
                        updated_at = NOW()
-                   WHERE user_id = $1 AND source_type = $2 
+                   WHERE user_id = $1 AND source_type = $2::source_error_source_type 
                    AND (source_id = $3 OR (source_id IS NULL AND $3 IS NULL))
                    AND resource_path = $4"#
             )
@@ -363,7 +363,7 @@ impl Database {
 
             let mut bind_index = 2;
             if let Some(_) = source_type {
-                sql.push_str(&format!(" AND source_type = ${}", bind_index));
+                sql.push_str(&format!(" AND source_type = ${}::source_error_source_type", bind_index));
             }
 
             let mut query_builder = sqlx::query(&sql);
