@@ -16,6 +16,7 @@ use tesseract::{Tesseract, PageSegMode, OcrEngineMode};
 
 use crate::models::Settings;
 use crate::services::file_service::FileService;
+use super::xml_extractor::XmlOfficeExtractor;
 // Removed text_sanitization import - now using minimal inline sanitization
 
 #[derive(Debug, Clone)]
@@ -1470,7 +1471,7 @@ impl EnhancedOcrService {
         self.extract_text(file_path, mime_type, settings).await
     }
 
-    /// Extract text from Office documents (DOCX, DOC, Excel)
+    /// Extract text from Office documents (DOCX, DOC, Excel) with library and XML fallback
     pub async fn extract_text_from_office(&self, file_path: &str, mime_type: &str, _settings: &Settings) -> Result<OcrResult> {
         let start_time = std::time::Instant::now();
         info!("Extracting text from Office document: {} (type: {})", file_path, mime_type);
@@ -1488,7 +1489,8 @@ impl EnhancedOcrService {
             ));
         }
         
-        match mime_type {
+        // Try library-based extraction first, fall back to XML extraction if it fails
+        let library_result = match mime_type {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
                 self.extract_text_from_docx(file_path, start_time).await
             }
@@ -1517,6 +1519,41 @@ impl EnhancedOcrService {
                     Please convert the document to PDF format or plain text for processing.",
                     mime_type, file_path
                 ))
+            }
+        };
+        
+        // If library-based extraction succeeds, return the result
+        match library_result {
+            Ok(result) => {
+                info!("Library-based Office extraction succeeded for '{}' (method: {})", file_path, result.preprocessing_applied.join(", "));
+                return Ok(result);
+            }
+            Err(library_error) => {
+                // Log the library extraction error and try XML fallback
+                warn!("Library-based Office extraction failed for '{}': {}. Attempting XML fallback.", file_path, library_error);
+                
+                // Try XML-based extraction as fallback
+                let xml_extractor = XmlOfficeExtractor::new(self.temp_dir.clone());
+                match xml_extractor.extract_text_from_office(file_path, mime_type).await {
+                    Ok(xml_result) => {
+                        info!("XML-based Office extraction succeeded as fallback for '{}' (method: {})", file_path, xml_result.extraction_method);
+                        // Convert OfficeExtractionResult to OcrResult using the From trait
+                        Ok(xml_result.into())
+                    }
+                    Err(xml_error) => {
+                        // Both methods failed, return a combined error message
+                        Err(anyhow!(
+                            "Both library and XML-based Office extraction failed for '{}' (type: {}):\n\
+                            Library error: {}\n\
+                            XML error: {}\n\
+                            \nConsider:\n\
+                            1. Converting the document to PDF format\n\
+                            2. Checking if the file is corrupted\n\
+                            3. Ensuring the file is a valid Office document",
+                            file_path, mime_type, library_error, xml_error
+                        ))
+                    }
+                }
             }
         }
     }

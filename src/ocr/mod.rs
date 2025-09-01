@@ -5,6 +5,7 @@ pub mod error;
 pub mod health;
 pub mod queue;
 pub mod tests;
+pub mod xml_extractor;
 
 use anyhow::{anyhow, Result};
 use std::path::Path;
