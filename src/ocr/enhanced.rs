@@ -1808,11 +1808,11 @@ impl EnhancedOcrService {
     }
     
     
-    /// Extract text from legacy DOC files using external tools
-    async fn extract_text_from_legacy_doc(&self, file_path: &str, start_time: std::time::Instant) -> Result<OcrResult> {
+    /// Extract text from legacy DOC files using lightweight external tools  
+    pub async fn extract_text_from_legacy_doc(&self, file_path: &str, start_time: std::time::Instant) -> Result<OcrResult> {
         info!("Processing legacy DOC file: {}", file_path);
         
-        // Try multiple external tools in order of preference
+        // Use lightweight DOC extraction tools in order of preference
         let tools = ["antiword", "catdoc", "wvText"];
         let mut last_error = None;
         
@@ -1832,7 +1832,7 @@ impl EnhancedOcrService {
                     
                     return Ok(OcrResult {
                         text: cleaned_text,
-                        confidence: 90.0, // Slightly lower confidence for external tool extraction
+                        confidence: 90.0, // High confidence for proven extraction tools
                         processing_time_ms: processing_time,
                         word_count,
                         preprocessing_applied: vec![format!("Legacy DOC extraction ({})", tool)],
@@ -1850,26 +1850,34 @@ impl EnhancedOcrService {
             }
         }
         
-        // If all tools failed, provide helpful error message
+        // If all tools failed, provide helpful installation guidance
         let processing_time = start_time.elapsed().as_millis() as u64;
         
         Err(anyhow!(
-            "Legacy DOC file extraction failed for '{}'. None of the external tools ({}) are available or could process the file.\n\
-            \nTo process this content, please:\n\
-            1. Install a DOC extraction tool:\n\
-               - antiword: 'sudo apt-get install antiword' (Ubuntu/Debian) or 'brew install antiword' (macOS)\n\
-               - catdoc: 'sudo apt-get install catdoc' (Ubuntu/Debian) or 'brew install catdoc' (macOS)\n\
-            2. OR convert the file manually:\n\
-               - Open the file in Microsoft Word, LibreOffice Writer, or Google Docs\n\
-               - Save/Export as DOCX format (recommended) or PDF\n\
-               - Upload the converted file\n\
-            \nDOCX format provides better compatibility and more reliable text extraction.\n\
+            "Legacy DOC file extraction failed for '{}'. None of the DOC extraction tools ({}) are available or working.\n\
+            \nTo process DOC files, please install one of these lightweight tools:\n\
+            \n• antiword (recommended for most DOC files):\n\
+               - Ubuntu/Debian: 'sudo apt-get install antiword'\n\
+               - macOS: 'brew install antiword'\n\
+               - Alpine: 'apk add antiword'\n\
+            \n• catdoc (good fallback option):\n\
+               - Ubuntu/Debian: 'sudo apt-get install catdoc'\n\
+               - macOS: 'brew install catdoc'\n\
+               - Alpine: 'apk add catdoc'\n\
+            \n• wv (includes wvText tool):\n\
+               - Ubuntu/Debian: 'sudo apt-get install wv'\n\
+               - macOS: 'brew install wv'\n\
+            \nAlternatively, convert the DOC file to DOCX or PDF format for better compatibility.\n\
+            These tools are much lighter than LibreOffice (~1-2MB vs 400-500MB) and work reliably for most DOC files.\n\
+            Processing time: {}ms\n\
             Last error: {}",
             file_path,
             tools.join(", "),
+            processing_time,
             last_error.map(|e| e.to_string()).unwrap_or_else(|| "Unknown error".to_string())
         ))
     }
+    
     
     /// Try to extract text from DOC file using a specific external tool
     async fn try_doc_extraction_tool(&self, file_path: &str, tool: &str) -> Result<String> {

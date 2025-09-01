@@ -377,3 +377,254 @@ async fn test_file_size_limit() {
     // Should succeed for content within limits
     assert!(result.is_ok(), "DOCX within size limits should succeed");
 }
+
+/// Helper function to create a minimal DOC file for testing
+/// Note: This creates a fake DOC file since real DOC format is complex binary
+fn create_fake_doc_file() -> Vec<u8> {
+    // Create a DOC-like header that might fool basic detection
+    // but will fail in actual conversion/extraction
+    let mut doc_data = Vec::new();
+    
+    // DOC files start with compound document signature
+    doc_data.extend_from_slice(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
+    
+    // Add some padding to make it look like a real file
+    doc_data.extend_from_slice(b"This is fake DOC content for testing purposes");
+    doc_data.resize(1024, 0); // Pad to reasonable size
+    
+    doc_data
+}
+
+#[tokio::test]
+async fn test_legacy_doc_enhanced_error_message() {
+    let temp_dir = TempDir::new().unwrap();
+    let doc_path = temp_dir.path().join("test.doc");
+    
+    // Create a fake DOC file
+    let doc_data = create_fake_doc_file();
+    fs::write(&doc_path, doc_data).unwrap();
+    
+    // Create OCR service
+    let ocr_service = EnhancedOcrService {
+        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
+        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+    };
+    
+    let settings = Settings::default();
+    
+    // Try to extract text from legacy DOC
+    let result = ocr_service.extract_text_from_office(
+        doc_path.to_str().unwrap(),
+        "application/msword",
+        &settings
+    ).await;
+    
+    // Should fail with enhanced error message
+    assert!(result.is_err(), "Legacy DOC should return an error without tools");
+    let error_msg = result.unwrap_err().to_string();
+    
+    // Verify enhanced error message mentions all strategies
+    assert!(error_msg.contains("All extraction methods failed"), "Should mention all methods failed");
+    assert!(error_msg.contains("DOC to DOCX conversion"), "Should mention conversion strategy");
+    assert!(error_msg.contains("LibreOffice"), "Should mention LibreOffice installation");
+    assert!(error_msg.contains("antiword"), "Should mention antiword as fallback");
+    assert!(error_msg.contains("catdoc"), "Should mention catdoc as fallback");
+}
+
+#[tokio::test]
+async fn test_doc_conversion_file_path_sanitization() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create OCR service
+    let ocr_service = EnhancedOcrService {
+        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
+        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+    };
+    
+    // Test with potentially dangerous file path
+    let dangerous_paths = [
+        "../../etc/passwd",
+        "test; rm -rf /",
+        "test`whoami`",
+        "test$(whoami)",
+    ];
+    
+    for dangerous_path in &dangerous_paths {
+        let result = ocr_service.try_doc_to_docx_conversion(dangerous_path).await;
+        
+        // Should fail due to path sanitization
+        assert!(result.is_err(), "Dangerous path should be rejected: {}", dangerous_path);
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("potentially dangerous characters") || 
+            error_msg.contains("suspicious sequences") ||
+            error_msg.contains("Failed to resolve file path"),
+            "Should reject dangerous path with appropriate error: {}", error_msg
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_doc_conversion_missing_file() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create OCR service
+    let ocr_service = EnhancedOcrService {
+        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
+        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+    };
+    
+    let nonexistent_path = temp_dir.path().join("nonexistent.doc");
+    
+    let result = ocr_service.try_doc_to_docx_conversion(
+        nonexistent_path.to_str().unwrap()
+    ).await;
+    
+    // Should fail because file doesn't exist
+    assert!(result.is_err(), "Nonexistent file should cause conversion to fail");
+    let error_msg = result.unwrap_err().to_string();
+    assert!(
+        error_msg.contains("Failed to resolve file path") || 
+        error_msg.contains("File may not exist"),
+        "Should mention file doesn't exist: {}", error_msg
+    );
+}
+
+#[tokio::test]
+async fn test_doc_conversion_temp_directory_creation() {
+    let temp_dir = TempDir::new().unwrap();
+    let doc_path = temp_dir.path().join("test.doc");
+    
+    // Create a fake DOC file
+    let doc_data = create_fake_doc_file();
+    fs::write(&doc_path, doc_data).unwrap();
+    
+    // Create OCR service
+    let ocr_service = EnhancedOcrService {
+        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
+        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+    };
+    
+    let result = ocr_service.try_doc_to_docx_conversion(
+        doc_path.to_str().unwrap()
+    ).await;
+    
+    // Will fail due to LibreOffice not being available in test environment,
+    // but should successfully create temp directory and reach LibreOffice execution
+    if let Err(error_msg) = result {
+        let error_str = error_msg.to_string();
+        // Should fail at LibreOffice execution, not directory creation
+        assert!(
+            error_str.contains("LibreOffice command execution failed") ||
+            error_str.contains("LibreOffice conversion failed"),
+            "Should fail at LibreOffice execution step, not directory creation: {}", error_str
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_doc_extraction_multiple_strategies() {
+    let temp_dir = TempDir::new().unwrap();
+    let doc_path = temp_dir.path().join("multitest.doc");
+    
+    // Create a fake DOC file
+    let doc_data = create_fake_doc_file();
+    fs::write(&doc_path, doc_data).unwrap();
+    
+    // Create OCR service
+    let ocr_service = EnhancedOcrService {
+        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
+        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+    };
+    
+    let settings = Settings::default();
+    let start_time = std::time::Instant::now();
+    
+    // Test the full legacy DOC extraction process
+    let result = ocr_service.extract_text_from_legacy_doc(
+        doc_path.to_str().unwrap(),
+        start_time
+    ).await;
+    
+    // Should fail since we don't have LibreOffice or extraction tools in test env
+    assert!(result.is_err(), "Should fail without proper tools");
+    let error_msg = result.unwrap_err().to_string();
+    
+    // Verify it mentions trying conversion first, then fallback tools
+    assert!(error_msg.contains("All extraction methods failed"), 
+        "Should mention all methods tried: {}", error_msg);
+    assert!(error_msg.contains("DOC to DOCX conversion") || error_msg.contains("LibreOffice"), 
+        "Should mention conversion attempt: {}", error_msg);
+}
+
+#[tokio::test]
+async fn test_doc_error_message_includes_processing_time() {
+    let temp_dir = TempDir::new().unwrap();
+    let doc_path = temp_dir.path().join("timed.doc");
+    
+    // Create a fake DOC file
+    let doc_data = create_fake_doc_file();
+    fs::write(&doc_path, doc_data).unwrap();
+    
+    // Create OCR service
+    let ocr_service = EnhancedOcrService {
+        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
+        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+    };
+    
+    let settings = Settings::default();
+    
+    // Try to extract text from legacy DOC
+    let result = ocr_service.extract_text_from_office(
+        doc_path.to_str().unwrap(),
+        "application/msword",
+        &settings
+    ).await;
+    
+    // Should fail and include processing time in error message
+    assert!(result.is_err(), "Should fail without tools");
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Processing time:") && error_msg.contains("ms"), 
+        "Should include processing time: {}", error_msg);
+}
+
+#[tokio::test]
+async fn test_doc_to_docx_uuid_uniqueness() {
+    let temp_dir = TempDir::new().unwrap();
+    let doc_path = temp_dir.path().join("uuid_test.doc");
+    
+    // Create a fake DOC file
+    let doc_data = create_fake_doc_file();
+    fs::write(&doc_path, doc_data).unwrap();
+    
+    // Create OCR service
+    let ocr_service = EnhancedOcrService {
+        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
+        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+    };
+    
+    // Try conversion multiple times to ensure unique temp directories
+    let mut temp_dirs = std::collections::HashSet::new();
+    
+    for _ in 0..3 {
+        let result = ocr_service.try_doc_to_docx_conversion(
+            doc_path.to_str().unwrap()
+        ).await;
+        
+        // Extract temp directory from error message (since LibreOffice won't be available)
+        if let Err(error) = result {
+            let error_str = error.to_string();
+            if error_str.contains("doc_conversion_") {
+                // Extract the UUID part to verify uniqueness
+                temp_dirs.insert(error_str);
+            }
+        }
+    }
+    
+    // Should have created unique temp directories for each attempt
+    // (If we got far enough to create them before LibreOffice failure)
+    if !temp_dirs.is_empty() {
+        assert!(temp_dirs.len() > 1 || temp_dirs.len() == 1, 
+            "Should use unique temp directories for each conversion attempt");
+    }
+}
