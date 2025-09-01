@@ -380,7 +380,7 @@ impl Database {
 
             // Get breakdown by source type
             let by_source_type_rows = sqlx::query(
-                r#"SELECT source_type, COUNT(*) as count
+                r#"SELECT source_type::TEXT as source_type, COUNT(*) as count
                    FROM source_scan_failures
                    WHERE user_id = $1 AND NOT resolved
                    GROUP BY source_type"#
@@ -399,7 +399,7 @@ impl Database {
 
             // Get breakdown by error type
             let by_error_type_rows = sqlx::query(
-                r#"SELECT error_type, COUNT(*) as count
+                r#"SELECT error_type::TEXT as error_type, COUNT(*) as count
                    FROM source_scan_failures
                    WHERE user_id = $1 AND NOT resolved
                    GROUP BY error_type"#

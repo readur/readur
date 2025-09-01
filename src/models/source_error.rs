@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 
 /// Generic source types that can be monitored for errors
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, ToSchema)]
-#[sqlx(type_name = "source_type", rename_all = "lowercase")]
+#[sqlx(type_name = "source_error_source_type", rename_all = "lowercase")]
 pub enum ErrorSourceType {
     #[sqlx(rename = "webdav")]
     WebDAV,
