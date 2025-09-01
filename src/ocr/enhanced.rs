@@ -42,10 +42,8 @@ pub struct EnhancedOcrService {
 }
 
 impl EnhancedOcrService {
-    // Security limits to prevent ZIP bombs and memory exhaustion attacks
-    const MAX_DECOMPRESSED_SIZE: u64 = 100 * 1024 * 1024; // 100MB total decompressed size
-    const MAX_XML_SIZE: u64 = 10 * 1024 * 1024; // 10MB per XML file
-    const MAX_ZIP_ENTRIES: usize = 1000; // Maximum number of entries to process
+    // Security limits for Office document processing
+    const MAX_OFFICE_DOCUMENT_SIZE: u64 = 100 * 1024 * 1024; // 100MB for all Office documents
     const MAX_ENTRY_NAME_LENGTH: usize = 255; // Maximum length of entry names
 
     /// Remove null bytes from text to prevent PostgreSQL errors
@@ -66,91 +64,6 @@ impl EnhancedOcrService {
         }
         
         cleaned
-    }
-
-    /// Validates ZIP entry names to prevent directory traversal attacks
-    fn validate_zip_entry_name(entry_name: &str) -> Result<()> {
-        // Check entry name length
-        if entry_name.len() > Self::MAX_ENTRY_NAME_LENGTH {
-            return Err(anyhow!(
-                "ZIP entry name too long ({}). Maximum allowed length is {} characters for security reasons.",
-                entry_name.len(),
-                Self::MAX_ENTRY_NAME_LENGTH
-            ));
-        }
-
-        // Check for directory traversal attempts
-        if entry_name.contains("..") {
-            return Err(anyhow!(
-                "ZIP entry contains directory traversal sequence '..': '{}'. This is blocked for security reasons.",
-                entry_name
-            ));
-        }
-
-        // Check for absolute paths
-        if entry_name.starts_with('/') || entry_name.starts_with('\\') {
-            return Err(anyhow!(
-                "ZIP entry contains absolute path: '{}'. This is blocked for security reasons.",
-                entry_name
-            ));
-        }
-
-        // Check for Windows drive letters
-        if entry_name.len() >= 2 && entry_name.chars().nth(1) == Some(':') {
-            return Err(anyhow!(
-                "ZIP entry contains Windows drive letter: '{}'. This is blocked for security reasons.",
-                entry_name
-            ));
-        }
-
-        // Check for suspicious characters
-        let suspicious_chars = ['<', '>', '|', '*', '?'];
-        if entry_name.chars().any(|c| suspicious_chars.contains(&c)) {
-            return Err(anyhow!(
-                "ZIP entry contains suspicious characters: '{}'. This is blocked for security reasons.",
-                entry_name
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Safely reads content from a ZIP entry with size limits to prevent memory exhaustion
-    fn read_zip_entry_safely<R: std::io::Read>(reader: &mut R, max_size: u64) -> Result<String> {
-        use std::io::Read;
-        
-        let mut buffer = Vec::new();
-        let mut total_read = 0u64;
-        let mut temp_buf = [0u8; 8192]; // 8KB chunks
-        
-        loop {
-            match reader.read(&mut temp_buf)? {
-                0 => break, // EOF
-                bytes_read => {
-                    total_read += bytes_read as u64;
-                    
-                    // Check if we've exceeded the size limit
-                    if total_read > max_size {
-                        return Err(anyhow!(
-                            "ZIP entry content exceeds maximum allowed size of {} bytes. \
-                            This may be a ZIP bomb attack. Current size: {} bytes.",
-                            max_size,
-                            total_read
-                        ));
-                    }
-                    
-                    buffer.extend_from_slice(&temp_buf[..bytes_read]);
-                }
-            }
-        }
-        
-        // Convert to string, handling encoding issues gracefully
-        String::from_utf8(buffer).or_else(|e| {
-            // Try to recover as much valid UTF-8 as possible
-            let bytes = e.into_bytes();
-            let lossy = String::from_utf8_lossy(&bytes);
-            Ok(lossy.into_owned())
-        })
     }
 
     /// Sanitizes file paths before passing to external tools to prevent command injection
@@ -1566,13 +1479,12 @@ impl EnhancedOcrService {
         let metadata = tokio::fs::metadata(file_path).await?;
         let file_size = metadata.len();
         
-        // Limit Office document size to 50MB to prevent memory exhaustion
-        const MAX_OFFICE_SIZE: u64 = 50 * 1024 * 1024; // 50MB
-        if file_size > MAX_OFFICE_SIZE {
+        // Limit Office document size to prevent memory exhaustion
+        if file_size > Self::MAX_OFFICE_DOCUMENT_SIZE {
             return Err(anyhow!(
                 "Office document too large: {:.1} MB (max: {:.1} MB). Consider converting to PDF or splitting the document.",
                 file_size as f64 / (1024.0 * 1024.0),
-                MAX_OFFICE_SIZE as f64 / (1024.0 * 1024.0)
+                Self::MAX_OFFICE_DOCUMENT_SIZE as f64 / (1024.0 * 1024.0)
             ));
         }
         
@@ -1609,100 +1521,37 @@ impl EnhancedOcrService {
         }
     }
     
-    /// Extract text from DOCX files using zip crate and quick-xml
+    /// Extract text from DOCX files using docx-rs library
     async fn extract_text_from_docx(&self, file_path: &str, start_time: std::time::Instant) -> Result<OcrResult> {
         info!("Starting DOCX text extraction: {}", file_path);
         
         // Move CPU-intensive operations to blocking thread pool
         let file_path_clone = file_path.to_string();
         let extraction_result = tokio::task::spawn_blocking(move || -> Result<String> {
-            use zip::ZipArchive;
-            use quick_xml::events::Event;
-            use quick_xml::Reader;
+            use docx_rs::*;
             
-            // Open the DOCX file as a ZIP archive
-            let file = std::fs::File::open(&file_path_clone)?;
-            let mut archive = ZipArchive::new(file)?;
             
-            // Security check: Validate ZIP archive structure
-            let entry_count = archive.len();
-            if entry_count > Self::MAX_ZIP_ENTRIES {
-                return Err(anyhow!(
-                    "ZIP archive contains too many entries ({}). Maximum allowed is {} for security reasons. \
-                    This may be a ZIP bomb attack.",
-                    entry_count,
-                    Self::MAX_ZIP_ENTRIES
-                ));
-            }
-
-            // Validate all entry names before processing to prevent directory traversal
-            for i in 0..entry_count {
-                let entry = archive.by_index(i)?;
-                let entry_name = entry.name();
-                Self::validate_zip_entry_name(entry_name)?;
-            }
+            // Read the DOCX file
+            let file_data = std::fs::read(&file_path_clone)?;
             
-            // Try to extract the main document content from word/document.xml
-            let mut document_xml = match archive.by_name("word/document.xml") {
-                Ok(file) => file,
-                Err(_) => {
-                    return Err(anyhow!(
-                        "Invalid DOCX file: missing word/document.xml. The file '{}' may be corrupted or not a valid DOCX document.",
-                        file_path_clone
-                    ));
-                }
-            };
+            // Parse the DOCX document using docx-rs
+            let docx = read_docx(&file_data)
+                .map_err(|e| anyhow!(
+                    "Failed to parse DOCX file '{}': {}. The file may be corrupted or not a valid DOCX document.",
+                    file_path_clone, e
+                ))?;
             
-            // Security: Use size-limited reading to prevent ZIP bomb attacks
-            let xml_content = Self::read_zip_entry_safely(&mut document_xml, Self::MAX_XML_SIZE)?;
-            drop(document_xml); // Close the archive entry
-            
-            // Parse the XML and extract text content
-            let mut reader = Reader::from_str(&xml_content);
-            reader.config_mut().trim_text(true);
-            
+            // Extract all text content from the document
             let mut text_content = Vec::new();
-            let mut in_text_element = false;
-            let mut buf = Vec::new();
             
-            loop {
-                match reader.read_event_into(&mut buf) {
-                    Ok(Event::Start(ref e)) => {
-                        // Look for text elements (w:t tags contain the actual text)
-                        if e.name().as_ref() == b"w:t" {
-                            in_text_element = true;
-                        }
-                    }
-                    Ok(Event::Text(e)) => {
-                        if in_text_element {
-                            // Extract and decode the text content
-                            let text = e.unescape().map_err(|e| anyhow!("Text unescape error: {}", e))?;
-                            text_content.push(text.into_owned());
-                        }
-                    }
-                    Ok(Event::End(ref e)) => {
-                        if e.name().as_ref() == b"w:t" {
-                            in_text_element = false;
-                        }
-                        // Add space after paragraph breaks
-                        if e.name().as_ref() == b"w:p" {
-                            text_content.push(" ".to_string());
-                        }
-                    }
-                    Ok(Event::Eof) => break,
-                    Err(e) => {
-                        return Err(anyhow!(
-                            "XML parsing error in DOCX file '{}': {}. The file may be corrupted.",
-                            file_path_clone, e
-                        ));
-                    }
-                    _ => {}
-                }
-                buf.clear();
+            // Extract text from document body
+            let document = docx.document;
+            for child in document.children {
+                Self::extract_text_from_document_child(&child, &mut text_content);
             }
             
-            // Join all text content
-            let raw_text = text_content.join("");
+            // Join all text content with appropriate spacing
+            let raw_text = text_content.join(" ");
             
             if raw_text.trim().is_empty() {
                 return Err(anyhow!(
@@ -1736,186 +1585,200 @@ impl EnhancedOcrService {
         })
     }
     
-    /// Extract text from Excel files (XLS/XLSX) using zip crate and quick-xml
-    async fn extract_text_from_excel(&self, file_path: &str, mime_type: &str, start_time: std::time::Instant) -> Result<OcrResult> {
-        info!("Starting Excel text extraction: {} (type: {})", file_path, mime_type);
-        
-        // Handle legacy XLS files separately
-        if mime_type == "application/vnd.ms-excel" {
-            return self.extract_text_from_legacy_excel(file_path, start_time).await;
+    /// Recursively extract text from document children (paragraphs, tables, etc.)
+    fn extract_text_from_document_child(child: &docx_rs::DocumentChild, text_content: &mut Vec<String>) {
+        match child {
+            docx_rs::DocumentChild::Paragraph(paragraph) => {
+                let mut paragraph_text = Vec::new();
+                for child in &paragraph.children {
+                    Self::extract_text_from_paragraph_child(child, &mut paragraph_text);
+                }
+                if !paragraph_text.is_empty() {
+                    text_content.push(paragraph_text.join(""));
+                }
+            }
+            docx_rs::DocumentChild::Table(table) => {
+                for row in &table.rows {
+                    let docx_rs::TableChild::TableRow(table_row) = row;
+                    for cell in &table_row.cells {
+                        let docx_rs::TableRowChild::TableCell(table_cell) = cell;
+                        for child in &table_cell.children {
+                            match child {
+                                docx_rs::TableCellContent::Paragraph(paragraph) => {
+                                    let mut paragraph_text = Vec::new();
+                                    for para_child in &paragraph.children {
+                                        Self::extract_text_from_paragraph_child(para_child, &mut paragraph_text);
+                                    }
+                                    if !paragraph_text.is_empty() {
+                                        text_content.push(paragraph_text.join(""));
+                                    }
+                                }
+                                docx_rs::TableCellContent::Table(nested_table) => {
+                                    // Handle nested tables using helper function
+                                    Self::extract_text_from_nested_table(nested_table, text_content);
+                                }
+                                _ => {} // Skip other table cell content types
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                // Skip other elements like bookmarks that don't contain text content
+            }
         }
-        
-        // Move CPU-intensive operations to blocking thread pool for XLSX
-        let file_path_clone = file_path.to_string();
-        let extraction_result = tokio::task::spawn_blocking(move || -> Result<String> {
-            use zip::ZipArchive;
-            use quick_xml::events::Event;
-            use quick_xml::Reader;
-            
-            // Open the XLSX file as a ZIP archive
-            let file = std::fs::File::open(&file_path_clone)?;
-            let mut archive = ZipArchive::new(file)?;
-            
-            // Security check: Validate ZIP archive structure
-            let entry_count = archive.len();
-            if entry_count > Self::MAX_ZIP_ENTRIES {
-                return Err(anyhow!(
-                    "ZIP archive contains too many entries ({}). Maximum allowed is {} for security reasons. \
-                    This may be a ZIP bomb attack.",
-                    entry_count,
-                    Self::MAX_ZIP_ENTRIES
-                ));
+    }
+    
+    /// Extract text from nested tables in DOCX documents
+    fn extract_text_from_nested_table(nested_table: &docx_rs::Table, text_content: &mut Vec<String>) {
+        for nested_row in &nested_table.rows {
+            let docx_rs::TableChild::TableRow(nested_table_row) = nested_row;
+            for nested_cell in &nested_table_row.cells {
+                let docx_rs::TableRowChild::TableCell(nested_table_cell) = nested_cell;
+                for nested_child in &nested_table_cell.children {
+                    match nested_child {
+                        docx_rs::TableCellContent::Paragraph(nested_paragraph) => {
+                            let mut nested_paragraph_text = Vec::new();
+                            for nested_para_child in &nested_paragraph.children {
+                                Self::extract_text_from_paragraph_child(nested_para_child, &mut nested_paragraph_text);
+                            }
+                            if !nested_paragraph_text.is_empty() {
+                                text_content.push(nested_paragraph_text.join(""));
+                            }
+                        }
+                        docx_rs::TableCellContent::Table(deeply_nested_table) => {
+                            // Recursively handle deeply nested tables
+                            Self::extract_text_from_nested_table(deeply_nested_table, text_content);
+                        }
+                        _ => {} // Skip other nested content for simplicity
+                    }
+                }
             }
-
-            // Validate all entry names before processing to prevent directory traversal
-            for i in 0..entry_count {
-                let entry = archive.by_index(i)?;
-                let entry_name = entry.name();
-                Self::validate_zip_entry_name(entry_name)?;
+        }
+    }
+    
+    /// Extract text from paragraph children (runs, text elements, etc.)
+    fn extract_text_from_paragraph_child(child: &docx_rs::ParagraphChild, text_content: &mut Vec<String>) {
+        match child {
+            docx_rs::ParagraphChild::Run(run) => {
+                for child in &run.children {
+                    match child {
+                        docx_rs::RunChild::Text(text) => {
+                            text_content.push(text.text.clone());
+                        }
+                        docx_rs::RunChild::Tab(_) => {
+                            text_content.push("\t".to_string());
+                        }
+                        docx_rs::RunChild::Break(_break_elem) => {
+                            // For simplicity, treat all breaks as line breaks
+                            text_content.push("\n".to_string());
+                        }
+                        // Skip other elements like images, drawings, etc.
+                        _ => {}
+                    }
+                }
             }
-            
-            // First, extract shared strings (xl/sharedStrings.xml)
-            let mut shared_strings = Vec::new();
-            if let Ok(mut shared_strings_file) = archive.by_name("xl/sharedStrings.xml") {
-                // Security: Use size-limited reading to prevent ZIP bomb attacks
-                let xml_content = Self::read_zip_entry_safely(&mut shared_strings_file, Self::MAX_XML_SIZE)?;
-                drop(shared_strings_file);
-                
-                // Parse shared strings
-                let mut reader = Reader::from_str(&xml_content);
-                reader.config_mut().trim_text(true);
-                let mut buf = Vec::new();
-                let mut in_string = false;
-                let mut current_string = String::new();
-                
-                loop {
-                    match reader.read_event_into(&mut buf) {
-                        Ok(Event::Start(ref e)) => {
-                            if e.name().as_ref() == b"t" {
-                                in_string = true;
-                                current_string.clear();
+            docx_rs::ParagraphChild::Insert(insert) => {
+                for child in &insert.children {
+                    match child {
+                        docx_rs::InsertChild::Run(run) => {
+                            for run_child in &run.children {
+                                match run_child {
+                                    docx_rs::RunChild::Text(text) => {
+                                        text_content.push(text.text.clone());
+                                    }
+                                    docx_rs::RunChild::Tab(_) => {
+                                        text_content.push("\t".to_string());
+                                    }
+                                    docx_rs::RunChild::Break(_) => {
+                                        text_content.push("\n".to_string());
+                                    }
+                                    _ => {}
+                                }
                             }
-                        }
-                        Ok(Event::Text(e)) => {
-                            if in_string {
-                                let text = e.unescape().map_err(|e| anyhow!("Text unescape error: {}", e))?;
-                                current_string.push_str(&text);
-                            }
-                        }
-                        Ok(Event::End(ref e)) => {
-                            if e.name().as_ref() == b"t" {
-                                in_string = false;
-                                shared_strings.push(current_string.clone());
-                                current_string.clear();
-                            }
-                        }
-                        Ok(Event::Eof) => break,
-                        Err(e) => {
-                            return Err(anyhow!(
-                                "XML parsing error in Excel shared strings: {}. The file may be corrupted.",
-                                e
-                            ));
                         }
                         _ => {}
                     }
-                    buf.clear();
                 }
             }
+            _ => {
+                // Skip other elements like deleted content, bookmarks, etc.
+            }
+        }
+    }
+    
+    /// Extract text from Excel files (XLS/XLSX) using calamine library
+    async fn extract_text_from_excel(&self, file_path: &str, mime_type: &str, start_time: std::time::Instant) -> Result<OcrResult> {
+        info!("Starting Excel text extraction: {} (type: {})", file_path, mime_type);
+        
+        // Move CPU-intensive operations to blocking thread pool
+        let file_path_clone = file_path.to_string();
+        let extraction_result = tokio::task::spawn_blocking(move || -> Result<String> {
+            use calamine::{open_workbook_auto, Reader, Data};
             
-            // Now extract worksheet data
+            
+            // Open the workbook using calamine - handles both XLS and XLSX automatically
+            let mut workbook = open_workbook_auto(&file_path_clone)
+                .map_err(|e| anyhow!(
+                    "Failed to open Excel file '{}': {}. The file may be corrupted or not a valid Excel document.",
+                    file_path_clone, e
+                ))?;
+            
             let mut all_text = Vec::new();
-            let mut worksheet_count = 0;
+            let worksheet_names = workbook.sheet_names().to_owned();
             
-            // Look for worksheets (xl/worksheets/sheet1.xml, sheet2.xml, etc.)
-            for i in 1..=20 { // Check up to 20 worksheets
-                let worksheet_name = format!("xl/worksheets/sheet{}.xml", i);
-                
-                if let Ok(mut worksheet_file) = archive.by_name(&worksheet_name) {
-                    worksheet_count += 1;
-                    // Security: Use size-limited reading to prevent ZIP bomb attacks
-                    let xml_content = Self::read_zip_entry_safely(&mut worksheet_file, Self::MAX_XML_SIZE)?;
-                    drop(worksheet_file);
-                    
-                    // Parse worksheet data
-                    let mut reader = Reader::from_str(&xml_content);
-                    reader.config_mut().trim_text(true);
-                    let mut buf = Vec::new();
-                    let mut in_cell_value = false;
-                    let mut current_cell_type = String::new();
-                    
-                    loop {
-                        match reader.read_event_into(&mut buf) {
-                            Ok(Event::Start(ref e)) => {
-                                if e.name().as_ref() == b"c" {
-                                    // Cell element - check if it has a type attribute
-                                    current_cell_type.clear();
-                                    for attr in e.attributes() {
-                                        if let Ok(attr) = attr {
-                                            if attr.key.as_ref() == b"t" {
-                                                current_cell_type = String::from_utf8_lossy(&attr.value).to_string();
-                                            }
-                                        }
-                                    }
-                                } else if e.name().as_ref() == b"v" {
-                                    // Cell value
-                                    in_cell_value = true;
-                                }
-                            }
-                            Ok(Event::Text(e)) => {
-                                if in_cell_value {
-                                    let text = e.unescape().map_err(|e| anyhow!("Text unescape error: {}", e))?;
-                                    
-                                    // If this is a shared string reference (t="s"), look up the string
-                                    if current_cell_type == "s" {
-                                        if let Ok(index) = text.parse::<usize>() {
-                                            if let Some(shared_string) = shared_strings.get(index) {
-                                                all_text.push(shared_string.clone());
-                                            }
-                                        }
+            if worksheet_names.is_empty() {
+                return Err(anyhow!(
+                    "No worksheets found in Excel file '{}'. The file may be corrupted or empty.",
+                    file_path_clone
+                ));
+            }
+            
+            // Extract text from all worksheets
+            for sheet_name in worksheet_names {
+                if let Ok(range) = workbook.worksheet_range(&sheet_name) {
+                    // Iterate through all cells in the worksheet
+                    for row in range.rows() {
+                        for cell in row {
+                            // Extract text content from each cell based on its data type
+                            let cell_text = match cell {
+                                Data::String(s) => s.clone(),
+                                Data::Float(f) => {
+                                    // Format numbers appropriately
+                                    if f.fract() == 0.0 {
+                                        format!("{}", *f as i64) // Integer
                                     } else {
-                                        // Direct value
-                                        all_text.push(text.into_owned());
+                                        format!("{}", f) // Decimal
                                     }
                                 }
+                                Data::Int(i) => format!("{}", i),
+                                Data::Bool(b) => format!("{}", b),
+                                Data::DateTime(dt) => format!("{}", dt),
+                                Data::DateTimeIso(dt_iso) => dt_iso.clone(),
+                                Data::DurationIso(dur_iso) => dur_iso.clone(),
+                                Data::Error(e) => format!("ERROR: {:?}", e),
+                                Data::Empty => continue, // Skip empty cells
+                            };
+                            
+                            // Only add non-empty text
+                            let trimmed_text = cell_text.trim();
+                            if !trimmed_text.is_empty() {
+                                all_text.push(trimmed_text.to_string());
                             }
-                            Ok(Event::End(ref e)) => {
-                                if e.name().as_ref() == b"v" {
-                                    in_cell_value = false;
-                                }
-                            }
-                            Ok(Event::Eof) => break,
-                            Err(e) => {
-                                return Err(anyhow!(
-                                    "XML parsing error in Excel worksheet {}: {}. The file may be corrupted.",
-                                    worksheet_name, e
-                                ));
-                            }
-                            _ => {}
                         }
-                        buf.clear();
                     }
-                } else {
-                    // No more worksheets found
-                    break;
                 }
             }
             
-            if worksheet_count == 0 {
+            if all_text.is_empty() {
                 return Err(anyhow!(
-                    "Invalid XLSX file: no worksheets found in '{}'. The file may be corrupted or not a valid Excel document.",
+                    "No text content found in Excel file '{}'. All cells may be empty or contain only formulas/formatting.",
                     file_path_clone
                 ));
             }
             
             // Join all text content with spaces
             let raw_text = all_text.join(" ");
-            
-            if raw_text.trim().is_empty() {
-                return Err(anyhow!(
-                    "No text content found in Excel file '{}'. The spreadsheet may be empty or contain only formulas/formatting.",
-                    file_path_clone
-                ));
-            }
             
             Ok(raw_text)
             
@@ -1928,8 +1791,10 @@ impl EnhancedOcrService {
         let word_count = self.count_words_safely(&cleaned_text);
         
         info!(
-            "Excel extraction completed: {} words extracted from '{}' in {}ms",
-            word_count, file_path, processing_time
+            "Excel extraction completed: {} words extracted from '{}' in {}ms (processed {} worksheets)",
+            word_count, file_path, processing_time,
+            // Count worksheets that were processed (approximation)
+            cleaned_text.matches("worksheet").count().max(1)
         );
         
         Ok(OcrResult {
@@ -1942,23 +1807,6 @@ impl EnhancedOcrService {
         })
     }
     
-    /// Extract text from legacy Excel files (XLS format)
-    async fn extract_text_from_legacy_excel(&self, file_path: &str, start_time: std::time::Instant) -> Result<OcrResult> {
-        info!("Processing legacy Excel (XLS) file: {}", file_path);
-        
-        let processing_time = start_time.elapsed().as_millis() as u64;
-        
-        // Legacy XLS files are complex binary format, suggest conversion
-        Err(anyhow!(
-            "Legacy Excel files (.xls) are not directly supported for text extraction due to their complex binary format. \
-            To process the content from '{}', please:\n\
-            1. Open the file in Microsoft Excel, LibreOffice Calc, or Google Sheets\n\
-            2. Save/Export as XLSX format (recommended) or CSV\n\
-            3. Alternatively, export as PDF to preserve formatting\n\
-            \nXLSX format provides better compatibility and more reliable text extraction.",
-            file_path
-        ))
-    }
     
     /// Extract text from legacy DOC files using external tools
     async fn extract_text_from_legacy_doc(&self, file_path: &str, start_time: std::time::Instant) -> Result<OcrResult> {

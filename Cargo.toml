@@ -61,10 +61,10 @@ sha2 = "0.10"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 testcontainers = { version = "0.24", optional = true }
 testcontainers-modules = { version = "0.12", features = ["postgres"], optional = true }
-# Office document support - temporarily disabled due to jetscii compatibility issues
-# docx = "0.2"          # DOCX text extraction - temporarily disabled due to jetscii compatibility issues
-# calamine = "0.22"     # Excel files (XLS/XLSX) text extraction - temporarily disabled due to jetscii compatibility issues  
-zip = "0.6"             # For DOCX/PPTX archive handling
+# Office document support - using proper, well-maintained libraries
+docx-rs = "0.4"         # For DOCX text extraction by bokuweb (NOT the docx crate by PoiScript)
+calamine = "0.26"       # For Excel (XLS/XLSX) text extraction
+zip = "0.6"             # Still needed for other archive handling
 rand = "0.8"
 
 [features]
