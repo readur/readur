@@ -452,7 +452,7 @@ async fn process_single_file(
         IngestionResult::Created(doc) => {
             debug!("[{}] ✅ Created new document for '{}': {} (reason: {})", 
                    file_request_id, file_info.name, doc.id, file_change_reason);
-            (doc, true, "synced") // New document - queue for OCR
+            (doc, true, "synced") // Queue all new documents for processing
         }
         IngestionResult::ExistingDocument(doc) => {
             debug!("[{}] 🔗 Found existing document for '{}': {} (reason: {})", 

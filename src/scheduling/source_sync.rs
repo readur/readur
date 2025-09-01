@@ -622,7 +622,7 @@ impl SourceSyncService {
         let (document, should_queue_ocr) = match result {
             IngestionResult::Created(doc) => {
                 debug!("Created new document for {}: {}", file_info.name, doc.id);
-                (doc, true) // New document - queue for OCR
+                (doc, true) // Queue all new documents for processing (OCR queue handles text extraction too)
             }
             IngestionResult::Skipped { existing_document_id, reason } => {
                 info!("Skipped duplicate file {}: {} (existing: {})", file_info.name, reason, existing_document_id);
@@ -726,7 +726,7 @@ impl SourceSyncService {
         let (document, should_queue_ocr) = match result {
             IngestionResult::Created(doc) => {
                 debug!("Created new document for {}: {}", file_info.name, doc.id);
-                (doc, true) // New document - queue for OCR
+                (doc, true) // Queue all new documents for processing (OCR queue handles text extraction too)
             }
             IngestionResult::Skipped { existing_document_id, reason } => {
                 info!("Skipped duplicate file {}: {} (existing: {})", file_info.name, reason, existing_document_id);

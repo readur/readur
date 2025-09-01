@@ -366,6 +366,75 @@ impl OcrQueueService {
                     "Processing OCR job {} for document {} | File: '{}' | Type: {} | Size: {:.2} MB", 
                     item.id, item.document_id, filename, mime_type, file_size_mb
                 );
+
+                // Validate that this file type should actually go through OCR
+                if !crate::utils::ocr::file_needs_ocr(&filename) {
+                    let info_msg = format!("File '{}' should not be processed via OCR pipeline - Office documents require text extraction instead", filename);
+                    info!("ℹ️  Skipping OCR for office document '{}' | Job: {} | Document: {} | Type: {} - Will attempt text extraction", 
+                          filename, item.id, item.document_id, mime_type);
+                    
+                    // Try text extraction instead of failing
+                    match self.extract_text_from_office_document(&file_path, &filename, &mime_type, item.document_id).await {
+                        Ok(true) => {
+                            // Text extraction succeeded
+                            let processing_time_ms = start_time.elapsed().as_millis() as i32;
+                            self.mark_completed(item.id, processing_time_ms).await?;
+                            info!("✅ Text extraction completed for '{}' | Job: {} | Document: {} | {}ms", 
+                                  filename, item.id, item.document_id, processing_time_ms);
+                            return Ok(());
+                        }
+                        Ok(false) => {
+                            // Text extraction failed but handled gracefully
+                            let error_msg = format!("Text extraction failed for office document '{}'", filename);
+                            warn!("⚠️  Text extraction failed for '{}' | Job: {} | Document: {}", 
+                                  filename, item.id, item.document_id);
+                            
+                            // Mark as failed but with text extraction failure reason
+                            sqlx::query(
+                                r#"
+                                UPDATE documents
+                                SET ocr_status = 'failed',
+                                    ocr_failure_reason = 'text_extraction_failed',
+                                    ocr_error = $2,
+                                    updated_at = NOW()
+                                WHERE id = $1
+                                "#
+                            )
+                            .bind(item.document_id)
+                            .bind(&error_msg)
+                            .execute(&self.pool)
+                            .await?;
+                            
+                            self.mark_failed(item.id, &error_msg).await?;
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            // Unexpected error during text extraction
+                            let error_msg = format!("Text extraction error for '{}': {}", filename, e);
+                            error!("❌ Text extraction error for '{}' | Job: {} | Document: {} | Error: {}", 
+                                   filename, item.id, item.document_id, e);
+                            
+                            sqlx::query(
+                                r#"
+                                UPDATE documents
+                                SET ocr_status = 'failed',
+                                    ocr_failure_reason = 'text_extraction_error',
+                                    ocr_error = $2,
+                                    updated_at = NOW()
+                                WHERE id = $1
+                                "#
+                            )
+                            .bind(item.document_id)
+                            .bind(&error_msg)
+                            .execute(&self.pool)
+                            .await?;
+                            
+                            self.mark_failed(item.id, &error_msg).await?;
+                            return Ok(());
+                        }
+                    }
+                }
+
                 // Get user's OCR settings or use defaults
                 let settings = if let Some(user_id) = user_id {
                     self.db.get_user_settings(user_id).await.ok().flatten()
@@ -1187,6 +1256,399 @@ impl OcrQueueService {
         }
         
         Ok(())
+    }
+
+    /// Extract text from Office documents (DOCX, DOC, etc.)
+    async fn extract_text_from_office_document(
+        &self,
+        file_path: &str,
+        filename: &str,
+        mime_type: &str,
+        document_id: Uuid,
+    ) -> Result<bool> {
+        use std::process::Stdio;
+        use tokio::process::Command;
+        
+        info!("Attempting text extraction for office document: {}", filename);
+        
+        let extracted_text = match mime_type {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
+                info!("Extracting text from DOCX file: {}", filename);
+                // Extract text from DOCX using unzip and XML parsing
+                self.extract_docx_text(file_path).await?
+            }
+            "application/msword" => {
+                info!("Extracting text from DOC file: {}", filename);
+                // Extract text from DOC using antiword if available, otherwise try catdoc
+                match self.extract_doc_text(file_path).await {
+                    Ok(text) => text,
+                    Err(e) => {
+                        error!("Failed to extract text from DOC file {}: {}", filename, e);
+                        return Err(anyhow::anyhow!("DOC text extraction failed: {}", e));
+                    }
+                }
+            }
+            "text/plain" => {
+                info!("Extracting text from plain text file: {}", filename);
+                // Simple text file
+                tokio::fs::read_to_string(file_path).await.unwrap_or_default()
+            }
+            "text/html" | "text/htm" => {
+                info!("Extracting text from HTML file: {}", filename);
+                // Extract text from HTML (basic approach)
+                self.extract_html_text(file_path).await?
+            }
+            _ => {
+                warn!("Unsupported text extraction format: {} for file {}", mime_type, filename);
+                return Ok(false);
+            }
+        };
+        
+        if extracted_text.trim().is_empty() {
+            warn!("No text content extracted from office document: {}", filename);
+            return Ok(false);
+        }
+        
+        let word_count = extracted_text.split_whitespace().count() as i32;
+        let char_count = extracted_text.chars().count() as i64;
+        
+        info!("Extracted {} words ({} characters) from office document: {}", 
+              word_count, char_count, filename);
+        
+        // Update document with extracted text
+        let result = sqlx::query(
+            r#"
+            UPDATE documents
+            SET ocr_text = $2,
+                ocr_status = 'completed',
+                ocr_confidence = 100.0,
+                ocr_word_count = $3,
+                ocr_processing_time_ms = 0,
+                ocr_completed_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+            "#
+        )
+        .bind(document_id)
+        .bind(&extracted_text)
+        .bind(word_count)
+        .execute(&self.pool)
+        .await;
+        
+        match result {
+            Ok(_) => {
+                info!("Successfully updated document {} with extracted text ({} words)", 
+                      document_id, word_count);
+                Ok(true)
+            }
+            Err(e) => {
+                error!("Failed to update document {} with extracted text: {}", document_id, e);
+                Err(anyhow::anyhow!("Database update failed: {}", e))
+            }
+        }
+    }
+
+    /// Extract text from DOCX files
+    async fn extract_docx_text(&self, file_path: &str) -> Result<String> {
+        use std::io::Read;
+        use zip::ZipArchive;
+        
+        // Read the DOCX file as a ZIP archive
+        let file = std::fs::File::open(file_path)?;
+        let mut archive = ZipArchive::new(file)?;
+        
+        // Look for the main document XML file
+        let mut document_xml = match archive.by_name("word/document.xml") {
+            Ok(file) => file,
+            Err(_) => {
+                return Err(anyhow::anyhow!("Could not find document.xml in DOCX file"));
+            }
+        };
+        
+        let mut xml_content = String::new();
+        document_xml.read_to_string(&mut xml_content)?;
+        
+        // Parse XML and extract text content
+        self.extract_text_from_docx_xml(&xml_content)
+    }
+
+    /// Extract text content from DOCX XML
+    fn extract_text_from_docx_xml(&self, xml_content: &str) -> Result<String> {
+        use regex::Regex;
+        
+        // More sophisticated DOCX text extraction that preserves formatting
+        let mut extracted_text = String::new();
+        let mut current_paragraph = String::new();
+        
+        // Split content by paragraphs first
+        let paragraph_regex = Regex::new(r"<w:p[^>]*>(.*?)</w:p>")?;
+        
+        for para_cap in paragraph_regex.captures_iter(xml_content) {
+            if let Some(para_content) = para_cap.get(1) {
+                current_paragraph.clear();
+                
+                // Extract text runs within this paragraph
+                let text_regex = Regex::new(r"<w:t[^>]*>([^<]*)</w:t>")?;
+                for text_cap in text_regex.captures_iter(para_content.as_str()) {
+                    if let Some(text) = text_cap.get(1) {
+                        let text_content = text.as_str();
+                        // Decode XML entities
+                        let decoded_text = text_content
+                            .replace("&amp;", "&")
+                            .replace("&lt;", "<")
+                            .replace("&gt;", ">")
+                            .replace("&quot;", "\"")
+                            .replace("&apos;", "'");
+                        current_paragraph.push_str(&decoded_text);
+                    }
+                }
+                
+                // Check for line breaks within the paragraph
+                let break_regex = Regex::new(r"<w:br[^>]*/>")?;
+                if break_regex.is_match(para_content.as_str()) {
+                    // Replace breaks with newlines within the paragraph text
+                    let lines: Vec<&str> = current_paragraph.split('\n').collect();
+                    for (i, line) in lines.iter().enumerate() {
+                        if i > 0 {
+                            extracted_text.push('\n');
+                        }
+                        extracted_text.push_str(line.trim());
+                    }
+                } else {
+                    // Add the paragraph content
+                    if !current_paragraph.trim().is_empty() {
+                        extracted_text.push_str(current_paragraph.trim());
+                    }
+                }
+                
+                // Add paragraph break (double newline for paragraph separation)
+                extracted_text.push('\n');
+                extracted_text.push('\n');
+            }
+        }
+        
+        // Clean up excess newlines but preserve intentional formatting
+        let cleaned_text = extracted_text
+            .lines()
+            .map(|line| line.trim())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string();
+            
+        // Replace multiple consecutive newlines with double newlines (paragraph breaks)
+        let final_regex = Regex::new(r"\n{3,}")?;
+        let final_text = final_regex.replace_all(&cleaned_text, "\n\n");
+        
+        Ok(final_text.to_string())
+    }
+
+    /// Extract text from DOC files (legacy Word format)
+    async fn extract_doc_text(&self, file_path: &str) -> Result<String> {
+        info!("Attempting to extract text from DOC file: {}", file_path);
+        
+        // Check if file exists and is readable
+        if !std::path::Path::new(file_path).exists() {
+            return Err(anyhow::anyhow!("DOC file does not exist: {}", file_path));
+        }
+        
+        let file_metadata = std::fs::metadata(file_path)?;
+        info!("DOC file size: {} bytes", file_metadata.len());
+        
+        // First, try the same ZIP-based approach as DOCX 
+        // Many DOC files saved in newer Word versions are actually ZIP-based
+        info!("Trying ZIP-based extraction for DOC file (modern compatibility format)...");
+        match self.extract_docx_text(file_path).await {
+            Ok(text) => {
+                if !text.trim().is_empty() {
+                    info!("Successfully extracted text from DOC file using ZIP method: {} characters", text.len());
+                    return Ok(text);
+                }
+            }
+            Err(e) => {
+                info!("ZIP-based extraction failed for DOC (expected for old format): {}", e);
+            }
+        }
+        
+        // Fallback to external tools for true legacy DOC files
+        info!("Trying external tools for legacy DOC extraction...");
+        match tokio::process::Command::new("antiword")
+            .arg("-t")  // Text output format (preserves formatting better)
+            .arg(file_path)
+            .output()
+            .await 
+        {
+            Ok(output) => {
+                info!("antiword executed with exit code: {:?}", output.status.code());
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    info!("antiword stdout length: {} bytes", text.len());
+                    if !text.trim().is_empty() {
+                        // Clean up the text but preserve line breaks
+                        let cleaned_text = text
+                            .lines()
+                            .map(|line| line.trim_end())  // Remove trailing whitespace but keep leading
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                            .trim()
+                            .to_string();
+                        info!("Successfully extracted text from DOC file using antiword: {} characters", cleaned_text.len());
+                        return Ok(cleaned_text);
+                    } else {
+                        warn!("antiword returned empty output for {}", file_path);
+                    }
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    warn!("antiword failed with exit code {}: {}", output.status.code().unwrap_or(-1), stderr);
+                }
+            }
+            Err(e) => {
+                warn!("antiword not available or failed to execute: {}", e);
+            }
+        }
+        
+        // Fallback: try catdoc with UTF-8 encoding
+        info!("Trying catdoc for DOC extraction...");
+        match tokio::process::Command::new("catdoc")
+            .arg("-d")  // UTF-8 output
+            .arg("utf-8")
+            .arg(file_path)
+            .output()
+            .await 
+        {
+            Ok(output) => {
+                info!("catdoc executed with exit code: {:?}", output.status.code());
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    info!("catdoc stdout length: {} bytes", text.len());
+                    if !text.trim().is_empty() {
+                        // Clean up the text but preserve line breaks
+                        let cleaned_text = text
+                            .lines()
+                            .map(|line| line.trim_end())  // Remove trailing whitespace but keep leading
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                            .trim()
+                            .to_string();
+                        info!("Successfully extracted text from DOC file using catdoc: {} characters", cleaned_text.len());
+                        return Ok(cleaned_text);
+                    } else {
+                        warn!("catdoc returned empty output for {}", file_path);
+                    }
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    warn!("catdoc failed with exit code {}: {}", output.status.code().unwrap_or(-1), stderr);
+                }
+            }
+            Err(e) => {
+                warn!("catdoc not available or failed to execute: {}", e);
+            }
+        }
+        
+        // Third fallback: try a basic approach without external tools
+        warn!("External DOC extraction tools (antiword/catdoc) not available or failed");
+        
+        // Try to extract basic text if it's actually a simple RTF or has readable text
+        match tokio::fs::read(file_path).await {
+            Ok(file_data) => {
+                let content = String::from_utf8_lossy(&file_data);
+                
+                // Very basic attempt to find readable text in DOC files
+                // This won't work for all DOC files but might catch some simple ones
+                let mut extracted_text = String::new();
+                let mut in_text = false;
+                
+                for chunk in content.as_bytes().chunks(4) {
+                    if chunk.len() == 4 {
+                        // Look for sequences that might be text (printable ASCII)
+                        let text_chars: String = chunk.iter()
+                            .filter(|&&b| b >= 32 && b <= 126)  // Printable ASCII
+                            .map(|&b| b as char)
+                            .collect();
+                        
+                        if text_chars.len() >= 3 {  // At least 3 printable chars in a row
+                            extracted_text.push_str(&text_chars);
+                            in_text = true;
+                        } else if in_text {
+                            extracted_text.push(' ');
+                            in_text = false;
+                        }
+                    }
+                }
+                
+                // Clean up the extracted text
+                if !extracted_text.trim().is_empty() {
+                    use regex::Regex;
+                    let space_regex = Regex::new(r"\s+").unwrap();
+                    let cleaned = space_regex.replace_all(&extracted_text, " ").trim().to_string();
+                    
+                    if cleaned.len() > 10 {  // Only return if we got a reasonable amount of text
+                        info!("Extracted basic text from DOC file using fallback method: {} characters", cleaned.len());
+                        return Ok(cleaned);
+                    }
+                }
+                
+                Err(anyhow::anyhow!("Could not extract readable text from DOC file using fallback method"))
+            }
+            Err(e) => {
+                Err(anyhow::anyhow!("Could not read DOC file: {}", e))
+            }
+        }
+    }
+
+    /// Extract text from HTML files
+    async fn extract_html_text(&self, file_path: &str) -> Result<String> {
+        let html_content = tokio::fs::read_to_string(file_path).await?;
+        
+        use regex::Regex;
+        
+        // Replace block-level elements with newlines to preserve structure
+        let block_elements = vec!["div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "br"];
+        let mut processed_content = html_content.clone();
+        
+        for element in block_elements {
+            // Replace closing tags with newlines
+            let closing_regex = Regex::new(&format!(r"</{}[^>]*>", element))?;
+            processed_content = closing_regex.replace_all(&processed_content, "\n").to_string();
+            
+            // Handle self-closing br tags
+            if element == "br" {
+                let br_regex = Regex::new(r"<br[^>]*/?>")?;
+                processed_content = br_regex.replace_all(&processed_content, "\n").to_string();
+            }
+        }
+        
+        // Remove all remaining HTML tags
+        let tag_regex = Regex::new(r"<[^>]*>")?;
+        let text_content = tag_regex.replace_all(&processed_content, "");
+        
+        // Decode HTML entities
+        let decoded_content = text_content
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&apos;", "'")
+            .replace("&nbsp;", " ")
+            .replace("&mdash;", "—")
+            .replace("&ndash;", "–")
+            .replace("&hellip;", "…")
+            .replace("&laquo;", "«")
+            .replace("&raquo;", "»");
+        
+        // Clean up whitespace while preserving line breaks
+        let lines: Vec<String> = decoded_content
+            .lines()
+            .map(|line| {
+                // Clean up spaces within each line
+                let space_regex = Regex::new(r"\s+").unwrap();
+                space_regex.replace_all(line.trim(), " ").to_string()
+            })
+            .filter(|line| !line.is_empty())  // Remove empty lines
+            .collect();
+        
+        Ok(lines.join("\n"))
     }
 
     /// Helper function to map OCR error strings to standardized failure reasons

@@ -98,6 +98,7 @@ impl BatchIngester {
                 for handle in batch.drain(..) {
                     match handle.await {
                         Ok(Ok(Some((doc_id, file_size)))) => {
+                            // Queue all documents for processing (OCR queue handles text extraction too)
                             let priority = calculate_priority(file_size);
                             queue_items.push((doc_id, priority, file_size));
                         }
@@ -115,7 +116,7 @@ impl BatchIngester {
                 
                 // Batch insert documents into queue
                 if !queue_items.is_empty() {
-                    info!("Enqueueing {} documents for OCR", queue_items.len());
+                    info!("Enqueueing {} documents for processing (OCR/text extraction)", queue_items.len());
                     self.queue_service.enqueue_documents_batch(queue_items.clone()).await?;
                     queue_items.clear();
                 }

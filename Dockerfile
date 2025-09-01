@@ -86,6 +86,8 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     ocrmypdf \
     curl \
+    antiword \
+    catdoc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

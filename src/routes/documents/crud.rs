@@ -252,13 +252,17 @@ pub async fn upload_document(
                 }
             }
             
-            // Auto-enqueue document for OCR processing
+            // Auto-enqueue all documents for processing (OCR queue handles both OCR and text extraction)
             let priority = 5; // Normal priority for direct uploads
             if let Err(e) = state.queue_service.enqueue_document(document.id, priority, document.file_size).await {
-                error!("Failed to enqueue document {} for OCR: {}", document.id, e);
-                // Don't fail the upload if OCR queueing fails, just log the error
+                error!("Failed to enqueue document {} for processing: {}", document.id, e);
+                // Don't fail the upload if queueing fails, just log the error
             } else {
-                info!("Document {} enqueued for OCR processing", document.id);
+                if crate::utils::ocr::file_needs_ocr(&document.filename) {
+                    info!("Document {} enqueued for OCR processing", document.id);
+                } else {
+                    info!("Document {} enqueued for text extraction", document.filename);
+                }
             }
             
             Ok(Json(DocumentUploadResponse {

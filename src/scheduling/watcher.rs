@@ -461,11 +461,15 @@ async fn process_file(
         IngestionResult::Created(doc) => {
             info!("Created new document for watch folder file {}: {}", file_info.name, doc.id);
             
-            // Enqueue for OCR processing with priority based on file size and type
+            // Enqueue for processing - OCR queue will handle both OCR and text extraction
             let priority = calculate_priority(file_info.size, &file_info.mime_type);
             queue_service.enqueue_document(doc.id, priority, file_info.size).await?;
             
-            info!("Successfully queued file for OCR: {} (size: {} bytes)", file_info.name, file_info.size);
+            if crate::utils::ocr::file_needs_ocr(&file_info.name) {
+                info!("Successfully queued file for OCR processing: {} (size: {} bytes)", file_info.name, file_info.size);
+            } else {
+                info!("Successfully queued file for text extraction: {} (size: {} bytes)", file_info.name, file_info.size);
+            }
         }
         IngestionResult::Skipped { existing_document_id, reason } => {
             info!("Skipped duplicate watch folder file {}: {} (existing: {})", file_info.name, reason, existing_document_id);
@@ -540,11 +544,11 @@ async fn extract_file_info_from_path(path: &Path) -> Result<FileIngestionInfo> {
 }
 
 fn is_ocr_able_file(mime_type: &str) -> bool {
+    // Only image files and PDFs should go through OCR
+    // Office documents (doc/docx) should use text extraction instead
     matches!(mime_type,
         "application/pdf" |
-        "text/plain" |
-        "image/png" | "image/jpeg" | "image/jpg" | "image/tiff" | "image/bmp" | "image/gif" |
-        "application/msword" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        "image/png" | "image/jpeg" | "image/jpg" | "image/tiff" | "image/bmp" | "image/gif"
     )
 }
 
