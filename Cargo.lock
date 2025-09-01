@@ -3779,6 +3779,7 @@ dependencies = [
  "readur",
  "regex",
  "reqwest 0.12.23",
+ "rust_xlsxwriter",
  "serde",
  "serde_json",
  "sha2",
@@ -4060,6 +4061,15 @@ checksum = "f6cc0c81648b20b70c491ff8cce00c1c3b223bb8ed2b5d41f0e54c6c4c0a3594"
 dependencies = [
  "sha2",
  "walkdir",
+]
+
+[[package]]
+name = "rust_xlsxwriter"
+version = "0.80.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "442eafa04d985ae671e027481e07a5b70fdb1b2cb5e46d9e074b67ca98e01a0a"
+dependencies = [
+ "zip 2.4.2",
 ]
 
 [[package]]

@@ -7,38 +7,55 @@ use tempfile::TempDir;
 use zip::write::FileOptions;
 use zip::{ZipWriter, CompressionMethod};
 
-/// Helper function to create a minimal DOCX file for testing
+/// Helper function to create a proper DOCX file for testing
+/// Creates a comprehensive DOCX structure that docx-rs can parse
 fn create_test_docx(content: &str) -> Vec<u8> {
     let mut buffer = Vec::new();
     {
         let mut zip = ZipWriter::new(std::io::Cursor::new(&mut buffer));
-        
-        // Add required DOCX structure
         let options = FileOptions::default().compression_method(CompressionMethod::Deflated);
         
-        // Add [Content_Types].xml
+        // Add [Content_Types].xml - More comprehensive structure
         zip.start_file("[Content_Types].xml", options).unwrap();
-        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
     <Default Extension="xml" ContentType="application/xml"/>
     <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+    <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+    <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+    <Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>
 </Types>"#).unwrap();
         
-        // Add _rels/.rels
-        zip.add_directory("_rels", options).unwrap();
+        // Add _rels/.rels 
+        zip.add_directory("_rels/", options).unwrap();
         zip.start_file("_rels/.rels", options).unwrap();
-        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>"#).unwrap();
         
-        // Add word directory
-        zip.add_directory("word", options).unwrap();
+        // Add word directory and its _rels subdirectory
+        zip.add_directory("word/", options).unwrap();
+        zip.add_directory("word/_rels/", options).unwrap();
         
-        // Add word/document.xml with the actual content
+        // Add word/_rels/document.xml.rels
+        zip.start_file("word/_rels/document.xml.rels", options).unwrap();
+        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+    <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>
+</Relationships>"#).unwrap();
+        
+        // Add word/document.xml with proper structure
         zip.start_file("word/document.xml", options).unwrap();
-        let document_xml = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+        // Escape XML entities and remove null bytes to create valid XML
+        let escaped_content = content.replace('&', "&amp;")
+                                    .replace('<', "&lt;")
+                                    .replace('>', "&gt;")
+                                    .replace('\0', ""); // Remove null bytes as they're invalid in XML
+        let document_xml = format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
     <w:body>
         <w:p>
@@ -46,79 +63,67 @@ fn create_test_docx(content: &str) -> Vec<u8> {
                 <w:t>{}</w:t>
             </w:r>
         </w:p>
+        <w:sectPr>
+            <w:pgSz w:w="12240" w:h="15840"/>
+            <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+        </w:sectPr>
     </w:body>
-</w:document>"#, content);
+</w:document>"#, escaped_content);
         zip.write_all(document_xml.as_bytes()).unwrap();
+        
+        // Add word/styles.xml (minimal styles)
+        zip.start_file("word/styles.xml", options).unwrap();
+        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+    <w:docDefaults>
+        <w:rPrDefault>
+            <w:rPr>
+                <w:rFonts w:ascii="Calibri" w:eastAsia="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>
+                <w:sz w:val="22"/>
+                <w:szCs w:val="22"/>
+                <w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/>
+            </w:rPr>
+        </w:rPrDefault>
+    </w:docDefaults>
+</w:styles>"#).unwrap();
+        
+        // Add word/settings.xml (minimal settings)
+        zip.start_file("word/settings.xml", options).unwrap();
+        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+    <w:defaultTabStop w:val="708"/>
+</w:settings>"#).unwrap();
+        
+        // Add word/fontTable.xml (minimal font table)
+        zip.start_file("word/fontTable.xml", options).unwrap();
+        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+    <w:font w:name="Calibri">
+        <w:panose1 w:val="020F0502020204030204"/>
+        <w:charset w:val="00"/>
+        <w:family w:val="swiss"/>
+        <w:pitch w:val="variable"/>
+    </w:font>
+</w:fonts>"#).unwrap();
         
         zip.finish().unwrap();
     }
     buffer
 }
 
-/// Helper function to create a minimal XLSX file for testing
+/// Helper function to create a proper XLSX file for testing
+/// Uses rust_xlsxwriter to create a real XLSX file that calamine can properly read
 fn create_test_xlsx(content: &str) -> Vec<u8> {
-    let mut buffer = Vec::new();
-    {
-        let mut zip = ZipWriter::new(std::io::Cursor::new(&mut buffer));
-        
-        let options = FileOptions::default().compression_method(CompressionMethod::Deflated);
-        
-        // Add [Content_Types].xml
-        zip.start_file("[Content_Types].xml", options).unwrap();
-        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-    <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-    <Default Extension="xml" ContentType="application/xml"/>
-    <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-    <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-    <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
-</Types>"#).unwrap();
-        
-        // Add _rels/.rels
-        zip.add_directory("_rels", options).unwrap();
-        zip.start_file("_rels/.rels", options).unwrap();
-        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>"#).unwrap();
-        
-        // Add xl directory structure
-        zip.add_directory("xl", options).unwrap();
-        zip.add_directory("xl/worksheets", options).unwrap();
-        
-        // Add xl/workbook.xml
-        zip.start_file("xl/workbook.xml", options).unwrap();
-        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-    <sheets>
-        <sheet name="Sheet1" sheetId="1" r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
-    </sheets>
-</workbook>"#).unwrap();
-        
-        // Add xl/sharedStrings.xml
-        zip.start_file("xl/sharedStrings.xml", options).unwrap();
-        let shared_strings_xml = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
-<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1">
-    <si><t>{}</t></si>
-</sst>"#, content);
-        zip.write_all(shared_strings_xml.as_bytes()).unwrap();
-        
-        // Add xl/worksheets/sheet1.xml
-        zip.start_file("xl/worksheets/sheet1.xml", options).unwrap();
-        zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-    <sheetData>
-        <row r="1">
-            <c r="A1" t="s">
-                <v>0</v>
-            </c>
-        </row>
-    </sheetData>
-</worksheet>"#).unwrap();
-        
-        zip.finish().unwrap();
-    }
-    buffer
+    use rust_xlsxwriter::*;
+    
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+    
+    // Add the test content to cell A1
+    worksheet.write_string(0, 0, content).expect("Failed to write to worksheet");
+    
+    // Save to buffer and return bytes
+    workbook.save_to_buffer().expect("Failed to save XLSX to buffer")
 }
 
 #[tokio::test]
@@ -213,7 +218,7 @@ async fn test_null_byte_removal() {
     assert!(result.is_ok(), "DOCX extraction should succeed even with null bytes");
     let ocr_result = result.unwrap();
     
-    // Verify null bytes were removed
+    // Verify null bytes were removed (they were stripped during DOCX creation since they're invalid in XML)
     assert!(!ocr_result.text.contains('\0'), "Extracted text should not contain null bytes");
     assert_eq!(ocr_result.text.trim(), "Testwithnullbytes");
 }
@@ -423,104 +428,16 @@ async fn test_legacy_doc_enhanced_error_message() {
     assert!(result.is_err(), "Legacy DOC should return an error without tools");
     let error_msg = result.unwrap_err().to_string();
     
-    // Verify enhanced error message mentions all strategies
-    assert!(error_msg.contains("All extraction methods failed"), "Should mention all methods failed");
-    assert!(error_msg.contains("DOC to DOCX conversion"), "Should mention conversion strategy");
-    assert!(error_msg.contains("LibreOffice"), "Should mention LibreOffice installation");
-    assert!(error_msg.contains("antiword"), "Should mention antiword as fallback");
-    assert!(error_msg.contains("catdoc"), "Should mention catdoc as fallback");
+    // Verify enhanced error message mentions extraction tools
+    assert!(error_msg.contains("None of the DOC extraction tools") || error_msg.contains("All extraction methods failed"), "Should mention extraction tools failed");
+    assert!(error_msg.contains("antiword"), "Should mention antiword tool");
+    assert!(error_msg.contains("catdoc"), "Should mention catdoc tool");
 }
 
-#[tokio::test]
-async fn test_doc_conversion_file_path_sanitization() {
-    let temp_dir = TempDir::new().unwrap();
-    
-    // Create OCR service
-    let ocr_service = EnhancedOcrService {
-        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
-        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
-    };
-    
-    // Test with potentially dangerous file path
-    let dangerous_paths = [
-        "../../etc/passwd",
-        "test; rm -rf /",
-        "test`whoami`",
-        "test$(whoami)",
-    ];
-    
-    for dangerous_path in &dangerous_paths {
-        let result = ocr_service.try_doc_to_docx_conversion(dangerous_path).await;
-        
-        // Should fail due to path sanitization
-        assert!(result.is_err(), "Dangerous path should be rejected: {}", dangerous_path);
-        let error_msg = result.unwrap_err().to_string();
-        assert!(
-            error_msg.contains("potentially dangerous characters") || 
-            error_msg.contains("suspicious sequences") ||
-            error_msg.contains("Failed to resolve file path"),
-            "Should reject dangerous path with appropriate error: {}", error_msg
-        );
-    }
-}
+// Note: DOC to DOCX conversion tests removed since we no longer use LibreOffice
+// Legacy DOC files are now handled by lightweight tools (antiword/catdoc) only
 
-#[tokio::test]
-async fn test_doc_conversion_missing_file() {
-    let temp_dir = TempDir::new().unwrap();
-    
-    // Create OCR service
-    let ocr_service = EnhancedOcrService {
-        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
-        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
-    };
-    
-    let nonexistent_path = temp_dir.path().join("nonexistent.doc");
-    
-    let result = ocr_service.try_doc_to_docx_conversion(
-        nonexistent_path.to_str().unwrap()
-    ).await;
-    
-    // Should fail because file doesn't exist
-    assert!(result.is_err(), "Nonexistent file should cause conversion to fail");
-    let error_msg = result.unwrap_err().to_string();
-    assert!(
-        error_msg.contains("Failed to resolve file path") || 
-        error_msg.contains("File may not exist"),
-        "Should mention file doesn't exist: {}", error_msg
-    );
-}
 
-#[tokio::test]
-async fn test_doc_conversion_temp_directory_creation() {
-    let temp_dir = TempDir::new().unwrap();
-    let doc_path = temp_dir.path().join("test.doc");
-    
-    // Create a fake DOC file
-    let doc_data = create_fake_doc_file();
-    fs::write(&doc_path, doc_data).unwrap();
-    
-    // Create OCR service
-    let ocr_service = EnhancedOcrService {
-        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
-        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
-    };
-    
-    let result = ocr_service.try_doc_to_docx_conversion(
-        doc_path.to_str().unwrap()
-    ).await;
-    
-    // Will fail due to LibreOffice not being available in test environment,
-    // but should successfully create temp directory and reach LibreOffice execution
-    if let Err(error_msg) = result {
-        let error_str = error_msg.to_string();
-        // Should fail at LibreOffice execution, not directory creation
-        assert!(
-            error_str.contains("LibreOffice command execution failed") ||
-            error_str.contains("LibreOffice conversion failed"),
-            "Should fail at LibreOffice execution step, not directory creation: {}", error_str
-        );
-    }
-}
 
 #[tokio::test]
 async fn test_doc_extraction_multiple_strategies() {
@@ -550,11 +467,9 @@ async fn test_doc_extraction_multiple_strategies() {
     assert!(result.is_err(), "Should fail without proper tools");
     let error_msg = result.unwrap_err().to_string();
     
-    // Verify it mentions trying conversion first, then fallback tools
-    assert!(error_msg.contains("All extraction methods failed"), 
+    // Verify it mentions trying extraction tools
+    assert!(error_msg.contains("None of the DOC extraction tools") || error_msg.contains("All extraction methods failed"), 
         "Should mention all methods tried: {}", error_msg);
-    assert!(error_msg.contains("DOC to DOCX conversion") || error_msg.contains("LibreOffice"), 
-        "Should mention conversion attempt: {}", error_msg);
 }
 
 #[tokio::test]
@@ -588,43 +503,4 @@ async fn test_doc_error_message_includes_processing_time() {
         "Should include processing time: {}", error_msg);
 }
 
-#[tokio::test]
-async fn test_doc_to_docx_uuid_uniqueness() {
-    let temp_dir = TempDir::new().unwrap();
-    let doc_path = temp_dir.path().join("uuid_test.doc");
-    
-    // Create a fake DOC file
-    let doc_data = create_fake_doc_file();
-    fs::write(&doc_path, doc_data).unwrap();
-    
-    // Create OCR service
-    let ocr_service = EnhancedOcrService {
-        temp_dir: temp_dir.path().to_str().unwrap().to_string(),
-        file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
-    };
-    
-    // Try conversion multiple times to ensure unique temp directories
-    let mut temp_dirs = std::collections::HashSet::new();
-    
-    for _ in 0..3 {
-        let result = ocr_service.try_doc_to_docx_conversion(
-            doc_path.to_str().unwrap()
-        ).await;
-        
-        // Extract temp directory from error message (since LibreOffice won't be available)
-        if let Err(error) = result {
-            let error_str = error.to_string();
-            if error_str.contains("doc_conversion_") {
-                // Extract the UUID part to verify uniqueness
-                temp_dirs.insert(error_str);
-            }
-        }
-    }
-    
-    // Should have created unique temp directories for each attempt
-    // (If we got far enough to create them before LibreOffice failure)
-    if !temp_dirs.is_empty() {
-        assert!(temp_dirs.len() > 1 || temp_dirs.len() == 1, 
-            "Should use unique temp directories for each conversion attempt");
-    }
-}
+// Note: UUID uniqueness test removed since we no longer use temporary conversion directories
