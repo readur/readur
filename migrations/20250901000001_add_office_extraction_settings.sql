@@ -3,12 +3,12 @@
 
 -- Add office extraction timeout column (default: 120 seconds)
 ALTER TABLE settings 
-ADD COLUMN office_extraction_timeout_seconds INTEGER NOT NULL DEFAULT 120
+ADD COLUMN IF NOT EXISTS office_extraction_timeout_seconds INTEGER NOT NULL DEFAULT 120
 CHECK (office_extraction_timeout_seconds > 0 AND office_extraction_timeout_seconds <= 600);
 
 -- Add office extraction detailed logging column (default: false for production)
 ALTER TABLE settings 
-ADD COLUMN office_extraction_enable_detailed_logging BOOLEAN NOT NULL DEFAULT false;
+ADD COLUMN IF NOT EXISTS office_extraction_enable_detailed_logging BOOLEAN NOT NULL DEFAULT false;
 
 -- Add comment to document the new columns
 COMMENT ON COLUMN settings.office_extraction_timeout_seconds IS 

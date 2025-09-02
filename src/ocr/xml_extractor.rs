@@ -295,6 +295,133 @@ impl XmlOfficeExtractor {
         reader
     }
     
+    /// Validate file path for security to prevent directory traversal and shell injection
+    fn validate_file_path_security(&self, file_path: &str) -> Result<()> {
+        // Check for null bytes
+        if file_path.contains('\0') {
+            return Err(anyhow!(
+                "File path contains null bytes: '{}'. This is blocked for security reasons.",
+                file_path.replace('\0', "\\0")
+            ));
+        }
+        
+        // Check for directory traversal attempts
+        if file_path.contains("..") {
+            return Err(anyhow!(
+                "File path contains directory traversal sequence '..': '{}'. This is blocked for security reasons.",
+                file_path
+            ));
+        }
+        
+        // Check for suspicious shell injection characters
+        let suspicious_chars = ['|', '&', ';', '$', '`', '(', ')', '{', '}', '[', ']', '<', '>'];
+        if file_path.chars().any(|c| suspicious_chars.contains(&c)) {
+            return Err(anyhow!(
+                "File path contains suspicious characters that could be used for command injection: '{}'. This is blocked for security reasons.",
+                file_path
+            ));
+        }
+        
+        // Check for shell command prefixes
+        let dangerous_prefixes = ["/bin/", "/usr/bin/", "/sbin/", "/usr/sbin/"];
+        for prefix in &dangerous_prefixes {
+            if file_path.starts_with(prefix) {
+                return Err(anyhow!(
+                    "File path starts with potentially dangerous system directory '{}': '{}'. This is blocked for security reasons.",
+                    prefix, file_path
+                ));
+            }
+        }
+        
+        // Ensure path is reasonably long (avoid empty or very short paths that might be special)
+        if file_path.trim().len() < 3 {
+            return Err(anyhow!(
+                "File path is too short: '{}'. This might indicate a malformed or dangerous path.",
+                file_path
+            ));
+        }
+        
+        // Check that file exists (additional validation)
+        if !std::path::Path::new(file_path).exists() {
+            return Err(anyhow!(
+                "File does not exist: '{}'. This prevents processing of non-existent files.",
+                file_path
+            ));
+        }
+        
+        Ok(())
+    }
+    
+    /// Try to execute an external tool with timeout and proper error handling
+    async fn try_external_tool(&self, tool_name: &str, args: &[&str], file_path: &str) -> Result<String> {
+        use tokio::process::Command;
+        
+        // Create the command with proper argument passing (no shell)
+        let mut cmd = Command::new(tool_name);
+        cmd.args(args);
+        
+        // Set timeout (30 seconds should be reasonable for DOC extraction)
+        let timeout_duration = Duration::from_secs(30);
+        
+        info!("Executing external tool: {} with args: {:?}", tool_name, args);
+        
+        // Execute the command with timeout
+        let output = match timeout(timeout_duration, cmd.output()).await {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    return Err(anyhow!(
+                        "Tool '{}' not found. Please install it: sudo apt-get install {}",
+                        tool_name,
+                        match tool_name {
+                            "antiword" => "antiword",
+                            "catdoc" => "catdoc", 
+                            "wvText" => "wv",
+                            _ => tool_name,
+                        }
+                    ));
+                } else {
+                    return Err(anyhow!("Failed to execute '{}': {}", tool_name, e));
+                }
+            }
+            Err(_) => {
+                return Err(anyhow!(
+                    "Tool '{}' timed out after 30 seconds while processing '{}'",
+                    tool_name, file_path
+                ));
+            }
+        };
+        
+        // Check exit status
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            return Err(anyhow!(
+                "Tool '{}' failed with exit code: {:?}\nstderr: {}\nstdout: {}",
+                tool_name,
+                output.status.code(),
+                stderr.trim(),
+                stdout.trim()
+            ));
+        }
+        
+        // Extract text from stdout
+        let extracted_text = String::from_utf8_lossy(&output.stdout).into_owned();
+        
+        // Check if we got any meaningful output
+        if extracted_text.trim().is_empty() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!(
+                "Tool '{}' produced no output. stderr: {}",
+                tool_name,
+                stderr.trim()
+            ));
+        }
+        
+        info!("Successfully extracted {} characters with {}", extracted_text.len(), tool_name);
+        Ok(extracted_text)
+    }
+    
     /// Parse workbook.xml to get actual worksheet references instead of guessing
     fn get_worksheet_names_from_workbook(archive: &mut zip::ZipArchive<std::fs::File>, context: &ExtractionContext) -> Result<Vec<String>> {
         use quick_xml::events::Event;
@@ -708,7 +835,12 @@ impl XmlOfficeExtractor {
             let raw_text = text_content.join("");
             let cleaned_text = Self::clean_extracted_text(&raw_text);
             
-            if cleaned_text.trim().is_empty() {
+            // Check if we have actual text content (not just structural markers like section breaks)
+            let content_without_markers = cleaned_text
+                .replace("--- Section Break ---", "")
+                .replace("--- Page Break ---", "");
+            
+            if content_without_markers.trim().is_empty() {
                 return Err(OfficeExtractionError::empty_document_error(&file_path_clone, "DOCX"));
             }
             
@@ -937,18 +1069,90 @@ impl XmlOfficeExtractor {
         })
     }
 
-    /// Extract text from legacy DOC files - provide guidance for now
+    /// Extract text from legacy DOC files using external tools (antiword, catdoc, wvText)
     async fn extract_text_from_legacy_doc(&self, file_path: &str, start_time: Instant) -> Result<OfficeExtractionResult> {
         info!("Processing legacy DOC file: {}", file_path);
         
-        let _processing_time = start_time.elapsed().as_millis() as u64;
+        // Validate file path for security
+        self.validate_file_path_security(file_path)?;
         
-        // Legacy DOC files are complex binary format, suggest conversion
-        Err(OfficeExtractionError::unsupported_format_error(
-            file_path, 
-            "Legacy Word (.doc)", 
-            &["DOCX", "PDF", "TXT"]
-        ))
+        // Try external tools in order of preference
+        let tools = vec![
+            ("antiword", vec![file_path]),
+            ("catdoc", vec![file_path]),
+            ("wvText", vec![file_path]),
+        ];
+        
+        let mut last_error: Option<String> = None;
+        let mut tried_tools = Vec::new();
+        
+        for (tool_name, args) in tools {
+            tried_tools.push(tool_name);
+            info!("Attempting DOC extraction with {}", tool_name);
+            
+            match self.try_external_tool(tool_name, &args, file_path).await {
+                Ok(extracted_text) => {
+                    let processing_time = start_time.elapsed().as_millis() as u64;
+                    
+                    // Clean and validate the extracted text
+                    let cleaned_text = Self::clean_extracted_text(&extracted_text);
+                    let sanitized_text = Self::remove_null_bytes(&cleaned_text);
+                    
+                    if sanitized_text.trim().is_empty() {
+                        return Err(OfficeExtractionError::empty_document_error(file_path, "DOC"));
+                    }
+                    
+                    let word_count = self.count_words_safely(&sanitized_text);
+                    
+                    info!(
+                        "DOC extraction succeeded with {}: {} words extracted from '{}' in {}ms",
+                        tool_name, word_count, file_path, processing_time
+                    );
+                    
+                    return Ok(OfficeExtractionResult {
+                        text: sanitized_text,
+                        confidence: 90.0, // External tool extraction has good but not perfect confidence
+                        processing_time_ms: processing_time,
+                        word_count,
+                        extraction_method: format!("DOC external tool ({})", tool_name),
+                    });
+                }
+                Err(e) => {
+                    warn!("DOC extraction with {} failed: {}", tool_name, e);
+                    last_error = Some(e.to_string());
+                }
+            }
+        }
+        
+        // All tools failed
+        let processing_time = start_time.elapsed().as_millis() as u64;
+        let error_message = format!(
+            "None of the DOC extraction tools (antiword, catdoc, wvText) are available or working.\n\
+            \n\
+            Tried tools: {}\n\
+            Processing time: {}ms\n\
+            \n\
+            This file is in the legacy Microsoft Word (.doc) binary format which requires \
+            external tools for text extraction.\n\
+            \n\
+            To extract text from DOC files, please install one of these tools:\n\
+            • antiword: sudo apt-get install antiword (Ubuntu/Debian)\n\
+            • catdoc: sudo apt-get install catdoc (Ubuntu/Debian)\n\
+            • wvText: sudo apt-get install wv (Ubuntu/Debian)\n\
+            \n\
+            Last error: {}\n\
+            \n\
+            Alternatively, you can:\n\
+            1. Convert the file to DOCX format using Microsoft Word or LibreOffice\n\
+            2. Save/export as PDF format\n\
+            3. Copy and paste the text into a new DOCX document\n\
+            4. Use online conversion tools to convert DOC to DOCX",
+            tried_tools.join(", "),
+            processing_time,
+            last_error.unwrap_or_else(|| "All extraction methods failed".to_string())
+        );
+        
+        Err(anyhow::anyhow!(error_message))
     }
 
     /// Extract text from legacy Excel files - provide guidance for now

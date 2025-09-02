@@ -33,6 +33,9 @@ This guide covers contributing to Readur, setting up a development environment, 
 - PostgreSQL 14+
 - Tesseract OCR 4.0+
 - Git
+- **Optional but recommended** for legacy DOC file support:
+  - antiword (`apt-get install antiword` or `brew install antiword`)
+  - catdoc (`apt-get install catdoc` or `brew install catdoc`)
 
 ### Local Development
 

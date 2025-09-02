@@ -61,7 +61,9 @@ jobs:
             pkg-config \
             libclang-dev \
             ocrmypdf \
-            clang
+            clang \
+            antiword \
+            catdoc
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
