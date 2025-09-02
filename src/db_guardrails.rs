@@ -22,6 +22,20 @@ impl DocumentTransactionManager {
     }
 
     /// Update OCR results with full transaction safety and validation
+    /// Sanitize text for PostgreSQL storage
+    /// Removes null bytes and ensures valid UTF-8 encoding
+    fn sanitize_text_for_db(text: &str) -> String {
+        // Remove null bytes which PostgreSQL cannot store in TEXT fields
+        let cleaned: String = text
+            .chars()
+            .filter(|&c| c != '\0')
+            .collect();
+        
+        // Additional safety: ensure the string is valid UTF-8
+        // (should already be, but this is defensive)
+        String::from_utf8_lossy(cleaned.as_bytes()).to_string()
+    }
+
     pub async fn update_ocr_with_validation(
         &self,
         document_id: Uuid,
@@ -81,7 +95,18 @@ impl DocumentTransactionManager {
             return Ok(false);
         }
 
-        // 5. Perform the update with additional safety checks
+        // 5. Sanitize text before database insertion
+        let sanitized_text = Self::sanitize_text_for_db(ocr_text);
+        
+        // Log if sanitization was needed
+        if sanitized_text.len() != ocr_text.len() {
+            warn!(
+                "Text sanitization was required for document {}: original {} chars, sanitized {} chars",
+                document_id, ocr_text.len(), sanitized_text.len()
+            );
+        }
+        
+        // 6. Perform the update with additional safety checks
         let updated_rows = sqlx::query!(
             r#"
             UPDATE documents
@@ -96,7 +121,7 @@ impl DocumentTransactionManager {
               AND ocr_status != 'completed'  -- Extra safety check
             "#,
             document_id,
-            ocr_text,
+            sanitized_text.as_str(),
             confidence,
             word_count,
             processing_time_ms
@@ -110,7 +135,7 @@ impl DocumentTransactionManager {
             return Ok(false);
         }
 
-        // 6. Remove from OCR queue atomically
+        // 7. Remove from OCR queue atomically
         let queue_removed = sqlx::query!(
             r#"
             DELETE FROM ocr_queue 
@@ -126,12 +151,12 @@ impl DocumentTransactionManager {
             warn!("Document {} not found in OCR queue during completion", document_id);
         }
 
-        // 7. Commit transaction
+        // 8. Commit transaction
         tx.commit().await?;
         
         info!(
             "Document {} OCR updated successfully: {} chars, {:.1}% confidence, {} words", 
-            document_id, ocr_text.len(), confidence, word_count
+            document_id, sanitized_text.len(), confidence, word_count
         );
         
         Ok(true)
@@ -530,6 +555,26 @@ impl DistributedLock {
 mod tests {
     use super::*;
     
-    // Mock tests for the transaction manager
-    // These would need a test database to run properly
+    #[test]
+    fn test_sanitize_text_for_db() {
+        // Test removing null bytes
+        let text_with_nulls = "Hello\0World\0!";
+        let sanitized = TransactionManager::sanitize_text_for_db(text_with_nulls);
+        assert_eq!(sanitized, "HelloWorld!");
+        
+        // Test preserving normal text
+        let normal_text = "This is a normal PDF text with special chars: €£¥";
+        let sanitized = TransactionManager::sanitize_text_for_db(normal_text);
+        assert_eq!(sanitized, normal_text);
+        
+        // Test handling empty string
+        let empty = "";
+        let sanitized = TransactionManager::sanitize_text_for_db(empty);
+        assert_eq!(sanitized, "");
+        
+        // Test handling text with multiple null bytes
+        let many_nulls = "\0\0Start\0Middle\0\0End\0\0";
+        let sanitized = TransactionManager::sanitize_text_for_db(many_nulls);
+        assert_eq!(sanitized, "StartMiddleEnd");
+    }
 }
