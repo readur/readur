@@ -17,7 +17,33 @@ use tesseract::{Tesseract, PageSegMode, OcrEngineMode};
 use crate::models::Settings;
 use crate::services::file_service::FileService;
 use super::xml_extractor::XmlOfficeExtractor;
+use super::extraction_comparator::{ExtractionConfig, ExtractionMode, ExtractionComparator, SingleExtractionResult, ComparisonReport};
 // Removed text_sanitization import - now using minimal inline sanitization
+
+/// RAII guard for automatic cleanup of temporary files
+struct FileCleanupGuard {
+    file_path: String,
+}
+
+impl FileCleanupGuard {
+    fn new(file_path: &str) -> Self {
+        Self {
+            file_path: file_path.to_string(),
+        }
+    }
+}
+
+impl Drop for FileCleanupGuard {
+    fn drop(&mut self) {
+        if std::path::Path::new(&self.file_path).exists() {
+            if let Err(e) = std::fs::remove_file(&self.file_path) {
+                warn!("Failed to clean up temporary file '{}': {}", self.file_path, e);
+            } else {
+                debug!("Cleaned up temporary file: {}", self.file_path);
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ImageQualityStats {
@@ -1472,15 +1498,72 @@ impl EnhancedOcrService {
     }
 
     /// Extract text from Office documents (DOCX, DOC, Excel) with library and XML fallback
-    pub async fn extract_text_from_office(&self, file_path: &str, mime_type: &str, _settings: &Settings) -> Result<OcrResult> {
+    pub async fn extract_text_from_office(&self, file_path: &str, mime_type: &str, settings: &Settings) -> Result<OcrResult> {
+        // Use the extraction mode from settings to determine behavior
+        let (result, comparison_report) = self.extract_text_from_office_with_mode(file_path, mime_type, settings).await?;
+        
+        // Log comparison report if available
+        if let Some(report) = comparison_report {
+            info!("╔════════════════════════════════════════════════════════════╗");
+            info!("║     📊 OFFICE DOCUMENT EXTRACTION COMPARISON REPORT 📊      ║");
+            info!("╠════════════════════════════════════════════════════════════╣");
+            info!("║ Similarity Score: {:.2}%", report.similarity_score * 100.0);
+            info!("╠════════════════════════════════════════════════════════════╣");
+            info!("║ LIBRARY EXTRACTION (docx-rs/calamine):");
+            if let Some(lib_result) = &report.library_result {
+                info!("║   ✓ Success: {} words in {}ms", lib_result.word_count, lib_result.processing_time_ms);
+                info!("║   Characters: {}", lib_result.text_length);
+            } else {
+                info!("║   ✗ Failed");
+            }
+            info!("╠════════════════════════════════════════════════════════════╣");
+            info!("║ XML EXTRACTION (manual parsing):");
+            if let Some(xml_result) = &report.xml_result {
+                info!("║   ✓ Success: {} words in {}ms", xml_result.word_count, xml_result.processing_time_ms);
+                info!("║   Characters: {}", xml_result.text_length);
+            } else {
+                info!("║   ✗ Failed");
+            }
+            info!("╠════════════════════════════════════════════════════════════╣");
+            info!("║ RECOMMENDATION: {}", report.recommended_method);
+            if report.performance_metrics.speed_improvement_factor > 1.0 {
+                info!("║ Speed Advantage: {:.1}x faster", report.performance_metrics.speed_improvement_factor);
+            }
+            info!("╚════════════════════════════════════════════════════════════╝");
+        } else {
+            warn!("⚠️ No comparison report generated - this shouldn't happen in CompareAlways mode!");
+        }
+        
+        Ok(result)
+    }
+    
+    /// Extract text from Office documents with configurable extraction mode and comparison
+    pub async fn extract_text_from_office_with_mode(
+        &self, 
+        file_path: &str, 
+        mime_type: &str, 
+        settings: &Settings
+    ) -> Result<(OcrResult, Option<ComparisonReport>)> {
         let start_time = std::time::Instant::now();
-        info!("Extracting text from Office document: {} (type: {})", file_path, mime_type);
+        info!("Extracting text from Office document with mode: {} (type: {})", file_path, mime_type);
+        
+        // TEMPORARY: Hardcode comparison mode for evaluation
+        let config = ExtractionConfig {
+            mode: ExtractionMode::CompareAlways,  // Always compare both methods
+            timeout_seconds: 180,                 // Give enough time for both extractions
+            enable_detailed_logging: true,        // Always log details
+        };
+        
+        info!("📊 FORCED COMPARISON MODE: Running both library and XML extraction for evaluation");
+        
+        if config.enable_detailed_logging {
+            info!("Office extraction mode: {:?}, timeout: {}s", config.mode, config.timeout_seconds);
+        }
         
         // Check file size before processing
         let metadata = tokio::fs::metadata(file_path).await?;
         let file_size = metadata.len();
         
-        // Limit Office document size to prevent memory exhaustion
         if file_size > Self::MAX_OFFICE_DOCUMENT_SIZE {
             return Err(anyhow!(
                 "Office document too large: {:.1} MB (max: {:.1} MB). Consider converting to PDF or splitting the document.",
@@ -1489,8 +1572,290 @@ impl EnhancedOcrService {
             ));
         }
         
-        // Try library-based extraction first, fall back to XML extraction if it fails
-        let library_result = match mime_type {
+        match config.mode {
+            ExtractionMode::LibraryFirst => {
+                self.extract_with_library_first(file_path, mime_type, start_time, &config).await
+            }
+            ExtractionMode::XmlFirst => {
+                self.extract_with_xml_first(file_path, mime_type, start_time, &config).await
+            }
+            ExtractionMode::CompareAlways => {
+                self.extract_with_comparison(file_path, mime_type, start_time, &config).await
+            }
+            ExtractionMode::LibraryOnly => {
+                self.extract_library_only(file_path, mime_type, start_time, &config).await
+            }
+            ExtractionMode::XmlOnly => {
+                self.extract_xml_only(file_path, mime_type, start_time, &config).await
+            }
+        }
+    }
+    
+    /// Extract using library-first approach (existing behavior)
+    async fn extract_with_library_first(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+        start_time: std::time::Instant,
+        config: &ExtractionConfig,
+    ) -> Result<(OcrResult, Option<ComparisonReport>)> {
+        let library_result = self.try_library_extraction(file_path, mime_type, start_time).await;
+        
+        match library_result {
+            Ok(result) => {
+                if config.enable_detailed_logging {
+                    info!("Library-based extraction succeeded for '{}' (method: {})", file_path, result.preprocessing_applied.join(", "));
+                }
+                Ok((result, None))
+            }
+            Err(library_error) => {
+                if config.enable_detailed_logging {
+                    warn!("Library-based extraction failed for '{}': {}. Attempting XML fallback.", file_path, library_error);
+                }
+                
+                let xml_extractor = XmlOfficeExtractor::new(self.temp_dir.clone());
+                match xml_extractor.extract_text_from_office(file_path, mime_type).await {
+                    Ok(xml_result) => {
+                        if config.enable_detailed_logging {
+                            info!("XML-based extraction succeeded as fallback for '{}' (method: {})", file_path, xml_result.extraction_method);
+                        }
+                        Ok((xml_result.into(), None))
+                    }
+                    Err(xml_error) => {
+                        Err(anyhow!(
+                            "Both library and XML-based extraction failed for '{}' (type: {}):\nLibrary error: {}\nXML error: {}",
+                            file_path, mime_type, library_error, xml_error
+                        ))
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Extract using XML-first approach
+    async fn extract_with_xml_first(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+        start_time: std::time::Instant,
+        config: &ExtractionConfig,
+    ) -> Result<(OcrResult, Option<ComparisonReport>)> {
+        let xml_extractor = XmlOfficeExtractor::new(self.temp_dir.clone());
+        let xml_result = xml_extractor.extract_text_from_office(file_path, mime_type).await;
+        
+        match xml_result {
+            Ok(result) => {
+                if config.enable_detailed_logging {
+                    info!("XML-based extraction succeeded for '{}' (method: {})", file_path, result.extraction_method);
+                }
+                Ok((result.into(), None))
+            }
+            Err(xml_error) => {
+                if config.enable_detailed_logging {
+                    warn!("XML-based extraction failed for '{}': {}. Attempting library fallback.", file_path, xml_error);
+                }
+                
+                match self.try_library_extraction(file_path, mime_type, start_time).await {
+                    Ok(library_result) => {
+                        if config.enable_detailed_logging {
+                            info!("Library-based extraction succeeded as fallback for '{}' (method: {})", file_path, library_result.preprocessing_applied.join(", "));
+                        }
+                        Ok((library_result, None))
+                    }
+                    Err(library_error) => {
+                        Err(anyhow!(
+                            "Both XML and library-based extraction failed for '{}' (type: {}):\nXML error: {}\nLibrary error: {}",
+                            file_path, mime_type, xml_error, library_error
+                        ))
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Extract using both methods and compare results
+    async fn extract_with_comparison(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+        start_time: std::time::Instant,
+        config: &ExtractionConfig,
+    ) -> Result<(OcrResult, Option<ComparisonReport>)> {
+        info!("Running both extraction methods for comparison analysis: {}", file_path);
+        
+        // To prevent concurrent file access issues, we'll copy the file to temporary locations
+        // and have each method work on its own copy. This ensures no file system conflicts.
+        let (library_temp_path, xml_temp_path) = self.create_temp_file_copies(file_path).await?;
+        
+        // Clean up temp files when done
+        let _library_cleanup = FileCleanupGuard::new(&library_temp_path);
+        let _xml_cleanup = FileCleanupGuard::new(&xml_temp_path);
+        
+        // Run both extractions concurrently on separate file copies
+        let library_future = self.try_library_extraction(&library_temp_path, mime_type, start_time);
+        let xml_future = async {
+            let xml_extractor = XmlOfficeExtractor::new(self.temp_dir.clone());
+            xml_extractor.extract_text_from_office(&xml_temp_path, mime_type).await
+        };
+        
+        let (library_result, xml_result) = tokio::join!(library_future, xml_future);
+        
+        // Convert results to SingleExtractionResult format for comparison
+        let library_single_result = match &library_result {
+            Ok(result) => Some(SingleExtractionResult {
+                text: result.text.clone(),
+                confidence: result.confidence,
+                processing_time: std::time::Duration::from_millis(result.processing_time_ms),
+                word_count: result.word_count,
+                method_name: result.preprocessing_applied.join(", "),
+                success: true,
+                error_message: None,
+            }),
+            Err(e) => Some(SingleExtractionResult {
+                text: String::new(),
+                confidence: 0.0,
+                processing_time: std::time::Duration::from_millis(0),
+                word_count: 0,
+                method_name: "Library extraction".to_string(),
+                success: false,
+                error_message: Some(e.to_string()),
+            }),
+        };
+        
+        let xml_single_result = match &xml_result {
+            Ok(result) => Some(SingleExtractionResult {
+                text: result.text.clone(),
+                confidence: result.confidence,
+                processing_time: std::time::Duration::from_millis(result.processing_time_ms),
+                word_count: result.word_count,
+                method_name: result.extraction_method.clone(),
+                success: true,
+                error_message: None,
+            }),
+            Err(e) => Some(SingleExtractionResult {
+                text: String::new(),
+                confidence: 0.0,
+                processing_time: std::time::Duration::from_millis(0),
+                word_count: 0,
+                method_name: "XML extraction".to_string(),
+                success: false,
+                error_message: Some(e.to_string()),
+            }),
+        };
+        
+        // Perform comparison
+        let comparator = ExtractionComparator::new(config.clone());
+        let comparison_report = comparator.compare_extractions(library_single_result, xml_single_result)?;
+        
+        // Log comparison results (selective logging to prevent spam)
+        if config.enable_detailed_logging {
+            // Only log interesting cases to prevent log spam
+            let should_log_details = 
+                // Log if methods disagree significantly
+                comparison_report.similarity_score < 0.8 ||
+                // Log if there's a big performance difference (> 2x)
+                comparison_report.performance_metrics.speed_improvement_factor > 2.0 ||
+                // Log if one method failed but other succeeded
+                (comparison_report.library_result.as_ref().map_or(false, |r| !r.success) && 
+                 comparison_report.xml_result.as_ref().map_or(false, |r| r.success)) ||
+                (comparison_report.library_result.as_ref().map_or(false, |r| r.success) && 
+                 comparison_report.xml_result.as_ref().map_or(false, |r| !r.success));
+                
+            if should_log_details {
+                info!(
+                    "Extraction comparison for '{}': similarity={:.2}, recommended_method='{}', performance_improvement={:.1}x",
+                    file_path,
+                    comparison_report.similarity_score,
+                    comparison_report.recommended_method,
+                    comparison_report.performance_metrics.speed_improvement_factor
+                );
+                
+                if let (Some(lib), Some(xml)) = (&comparison_report.library_result, &comparison_report.xml_result) {
+                    debug!(
+                        "Method details: Library({}ms, {} words, success={}), XML({}ms, {} words, success={})",
+                        lib.processing_time_ms,
+                        lib.word_count,
+                        lib.success,
+                        xml.processing_time_ms,
+                        xml.word_count,
+                        xml.success
+                    );
+                }
+            } else {
+                // For routine comparisons, just use debug level
+                debug!(
+                    "Extraction comparison for '{}': methods agree (similarity={:.2}), using '{}'",
+                    file_path,
+                    comparison_report.similarity_score,
+                    comparison_report.recommended_method
+                );
+            }
+        }
+        
+        // Determine which result to return based on comparison
+        let chosen_result = match (&library_result, &xml_result) {
+            (Ok(lib_result), Ok(xml_result)) => {
+                // Both succeeded, choose based on recommendation
+                if comparison_report.recommended_method.contains("Library") ||
+                   comparison_report.recommended_method.contains("Tie") {
+                    Ok(lib_result.clone())
+                } else {
+                    Ok(xml_result.clone().into())
+                }
+            }
+            (Ok(lib_result), Err(_)) => Ok(lib_result.clone()),
+            (Err(_), Ok(xml_result)) => Ok(xml_result.clone().into()),
+            (Err(lib_error), Err(xml_error)) => Err(anyhow!(
+                "Both extraction methods failed for '{}': Library: {}, XML: {}",
+                file_path, lib_error, xml_error
+            )),
+        };
+        
+        match chosen_result {
+            Ok(result) => Ok((result, Some(comparison_report))),
+            Err(e) => Err(e),
+        }
+    }
+    
+    /// Extract using library method only
+    async fn extract_library_only(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+        start_time: std::time::Instant,
+        config: &ExtractionConfig,
+    ) -> Result<(OcrResult, Option<ComparisonReport>)> {
+        let result = self.try_library_extraction(file_path, mime_type, start_time).await?;
+        if config.enable_detailed_logging {
+            info!("Library-only extraction completed for '{}' (method: {})", file_path, result.preprocessing_applied.join(", "));
+        }
+        Ok((result, None))
+    }
+    
+    /// Extract using XML method only
+    async fn extract_xml_only(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+        start_time: std::time::Instant,
+        config: &ExtractionConfig,
+    ) -> Result<(OcrResult, Option<ComparisonReport>)> {
+        let xml_extractor = XmlOfficeExtractor::new(self.temp_dir.clone());
+        let result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
+        if config.enable_detailed_logging {
+            info!("XML-only extraction completed for '{}' (method: {})", file_path, result.extraction_method);
+        }
+        Ok((result.into(), None))
+    }
+    
+    /// Helper method to try library-based extraction
+    async fn try_library_extraction(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+        start_time: std::time::Instant,
+    ) -> Result<OcrResult> {
+        match mime_type {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
                 self.extract_text_from_docx(file_path, start_time).await
             }
@@ -1502,14 +1867,12 @@ impl EnhancedOcrService {
                 self.extract_text_from_excel(file_path, mime_type, start_time).await
             }
             "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
-                // For PPTX, we'll provide guidance for now as it's complex
                 Err(anyhow!(
                     "PowerPoint files (PPTX) are not yet supported for text extraction. \
                     To extract content from '{}', please:\n\
                     1. Export/Print the presentation as PDF (recommended)\n\
                     2. Use 'File' > 'Export' > 'Create Handouts' in PowerPoint\n\
-                    3. Copy text content from slides into a text document\n\
-                    \nPDF export will preserve both text and visual elements.",
+                    3. Copy text content from slides into a text document",
                     file_path
                 ))
             }
@@ -1520,42 +1883,67 @@ impl EnhancedOcrService {
                     mime_type, file_path
                 ))
             }
-        };
+        }
+    }
+    
+    /// Create temporary copies of the file for concurrent processing to prevent file access conflicts
+    async fn create_temp_file_copies(&self, file_path: &str) -> Result<(String, String)> {
+        use tokio::fs;
+        use uuid::Uuid;
         
-        // If library-based extraction succeeds, return the result
-        match library_result {
-            Ok(result) => {
-                info!("Library-based Office extraction succeeded for '{}' (method: {})", file_path, result.preprocessing_applied.join(", "));
-                return Ok(result);
+        // Generate unique temporary file names
+        let file_extension = std::path::Path::new(file_path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("tmp");
+            
+        let library_temp_name = format!("library_{}_{}.{}", 
+            Uuid::new_v4().simple(), 
+            chrono::Utc::now().timestamp_millis(),
+            file_extension
+        );
+        let xml_temp_name = format!("xml_{}_{}.{}", 
+            Uuid::new_v4().simple(), 
+            chrono::Utc::now().timestamp_millis(),
+            file_extension
+        );
+        
+        let library_temp_path = std::path::Path::new(&self.temp_dir).join(library_temp_name);
+        let xml_temp_path = std::path::Path::new(&self.temp_dir).join(xml_temp_name);
+        
+        // Copy original file to both temporary locations
+        match fs::copy(file_path, &library_temp_path).await {
+            Ok(bytes_copied) => {
+                debug!("Created library temp copy: {} ({} bytes)", library_temp_path.display(), bytes_copied);
             }
-            Err(library_error) => {
-                // Log the library extraction error and try XML fallback
-                warn!("Library-based Office extraction failed for '{}': {}. Attempting XML fallback.", file_path, library_error);
-                
-                // Try XML-based extraction as fallback
-                let xml_extractor = XmlOfficeExtractor::new(self.temp_dir.clone());
-                match xml_extractor.extract_text_from_office(file_path, mime_type).await {
-                    Ok(xml_result) => {
-                        info!("XML-based Office extraction succeeded as fallback for '{}' (method: {})", file_path, xml_result.extraction_method);
-                        // Convert OfficeExtractionResult to OcrResult using the From trait
-                        Ok(xml_result.into())
-                    }
-                    Err(xml_error) => {
-                        // Both methods failed, return a combined error message
-                        Err(anyhow!(
-                            "Both library and XML-based Office extraction failed for '{}' (type: {}):\n\
-                            Library error: {}\n\
-                            XML error: {}\n\
-                            \nConsider:\n\
-                            1. Converting the document to PDF format\n\
-                            2. Checking if the file is corrupted\n\
-                            3. Ensuring the file is a valid Office document",
-                            file_path, mime_type, library_error, xml_error
-                        ))
-                    }
-                }
+            Err(e) => {
+                return Err(anyhow!(
+                    "Failed to create temporary copy for library extraction: {}. \
+                    Original file: {}, Target: {}",
+                    e, file_path, library_temp_path.display()
+                ));
             }
         }
+        
+        match fs::copy(file_path, &xml_temp_path).await {
+            Ok(bytes_copied) => {
+                debug!("Created XML temp copy: {} ({} bytes)", xml_temp_path.display(), bytes_copied);
+            }
+            Err(e) => {
+                // Clean up the first copy if second copy fails
+                let _ = fs::remove_file(&library_temp_path).await;
+                return Err(anyhow!(
+                    "Failed to create temporary copy for XML extraction: {}. \
+                    Original file: {}, Target: {}",
+                    e, file_path, xml_temp_path.display()
+                ));
+            }
+        }
+        
+        Ok((
+            library_temp_path.to_string_lossy().to_string(),
+            xml_temp_path.to_string_lossy().to_string(),
+        ))
     }
     
     /// Extract text from DOCX files using docx-rs library

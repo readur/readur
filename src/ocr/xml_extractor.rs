@@ -6,6 +6,136 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::time::{timeout, Duration};
 use super::enhanced::OcrResult;
 
+/// User-friendly error messages for Office document extraction issues
+pub struct OfficeExtractionError;
+
+impl OfficeExtractionError {
+    /// Create a user-friendly timeout error
+    pub fn timeout_error(file_path: &str, timeout_seconds: u64) -> anyhow::Error {
+        anyhow!(
+            "Document processing timed out after {} seconds.\n\
+            \n\
+            The file '{}' is taking too long to process, which may indicate:\n\
+            • Very large or complex document structure\n\
+            • Document contains many embedded objects or images\n\
+            • Corrupted or damaged file\n\
+            \n\
+            Suggestions to resolve this issue:\n\
+            1. Convert the document to PDF format (often processes faster)\n\
+            2. Split large documents into smaller sections\n\
+            3. Remove or compress embedded images/objects\n\
+            4. Try opening and re-saving the document to fix potential corruption\n\
+            5. Contact support if this is an important document that consistently fails",
+            timeout_seconds, file_path
+        )
+    }
+    
+    /// Create a user-friendly file size error
+    pub fn file_too_large_error(file_path: &str, file_size_mb: f64, max_size_mb: f64) -> anyhow::Error {
+        anyhow!(
+            "Document is too large to process safely.\n\
+            \n\
+            The file '{}' is {:.1} MB, but the maximum allowed size is {:.1} MB.\n\
+            \n\
+            This limit helps prevent system overload and ensures reliable processing.\n\
+            \n\
+            Suggestions to resolve this issue:\n\
+            1. Split the document into smaller files (recommended)\n\
+            2. Reduce image quality or remove unnecessary images\n\
+            3. Convert to PDF format which often compresses better\n\
+            4. Remove embedded objects, videos, or audio files\n\
+            5. Process individual sections separately if splitting isn't practical",
+            file_path, file_size_mb, max_size_mb
+        )
+    }
+    
+    /// Create a user-friendly corrupted file error
+    pub fn corrupted_file_error(file_path: &str, file_type: &str, specific_issue: &str) -> anyhow::Error {
+        anyhow!(
+            "Unable to process document - file appears corrupted or invalid.\n\
+            \n\
+            The {} file '{}' could not be processed due to: {}\n\
+            \n\
+            This typically indicates:\n\
+            • File corruption during transfer or storage\n\
+            • Incomplete download or truncated file\n\
+            • File format doesn't match the expected structure\n\
+            • Document was created with incompatible software\n\
+            \n\
+            Suggestions to resolve this issue:\n\
+            1. Re-download or re-obtain the original file\n\
+            2. Open the document in its native application and re-save it\n\
+            3. Try converting the document to PDF format first\n\
+            4. Use a file repair tool if available\n\
+            5. Contact the document creator for a fresh copy",
+            file_type, file_path, specific_issue
+        )
+    }
+    
+    /// Create a user-friendly empty document error
+    pub fn empty_document_error(file_path: &str, document_type: &str) -> anyhow::Error {
+        anyhow!(
+            "No text content found in document.\n\
+            \n\
+            The {} file '{}' appears to be empty or contains no extractable text.\n\
+            \n\
+            This could mean:\n\
+            • Document contains only images, charts, or graphics\n\
+            • All content is in unsupported formats (e.g., embedded objects)\n\
+            • Document is password-protected or encrypted\n\
+            • File contains only formatting with no actual text\n\
+            \n\
+            Suggestions:\n\
+            1. Check if the document has visible content when opened normally\n\
+            2. If it contains images with text, convert to PDF and try again\n\
+            3. Copy and paste content into a new document if possible\n\
+            4. Remove password protection if the document is encrypted\n\
+            5. Contact support if you believe this document should contain text",
+            document_type, file_path
+        )
+    }
+    
+    /// Create a user-friendly unsupported format error
+    pub fn unsupported_format_error(file_path: &str, file_format: &str, suggested_formats: &[&str]) -> anyhow::Error {
+        let format_list = suggested_formats.join(", ");
+        anyhow!(
+            "Document format not supported for text extraction.\n\
+            \n\
+            The file '{}' is in {} format, which is not currently supported for automatic text extraction.\n\
+            \n\
+            Supported formats include: {}\n\
+            \n\
+            Suggestions to process this document:\n\
+            1. Convert to a supported format (PDF recommended)\n\
+            2. Open in the original application and export/save as supported format\n\
+            3. Copy text manually and paste into a supported document type\n\
+            4. Use online conversion tools to change the format\n\
+            5. Contact support if you frequently work with this format",
+            file_path, file_format, format_list
+        )
+    }
+    
+    /// Create a user-friendly ZIP bomb protection error
+    pub fn zip_bomb_protection_error(current_size_mb: f64, max_size_mb: f64) -> anyhow::Error {
+        anyhow!(
+            "Document processing stopped for security reasons.\n\
+            \n\
+            The document's internal structure expanded to {:.1} MB when processed, \
+            exceeding the safety limit of {:.1} MB.\n\
+            \n\
+            This protection prevents potential 'ZIP bomb' attacks that could overwhelm the system.\n\
+            \n\
+            If this is a legitimate document:\n\
+            1. The document may be extremely large or complex\n\
+            2. Try splitting it into smaller sections\n\
+            3. Convert to PDF format which may process more efficiently\n\
+            4. Remove large embedded objects or images\n\
+            5. Contact support if you believe this is a valid business document",
+            current_size_mb, max_size_mb
+        )
+    }
+}
+
 /// Result structure for Office document text extraction
 #[derive(Debug, Clone)]
 pub struct OfficeExtractionResult {
@@ -38,6 +168,10 @@ pub struct ExtractionContext {
     pub total_decompressed_size: Arc<AtomicU64>,
     /// Maximum allowed total decompressed size
     pub max_total_decompressed_size: u64,
+    /// Original compressed file size for compression ratio calculations
+    pub compressed_file_size: u64,
+    /// Maximum allowed compression ratio (decompressed/compressed)
+    pub max_compression_ratio: f64,
 }
 
 impl ExtractionContext {
@@ -46,6 +180,18 @@ impl ExtractionContext {
             cancelled: Arc::new(AtomicBool::new(false)),
             total_decompressed_size: Arc::new(AtomicU64::new(0)),
             max_total_decompressed_size,
+            compressed_file_size: 0, // Will be set when file is processed
+            max_compression_ratio: 1000.0, // Allow up to 1000:1 ratio (should catch most ZIP bombs)
+        }
+    }
+    
+    pub fn new_with_file_info(max_total_decompressed_size: u64, compressed_file_size: u64) -> Self {
+        Self {
+            cancelled: Arc::new(AtomicBool::new(false)),
+            total_decompressed_size: Arc::new(AtomicU64::new(0)),
+            max_total_decompressed_size,
+            compressed_file_size,
+            max_compression_ratio: 1000.0, // Allow up to 1000:1 ratio
         }
     }
     
@@ -59,14 +205,41 @@ impl ExtractionContext {
     
     pub fn add_decompressed_bytes(&self, bytes: u64) -> Result<()> {
         let new_total = self.total_decompressed_size.fetch_add(bytes, Ordering::SeqCst) + bytes;
+        
+        // Check absolute size limit
         if new_total > self.max_total_decompressed_size {
-            return Err(anyhow!(
-                "Total decompressed size ({:.1} MB) exceeds maximum allowed ({:.1} MB). \
-                This may be a ZIP bomb attack attempting to exhaust system resources.",
+            return Err(OfficeExtractionError::zip_bomb_protection_error(
                 new_total as f64 / (1024.0 * 1024.0),
                 self.max_total_decompressed_size as f64 / (1024.0 * 1024.0)
             ));
         }
+        
+        // Check compression ratio if we have file size info
+        if self.compressed_file_size > 0 {
+            let current_ratio = new_total as f64 / self.compressed_file_size as f64;
+            if current_ratio > self.max_compression_ratio {
+                return Err(anyhow!(
+                    "Document compression ratio is suspiciously high: {:.1}:1 (limit: {:.1}:1).\n\
+                    \n\
+                    The document expanded from {:.1} MB to {:.1} MB when processed, \
+                    which indicates a potential ZIP bomb attack.\n\
+                    \n\
+                    ZIP bombs are malicious files designed to consume system resources \
+                    by expanding to enormous sizes when decompressed.\n\
+                    \n\
+                    If this is a legitimate document:\n\
+                    1. The file may contain highly repetitive content\n\
+                    2. Try converting to PDF format first\n\
+                    3. Split the document into smaller sections\n\
+                    4. Contact support if this is a valid business document",
+                    current_ratio,
+                    self.max_compression_ratio,
+                    self.compressed_file_size as f64 / (1024.0 * 1024.0),
+                    new_total as f64 / (1024.0 * 1024.0)
+                ));
+            }
+        }
+        
         Ok(())
     }
 }
@@ -330,15 +503,7 @@ impl XmlOfficeExtractor {
         
         match timeout(timeout_duration, extraction_future).await {
             Ok(result) => result,
-            Err(_) => Err(anyhow!(
-                "Office document text extraction timed out after {} seconds for file '{}'. \
-                The document may be very large or complex. Consider:\n\
-                1. Converting to PDF format first\n\
-                2. Splitting large documents into smaller parts\n\
-                3. Increasing the timeout if this is expected behavior",
-                timeout_seconds,
-                file_path
-            ))
+            Err(_) => Err(OfficeExtractionError::timeout_error(file_path, timeout_seconds))
         }
     }
     
@@ -352,15 +517,15 @@ impl XmlOfficeExtractor {
         let file_size = metadata.len();
         
         if file_size > Self::MAX_OFFICE_SIZE {
-            return Err(anyhow!(
-                "Office document too large: {:.1} MB (max: {:.1} MB). Consider converting to PDF or splitting the document.",
+            return Err(OfficeExtractionError::file_too_large_error(
+                file_path, 
                 file_size as f64 / (1024.0 * 1024.0),
                 Self::MAX_OFFICE_SIZE as f64 / (1024.0 * 1024.0)
             ));
         }
         
         // Create extraction context for ZIP bomb protection and cancellation support
-        let context = ExtractionContext::new(Self::MAX_DECOMPRESSED_SIZE);
+        let context = ExtractionContext::new_with_file_info(Self::MAX_DECOMPRESSED_SIZE, file_size);
         
         match mime_type {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
@@ -377,21 +542,17 @@ impl XmlOfficeExtractor {
             }
             "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
                 // For PPTX, provide guidance for now as it's complex
-                Err(anyhow!(
-                    "PowerPoint files (PPTX) are not yet supported for text extraction. \
-                    To extract content from '{}', please:\n\
-                    1. Export/Print the presentation as PDF (recommended)\n\
-                    2. Use 'File' > 'Export' > 'Create Handouts' in PowerPoint\n\
-                    3. Copy text content from slides into a text document\n\
-                    \nPDF export will preserve both text and visual elements.",
-                    file_path
+                Err(OfficeExtractionError::unsupported_format_error(
+                    file_path, 
+                    "PowerPoint (PPTX)", 
+                    &["PDF", "DOCX", "XLSX", "TXT"]
                 ))
             }
             _ => {
-                Err(anyhow!(
-                    "Office document type '{}' is not supported for text extraction (file: {}). \
-                    Please convert the document to PDF format or plain text for processing.",
-                    mime_type, file_path
+                Err(OfficeExtractionError::unsupported_format_error(
+                    file_path, 
+                    mime_type, 
+                    &["PDF", "DOCX", "XLSX", "TXT"]
                 ))
             }
         }
@@ -403,7 +564,10 @@ impl XmlOfficeExtractor {
         
         // Move CPU-intensive operations to blocking thread pool
         let file_path_clone = file_path.to_string();
-        let context_clone = ExtractionContext::new(context.max_total_decompressed_size);
+        let context_clone = ExtractionContext::new_with_file_info(
+            context.max_total_decompressed_size,
+            context.compressed_file_size
+        );
         let extraction_result = tokio::task::spawn_blocking(move || -> Result<String> {
             use zip::ZipArchive;
             use quick_xml::events::Event;
@@ -434,9 +598,10 @@ impl XmlOfficeExtractor {
             let mut document_xml = match archive.by_name("word/document.xml") {
                 Ok(file) => file,
                 Err(_) => {
-                    return Err(anyhow!(
-                        "Invalid DOCX file: missing word/document.xml. The file '{}' may be corrupted or not a valid DOCX document.",
-                        file_path_clone
+                    return Err(OfficeExtractionError::corrupted_file_error(
+                        &file_path_clone, 
+                        "DOCX", 
+                        "missing word/document.xml - required component not found"
                     ));
                 }
             };
@@ -460,6 +625,35 @@ impl XmlOfficeExtractor {
                             in_text_element = true;
                         }
                     }
+                    Ok(Event::Empty(ref e)) => {
+                        // Handle self-closing elements that represent spacing
+                        match e.name().as_ref() {
+                            b"w:tab" => {
+                                text_content.push("\t".to_string());
+                            }
+                            b"w:br" => {
+                                text_content.push("\n".to_string());
+                            }
+                            b"w:cr" => {
+                                text_content.push("\r".to_string());
+                            }
+                            b"w:space" => {
+                                // Check for xml:space="preserve" attribute
+                                let mut space_count = 1; // Default to one space
+                                for attr in e.attributes() {
+                                    if let Ok(attr) = attr {
+                                        if attr.key.as_ref() == b"w:count" {
+                                            if let Ok(count_str) = std::str::from_utf8(&attr.value) {
+                                                space_count = count_str.parse::<usize>().unwrap_or(1);
+                                            }
+                                        }
+                                    }
+                                }
+                                text_content.push(" ".repeat(space_count));
+                            }
+                            _ => {}
+                        }
+                    }
                     Ok(Event::Text(e)) => {
                         if in_text_element {
                             // Extract and decode the text content
@@ -471,16 +665,38 @@ impl XmlOfficeExtractor {
                         if e.name().as_ref() == b"w:t" {
                             in_text_element = false;
                         }
-                        // Add space after paragraph breaks
-                        if e.name().as_ref() == b"w:p" {
-                            text_content.push(" ".to_string());
+                        // Add proper breaks and spacing to preserve document structure
+                        match e.name().as_ref() {
+                            b"w:p" => {
+                                // End of paragraph - add double newline for better readability
+                                text_content.push("\n\n".to_string());
+                            }
+                            b"w:tr" => {
+                                // End of table row - add single newline
+                                text_content.push("\n".to_string());
+                            }
+                            b"w:tc" => {
+                                // End of table cell - add tab separator
+                                text_content.push("\t".to_string());
+                            }
+                            // Remove automatic spacing after w:r - this was causing words to be split
+                            // Instead, rely on explicit w:space elements and natural paragraph breaks
+                            // Handle section breaks and page breaks
+                            b"w:sectPr" => {
+                                text_content.push("\n\n--- Section Break ---\n\n".to_string());
+                            }
+                            b"w:lastRenderedPageBreak" => {
+                                text_content.push("\n\n--- Page Break ---\n\n".to_string());
+                            }
+                            _ => {}
                         }
                     }
                     Ok(Event::Eof) => break,
                     Err(e) => {
-                        return Err(anyhow!(
-                            "XML parsing error in DOCX file '{}': {}. The file may be corrupted.",
-                            file_path_clone, e
+                        return Err(OfficeExtractionError::corrupted_file_error(
+                            &file_path_clone, 
+                            "DOCX", 
+                            &format!("XML parsing error - {}", e)
                         ));
                     }
                     _ => {}
@@ -488,17 +704,15 @@ impl XmlOfficeExtractor {
                 buf.clear();
             }
             
-            // Join all text content
+            // Join all text content and clean it up for better readability
             let raw_text = text_content.join("");
+            let cleaned_text = Self::clean_extracted_text(&raw_text);
             
-            if raw_text.trim().is_empty() {
-                return Err(anyhow!(
-                    "No text content found in DOCX file '{}'. The document may be empty or contain only images/objects.",
-                    file_path_clone
-                ));
+            if cleaned_text.trim().is_empty() {
+                return Err(OfficeExtractionError::empty_document_error(&file_path_clone, "DOCX"));
             }
             
-            Ok(raw_text)
+            Ok(cleaned_text)
             
         }).await??;
         
@@ -528,7 +742,10 @@ impl XmlOfficeExtractor {
         
         // Move CPU-intensive operations to blocking thread pool
         let file_path_clone = file_path.to_string();
-        let context_clone = ExtractionContext::new(context.max_total_decompressed_size);
+        let context_clone = ExtractionContext::new_with_file_info(
+            context.max_total_decompressed_size,
+            context.compressed_file_size
+        );
         let extraction_result = tokio::task::spawn_blocking(move || -> Result<String> {
             use zip::ZipArchive;
             use quick_xml::events::Event;
@@ -591,9 +808,10 @@ impl XmlOfficeExtractor {
                         }
                         Ok(Event::Eof) => break,
                         Err(e) => {
-                            return Err(anyhow!(
-                                "XML parsing error in Excel shared strings: {}. The file may be corrupted.",
-                                e
+                            return Err(OfficeExtractionError::corrupted_file_error(
+                                &file_path_clone, 
+                                "XLSX", 
+                                &format!("shared strings XML parsing error - {}", e)
                             ));
                         }
                         _ => {}
@@ -667,9 +885,10 @@ impl XmlOfficeExtractor {
                             }
                             Ok(Event::Eof) => break,
                             Err(e) => {
-                                return Err(anyhow!(
-                                    "XML parsing error in Excel worksheet {}: {}. The file may be corrupted.",
-                                    worksheet_path, e
+                                return Err(OfficeExtractionError::corrupted_file_error(
+                                    &file_path_clone, 
+                                    "XLSX", 
+                                    &format!("worksheet '{}' XML parsing error - {}", worksheet_path, e)
                                 ));
                             }
                             _ => {}
@@ -680,9 +899,10 @@ impl XmlOfficeExtractor {
             }
             
             if worksheet_count == 0 {
-                return Err(anyhow!(
-                    "Invalid XLSX file: no worksheets found in '{}'. The file may be corrupted or not a valid Excel document.",
-                    file_path_clone
+                return Err(OfficeExtractionError::corrupted_file_error(
+                    &file_path_clone, 
+                    "XLSX", 
+                    "no worksheets found - file structure is invalid"
                 ));
             }
             
@@ -690,10 +910,7 @@ impl XmlOfficeExtractor {
             let raw_text = all_text.join(" ");
             
             if raw_text.trim().is_empty() {
-                return Err(anyhow!(
-                    "No text content found in Excel file '{}'. The spreadsheet may be empty or contain only formulas/formatting.",
-                    file_path_clone
-                ));
+                return Err(OfficeExtractionError::empty_document_error(&file_path_clone, "XLSX"));
             }
             
             Ok(raw_text)
@@ -727,14 +944,10 @@ impl XmlOfficeExtractor {
         let _processing_time = start_time.elapsed().as_millis() as u64;
         
         // Legacy DOC files are complex binary format, suggest conversion
-        Err(anyhow!(
-            "Legacy Word files (.doc) are not directly supported for text extraction due to their complex binary format. \
-            To process the content from '{}', please:\n\
-            1. Open the file in Microsoft Word, LibreOffice Writer, or Google Docs\n\
-            2. Save/Export as DOCX format (recommended) or PDF\n\
-            3. Alternatively, install external tools like antiword or catdoc\n\
-            \nDOCX format provides better compatibility and more reliable text extraction.",
-            file_path
+        Err(OfficeExtractionError::unsupported_format_error(
+            file_path, 
+            "Legacy Word (.doc)", 
+            &["DOCX", "PDF", "TXT"]
         ))
     }
 
@@ -745,32 +958,135 @@ impl XmlOfficeExtractor {
         let _processing_time = start_time.elapsed().as_millis() as u64;
         
         // Legacy XLS files are complex binary format, suggest conversion
-        Err(anyhow!(
-            "Legacy Excel files (.xls) are not directly supported for text extraction due to their complex binary format. \
-            To process the content from '{}', please:\n\
-            1. Open the file in Microsoft Excel, LibreOffice Calc, or Google Sheets\n\
-            2. Save/Export as XLSX format (recommended) or CSV\n\
-            3. Alternatively, export as PDF to preserve formatting\n\
-            \nXLSX format provides better compatibility and more reliable text extraction.",
-            file_path
+        Err(OfficeExtractionError::unsupported_format_error(
+            file_path, 
+            "Legacy Excel (.xls)", 
+            &["XLSX", "PDF", "CSV", "TXT"]
         ))
+    }
+
+    /// Clean extracted text to improve readability and structure
+    fn clean_extracted_text(text: &str) -> String {
+        use regex::Regex;
+        
+        // Create regex patterns for cleaning (compile once for efficiency)
+        let multiple_spaces = Regex::new(r" {3,}").unwrap(); // 3+ spaces -> 2 spaces
+        let multiple_newlines = Regex::new(r"\n{3,}").unwrap(); // 3+ newlines -> 2 newlines
+        let space_before_newline = Regex::new(r" +\n").unwrap(); // spaces before newlines
+        let newline_before_space = Regex::new(r"\n +").unwrap(); // newlines followed by spaces
+        let mixed_whitespace = Regex::new(r"[ \t]+").unwrap(); // tabs and spaces -> single space
+        
+        // Pattern to fix concatenated words like "ExecutiveSummary" -> "Executive Summary"
+        // This looks for lowercase-uppercase transitions and adds a space
+        let word_boundaries = Regex::new(r"([a-z])([A-Z])").unwrap();
+        
+        let mut cleaned = text.to_string();
+        
+        // First, fix word boundaries that got concatenated
+        cleaned = word_boundaries.replace_all(&cleaned, "$1 $2").to_string();
+        
+        // Clean up excessive whitespace
+        cleaned = multiple_spaces.replace_all(&cleaned, "  ").to_string();
+        cleaned = multiple_newlines.replace_all(&cleaned, "\n\n").to_string();
+        cleaned = space_before_newline.replace_all(&cleaned, "\n").to_string();
+        cleaned = newline_before_space.replace_all(&cleaned, "\n").to_string();
+        cleaned = mixed_whitespace.replace_all(&cleaned, " ").to_string();
+        
+        // Remove leading/trailing whitespace but preserve internal structure
+        cleaned.trim().to_string()
     }
 
     /// Safely count words to prevent overflow on very large texts
     pub fn count_words_safely(&self, text: &str) -> usize {
-        // For very large texts, sample to estimate word count to prevent overflow
-        if text.len() > 1_000_000 { // > 1MB of text
-            // Sample first 100KB and extrapolate
-            let sample_size = 100_000;
-            let sample_text = &text[..sample_size.min(text.len())];
-            let sample_words = self.count_words_in_text(sample_text);
-            let estimated_total = (sample_words as f64 * (text.len() as f64 / sample_size as f64)) as usize;
+        // Early return for empty or tiny texts
+        if text.trim().is_empty() {
+            return 0;
+        }
+        
+        // For very large texts, use sampling to estimate word count
+        const LARGE_TEXT_THRESHOLD: usize = 1_000_000; // 1MB
+        const SAMPLE_SIZE: usize = 100_000; // 100KB samples
+        const MAX_WORD_COUNT: usize = 10_000_000; // 10M words cap
+        
+        if text.len() > LARGE_TEXT_THRESHOLD {
+            warn!(
+                "Text is very large ({:.1} MB), using sampling method for word count estimation",
+                text.len() as f64 / (1024.0 * 1024.0)
+            );
             
-            // Cap at reasonable maximum to prevent display issues
-            estimated_total.min(10_000_000) // Max 10M words
+            // Use multiple samples for better accuracy on very large texts
+            let num_samples = 3;
+            let sample_size = SAMPLE_SIZE.min(text.len() / num_samples);
+            let mut total_estimated_words = 0;
+            
+            // Sample from beginning, middle, and end
+            for i in 0..num_samples {
+                let start = (text.len() / num_samples) * i;
+                let end = (start + sample_size).min(text.len());
+                
+                // Ensure we sample complete characters (UTF-8 safe)
+                let sample_start = Self::floor_char_boundary(text, start);
+                let sample_end = Self::floor_char_boundary(text, end);
+                
+                if sample_end > sample_start {
+                    let sample = &text[sample_start..sample_end];
+                    let sample_words = self.count_words_in_text_optimized(sample);
+                    
+                    // Extrapolate this sample to the full text
+                    let sample_ratio = text.len() as f64 / (sample_end - sample_start) as f64;
+                    let estimated_from_sample = (sample_words as f64 * sample_ratio / num_samples as f64) as usize;
+                    total_estimated_words += estimated_from_sample;
+                }
+            }
+            
+            // Cap at reasonable maximum
+            total_estimated_words.min(MAX_WORD_COUNT)
+        } else if text.len() > 50_000 { // 50KB - use optimized counting for medium texts
+            self.count_words_in_text_optimized(text)
         } else {
+            // Small texts can use the full algorithm
             self.count_words_in_text(text)
         }
+    }
+    
+    /// Helper method to find the nearest character boundary (stable replacement for floor_char_boundary)
+    fn floor_char_boundary(text: &str, index: usize) -> usize {
+        if index >= text.len() {
+            return text.len();
+        }
+        
+        // Find the start of a UTF-8 character by backing up until we find a valid char boundary
+        let mut boundary = index;
+        while boundary > 0 && !text.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
+        boundary
+    }
+    
+    /// Optimized word counting for medium-large texts
+    fn count_words_in_text_optimized(&self, text: &str) -> usize {
+        // For performance, use a simpler approach for medium-large texts
+        let mut word_count = 0;
+        let mut in_word = false;
+        
+        for ch in text.chars() {
+            if ch.is_whitespace() {
+                if in_word {
+                    word_count += 1;
+                    in_word = false;
+                }
+            } else if ch.is_alphanumeric() {
+                in_word = true;
+            }
+            // Ignore pure punctuation
+        }
+        
+        // Count the last word if text doesn't end with whitespace
+        if in_word {
+            word_count += 1;
+        }
+        
+        word_count
     }
 
     fn count_words_in_text(&self, text: &str) -> usize {

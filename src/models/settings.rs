@@ -60,6 +60,10 @@ pub struct Settings {
     pub webdav_file_extensions: Vec<String>,
     pub webdav_auto_sync: bool,
     pub webdav_sync_interval_minutes: i32,
+    // Office document extraction configuration
+    pub office_extraction_mode: String, // "library_first", "xml_first", "compare_always", "library_only", "xml_only"
+    pub office_extraction_timeout_seconds: i32,
+    pub office_extraction_enable_detailed_logging: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -118,6 +122,10 @@ pub struct SettingsResponse {
     pub webdav_file_extensions: Vec<String>,
     pub webdav_auto_sync: bool,
     pub webdav_sync_interval_minutes: i32,
+    // Office document extraction configuration
+    pub office_extraction_mode: String,
+    pub office_extraction_timeout_seconds: i32,
+    pub office_extraction_enable_detailed_logging: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -174,6 +182,10 @@ pub struct UpdateSettings {
     pub webdav_file_extensions: Option<Vec<String>>,
     pub webdav_auto_sync: Option<bool>,
     pub webdav_sync_interval_minutes: Option<i32>,
+    // Office document extraction configuration
+    pub office_extraction_mode: Option<String>,
+    pub office_extraction_timeout_seconds: Option<i32>,
+    pub office_extraction_enable_detailed_logging: Option<bool>,
 }
 
 impl From<Settings> for SettingsResponse {
@@ -231,6 +243,10 @@ impl From<Settings> for SettingsResponse {
             webdav_file_extensions: settings.webdav_file_extensions,
             webdav_auto_sync: settings.webdav_auto_sync,
             webdav_sync_interval_minutes: settings.webdav_sync_interval_minutes,
+            // Office document extraction configuration
+            office_extraction_mode: settings.office_extraction_mode,
+            office_extraction_timeout_seconds: settings.office_extraction_timeout_seconds,
+            office_extraction_enable_detailed_logging: settings.office_extraction_enable_detailed_logging,
         }
     }
 }
@@ -295,6 +311,10 @@ impl UpdateSettings {
             webdav_file_extensions: None,
             webdav_auto_sync: None,
             webdav_sync_interval_minutes: None,
+            // Office document extraction configuration - don't update these in language update
+            office_extraction_mode: None,
+            office_extraction_timeout_seconds: None,
+            office_extraction_enable_detailed_logging: None,
         }
     }
 }
@@ -372,6 +392,10 @@ impl Default for Settings {
             ],
             webdav_auto_sync: false,
             webdav_sync_interval_minutes: 60,
+            // Office document extraction configuration defaults
+            office_extraction_mode: "library_first".to_string(), // Default to library-first approach
+            office_extraction_timeout_seconds: 120, // 2 minutes default timeout
+            office_extraction_enable_detailed_logging: false, // Conservative default
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         }
