@@ -47,6 +47,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Pre-pull Docker images for testcontainers
+        run: |
+          echo "Pre-pulling Docker images that testcontainers will use..."
+          docker pull postgres:latest
+          docker pull postgres:15
+          docker pull postgres:15-alpine
+          docker pull postgres:17
+          echo "Images pulled successfully. These are now in local Docker cache."
+          echo "Testcontainers will use the local cached images."
+
       - name: Remove local env files to prevent conflicts
         run: |
           # Remove or rename env files so they don't override CI environment variables
@@ -166,6 +176,8 @@ jobs:
           RUST_LOG: debug
           RUST_BACKTRACE: 1
           DEBUG: 1
+          TESTCONTAINERS_RYUK_DISABLED: true
+          DOCKER_HOST: unix:///var/run/docker.sock
 
       - name: Print server logs on failure
         if: failure()
