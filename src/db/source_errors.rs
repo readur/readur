@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use super::Database;
 use crate::models::{
     CreateSourceScanFailure, SourceScanFailure, SourceScanFailureStats,
-    ErrorSourceType, SourceErrorType, SourceErrorSeverity, ListFailuresQuery,
+    ErrorSourceType, ListFailuresQuery,
 };
 
 impl Database {
@@ -59,22 +59,22 @@ impl Database {
             let mut bind_index = 2;
             let mut conditions = Vec::new();
 
-            if let Some(source_type) = &query.source_type {
+            if let Some(_source_type) = &query.source_type {
                 conditions.push(format!("source_type = ${}::source_error_source_type", bind_index));
                 bind_index += 1;
             }
 
-            if let Some(source_id) = &query.source_id {
+            if let Some(_source_id) = &query.source_id {
                 conditions.push(format!("source_id = ${}", bind_index));
                 bind_index += 1;
             }
 
-            if let Some(error_type) = &query.error_type {
+            if let Some(_error_type) = &query.error_type {
                 conditions.push(format!("error_type = ${}::source_error_type", bind_index));
                 bind_index += 1;
             }
 
-            if let Some(severity) = &query.severity {
+            if let Some(_severity) = &query.severity {
                 conditions.push(format!("error_severity = ${}::source_error_severity", bind_index));
                 bind_index += 1;
             }
@@ -104,12 +104,12 @@ impl Database {
 
             sql.push_str(" ORDER BY error_severity DESC, last_failure_at DESC");
 
-            if let Some(limit) = query.limit {
+            if let Some(_limit) = query.limit {
                 sql.push_str(&format!(" LIMIT ${}", bind_index));
                 bind_index += 1;
             }
 
-            if let Some(offset) = query.offset {
+            if let Some(_offset) = query.offset {
                 sql.push_str(&format!(" OFFSET ${}", bind_index));
             }
 
@@ -361,7 +361,7 @@ impl Database {
                    WHERE user_id = $1"#
             );
 
-            let mut bind_index = 2;
+            let bind_index = 2;
             if let Some(_) = source_type {
                 sql.push_str(&format!(" AND source_type = ${}::source_error_source_type", bind_index));
             }

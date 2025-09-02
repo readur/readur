@@ -1,0 +1,2 @@
+> [!WARNING]
+> The external dependencies `catdoc` and `antiword` have been added to support consumption of `.doc` documents.

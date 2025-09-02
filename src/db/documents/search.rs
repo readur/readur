@@ -195,7 +195,7 @@ impl Database {
             ("ocr_text", document.ocr_text.as_deref().unwrap_or(""))
         ];
 
-        for (source, text) in texts {
+        for (_source, text) in texts {
             if text.is_empty() {
                 continue;
             }

@@ -1,11 +1,11 @@
 use anyhow::{anyhow, Result};
-use reqwest::{Client, Method, Response};
+use reqwest::{Client, Method};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
-use futures_util::stream;
+// futures_util::stream import removed as unused
 use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use rand::Rng;
@@ -15,12 +15,11 @@ use crate::models::{
 };
 use crate::models::source::{
     WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVTestConnection,
-    WebDAVFolderInfo,
 };
 use crate::models::source_error::{ErrorSourceType, ErrorContext};
 use crate::services::source_error_tracker::SourceErrorTracker;
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
-use crate::mime_detection::{detect_mime_from_content, update_mime_type_with_content, MimeDetectionResult};
+use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 use super::common::build_user_agent;

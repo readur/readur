@@ -1,5 +1,4 @@
-use anyhow::Result;
-use std::collections::HashMap;
+// Unused imports removed - anyhow::Result and std::collections::HashMap are not used in this file
 
 use crate::models::{
     ErrorSourceType, SourceErrorType, SourceErrorSeverity, SourceErrorClassifier,
