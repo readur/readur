@@ -16,6 +16,33 @@ use tesseract::{Tesseract, PageSegMode, OcrEngineMode};
 
 use crate::models::Settings;
 use crate::services::file_service::FileService;
+use super::xml_extractor::XmlOfficeExtractor;
+// Removed text_sanitization import - now using minimal inline sanitization
+
+/// RAII guard for automatic cleanup of temporary files
+struct FileCleanupGuard {
+    file_path: String,
+}
+
+impl FileCleanupGuard {
+    fn new(file_path: &str) -> Self {
+        Self {
+            file_path: file_path.to_string(),
+        }
+    }
+}
+
+impl Drop for FileCleanupGuard {
+    fn drop(&mut self) {
+        if std::path::Path::new(&self.file_path).exists() {
+            if let Err(e) = std::fs::remove_file(&self.file_path) {
+                warn!("Failed to clean up temporary file '{}': {}", self.file_path, e);
+            } else {
+                debug!("Cleaned up temporary file: {}", self.file_path);
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ImageQualityStats {
@@ -41,6 +68,31 @@ pub struct EnhancedOcrService {
 }
 
 impl EnhancedOcrService {
+    // Security limits for Office document processing
+    const MAX_OFFICE_DOCUMENT_SIZE: u64 = 100 * 1024 * 1024; // 100MB for all Office documents
+    const MAX_ENTRY_NAME_LENGTH: usize = 255; // Maximum length of entry names
+
+    /// Remove null bytes from text to prevent PostgreSQL errors
+    /// This is the ONLY sanitization we do - preserving all other original content
+    fn remove_null_bytes(text: &str) -> String {
+        let original_len = text.len();
+        let cleaned: String = text.chars().filter(|&c| c != '\0').collect();
+        
+        // Log if we found and removed null bytes (shouldn't happen with valid documents)
+        let cleaned_len = cleaned.len();
+        if cleaned_len < original_len {
+            let null_bytes_removed = text.chars().filter(|&c| c == '\0').count();
+            warn!(
+                "Removed {} null bytes from extracted text (original: {} chars, cleaned: {} chars). \
+                This indicates corrupted or malformed document data.",
+                null_bytes_removed, original_len, cleaned_len
+            );
+        }
+        
+        cleaned
+    }
+
+
     pub fn new(temp_dir: String, file_service: FileService) -> Self {
         Self { temp_dir, file_service }
     }
@@ -1069,7 +1121,7 @@ impl EnhancedOcrService {
         let ocr_text_result = tokio::task::spawn_blocking({
             let temp_ocr_path = temp_ocr_path.clone();
             move || -> Result<String> {
-                let bytes = std::fs::read(&temp_ocr_path)?;
+                let _bytes = std::fs::read(&temp_ocr_path)?;
                 // Catch panics from pdf-extract library (same pattern as used elsewhere)
                 // Extract text from the OCR'd PDF using ocrmypdf's sidecar option
                 let temp_text_path = format!("{}.txt", temp_ocr_path);
@@ -1276,7 +1328,7 @@ impl EnhancedOcrService {
             // Look for text objects (BT...ET blocks)
             if !in_text_object && char == 'B' {
                 // Check if this might be the start of "BT" (Begin Text)
-                if let Some(window) = bytes.windows(2).find(|w| w == b"BT") {
+                if let Some(_window) = bytes.windows(2).find(|w| w == b"BT") {
                     in_text_object = true;
                     continue;
                 }
@@ -1284,7 +1336,7 @@ impl EnhancedOcrService {
             
             if in_text_object && char == 'E' {
                 // Check if this might be the start of "ET" (End Text)
-                if let Some(window) = bytes.windows(2).find(|w| w == b"ET") {
+                if let Some(_window) = bytes.windows(2).find(|w| w == b"ET") {
                     in_text_object = false;
                     if !current_text.trim().is_empty() {
                         extracted_text.push_str(&current_text);
@@ -1411,6 +1463,46 @@ impl EnhancedOcrService {
         self.extract_text(file_path, mime_type, settings).await
     }
 
+    /// Extract text from Office documents (DOCX, DOC, Excel) using XML extraction
+    pub async fn extract_text_from_office(&self, file_path: &str, mime_type: &str, settings: &Settings) -> Result<OcrResult> {
+        let start_time = std::time::Instant::now();
+        info!("Extracting text from Office document: {} (type: {})", file_path, mime_type);
+        
+        // Check file size before processing
+        let metadata = tokio::fs::metadata(file_path).await?;
+        let file_size = metadata.len();
+        
+        if file_size > Self::MAX_OFFICE_DOCUMENT_SIZE {
+            return Err(anyhow!(
+                "Office document too large: {:.1} MB (max: {:.1} MB). Consider converting to PDF or splitting the document.",
+                file_size as f64 / (1024.0 * 1024.0),
+                Self::MAX_OFFICE_DOCUMENT_SIZE as f64 / (1024.0 * 1024.0)
+            ));
+        }
+        
+        // Use XML extraction as the primary method
+        let xml_extractor = XmlOfficeExtractor::new(self.temp_dir.clone());
+        let xml_result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
+        
+        let total_time = start_time.elapsed().as_millis() as u64;
+        
+        info!(
+            "Office document extraction completed: {} words in {}ms using XML extraction", 
+            xml_result.word_count, 
+            total_time
+        );
+        
+        // Convert OfficeExtractionResult to OcrResult for backward compatibility
+        Ok(OcrResult {
+            text: xml_result.text,
+            confidence: xml_result.confidence,
+            processing_time_ms: xml_result.processing_time_ms,
+            word_count: xml_result.word_count,
+            preprocessing_applied: vec![format!("XML extraction - {}", xml_result.extraction_method)],
+            processed_image_path: None,
+        })
+    }
+
     /// Extract text from any supported file type
     pub async fn extract_text(&self, file_path: &str, mime_type: &str, settings: &Settings) -> Result<OcrResult> {
         // Resolve the actual file path
@@ -1455,13 +1547,16 @@ impl EnhancedOcrService {
                 
                 let text = tokio::fs::read_to_string(&resolved_path).await?;
                 
+                // Only remove null bytes - preserve all original formatting
+                let cleaned_text = Self::remove_null_bytes(&text);
+                
                 // Limit text content size in memory
                 const MAX_TEXT_CONTENT_SIZE: usize = 10 * 1024 * 1024; // 10MB of text content
-                let trimmed_text = if text.len() > MAX_TEXT_CONTENT_SIZE {
-                    warn!("Text file content too large ({} chars), truncating to {} chars", text.len(), MAX_TEXT_CONTENT_SIZE);
-                    format!("{}... [TEXT TRUNCATED DUE TO SIZE]", &text[..MAX_TEXT_CONTENT_SIZE])
+                let trimmed_text = if cleaned_text.len() > MAX_TEXT_CONTENT_SIZE {
+                    warn!("Text file content too large ({} chars), truncating to {} chars", cleaned_text.len(), MAX_TEXT_CONTENT_SIZE);
+                    format!("{}... [TEXT TRUNCATED DUE TO SIZE]", &cleaned_text[..MAX_TEXT_CONTENT_SIZE])
                 } else {
-                    text.trim().to_string()
+                    cleaned_text.trim().to_string()
                 };
                 
                 let processing_time = start_time.elapsed().as_millis() as u64;
@@ -1475,6 +1570,16 @@ impl EnhancedOcrService {
                     preprocessing_applied: vec!["Plain text read".to_string()],
                     processed_image_path: None, // No image processing for plain text
                 })
+            }
+            // Handle Office document formats
+            mime if matches!(mime, 
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" |
+                "application/msword" |
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" |
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            ) => {
+                // extract_text_from_office now returns OcrResult directly
+                self.extract_text_from_office(&resolved_path, mime, settings).await
             }
             _ => Err(anyhow::anyhow!("Unsupported file type: {}", mime_type)),
         }
@@ -1608,6 +1713,11 @@ impl EnhancedOcrService {
     
     pub fn validate_ocr_quality(&self, _result: &OcrResult, _settings: &Settings) -> bool {
         false
+    }
+
+    pub fn count_words_safely(&self, text: &str) -> usize {
+        // Simple word count for non-OCR builds
+        text.split_whitespace().count()
     }
 }
 

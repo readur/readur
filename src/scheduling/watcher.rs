@@ -387,9 +387,9 @@ async fn process_file(
         .first_or_octet_stream()
         .to_string();
     
-    // Check if file is OCR-able
-    if !is_ocr_able_file(&mime_type) {
-        debug!("Skipping non-OCR-able file: {} ({})", filename, mime_type);
+    // Check if file can have text extracted (OCR or Office document text extraction)
+    if !is_text_extractable_file(&mime_type) {
+        debug!("Skipping non-text-extractable file: {} ({})", filename, mime_type);
         return Ok(());  
     }
     
@@ -540,11 +540,29 @@ async fn extract_file_info_from_path(path: &Path) -> Result<FileIngestionInfo> {
 }
 
 fn is_ocr_able_file(mime_type: &str) -> bool {
+    // Check mime types that are suitable for OCR processing (images and PDFs)
     matches!(mime_type,
-        "application/pdf" |
+        "application/pdf" | 
+        "image/png" | "image/jpeg" | "image/jpg" | 
+        "image/tiff" | "image/bmp" | "image/gif"
+    )
+}
+
+fn is_text_extractable_file(mime_type: &str) -> bool {
+    // Check mime types that support text extraction (OCR + Office documents + plain text)
+    matches!(mime_type,
+        // OCR-able files
+        "application/pdf" | 
+        "image/png" | "image/jpeg" | "image/jpg" | 
+        "image/tiff" | "image/bmp" | "image/gif" |
+        // Plain text
         "text/plain" |
-        "image/png" | "image/jpeg" | "image/jpg" | "image/tiff" | "image/bmp" | "image/gif" |
-        "application/msword" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        // Office document formats
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | // DOCX
+        "application/msword" |                                                      // DOC
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" |      // XLSX
+        "application/vnd.ms-excel" |                                                // XLS  
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" // PPTX (for future)
     )
 }
 

@@ -101,6 +101,9 @@ async fn get_settings(
                 webdav_file_extensions: default.webdav_file_extensions,
                 webdav_auto_sync: default.webdav_auto_sync,
                 webdav_sync_interval_minutes: default.webdav_sync_interval_minutes,
+                // Office document extraction configuration
+                office_extraction_timeout_seconds: default.office_extraction_timeout_seconds,
+                office_extraction_enable_detailed_logging: default.office_extraction_enable_detailed_logging,
             }
         },
     };

@@ -86,6 +86,9 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     ocrmypdf \
     curl \
+    # Legacy DOC file support (lightweight tools)
+    antiword \
+    catdoc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

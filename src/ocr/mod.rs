@@ -5,6 +5,7 @@ pub mod error;
 pub mod health;
 pub mod queue;
 pub mod tests;
+pub mod xml_extractor;
 
 use anyhow::{anyhow, Result};
 use std::path::Path;
@@ -16,12 +17,37 @@ use tesseract::Tesseract;
 
 pub struct OcrService {
     health_checker: OcrHealthChecker,
+    temp_dir: String,
+}
+
+/// Configuration for the OCR service
+#[derive(Debug, Clone)]
+pub struct OcrConfig {
+    /// Temporary directory for processing
+    pub temp_dir: String,
+}
+
+impl Default for OcrConfig {
+    fn default() -> Self {
+        Self {
+            temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
+        }
+    }
 }
 
 impl OcrService {
     pub fn new() -> Self {
         Self {
             health_checker: OcrHealthChecker::new(),
+            temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
+        }
+    }
+
+    /// Create OCR service with configuration
+    pub fn new_with_config(config: OcrConfig) -> Self {
+        Self {
+            health_checker: OcrHealthChecker::new(),
+            temp_dir: config.temp_dir,
         }
     }
 
@@ -158,6 +184,39 @@ impl OcrService {
         }
     }
 
+    /// Extract text from Office documents using XML extraction
+    pub async fn extract_text_from_office_document(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+    ) -> Result<crate::ocr::enhanced::OcrResult> {
+        // Use XML extraction directly
+        let xml_extractor = crate::ocr::xml_extractor::XmlOfficeExtractor::new(
+            self.temp_dir.clone()
+        );
+        
+        let result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
+        // Convert OfficeExtractionResult to OcrResult for backward compatibility
+        Ok(crate::ocr::enhanced::OcrResult {
+            text: result.text,
+            confidence: result.confidence,
+            processing_time_ms: result.processing_time_ms,
+            word_count: result.word_count,
+            preprocessing_applied: vec![format!("XML extraction - {}", result.extraction_method)],
+            processed_image_path: None,
+        })
+    }
+
+    /// Extract text from Office documents with custom configuration
+    pub async fn extract_text_from_office_document_with_config(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+    ) -> Result<crate::ocr::enhanced::OcrResult> {
+        // Use the same XML extraction logic as the basic method
+        self.extract_text_from_office_document(file_path, mime_type).await
+    }
+
     pub async fn extract_text(&self, file_path: &str, mime_type: &str) -> Result<String> {
         self.extract_text_with_lang(file_path, mime_type, "eng").await
     }
@@ -165,6 +224,16 @@ impl OcrService {
     pub async fn extract_text_with_lang(&self, file_path: &str, mime_type: &str, lang: &str) -> Result<String> {
         match mime_type {
             "application/pdf" => self.extract_text_from_pdf(file_path).await,
+            // Office document types - use fallback strategy if available
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" |
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" |
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" |
+            "application/msword" |
+            "application/vnd.ms-excel" |
+            "application/vnd.ms-powerpoint" => {
+                let result = self.extract_text_from_office_document(file_path, mime_type).await?;
+                Ok(result.text)
+            }
             "image/png" | "image/jpeg" | "image/jpg" | "image/tiff" | "image/bmp" => {
                 self.extract_text_from_image_with_lang(file_path, lang).await
             }
@@ -233,5 +302,36 @@ impl OcrService {
         } else {
             false
         }
+    }
+
+
+    /// Check if Office document extraction is available
+    pub fn supports_office_documents(&self) -> bool {
+        true // XML extraction is always available
+    }
+
+    /// Get supported MIME types
+    pub fn get_supported_mime_types(&self) -> Vec<&'static str> {
+        let mut types = vec![
+            "application/pdf",
+            "image/png",
+            "image/jpeg", 
+            "image/jpg",
+            "image/tiff",
+            "image/bmp",
+            "text/plain",
+        ];
+
+        // Office document types are always supported via XML extraction
+        types.extend_from_slice(&[
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/msword",
+            "application/vnd.ms-excel",
+            "application/vnd.ms-powerpoint",
+        ]);
+
+        types
     }
 }

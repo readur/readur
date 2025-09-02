@@ -13,8 +13,8 @@ You can check our our docs at [docs.readur.app](https://docs.readur.app).
 |---------|-------------|---------------|
 | 🔐 **Secure Authentication** | JWT-based user authentication with bcrypt password hashing + OIDC/SSO support | [User Management](https://docs.readur.app/user-management-guide/), [OIDC Setup](https://docs.readur.app/oidc-setup/) |
 | 👥 **User Management** | Role-based access control with Admin and User roles | [User Management Guide](https://docs.readur.app/user-management-guide/) |
-| 📤 **Smart File Upload** | Drag-and-drop support for PDF, images, text files, and Office documents | [File Upload Guide](https://docs.readur.app/file-upload-guide/) |
-| 🔍 **Advanced OCR** | Automatic text extraction using Tesseract for searchable document content | [OCR Optimization](https://docs.readur.app/dev/OCR_OPTIMIZATION_GUIDE/) |
+| 📤 **Smart File Upload** | Drag-and-drop support for PDF, images, text files, and Office documents (DOCX, XLSX, DOC*) | [File Upload Guide](https://docs.readur.app/file-upload-guide/) |
+| 🔍 **Advanced OCR** | Automatic text extraction using Tesseract and Office document parsing | [OCR Optimization](https://docs.readur.app/dev/OCR_OPTIMIZATION_GUIDE/) |
 | 🌍 **Multi-Language OCR** | Process documents in multiple languages simultaneously with automatic language detection | [Multi-Language OCR Guide](https://docs.readur.app/multi-language-ocr-guide/) |
 | 🔎 **Powerful Search** | PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean) | [Advanced Search Guide](https://docs.readur.app/advanced-search/) |
 | 🔗 **Multi-Source Sync** | WebDAV, Local Folders, and S3-compatible storage integration | [Sources Guide](https://docs.readur.app/sources-guide/), [S3 Storage Guide](https://docs.readur.app/s3-storage-guide/) |
@@ -105,6 +105,13 @@ open http://localhost:8000
 ### Recommended for Production
 - 4+ CPU cores, 4GB+ RAM, 50GB+ SSD
 - See [deployment guide](https://docs.readur.app/deployment/) for details
+
+### Optional Dependencies
+For legacy Microsoft Word (.doc) file support, install one of:
+- `antiword` - Lightweight DOC text extractor
+- `catdoc` - Alternative DOC text extraction tool
+
+*Note: Modern Office formats (DOCX, XLSX) are fully supported without additional dependencies.*
 
 ## 🤝 Contributing
 

@@ -72,6 +72,9 @@ fn create_empty_update_settings() -> UpdateSettings {
         webdav_file_extensions: None,
         webdav_auto_sync: None,
         webdav_sync_interval_minutes: None,
+        // Office document extraction configuration
+        office_extraction_timeout_seconds: None,
+        office_extraction_enable_detailed_logging: None,
     }
 }
 
@@ -215,6 +218,9 @@ async fn setup_webdav_settings(state: &AppState, user_id: Uuid) {
         ocr_quality_threshold_noise: None,
         ocr_quality_threshold_sharpness: None,
         ocr_skip_enhancement: None,
+        // Office document extraction configuration
+        office_extraction_timeout_seconds: None,
+        office_extraction_enable_detailed_logging: None,
     };
 
     state.db.create_or_update_settings(user_id, &update_settings).await

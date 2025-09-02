@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use sqlx::Row;
 use uuid::Uuid;
 use serde_json::Value;
@@ -75,6 +75,9 @@ fn settings_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Settings {
         webdav_file_extensions: row.get("webdav_file_extensions"),
         webdav_auto_sync: row.get("webdav_auto_sync"),
         webdav_sync_interval_minutes: row.get("webdav_sync_interval_minutes"),
+        // Office document extraction configuration
+        office_extraction_timeout_seconds: row.get("office_extraction_timeout_seconds"),
+        office_extraction_enable_detailed_logging: row.get("office_extraction_enable_detailed_logging"),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     }
@@ -102,6 +105,8 @@ impl Database {
                    ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                    webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                    webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
+                   COALESCE(office_extraction_timeout_seconds, 120) as office_extraction_timeout_seconds,
+                   COALESCE(office_extraction_enable_detailed_logging, true) as office_extraction_enable_detailed_logging,
                    created_at, updated_at
                    FROM settings WHERE user_id = $1"#
             )
@@ -137,6 +142,8 @@ impl Database {
                ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
+               COALESCE(office_extraction_timeout_seconds, 120) as office_extraction_timeout_seconds,
+               COALESCE(office_extraction_enable_detailed_logging, false) as office_extraction_enable_detailed_logging,
                created_at, updated_at
                FROM settings
                WHERE webdav_enabled = true AND webdav_auto_sync = true"#
@@ -151,7 +158,112 @@ impl Database {
         Ok(settings_list)
     }
 
+    /// Validate office extraction settings
+    fn validate_office_extraction_settings(settings: &crate::models::UpdateSettings) -> Result<()> {
+        // Validate timeout
+        if let Some(timeout) = settings.office_extraction_timeout_seconds {
+            if timeout <= 0 {
+                return Err(anyhow!(
+                    "Office extraction timeout must be greater than 0 seconds, got: {}",
+                    timeout
+                ));
+            }
+            if timeout > 600 {
+                return Err(anyhow!(
+                    "Office extraction timeout cannot exceed 600 seconds (10 minutes) for system stability, got: {}",
+                    timeout
+                ));
+            }
+        }
+        
+        // Logging setting doesn't need validation as it's boolean
+        
+        Ok(())
+    }
+    
+    /// Validate general settings constraints
+    fn validate_settings_constraints(settings: &crate::models::UpdateSettings) -> Result<()> {
+        // Validate OCR settings
+        if let Some(concurrent_jobs) = settings.concurrent_ocr_jobs {
+            if concurrent_jobs < 1 || concurrent_jobs > 20 {
+                return Err(anyhow!(
+                    "Concurrent OCR jobs must be between 1 and 20, got: {}",
+                    concurrent_jobs
+                ));
+            }
+        }
+        
+        if let Some(timeout) = settings.ocr_timeout_seconds {
+            if timeout < 10 || timeout > 1800 {
+                return Err(anyhow!(
+                    "OCR timeout must be between 10 and 1800 seconds, got: {}",
+                    timeout
+                ));
+            }
+        }
+        
+        if let Some(max_size) = settings.max_file_size_mb {
+            if max_size < 1 || max_size > 500 {
+                return Err(anyhow!(
+                    "Maximum file size must be between 1 and 500 MB, got: {}",
+                    max_size
+                ));
+            }
+        }
+        
+        if let Some(memory_limit) = settings.memory_limit_mb {
+            if memory_limit < 64 || memory_limit > 8192 {
+                return Err(anyhow!(
+                    "Memory limit must be between 64 and 8192 MB, got: {}",
+                    memory_limit
+                ));
+            }
+        }
+        
+        if let Some(results_per_page) = settings.search_results_per_page {
+            if results_per_page < 1 || results_per_page > 1000 {
+                return Err(anyhow!(
+                    "Search results per page must be between 1 and 1000, got: {}",
+                    results_per_page
+                ));
+            }
+        }
+        
+        if let Some(snippet_length) = settings.search_snippet_length {
+            if snippet_length < 10 || snippet_length > 2000 {
+                return Err(anyhow!(
+                    "Search snippet length must be between 10 and 2000 characters, got: {}",
+                    snippet_length
+                ));
+            }
+        }
+        
+        if let Some(threshold) = settings.fuzzy_search_threshold {
+            if threshold < 0.0 || threshold > 1.0 {
+                return Err(anyhow!(
+                    "Fuzzy search threshold must be between 0.0 and 1.0, got: {}",
+                    threshold
+                ));
+            }
+        }
+        
+        // Validate WebDAV settings
+        if let Some(sync_interval) = settings.webdav_sync_interval_minutes {
+            if sync_interval < 1 || sync_interval > 10080 { // max 1 week
+                return Err(anyhow!(
+                    "WebDAV sync interval must be between 1 and 10080 minutes (1 week), got: {}",
+                    sync_interval
+                ));
+            }
+        }
+        
+        Ok(())
+    }
+
     pub async fn create_or_update_settings(&self, user_id: Uuid, settings: &crate::models::UpdateSettings) -> Result<crate::models::Settings> {
+        // Validate settings before saving
+        Self::validate_office_extraction_settings(settings)?;
+        Self::validate_settings_constraints(settings)?;
         // Get existing settings to merge with updates
         let existing = self.get_user_settings(user_id).await?;
         let defaults = crate::models::Settings::default();
@@ -179,9 +291,10 @@ impl Database {
                 ocr_quality_threshold_brightness, ocr_quality_threshold_contrast, ocr_quality_threshold_noise,
                 ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                 webdav_enabled, webdav_server_url, webdav_username, webdav_password,
-                webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes
+                webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
+                office_extraction_timeout_seconds, office_extraction_enable_detailed_logging
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55)
             ON CONFLICT (user_id) DO UPDATE SET
                 ocr_language = $2,
                 preferred_languages = $3,
@@ -235,6 +348,8 @@ impl Database {
                 webdav_file_extensions = $51,
                 webdav_auto_sync = $52,
                 webdav_sync_interval_minutes = $53,
+                office_extraction_timeout_seconds = $54,
+                office_extraction_enable_detailed_logging = $55,
                 updated_at = NOW()
             RETURNING id, user_id, ocr_language, 
                       COALESCE(preferred_languages, '["eng"]'::jsonb) as preferred_languages,
@@ -254,6 +369,8 @@ impl Database {
                       ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                       webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                       webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
+                      COALESCE(office_extraction_timeout_seconds, 120) as office_extraction_timeout_seconds,
+                      COALESCE(office_extraction_enable_detailed_logging, false) as office_extraction_enable_detailed_logging,
                       created_at, updated_at
             "#
         )
@@ -310,6 +427,8 @@ impl Database {
         .bind(settings.webdav_file_extensions.as_ref().unwrap_or(&current.webdav_file_extensions))
         .bind(settings.webdav_auto_sync.unwrap_or(current.webdav_auto_sync))
         .bind(settings.webdav_sync_interval_minutes.unwrap_or(current.webdav_sync_interval_minutes))
+        .bind(settings.office_extraction_timeout_seconds.unwrap_or(current.office_extraction_timeout_seconds))
+        .bind(settings.office_extraction_enable_detailed_logging.unwrap_or(current.office_extraction_enable_detailed_logging))
         .fetch_one(&self.pool)
         .await?;
 
