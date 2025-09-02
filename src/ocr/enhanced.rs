@@ -92,39 +92,6 @@ impl EnhancedOcrService {
         cleaned
     }
 
-    /// Sanitizes file paths before passing to external tools to prevent command injection
-    fn sanitize_file_path_for_external_tool(file_path: &str) -> Result<String> {
-        use std::path::Path;
-        
-        // Resolve to absolute path to prevent relative path tricks
-        let path = Path::new(file_path);
-        let absolute_path = path.canonicalize()
-            .map_err(|e| anyhow!("Failed to resolve file path '{}': {}. File may not exist.", file_path, e))?;
-        
-        let path_str = absolute_path.to_str()
-            .ok_or_else(|| anyhow!("File path contains invalid UTF-8 characters: '{:?}'", absolute_path))?;
-        
-        // Check for suspicious characters that could be used for command injection
-        let dangerous_chars = ['&', '|', ';', '`', '$', '(', ')', '<', '>', '"', '\'', '\\'];
-        if path_str.chars().any(|c| dangerous_chars.contains(&c)) {
-            return Err(anyhow!(
-                "File path contains potentially dangerous characters: '{}'. \
-                This is blocked for security reasons to prevent command injection.",
-                path_str
-            ));
-        }
-        
-        // Ensure the path doesn't contain shell metacharacters
-        if path_str.contains("..") || path_str.contains("//") {
-            return Err(anyhow!(
-                "File path contains suspicious sequences: '{}'. \
-                This is blocked for security reasons.",
-                path_str
-            ));
-        }
-        
-        Ok(path_str.to_string())
-    }
 
     pub fn new(temp_dir: String, file_service: FileService) -> Self {
         Self { temp_dir, file_service }
@@ -1525,137 +1492,15 @@ impl EnhancedOcrService {
             total_time
         );
         
+        // Convert OfficeExtractionResult to OcrResult for backward compatibility
         Ok(OcrResult {
             text: xml_result.text,
             confidence: xml_result.confidence,
-            processing_time_ms: total_time,
+            processing_time_ms: xml_result.processing_time_ms,
             word_count: xml_result.word_count,
-            preprocessing_applied: vec![xml_result.extraction_method],
+            preprocessing_applied: vec![format!("XML extraction - {}", xml_result.extraction_method)],
             processed_image_path: None,
         })
-    }
-    
-    /// REMOVED: This method was used for comparison analysis - now handled by extract_text_from_office
-    #[deprecated(note = "Use extract_text_from_office instead - this method was for comparison analysis")]
-    /// Extract text from legacy DOC files using lightweight external tools  
-    pub async fn extract_text_from_legacy_doc(&self, file_path: &str, start_time: std::time::Instant) -> Result<OcrResult> {
-        info!("Processing legacy DOC file: {}", file_path);
-        
-        // Use lightweight DOC extraction tools in order of preference
-        let tools = ["antiword", "catdoc", "wvText"];
-        let mut last_error = None;
-        
-        for tool in &tools {
-            match self.try_doc_extraction_tool(file_path, tool).await {
-                Ok(text) if !text.trim().is_empty() => {
-                    let processing_time = start_time.elapsed().as_millis() as u64;
-                    
-                    // Only remove null bytes - preserve all original formatting
-                    let cleaned_text = Self::remove_null_bytes(&text);
-                    let word_count = self.count_words_safely(&cleaned_text);
-                    
-                    info!(
-                        "Legacy DOC extraction completed using {}: {} words extracted from '{}' in {}ms",
-                        tool, word_count, file_path, processing_time
-                    );
-                    
-                    return Ok(OcrResult {
-                        text: cleaned_text,
-                        confidence: 90.0, // High confidence for proven extraction tools
-                        processing_time_ms: processing_time,
-                        word_count,
-                        preprocessing_applied: vec![format!("Legacy DOC extraction ({})", tool)],
-                        processed_image_path: None,
-                    });
-                }
-                Ok(_) => {
-                    // Tool succeeded but returned empty text
-                    last_error = Some(anyhow!("{} returned empty content", tool));
-                }
-                Err(e) => {
-                    last_error = Some(e);
-                    continue; // Try next tool
-                }
-            }
-        }
-        
-        // If all tools failed, provide helpful installation guidance
-        let processing_time = start_time.elapsed().as_millis() as u64;
-        
-        Err(anyhow!(
-            "Legacy DOC file extraction failed for '{}'. None of the DOC extraction tools ({}) are available or working.\n\
-            \nTo process DOC files, please install one of these lightweight tools:\n\
-            \n• antiword (recommended for most DOC files):\n\
-               - Ubuntu/Debian: 'sudo apt-get install antiword'\n\
-               - macOS: 'brew install antiword'\n\
-               - Alpine: 'apk add antiword'\n\
-            \n• catdoc (good fallback option):\n\
-               - Ubuntu/Debian: 'sudo apt-get install catdoc'\n\
-               - macOS: 'brew install catdoc'\n\
-               - Alpine: 'apk add catdoc'\n\
-            \n• wv (includes wvText tool):\n\
-               - Ubuntu/Debian: 'sudo apt-get install wv'\n\
-               - macOS: 'brew install wv'\n\
-            \nAlternatively, convert the DOC file to DOCX or PDF format for better compatibility.\n\
-            These tools are much lighter than LibreOffice (~1-2MB vs 400-500MB) and work reliably for most DOC files.\n\
-            Processing time: {}ms\n\
-            Last error: {}",
-            file_path,
-            tools.join(", "),
-            processing_time,
-            last_error.map(|e| e.to_string()).unwrap_or_else(|| "Unknown error".to_string())
-        ))
-    }
-    
-    
-    /// Try to extract text from DOC file using a specific external tool
-    async fn try_doc_extraction_tool(&self, file_path: &str, tool: &str) -> Result<String> {
-        // Security: Sanitize file path before passing to external tools
-        let sanitized_path = Self::sanitize_file_path_for_external_tool(file_path)?;
-        
-        let output = match tool {
-            "antiword" => {
-                tokio::process::Command::new("antiword")
-                    .arg(&sanitized_path)
-                    .output()
-                    .await?
-            }
-            "catdoc" => {
-                tokio::process::Command::new("catdoc")
-                    .arg("-a")  // ASCII output
-                    .arg(&sanitized_path)
-                    .output()
-                    .await?
-            }
-            "wvText" => {
-                // wvText from wv package
-                tokio::process::Command::new("wvText")
-                    .arg(&sanitized_path)
-                    .arg("-")  // Output to stdout
-                    .output()
-                    .await?
-            }
-            _ => return Err(anyhow!("Unknown DOC extraction tool: {}", tool)),
-        };
-        
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!(
-                "{} failed with exit code {}: {}",
-                tool,
-                output.status.code().unwrap_or(-1),
-                stderr
-            ));
-        }
-        
-        let text = String::from_utf8_lossy(&output.stdout).to_string();
-        
-        // Check if tool is actually available (some might succeed but output usage info)
-        if text.contains("command not found") || text.contains("Usage:") {
-            return Err(anyhow!("{} is not properly installed or configured", tool));
-        }
-        
-        Ok(text)
     }
 
     /// Extract text from any supported file type
@@ -1733,6 +1578,7 @@ impl EnhancedOcrService {
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" |
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation"
             ) => {
+                // extract_text_from_office now returns OcrResult directly
                 self.extract_text_from_office(&resolved_path, mime, settings).await
             }
             _ => Err(anyhow::anyhow!("Unsupported file type: {}", mime_type)),

@@ -115,6 +115,8 @@ mod tests {
                 webdav_file_extensions: None,
                 webdav_auto_sync: None,
                 webdav_sync_interval_minutes: None,
+                office_extraction_timeout_seconds: None,
+                office_extraction_enable_detailed_logging: None,
             };
 
             let response = ctx.app
@@ -238,6 +240,8 @@ mod tests {
                 webdav_file_extensions: None,
                 webdav_auto_sync: None,
                 webdav_sync_interval_minutes: None,
+                office_extraction_timeout_seconds: None,
+                office_extraction_enable_detailed_logging: None,
             };
 
             let response = ctx.app
@@ -388,6 +392,8 @@ mod tests {
                 webdav_file_extensions: None,
                 webdav_auto_sync: None,
                 webdav_sync_interval_minutes: None,
+                office_extraction_timeout_seconds: None,
+                office_extraction_enable_detailed_logging: None,
             };
 
             let response = ctx.app
@@ -515,6 +521,8 @@ mod tests {
                 webdav_file_extensions: None,
                 webdav_auto_sync: None,
                 webdav_sync_interval_minutes: None,
+                office_extraction_timeout_seconds: None,
+                office_extraction_enable_detailed_logging: None,
             };
 
             let response = ctx.app

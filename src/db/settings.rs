@@ -76,7 +76,6 @@ fn settings_from_row(row: &sqlx::postgres::PgRow) -> crate::models::Settings {
         webdav_auto_sync: row.get("webdav_auto_sync"),
         webdav_sync_interval_minutes: row.get("webdav_sync_interval_minutes"),
         // Office document extraction configuration
-        office_extraction_mode: row.get("office_extraction_mode"),
         office_extraction_timeout_seconds: row.get("office_extraction_timeout_seconds"),
         office_extraction_enable_detailed_logging: row.get("office_extraction_enable_detailed_logging"),
         created_at: row.get("created_at"),
@@ -106,7 +105,6 @@ impl Database {
                    ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                    webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                    webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
-                   COALESCE(office_extraction_mode, 'compare_always') as office_extraction_mode,
                    COALESCE(office_extraction_timeout_seconds, 120) as office_extraction_timeout_seconds,
                    COALESCE(office_extraction_enable_detailed_logging, true) as office_extraction_enable_detailed_logging,
                    created_at, updated_at
@@ -144,7 +142,6 @@ impl Database {
                ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
-               COALESCE(office_extraction_mode, 'library_first') as office_extraction_mode,
                COALESCE(office_extraction_timeout_seconds, 120) as office_extraction_timeout_seconds,
                COALESCE(office_extraction_enable_detailed_logging, false) as office_extraction_enable_detailed_logging,
                created_at, updated_at
@@ -163,18 +160,6 @@ impl Database {
 
     /// Validate office extraction settings
     fn validate_office_extraction_settings(settings: &crate::models::UpdateSettings) -> Result<()> {
-        // Validate extraction mode
-        if let Some(mode) = &settings.office_extraction_mode {
-            let valid_modes = ["library_first", "xml_first", "compare_always", "library_only", "xml_only"];
-            if !valid_modes.contains(&mode.as_str()) {
-                return Err(anyhow!(
-                    "Invalid office extraction mode '{}'. Valid modes are: {}",
-                    mode,
-                    valid_modes.join(", ")
-                ));
-            }
-        }
-        
         // Validate timeout
         if let Some(timeout) = settings.office_extraction_timeout_seconds {
             if timeout <= 0 {
@@ -307,9 +292,9 @@ impl Database {
                 ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                 webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                 webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
-                office_extraction_mode, office_extraction_timeout_seconds, office_extraction_enable_detailed_logging
+                office_extraction_timeout_seconds, office_extraction_enable_detailed_logging
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55)
             ON CONFLICT (user_id) DO UPDATE SET
                 ocr_language = $2,
                 preferred_languages = $3,
@@ -363,9 +348,8 @@ impl Database {
                 webdav_file_extensions = $51,
                 webdav_auto_sync = $52,
                 webdav_sync_interval_minutes = $53,
-                office_extraction_mode = $54,
-                office_extraction_timeout_seconds = $55,
-                office_extraction_enable_detailed_logging = $56,
+                office_extraction_timeout_seconds = $54,
+                office_extraction_enable_detailed_logging = $55,
                 updated_at = NOW()
             RETURNING id, user_id, ocr_language, 
                       COALESCE(preferred_languages, '["eng"]'::jsonb) as preferred_languages,
@@ -385,7 +369,6 @@ impl Database {
                       ocr_quality_threshold_sharpness, ocr_skip_enhancement,
                       webdav_enabled, webdav_server_url, webdav_username, webdav_password,
                       webdav_watch_folders, webdav_file_extensions, webdav_auto_sync, webdav_sync_interval_minutes,
-                      COALESCE(office_extraction_mode, 'library_first') as office_extraction_mode,
                       COALESCE(office_extraction_timeout_seconds, 120) as office_extraction_timeout_seconds,
                       COALESCE(office_extraction_enable_detailed_logging, false) as office_extraction_enable_detailed_logging,
                       created_at, updated_at
@@ -444,7 +427,6 @@ impl Database {
         .bind(settings.webdav_file_extensions.as_ref().unwrap_or(&current.webdav_file_extensions))
         .bind(settings.webdav_auto_sync.unwrap_or(current.webdav_auto_sync))
         .bind(settings.webdav_sync_interval_minutes.unwrap_or(current.webdav_sync_interval_minutes))
-        .bind(settings.office_extraction_mode.as_ref().unwrap_or(&current.office_extraction_mode))
         .bind(settings.office_extraction_timeout_seconds.unwrap_or(current.office_extraction_timeout_seconds))
         .bind(settings.office_extraction_enable_detailed_logging.unwrap_or(current.office_extraction_enable_detailed_logging))
         .fetch_one(&self.pool)

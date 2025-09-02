@@ -7,7 +7,7 @@ use tokio::time::timeout;
 
 use readur::ocr::{
     OcrService, OcrConfig,
-    fallback_strategy::{FallbackConfig, CircuitBreakerConfig, LearningConfig, MethodTimeouts},
+    fallback_strategy::FallbackConfig,
 };
 
 /// Test utilities for creating mock Office documents
@@ -154,18 +154,7 @@ fn create_test_ocr_service(temp_dir: &str) -> OcrService {
             max_retries: 2,
             initial_retry_delay_ms: 100,
             max_retry_delay_ms: 1000,
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: true,
-                failure_threshold: 3,
-                recovery_timeout_seconds: 5,
-                success_threshold_percentage: 70,
-            },
-            learning: LearningConfig {
-                enabled: true,
-                cache_successful_methods: true,
-                cache_ttl_hours: 1,
-            },
-            method_timeouts: MethodTimeouts::default(),
+            xml_timeout_seconds: 60,
         },
         temp_dir: temp_dir.to_string(),
     };
@@ -186,16 +175,12 @@ async fn test_extract_text_from_docx() -> Result<()> {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ).await?;
     
-    assert!(result.success);
-    // Since we're using a placeholder library extraction, check for the actual content
+    // The method now returns an OcrResult
     println!("Extracted text: '{}'", result.text);
-    println!("Method used: {}", result.method_name);
     assert!(!result.text.is_empty());
-    assert!(result.word_count > 0);
+    assert!(result.text.contains(test_content));
     assert!(result.confidence > 0.0);
-    assert!(result.processing_time < Duration::from_secs(30));
-    // The method might be Library-based extraction (placeholder) or XML extraction
-    assert!(result.method_name.contains("extraction"));
+    assert!(result.word_count > 0);
     
     Ok(())
 }
@@ -218,13 +203,13 @@ async fn test_extract_text_from_xlsx() -> Result<()> {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ).await?;
     
-    assert!(result.success);
-    // Since we're using placeholder extraction, check basic properties
+    // The method now returns an OcrResult
     println!("XLSX extracted text: '{}'", result.text);
-    println!("XLSX method used: {}", result.method_name);
     assert!(!result.text.is_empty());
-    assert!(result.word_count > 0);
+    // Check if it contains some of our test content
+    assert!(result.text.contains("Header") || result.text.contains("Data"));
     assert!(result.confidence > 0.0);
+    assert!(result.word_count > 0);
     
     Ok(())
 }
@@ -252,8 +237,10 @@ async fn test_extraction_modes() -> Result<()> {
     
     // XML extraction should succeed with our test document
     assert!(result.is_ok(), "XML extraction failed: {:?}", result);
-    let extracted_text = result?;
-    assert!(!extracted_text.is_empty());
+    let extracted_result = result?;
+    assert!(!extracted_result.text.is_empty());
+    assert!(extracted_result.confidence > 0.0);
+    assert!(extracted_result.word_count > 0);
     
     Ok(())
 }
@@ -263,29 +250,14 @@ async fn test_fallback_mechanism() -> Result<()> {
     let test_docs = OfficeTestDocuments::new()?;
     let temp_dir = test_docs.temp_dir.path().to_string_lossy().to_string();
     
-    // Create a service with library-first mode
+    // Create a service with XML-only mode (simplified)
     let config = OcrConfig {
         fallback_config: FallbackConfig {
             enabled: true,
             max_retries: 1,
             initial_retry_delay_ms: 50,
             max_retry_delay_ms: 200,
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: false, // Disable for this test
-                failure_threshold: 5,
-                recovery_timeout_seconds: 10,
-                success_threshold_percentage: 50,
-            },
-            learning: LearningConfig {
-                enabled: true,
-                cache_successful_methods: true,
-                cache_ttl_hours: 1,
-            },
-            method_timeouts: MethodTimeouts {
-                library_timeout_seconds: 1, // Very short timeout to force fallback
-                xml_timeout_seconds: 30,
-                ocr_timeout_seconds: 60,
-            },
+            xml_timeout_seconds: 30,
         },
         temp_dir,
     };
@@ -293,16 +265,16 @@ async fn test_fallback_mechanism() -> Result<()> {
     let ocr_service = OcrService::new_with_config(config);
     let docx_path = test_docs.create_mock_docx("fallback_test.docx", "Fallback test content")?;
     
-    // The library method should timeout and fallback to XML
+    // The XML extraction should succeed
     let result = ocr_service.extract_text_from_office_document(
         &docx_path,
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ).await?;
     
-    assert!(result.success);
+    // The method now returns an OcrResult
     assert!(result.text.contains("Fallback test content"));
-    // Should have used XML extraction due to library timeout
-    assert!(result.method_name.contains("XML"));
+    assert!(result.confidence > 0.0);
+    assert!(result.word_count > 0);
     
     Ok(())
 }
@@ -326,7 +298,9 @@ async fn test_timeout_handling() -> Result<()> {
     // Should complete successfully even with short timeout for our simple test file
     assert!(result.is_ok());
     let extraction_result = result??;
-    assert!(extraction_result.success);
+    assert!(!extraction_result.text.is_empty());
+    assert!(extraction_result.confidence > 0.0);
+    assert!(extraction_result.word_count > 0);
     
     Ok(())
 }
@@ -399,10 +373,11 @@ async fn test_concurrent_extraction() -> Result<()> {
     
     // Verify all extractions succeeded
     for (i, task_result) in results.into_iter().enumerate() {
-        let extraction_result = task_result??;
-        assert!(extraction_result.success, "Task {} failed", i);
-        assert!(extraction_result.text.contains(&format!("Test document {}", i)));
-        assert!(extraction_result.word_count > 0);
+        let ocr_result = task_result??;
+        assert!(!ocr_result.text.is_empty(), "Task {} failed", i);
+        assert!(ocr_result.text.contains(&format!("Test document {}", i)));
+        assert!(ocr_result.confidence > 0.0);
+        assert!(ocr_result.word_count > 0);
     }
     
     Ok(())
@@ -412,25 +387,14 @@ async fn test_concurrent_extraction() -> Result<()> {
 async fn test_circuit_breaker() -> Result<()> {
     let test_docs = OfficeTestDocuments::new()?;
     
-    // Create service with aggressive circuit breaker settings
+    // Create service with simple retry settings (circuit breaker functionality removed)
     let config = OcrConfig {
         fallback_config: FallbackConfig {
             enabled: true,
             max_retries: 0, // No retries to make failures immediate
             initial_retry_delay_ms: 10,
             max_retry_delay_ms: 100,
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: true,
-                failure_threshold: 2, // Trip after just 2 failures
-                recovery_timeout_seconds: 1,
-                success_threshold_percentage: 100, // Require 100% success to close
-            },
-            learning: LearningConfig::default(),
-            method_timeouts: MethodTimeouts {
-                library_timeout_seconds: 30,
-                xml_timeout_seconds: 30,
-                ocr_timeout_seconds: 30,
-            },
+            xml_timeout_seconds: 30,
         },
         temp_dir: test_docs.temp_dir.path().to_string_lossy().to_string(),
     };
@@ -458,24 +422,17 @@ async fn test_circuit_breaker() -> Result<()> {
     ).await;
     assert!(result2.is_err());
     
-    // Third attempt - should fail fast due to circuit breaker
+    // Third attempt - should succeed since circuit breaker functionality was removed  
     let result3 = ocr_service.extract_text_from_office_document(
         &valid_path,
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ).await;
-    assert!(result3.is_err());
-    let error_msg = result3.unwrap_err().to_string();
-    assert!(error_msg.contains("circuit breaker") || error_msg.contains("open"));
-    
-    // Wait for recovery timeout
-    tokio::time::sleep(Duration::from_secs(2)).await;
-    
-    // Now should be able to process valid document (circuit goes to half-open)
-    let _result4 = ocr_service.extract_text_from_office_document(
-        &valid_path,
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ).await;
-    // This might still fail if circuit is still open, which is acceptable behavior
+    // With simplified architecture, valid documents should always work
+    assert!(result3.is_ok());
+    let valid_result = result3.unwrap();
+    assert!(valid_result.text.contains("Valid document"));
+    assert!(valid_result.confidence > 0.0);
+    assert!(valid_result.word_count > 0);
     
     Ok(())
 }
@@ -501,6 +458,10 @@ async fn test_statistics_tracking() -> Result<()> {
         ).await;
         
         assert!(result.is_ok(), "Extraction {} failed: {:?}", i, result);
+        let ocr_result = result.unwrap();
+        assert!(!ocr_result.text.is_empty());
+        assert!(ocr_result.confidence > 0.0);
+        assert!(ocr_result.word_count > 0);
     }
     
     // Check updated stats
@@ -534,25 +495,14 @@ async fn test_mime_type_support() -> Result<()> {
 async fn test_learning_mechanism() -> Result<()> {
     let test_docs = OfficeTestDocuments::new()?;
     
-    // Create service with learning enabled
+    // Create service with simple XML extraction (learning functionality removed)
     let config = OcrConfig {
         fallback_config: FallbackConfig {
             enabled: true,
             max_retries: 1,
             initial_retry_delay_ms: 10,
             max_retry_delay_ms: 100,
-            circuit_breaker: CircuitBreakerConfig {
-                enabled: false, // Disable to focus on learning
-                failure_threshold: 10,
-                recovery_timeout_seconds: 10,
-                success_threshold_percentage: 50,
-            },
-            learning: LearningConfig {
-                enabled: true,
-                cache_successful_methods: true,
-                cache_ttl_hours: 1,
-            },
-            method_timeouts: MethodTimeouts::default(),
+            xml_timeout_seconds: 30,
         },
         temp_dir: test_docs.temp_dir.path().to_string_lossy().to_string(),
     };
@@ -569,15 +519,16 @@ async fn test_learning_mechanism() -> Result<()> {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ).await;
         
-        assert!(result.is_ok(), "Learning iteration {} failed: {:?}", i, result);
-        let result = result?;
-        assert!(result.success);
-        assert!(result.text.contains(&format!("document {}", i)));
+        assert!(result.is_ok(), "Extraction iteration {} failed: {:?}", i, result);
+        let ocr_result = result?;
+        assert!(!ocr_result.text.is_empty());
+        assert!(ocr_result.text.contains(&format!("document {}", i)));
+        assert!(ocr_result.confidence > 0.0);
+        assert!(ocr_result.word_count > 0);
     }
     
-    // The learning mechanism should now have preferences cached
-    // We can't easily test this directly without exposing internal state,
-    // but the fact that all extractions succeeded indicates the system is working
+    // With the simplified XML-only architecture, the system should consistently work
+    // All extractions succeeded, indicating the XML extraction is working correctly
     
     Ok(())
 }
@@ -635,11 +586,11 @@ async fn benchmark_extraction_performance() -> Result<()> {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ).await?;
         
-        assert!(result.success);
-        println!("Iteration {}: {} ms, {} words", 
+        assert!(!result.text.is_empty());
+        println!("Iteration {}: extracted {} chars, confidence: {:.1}%", 
             i, 
-            result.processing_time.as_millis(),
-            result.word_count
+            result.text.len(),
+            result.confidence
         );
     }
     

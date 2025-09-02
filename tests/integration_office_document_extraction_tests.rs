@@ -457,19 +457,20 @@ async fn test_doc_extraction_multiple_strategies() {
     let settings = Settings::default();
     let start_time = std::time::Instant::now();
     
-    // Test the full legacy DOC extraction process
-    let result = ocr_service.extract_text_from_legacy_doc(
+    // Test Office extraction with the DOC file (this should fail as DOC files are not XML-based)
+    let result = ocr_service.extract_text_from_office(
         doc_path.to_str().unwrap(),
-        start_time
+        "application/msword",
+        &settings
     ).await;
     
-    // Should fail since we don't have LibreOffice or extraction tools in test env
-    assert!(result.is_err(), "Should fail without proper tools");
+    // Should fail since DOC files are not XML-based and we only do XML extraction now
+    assert!(result.is_err(), "Should fail for DOC files as they are not XML-based");
     let error_msg = result.unwrap_err().to_string();
     
-    // Verify it mentions trying extraction tools
-    assert!(error_msg.contains("None of the DOC extraction tools") || error_msg.contains("All extraction methods failed"), 
-        "Should mention all methods tried: {}", error_msg);
+    // Verify it mentions XML parsing issues for DOC files
+    assert!(error_msg.contains("not a valid ZIP") || error_msg.contains("invalid") || error_msg.contains("XML"), 
+        "Should mention XML/ZIP parsing issues: {}", error_msg);
 }
 
 #[tokio::test]

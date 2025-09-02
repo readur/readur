@@ -195,25 +195,41 @@ impl OcrService {
         }
     }
 
-    /// Extract text from Office documents using fallback strategy
+    /// Extract text from Office documents using XML extraction
     pub async fn extract_text_from_office_document(
         &self,
         file_path: &str,
         mime_type: &str,
-    ) -> Result<String> {
+    ) -> Result<crate::ocr::enhanced::OcrResult> {
         match &self.fallback_strategy {
             Some(strategy) => {
                 let result = strategy.extract_with_fallback(file_path, mime_type).await?;
-                Ok(result.text)
+                // Convert the result to OcrResult for backward compatibility
+                Ok(crate::ocr::enhanced::OcrResult {
+                    text: result.text,
+                    confidence: result.confidence,
+                    processing_time_ms: result.processing_time_ms,
+                    word_count: result.word_count,
+                    preprocessing_applied: vec![format!("XML extraction - {}", result.extraction_method)],
+                    processed_image_path: None,
+                })
             }
             None => {
-                // Fallback to basic XML extraction if no strategy is configured
+                // Use basic XML extraction if no strategy is configured
                 let xml_extractor = crate::ocr::xml_extractor::XmlOfficeExtractor::new(
                     std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string())
                 );
                 
                 let result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
-                Ok(result.text)
+                // Convert OfficeExtractionResult to OcrResult for backward compatibility
+                Ok(crate::ocr::enhanced::OcrResult {
+                    text: result.text,
+                    confidence: result.confidence,
+                    processing_time_ms: result.processing_time_ms,
+                    word_count: result.word_count,
+                    preprocessing_applied: vec![format!("XML extraction - {}", result.extraction_method)],
+                    processed_image_path: None,
+                })
             }
         }
     }
@@ -223,16 +239,9 @@ impl OcrService {
         &self,
         file_path: &str,
         mime_type: &str,
-    ) -> Result<String> {
-        match &self.fallback_strategy {
-            Some(strategy) => {
-                let result = strategy.extract_with_fallback(file_path, mime_type).await?;
-                Ok(result.text)
-            }
-            None => {
-                return Err(anyhow!("Fallback strategy not configured for advanced Office document extraction"));
-            }
-        }
+    ) -> Result<crate::ocr::enhanced::OcrResult> {
+        // Use the same XML extraction logic as the basic method
+        self.extract_text_from_office_document(file_path, mime_type).await
     }
 
     pub async fn extract_text(&self, file_path: &str, mime_type: &str) -> Result<String> {
@@ -249,7 +258,8 @@ impl OcrService {
             "application/msword" |
             "application/vnd.ms-excel" |
             "application/vnd.ms-powerpoint" => {
-                self.extract_text_from_office_document(file_path, mime_type).await
+                let result = self.extract_text_from_office_document(file_path, mime_type).await?;
+                Ok(result.text)
             }
             "image/png" | "image/jpeg" | "image/jpg" | "image/tiff" | "image/bmp" => {
                 self.extract_text_from_image_with_lang(file_path, lang).await
@@ -321,7 +331,7 @@ impl OcrService {
         }
     }
 
-    /// Get fallback strategy statistics
+    /// Get XML extraction statistics
     pub async fn get_fallback_stats(&self) -> Option<crate::ocr::fallback_strategy::FallbackStats> {
         match &self.fallback_strategy {
             Some(strategy) => Some(strategy.get_stats().await),
@@ -329,14 +339,14 @@ impl OcrService {
         }
     }
 
-    /// Reset fallback strategy statistics
+    /// Reset XML extraction statistics
     pub async fn reset_fallback_stats(&self) -> Result<()> {
         match &self.fallback_strategy {
             Some(strategy) => {
                 strategy.reset_stats().await;
                 Ok(())
             }
-            None => Err(anyhow!("Fallback strategy not configured")),
+            None => Err(anyhow!("XML extraction strategy not configured")),
         }
     }
 
