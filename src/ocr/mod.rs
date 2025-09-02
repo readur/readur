@@ -2,7 +2,6 @@ pub mod api;
 pub mod enhanced;
 pub mod enhanced_processing;
 pub mod error;
-pub mod fallback_strategy;
 pub mod health;
 pub mod queue;
 pub mod tests;
@@ -12,21 +11,18 @@ use anyhow::{anyhow, Result};
 use std::path::Path;
 use crate::ocr::error::OcrError;
 use crate::ocr::health::OcrHealthChecker;
-use crate::ocr::fallback_strategy::{FallbackStrategy, FallbackConfig};
 
 #[cfg(feature = "ocr")]
 use tesseract::Tesseract;
 
 pub struct OcrService {
     health_checker: OcrHealthChecker,
-    fallback_strategy: Option<FallbackStrategy>,
+    temp_dir: String,
 }
 
 /// Configuration for the OCR service
 #[derive(Debug, Clone)]
 pub struct OcrConfig {
-    /// Fallback configuration  
-    pub fallback_config: FallbackConfig,
     /// Temporary directory for processing
     pub temp_dir: String,
 }
@@ -34,7 +30,6 @@ pub struct OcrConfig {
 impl Default for OcrConfig {
     fn default() -> Self {
         Self {
-            fallback_config: FallbackConfig::default(),
             temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
         }
     }
@@ -44,21 +39,15 @@ impl OcrService {
     pub fn new() -> Self {
         Self {
             health_checker: OcrHealthChecker::new(),
-            fallback_strategy: None,
+            temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
         }
     }
 
     /// Create OCR service with configuration
     pub fn new_with_config(config: OcrConfig) -> Self {
-        let fallback_strategy = if config.fallback_config.enabled {
-            Some(FallbackStrategy::new(config.fallback_config, config.temp_dir))
-        } else {
-            None
-        };
-
         Self {
             health_checker: OcrHealthChecker::new(),
-            fallback_strategy,
+            temp_dir: config.temp_dir,
         }
     }
 
@@ -201,37 +190,21 @@ impl OcrService {
         file_path: &str,
         mime_type: &str,
     ) -> Result<crate::ocr::enhanced::OcrResult> {
-        match &self.fallback_strategy {
-            Some(strategy) => {
-                let result = strategy.extract_with_fallback(file_path, mime_type).await?;
-                // Convert the result to OcrResult for backward compatibility
-                Ok(crate::ocr::enhanced::OcrResult {
-                    text: result.text,
-                    confidence: result.confidence,
-                    processing_time_ms: result.processing_time_ms,
-                    word_count: result.word_count,
-                    preprocessing_applied: vec![format!("XML extraction - {}", result.extraction_method)],
-                    processed_image_path: None,
-                })
-            }
-            None => {
-                // Use basic XML extraction if no strategy is configured
-                let xml_extractor = crate::ocr::xml_extractor::XmlOfficeExtractor::new(
-                    std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string())
-                );
-                
-                let result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
-                // Convert OfficeExtractionResult to OcrResult for backward compatibility
-                Ok(crate::ocr::enhanced::OcrResult {
-                    text: result.text,
-                    confidence: result.confidence,
-                    processing_time_ms: result.processing_time_ms,
-                    word_count: result.word_count,
-                    preprocessing_applied: vec![format!("XML extraction - {}", result.extraction_method)],
-                    processed_image_path: None,
-                })
-            }
-        }
+        // Use XML extraction directly
+        let xml_extractor = crate::ocr::xml_extractor::XmlOfficeExtractor::new(
+            self.temp_dir.clone()
+        );
+        
+        let result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
+        // Convert OfficeExtractionResult to OcrResult for backward compatibility
+        Ok(crate::ocr::enhanced::OcrResult {
+            text: result.text,
+            confidence: result.confidence,
+            processing_time_ms: result.processing_time_ms,
+            word_count: result.word_count,
+            preprocessing_applied: vec![format!("XML extraction - {}", result.extraction_method)],
+            processed_image_path: None,
+        })
     }
 
     /// Extract text from Office documents with custom configuration
@@ -331,28 +304,10 @@ impl OcrService {
         }
     }
 
-    /// Get XML extraction statistics
-    pub async fn get_fallback_stats(&self) -> Option<crate::ocr::fallback_strategy::FallbackStats> {
-        match &self.fallback_strategy {
-            Some(strategy) => Some(strategy.get_stats().await),
-            None => None,
-        }
-    }
-
-    /// Reset XML extraction statistics
-    pub async fn reset_fallback_stats(&self) -> Result<()> {
-        match &self.fallback_strategy {
-            Some(strategy) => {
-                strategy.reset_stats().await;
-                Ok(())
-            }
-            None => Err(anyhow!("XML extraction strategy not configured")),
-        }
-    }
 
     /// Check if Office document extraction is available
     pub fn supports_office_documents(&self) -> bool {
-        self.fallback_strategy.is_some()
+        true // XML extraction is always available
     }
 
     /// Get supported MIME types
@@ -367,16 +322,15 @@ impl OcrService {
             "text/plain",
         ];
 
-        if self.supports_office_documents() {
-            types.extend_from_slice(&[
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                "application/msword",
-                "application/vnd.ms-excel",
-                "application/vnd.ms-powerpoint",
-            ]);
-        }
+        // Office document types are always supported via XML extraction
+        types.extend_from_slice(&[
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/msword",
+            "application/vnd.ms-excel",
+            "application/vnd.ms-powerpoint",
+        ]);
 
         types
     }

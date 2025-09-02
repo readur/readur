@@ -7,7 +7,6 @@ use tokio::time::timeout;
 
 use readur::ocr::{
     OcrService, OcrConfig,
-    fallback_strategy::FallbackConfig,
 };
 
 /// Test utilities for creating mock Office documents
@@ -72,7 +71,7 @@ impl OfficeTestDocuments {
         let file = fs::File::create(&file_path)?;
         let mut zip = zip::ZipWriter::new(file);
         
-        // Add [Content_Types].xml
+        // Add [Content_Types].xml with shared strings support
         zip.start_file("[Content_Types].xml", zip::write::FileOptions::default())?;
         zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -80,6 +79,7 @@ impl OfficeTestDocuments {
     <Default Extension="xml" ContentType="application/xml"/>
     <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
     <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+    <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
 </Types>"#)?;
         
         // Add _rels/.rels
@@ -98,26 +98,42 @@ impl OfficeTestDocuments {
     </sheets>
 </workbook>"#)?;
         
-        // Add xl/_rels/workbook.xml.rels
+        // Add xl/_rels/workbook.xml.rels with shared strings relationship
         zip.start_file("xl/_rels/workbook.xml.rels", zip::write::FileOptions::default())?;
         zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
 </Relationships>"#)?;
         
-        // Add xl/worksheets/sheet1.xml with actual content
+        // Add xl/sharedStrings.xml with the text content
+        zip.start_file("xl/sharedStrings.xml", zip::write::FileOptions::default())?;
+        let mut shared_strings_xml = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="{count}" uniqueCount="{count}">"#);
+        shared_strings_xml = shared_strings_xml.replace("{count}", &content.len().to_string());
+        
+        for cell_content in content {
+            shared_strings_xml.push_str(&format!(r#"
+    <si><t>{}</t></si>"#, cell_content));
+        }
+        
+        shared_strings_xml.push_str(r#"
+</sst>"#);
+        zip.write_all(shared_strings_xml.as_bytes())?;
+        
+        // Add xl/worksheets/sheet1.xml with references to shared strings
         zip.start_file("xl/worksheets/sheet1.xml", zip::write::FileOptions::default())?;
         let mut worksheet_xml = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
     <sheetData>"#);
         
-        for (row_idx, cell_content) in content.iter().enumerate() {
+        for (row_idx, _) in content.iter().enumerate() {
             worksheet_xml.push_str(&format!(r#"
         <row r="{}">
-            <c r="A{}" t="inlineStr">
-                <is><t>{}</t></is>
+            <c r="A{}" t="s">
+                <v>{}</v>
             </c>
-        </row>"#, row_idx + 1, row_idx + 1, cell_content));
+        </row>"#, row_idx + 1, row_idx + 1, row_idx));
         }
         
         worksheet_xml.push_str(r#"
@@ -146,16 +162,9 @@ impl OfficeTestDocuments {
     }
 }
 
-/// Create a test OCR service with fallback strategy
+/// Create a test OCR service with XML extraction
 fn create_test_ocr_service(temp_dir: &str) -> OcrService {
     let config = OcrConfig {
-        fallback_config: FallbackConfig {
-            enabled: true,
-            max_retries: 2,
-            initial_retry_delay_ms: 100,
-            max_retry_delay_ms: 1000,
-            xml_timeout_seconds: 60,
-        },
         temp_dir: temp_dir.to_string(),
     };
     
@@ -224,7 +233,6 @@ async fn test_extraction_modes() -> Result<()> {
     
     // Test XML extraction with the simplified approach
     let ocr_config = OcrConfig {
-        fallback_config: FallbackConfig::default(),
         temp_dir: temp_dir.clone(),
     };
     
@@ -250,15 +258,8 @@ async fn test_fallback_mechanism() -> Result<()> {
     let test_docs = OfficeTestDocuments::new()?;
     let temp_dir = test_docs.temp_dir.path().to_string_lossy().to_string();
     
-    // Create a service with XML-only mode (simplified)
+    // Create a service with XML extraction
     let config = OcrConfig {
-        fallback_config: FallbackConfig {
-            enabled: true,
-            max_retries: 1,
-            initial_retry_delay_ms: 50,
-            max_retry_delay_ms: 200,
-            xml_timeout_seconds: 30,
-        },
         temp_dir,
     };
     
@@ -387,15 +388,8 @@ async fn test_concurrent_extraction() -> Result<()> {
 async fn test_circuit_breaker() -> Result<()> {
     let test_docs = OfficeTestDocuments::new()?;
     
-    // Create service with simple retry settings (circuit breaker functionality removed)
+    // Create service with XML extraction
     let config = OcrConfig {
-        fallback_config: FallbackConfig {
-            enabled: true,
-            max_retries: 0, // No retries to make failures immediate
-            initial_retry_delay_ms: 10,
-            max_retry_delay_ms: 100,
-            xml_timeout_seconds: 30,
-        },
         temp_dir: test_docs.temp_dir.path().to_string_lossy().to_string(),
     };
     
@@ -442,13 +436,7 @@ async fn test_statistics_tracking() -> Result<()> {
     let test_docs = OfficeTestDocuments::new()?;
     let ocr_service = create_test_ocr_service(test_docs.temp_dir.path().to_string_lossy().as_ref());
     
-    // Reset stats
-    ocr_service.reset_fallback_stats().await?;
-    
-    let initial_stats = ocr_service.get_fallback_stats().await.unwrap();
-    assert_eq!(initial_stats.total_extractions, 0);
-    
-    // Perform some extractions
+    // Perform some extractions to verify functionality
     let valid_path = test_docs.create_mock_docx("stats_test.docx", "Statistics test document")?;
     
     for i in 0..3 {
@@ -462,13 +450,10 @@ async fn test_statistics_tracking() -> Result<()> {
         assert!(!ocr_result.text.is_empty());
         assert!(ocr_result.confidence > 0.0);
         assert!(ocr_result.word_count > 0);
+        assert!(ocr_result.processing_time_ms > 0);
     }
     
-    // Check updated stats
-    let final_stats = ocr_service.get_fallback_stats().await.unwrap();
-    assert_eq!(final_stats.total_extractions, 3);
-    assert!(final_stats.success_rate_percentage > 0.0);
-    assert!(final_stats.average_processing_time_ms > 0.0);
+    // All extractions succeeded, indicating the XML extraction is working correctly
     
     Ok(())
 }
@@ -495,15 +480,8 @@ async fn test_mime_type_support() -> Result<()> {
 async fn test_learning_mechanism() -> Result<()> {
     let test_docs = OfficeTestDocuments::new()?;
     
-    // Create service with simple XML extraction (learning functionality removed)
+    // Create service with XML extraction
     let config = OcrConfig {
-        fallback_config: FallbackConfig {
-            enabled: true,
-            max_retries: 1,
-            initial_retry_delay_ms: 10,
-            max_retry_delay_ms: 100,
-            xml_timeout_seconds: 30,
-        },
         temp_dir: test_docs.temp_dir.path().to_string_lossy().to_string(),
     };
     
