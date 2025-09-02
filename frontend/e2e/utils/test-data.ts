@@ -20,6 +20,10 @@ export const TEST_FILES = {
   test8: '../tests/test_images/test8.jpeg',    // "Test 8\nThis is some text from text 8"
   test9: '../tests/test_images/test9.png',     // "Test 9\nThis is some text from text 9"
   
+  // Word documents
+  testDocx: 'test_data/test_file.docx',        // "This is a test file"
+  testDoc: 'test_data/test_file.doc',          // "This is a test file"
+  
   // Multilingual test PDFs
   spanishTest: 'test_data/multilingual/spanish_test.pdf',
   englishTest: 'test_data/multilingual/english_test.pdf',
@@ -58,6 +62,12 @@ export const EXPECTED_OCR_CONTENT = {
   test7: 'Test 7\nThis is some text from text 7',
   test8: 'Test 8\nThis is some text from text 8',
   test9: 'Test 9\nThis is some text from text 9'
+};
+
+// Expected text content for Word documents
+export const EXPECTED_TEXT_CONTENT = {
+  testDocx: 'This is a test file',
+  testDoc: 'This is a test file'
 };
 
 export const API_ENDPOINTS = {

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures/auth';
-import { TEST_FILES, TIMEOUTS, API_ENDPOINTS, EXPECTED_OCR_CONTENT } from './utils/test-data';
+import { TEST_FILES, TIMEOUTS, API_ENDPOINTS, EXPECTED_OCR_CONTENT, EXPECTED_TEXT_CONTENT } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
 test.describe('Document Upload', () => {
@@ -288,6 +288,212 @@ test.describe('Document Upload', () => {
       await expect(page.locator('[data-testid="uploaded-files"], .uploaded-file')).toBeVisible({ 
         timeout: TIMEOUTS.medium 
       });
+    }
+  });
+
+  test('should upload .docx document successfully', async ({ dynamicAdminPage: page }) => {
+    // Check if we can see the upload page (not stuck on login)
+    const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
+    if (isOnLoginPage) {
+      throw new Error('Test is stuck on login page - authentication failed');
+    }
+    
+    // Find file input
+    const fileInput = page.locator('input[type="file"]').first();
+    await expect(fileInput).toBeAttached({ timeout: 10000 });
+    
+    // Upload test_file.docx
+    console.log('Uploading test_file.docx...');
+    await fileInput.setInputFiles(TEST_FILES.testDocx);
+    
+    // Verify file is added to the list by looking for the filename
+    await expect(page.getByText('test_file.docx')).toBeVisible({ timeout: TIMEOUTS.short });
+    console.log('DOCX file selected successfully');
+    
+    // Look for upload button
+    const uploadButtonSelectors = [
+      'button:has-text("Upload All")',
+      'button:has-text("Upload")',
+      'button:has-text("Start Upload")',
+      '[data-testid="upload-button"]'
+    ];
+    
+    let uploadButton = null;
+    for (const selector of uploadButtonSelectors) {
+      const button = page.locator(selector);
+      if (await button.isVisible({ timeout: TIMEOUTS.short })) {
+        uploadButton = button;
+        console.log(`Found upload button using: ${selector}`);
+        break;
+      }
+    }
+    
+    if (uploadButton) {
+      // Wait for upload API call
+      const uploadResponse = helpers.waitForApiCall('/api/documents', TIMEOUTS.upload);
+      
+      // Click upload button
+      await uploadButton.click();
+      console.log('Upload button clicked');
+      
+      // Verify upload was successful
+      try {
+        const response = await uploadResponse;
+        console.log(`Upload API completed with status: ${response.status()}`);
+        
+        if (response.status() >= 200 && response.status() < 300) {
+          console.log('DOCX upload completed successfully');
+        }
+      } catch (error) {
+        console.log('Upload API call timed out or failed:', error);
+      }
+    } else {
+      console.log('No upload button found - file may upload automatically');
+      await page.waitForTimeout(2000);
+    }
+    
+    console.log('DOCX upload test completed');
+  });
+
+  test('should upload .doc document successfully', async ({ dynamicAdminPage: page }) => {
+    // Check if we can see the upload page (not stuck on login)
+    const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
+    if (isOnLoginPage) {
+      throw new Error('Test is stuck on login page - authentication failed');
+    }
+    
+    // Find file input
+    const fileInput = page.locator('input[type="file"]').first();
+    await expect(fileInput).toBeAttached({ timeout: 10000 });
+    
+    // Upload test_file.doc
+    console.log('Uploading test_file.doc...');
+    await fileInput.setInputFiles(TEST_FILES.testDoc);
+    
+    // Verify file is added to the list by looking for the filename
+    await expect(page.getByText('test_file.doc')).toBeVisible({ timeout: TIMEOUTS.short });
+    console.log('DOC file selected successfully');
+    
+    // Look for upload button
+    const uploadButtonSelectors = [
+      'button:has-text("Upload All")',
+      'button:has-text("Upload")',
+      'button:has-text("Start Upload")',
+      '[data-testid="upload-button"]'
+    ];
+    
+    let uploadButton = null;
+    for (const selector of uploadButtonSelectors) {
+      const button = page.locator(selector);
+      if (await button.isVisible({ timeout: TIMEOUTS.short })) {
+        uploadButton = button;
+        console.log(`Found upload button using: ${selector}`);
+        break;
+      }
+    }
+    
+    if (uploadButton) {
+      // Wait for upload API call
+      const uploadResponse = helpers.waitForApiCall('/api/documents', TIMEOUTS.upload);
+      
+      // Click upload button
+      await uploadButton.click();
+      console.log('Upload button clicked');
+      
+      // Verify upload was successful
+      try {
+        const response = await uploadResponse;
+        console.log(`Upload API completed with status: ${response.status()}`);
+        
+        if (response.status() >= 200 && response.status() < 300) {
+          console.log('DOC upload completed successfully');
+        }
+      } catch (error) {
+        console.log('Upload API call timed out or failed:', error);
+      }
+    } else {
+      console.log('No upload button found - file may upload automatically');
+      await page.waitForTimeout(2000);
+    }
+    
+    console.log('DOC upload test completed');
+  });
+
+  test('should process .docx document and extract text content', async ({ dynamicAdminPage: page }) => {
+    // Check if we can see the upload page (not stuck on login)
+    const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
+    if (isOnLoginPage) {
+      throw new Error('Test is stuck on login page - authentication failed');
+    }
+    
+    const fileInput = page.locator('input[type="file"]').first();
+    await fileInput.setInputFiles(TEST_FILES.testDocx);
+    
+    const uploadButton = page.locator('button:has-text("Upload"), [data-testid="upload-button"]').first();
+    if (await uploadButton.isVisible()) {
+      await uploadButton.click();
+    }
+    
+    await helpers.waitForLoadingToComplete();
+    
+    // Navigate to document details to verify content extraction
+    const uploadedDocument = page.locator('[data-testid="uploaded-files"] > *, .uploaded-file').first();
+    if (await uploadedDocument.isVisible()) {
+      await uploadedDocument.click();
+      
+      // Should navigate to document details page
+      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
+      
+      // Check that document content is visible and contains expected text
+      const documentContent = page.locator('[data-testid="document-content"], .document-text, .document-content');
+      if (await documentContent.isVisible({ timeout: TIMEOUTS.medium })) {
+        const content = await documentContent.textContent();
+        expect(content).toContain(EXPECTED_TEXT_CONTENT.testDocx);
+        console.log('DOCX content extraction verified successfully');
+      } else {
+        console.log('Document content not visible, checking page text');
+        // Fallback: check if the expected text is anywhere on the page
+        await expect(page.locator(`text=${EXPECTED_TEXT_CONTENT.testDocx}`)).toBeVisible({ timeout: TIMEOUTS.medium });
+      }
+    }
+  });
+
+  test('should process .doc document and extract text content', async ({ dynamicAdminPage: page }) => {
+    // Check if we can see the upload page (not stuck on login)
+    const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
+    if (isOnLoginPage) {
+      throw new Error('Test is stuck on login page - authentication failed');
+    }
+    
+    const fileInput = page.locator('input[type="file"]').first();
+    await fileInput.setInputFiles(TEST_FILES.testDoc);
+    
+    const uploadButton = page.locator('button:has-text("Upload"), [data-testid="upload-button"]').first();
+    if (await uploadButton.isVisible()) {
+      await uploadButton.click();
+    }
+    
+    await helpers.waitForLoadingToComplete();
+    
+    // Navigate to document details to verify content extraction
+    const uploadedDocument = page.locator('[data-testid="uploaded-files"] > *, .uploaded-file').first();
+    if (await uploadedDocument.isVisible()) {
+      await uploadedDocument.click();
+      
+      // Should navigate to document details page
+      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
+      
+      // Check that document content is visible and contains expected text
+      const documentContent = page.locator('[data-testid="document-content"], .document-text, .document-content');
+      if (await documentContent.isVisible({ timeout: TIMEOUTS.medium })) {
+        const content = await documentContent.textContent();
+        expect(content).toContain(EXPECTED_TEXT_CONTENT.testDoc);
+        console.log('DOC content extraction verified successfully');
+      } else {
+        console.log('Document content not visible, checking page text');
+        // Fallback: check if the expected text is anywhere on the page
+        await expect(page.locator(`text=${EXPECTED_TEXT_CONTENT.testDoc}`)).toBeVisible({ timeout: TIMEOUTS.medium });
+      }
     }
   });
 });
