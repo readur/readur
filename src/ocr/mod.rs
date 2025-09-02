@@ -2,7 +2,6 @@ pub mod api;
 pub mod enhanced;
 pub mod enhanced_processing;
 pub mod error;
-pub mod extraction_comparator;
 pub mod fallback_strategy;
 pub mod health;
 pub mod queue;
@@ -14,7 +13,6 @@ use std::path::Path;
 use crate::ocr::error::OcrError;
 use crate::ocr::health::OcrHealthChecker;
 use crate::ocr::fallback_strategy::{FallbackStrategy, FallbackConfig};
-use crate::ocr::extraction_comparator::{ExtractionConfig, ExtractionMode, SingleExtractionResult};
 
 #[cfg(feature = "ocr")]
 use tesseract::Tesseract;
@@ -27,8 +25,6 @@ pub struct OcrService {
 /// Configuration for the OCR service
 #[derive(Debug, Clone)]
 pub struct OcrConfig {
-    /// Extraction configuration
-    pub extraction_config: ExtractionConfig,
     /// Fallback configuration  
     pub fallback_config: FallbackConfig,
     /// Temporary directory for processing
@@ -38,7 +34,6 @@ pub struct OcrConfig {
 impl Default for OcrConfig {
     fn default() -> Self {
         Self {
-            extraction_config: ExtractionConfig::default(),
             fallback_config: FallbackConfig::default(),
             temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
         }
@@ -205,11 +200,11 @@ impl OcrService {
         &self,
         file_path: &str,
         mime_type: &str,
-    ) -> Result<SingleExtractionResult> {
+    ) -> Result<String> {
         match &self.fallback_strategy {
             Some(strategy) => {
-                let extraction_config = ExtractionConfig::default();
-                strategy.extract_with_fallback(file_path, mime_type, &extraction_config).await
+                let result = strategy.extract_with_fallback(file_path, mime_type).await?;
+                Ok(result.text)
             }
             None => {
                 // Fallback to basic XML extraction if no strategy is configured
@@ -218,15 +213,7 @@ impl OcrService {
                 );
                 
                 let result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
-                Ok(SingleExtractionResult {
-                    text: result.text,
-                    confidence: result.confidence,
-                    processing_time: std::time::Duration::from_millis(result.processing_time_ms),
-                    word_count: result.word_count,
-                    method_name: result.extraction_method,
-                    success: true,
-                    error_message: None,
-                })
+                Ok(result.text)
             }
         }
     }
@@ -236,11 +223,11 @@ impl OcrService {
         &self,
         file_path: &str,
         mime_type: &str,
-        extraction_config: &ExtractionConfig,
-    ) -> Result<SingleExtractionResult> {
+    ) -> Result<String> {
         match &self.fallback_strategy {
             Some(strategy) => {
-                strategy.extract_with_fallback(file_path, mime_type, extraction_config).await
+                let result = strategy.extract_with_fallback(file_path, mime_type).await?;
+                Ok(result.text)
             }
             None => {
                 return Err(anyhow!("Fallback strategy not configured for advanced Office document extraction"));
@@ -262,10 +249,7 @@ impl OcrService {
             "application/msword" |
             "application/vnd.ms-excel" |
             "application/vnd.ms-powerpoint" => {
-                match self.extract_text_from_office_document(file_path, mime_type).await {
-                    Ok(result) => Ok(result.text),
-                    Err(e) => Err(e),
-                }
+                self.extract_text_from_office_document(file_path, mime_type).await
             }
             "image/png" | "image/jpeg" | "image/jpg" | "image/tiff" | "image/bmp" => {
                 self.extract_text_from_image_with_lang(file_path, lang).await

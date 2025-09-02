@@ -8,7 +8,6 @@ use tokio::time::timeout;
 use readur::ocr::{
     OcrService, OcrConfig,
     fallback_strategy::{FallbackConfig, CircuitBreakerConfig, LearningConfig, MethodTimeouts},
-    extraction_comparator::{ExtractionConfig, ExtractionMode},
 };
 
 /// Test utilities for creating mock Office documents
@@ -150,11 +149,6 @@ impl OfficeTestDocuments {
 /// Create a test OCR service with fallback strategy
 fn create_test_ocr_service(temp_dir: &str) -> OcrService {
     let config = OcrConfig {
-        extraction_config: ExtractionConfig {
-            mode: ExtractionMode::LibraryFirst,
-            timeout_seconds: 30,
-            enable_detailed_logging: true,
-        },
         fallback_config: FallbackConfig {
             enabled: true,
             max_retries: 2,
@@ -243,45 +237,23 @@ async fn test_extraction_modes() -> Result<()> {
     let test_content = "Test document for mode comparison";
     let docx_path = test_docs.create_mock_docx("test_modes.docx", test_content)?;
     
-    // Test different extraction modes
-    let modes = vec![
-        ExtractionMode::LibraryFirst,
-        ExtractionMode::XmlFirst,
-        ExtractionMode::XmlOnly,
-        ExtractionMode::CompareAlways,
-    ];
+    // Test XML extraction with the simplified approach
+    let ocr_config = OcrConfig {
+        fallback_config: FallbackConfig::default(),
+        temp_dir: temp_dir.clone(),
+    };
     
-    for mode in modes {
-        let config = ExtractionConfig {
-            mode,
-            timeout_seconds: 30,
-            enable_detailed_logging: true,
-        };
-        
-        let ocr_config = OcrConfig {
-            extraction_config: config,
-            fallback_config: FallbackConfig::default(),
-            temp_dir: temp_dir.clone(),
-        };
-        
-        let ocr_service = OcrService::new_with_config(ocr_config);
-        
-        let result = ocr_service.extract_text_from_office_document_with_config(
-            &docx_path,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            &ExtractionConfig {
-                mode,
-                timeout_seconds: 30,
-                enable_detailed_logging: true,
-            }
-        ).await;
-        
-        // All modes should succeed with our test document
-        assert!(result.is_ok(), "Mode {:?} failed: {:?}", mode, result);
-        let result = result?;
-        assert!(result.success);
-        assert!(!result.text.is_empty());
-    }
+    let ocr_service = OcrService::new_with_config(ocr_config);
+    
+    let result = ocr_service.extract_text_from_office_document_with_config(
+        &docx_path,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ).await;
+    
+    // XML extraction should succeed with our test document
+    assert!(result.is_ok(), "XML extraction failed: {:?}", result);
+    let extracted_text = result?;
+    assert!(!extracted_text.is_empty());
     
     Ok(())
 }
@@ -293,11 +265,6 @@ async fn test_fallback_mechanism() -> Result<()> {
     
     // Create a service with library-first mode
     let config = OcrConfig {
-        extraction_config: ExtractionConfig {
-            mode: ExtractionMode::LibraryFirst,
-            timeout_seconds: 30,
-            enable_detailed_logging: true,
-        },
         fallback_config: FallbackConfig {
             enabled: true,
             max_retries: 1,
@@ -347,19 +314,12 @@ async fn test_timeout_handling() -> Result<()> {
     
     let docx_path = test_docs.create_mock_docx("timeout_test.docx", "Test content")?;
     
-    // Test with very short timeout
-    let config = ExtractionConfig {
-        mode: ExtractionMode::XmlOnly,
-        timeout_seconds: 1, // Very short timeout
-        enable_detailed_logging: true,
-    };
-    
+    // Test timeout behavior (the timeout logic is now in the XML extractor itself)
     let result = timeout(
         Duration::from_millis(2000), // Give overall test 2 seconds
         ocr_service.extract_text_from_office_document_with_config(
             &docx_path,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            &config
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
     ).await;
     
@@ -454,11 +414,6 @@ async fn test_circuit_breaker() -> Result<()> {
     
     // Create service with aggressive circuit breaker settings
     let config = OcrConfig {
-        extraction_config: ExtractionConfig {
-            mode: ExtractionMode::LibraryFirst,
-            timeout_seconds: 30,
-            enable_detailed_logging: true,
-        },
         fallback_config: FallbackConfig {
             enabled: true,
             max_retries: 0, // No retries to make failures immediate
@@ -581,11 +536,6 @@ async fn test_learning_mechanism() -> Result<()> {
     
     // Create service with learning enabled
     let config = OcrConfig {
-        extraction_config: ExtractionConfig {
-            mode: ExtractionMode::CompareAlways, // This will help with learning
-            timeout_seconds: 30,
-            enable_detailed_logging: true,
-        },
         fallback_config: FallbackConfig {
             enabled: true,
             max_retries: 1,

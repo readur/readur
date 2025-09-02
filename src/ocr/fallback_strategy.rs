@@ -1,13 +1,11 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, warn};
 use rand::Rng;
 
-use super::extraction_comparator::{ExtractionConfig, ExtractionMode, SingleExtractionResult};
 use super::xml_extractor::{OfficeExtractionResult, XmlOfficeExtractor};
 
 /// Configuration for fallback strategy behavior
@@ -453,8 +451,7 @@ impl FallbackStrategy {
         &self,
         file_path: &str,
         mime_type: &str,
-        extraction_config: &ExtractionConfig,
-    ) -> Result<SingleExtractionResult> {
+    ) -> Result<OfficeExtractionResult> {
         let start_time = Instant::now();
         let document_type = self.get_document_type(mime_type);
         
@@ -470,27 +467,12 @@ impl FallbackStrategy {
             }
         }
 
-        let result = match extraction_config.mode {
-            ExtractionMode::LibraryFirst => {
-                self.execute_library_first_strategy(file_path, mime_type, &document_type, extraction_config).await
-            }
-            ExtractionMode::XmlFirst => {
-                self.execute_xml_first_strategy(file_path, mime_type, &document_type, extraction_config).await
-            }
-            ExtractionMode::CompareAlways => {
-                self.execute_compare_always_strategy(file_path, mime_type, &document_type, extraction_config).await
-            }
-            ExtractionMode::LibraryOnly => {
-                self.execute_library_only_strategy(file_path, mime_type, &document_type).await
-            }
-            ExtractionMode::XmlOnly => {
-                self.execute_xml_only_strategy(file_path, mime_type, &document_type).await
-            }
-        };
+        // Use XML extraction as the primary method
+        let result = self.execute_xml_extraction(file_path, mime_type).await;
 
         let processing_time = start_time.elapsed();
         
-        // Update statistics
+        // Update statistics  
         self.update_stats(&result, processing_time).await;
         
         // Clean up expired cache entries periodically (1% chance per extraction)
@@ -505,257 +487,15 @@ impl FallbackStrategy {
         result
     }
 
-    /// Execute library-first strategy with XML fallback
-    async fn execute_library_first_strategy(
+    /// Execute XML extraction directly 
+    async fn execute_xml_extraction(
         &self,
         file_path: &str,
         mime_type: &str,
-        document_type: &str,
-        extraction_config: &ExtractionConfig,
-    ) -> Result<SingleExtractionResult> {
-        // Check if we have a learned preference
-        if let Some(preferred_method) = self.learning_cache.get_preferred_method(document_type) {
-            debug!("Using learned preference: {} for document type: {}", preferred_method, document_type);
-            
-            if preferred_method.contains("XML") {
-                // Try XML first based on learning
-                match self.try_xml_extraction(file_path, mime_type).await {
-                    Ok(result) => {
-                        self.learning_cache.record_success(document_type, &result.method_name, result.processing_time.as_millis() as u64, result.confidence);
-                        return Ok(result);
-                    }
-                    Err(e) => {
-                        debug!("Learned preference failed, falling back to library: {}", e);
-                    }
-                }
-            }
-        }
-
-        // Try library extraction first
-        match self.try_library_extraction(file_path, mime_type).await {
-            Ok(result) => {
-                match self.stats.write() {
-                    Ok(mut stats) => {
-                        stats.library_successes += 1;
-                    }
-                    Err(_) => {
-                        warn!("Failed to acquire write lock on stats for library success update");
-                    }
-                }
-                self.learning_cache.record_success(document_type, &result.method_name, result.processing_time.as_millis() as u64, result.confidence);
-                Ok(result)
-            }
-            Err(library_error) => {
-                warn!("Library extraction failed, attempting XML fallback: {}", library_error);
-                
-                match self.stats.write() {
-                    Ok(mut stats) => {
-                        stats.fallback_used += 1;
-                    }
-                    Err(_) => {
-                        warn!("Failed to acquire write lock on stats for fallback count update");
-                    }
-                }
-
-                match self.try_xml_extraction(file_path, mime_type).await {
-                    Ok(result) => {
-                        match self.stats.write() {
-                            Ok(mut stats) => {
-                                stats.xml_successes += 1;
-                            }
-                            Err(_) => {
-                                warn!("Failed to acquire write lock on stats for xml success update");
-                            }
-                        }
-                        self.learning_cache.record_success(document_type, &result.method_name, result.processing_time.as_millis() as u64, result.confidence);
-                        Ok(result)
-                    }
-                    Err(xml_error) => {
-                        error!("Both library and XML extraction failed. Library error: {}. XML error: {}", library_error, xml_error);
-                        Err(anyhow!(
-                            "All extraction methods failed. Library extraction: {}. XML extraction: {}",
-                            library_error, xml_error
-                        ))
-                    }
-                }
-            }
-        }
-    }
-
-    /// Execute XML-first strategy with library fallback
-    async fn execute_xml_first_strategy(
-        &self,
-        file_path: &str,
-        mime_type: &str,
-        document_type: &str,
-        extraction_config: &ExtractionConfig,
-    ) -> Result<SingleExtractionResult> {
-        // Check if we have a learned preference
-        if let Some(preferred_method) = self.learning_cache.get_preferred_method(document_type) {
-            debug!("Using learned preference: {} for document type: {}", preferred_method, document_type);
-            
-            if preferred_method.contains("Library") {
-                // Try library first based on learning
-                match self.try_library_extraction(file_path, mime_type).await {
-                    Ok(result) => {
-                        self.learning_cache.record_success(document_type, &result.method_name, result.processing_time.as_millis() as u64, result.confidence);
-                        return Ok(result);
-                    }
-                    Err(e) => {
-                        debug!("Learned preference failed, falling back to XML: {}", e);
-                    }
-                }
-            }
-        }
-
-        // Try XML extraction first
-        match self.try_xml_extraction(file_path, mime_type).await {
-            Ok(result) => {
-                match self.stats.write() {
-                    Ok(mut stats) => {
-                        stats.xml_successes += 1;
-                    }
-                    Err(_) => {
-                        warn!("Failed to acquire write lock on stats for xml success update");
-                    }
-                }
-                self.learning_cache.record_success(document_type, &result.method_name, result.processing_time.as_millis() as u64, result.confidence);
-                Ok(result)
-            }
-            Err(xml_error) => {
-                warn!("XML extraction failed, attempting library fallback: {}", xml_error);
-                
-                match self.stats.write() {
-                    Ok(mut stats) => {
-                        stats.fallback_used += 1;
-                    }
-                    Err(_) => {
-                        warn!("Failed to acquire write lock on stats for fallback count update");
-                    }
-                }
-
-                match self.try_library_extraction(file_path, mime_type).await {
-                    Ok(result) => {
-                        match self.stats.write() {
-                            Ok(mut stats) => {
-                                stats.library_successes += 1;
-                            }
-                            Err(_) => {
-                                warn!("Failed to acquire write lock on stats for library success update");
-                            }
-                        }
-                        self.learning_cache.record_success(document_type, &result.method_name, result.processing_time.as_millis() as u64, result.confidence);
-                        Ok(result)
-                    }
-                    Err(library_error) => {
-                        error!("Both XML and library extraction failed. XML error: {}. Library error: {}", xml_error, library_error);
-                        Err(anyhow!(
-                            "All extraction methods failed. XML extraction: {}. Library extraction: {}",
-                            xml_error, library_error
-                        ))
-                    }
-                }
-            }
-        }
-    }
-
-    /// Execute compare-always strategy (runs both methods)
-    async fn execute_compare_always_strategy(
-        &self,
-        file_path: &str,
-        mime_type: &str,
-        document_type: &str,
-        extraction_config: &ExtractionConfig,
-    ) -> Result<SingleExtractionResult> {
-        let library_result = self.try_library_extraction(file_path, mime_type).await;
-        let xml_result = self.try_xml_extraction(file_path, mime_type).await;
-
-        match (library_result, xml_result) {
-            (Ok(lib_result), Ok(xml_result)) => {
-                // Both succeeded, choose the better one
-                match self.stats.write() {
-                    Ok(mut stats) => {
-                        stats.library_successes += 1;
-                        stats.xml_successes += 1;
-                    }
-                    Err(_) => {
-                        warn!("Failed to acquire write lock on stats for dual success update");
-                    }
-                }
-
-                let chosen_result = if lib_result.word_count >= xml_result.word_count && lib_result.processing_time <= xml_result.processing_time {
-                    lib_result
-                } else {
-                    xml_result
-                };
-
-                self.learning_cache.record_success(document_type, &chosen_result.method_name, chosen_result.processing_time.as_millis() as u64, chosen_result.confidence);
-                
-                info!("Compare-always mode: both methods succeeded, chosen: {}", chosen_result.method_name);
-                Ok(chosen_result)
-            }
-            (Ok(lib_result), Err(_)) => {
-                match self.stats.write() {
-                    Ok(mut stats) => {
-                        stats.library_successes += 1;
-                    }
-                    Err(_) => {
-                        warn!("Failed to acquire write lock on stats for library success update");
-                    }
-                }
-                self.learning_cache.record_success(document_type, &lib_result.method_name, lib_result.processing_time.as_millis() as u64, lib_result.confidence);
-                Ok(lib_result)
-            }
-            (Err(_), Ok(xml_result)) => {
-                match self.stats.write() {
-                    Ok(mut stats) => {
-                        stats.xml_successes += 1;
-                    }
-                    Err(_) => {
-                        warn!("Failed to acquire write lock on stats for xml success update");
-                    }
-                }
-                self.learning_cache.record_success(document_type, &xml_result.method_name, xml_result.processing_time.as_millis() as u64, xml_result.confidence);
-                Ok(xml_result)
-            }
-            (Err(lib_error), Err(xml_error)) => {
-                error!("Both extraction methods failed in compare-always mode. Library: {}. XML: {}", lib_error, xml_error);
-                Err(anyhow!(
-                    "All extraction methods failed. Library: {}. XML: {}",
-                    lib_error, xml_error
-                ))
-            }
-        }
-    }
-
-    /// Execute library-only strategy
-    async fn execute_library_only_strategy(
-        &self,
-        file_path: &str,
-        mime_type: &str,
-        document_type: &str,
-    ) -> Result<SingleExtractionResult> {
-        let result = self.try_library_extraction(file_path, mime_type).await?;
-        match self.stats.write() {
-            Ok(mut stats) => {
-                stats.library_successes += 1;
-            }
-            Err(_) => {
-                warn!("Failed to acquire write lock on stats for library success update");
-            }
-        }
-        self.learning_cache.record_success(document_type, &result.method_name, result.processing_time.as_millis() as u64, result.confidence);
-        Ok(result)
-    }
-
-    /// Execute XML-only strategy
-    async fn execute_xml_only_strategy(
-        &self,
-        file_path: &str,
-        mime_type: &str,
-        document_type: &str,
-    ) -> Result<SingleExtractionResult> {
-        let result = self.try_xml_extraction(file_path, mime_type).await?;
+    ) -> Result<OfficeExtractionResult> {
+        let result = self.xml_extractor.extract_text_from_office(file_path, mime_type).await?;
+        
+        // Update stats
         match self.stats.write() {
             Ok(mut stats) => {
                 stats.xml_successes += 1;
@@ -764,295 +504,11 @@ impl FallbackStrategy {
                 warn!("Failed to acquire write lock on stats for xml success update");
             }
         }
-        self.learning_cache.record_success(document_type, &result.method_name, result.processing_time.as_millis() as u64, result.confidence);
+        
         Ok(result)
     }
 
-    /// Try library-based extraction with circuit breaker and retry logic
-    async fn try_library_extraction(
-        &self,
-        file_path: &str,
-        mime_type: &str,
-    ) -> Result<SingleExtractionResult> {
-        let method_name = "Library";
-        
-        // Check circuit breaker
-        if !self.should_allow_request(method_name).await {
-            return Err(anyhow!("Circuit breaker is open for library extraction"));
-        }
-
-        let result = self.execute_with_retry(
-            || self.execute_library_extraction(file_path, mime_type),
-            method_name
-        ).await;
-
-        // Update circuit breaker
-        match &result {
-            Ok(_) => self.record_success(method_name).await,
-            Err(_) => self.record_failure(method_name).await,
-        }
-
-        result
-    }
-
-    /// Try XML-based extraction with circuit breaker and retry logic
-    async fn try_xml_extraction(
-        &self,
-        file_path: &str,
-        mime_type: &str,
-    ) -> Result<SingleExtractionResult> {
-        let method_name = "XML";
-        
-        // Check circuit breaker
-        if !self.should_allow_request(method_name).await {
-            return Err(anyhow!("Circuit breaker is open for XML extraction"));
-        }
-
-        let result = self.execute_with_retry(
-            || self.execute_xml_extraction(file_path, mime_type),
-            method_name
-        ).await;
-
-        // Update circuit breaker
-        match &result {
-            Ok(_) => self.record_success(method_name).await,
-            Err(_) => self.record_failure(method_name).await,
-        }
-
-        result
-    }
-
-    /// Execute library extraction (placeholder - would integrate with actual library)
-    async fn execute_library_extraction(
-        &self,
-        file_path: &str,
-        mime_type: &str,
-    ) -> Result<SingleExtractionResult> {
-        let start_time = Instant::now();
-        
-        // Timeout wrapper
-        let timeout_duration = Duration::from_secs(self.config.method_timeouts.library_timeout_seconds);
-        
-        timeout(timeout_duration, async {
-            // This is a placeholder - in production this would call the actual library extraction
-            // For now, simulate library extraction behavior
-            tokio::time::sleep(Duration::from_millis(50)).await; // Simulate processing time
-            
-            // Simulate failure for certain conditions (for testing purposes)
-            if file_path.contains("corrupt") || file_path.contains("unsupported") {
-                return Err(anyhow!("Library extraction failed: unsupported document format"));
-            }
-            
-            Ok(SingleExtractionResult {
-                text: format!("Library-extracted text from {}", file_path),
-                confidence: 85.0,
-                processing_time: start_time.elapsed(),
-                word_count: 150, // Simulated word count
-                method_name: "Library-based extraction".to_string(),
-                success: true,
-                error_message: None,
-            })
-        }).await.map_err(|_| anyhow!("Library extraction timed out after {} seconds", self.config.method_timeouts.library_timeout_seconds))?
-    }
-
-    /// Execute XML extraction
-    async fn execute_xml_extraction(
-        &self,
-        file_path: &str,
-        mime_type: &str,
-    ) -> Result<SingleExtractionResult> {
-        let start_time = Instant::now();
-        
-        // Timeout wrapper
-        let timeout_duration = Duration::from_secs(self.config.method_timeouts.xml_timeout_seconds);
-        
-        timeout(timeout_duration, async {
-            let result = self.xml_extractor.extract_text_from_office_with_timeout(
-                file_path, 
-                mime_type, 
-                self.config.method_timeouts.xml_timeout_seconds
-            ).await?;
-            
-            Ok(SingleExtractionResult {
-                text: result.text,
-                confidence: result.confidence,
-                processing_time: start_time.elapsed(),
-                word_count: result.word_count,
-                method_name: format!("XML-based extraction ({})", result.extraction_method),
-                success: true,
-                error_message: None,
-            })
-        }).await.map_err(|_| anyhow!("XML extraction timed out after {} seconds", self.config.method_timeouts.xml_timeout_seconds))?
-    }
-
-    /// Execute operation with retry logic and exponential backoff
-    async fn execute_with_retry<F, Fut>(
-        &self,
-        operation: F,
-        method_name: &str,
-    ) -> Result<SingleExtractionResult>
-    where
-        F: Fn() -> Fut,
-        Fut: std::future::Future<Output = Result<SingleExtractionResult>>,
-    {
-        let mut delay_ms = self.config.initial_retry_delay_ms;
-        let mut last_error = None;
-
-        for attempt in 0..=self.config.max_retries {
-            match operation().await {
-                Ok(result) => return Ok(result),
-                Err(e) => {
-                    last_error = Some(e);
-                    
-                    if attempt < self.config.max_retries && self.is_retryable_error(&last_error.as_ref().unwrap()) {
-                        warn!("Attempt {} failed for {}, retrying in {}ms: {}", 
-                            attempt + 1, method_name, delay_ms, last_error.as_ref().unwrap());
-                        
-                        match self.stats.write() {
-                            Ok(mut stats) => {
-                                stats.retry_attempts += 1;
-                            }
-                            Err(_) => {
-                                warn!("Failed to acquire write lock on stats for retry attempt update");
-                            }
-                        }
-                        
-                        sleep(Duration::from_millis(delay_ms)).await;
-                        
-                        // Exponential backoff with jitter
-                        delay_ms = (delay_ms * 2).min(self.config.max_retry_delay_ms);
-                        let jitter_range = delay_ms / 4;
-                        if jitter_range > 0 {
-                            delay_ms += rand::thread_rng().gen_range(0..jitter_range); // Add 0-25% jitter
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-
-        Err(last_error.unwrap())
-    }
-
-    /// Check if an error is retryable with improved classification
-    /// This method categorizes errors into retryable and non-retryable based on their nature
-    fn is_retryable_error(&self, error: &anyhow::Error) -> bool {
-        let error_msg = error.to_string().to_lowercase();
-        let error_chain = format!("{:?}", error).to_lowercase();
-        
-        // Definitely retryable errors (transient issues)
-        let retryable_patterns = [
-            // Network and I/O issues
-            "timeout", "timed out", "connection", "network",
-            "temporarily unavailable", "resource busy", "busy",
-            "would block", "try again", "eagain", "ewouldblock",
-            // File system temporary issues
-            "no space left", "disk full", "quota exceeded",
-            "file locked", "sharing violation",
-            // Service temporary issues
-            "service unavailable", "server unavailable", "503",
-            "rate limit", "throttling", "429", "too many requests",
-            // Memory pressure (might be temporary)
-            "out of memory", "memory limit", "allocation failed",
-        ];
-        
-        // Definitely non-retryable errors (permanent issues)
-        let non_retryable_patterns = [
-            // File format/content issues
-            "corrupted", "invalid format", "unsupported format",
-            "malformed", "parse error", "invalid structure",
-            "not found", "404", "file not found", "no such file",
-            // Permission issues
-            "access denied", "permission denied", "unauthorized", "403",
-            "forbidden", "authentication failed",
-            // Logical errors in code
-            "assertion failed", "panic", "index out of bounds",
-            "null pointer", "segmentation fault",
-        ];
-        
-        // Check for non-retryable patterns first (they take precedence)
-        for pattern in &non_retryable_patterns {
-            if error_msg.contains(pattern) || error_chain.contains(pattern) {
-                debug!("Error classified as non-retryable due to pattern '{}': {}", pattern, error_msg);
-                return false;
-            }
-        }
-        
-        // Check for retryable patterns
-        for pattern in &retryable_patterns {
-            if error_msg.contains(pattern) || error_chain.contains(pattern) {
-                debug!("Error classified as retryable due to pattern '{}': {}", pattern, error_msg);
-                return true;
-            }
-        }
-        
-        // Check error source chain for more context
-        let mut source = error.source();
-        while let Some(err) = source {
-            let source_msg = err.to_string().to_lowercase();
-            
-            // Check source errors against patterns
-            for pattern in &non_retryable_patterns {
-                if source_msg.contains(pattern) {
-                    debug!("Error classified as non-retryable due to source pattern '{}': {}", pattern, source_msg);
-                    return false;
-                }
-            }
-            
-            for pattern in &retryable_patterns {
-                if source_msg.contains(pattern) {
-                    debug!("Error classified as retryable due to source pattern '{}': {}", pattern, source_msg);
-                    return true;
-                }
-            }
-            
-            source = err.source();
-        }
-        
-        // Default: unknown errors are not retryable to avoid infinite loops
-        debug!("Error classified as non-retryable (default): {}", error_msg);
-        false
-    }
-
-    /// Check if circuit breaker should allow request
-    async fn should_allow_request(&self, method_name: &str) -> bool {
-        if !self.config.circuit_breaker.enabled {
-            return true;
-        }
-
-        match self.circuit_breakers.write() {
-            Ok(mut breakers) => {
-                let breaker = breakers.entry(method_name.to_string())
-                    .or_insert_with(|| CircuitBreaker::new(self.config.circuit_breaker.clone()));
-                breaker.should_allow_request()
-            }
-            Err(_) => {
-                warn!("Failed to acquire write lock on circuit breakers, allowing request");
-                true
-            }
-        }
-    }
-
-    /// Record successful operation for circuit breaker
-    async fn record_success(&self, method_name: &str) {
-        if !self.config.circuit_breaker.enabled {
-            return;
-        }
-
-        match self.circuit_breakers.write() {
-            Ok(mut breakers) => {
-                let breaker = breakers.entry(method_name.to_string())
-                    .or_insert_with(|| CircuitBreaker::new(self.config.circuit_breaker.clone()));
-                breaker.record_success();
-            }
-            Err(_) => {
-                warn!("Failed to acquire write lock on circuit breakers for success recording");
-            }
-        }
-    }
-
-    /// Record failed operation for circuit breaker
+    /// Record a failure for circuit breaker tracking
     async fn record_failure(&self, method_name: &str) {
         if !self.config.circuit_breaker.enabled {
             return;
@@ -1101,7 +557,7 @@ impl FallbackStrategy {
     }
 
     /// Update statistics after extraction
-    async fn update_stats(&self, result: &Result<SingleExtractionResult>, processing_time: Duration) {
+    async fn update_stats(&self, result: &Result<OfficeExtractionResult>, processing_time: Duration) {
         match self.stats.write() {
             Ok(mut stats) => {
                 let processing_time_ms = processing_time.as_millis() as f64;
