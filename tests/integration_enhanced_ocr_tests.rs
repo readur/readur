@@ -272,8 +272,10 @@ mod tests {
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
         
         // Create a file larger than the limit (50MB for text files)
-        let large_content = "A".repeat(60 * 1024 * 1024); // 60MB
+        // Using smaller size and explicit drop for CI environments
+        let large_content = "A".repeat(50 * 1024 * 1024 + 1024); // 50MB + 1KB (just over the limit)
         fs::write(temp_file.path(), &large_content).unwrap();
+        drop(large_content); // Explicitly free memory
         
         let result = service
             .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings)
@@ -533,8 +535,10 @@ startxref
         let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
         
         // Create a file larger than the 100MB PDF limit
-        let large_pdf_content = format!("%PDF-1.4\n{}", "A".repeat(110 * 1024 * 1024));
-        fs::write(temp_file.path(), large_pdf_content).unwrap();
+        // Using smaller size and explicit drop for CI environments
+        let large_pdf_content = format!("%PDF-1.4\n{}", "A".repeat(100 * 1024 * 1024 + 1024)); // 100MB + 1KB (just over the limit)
+        fs::write(temp_file.path(), &large_pdf_content).unwrap();
+        drop(large_pdf_content); // Explicitly free memory
         
         let result = service
             .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings)

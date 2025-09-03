@@ -38,6 +38,29 @@ jobs:
           --health-retries 5
 
     steps:
+      - name: Free disk space
+        run: |
+          echo "Initial disk usage:"
+          df -h
+
+          # Remove unnecessary packages and files to free up space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/swift
+          sudo apt-get clean
+          sudo docker system prune -af --volumes
+
+          # Set TMPDIR to use runner's work directory which has more space
+          echo "TMPDIR=${{ runner.temp }}" >> $GITHUB_ENV
+
+          echo "Disk usage after cleanup:"
+          df -h
+          echo "Temp directory set to: ${{ runner.temp }}"
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -50,6 +73,7 @@ jobs:
       - name: Pre-pull Docker images for testcontainers
         run: |
           echo "Pre-pulling Docker images that testcontainers will use..."
+          # Only pull the specific version we're using to save space
           docker pull postgres:latest
           docker pull postgres:15
           docker pull postgres:15-alpine
@@ -163,7 +187,11 @@ jobs:
         run: |
           echo "Running tests with DATABASE_URL: $DATABASE_URL"
           echo "Environment check:"
-          env | grep -E "(DATABASE_URL|JWT_SECRET|API_URL)" | sort
+          env | grep -E "(DATABASE_URL|JWT_SECRET|API_URL|TMPDIR)" | sort
+          echo "Disk usage before tests:"
+          df -h
+
+          # Run tests with explicit temp directory
           cargo test --test '*' --features test-utils --no-fail-fast -- --test-threads=1 --nocapture
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -182,6 +210,10 @@ jobs:
       - name: Print server logs on failure
         if: failure()
         run: |
+          echo "=== Disk usage on failure ==="
+          df -h
+          echo "=== Temp directory usage ==="
+          du -sh ${{ runner.temp }} || echo "Could not check temp directory"
           echo "=== Server logs ==="
           cat server.log || echo "No server logs found"
           echo "=== End of server logs ==="
