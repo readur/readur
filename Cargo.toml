@@ -63,7 +63,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 testcontainers = { version = "0.24", optional = true }
 testcontainers-modules = { version = "0.12", features = ["postgres"], optional = true }
 # Office document support - now using XML extraction only
-zip = "0.6"             # Still needed for other archive handling
+zip = "4.0"             # Still needed for other archive handling
 rand = "0.8"
 
 [features]
