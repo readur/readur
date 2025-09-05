@@ -808,12 +808,12 @@ impl XmlOfficeExtractor {
                             }
                             // Remove automatic spacing after w:r - this was causing words to be split
                             // Instead, rely on explicit w:space elements and natural paragraph breaks
-                            // Handle section breaks and page breaks
+                            // Handle section breaks and page breaks with just whitespace
                             b"w:sectPr" => {
-                                text_content.push("\n\n--- Section Break ---\n\n".to_string());
+                                text_content.push("\n\n".to_string());
                             }
                             b"w:lastRenderedPageBreak" => {
-                                text_content.push("\n\n--- Page Break ---\n\n".to_string());
+                                text_content.push("\n\n".to_string());
                             }
                             _ => {}
                         }
@@ -835,12 +835,8 @@ impl XmlOfficeExtractor {
             let raw_text = text_content.join("");
             let cleaned_text = Self::clean_extracted_text(&raw_text);
             
-            // Check if we have actual text content (not just structural markers like section breaks)
-            let content_without_markers = cleaned_text
-                .replace("--- Section Break ---", "")
-                .replace("--- Page Break ---", "");
-            
-            if content_without_markers.trim().is_empty() {
+            // Check if we have actual text content
+            if cleaned_text.trim().is_empty() {
                 return Err(OfficeExtractionError::empty_document_error(&file_path_clone, "DOCX"));
             }
             
