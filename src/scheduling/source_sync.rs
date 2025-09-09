@@ -109,6 +109,7 @@ impl SourceSyncService {
             file_extensions: config.file_extensions,
             timeout_seconds: 180, // 3 minutes for discover_files_in_folder operations
             server_type: config.server_type,
+            loop_detection: crate::services::webdav::loop_detection::LoopDetectionConfig::default(),
         };
 
         let webdav_service = WebDAVService::new(webdav_config.clone())

@@ -58,6 +58,11 @@ impl SmartSyncService {
     pub fn state(&self) -> &Arc<AppState> {
         &self.state
     }
+    
+    /// Get loop detection metrics from the WebDAV service
+    pub async fn get_loop_detection_metrics(&self, webdav_service: &WebDAVService) -> Result<serde_json::Value> {
+        webdav_service.get_loop_detection_metrics().await
+    }
 
     /// Evaluates whether sync is needed and determines the best strategy
     pub async fn evaluate_sync_need(

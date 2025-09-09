@@ -11,6 +11,14 @@ path = "src/main.rs"
 name = "test_runner"
 path = "src/bin/test_runner.rs"
 
+[[bin]]
+name = "analyze-webdav-performance"
+path = "src/bin/analyze-webdav-performance.rs"
+
+[[bin]]
+name = "webdav_loop_detection_stress"
+path = "tests/stress/webdav_loop_detection_stress.rs"
+
 
 
 [dependencies]
@@ -71,6 +79,7 @@ default = ["ocr", "s3"]
 ocr = ["tesseract", "image", "imageproc", "raw-cpuid"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types"]
 test-utils = ["testcontainers", "testcontainers-modules"]
+stress-testing = ["test-utils"]
 
 [dev-dependencies]
 tempfile = "3"
@@ -95,4 +104,11 @@ debug = false
 [[test]]
 name = "integration_smart_sync_deep_scan"
 path = "tests/integration_smart_sync_deep_scan.rs"
+harness = true
+
+# WebDAV Stress Testing configuration
+[[test]]
+name = "webdav_stress_tests"
+path = "tests/webdav_stress_tests.rs"
+required-features = ["stress-testing"]
 harness = true

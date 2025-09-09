@@ -1,0 +1,401 @@
+name: WebDAV Stress Tests
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'src/services/webdav/**'
+      - 'src/routes/webdav/**'
+      - 'src/webdav_xml_parser.rs'
+      - 'tests/stress/**'
+      - '.github/workflows/webdav-stress-test.yml'
+  pull_request:
+    branches:
+      - master
+      - main
+    paths:
+      - 'src/services/webdav/**'
+      - 'src/routes/webdav/**'
+      - 'src/webdav_xml_parser.rs'
+      - 'tests/stress/**'
+      - '.github/workflows/webdav-stress-test.yml'
+  schedule:
+    # Run stress tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      stress_level:
+        description: 'Stress test intensity level'
+        required: true
+        default: 'medium'
+        type: choice
+        options:
+        - light
+        - medium
+        - heavy
+        - extreme
+      timeout_minutes:
+        description: 'Test timeout in minutes'
+        required: false
+        default: '30'
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_LOG: debug,webdav_stress=trace
+  RUST_BACKTRACE: full
+  DATABASE_URL: postgresql://readur_test:readur_test@localhost:5433/readur_test
+
+jobs:
+  webdav-stress-tests:
+    name: WebDAV Stress Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJson(github.event.inputs.timeout_minutes || '45') }}
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          POSTGRES_USER: readur_test
+          POSTGRES_PASSWORD: readur_test
+          POSTGRES_DB: readur_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=512m
+
+    steps:
+      - name: Free disk space
+        run: |
+          echo "=== Initial disk usage ==="
+          df -h
+          
+          # Remove unnecessary packages to free up space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/swift
+          sudo apt-get clean
+          sudo docker system prune -af --volumes
+          
+          # Set up efficient temp directories
+          echo "TMPDIR=${{ runner.temp }}" >> $GITHUB_ENV
+          echo "WEBDAV_TEST_ROOT=${{ runner.temp }}/webdav-stress" >> $GITHUB_ENV
+          mkdir -p ${{ runner.temp }}/webdav-stress
+          
+          echo "=== Disk usage after cleanup ==="
+          df -h
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-stress-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-stress-
+
+      - name: Cache target directory  
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-stress-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-stress-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-target-stress-
+
+      - name: Setup Dufs WebDAV server
+        run: |
+          # Install Dufs (Rust-based WebDAV server)
+          cargo install dufs --features webdav
+          
+          # Create WebDAV test directory structure
+          mkdir -p ${{ env.WEBDAV_TEST_ROOT }}/webdav-server
+          
+          # Start Dufs server in background
+          dufs ${{ env.WEBDAV_TEST_ROOT }}/webdav-server \
+            --bind 0.0.0.0:8080 \
+            --enable-cors \
+            --allow-all \
+            --auth ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }} \
+            --log-level debug > dufs.log 2>&1 &
+          
+          echo $! > dufs.pid
+          echo "DUFS_PID=$(cat dufs.pid)" >> $GITHUB_ENV
+          
+          # Store credentials in environment for reuse
+          echo "WEBDAV_TEST_USERNAME=${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}" >> $GITHUB_ENV
+          echo "WEBDAV_TEST_PASSWORD=${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" >> $GITHUB_ENV
+          
+          # Wait for server to start with exponential backoff
+          attempt=1
+          max_attempts=30
+          base_delay=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            if curl -f "http://${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}@localhost:8080/" > /dev/null 2>&1; then
+              echo "Dufs WebDAV server is ready after $attempt attempts"
+              break
+            fi
+            
+            # Exponential backoff with jitter
+            delay=$(( base_delay * attempt + RANDOM % 3 ))
+            echo "Waiting for Dufs server... (attempt $attempt/$max_attempts, delay ${delay}s)"
+            sleep $delay
+            attempt=$(( attempt + 1 ))
+          done
+          
+          # Verify server with proper credentials
+          if ! curl -f "http://${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}@localhost:8080/" > /dev/null 2>&1; then
+            echo "ERROR: Dufs server failed to start!"
+            cat dufs.log
+            exit 1
+          fi
+          
+          echo "WebDAV server ready at http://localhost:8080"
+
+      - name: Generate complex test data structures
+        run: |
+          chmod +x scripts/generate-webdav-test-data.sh
+          ./scripts/generate-webdav-test-data.sh \
+            --webdav-root "${{ env.WEBDAV_TEST_ROOT }}/webdav-server" \
+            --stress-level "${{ github.event.inputs.stress_level || 'medium' }}" \
+            --include-git-repos \
+            --include-permission-issues \
+            --include-symlinks \
+            --include-large-directories \
+            --include-unicode-names \
+            --include-problematic-files
+        env:
+          STRESS_LEVEL: ${{ github.event.inputs.stress_level || 'medium' }}
+
+      - name: Build readur with stress testing features
+        run: |
+          cargo build --release --features stress-testing
+
+      - name: Start readur server for stress testing
+        run: |
+          # Set up directories
+          mkdir -p uploads watch stress-test-logs
+          
+          # Start server with stress testing configuration
+          ./target/release/readur > readur-stress.log 2>&1 &
+          echo $! > readur.pid
+          echo "READUR_PID=$(cat readur.pid)" >> $GITHUB_ENV
+          
+          # Wait for readur to start
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
+              echo "Readur server is ready for stress testing"
+              break
+            fi
+            echo "Waiting for readur server... ($i/30)"
+            sleep 2
+          done
+          
+          if ! curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
+            echo "ERROR: Readur server failed to start!"
+            cat readur-stress.log
+            exit 1
+          fi
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          JWT_SECRET: stress-test-secret
+          SERVER_ADDRESS: 0.0.0.0:8000
+          UPLOAD_PATH: ./uploads
+          WATCH_FOLDER: ./watch
+          RUST_LOG: debug,webdav=trace
+          WEBDAV_STRESS_TESTING: "true"
+          WEBDAV_LOOP_DETECTION_ENABLED: "true"
+          WEBDAV_MAX_SCAN_DEPTH: "50"
+          WEBDAV_SCAN_TIMEOUT_SECONDS: "300"
+
+      - name: Run WebDAV infinite loop detection tests
+        id: loop_detection
+        run: |
+          echo "=== Starting WebDAV Loop Detection Stress Tests ==="
+          
+          # Run the stress tests with loop monitoring
+          timeout 1800s cargo test --release --test webdav_stress_tests \
+            --features stress-testing -- \
+            --test-threads=4 \
+            --nocapture \
+            test_infinite_loop_detection || test_exit_code=$?
+          
+          # Check if tests passed or timed out due to infinite loops
+          if [ "${test_exit_code:-0}" -eq 124 ]; then
+            echo "::error::Tests timed out - possible infinite loop detected!"
+            echo "INFINITE_LOOP_DETECTED=true" >> $GITHUB_ENV
+            exit 1
+          elif [ "${test_exit_code:-0}" -ne 0 ]; then
+            echo "::error::Stress tests failed with exit code: ${test_exit_code}"
+            exit $test_exit_code
+          fi
+          
+          echo "Loop detection tests completed successfully"
+        env:
+          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_USERNAME: ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}
+          WEBDAV_PASSWORD: ${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}
+          STRESS_LEVEL: ${{ github.event.inputs.stress_level || 'medium' }}
+          TEST_TIMEOUT_SECONDS: 1800
+
+      - name: Run WebDAV directory scanning stress tests
+        run: |
+          echo "=== Starting Directory Scanning Stress Tests ==="
+          
+          cargo test --release --test webdav_stress_tests \
+            --features stress-testing -- \
+            --test-threads=2 \
+            --nocapture \
+            test_directory_scanning_stress
+        env:
+          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_USERNAME: ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}
+          WEBDAV_PASSWORD: ${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}
+
+      - name: Run WebDAV concurrent access stress tests
+        run: |
+          echo "=== Starting Concurrent Access Stress Tests ==="
+          
+          cargo test --release --test webdav_stress_tests \
+            --features stress-testing -- \
+            --test-threads=8 \
+            --nocapture \
+            test_concurrent_webdav_access
+        env:
+          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_USERNAME: ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}
+          WEBDAV_PASSWORD: ${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}
+
+      - name: Run WebDAV edge case handling tests
+        run: |
+          echo "=== Starting Edge Case Handling Tests ==="
+          
+          cargo test --release --test webdav_stress_tests \
+            --features stress-testing -- \
+            --test-threads=2 \
+            --nocapture \
+            test_edge_case_handling
+        env:
+          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_USERNAME: ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}
+          WEBDAV_PASSWORD: ${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}
+
+      - name: Analyze WebDAV performance metrics
+        if: always()
+        run: |
+          echo "=== WebDAV Performance Analysis ==="
+          
+          # Run performance analysis
+          if [ -f "stress-test-metrics.json" ]; then
+            cargo run --release --bin analyze-webdav-performance -- \
+              --metrics-file stress-test-metrics.json \
+              --output-format github-summary
+          fi
+          
+          # Generate summary report
+          echo "## WebDAV Stress Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stress Level**: ${{ github.event.inputs.stress_level || 'medium' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Duration**: $(date -d @$SECONDS -u +%H:%M:%S)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Infinite Loop Detection**: ${INFINITE_LOOP_DETECTED:-false}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "webdav-performance-report.md" ]; then
+            cat webdav-performance-report.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Collect and analyze logs
+        if: always()
+        run: |
+          echo "=== Collecting logs for analysis ==="
+          
+          # Create logs directory
+          mkdir -p stress-test-artifacts/logs
+          
+          # Collect all relevant logs
+          cp readur-stress.log stress-test-artifacts/logs/ || echo "No readur log"
+          cp dufs.log stress-test-artifacts/logs/ || echo "No dufs log"
+          
+          # Analyze logs for loop patterns
+          if [ -f scripts/analyze-webdav-loops.py ]; then
+            python3 scripts/analyze-webdav-loops.py \
+              --log-file stress-test-artifacts/logs/readur-stress.log \
+              --output stress-test-artifacts/loop-analysis.json
+          fi
+          
+          # Check for problematic patterns
+          echo "=== Log Analysis Results ==="
+          if grep -q "already scanned directory" stress-test-artifacts/logs/readur-stress.log 2>/dev/null; then
+            echo "::warning::Detected repeated directory scanning patterns"
+          fi
+          
+          if grep -q "timeout" stress-test-artifacts/logs/readur-stress.log 2>/dev/null; then
+            echo "::warning::Detected timeout issues during WebDAV operations"
+          fi
+
+      - name: Upload stress test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webdav-stress-test-artifacts-${{ github.run_id }}
+          path: |
+            stress-test-artifacts/
+            stress-test-metrics.json
+            webdav-performance-report.md
+          retention-days: 30
+
+      - name: Report critical issues
+        if: failure() && env.INFINITE_LOOP_DETECTED == 'true'
+        run: |
+          echo "::error title=Infinite Loop Detected::WebDAV sync entered an infinite loop during stress testing"
+          echo "::error::Check the uploaded artifacts for detailed analysis"
+          
+          # Create GitHub issue for infinite loop detection
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "push" ]; then
+            echo "This would create a GitHub issue for infinite loop detection"
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Stop servers
+          if [ -n "$READUR_PID" ] && kill -0 $READUR_PID 2>/dev/null; then
+            kill $READUR_PID || true
+          fi
+          
+          if [ -n "$DUFS_PID" ] && kill -0 $DUFS_PID 2>/dev/null; then
+            kill $DUFS_PID || true
+          fi
+          
+          # Clean up temp files
+          rm -rf ${{ env.WEBDAV_TEST_ROOT }} || true
+          
+          echo "=== Final disk usage ==="
+          df -h

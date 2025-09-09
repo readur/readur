@@ -23,6 +23,7 @@ use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 use super::common::build_user_agent;
+use super::loop_detection::LoopDetectionService;
 
 /// Results from WebDAV discovery including both files and directories
 #[derive(Debug, Clone)]
@@ -153,6 +154,8 @@ pub struct WebDAVService {
     download_semaphore: Arc<Semaphore>,
     /// Stores the working protocol (updated after successful protocol detection)
     working_protocol: Arc<std::sync::RwLock<Option<String>>>,
+    /// Loop detection service for monitoring sync patterns
+    loop_detector: LoopDetectionService,
 }
 
 impl WebDAVService {
@@ -184,6 +187,9 @@ impl WebDAVService {
         let scan_semaphore = Arc::new(Semaphore::new(concurrency_config.max_concurrent_scans));
         let download_semaphore = Arc::new(Semaphore::new(concurrency_config.max_concurrent_downloads));
 
+        // Create loop detector with config from WebDAV config
+        let loop_detector = LoopDetectionService::with_config(config.loop_detection.clone());
+
         Ok(Self {
             client,
             config,
@@ -192,7 +198,23 @@ impl WebDAVService {
             scan_semaphore,
             download_semaphore,
             working_protocol: Arc::new(std::sync::RwLock::new(None)),
+            loop_detector,
         })
+    }
+
+    /// Get loop detection metrics and status
+    pub async fn get_loop_detection_metrics(&self) -> Result<serde_json::Value> {
+        self.loop_detector.get_metrics().await
+    }
+
+    /// Update loop detection configuration
+    pub async fn update_loop_detection_config(&self, config: super::loop_detection::LoopDetectionConfig) -> Result<()> {
+        self.loop_detector.update_config(config).await
+    }
+
+    /// Clear loop detection state (useful for testing)
+    pub async fn clear_loop_detection_state(&self) -> Result<()> {
+        self.loop_detector.clear_state().await
     }
 
     // ============================================================================
@@ -282,6 +304,7 @@ impl WebDAVService {
             file_extensions: self.config.file_extensions.clone(),
             timeout_seconds: self.config.timeout_seconds,
             server_type: self.config.server_type.clone(),
+            loop_detection: self.config.loop_detection.clone(),
         };
 
         // Test basic OPTIONS request
@@ -410,6 +433,7 @@ impl WebDAVService {
             file_extensions: vec![],
             timeout_seconds: 30,
             server_type: test_config.server_type.clone(),
+            loop_detection: super::loop_detection::LoopDetectionConfig::default(),
         };
 
         let service = Self::new(config)?;
@@ -428,6 +452,7 @@ impl WebDAVService {
             file_extensions: self.config.file_extensions.clone(),
             timeout_seconds: self.config.timeout_seconds,
             server_type: self.config.server_type.clone(),
+            loop_detection: self.config.loop_detection.clone(),
         };
         let webdav_url = temp_config.webdav_url();
         
@@ -821,6 +846,7 @@ impl WebDAVService {
             file_extensions: self.config.file_extensions.clone(),
             timeout_seconds: self.config.timeout_seconds,
             server_type: self.config.server_type.clone(),
+            loop_detection: self.config.loop_detection.clone(),
         };
         let base_url = temp_config.webdav_url();
         let clean_path = path.trim_start_matches('/');
@@ -892,6 +918,7 @@ impl WebDAVService {
             file_extensions: self.config.file_extensions.clone(),
             timeout_seconds: self.config.timeout_seconds,
             server_type: self.config.server_type.clone(),
+            loop_detection: self.config.loop_detection.clone(),
         };
         let base_url = temp_config.webdav_url();
         
@@ -1120,19 +1147,57 @@ impl WebDAVService {
 
     /// Discovers both files and directories in a single directory
     async fn discover_files_and_directories_single(&self, directory_path: &str) -> Result<WebDAVDiscoveryResult> {
-        // Try the primary URL first, then fallback URLs if we get a 405 error
-        match self.discover_files_and_directories_single_with_url(directory_path, &self.get_url_for_path(directory_path)).await {
-            Ok(result) => Ok(result),
+        // Start loop detection tracking with graceful degradation
+        let access_id = match self.loop_detector.start_access(directory_path, "single_discovery").await {
+            Ok(id) => id,
             Err(e) => {
-                // Check if this is a 405 Method Not Allowed error
-                if e.to_string().contains("405") || e.to_string().contains("Method Not Allowed") {
-                    warn!("🔄 Primary WebDAV URL failed with 405 error, trying fallback URLs...");
-                    self.try_fallback_discovery(directory_path).await
-                } else {
-                    Err(e)
+                // Log the loop detection error but continue with sync
+                warn!("Loop detection failed for '{}': {} - continuing sync without detection", directory_path, e);
+                uuid::Uuid::new_v4() // Use dummy ID to continue
+            }
+        };
+        
+        let result = async {
+            // Try the primary URL first, then fallback URLs if we get a 405 error
+            match self.discover_files_and_directories_single_with_url(directory_path, &self.get_url_for_path(directory_path)).await {
+                Ok(result) => Ok(result),
+                Err(e) => {
+                    // Check if this is a 405 Method Not Allowed error
+                    if e.to_string().contains("405") || e.to_string().contains("Method Not Allowed") {
+                        warn!("🔄 Primary WebDAV URL failed with 405 error, trying fallback URLs...");
+                        self.try_fallback_discovery(directory_path).await
+                    } else {
+                        Err(e)
+                    }
+                }
+            }
+        }.await;
+        
+        // Complete loop detection tracking with graceful degradation
+        match &result {
+            Ok(discovery) => {
+                if let Err(e) = self.loop_detector.complete_access(
+                    access_id, 
+                    Some(discovery.files.len()),
+                    Some(discovery.directories.len()),
+                    None
+                ).await {
+                    debug!("Loop detection completion failed for '{}': {} - sync completed successfully", directory_path, e);
+                }
+            }
+            Err(e) => {
+                if let Err(completion_err) = self.loop_detector.complete_access(
+                    access_id,
+                    None,
+                    None,
+                    Some(e.to_string())
+                ).await {
+                    debug!("Loop detection completion failed for '{}': {} - original error: {}", directory_path, completion_err, e);
                 }
             }
         }
+        
+        result
     }
 
     /// Tries fallback URLs when the primary WebDAV URL fails with 405
@@ -1236,6 +1301,16 @@ impl WebDAVService {
 
     /// Discovers files and directories recursively
     async fn discover_files_and_directories_recursive(&self, directory_path: &str) -> Result<WebDAVDiscoveryResult> {
+        // Start loop detection tracking for the root directory with graceful degradation
+        let access_id = match self.loop_detector.start_access(directory_path, "recursive_discovery").await {
+            Ok(id) => id,
+            Err(e) => {
+                // Log the loop detection error but continue with sync
+                warn!("Loop detection failed for recursive discovery '{}': {} - continuing sync without detection", directory_path, e);
+                uuid::Uuid::new_v4() // Use dummy ID to continue
+            }
+        };
+        
         let mut all_files = Vec::new();
         let mut all_directories = Vec::new();
         let mut directories_to_scan = vec![directory_path.to_string()];
@@ -1305,6 +1380,17 @@ impl WebDAVService {
         }
 
         info!("Recursive scan completed. Found {} files and {} directories", all_files.len(), all_directories.len());
+        
+        // Complete loop detection tracking with graceful degradation
+        if let Err(e) = self.loop_detector.complete_access(
+            access_id,
+            Some(all_files.len()),
+            Some(all_directories.len()),
+            None
+        ).await {
+            debug!("Loop detection completion failed for recursive discovery '{}': {} - sync completed successfully", directory_path, e);
+        }
+        
         Ok(WebDAVDiscoveryResult { 
             files: all_files, 
             directories: all_directories 
@@ -2237,6 +2323,7 @@ impl WebDAVService {
             file_extensions: self.config.file_extensions.clone(),
             timeout_seconds: self.config.timeout_seconds,
             server_type: self.config.server_type.clone(),
+            loop_detection: self.config.loop_detection.clone(),
         };
         
         let options_response = self.authenticated_request(
@@ -2575,6 +2662,7 @@ impl Clone for WebDAVService {
             scan_semaphore: Arc::clone(&self.scan_semaphore),
             download_semaphore: Arc::clone(&self.download_semaphore),
             working_protocol: Arc::clone(&self.working_protocol),
+            loop_detector: self.loop_detector.clone(),
         }
     }
 }
@@ -2604,6 +2692,7 @@ mod tests {
             file_extensions: vec![],
             timeout_seconds: 30,
             server_type: Some("generic".to_string()),
+            loop_detection: super::loop_detection::LoopDetectionConfig::default(),
         };
         
         let service = WebDAVService::new(config).expect("Failed to create WebDAV service");
@@ -2629,6 +2718,7 @@ mod tests {
             file_extensions: vec![],
             timeout_seconds: 30,
             server_type: Some("generic".to_string()),
+            loop_detection: super::loop_detection::LoopDetectionConfig::default(),
         };
         
         let retry_config = RetryConfig {

@@ -1,0 +1,81 @@
+# Multi-stage Dockerfile for WebDAV Stress Testing
+FROM rust:1.75-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig \
+    git \
+    curl \
+    build-base
+
+# Set working directory
+WORKDIR /app
+
+# Copy manifests
+COPY Cargo.toml Cargo.lock ./
+
+# Copy source code
+COPY src ./src
+COPY tests ./tests
+COPY scripts ./scripts
+
+# Build with stress testing features
+RUN cargo build --release --features stress-testing
+
+# Runtime stage
+FROM alpine:3.18
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    curl \
+    python3 \
+    py3-pip \
+    bash \
+    jq \
+    git
+
+# Install Python dependencies for analysis scripts
+RUN pip3 install --no-cache-dir \
+    requests \
+    python-dateutil \
+    pyyaml
+
+# Create app user
+RUN addgroup -g 1000 readur && \
+    adduser -D -s /bin/bash -u 1000 -G readur readur
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/readur ./readur
+
+# Copy scripts and configurations
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/tests/stress ./tests/stress
+
+# Make scripts executable
+RUN chmod +x ./scripts/*.sh ./scripts/*.py
+
+# Create directories for test results
+RUN mkdir -p /tmp/stress-results /app/logs && \
+    chown -R readur:readur /app /tmp/stress-results
+
+# Switch to non-root user
+USER readur
+
+# Environment variables for stress testing
+ENV RUST_LOG=debug,webdav_stress=trace
+ENV RUST_BACKTRACE=1
+ENV WEBDAV_STRESS_TESTING=true
+ENV WEBDAV_LOOP_DETECTION_ENABLED=true
+
+# Health check for container
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health || exit 1
+
+# Default command runs stress tests
+CMD ["./scripts/run-stress-tests.sh"]

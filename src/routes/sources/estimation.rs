@@ -95,6 +95,7 @@ async fn estimate_webdav_crawl_internal(
         file_extensions: config.file_extensions.clone(),
         timeout_seconds: 300,
         server_type: config.server_type.clone(),
+        loop_detection: crate::services::webdav::loop_detection::LoopDetectionConfig::default(),
     };
 
     // Create WebDAV service and estimate crawl

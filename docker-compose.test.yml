@@ -129,6 +129,63 @@ services:
     profiles:
       - e2e-tests
 
+  # Dufs WebDAV server for stress testing
+  dufs_webdav:
+    image: sigoden/dufs:latest
+    container_name: readur_dufs_webdav
+    command: >
+      /data
+      --bind 0.0.0.0:8080
+      --enable-cors
+      --allow-all
+      --auth webdav_user:webdav_pass
+      --log-level debug
+    volumes:
+      # Using tmpfs for ephemeral WebDAV test data
+      - type: tmpfs
+        target: /data
+        tmpfs:
+          size: 1G
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--auth-no-challenge", "--http-user=webdav_user", "--http-password=webdav_pass", "http://localhost:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - readur_test_network
+    profiles:
+      - webdav-stress
+
+
+  # WebDAV stress test orchestrator
+  webdav_stress_orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.stress
+    container_name: readur_stress_orchestrator
+    environment:
+      - RUST_LOG=debug,webdav_stress=trace
+      - WEBDAV_DUFS_URL=http://dufs_webdav:8080
+      - WEBDAV_USERNAME=webdav_user
+      - WEBDAV_PASSWORD=webdav_pass
+      - STRESS_TEST_DURATION=300
+      - LOOP_DETECTION_TIMEOUT=60
+      - MAX_DIRECTORY_DEPTH=20
+    volumes:
+      - ./tests/stress:/app/tests/stress:ro
+      - type: tmpfs
+        target: /tmp/stress-results
+    depends_on:
+      dufs_webdav:
+        condition: service_healthy
+    networks:
+      - readur_test_network
+    profiles:
+      - webdav-stress
+
 networks:
   readur_test_network:
     name: readur_test_network
