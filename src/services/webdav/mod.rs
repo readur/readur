@@ -5,7 +5,6 @@ pub mod config;
 pub mod service; 
 pub mod smart_sync;
 pub mod progress_shim; // Backward compatibility shim for simplified progress tracking
-pub mod loop_detection; // Loop detection and monitoring for sync operations
 
 // Re-export main types for convenience
 pub use common::build_user_agent;
@@ -16,7 +15,6 @@ pub use service::{
     ValidationRecommendation, ValidationAction, ValidationSummary
 };
 pub use smart_sync::{SmartSyncService, SmartSyncDecision, SmartSyncStrategy, SmartSyncResult};
-pub use loop_detection::{LoopDetectionService, LoopDetectionConfig, LoopDetectionResult, LoopType};
 
 // Backward compatibility exports for progress tracking (simplified)
 pub use progress_shim::{SyncProgress, SyncPhase, ProgressStats};
@@ -28,7 +26,5 @@ mod url_construction_tests;
 mod subdirectory_edge_cases_tests;
 #[cfg(test)]
 mod protocol_detection_tests;
-#[cfg(test)]
-mod loop_detection_integration_tests;
 #[cfg(test)]
 mod tests;

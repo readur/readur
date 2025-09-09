@@ -275,7 +275,6 @@ impl WebDAVScheduler {
             file_extensions: settings.webdav_file_extensions.clone(),
             timeout_seconds: 30,
             server_type: Some("nextcloud".to_string()),
-            loop_detection: crate::services::webdav::loop_detection::LoopDetectionConfig::default(),
         })
     }
 

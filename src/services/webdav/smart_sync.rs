@@ -59,9 +59,12 @@ impl SmartSyncService {
         &self.state
     }
     
-    /// Get loop detection metrics from the WebDAV service
-    pub async fn get_loop_detection_metrics(&self, webdav_service: &WebDAVService) -> Result<serde_json::Value> {
-        webdav_service.get_loop_detection_metrics().await
+    /// Get sync metrics (simplified version without loop detection)
+    pub async fn get_sync_metrics(&self, _webdav_service: &WebDAVService) -> Result<serde_json::Value> {
+        Ok(serde_json::json!({
+            "loop_detection_removed": true,
+            "message": "Loop detection has been replaced with database-based failure tracking"
+        }))
     }
 
     /// Evaluates whether sync is needed and determines the best strategy

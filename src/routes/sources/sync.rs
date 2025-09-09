@@ -240,7 +240,6 @@ pub async fn trigger_deep_scan(
                 file_extensions: config.file_extensions.clone(),
                 timeout_seconds: 600, // 10 minutes for deep scan
                 server_type: config.server_type.clone(),
-                loop_detection: crate::services::webdav::LoopDetectionConfig::default(),
             };
 
             let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config.clone())

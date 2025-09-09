@@ -1,5 +1,4 @@
 
-use super::loop_detection::LoopDetectionConfig;
 
 /// WebDAV server configuration
 #[derive(Debug, Clone)]
@@ -11,7 +10,6 @@ pub struct WebDAVConfig {
     pub file_extensions: Vec<String>,
     pub timeout_seconds: u64,
     pub server_type: Option<String>, // "nextcloud", "owncloud", "generic"
-    pub loop_detection: LoopDetectionConfig,
 }
 
 /// Retry configuration for WebDAV operations
@@ -103,7 +101,6 @@ impl WebDAVConfig {
             file_extensions,
             timeout_seconds: 30,
             server_type: None,
-            loop_detection: LoopDetectionConfig::default(),
         }
     }
 

@@ -130,39 +130,92 @@ impl SourceErrorTracker {
         source_id: Option<Uuid>,
         resource_path: &str,
     ) -> Result<SkipDecision> {
-        // Check if there are any failures for this resource path
-        match self.db.is_source_known_failure(user_id, source_type, source_id, resource_path).await {
-            Ok(true) => {
-                // There is a known failure, but we need more details
-                // For now, implement a simple cooldown based on the fact that there's a failure
-                // In a real implementation, we'd need a method that returns failure details
-                let skip_reason = format!("Resource has previous failures recorded in system");
-                
-                info!(
-                    "⏭️ Skipping {} resource '{}' due to error tracking: {}",
-                    source_type, resource_path, skip_reason
-                );
-                
-                Ok(SkipDecision {
-                    should_skip: true,
-                    reason: skip_reason,
-                    failure_count: 1, // We don't have exact count, use 1 as placeholder
-                    time_since_last_failure_minutes: 0, // We don't have exact time
-                    cooldown_remaining_minutes: Some(60), // Default 1 hour cooldown
-                })
-            }
-            Ok(false) => {
-                debug!(
-                    "✅ No previous failures for {} resource '{}', proceeding with scan",
-                    source_type, resource_path
-                );
-                Ok(SkipDecision {
-                    should_skip: false,
-                    reason: "No previous failures recorded".to_string(),
-                    failure_count: 0,
-                    time_since_last_failure_minutes: 0,
-                    cooldown_remaining_minutes: None,
-                })
+        // Get detailed failure information from the database
+        let query = crate::models::ListFailuresQuery {
+            source_type: Some(source_type),
+            source_id: source_id,
+            error_type: None,
+            severity: None,
+            include_resolved: Some(false), // Only unresolved failures
+            include_excluded: Some(true),  // Include user-excluded resources
+            ready_for_retry: None,
+            limit: Some(1),
+            offset: None,
+        };
+
+        match self.db.list_source_scan_failures(user_id, &query).await {
+            Ok(failures) => {
+                if let Some(failure) = failures.into_iter()
+                    .find(|f| f.resource_path == resource_path) {
+                    
+                    // Check if this failure should be skipped based on sophisticated database logic
+                    let now = chrono::Utc::now();
+                    let time_since_last = now.signed_duration_since(failure.last_failure_at);
+                    let time_since_last_minutes = time_since_last.num_minutes();
+
+                    // Calculate cooldown remaining if there's a next retry time
+                    let cooldown_remaining = if let Some(next_retry) = failure.next_retry_at {
+                        let remaining = next_retry.signed_duration_since(now);
+                        if remaining.num_seconds() > 0 {
+                            Some(remaining.num_minutes().max(0))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Use the same sophisticated logic as the database query
+                    let should_skip = failure.user_excluded || 
+                        (matches!(failure.error_severity, crate::models::SourceErrorSeverity::Critical | crate::models::SourceErrorSeverity::High) 
+                         && failure.failure_count > 3) ||
+                        cooldown_remaining.is_some();
+
+                    let reason = if failure.user_excluded {
+                        "Resource has been manually excluded by user".to_string()
+                    } else if matches!(failure.error_severity, crate::models::SourceErrorSeverity::Critical | crate::models::SourceErrorSeverity::High) 
+                             && failure.failure_count > 3 {
+                        format!("Resource has failed {} times with {} severity - giving up", 
+                               failure.failure_count, failure.error_severity)
+                    } else if let Some(cooldown_mins) = cooldown_remaining {
+                        format!("Resource is in cooldown period ({} minutes remaining)", cooldown_mins)
+                    } else {
+                        "Resource has unresolved failures but is ready for retry".to_string()
+                    };
+
+                    if should_skip {
+                        info!(
+                            "⏭️ Skipping {} resource '{}' due to error tracking: {}",
+                            source_type, resource_path, reason
+                        );
+                    } else {
+                        debug!(
+                            "🔄 Allowing retry of {} resource '{}' after {} failures",
+                            source_type, resource_path, failure.failure_count
+                        );
+                    }
+
+                    Ok(SkipDecision {
+                        should_skip,
+                        reason,
+                        failure_count: failure.failure_count,
+                        time_since_last_failure_minutes: time_since_last_minutes,
+                        cooldown_remaining_minutes: cooldown_remaining,
+                    })
+                } else {
+                    // No failure record found for this specific path
+                    debug!(
+                        "✅ No previous failures for {} resource '{}', proceeding with scan",
+                        source_type, resource_path
+                    );
+                    Ok(SkipDecision {
+                        should_skip: false,
+                        reason: "No previous failures recorded".to_string(),
+                        failure_count: 0,
+                        time_since_last_failure_minutes: 0,
+                        cooldown_remaining_minutes: None,
+                    })
+                }
             }
             Err(e) => {
                 warn!(
@@ -407,11 +460,14 @@ impl SourceErrorTracker {
             _ => crate::models::RetryStrategy::Exponential,
         };
 
-        let retry_delay = match error_type {
-            SourceErrorType::RateLimited => 600, // 10 minutes for rate limits
-            SourceErrorType::NetworkError => 60, // 1 minute for network issues
-            SourceErrorType::Timeout => 900,     // 15 minutes for timeouts
-            _ => 300,                             // 5 minutes default
+        let (retry_delay, max_retries) = match error_type {
+            SourceErrorType::RateLimited => (600, 3),  // 10 minutes, 3 retries max
+            SourceErrorType::NetworkError => (60, 5),   // 1 minute, 5 retries max  
+            SourceErrorType::Timeout => (300, 3),       // 5 minutes, 3 retries max
+            SourceErrorType::ServerError => (300, 3),   // 5 minutes, 3 retries max
+            SourceErrorType::NotFound => (0, 0),        // Don't retry 404s
+            SourceErrorType::PermissionDenied => (0, 0), // Don't retry permission errors
+            _ => (300, 3),                               // 5 minutes default, 3 retries
         };
 
         ErrorClassification {
@@ -419,7 +475,7 @@ impl SourceErrorTracker {
             severity,
             retry_strategy,
             retry_delay_seconds: retry_delay,
-            max_retries: 5,
+            max_retries,
             user_friendly_message: format!("Error accessing resource: {}", error),
             recommended_action: "The system will retry this operation automatically.".to_string(),
             diagnostic_data: serde_json::json!({

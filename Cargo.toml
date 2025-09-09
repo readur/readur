@@ -15,9 +15,6 @@ path = "src/bin/test_runner.rs"
 name = "analyze-webdav-performance"
 path = "src/bin/analyze-webdav-performance.rs"
 
-[[bin]]
-name = "webdav_loop_detection_stress"
-path = "tests/stress/webdav_loop_detection_stress.rs"
 
 
 

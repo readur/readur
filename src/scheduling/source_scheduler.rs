@@ -745,7 +745,6 @@ impl SourceScheduler {
                     file_extensions: webdav_config.file_extensions.clone(),
                     timeout_seconds: 600, // 10 minutes for deep scan
                     server_type: webdav_config.server_type.clone(),
-                    loop_detection: crate::services::webdav::loop_detection::LoopDetectionConfig::default(),
                 }
             )?;
             
@@ -1033,7 +1032,6 @@ impl SourceScheduler {
             file_extensions: config.file_extensions.clone(),
             timeout_seconds: 30, // Quick connectivity test
             server_type: config.server_type.clone(),
-            loop_detection: crate::services::webdav::loop_detection::LoopDetectionConfig::default(),
         };
 
         let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config)

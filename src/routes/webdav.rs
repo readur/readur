@@ -72,7 +72,6 @@ async fn get_user_webdav_config(state: &Arc<AppState>, user_id: uuid::Uuid) -> R
         file_extensions: settings.webdav_file_extensions,
         timeout_seconds: 300, // 5 minutes timeout for crawl estimation
         server_type: Some("nextcloud".to_string()), // Default to Nextcloud
-        loop_detection: crate::services::webdav::loop_detection::LoopDetectionConfig::default(),
     })
 }
 
@@ -108,7 +107,6 @@ async fn test_webdav_connection(
         file_extensions: Vec::new(),
         timeout_seconds: 300, // 5 minutes timeout for crawl estimation
         server_type: test_config.server_type.clone(),
-        loop_detection: crate::services::webdav::loop_detection::LoopDetectionConfig::default(),
     };
 
     // Create WebDAV service and test connection
