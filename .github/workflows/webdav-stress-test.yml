@@ -145,7 +145,7 @@ jobs:
             --enable-cors \
             --allow-all \
             --auth ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}@/:rw \
-            --log-level debug > dufs.log 2>&1 &
+            --log-file dufs.log &
           
           echo $! > dufs.pid
           echo "DUFS_PID=$(cat dufs.pid)" >> $GITHUB_ENV

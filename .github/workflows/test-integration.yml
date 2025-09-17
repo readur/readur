@@ -197,7 +197,7 @@ jobs:
             --enable-cors \
             --allow-all \
             --auth testuser:testpass123@/:rw \
-            --log-level error > dufs.log 2>&1 &
+            --log-file dufs.log &
 
           echo $! > dufs.pid
 
