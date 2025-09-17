@@ -183,6 +183,38 @@ jobs:
           PGPASSWORD=readur psql -h localhost -p 5432 -U readur -d readur -c "SELECT version();"
           echo "Database connection successful!"
 
+      - name: Setup WebDAV server for stress tests
+        run: |
+          # Install Dufs WebDAV server
+          cargo install dufs --features webdav
+
+          # Create WebDAV test directory
+          mkdir -p ${{ runner.temp }}/webdav-server
+
+          # Start Dufs server in background
+          dufs ${{ runner.temp }}/webdav-server \
+            --bind 0.0.0.0:8080 \
+            --enable-cors \
+            --allow-all \
+            --auth testuser:testpass123 \
+            --log-level error > dufs.log 2>&1 &
+
+          echo $! > dufs.pid
+
+          # Wait for server to start
+          for i in {1..30}; do
+            if curl -f "http://testuser:testpass123@localhost:8080/" > /dev/null 2>&1; then
+              echo "WebDAV server is ready"
+              break
+            fi
+            echo "Waiting for WebDAV server... ($i/30)"
+            sleep 1
+          done
+        env:
+          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_USERNAME: testuser
+          WEBDAV_PASSWORD: testpass123
+
       - name: Run integration tests
         run: |
           echo "Running tests with DATABASE_URL: $DATABASE_URL"
@@ -192,7 +224,8 @@ jobs:
           df -h
 
           # Run tests with explicit temp directory
-          cargo test --test '*' --features test-utils --no-fail-fast -- --test-threads=1 --nocapture
+          # Run all tests including stress tests (with stress-testing feature enabled)
+          cargo test --test '*' --features "test-utils stress-testing" --no-fail-fast -- --test-threads=1 --nocapture
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -206,6 +239,9 @@ jobs:
           DEBUG: 1
           TESTCONTAINERS_RYUK_DISABLED: true
           DOCKER_HOST: unix:///var/run/docker.sock
+          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_USERNAME: testuser
+          WEBDAV_PASSWORD: testpass123
 
       - name: Print server logs on failure
         if: failure()
@@ -218,12 +254,19 @@ jobs:
           cat server.log || echo "No server logs found"
           echo "=== End of server logs ==="
 
-      - name: Stop readur server
+      - name: Stop servers
         if: always()
         run: |
+          # Stop readur server
           if [ -f readur.pid ]; then
             kill $(cat readur.pid) || true
             rm readur.pid
+          fi
+
+          # Stop WebDAV server
+          if [ -f dufs.pid ]; then
+            kill $(cat dufs.pid) || true
+            rm dufs.pid
           fi
 
   frontend-integration-tests:
