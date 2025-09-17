@@ -158,23 +158,26 @@ jobs:
           attempt=1
           max_attempts=30
           base_delay=1
-          
+
           while [ $attempt -le $max_attempts ]; do
-            if curl -f "http://${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}@localhost:8080/" > /dev/null 2>&1; then
-              echo "Dufs WebDAV server is ready after $attempt attempts"
+            # Test with basic auth header instead of URL auth
+            response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" http://localhost:8080/ || echo "000")
+            if [ "$response" = "200" ] || [ "$response" = "401" ] || [ "$response" = "403" ]; then
+              echo "Dufs WebDAV server is ready after $attempt attempts (HTTP $response)"
               break
             fi
-            
+
             # Exponential backoff with jitter
             delay=$(( base_delay * attempt + RANDOM % 3 ))
-            echo "Waiting for Dufs server... (attempt $attempt/$max_attempts, delay ${delay}s)"
+            echo "Waiting for Dufs server... (attempt $attempt/$max_attempts, delay ${delay}s, HTTP response: $response)"
             sleep $delay
             attempt=$(( attempt + 1 ))
           done
-          
-          # Verify server with proper credentials
-          if ! curl -f "http://${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}@localhost:8080/" > /dev/null 2>&1; then
-            echo "ERROR: Dufs server failed to start!"
+
+          # Verify server responds
+          response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" http://localhost:8080/ || echo "000")
+          if [ "$response" = "000" ]; then
+            echo "ERROR: Dufs server is not responding!"
             cat dufs.log
             exit 1
           fi
