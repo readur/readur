@@ -133,18 +133,18 @@ jobs:
 
       - name: Setup Dufs WebDAV server
         run: |
-          # Install Dufs (Rust-based WebDAV server)
-          cargo install dufs --features webdav
-          
+          # Install Dufs (Rust-based WebDAV server with built-in WebDAV support)
+          cargo install dufs
+
           # Create WebDAV test directory structure
           mkdir -p ${{ env.WEBDAV_TEST_ROOT }}/webdav-server
-          
-          # Start Dufs server in background
+
+          # Start Dufs server in background with WebDAV support
           dufs ${{ env.WEBDAV_TEST_ROOT }}/webdav-server \
             --bind 0.0.0.0:8080 \
             --enable-cors \
             --allow-all \
-            --auth ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }} \
+            --auth ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}@/:rw \
             --log-level debug > dufs.log 2>&1 &
           
           echo $! > dufs.pid

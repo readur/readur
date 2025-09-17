@@ -185,18 +185,18 @@ jobs:
 
       - name: Setup WebDAV server for stress tests
         run: |
-          # Install Dufs WebDAV server
-          cargo install dufs --features webdav
+          # Install Dufs WebDAV server (WebDAV is supported by default)
+          cargo install dufs
 
           # Create WebDAV test directory
           mkdir -p ${{ runner.temp }}/webdav-server
 
-          # Start Dufs server in background
+          # Start Dufs server in background with WebDAV support
           dufs ${{ runner.temp }}/webdav-server \
             --bind 0.0.0.0:8080 \
             --enable-cors \
             --allow-all \
-            --auth testuser:testpass123 \
+            --auth testuser:testpass123@/:rw \
             --log-level error > dufs.log 2>&1 &
 
           echo $! > dufs.pid
