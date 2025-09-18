@@ -169,7 +169,7 @@ impl WebDAVResourceManager {
     /// Acquire resources for a WebDAV operation
     pub async fn acquire_operation_permit(&self) -> anyhow::Result<OperationPermit> {
         // Wait for semaphore permit
-        let permit = self.operation_semaphore.acquire().await
+        let permit = self.operation_semaphore.clone().acquire_owned().await
             .map_err(|e| anyhow::anyhow!("Failed to acquire operation permit: {}", e))?;
         
         // Rate limiting
@@ -420,7 +420,7 @@ impl LoopDetectionMonitor {
         // Store the task handle
         if let Ok(mut handle) = cleanup_interval.try_lock() {
             *handle = Some(task);
-        }
+        };
     }
     
     /// Record a directory access for loop detection with circuit breaker protection
@@ -523,10 +523,9 @@ impl LoopDetectionMonitor {
         self.monitoring_active.store(false, Ordering::Relaxed);
         
         // Stop cleanup task
-        if let Ok(mut handle) = self.cleanup_interval.lock().await {
-            if let Some(task) = handle.take() {
-                task.abort();
-            }
+        let mut handle = self.cleanup_interval.lock().await;
+        if let Some(task) = handle.take() {
+            task.abort();
         }
         
         // Clear all data to free memory
@@ -604,7 +603,7 @@ fn create_stress_test_webdav_service(config: &StressTestConfig) -> Result<WebDAV
         file_extensions: vec![],
     };
     
-    Ok(WebDAVService::new(webdav_config))
+    WebDAVService::new(webdav_config)
 }
 
 /// Get stress test configuration from environment variables
@@ -724,11 +723,12 @@ async fn perform_loop_detection_test(
     // Perform concurrent WebDAV operations
     for i in 0..operation_count {
         let path = test_paths[i % test_paths.len()].to_string();
+        let path_for_check = path.clone();
         let service = webdav_service.clone();
         let monitor = loop_monitor.clone();
-        
+
         let resource_mgr = resource_manager.clone();
-        
+
         let handle = tokio::spawn(async move {
             // Acquire operation permit for resource coordination
             let _permit = match resource_mgr.acquire_operation_permit().await {
@@ -740,7 +740,8 @@ async fn perform_loop_detection_test(
             };
             
             // Acquire directory lock to prevent race conditions
-            let _dir_lock = resource_mgr.acquire_directory_lock(&path).await.lock().await;
+            let dir_lock_arc = resource_mgr.acquire_directory_lock(&path).await;
+            let _dir_lock = dir_lock_arc.lock().await;
             
             // Record directory access for loop detection
             monitor.record_directory_access(&path).await;
@@ -775,11 +776,11 @@ async fn perform_loop_detection_test(
         });
         
         handles.push(handle);
-        
+
         // Check for suspected loops periodically
         if i % 10 == 0 {
-            if loop_monitor.is_suspected_loop(&path).await {
-                warn!("Suspected loop detected for path: {} - continuing test to gather data", path);
+            if loop_monitor.is_suspected_loop(&path_for_check).await {
+                warn!("Suspected loop detected for path: {} - continuing test to gather data", path_for_check);
             }
         }
         
@@ -1019,7 +1020,8 @@ async fn test_wide_directory_scanning(
             };
             
             // Acquire directory lock
-            let _dir_lock = resource_mgr.acquire_directory_lock(&dir_path).await.lock().await;
+            let dir_lock_arc = resource_mgr.acquire_directory_lock(&dir_path).await;
+            let _dir_lock = dir_lock_arc.lock().await;
             let start_time = Instant::now();
             
             match timeout(
@@ -1140,7 +1142,8 @@ async fn test_concurrent_webdav_access() -> Result<()> {
                 };
                 
                 // Acquire directory lock to prevent race conditions on same path
-                let _dir_lock = resource_mgr.acquire_directory_lock(path).await.lock().await;
+                let dir_lock_arc = resource_mgr.acquire_directory_lock(path).await;
+                let _dir_lock = dir_lock_arc.lock().await;
                 
                 match timeout(
                     Duration::from_secs(timeout_secs),
