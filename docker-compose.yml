@@ -18,8 +18,17 @@ services:
   readur:
     build: .
     environment:
-      # Database configuration
+      # Database configuration - choose one of these methods:
+      # Method 1: Use DATABASE_URL (takes priority if set)
       DATABASE_URL: postgresql://readur:readur@postgres/readur
+
+      # Method 2: Use individual PostgreSQL variables
+      # (Only used if DATABASE_URL is not set or commented out)
+      # POSTGRES_HOST: postgres
+      # POSTGRES_PORT: 5432
+      # POSTGRES_DB: readur
+      # POSTGRES_USER: readur
+      # POSTGRES_PASSWORD: readur
       
       # Server configuration - choose one of these methods:
       # Method 1: Use SERVER_ADDRESS for full control

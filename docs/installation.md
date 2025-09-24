@@ -103,6 +103,8 @@ nano .env
 ```
 
 Required environment variables:
+
+**Option 1: Using DATABASE_URL (recommended)**:
 ```env
 DATABASE_URL=postgresql://readur_user:your_password@localhost/readur
 JWT_SECRET=your-super-secret-jwt-key-change-this
@@ -111,6 +113,24 @@ UPLOAD_PATH=./uploads
 WATCH_FOLDER=./watch
 ALLOWED_FILE_TYPES=pdf,png,jpg,jpeg,gif,bmp,tiff,txt,rtf,doc,docx
 ```
+
+**Option 2: Using individual PostgreSQL variables**:
+```env
+# DATABASE_URL takes priority if set, but you can use individual variables instead
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=readur
+POSTGRES_USER=readur_user
+POSTGRES_PASSWORD=your_password
+
+JWT_SECRET=your-super-secret-jwt-key-change-this
+SERVER_ADDRESS=0.0.0.0:8000
+UPLOAD_PATH=./uploads
+WATCH_FOLDER=./watch
+ALLOWED_FILE_TYPES=pdf,png,jpg,jpeg,gif,bmp,tiff,txt,rtf,doc,docx
+```
+
+> **Note**: If `DATABASE_URL` is set, it takes priority over individual PostgreSQL variables. This is useful for different deployment scenarios where some platforms provide a single connection string while others provide individual components.
 
 3. **Build and Run Backend**:
 ```bash

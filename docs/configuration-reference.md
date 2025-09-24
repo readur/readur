@@ -8,7 +8,12 @@ This document provides a comprehensive reference for all configuration options a
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `DATABASE_URL` | String | `postgresql://readur:readur@localhost/readur` | PostgreSQL connection string | Yes |
+| `DATABASE_URL` | String | `postgresql://readur:readur@localhost/readur` | PostgreSQL connection string (takes priority over individual vars) | Yes* |
+| `POSTGRES_HOST` | String | `localhost` | PostgreSQL host (used if DATABASE_URL not set) | No |
+| `POSTGRES_PORT` | String | `5432` | PostgreSQL port (used if DATABASE_URL not set) | No |
+| `POSTGRES_DB` | String | `readur` | PostgreSQL database name (used if DATABASE_URL not set) | No |
+| `POSTGRES_USER` | String | `readur` | PostgreSQL username (used if DATABASE_URL not set) | No |
+| `POSTGRES_PASSWORD` | String | `readur` | PostgreSQL password (used if DATABASE_URL not set) | No |
 | `SERVER_ADDRESS` | String | `0.0.0.0:8080` | Server bind address (host:port) | No |
 | `SERVER_HOST` | String | `0.0.0.0` | Server host (used if SERVER_ADDRESS not set) | No |
 | `SERVER_PORT` | String | `8080` | Server port (used if SERVER_ADDRESS not set) | No |
@@ -195,6 +200,29 @@ This document provides a comprehensive reference for all configuration options a
 | `FEATURE_MULTI_LANGUAGE_OCR` | Boolean | `true` | Enable multi-language OCR | No |
 | `FEATURE_WEBDAV` | Boolean | `true` | Enable WebDAV sync | No |
 | `FEATURE_API_V2` | Boolean | `false` | Enable API v2 endpoints | No |
+
+## Database Connection Priority
+
+The database connection can be configured in two ways:
+
+1. **Using `DATABASE_URL`** (takes priority if set):
+   ```bash
+   DATABASE_URL=postgresql://username:password@host:port/database
+   ```
+
+2. **Using individual PostgreSQL variables** (used if `DATABASE_URL` is not set):
+   ```bash
+   POSTGRES_HOST=localhost
+   POSTGRES_PORT=5432
+   POSTGRES_DB=readur
+   POSTGRES_USER=readur
+   POSTGRES_PASSWORD=your_password
+   ```
+
+This flexibility allows for easy deployment across different platforms:
+- **Docker/Kubernetes**: Often provide individual variables
+- **Heroku/Railway**: Typically provide `DATABASE_URL`
+- **Local Development**: Use either method based on preference
 
 ## Configuration Files
 
