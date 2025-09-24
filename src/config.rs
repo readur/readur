@@ -58,10 +58,62 @@ impl Config {
                 val
             }
             Err(_) => {
-                let default_url = "postgresql://readur:readur@localhost/readur".to_string();
-                println!("⚠️  DATABASE_URL: {} (using default - env var not set)", 
-                         "postgresql://readur:***@localhost/readur");
-                default_url
+                // Try to construct from individual env vars
+                let db_host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".to_string());
+                let db_port = env::var("POSTGRES_PORT").unwrap_or_else(|_| "5432".to_string());
+                let db_name = env::var("POSTGRES_DB").unwrap_or_else(|_| "readur".to_string());
+                let db_user = env::var("POSTGRES_USER").unwrap_or_else(|_| "readur".to_string());
+                let db_password = env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| "readur".to_string());
+
+                // Check if any individual env vars were set
+                let using_individual_vars = env::var("POSTGRES_HOST").is_ok()
+                    || env::var("POSTGRES_PORT").is_ok()
+                    || env::var("POSTGRES_DB").is_ok()
+                    || env::var("POSTGRES_USER").is_ok()
+                    || env::var("POSTGRES_PASSWORD").is_ok();
+
+                if using_individual_vars {
+                    println!("📊 Constructing DATABASE_URL from individual environment variables:");
+                    if env::var("POSTGRES_HOST").is_ok() {
+                        println!("  ✅ POSTGRES_HOST: {}", db_host);
+                    } else {
+                        println!("  ⚠️  POSTGRES_HOST: {} (using default)", db_host);
+                    }
+                    if env::var("POSTGRES_PORT").is_ok() {
+                        println!("  ✅ POSTGRES_PORT: {}", db_port);
+                    } else {
+                        println!("  ⚠️  POSTGRES_PORT: {} (using default)", db_port);
+                    }
+                    if env::var("POSTGRES_DB").is_ok() {
+                        println!("  ✅ POSTGRES_DB: {}", db_name);
+                    } else {
+                        println!("  ⚠️  POSTGRES_DB: {} (using default)", db_name);
+                    }
+                    if env::var("POSTGRES_USER").is_ok() {
+                        println!("  ✅ POSTGRES_USER: {}", db_user);
+                    } else {
+                        println!("  ⚠️  POSTGRES_USER: {} (using default)", db_user);
+                    }
+                    if env::var("POSTGRES_PASSWORD").is_ok() {
+                        println!("  ✅ POSTGRES_PASSWORD: ***hidden*** ({} chars)", db_password.len());
+                    } else {
+                        println!("  ⚠️  POSTGRES_PASSWORD: using default");
+                    }
+                }
+
+                let constructed_url = format!(
+                    "postgresql://{}:{}@{}:{}/{}",
+                    db_user, db_password, db_host, db_port, db_name
+                );
+
+                if using_individual_vars {
+                    println!("🔗 Constructed DATABASE_URL: postgresql://{}:***@{}:{}/{}",
+                             db_user, db_host, db_port, db_name);
+                } else {
+                    println!("⚠️  DATABASE_URL: postgresql://readur:***@localhost:5432/readur (using all defaults - no env vars set)");
+                }
+
+                constructed_url
             }
         };
         
