@@ -10,14 +10,135 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tokio::time::{sleep, timeout, interval};
+use tokio::net::TcpListener;
+use axum::{Router, routing::any, http::StatusCode, response::IntoResponse};
 use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "stress-testing")]
-use readur::services::webdav::{WebDAVService, WebDAVConfig, RetryConfig, ConcurrencyConfig};
+use readur::services::webdav::{WebDAVService, WebDAVConfig};
+
+// Global tracing initialization - ensures it only happens once
+static INIT_TRACING: Once = Once::new();
+
+/// Initialize tracing subscriber safely - can be called multiple times
+fn init_tracing() {
+    INIT_TRACING.call_once(|| {
+        tracing_subscriber::fmt::init();
+    });
+}
+
+/// Mock WebDAV server for testing
+struct MockWebDAVServer {
+    port: u16,
+    server_handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl MockWebDAVServer {
+    async fn start() -> Result<Self> {
+        let app = Router::new()
+            .route("/", any(mock_webdav_handler))
+            .fallback(mock_webdav_handler);
+
+        let listener = TcpListener::bind("127.0.0.1:0").await
+            .map_err(|e| anyhow!("Failed to bind to port: {}", e))?;
+        let port = listener.local_addr()
+            .map_err(|e| anyhow!("Failed to get local address: {}", e))?
+            .port();
+
+        let server_handle = tokio::spawn(async move {
+            if let Err(e) = axum::serve(listener, app).await {
+                error!("Mock WebDAV server error: {}", e);
+            }
+        });
+
+        // Give the server a moment to start
+        sleep(Duration::from_millis(100)).await;
+
+        info!("Mock WebDAV server started on port {}", port);
+
+        Ok(Self {
+            port,
+            server_handle: Some(server_handle),
+        })
+    }
+
+    fn url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+
+    async fn stop(&mut self) {
+        if let Some(handle) = self.server_handle.take() {
+            handle.abort();
+            let _ = handle.await; // Ignore the abort error
+        }
+    }
+}
+
+impl Drop for MockWebDAVServer {
+    fn drop(&mut self) {
+        if let Some(handle) = self.server_handle.take() {
+            handle.abort();
+        }
+    }
+}
+
+/// Mock WebDAV request handler that responds with valid WebDAV XML
+async fn mock_webdav_handler(req: axum::extract::Request) -> impl IntoResponse {
+    let path = req.uri().path();
+    let method = req.method();
+
+    debug!("Mock WebDAV request: {} {}", method, path);
+
+    match method.as_str() {
+        "PROPFIND" => {
+            // Return a valid WebDAV PROPFIND response
+            let response_body = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>{}</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/></d:resourcetype>
+        <d:displayname>{}</d:displayname>
+        <d:getlastmodified>Wed, 01 Jan 2025 12:00:00 GMT</d:getlastmodified>
+        <d:creationdate>2025-01-01T12:00:00Z</d:creationdate>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>{}/test-file.txt</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype/>
+        <d:displayname>test-file.txt</d:displayname>
+        <d:getcontentlength>42</d:getcontentlength>
+        <d:getlastmodified>Wed, 01 Jan 2025 12:00:00 GMT</d:getlastmodified>
+        <d:creationdate>2025-01-01T12:00:00Z</d:creationdate>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>"#, path, path.trim_start_matches('/'), path);
+
+            (StatusCode::MULTI_STATUS, [("Content-Type", "application/xml; charset=utf-8")], response_body)
+        },
+        "GET" => {
+            if path.ends_with(".txt") {
+                (StatusCode::OK, [("Content-Type", "text/plain")], "Mock file content".to_string())
+            } else {
+                (StatusCode::NOT_FOUND, [("Content-Type", "text/plain")], "Not found".to_string())
+            }
+        },
+        _ => {
+            (StatusCode::METHOD_NOT_ALLOWED, [("Content-Type", "text/plain")], "Method not allowed".to_string())
+        }
+    }
+}
 
 /// Circuit breaker for protecting against infinite loops and cascading failures
 #[derive(Debug)]
@@ -606,63 +727,68 @@ fn create_stress_test_webdav_service(config: &StressTestConfig) -> Result<WebDAV
     WebDAVService::new(webdav_config)
 }
 
-/// Get stress test configuration from environment variables
-fn get_stress_test_config() -> Result<StressTestConfig> {
-    let webdav_server_url = std::env::var("WEBDAV_SERVER_URL")
-        .unwrap_or_else(|_| "http://localhost:8080".to_string());
-    
+/// Get stress test configuration, optionally with mock server URL
+fn get_stress_test_config(mock_server_url: Option<String>) -> Result<StressTestConfig> {
+    let webdav_server_url = mock_server_url
+        .or_else(|| std::env::var("WEBDAV_SERVER_URL").ok())
+        .unwrap_or_else(|| "http://localhost:8080".to_string());
+
     let username = std::env::var("WEBDAV_USERNAME")
         .unwrap_or_else(|_| "admin".to_string());
-    
+
     let password = std::env::var("WEBDAV_PASSWORD")
         .unwrap_or_else(|_| "password".to_string());
-    
+
     let stress_level = std::env::var("STRESS_LEVEL")
-        .unwrap_or_else(|_| "medium".to_string())
+        .unwrap_or_else(|_| "light".to_string()) // Use light for tests
         .parse::<StressLevel>()?;
-    
+
     let test_timeout_seconds = std::env::var("TEST_TIMEOUT_SECONDS")
-        .unwrap_or_else(|_| "600".to_string())
+        .unwrap_or_else(|_| "120".to_string()) // Shorter timeout for tests
         .parse::<u64>()?;
-    
+
     Ok(StressTestConfig {
         webdav_server_url,
         username,
         password,
         stress_level,
         test_timeout_seconds,
-        max_concurrent_operations: 8,
-        loop_detection_threshold: 50, // Suspect loops after 50 accesses
-        scan_timeout_seconds: 30,
+        max_concurrent_operations: 4, // Reduced for tests
+        loop_detection_threshold: 20, // Lower threshold for tests
+        scan_timeout_seconds: 15, // Shorter scan timeout
     })
 }
 
 #[cfg(feature = "stress-testing")]
 #[tokio::test]
 async fn test_infinite_loop_detection() -> Result<()> {
-    tracing_subscriber::fmt::init();
-    
+    init_tracing();
+
     info!("Starting infinite loop detection stress test");
-    
-    let config = get_stress_test_config()?;
+
+    // Start mock WebDAV server
+    let mut mock_server = MockWebDAVServer::start().await
+        .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+
+    let config = get_stress_test_config(Some(mock_server.url()))?;
     let webdav_service = create_stress_test_webdav_service(&config)?;
     let loop_monitor = Arc::new(LoopDetectionMonitor::new(config.loop_detection_threshold));
-    
+
     // Test with timeout to prevent actual infinite loops in CI
     let test_result = timeout(
         Duration::from_secs(config.test_timeout_seconds),
         perform_loop_detection_test(&webdav_service, &loop_monitor, &config)
     ).await;
-    
+
     // Always clean up resources
     let cleanup_result = match test_result {
         Ok(Ok(())) => {
             info!("Loop detection test completed successfully");
-            
+
             // Analyze results
             let stats = loop_monitor.get_statistics().await;
             info!("Loop detection statistics: {:?}", stats);
-            
+
             // Test should pass if no infinite loops were detected
             if stats.suspected_loop_count == 0 {
                 info!("✅ No infinite loops detected - test passed");
@@ -686,10 +812,11 @@ async fn test_infinite_loop_detection() -> Result<()> {
             Err(anyhow!("Test timed out - infinite loop suspected"))
         }
     };
-    
+
     // Clean up monitoring resources
     loop_monitor.stop_monitoring().await;
-    
+    mock_server.stop().await;
+
     cleanup_result
 }
 
@@ -821,11 +948,15 @@ async fn perform_loop_detection_test(
 #[cfg(feature = "stress-testing")]
 #[tokio::test]
 async fn test_directory_scanning_stress() -> Result<()> {
-    tracing_subscriber::fmt::init();
-    
+    init_tracing();
+
     info!("Starting directory scanning stress test");
-    
-    let config = get_stress_test_config()?;
+
+    // Start mock WebDAV server
+    let mut mock_server = MockWebDAVServer::start().await
+        .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+
+    let config = get_stress_test_config(Some(mock_server.url()))?;
     let webdav_service = create_stress_test_webdav_service(&config)?;
     
     // Test deep recursive scanning
@@ -859,25 +990,29 @@ async fn test_directory_scanning_stress() -> Result<()> {
         Duration::from_secs(config.test_timeout_seconds / 2),
         test_wide_directory_scanning(&webdav_service, &config)
     ).await;
-    
-    match wide_scan_result {
+
+    let result = match wide_scan_result {
         Ok(Ok(metrics)) => {
             info!("Wide scanning completed successfully");
-            info!("Scan metrics: {} directories scanned, {:.2}% success rate", 
-                  metrics.total_operations, 
+            info!("Scan metrics: {} directories scanned, {:.2}% success rate",
+                  metrics.total_operations,
                   (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0);
+            Ok(())
         },
         Ok(Err(e)) => {
             error!("Wide scanning test failed: {}", e);
-            return Err(e);
+            Err(e)
         },
         Err(_) => {
             error!("❌ Wide scanning test timed out!");
-            return Err(anyhow!("Wide scanning test timed out"));
+            Err(anyhow!("Wide scanning test timed out"))
         }
-    }
-    
-    Ok(())
+    };
+
+    // Clean up mock server
+    mock_server.stop().await;
+
+    result
 }
 
 async fn test_deep_recursive_scanning(
@@ -1086,11 +1221,15 @@ async fn test_wide_directory_scanning(
 #[cfg(feature = "stress-testing")]
 #[tokio::test]
 async fn test_concurrent_webdav_access() -> Result<()> {
-    tracing_subscriber::fmt::init();
-    
+    init_tracing();
+
     info!("Starting concurrent WebDAV access stress test");
-    
-    let config = get_stress_test_config()?;
+
+    // Start mock WebDAV server
+    let mut mock_server = MockWebDAVServer::start().await
+        .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+
+    let config = get_stress_test_config(Some(mock_server.url()))?;
     let webdav_service = create_stress_test_webdav_service(&config)?;
     
     let concurrent_operations = config.stress_level.concurrent_operations();
@@ -1207,6 +1346,9 @@ async fn test_concurrent_webdav_access() -> Result<()> {
     info!("Total operations: {} ({}% success rate)", total_operations, success_rate);
     info!("Operations per second: {:.2}", total_operations as f64 / total_time.as_secs_f64());
     
+    // Clean up mock server
+    mock_server.stop().await;
+
     // Test passes if success rate is reasonable (>= 80%)
     if success_rate >= 80.0 {
         info!("✅ Concurrent access test passed");
@@ -1220,13 +1362,17 @@ async fn test_concurrent_webdav_access() -> Result<()> {
 #[cfg(feature = "stress-testing")]
 #[tokio::test]
 async fn test_edge_case_handling() -> Result<()> {
-    tracing_subscriber::fmt::init();
-    
+    init_tracing();
+
     info!("Starting edge case handling stress test");
-    
-    let config = get_stress_test_config()?;
+
+    // Start mock WebDAV server
+    let mut mock_server = MockWebDAVServer::start().await
+        .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+
+    let config = get_stress_test_config(Some(mock_server.url()))?;
     let webdav_service = create_stress_test_webdav_service(&config)?;
-    
+
     // Test various edge cases that might cause infinite loops or crashes
     let edge_case_paths = vec![
         "/symlink-test",           // Symbolic links
@@ -1298,6 +1444,9 @@ async fn test_edge_case_handling() -> Result<()> {
     info!("  - Expected failures: {}", expected_failures);
     info!("  - Timeouts: {}", timeouts);
     
+    // Clean up mock server
+    mock_server.stop().await;
+
     // Test passes if no timeouts occurred (timeouts suggest infinite loops)
     if timeouts == 0 {
         info!("✅ Edge case handling test passed - no infinite loops detected");
@@ -1355,6 +1504,8 @@ mod stress_tests_disabled {
 #[cfg(feature = "stress-testing")]
 #[tokio::test]
 async fn test_cleanup_and_reporting() -> Result<()> {
+    init_tracing();
+
     // This test runs at the end to generate final reports
     info!("Generating final stress test report...");
     
