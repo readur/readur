@@ -35,7 +35,7 @@
     "react-dropzone": "^14.2.3",
     "react-hook-form": "^7.43.0",
     "react-router-dom": "^7.0.0",
-    "uuid": "^11.1.0"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",
