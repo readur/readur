@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -98,6 +99,7 @@ type SortField = 'created_at' | 'original_filename' | 'file_size';
 type SortOrder = 'asc' | 'desc';
 
 const DocumentsPage: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const api = useApi();
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -157,7 +159,7 @@ const DocumentsPage: React.FC = () => {
       setDocuments(response.data.documents || []);
       setPagination(response.data.pagination || { total: 0, limit: 20, offset: 0, has_more: false });
     } catch (err) {
-      setError('Failed to load documents');
+      setError(t('common.status.error'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -438,12 +440,12 @@ const DocumentsPage: React.FC = () => {
 
   const getOcrStatusChip = (doc: Document) => {
     if (!doc.ocr_status) return null;
-    
+
     const statusConfig = {
-      'completed': { color: 'success' as const, label: doc.ocr_confidence ? `OCR ${Math.round(doc.ocr_confidence)}%` : 'OCR Done' },
-      'processing': { color: 'warning' as const, label: 'Processing...' },
-      'failed': { color: 'error' as const, label: 'OCR Failed' },
-      'pending': { color: 'default' as const, label: 'Pending' },
+      'completed': { color: 'success' as const, label: doc.ocr_confidence ? t('documents.ocrStatus.confidence', { percent: Math.round(doc.ocr_confidence) }) : t('documents.ocrStatus.done') },
+      'processing': { color: 'warning' as const, label: t('documents.ocrStatus.processing') },
+      'failed': { color: 'error' as const, label: t('documents.ocrStatus.failed') },
+      'pending': { color: 'default' as const, label: t('documents.ocrStatus.pending') },
     };
     
     const config = statusConfig[doc.ocr_status as keyof typeof statusConfig];
@@ -490,10 +492,10 @@ const DocumentsPage: React.FC = () => {
             mb: 1,
           }}
         >
-          Documents
+          {t('documents.title')}
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Manage and explore your document library
+          {t('documents.subtitle')}
         </Typography>
       </Box>
 
@@ -507,7 +509,7 @@ const DocumentsPage: React.FC = () => {
       }}>
         {/* Search */}
         <TextField
-          placeholder="Search documents..."
+          placeholder={t('documents.search.placeholder')}
           variant="outlined"
           size="small"
           value={searchQuery}
@@ -545,22 +547,22 @@ const DocumentsPage: React.FC = () => {
           size="small"
           color={selectionMode ? "secondary" : "primary"}
         >
-          {selectionMode ? 'Cancel' : 'Select'}
+          {selectionMode ? t('documents.selection.cancel') : t('documents.selection.select')}
         </Button>
 
         {/* OCR Filter */}
         <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>OCR Status</InputLabel>
+          <InputLabel>{t('documents.filters.ocrStatus')}</InputLabel>
           <Select
             value={ocrFilter}
-            label="OCR Status"
+            label={t('documents.filters.ocrStatus')}
             onChange={handleOcrFilterChange}
           >
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="completed">Completed</MenuItem>
-            <MenuItem value="processing">Processing</MenuItem>
-            <MenuItem value="failed">Failed</MenuItem>
-            <MenuItem value="pending">Pending</MenuItem>
+            <MenuItem value="">{t('documents.filters.all')}</MenuItem>
+            <MenuItem value="completed">{t('documents.filters.completed')}</MenuItem>
+            <MenuItem value="processing">{t('documents.filters.processing')}</MenuItem>
+            <MenuItem value="failed">{t('documents.filters.failed')}</MenuItem>
+            <MenuItem value="pending">{t('documents.filters.pending')}</MenuItem>
           </Select>
         </FormControl>
 
@@ -571,7 +573,7 @@ const DocumentsPage: React.FC = () => {
           onClick={handleSortMenuClick}
           size="small"
         >
-          Sort
+          {t('documents.sort.label')}
         </Button>
       </Box>
 
@@ -588,7 +590,10 @@ const DocumentsPage: React.FC = () => {
           color: 'primary.contrastText'
         }}>
           <Typography variant="body2" sx={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {selectedDocuments.size > 999 ? `${Math.floor(selectedDocuments.size/1000)}K` : selectedDocuments.size} of {sortedDocuments.length > 999 ? `${Math.floor(sortedDocuments.length/1000)}K` : sortedDocuments.length} documents selected
+            {t('documents.selection.count', {
+              count: selectedDocuments.size,
+              total: sortedDocuments.length
+            })}
           </Typography>
           <Button
             variant="text"
@@ -597,7 +602,7 @@ const DocumentsPage: React.FC = () => {
             size="small"
             sx={{ color: 'primary.contrastText' }}
           >
-            {selectedDocuments.size === sortedDocuments.length ? 'Deselect All' : 'Select All'}
+            {selectedDocuments.size === sortedDocuments.length ? t('documents.selection.deselectAll') : t('documents.selection.selectAll')}
           </Button>
           <Button
             variant="contained"
@@ -607,7 +612,7 @@ const DocumentsPage: React.FC = () => {
             size="small"
             color="error"
           >
-            Delete Selected ({selectedDocuments.size > 999 ? `${Math.floor(selectedDocuments.size/1000)}K` : selectedDocuments.size})
+            {t('documents.selection.deleteSelected', { count: selectedDocuments.size })}
           </Button>
         </Box>
       )}
@@ -620,27 +625,27 @@ const DocumentsPage: React.FC = () => {
       >
         <MenuItem onClick={() => handleSortChange('created_at', 'desc')}>
           <ListItemIcon><DateIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Newest First</ListItemText>
+          <ListItemText>{t('documents.sort.newestFirst')}</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => handleSortChange('created_at', 'asc')}>
           <ListItemIcon><DateIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Oldest First</ListItemText>
+          <ListItemText>{t('documents.sort.oldestFirst')}</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => handleSortChange('original_filename', 'asc')}>
           <ListItemIcon><TextIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Name A-Z</ListItemText>
+          <ListItemText>{t('documents.sort.nameAZ')}</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => handleSortChange('original_filename', 'desc')}>
           <ListItemIcon><TextIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Name Z-A</ListItemText>
+          <ListItemText>{t('documents.sort.nameZA')}</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => handleSortChange('file_size', 'desc')}>
           <ListItemIcon><SizeIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Largest First</ListItemText>
+          <ListItemText>{t('documents.sort.largestFirst')}</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => handleSortChange('file_size', 'asc')}>
           <ListItemIcon><SizeIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Smallest First</ListItemText>
+          <ListItemText>{t('documents.sort.smallestFirst')}</ListItemText>
         </MenuItem>
       </Menu>
 
@@ -655,25 +660,25 @@ const DocumentsPage: React.FC = () => {
           handleDocMenuClose(); 
         }}>
           <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Download</ListItemText>
+          <ListItemText>{t('common.actions.download')}</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { 
-          if (selectedDoc) navigate(`/documents/${selectedDoc.id}`); 
-          handleDocMenuClose(); 
+        <MenuItem onClick={() => {
+          if (selectedDoc) navigate(`/documents/${selectedDoc.id}`);
+          handleDocMenuClose();
         }}>
           <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>View Details</ListItemText>
+          <ListItemText>{t('common.actions.viewDetails')}</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { 
-          if (selectedDoc) handleEditDocumentLabels(selectedDoc); 
-          handleDocMenuClose(); 
+        <MenuItem onClick={() => {
+          if (selectedDoc) handleEditDocumentLabels(selectedDoc);
+          handleDocMenuClose();
         }}>
           <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Edit Labels</ListItemText>
+          <ListItemText>{t('documents.actions.editLabels')}</ListItemText>
         </MenuItem>
         <Divider />
-        <MenuItem onClick={() => { 
-          if (selectedDoc) handleRetryOcr(selectedDoc); 
+        <MenuItem onClick={() => {
+          if (selectedDoc) handleRetryOcr(selectedDoc);
         }} disabled={retryingDocument === selectedDoc?.id}>
           <ListItemIcon>
             {retryingDocument === selectedDoc?.id ? (
@@ -683,21 +688,21 @@ const DocumentsPage: React.FC = () => {
             )}
           </ListItemIcon>
           <ListItemText>
-            {retryingDocument === selectedDoc?.id ? 'Retrying OCR...' : 'Retry OCR'}
+            {retryingDocument === selectedDoc?.id ? t('documents.actions.retryingOcr') : t('documents.actions.retryOcr')}
           </ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { 
-          if (selectedDoc) handleShowRetryHistory(selectedDoc.id); 
+        <MenuItem onClick={() => {
+          if (selectedDoc) handleShowRetryHistory(selectedDoc.id);
         }}>
           <ListItemIcon><HistoryIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Retry History</ListItemText>
+          <ListItemText>{t('documents.actions.retryHistory')}</ListItemText>
         </MenuItem>
         <Divider />
-        <MenuItem onClick={() => { 
-          if (selectedDoc) handleDeleteClick(selectedDoc); 
+        <MenuItem onClick={() => {
+          if (selectedDoc) handleDeleteClick(selectedDoc);
         }}>
           <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
-          <ListItemText>Delete</ListItemText>
+          <ListItemText>{t('common.actions.delete')}</ListItemText>
         </MenuItem>
       </Menu>
 
@@ -714,10 +719,10 @@ const DocumentsPage: React.FC = () => {
           }}
         >
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            No documents found
+            {t('documents.empty.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {searchQuery ? 'Try adjusting your search terms' : 'Upload your first document to get started'}
+            {searchQuery ? t('documents.empty.searchSubtitle') : t('documents.empty.uploadSubtitle')}
           </Typography>
         </Box>
       ) : (
@@ -920,7 +925,7 @@ const DocumentsPage: React.FC = () => {
                       }}
                       fullWidth
                     >
-                      Download
+                      {t('common.actions.download')}
                     </Button>
                   </CardActions>
                 )}
@@ -932,7 +937,7 @@ const DocumentsPage: React.FC = () => {
 
       {/* Label Edit Dialog */}
       <Dialog open={labelEditDialogOpen} onClose={() => setLabelEditDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Document Labels</DialogTitle>
+        <DialogTitle>{t('documents.dialogs.editLabels.title')}</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 2 }}>
             <LabelSelector
@@ -940,59 +945,62 @@ const DocumentsPage: React.FC = () => {
               availableLabels={availableLabels}
               onLabelsChange={setEditingDocumentLabels}
               onCreateLabel={handleCreateLabel}
-              placeholder="Select labels for this document..."
+              placeholder={t('documents.dialogs.editLabels.placeholder')}
               size="medium"
               disabled={labelsLoading}
             />
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setLabelEditDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSaveDocumentLabels} variant="contained">Save</Button>
+          <Button onClick={() => setLabelEditDialogOpen(false)}>{t('common.actions.cancel')}</Button>
+          <Button onClick={handleSaveDocumentLabels} variant="contained">{t('common.actions.save')}</Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel} maxWidth="sm">
-        <DialogTitle>Delete Document</DialogTitle>
+        <DialogTitle>{t('documents.dialogs.delete.title')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete "{documentToDelete?.original_filename}"?
+            {t('documents.dialogs.delete.message', { filename: documentToDelete?.original_filename })}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            This action cannot be undone. The document file and all associated data will be permanently removed.
+            {t('documents.dialogs.delete.warning')}
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteCancel} disabled={deleteLoading}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
-          <Button 
-            onClick={handleDeleteConfirm} 
-            color="error" 
+          <Button
+            onClick={handleDeleteConfirm}
+            color="error"
             variant="contained"
             disabled={deleteLoading}
             startIcon={deleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
           >
-            {deleteLoading ? 'Deleting...' : 'Delete'}
+            {deleteLoading ? t('documents.dialogs.delete.deleting') : t('documents.dialogs.delete.delete')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Bulk Delete Confirmation Dialog */}
       <Dialog open={bulkDeleteDialogOpen} onClose={handleBulkDeleteCancel} maxWidth="sm">
-        <DialogTitle>Delete Multiple Documents</DialogTitle>
+        <DialogTitle>{t('documents.dialogs.bulkDelete.title')}</DialogTitle>
         <DialogContent>
           <Typography gutterBottom>
-            Are you sure you want to delete {selectedDocuments.size} selected document{selectedDocuments.size !== 1 ? 's' : ''}?
+            {t('documents.dialogs.bulkDelete.message', {
+              count: selectedDocuments.size,
+              plural: selectedDocuments.size !== 1 ? 's' : ''
+            })}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            This action cannot be undone. All selected documents and their associated data will be permanently removed.
+            {t('documents.dialogs.bulkDelete.warning')}
           </Typography>
           {selectedDocuments.size > 0 && (
             <Box sx={{ mt: 2, maxHeight: 200, overflow: 'auto' }}>
               <Typography variant="subtitle2" gutterBottom>
-                Documents to be deleted:
+                {t('documents.dialogs.bulkDelete.listTitle')}
               </Typography>
               {Array.from(selectedDocuments).slice(0, 10).map(docId => {
                 const doc = documents.find(d => d.id === docId);
@@ -1004,7 +1012,7 @@ const DocumentsPage: React.FC = () => {
               })}
               {selectedDocuments.size > 10 && (
                 <Typography variant="body2" sx={{ pl: 1, fontStyle: 'italic' }}>
-                  ... and {selectedDocuments.size - 10} more
+                  {t('documents.dialogs.bulkDelete.moreCount', { count: selectedDocuments.size - 10 })}
                 </Typography>
               )}
             </Box>
@@ -1012,16 +1020,19 @@ const DocumentsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleBulkDeleteCancel} disabled={bulkDeleteLoading}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
-          <Button 
-            onClick={handleBulkDeleteConfirm} 
-            color="error" 
+          <Button
+            onClick={handleBulkDeleteConfirm}
+            color="error"
             variant="contained"
             disabled={bulkDeleteLoading}
             startIcon={bulkDeleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
           >
-            {bulkDeleteLoading ? 'Deleting...' : `Delete ${selectedDocuments.size} Document${selectedDocuments.size !== 1 ? 's' : ''}`}
+            {bulkDeleteLoading ? t('documents.dialogs.delete.deleting') : t('documents.dialogs.bulkDelete.deleteButton', {
+              count: selectedDocuments.size,
+              plural: selectedDocuments.size !== 1 ? 's' : ''
+            })}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1030,9 +1041,13 @@ const DocumentsPage: React.FC = () => {
       <Box sx={{ mt: 3 }}>
         <Box sx={{ textAlign: 'center', mb: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} documents
-            {ocrFilter && ` with OCR status: ${ocrFilter}`}
-            {searchQuery && ` matching "${searchQuery}"`}
+            {t('documents.pagination.showing', {
+              start: pagination.offset + 1,
+              end: Math.min(pagination.offset + pagination.limit, pagination.total),
+              total: pagination.total
+            })}
+            {ocrFilter && t('documents.pagination.withOcrStatus', { status: ocrFilter })}
+            {searchQuery && t('documents.pagination.matching', { query: searchQuery })}
           </Typography>
         </Box>
         

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -35,36 +36,37 @@ interface UploadedDocument {
   created_at: string;
 }
 
-const features: Feature[] = [
-  {
-    icon: AutoIcon,
-    title: 'AI-Powered OCR',
-    description: 'Advanced text extraction from any document type',
-  },
-  {
-    icon: SearchIcon,
-    title: 'Full-Text Search',
-    description: 'Find documents instantly by content or metadata',
-  },
-  {
-    icon: SpeedIcon,
-    title: 'Lightning Fast',
-    description: 'Process documents in seconds, not minutes',
-  },
-  {
-    icon: SecurityIcon,
-    title: 'Secure & Private',
-    description: 'Your documents are encrypted and protected',
-  },
-  {
-    icon: LanguageIcon,
-    title: 'Multi-Language',
-    description: 'Support for 100+ languages and scripts',
-  },
-];
-
 const UploadPage: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
+
+  const features: Feature[] = [
+    {
+      icon: AutoIcon,
+      title: t('upload.features.aiOcr.title'),
+      description: t('upload.features.aiOcr.description'),
+    },
+    {
+      icon: SearchIcon,
+      title: t('upload.features.fullTextSearch.title'),
+      description: t('upload.features.fullTextSearch.description'),
+    },
+    {
+      icon: SpeedIcon,
+      title: t('upload.features.lightningFast.title'),
+      description: t('upload.features.lightningFast.description'),
+    },
+    {
+      icon: SecurityIcon,
+      title: t('upload.features.secure.title'),
+      description: t('upload.features.secure.description'),
+    },
+    {
+      icon: LanguageIcon,
+      title: t('upload.features.multiLanguage.title'),
+      description: t('upload.features.multiLanguage.description'),
+    },
+  ];
 
   const handleUploadComplete = (document: UploadedDocument): void => {
     // Optionally navigate to the document or show a success message
@@ -75,10 +77,10 @@ const UploadPage: React.FC = () => {
     <Container maxWidth="lg">
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-          Upload Documents
+          {t('upload.title')}
         </Typography>
         <Typography variant="h6" color="text.secondary">
-          Transform your documents with intelligent OCR processing
+          {t('upload.subtitle')}
         </Typography>
       </Box>
 
@@ -95,27 +97,27 @@ const UploadPage: React.FC = () => {
           <Card elevation={0} sx={{ mt: 3 }}>
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                📋 Upload Tips
+                {t('upload.tips.title')}
               </Typography>
               <List dense sx={{ p: 0 }}>
                 <ListItem sx={{ px: 0 }}>
                   <Typography variant="body2" color="text.secondary">
-                    • For best OCR results, use high-resolution images
+                    {t('upload.tips.highRes')}
                   </Typography>
                 </ListItem>
                 <ListItem sx={{ px: 0 }}>
                   <Typography variant="body2" color="text.secondary">
-                    • PDF files with text layers are processed faster
+                    {t('upload.tips.pdfText')}
                   </Typography>
                 </ListItem>
                 <ListItem sx={{ px: 0 }}>
                   <Typography variant="body2" color="text.secondary">
-                    • Ensure documents are well-lit and clearly readable
+                    {t('upload.tips.clarity')}
                   </Typography>
                 </ListItem>
                 <ListItem sx={{ px: 0 }}>
                   <Typography variant="body2" color="text.secondary">
-                    • Maximum file size is 50MB per document
+                    {t('upload.tips.maxSize')}
                   </Typography>
                 </ListItem>
               </List>

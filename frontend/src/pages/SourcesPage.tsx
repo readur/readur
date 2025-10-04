@@ -79,6 +79,7 @@ import { useNavigate } from 'react-router-dom';
 import api, { queueService, sourcesService, ErrorHelper, ErrorCodes } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 import SyncProgressDisplay from '../components/SyncProgress';
 
 interface Source {
@@ -115,6 +116,7 @@ const SourcesPage: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [ocrStatus, setOcrStatus] = useState<{ is_paused: boolean; status: string }>({ is_paused: false, status: 'running' });
@@ -226,7 +228,7 @@ const SourcesPage: React.FC = () => {
       setSources(response.data);
     } catch (error) {
       console.error('Failed to load sources:', error);
-      showSnackbar('Failed to load sources', 'error');
+      showSnackbar(t('sources.errors.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -253,10 +255,10 @@ const SourcesPage: React.FC = () => {
     try {
       await queueService.pauseOcr();
       await loadOcrStatus();
-      showSnackbar('OCR processing paused successfully', 'success');
+      showSnackbar(t('sources.ocr.pausedSuccess'), 'success');
     } catch (error) {
       console.error('Failed to pause OCR:', error);
-      showSnackbar('Failed to pause OCR processing', 'error');
+      showSnackbar(t('sources.ocr.pauseFailed'), 'error');
     } finally {
       setOcrLoading(false);
     }
@@ -268,10 +270,10 @@ const SourcesPage: React.FC = () => {
     try {
       await queueService.resumeOcr();
       await loadOcrStatus();
-      showSnackbar('OCR processing resumed successfully', 'success');
+      showSnackbar(t('sources.ocr.resumedSuccess'), 'success');
     } catch (error) {
       console.error('Failed to resume OCR:', error);
-      showSnackbar('Failed to resume OCR processing', 'error');
+      showSnackbar(t('sources.ocr.resumeFailed'), 'error');
     } finally {
       setOcrLoading(false);
     }
@@ -390,7 +392,7 @@ const SourcesPage: React.FC = () => {
           enabled: formData.enabled,
           config,
         });
-        showSnackbar('Source updated successfully', 'success');
+        showSnackbar(t('sources.messages.updateSuccess'), 'success');
       } else {
         await api.post('/sources', {
           name: formData.name,
@@ -398,7 +400,7 @@ const SourcesPage: React.FC = () => {
           enabled: formData.enabled,
           config,
         });
-        showSnackbar('Source created successfully', 'success');
+        showSnackbar(t('sources.messages.createSuccess'), 'success');
       }
 
       setDialogOpen(false);
@@ -410,17 +412,17 @@ const SourcesPage: React.FC = () => {
       
       // Handle specific source errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_DUPLICATE_NAME)) {
-        showSnackbar('A source with this name already exists. Please choose a different name.', 'error');
+        showSnackbar(t('sources.errors.duplicateName'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONFIG_INVALID)) {
-        showSnackbar('Source configuration is invalid. Please check your settings and try again.', 'error');
+        showSnackbar(t('sources.errors.invalidConfig'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_AUTH_FAILED)) {
-        showSnackbar('Authentication failed. Please verify your credentials.', 'error');
+        showSnackbar(t('sources.errors.authFailed'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONNECTION_FAILED)) {
-        showSnackbar('Cannot connect to the source. Please check your network and server settings.', 'error');
+        showSnackbar(t('sources.errors.connectionError'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_INVALID_PATH)) {
-        showSnackbar('Invalid path specified. Please check your folder paths and try again.', 'error');
+        showSnackbar(t('sources.errors.invalidPath'), 'error');
       } else {
-        showSnackbar(errorInfo.message || 'Failed to save source', 'error');
+        showSnackbar(errorInfo.message || t('sources.errors.saveFailed'), 'error');
       }
     }
   };
@@ -442,7 +444,7 @@ const SourcesPage: React.FC = () => {
     setDeleteLoading(true);
     try {
       await api.delete(`/sources/${sourceToDelete.id}`);
-      showSnackbar('Source deleted successfully', 'success');
+      showSnackbar(t('sources.messages.deleteSuccess'), 'success');
       loadSources();
       handleDeleteCancel();
     } catch (error) {
@@ -452,13 +454,13 @@ const SourcesPage: React.FC = () => {
       
       // Handle specific delete errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_NOT_FOUND)) {
-        showSnackbar('Source not found. It may have already been deleted.', 'warning');
+        showSnackbar(t('sources.errors.notFound'), 'warning');
         loadSources(); // Refresh the list
         handleDeleteCancel();
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_SYNC_IN_PROGRESS)) {
-        showSnackbar('Cannot delete source while sync is in progress. Please stop the sync first.', 'error');
+        showSnackbar(t('sources.errors.syncInProgress'), 'error');
       } else {
-        showSnackbar(errorInfo.message || 'Failed to delete source', 'error');
+        showSnackbar(errorInfo.message || t('sources.errors.deleteFailed'), 'error');
       }
       setDeleteLoading(false);
     }
@@ -505,9 +507,9 @@ const SourcesPage: React.FC = () => {
       }
 
       if (response && response.data.success) {
-        showSnackbar(response.data.message || 'Connection successful!', 'success');
+        showSnackbar(response.data.message || t('sources.messages.connectionSuccess'), 'success');
       } else {
-        showSnackbar(response?.data.message || 'Connection failed', 'error');
+        showSnackbar(response?.data.message || t('sources.errors.connectionFailed'), 'error');
       }
     } catch (error: any) {
       console.error('Failed to test connection:', error);
@@ -516,17 +518,17 @@ const SourcesPage: React.FC = () => {
       
       // Handle specific connection test errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONNECTION_FAILED)) {
-        showSnackbar('Connection failed. Please check your server URL and network connectivity.', 'error');
+        showSnackbar(t('sources.errors.connectionFailedUrl'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_AUTH_FAILED)) {
-        showSnackbar('Authentication failed. Please verify your username and password.', 'error');
+        showSnackbar(t('sources.errors.authFailedCredentials'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_INVALID_PATH)) {
-        showSnackbar('Invalid path specified. Please check your folder paths.', 'error');
+        showSnackbar(t('sources.errors.invalidFolderPath'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONFIG_INVALID)) {
-        showSnackbar('Configuration is invalid. Please review your settings.', 'error');
+        showSnackbar(t('sources.errors.invalidSettings'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_NETWORK_TIMEOUT)) {
-        showSnackbar('Connection timed out. Please check your network and try again.', 'error');
+        showSnackbar(t('sources.errors.timeout'), 'error');
       } else {
-        showSnackbar(errorInfo.message || 'Failed to test connection', 'error');
+        showSnackbar(errorInfo.message || t('sources.errors.testConnectionFailed'), 'error');
       }
     } finally {
       setTestingConnection(false);
@@ -552,7 +554,7 @@ const SourcesPage: React.FC = () => {
     
     try {
       await sourcesService.triggerSync(sourceToSync.id);
-      showSnackbar('Quick sync started successfully', 'success');
+      showSnackbar(t('sources.messages.syncStartSuccess'), 'success');
       setTimeout(loadSources, 1000);
     } catch (error: any) {
       console.error('Failed to trigger sync:', error);
@@ -561,16 +563,16 @@ const SourcesPage: React.FC = () => {
       
       // Handle specific sync errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_SYNC_IN_PROGRESS)) {
-        showSnackbar('Source is already syncing. Please wait for the current sync to complete.', 'warning');
+        showSnackbar(t('sources.errors.alreadySyncing'), 'warning');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_CONNECTION_FAILED)) {
-        showSnackbar('Cannot connect to source. Please check your connection and try again.', 'error');
+        showSnackbar(t('sources.errors.cannotConnect'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_AUTH_FAILED)) {
-        showSnackbar('Authentication failed. Please verify your source credentials.', 'error');
+        showSnackbar(t('sources.errors.authFailedSource'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SOURCE_NOT_FOUND)) {
-        showSnackbar('Source not found. It may have been deleted.', 'error');
+        showSnackbar(t('sources.errors.sourceDeleted'), 'error');
         loadSources(); // Refresh the sources list
       } else {
-        showSnackbar(errorInfo.message || 'Failed to start sync', 'error');
+        showSnackbar(errorInfo.message || t('sources.errors.syncStartFailed'), 'error');
       }
     } finally {
       setSyncingSource(null);
@@ -585,16 +587,16 @@ const SourcesPage: React.FC = () => {
     
     try {
       await sourcesService.triggerDeepScan(sourceToSync.id);
-      showSnackbar('Deep scan started successfully', 'success');
+      showSnackbar(t('sources.messages.deepScanSuccess'), 'success');
       setTimeout(loadSources, 1000);
     } catch (error: any) {
       console.error('Failed to trigger deep scan:', error);
       if (error.response?.status === 409) {
         showSnackbar('Source is already syncing', 'warning');
       } else if (error.response?.status === 400 && error.response?.data?.message?.includes('only supported for WebDAV')) {
-        showSnackbar('Deep scan is only supported for WebDAV sources', 'warning');
+        showSnackbar(t('sources.errors.deepScanWebdavOnly'), 'warning');
       } else {
-        showSnackbar('Failed to start deep scan', 'error');
+        showSnackbar(t('sources.errors.deepScanFailed'), 'error');
       }
     } finally {
       setDeepScanning(false);
@@ -605,14 +607,14 @@ const SourcesPage: React.FC = () => {
     setStoppingSync(sourceId);
     try {
       await sourcesService.stopSync(sourceId);
-      showSnackbar('Sync stopped successfully', 'success');
+      showSnackbar(t('sources.messages.syncStopSuccess'), 'success');
       setTimeout(loadSources, 1000);
     } catch (error: any) {
       console.error('Failed to stop sync:', error);
       if (error.response?.status === 409) {
-        showSnackbar('Source is not currently syncing', 'warning');
+        showSnackbar(t('sources.errors.notSyncing'), 'warning');
       } else {
-        showSnackbar('Failed to stop sync', 'error');
+        showSnackbar(t('sources.errors.syncStopFailed'), 'error');
       }
     } finally {
       setStoppingSync(null);
@@ -646,29 +648,29 @@ const SourcesPage: React.FC = () => {
 
     let statusColor = theme.palette.grey[500];
     let StatusIcon = HealthIcon;
-    let statusText = 'Unknown';
-    let tooltipText = 'Validation status unknown';
+    let statusText = t('sources.validation.unknown');
+    let tooltipText = t('sources.validation.statusUnknown');
 
     if (validationStatus === 'healthy') {
       statusColor = theme.palette.success.main;
       StatusIcon = CheckCircleIcon;
-      statusText = 'Healthy';
-      tooltipText = `Health score: ${validationScore || 'N/A'}`;
+      statusText = t('sources.validation.healthy');
+      tooltipText = `t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') })`;
     } else if (validationStatus === 'warning') {
       statusColor = theme.palette.warning.main;
       StatusIcon = WarningIcon;
-      statusText = 'Warning';
-      tooltipText = `Health score: ${validationScore || 'N/A'} - Issues detected`;
+      statusText = t('sources.validation.warning');
+      tooltipText = `t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') }) - Issues detected`;
     } else if (validationStatus === 'critical') {
       statusColor = theme.palette.error.main;
       StatusIcon = CriticalIcon;
-      statusText = 'Critical';
-      tooltipText = `Health score: ${validationScore || 'N/A'} - Critical issues`;
+      statusText = t('sources.validation.critical');
+      tooltipText = `t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') }) - Critical issues`;
     } else if (validationStatus === 'validating') {
       statusColor = theme.palette.info.main;
       StatusIcon = HealthIcon;
-      statusText = 'Validating';
-      tooltipText = 'Validation check in progress';
+      statusText = t('sources.validation.validating');
+      tooltipText = t('sources.validation.inProgress');
     }
 
     if (lastValidationAt) {
@@ -754,10 +756,10 @@ const SourcesPage: React.FC = () => {
         });
       }
       setCrawlEstimate(response.data);
-      showSnackbar('Crawl estimation completed', 'success');
+      showSnackbar(t('sources.messages.estimationSuccess'), 'success');
     } catch (error) {
       console.error('Failed to estimate crawl:', error);
-      showSnackbar('Failed to estimate crawl', 'error');
+      showSnackbar(t('sources.errors.estimateFailed'), 'error');
     } finally {
       setEstimatingCrawl(false);
     }
@@ -973,7 +975,7 @@ const SourcesPage: React.FC = () => {
                   />
                   <Chip
                     icon={<OcrIcon sx={{ fontSize: '0.9rem !important' }} />}
-                    label={`${source.total_documents_ocr} OCR'd`}
+                    label={t('sources.stats.ocrCount', { count: source.total_documents_ocr })}
                     size="small"
                     sx={{ 
                       borderRadius: 2,
@@ -1134,7 +1136,7 @@ const SourcesPage: React.FC = () => {
                 label="Last Sync"
                 value={source.last_sync_at
                   ? formatDistanceToNow(new Date(source.last_sync_at), { addSuffix: true })
-                  : 'Never'}
+                  : t('sources.stats.never')}
                 color="primary"
                 tooltip="When this source was last synchronized"
               />
@@ -1256,7 +1258,7 @@ const SourcesPage: React.FC = () => {
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
-            {autoRefreshing ? 'Auto-refreshing...' : 'Refresh'}
+            {autoRefreshing ? t('sources.status.autoRefreshing') : t('common.actions.refresh')}
           </Button>
 
           {/* OCR Controls for Admin Users */}
@@ -1404,10 +1406,10 @@ const SourcesPage: React.FC = () => {
             </Avatar>
             <Box>
               <Typography variant="h6" fontWeight="bold">
-                {editingSource ? 'Edit Source' : 'Create New Source'}
+                {editingSource ? t('sources.actions.editSource') : t('sources.dialog.createTitle')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {editingSource ? 'Update your source configuration' : 'Connect a new document source'}
+                {editingSource ? t('sources.dialog.editSubtitle') : t('sources.dialog.createSubtitle')}
               </Typography>
             </Box>
           </Stack>
@@ -1767,7 +1769,7 @@ const SourcesPage: React.FC = () => {
                         startIcon={estimatingCrawl ? <CircularProgress size={20} /> : <AssessmentIcon />}
                         sx={{ mb: 2, borderRadius: 2 }}
                       >
-                        {estimatingCrawl ? 'Estimating...' : 'Estimate Crawl'}
+                        {estimatingCrawl ? t('sources.estimation.estimating') : t('sources.estimation.estimate')}
                       </Button>
 
                       {estimatingCrawl && (
@@ -2391,7 +2393,7 @@ const SourcesPage: React.FC = () => {
               background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
             }}
           >
-            {editingSource ? 'Save Changes' : 'Create Source'}
+            {editingSource ? 'Save Changes' : t('sources.actions.createSource')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2426,7 +2428,7 @@ const SourcesPage: React.FC = () => {
               px: 3,
             }}
           >
-            {deleteLoading ? 'Deleting...' : 'Delete'}
+            {deleteLoading ? t('sources.delete.deleting') : t('common.actions.delete')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -29,6 +29,7 @@ import {
 } from '@mui/icons-material';
 import { useDropzone, FileRejection, DropzoneOptions } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api, ErrorHelper, ErrorCodes } from '../../services/api';
 import { useNotifications } from '../../contexts/NotificationContext';
 import LabelSelector from '../Labels/LabelSelector';
@@ -65,6 +66,7 @@ type FileStatus = 'pending' | 'uploading' | 'success' | 'error' | 'timeout' | 'c
 const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { addBatchNotification } = useNotifications();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
@@ -97,13 +99,13 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
       
       // Handle specific label fetch errors
-      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) ||
           ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        setError('Your session has expired. Please refresh the page and log in again.');
+        setError(t('upload.errors.sessionExpired'));
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
-        setError('You do not have permission to access labels.');
+        setError(t('upload.errors.labelPermissionDenied'));
       } else if (errorInfo.category === 'network') {
-        setError('Network error loading labels. Please check your connection.');
+        setError(t('upload.errors.labelNetworkError'));
       } else {
         // Don't show error for label loading failures as it's not critical
         console.warn('Label loading failed:', errorInfo.message);
@@ -126,15 +128,15 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       
       // Handle specific label creation errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_DUPLICATE_NAME)) {
-        throw new Error('A label with this name already exists. Please choose a different name.');
+        throw new Error(t('labels.errors.duplicateName'));
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_INVALID_NAME)) {
-        throw new Error('Label name contains invalid characters. Please use only letters, numbers, and basic punctuation.');
+        throw new Error(t('labels.errors.invalidName'));
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_INVALID_COLOR)) {
-        throw new Error('Invalid color format. Please use a valid hex color like #0969da.');
+        throw new Error(t('labels.errors.invalidColor'));
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.LABEL_MAX_LABELS_REACHED)) {
-        throw new Error('Maximum number of labels reached. Please delete some labels before creating new ones.');
+        throw new Error(t('labels.errors.maxLabelsReached'));
       } else {
-        throw new Error(errorInfo.message || 'Failed to create label');
+        throw new Error(errorInfo.message || t('labels.errors.loadFailed'));
       }
     }
   };
@@ -261,22 +263,22 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       
       // Handle specific document upload errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_TOO_LARGE)) {
-        errorMessage = 'File is too large. Maximum size is 50MB.';
+        errorMessage = t('upload.errors.fileTooLarge');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_INVALID_FORMAT)) {
-        errorMessage = 'Unsupported file format. Please use PDF, images, text, or Word documents.';
+        errorMessage = t('upload.errors.unsupportedFormat');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_OCR_FAILED)) {
-        errorMessage = 'Failed to process document. Please try again or contact support.';
-      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+        errorMessage = t('upload.errors.processingFailed');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) ||
                  ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        errorMessage = 'Session expired. Please refresh and log in again.';
+        errorMessage = t('upload.errors.sessionExpired');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
-        errorMessage = 'You do not have permission to upload documents.';
+        errorMessage = t('upload.errors.permissionDenied');
       } else if (errorInfo.category === 'network') {
-        errorMessage = 'Network error. Please check your connection and try again.';
+        errorMessage = t('upload.errors.networkError');
       } else if (errorInfo.category === 'server') {
-        errorMessage = 'Server error. Please try again later.';
+        errorMessage = t('upload.errors.serverError');
       } else {
-        errorMessage = errorInfo.message || 'Upload failed';
+        errorMessage = errorInfo.message || t('common.status.failed');
       }
       
       setFiles(prev => prev.map(f => 
@@ -471,33 +473,33 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
             />
             
             <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
-              {isDragActive ? 'Drop files here' : 'Drag & drop files here'}
+              {isDragActive ? t('upload.dropzone.dropHere') : t('upload.dropzone.dragDrop')}
             </Typography>
-            
+
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              or click to browse your computer
+              {t('upload.dropzone.browse')}
             </Typography>
-            
-            <Button 
-              variant="contained" 
-              sx={{ 
+
+            <Button
+              variant="contained"
+              sx={{
                 mb: 2,
                 borderRadius: 2,
                 px: 3,
               }}
             >
-              Choose Files
+              {t('upload.dropzone.chooseFiles')}
             </Button>
-            
+
             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Chip label="PDF" size="small" variant="outlined" />
-              <Chip label="Images" size="small" variant="outlined" />
-              <Chip label="Text" size="small" variant="outlined" />
-              <Chip label="Word" size="small" variant="outlined" />
+              <Chip label={t('upload.dropzone.fileTypes.pdf')} size="small" variant="outlined" />
+              <Chip label={t('upload.dropzone.fileTypes.images')} size="small" variant="outlined" />
+              <Chip label={t('upload.dropzone.fileTypes.text')} size="small" variant="outlined" />
+              <Chip label={t('upload.dropzone.fileTypes.word')} size="small" variant="outlined" />
             </Box>
-            
+
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-              Maximum file size: 50MB per file
+              {t('upload.dropzone.maxFileSize')}
             </Typography>
           </Box>
         </CardContent>
@@ -514,10 +516,10 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       <Card elevation={0} sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            🌐 OCR Language Settings
+            {t('upload.languageSettings.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select languages for optimal OCR text recognition
+            {t('upload.languageSettings.description')}
           </Typography>
           <Box sx={{ '& > div': { width: '100%' } }}>
             <LanguageSelector
@@ -534,23 +536,23 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
       <Card elevation={0} sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            📋 Label Assignment
+            {t('upload.labelAssignment.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select labels to automatically assign to all uploaded documents
+            {t('upload.labelAssignment.description')}
           </Typography>
           <LabelSelector
             selectedLabels={selectedLabels}
             availableLabels={availableLabels}
             onLabelsChange={setSelectedLabels}
             onCreateLabel={handleCreateLabel}
-            placeholder="Choose labels for your documents..."
+            placeholder={t('upload.labelAssignment.placeholder')}
             size="medium"
             disabled={labelsLoading}
           />
           {selectedLabels.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-              These labels will be applied to all uploaded documents
+              {t('upload.labelAssignment.helperText')}
             </Typography>
           )}
         </CardContent>
@@ -562,7 +564,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Files ({files.length})
+                {t('upload.fileList.title', { count: files.length })}
               </Typography>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button
@@ -570,7 +572,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                   onClick={clearCompleted}
                   disabled={!files.some(f => f.status === 'success')}
                 >
-                  Clear Completed
+                  {t('upload.fileList.clearCompleted')}
                 </Button>
                 <Button
                   variant="contained"
@@ -580,10 +582,10 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
                   sx={{ borderRadius: 2 }}
                 >
                   {uploading ? (
-                    uploadProgress.total > 0 ? 
-                      `Uploading... (${uploadProgress.completed}/${uploadProgress.total})` : 
-                      'Uploading...'
-                  ) : 'Upload All'}
+                    uploadProgress.total > 0 ?
+                      t('upload.fileList.uploading', { completed: uploadProgress.completed, total: uploadProgress.total }) :
+                      t('upload.fileList.uploadingSimple')
+                  ) : t('upload.fileList.uploadAll')}
                 </Button>
               </Box>
             </Box>

@@ -50,6 +50,7 @@ import {
 import { format, formatDistanceToNow } from 'date-fns';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 interface IgnoredFile {
   id: string;
@@ -81,6 +82,7 @@ interface IgnoredFilesStats {
 }
 
 const IgnoredFilesPage: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [ignoredFiles, setIgnoredFiles] = useState<IgnoredFile[]>([]);
@@ -381,11 +383,11 @@ const IgnoredFilesPage: React.FC = () => {
             sx={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}
           >
             <StorageIcon sx={{ mr: 0.5 }} fontSize="inherit" />
-            Sources
+            {t('navigation.sources')}
           </Link>
           <Typography color="text.primary" sx={{ display: 'flex', alignItems: 'center' }}>
             <BlockIcon sx={{ mr: 0.5 }} fontSize="inherit" />
-            Ignored Files
+            {t('ignoredFiles.title')}
             {(sourceTypeParam || sourceNameParam) && (
               <Chip
                 label={sourceNameParam ? `${sourceNameParam}` : `${getSourceTypeDisplay(sourceTypeParam)} Sources`}
@@ -400,7 +402,7 @@ const IgnoredFilesPage: React.FC = () => {
 
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
         <BlockIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-        Ignored Files
+        {t('ignoredFiles.title')}
         {(sourceTypeParam || sourceNameParam || sourceIdParam) && (
           <Button
             variant="outlined"
@@ -409,16 +411,13 @@ const IgnoredFilesPage: React.FC = () => {
             onClick={clearFilters}
             sx={{ ml: 2, textTransform: 'none' }}
           >
-            View All
+            {t('common.actions.viewDetails')}
           </Button>
         )}
       </Typography>
 
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        {sourceTypeParam || sourceNameParam || sourceIdParam
-          ? `Files from ${sourceNameParam || getSourceTypeDisplay(sourceTypeParam)} sources that have been deleted and will be ignored during future syncs.`
-          : 'Files that have been deleted and will be ignored during future syncs from their sources.'
-        }
+        {t('ignoredFiles.subtitle')}
       </Typography>
 
       {/* Statistics Cards */}
@@ -466,7 +465,7 @@ const IgnoredFilesPage: React.FC = () => {
         <CardContent>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
             <TextField
-              placeholder="Search filenames..."
+              placeholder={t('ignoredFiles.filters.searchPlaceholder')}
               variant="outlined"
               size="small"
               value={searchTerm}
@@ -480,15 +479,15 @@ const IgnoredFilesPage: React.FC = () => {
               }}
               sx={{ flexGrow: 1 }}
             />
-            
+
             <FormControl size="small" sx={{ minWidth: 150 }}>
-              <InputLabel>Source Type</InputLabel>
+              <InputLabel>{t('ignoredFiles.filters.reason')}</InputLabel>
               <Select
                 value={sourceTypeFilter}
-                label="Source Type"
+                label={t('ignoredFiles.filters.reason')}
                 onChange={handleSourceTypeFilter}
               >
-                <MenuItem value="">All Sources</MenuItem>
+                <MenuItem value="">{t('ignoredFiles.filters.allReasons')}</MenuItem>
                 {uniqueSourceTypes.map(sourceType => (
                   <MenuItem key={sourceType} value={sourceType}>
                     {getSourceTypeDisplay(sourceType)}
@@ -505,7 +504,7 @@ const IgnoredFilesPage: React.FC = () => {
                 fetchStats();
               }}
             >
-              Refresh
+              {t('common.actions.refresh')}
             </Button>
           </Stack>
         </CardContent>
@@ -546,12 +545,12 @@ const IgnoredFilesPage: React.FC = () => {
                     onChange={handleSelectAll}
                   />
                 </TableCell>
-                <TableCell>Filename</TableCell>
+                <TableCell>{t('ignoredFiles.table.filename')}</TableCell>
                 <TableCell>Source</TableCell>
-                <TableCell>Size</TableCell>
-                <TableCell>Ignored Date</TableCell>
-                <TableCell>Reason</TableCell>
-                <TableCell>Actions</TableCell>
+                <TableCell>{t('ignoredFiles.table.size')}</TableCell>
+                <TableCell>{t('ignoredFiles.table.ignoredAt')}</TableCell>
+                <TableCell>{t('ignoredFiles.table.reason')}</TableCell>
+                <TableCell>{t('common.actions.edit')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -571,7 +570,7 @@ const IgnoredFilesPage: React.FC = () => {
                 <TableRow>
                   <TableCell colSpan={7} align="center">
                     <Typography variant="body2" color="text.secondary">
-                      No ignored files found
+                      {t('ignoredFiles.empty.subtitle')}
                     </Typography>
                   </TableCell>
                 </TableRow>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -179,6 +180,7 @@ interface IgnoredFilesStats {
 }
 
 const DocumentManagementPage: React.FC = () => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const navigate = useNavigate();
   const [currentTab, setCurrentTab] = useState(0);
@@ -259,22 +261,22 @@ const DocumentManagementPage: React.FC = () => {
       console.error('Failed to fetch failed documents:', error);
       
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
-      let errorMessage = 'Failed to load failed documents';
-      
+      let errorMessage = t('documentManagement.errors.loadFailedDocuments');
+
       // Handle specific document management errors
-      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) ||
           ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+        errorMessage = t('documentManagement.errors.sessionExpired');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
-        errorMessage = 'You do not have permission to view failed documents.';
+        errorMessage = t('documentManagement.errors.permissionDenied');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_NOT_FOUND)) {
-        errorMessage = 'No failed documents found or they may have been processed.';
+        errorMessage = t('documentManagement.errors.noFailedDocumentsFound');
       } else if (errorInfo.category === 'network') {
-        errorMessage = 'Network error. Please check your connection and try again.';
+        errorMessage = t('documentManagement.errors.networkError');
       } else if (errorInfo.category === 'server') {
-        errorMessage = 'Server error. Please try again later.';
+        errorMessage = t('documentManagement.errors.serverError');
       } else {
-        errorMessage = errorInfo.message || 'Failed to load failed documents';
+        errorMessage = errorInfo.message || t('documentManagement.errors.loadFailedDocuments');
       }
       
       setSnackbar({
@@ -304,20 +306,20 @@ const DocumentManagementPage: React.FC = () => {
       console.error('Failed to fetch duplicates:', error);
       
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
-      let errorMessage = 'Failed to load duplicate documents';
-      
+      let errorMessage = t('documentManagement.errors.loadDuplicates');
+
       // Handle specific duplicate fetch errors
-      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) ||
           ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+        errorMessage = t('documentManagement.errors.sessionExpired');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
-        errorMessage = 'You do not have permission to view duplicate documents.';
+        errorMessage = t('documentManagement.errors.permissionDeniedDuplicates');
       } else if (errorInfo.category === 'network') {
-        errorMessage = 'Network error. Please check your connection and try again.';
+        errorMessage = t('documentManagement.errors.networkError');
       } else if (errorInfo.category === 'server') {
-        errorMessage = 'Server error. Please try again later.';
+        errorMessage = t('documentManagement.errors.serverError');
       } else {
-        errorMessage = errorInfo.message || 'Failed to load duplicate documents';
+        errorMessage = errorInfo.message || t('documentManagement.errors.loadDuplicates');
       }
       
       setSnackbar({
@@ -373,7 +375,10 @@ const DocumentManagementPage: React.FC = () => {
       if (response.data.success) {
         setSnackbar({
           open: true,
-          message: `OCR retry queued for "${document.filename}". Estimated wait time: ${response.data.estimated_wait_minutes || 'Unknown'} minutes.`,
+          message: t('documentManagement.retry.queuedSuccess', {
+            filename: document.filename,
+            minutes: response.data.estimated_wait_minutes || t('documentManagement.retry.unknown')
+          }),
           severity: 'success'
         });
         
@@ -382,7 +387,7 @@ const DocumentManagementPage: React.FC = () => {
       } else {
         setSnackbar({
           open: true,
-          message: response.data.message || 'Failed to retry OCR',
+          message: response.data.message || t('documentManagement.retry.failed'),
           severity: 'error'
         });
       }
@@ -390,24 +395,24 @@ const DocumentManagementPage: React.FC = () => {
       console.error('Failed to retry OCR:', error);
       
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
-      let errorMessage = 'Failed to retry OCR processing';
-      
+      let errorMessage = t('documentManagement.retry.processingFailed');
+
       // Handle specific OCR retry errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_NOT_FOUND)) {
-        errorMessage = 'Document not found. It may have been deleted or processed already.';
+        errorMessage = t('documentManagement.errors.documentNotFound');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.DOCUMENT_OCR_FAILED)) {
-        errorMessage = 'Document cannot be retried due to processing issues. Please check the document format.';
-      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+        errorMessage = t('documentManagement.errors.cannotRetry');
+      } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) ||
                  ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+        errorMessage = t('documentManagement.errors.sessionExpired');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
-        errorMessage = 'You do not have permission to retry OCR processing.';
+        errorMessage = t('documentManagement.errors.permissionDeniedRetry');
       } else if (errorInfo.category === 'server') {
-        errorMessage = 'Server error. Please try again later or contact support.';
+        errorMessage = t('documentManagement.errors.serverErrorSupport');
       } else if (errorInfo.category === 'network') {
-        errorMessage = 'Network error. Please check your connection and try again.';
+        errorMessage = t('documentManagement.errors.networkError');
       } else {
-        errorMessage = errorInfo.message || 'Failed to retry OCR processing';
+        errorMessage = errorInfo.message || t('documentManagement.retry.processingFailed');
       }
       
       setSnackbar({
@@ -431,16 +436,19 @@ const DocumentManagementPage: React.FC = () => {
       if (response.data.queued_count > 0) {
         setSnackbar({
           open: true,
-          message: `Successfully queued ${response.data.queued_count} documents for OCR retry. Estimated processing time: ${Math.ceil(response.data.estimated_total_time_minutes)} minutes.`,
+          message: t('documentManagement.retry.bulkSuccess', {
+            count: response.data.queued_count,
+            minutes: Math.ceil(response.data.estimated_total_time_minutes)
+          }),
           severity: 'success'
         });
-        
+
         // Refresh all tabs since we're retrying all documents
         await refreshCurrentTab();
       } else {
         setSnackbar({
           open: true,
-          message: 'No documents found to retry',
+          message: t('documentManagement.retry.noDocuments'),
           severity: 'info'
         });
       }
@@ -448,7 +456,7 @@ const DocumentManagementPage: React.FC = () => {
       console.error('Error retrying all documents:', error);
       setSnackbar({
         open: true,
-        message: 'Failed to retry documents. Please try again.',
+        message: t('documentManagement.retry.bulkFailed'),
         severity: 'error'
       });
     } finally {
@@ -464,16 +472,18 @@ const DocumentManagementPage: React.FC = () => {
       if (response.data.requeued_count > 0) {
         setSnackbar({
           open: true,
-          message: `Successfully queued ${response.data.requeued_count} failed documents for OCR retry. Check the queue stats for progress.`,
+          message: t('documentManagement.retry.requeuedSuccess', {
+            count: response.data.requeued_count
+          }),
           severity: 'success'
         });
-        
+
         // Refresh the list to update status
         await fetchFailedDocuments();
       } else {
         setSnackbar({
           open: true,
-          message: 'No failed documents found to retry',
+          message: t('documentManagement.retry.noFailedDocuments'),
           severity: 'info'
         });
       }
@@ -481,7 +491,7 @@ const DocumentManagementPage: React.FC = () => {
       console.error('Failed to retry all failed OCR:', error);
       setSnackbar({
         open: true,
-        message: 'Failed to retry all failed OCR documents',
+        message: t('documentManagement.retry.requeuedFailed'),
         severity: 'error'
       });
     } finally {
@@ -493,7 +503,11 @@ const DocumentManagementPage: React.FC = () => {
   const handleBulkRetrySuccess = (result: BulkOcrRetryResponse) => {
     setSnackbar({
       open: true,
-      message: `Successfully queued ${result.queued_count} of ${result.matched_count} documents for retry. Estimated processing time: ${Math.round(result.estimated_total_time_minutes)} minutes.`,
+      message: t('documentManagement.retry.advancedSuccess', {
+        queued: result.queued_count,
+        matched: result.matched_count,
+        minutes: Math.round(result.estimated_total_time_minutes)
+      }),
       severity: 'success'
     });
     fetchFailedDocuments(); // Refresh the list
@@ -574,20 +588,20 @@ const DocumentManagementPage: React.FC = () => {
       console.error('Failed to fetch ignored files:', error);
       
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
-      let errorMessage = 'Failed to load ignored files';
-      
+      let errorMessage = t('documentManagement.errors.loadIgnoredFiles');
+
       // Handle specific ignored files errors
-      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) || 
+      if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_SESSION_EXPIRED) ||
           ErrorHelper.isErrorCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
+        errorMessage = t('documentManagement.errors.sessionExpired');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
-        errorMessage = 'You do not have permission to view ignored files.';
+        errorMessage = t('documentManagement.errors.permissionDeniedIgnored');
       } else if (errorInfo.category === 'network') {
-        errorMessage = 'Network error. Please check your connection and try again.';
+        errorMessage = t('documentManagement.errors.networkError');
       } else if (errorInfo.category === 'server') {
-        errorMessage = 'Server error. Please try again later.';
+        errorMessage = t('documentManagement.errors.serverError');
       } else {
-        errorMessage = errorInfo.message || 'Failed to load ignored files';
+        errorMessage = errorInfo.message || t('documentManagement.errors.loadIgnoredFiles');
       }
       
       setSnackbar({
@@ -642,7 +656,7 @@ const DocumentManagementPage: React.FC = () => {
       
       setSnackbar({
         open: true,
-        message: response.data.message || 'Files removed from ignored list',
+        message: response.data.message || t('documentManagement.ignoredFiles.removedSuccess'),
         severity: 'success'
       });
       setSelectedIgnoredFiles(new Set());
@@ -652,7 +666,7 @@ const DocumentManagementPage: React.FC = () => {
     } catch (error: any) {
       setSnackbar({
         open: true,
-        message: error.response?.data?.message || 'Failed to delete ignored files',
+        message: error.response?.data?.message || t('documentManagement.ignoredFiles.deleteFailed'),
         severity: 'error'
       });
     } finally {
@@ -665,7 +679,7 @@ const DocumentManagementPage: React.FC = () => {
       const response = await api.delete(`/ignored-files/${fileId}`);
       setSnackbar({
         open: true,
-        message: response.data.message || 'File removed from ignored list',
+        message: response.data.message || t('documentManagement.ignoredFiles.fileRemovedSuccess'),
         severity: 'success'
       });
       fetchIgnoredFiles();
@@ -673,7 +687,7 @@ const DocumentManagementPage: React.FC = () => {
     } catch (error: any) {
       setSnackbar({
         open: true,
-        message: error.response?.data?.message || 'Failed to delete ignored file',
+        message: error.response?.data?.message || t('documentManagement.ignoredFiles.fileDeleteFailed'),
         severity: 'error'
       });
     }
@@ -748,7 +762,7 @@ const DocumentManagementPage: React.FC = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: 'Failed to preview low confidence documents',
+        message: t('documentManagement.cleanup.previewFailed'),
         severity: 'error'
       });
     } finally {
@@ -760,7 +774,7 @@ const DocumentManagementPage: React.FC = () => {
     if (!previewData || previewData.matched_count === 0) {
       setSnackbar({
         open: true,
-        message: 'No documents to delete',
+        message: t('documentManagement.cleanup.noDocuments'),
         severity: 'warning'
       });
       return;
@@ -784,7 +798,7 @@ const DocumentManagementPage: React.FC = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: 'Failed to delete low confidence documents',
+        message: t('documentManagement.cleanup.deleteFailed'),
         severity: 'error'
       });
     } finally {
@@ -801,7 +815,7 @@ const DocumentManagementPage: React.FC = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: 'Failed to preview failed documents',
+        message: t('documentManagement.cleanup.previewFailedDocs'),
         severity: 'error'
       });
     } finally {
@@ -829,7 +843,7 @@ const DocumentManagementPage: React.FC = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: 'Failed to delete failed documents',
+        message: t('documentManagement.cleanup.deleteFailedDocs'),
         severity: 'error'
       });
     } finally {
@@ -849,7 +863,7 @@ const DocumentManagementPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
-          Document Management
+          {t('documentManagement.title')}
         </Typography>
         <Box display="flex" gap={2}>
           <Button
@@ -867,7 +881,7 @@ const DocumentManagementPage: React.FC = () => {
               }
             }}
           >
-            {retryingAll ? 'Retrying All...' : 'Retry All Documents'}
+            {retryingAll ? t('documentManagement.retrying') : t('documentManagement.retryAll')}
           </Button>
           <Button
             variant="outlined"
@@ -875,7 +889,7 @@ const DocumentManagementPage: React.FC = () => {
             onClick={refreshCurrentTab}
             disabled={loading || duplicatesLoading || retryingAll}
           >
-            Refresh
+            {t('common.actions.refresh')}
           </Button>
         </Box>
       </Box>
@@ -903,31 +917,43 @@ const DocumentManagementPage: React.FC = () => {
             },
           }}
         >
-          <Tooltip title="View and manage documents that failed during processing (OCR, ingestion, validation, etc.)">
+          <Tooltip title={t('documentManagement.tabs.failedDocumentsTooltip')}>
             <Tab
               icon={<ErrorIcon />}
-              label={`Failed Documents${statistics ? ` (${statistics.total_failed})` : ''}`}
+              label={t('documentManagement.tabs.failedDocuments', {
+                count: statistics ? statistics.total_failed : 0,
+                showCount: statistics ? true : false
+              })}
               iconPosition="start"
             />
           </Tooltip>
-          <Tooltip title="Manage and clean up documents with quality issues - low OCR confidence or failed processing">
+          <Tooltip title={t('documentManagement.tabs.cleanupTooltip')}>
             <Tab
               icon={<DeleteIcon />}
-              label={`Document Cleanup${(previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0) > 0 ? ` (${(previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0)})` : ''}`}
+              label={t('documentManagement.tabs.cleanup', {
+                count: (previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0),
+                showCount: (previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0) > 0
+              })}
               iconPosition="start"
             />
           </Tooltip>
-          <Tooltip title="View and manage duplicate document groups - documents with identical content">
+          <Tooltip title={t('documentManagement.tabs.duplicatesTooltip')}>
             <Tab
               icon={<FileCopyIcon />}
-              label={`Duplicate Files${duplicateStatistics ? ` (${duplicateStatistics.total_duplicate_groups})` : ''}`}
+              label={t('documentManagement.tabs.duplicates', {
+                count: duplicateStatistics ? duplicateStatistics.total_duplicate_groups : 0,
+                showCount: duplicateStatistics ? true : false
+              })}
               iconPosition="start"
             />
           </Tooltip>
-          <Tooltip title="Manage files that have been ignored during sync operations">
+          <Tooltip title={t('documentManagement.tabs.ignoredFilesTooltip')}>
             <Tab
               icon={<BlockIcon />}
-              label={`Ignored Files${ignoredFilesStats ? ` (${ignoredFilesStats.total_ignored_files})` : ''}`}
+              label={t('documentManagement.tabs.ignoredFiles', {
+                count: ignoredFilesStats ? ignoredFilesStats.total_ignored_files : 0,
+                showCount: ignoredFilesStats ? true : false
+              })}
               iconPosition="start"
             />
           </Tooltip>
@@ -945,7 +971,7 @@ const DocumentManagementPage: React.FC = () => {
               <CardContent>
                 <Typography variant="h6" color="error">
                   <ErrorIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                  Total Failed
+                  {t('documentManagement.stats.totalFailed')}
                 </Typography>
                 <Typography variant="h3" color="error.main">
                   {statistics.total_failed}
@@ -960,7 +986,7 @@ const DocumentManagementPage: React.FC = () => {
                     size="small"
                     fullWidth
                   >
-                    {retryingAll ? 'Retrying...' : 'Retry Failed Only'}
+                    {retryingAll ? t('documentManagement.retrying') : t('documentManagement.retryFailedOnly')}
                   </Button>
                 </Box>
               </CardContent>
@@ -970,7 +996,7 @@ const DocumentManagementPage: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography variant="h6" mb={2}>
-                  Failure Categories
+                  {t('documentManagement.stats.failureCategories')}
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={1}>
                   {statistics?.by_reason ? Object.entries(statistics.by_reason).map(([reason, count]) => (
@@ -983,7 +1009,7 @@ const DocumentManagementPage: React.FC = () => {
                     />
                   )) : (
                     <Typography variant="body2" color="text.secondary">
-                      No failure data available
+                      {t('documentManagement.stats.noFailureData')}
                     </Typography>
                   )}
                 </Box>
@@ -999,18 +1025,18 @@ const DocumentManagementPage: React.FC = () => {
           <Card>
             <CardContent>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6">Advanced Retry Options</Typography>
+                <Typography variant="h6">{t('documentManagement.advancedRetry.title')}</Typography>
                 <Button
                   variant="outlined"
                   onClick={() => setBulkRetryModalOpen(true)}
                   disabled={!statistics || statistics.total_failed === 0}
                   startIcon={<RefreshIcon />}
                 >
-                  Advanced Retry
+                  {t('documentManagement.advancedRetry.button')}
                 </Button>
               </Box>
               <Typography variant="body2" color="text.secondary">
-                Use advanced filtering and selection options to retry specific subsets of failed documents based on file type, failure reason, size, and more.
+                {t('documentManagement.advancedRetry.description')}
               </Typography>
             </CardContent>
           </Card>
@@ -1023,42 +1049,42 @@ const DocumentManagementPage: React.FC = () => {
       {/* Filter Controls */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" mb={2}>Filter Options</Typography>
+          <Typography variant="h6" mb={2}>{t('documentManagement.filters.title')}</Typography>
           <Grid container spacing={3} alignItems="center">
             <Grid item xs={12} md={4}>
               <TextField
-                label="Filter by Stage"
+                label={t('documentManagement.filters.stage')}
                 select
                 value={failedDocumentsFilters.stage || ''}
                 onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, stage: e.target.value || undefined }))}
                 fullWidth
               >
-                <MenuItem value="">All Stages</MenuItem>
-                <MenuItem value="ocr">OCR Processing</MenuItem>
-                <MenuItem value="ingestion">Document Ingestion</MenuItem>
-                <MenuItem value="validation">Validation</MenuItem>
-                <MenuItem value="storage">File Storage</MenuItem>
-                <MenuItem value="processing">Processing</MenuItem>
-                <MenuItem value="sync">Synchronization</MenuItem>
+                <MenuItem value="">{t('documentManagement.filters.allStages')}</MenuItem>
+                <MenuItem value="ocr">{t('documentManagement.filters.stages.ocr')}</MenuItem>
+                <MenuItem value="ingestion">{t('documentManagement.filters.stages.ingestion')}</MenuItem>
+                <MenuItem value="validation">{t('documentManagement.filters.stages.validation')}</MenuItem>
+                <MenuItem value="storage">{t('documentManagement.filters.stages.storage')}</MenuItem>
+                <MenuItem value="processing">{t('documentManagement.filters.stages.processing')}</MenuItem>
+                <MenuItem value="sync">{t('documentManagement.filters.stages.sync')}</MenuItem>
               </TextField>
             </Grid>
             <Grid item xs={12} md={4}>
               <TextField
-                label="Filter by Reason"
+                label={t('documentManagement.filters.reason')}
                 select
                 value={failedDocumentsFilters.reason || ''}
                 onChange={(e) => setFailedDocumentsFilters(prev => ({ ...prev, reason: e.target.value || undefined }))}
                 fullWidth
               >
-                <MenuItem value="">All Reasons</MenuItem>
-                <MenuItem value="duplicate_content">Duplicate Content</MenuItem>
-                <MenuItem value="low_ocr_confidence">Low OCR Confidence</MenuItem>
-                <MenuItem value="unsupported_format">Unsupported Format</MenuItem>
-                <MenuItem value="file_too_large">File Too Large</MenuItem>
-                <MenuItem value="file_corrupted">File Corrupted</MenuItem>
-                <MenuItem value="ocr_timeout">OCR Timeout</MenuItem>
-                <MenuItem value="pdf_parsing_error">PDF Parsing Error</MenuItem>
-                <MenuItem value="other">Other</MenuItem>
+                <MenuItem value="">{t('documentManagement.filters.allReasons')}</MenuItem>
+                <MenuItem value="duplicate_content">{t('documentManagement.filters.reasons.duplicateContent')}</MenuItem>
+                <MenuItem value="low_ocr_confidence">{t('documentManagement.filters.reasons.lowConfidence')}</MenuItem>
+                <MenuItem value="unsupported_format">{t('documentManagement.filters.reasons.unsupportedFormat')}</MenuItem>
+                <MenuItem value="file_too_large">{t('documentManagement.filters.reasons.fileTooLarge')}</MenuItem>
+                <MenuItem value="file_corrupted">{t('documentManagement.filters.reasons.fileCorrupted')}</MenuItem>
+                <MenuItem value="ocr_timeout">{t('documentManagement.filters.reasons.ocrTimeout')}</MenuItem>
+                <MenuItem value="pdf_parsing_error">{t('documentManagement.filters.reasons.pdfParsingError')}</MenuItem>
+                <MenuItem value="other">{t('documentManagement.filters.reasons.other')}</MenuItem>
               </TextField>
             </Grid>
             <Grid item xs={12} md={4}>
@@ -1068,7 +1094,7 @@ const DocumentManagementPage: React.FC = () => {
                 disabled={!failedDocumentsFilters.stage && !failedDocumentsFilters.reason}
                 fullWidth
               >
-                Clear Filters
+                {t('documentManagement.filters.clearFilters')}
               </Button>
             </Grid>
           </Grid>
@@ -1077,15 +1103,14 @@ const DocumentManagementPage: React.FC = () => {
 
       {(!documents || documents.length === 0) ? (
         <Alert severity="success" sx={{ mt: 2 }}>
-          <AlertTitle>Great news!</AlertTitle>
-          No documents have failed OCR processing. All your documents are processing successfully.
+          <AlertTitle>{t('documentManagement.alerts.noFailedTitle')}</AlertTitle>
+          {t('documentManagement.alerts.noFailedMessage')}
         </Alert>
       ) : (
         <>
           <Alert severity="info" sx={{ mb: 2 }}>
-            <AlertTitle>Failed Documents Overview</AlertTitle>
-            These documents failed at various stages of processing: ingestion, validation, OCR, storage, etc.
-            Use the filters above to narrow down by failure stage or specific reason. You can retry processing for recoverable failures.
+            <AlertTitle>{t('documentManagement.alerts.overviewTitle')}</AlertTitle>
+            {t('documentManagement.alerts.overviewMessage')}
           </Alert>
 
           <TableContainer component={Paper}>
@@ -1093,11 +1118,11 @@ const DocumentManagementPage: React.FC = () => {
               <TableHead>
                 <TableRow>
                   <TableCell />
-                  <TableCell>Document</TableCell>
-                  <TableCell>Failure Type</TableCell>
-                  <TableCell>Retry Count</TableCell>
-                  <TableCell>Last Failed</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell>{t('documentManagement.table.document')}</TableCell>
+                  <TableCell>{t('documentManagement.table.failureType')}</TableCell>
+                  <TableCell>{t('documentManagement.table.retryCount')}</TableCell>
+                  <TableCell>{t('documentManagement.table.lastFailed')}</TableCell>
+                  <TableCell>{t('documentManagement.table.actions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -1131,17 +1156,17 @@ const DocumentManagementPage: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {document.retry_count} attempts
+                          {t('documentManagement.table.attempts', { count: document.retry_count })}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {document.updated_at ? format(new Date(document.updated_at), 'MMM dd, yyyy HH:mm') : 'Unknown'}
+                          {document.updated_at ? format(new Date(document.updated_at), 'MMM dd, yyyy HH:mm') : t('documentManagement.table.unknown')}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Box display="flex" gap={1}>
-                          <Tooltip title="Retry OCR">
+                          <Tooltip title={t('documentManagement.actions.retryOcr')}>
                             <IconButton
                               size="small"
                               onClick={() => handleRetryOcr(document)}
@@ -1154,7 +1179,7 @@ const DocumentManagementPage: React.FC = () => {
                               )}
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="View Details">
+                          <Tooltip title={t('documentManagement.actions.viewDetails')}>
                             <IconButton
                               size="small"
                               onClick={() => showDocumentDetails(document)}
@@ -1162,7 +1187,7 @@ const DocumentManagementPage: React.FC = () => {
                               <VisibilityIcon />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Retry History">
+                          <Tooltip title={t('documentManagement.actions.retryHistory')}>
                             <IconButton
                               size="small"
                               onClick={() => handleShowRetryHistory(document.id)}
@@ -1170,7 +1195,7 @@ const DocumentManagementPage: React.FC = () => {
                               <HistoryIcon />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Download Document">
+                          <Tooltip title={t('documentManagement.actions.download')}>
                             <IconButton
                               size="small"
                               onClick={async () => {
@@ -1197,29 +1222,29 @@ const DocumentManagementPage: React.FC = () => {
                             borderRadius: 1
                           }}>
                             <Typography variant="h6" gutterBottom>
-                              Error Details
+                              {t('documentManagement.details.errorDetails')}
                             </Typography>
                             <Grid container spacing={2}>
                               <Grid item xs={12} md={6}>
                                 <Typography variant="body2" color="text.secondary">
-                                  <strong>Failure Reason:</strong>
+                                  <strong>{t('documentManagement.details.failureReason')}:</strong>
                                 </Typography>
                                 <Typography variant="body2" sx={{ mb: 1 }}>
-                                  {document.failure_reason || document.ocr_failure_reason || 'Not specified'}
+                                  {document.failure_reason || document.ocr_failure_reason || t('documentManagement.details.notSpecified')}
                                 </Typography>
                                 
                                 {/* Show OCR confidence and word count for low confidence failures */}
                                 {(document.failure_reason === 'low_ocr_confidence' || document.ocr_failure_reason === 'low_ocr_confidence') && (
                                   <>
                                     <Typography variant="body2" color="text.secondary" component="div">
-                                      <strong>OCR Results:</strong>
+                                      <strong>{t('documentManagement.details.ocrResults')}:</strong>
                                     </Typography>
                                     <Box component="div" sx={{ mb: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                                       {document.ocr_confidence !== undefined && document.ocr_confidence !== null && (
                                         <Chip
                                           size="small"
                                           icon={<WarningIcon />}
-                                          label={`${document.ocr_confidence.toFixed(1)}% confidence`}
+                                          label={t('documentManagement.details.confidencePercent', { percent: document.ocr_confidence.toFixed(1) })}
                                           color="warning"
                                           variant="outlined"
                                         />
@@ -1228,7 +1253,7 @@ const DocumentManagementPage: React.FC = () => {
                                         <Chip
                                           size="small"
                                           icon={<FindInPageIcon />}
-                                          label={`${document.ocr_word_count} words found`}
+                                          label={t('documentManagement.details.wordsFound', { count: document.ocr_word_count })}
                                           color="info"
                                           variant="outlined"
                                         />
@@ -1238,7 +1263,7 @@ const DocumentManagementPage: React.FC = () => {
                                 )}
                                 
                                 <Typography variant="body2" color="text.secondary">
-                                  <strong>Error Message:</strong>
+                                  <strong>{t('documentManagement.details.errorMessage')}:</strong>
                                 </Typography>
                                 <Typography
                                   variant="body2"
@@ -1251,21 +1276,21 @@ const DocumentManagementPage: React.FC = () => {
                                     wordBreak: 'break-word'
                                   }}
                                 >
-                                  {document.error_message || document.ocr_error || 'No error message available'}
+                                  {document.error_message || document.ocr_error || t('documentManagement.details.noErrorMessage')}
                                 </Typography>
                               </Grid>
                               <Grid item xs={12} md={6}>
                                 <Typography variant="body2" color="text.secondary">
-                                  <strong>Last Attempt:</strong>
+                                  <strong>{t('documentManagement.details.lastAttempt')}:</strong>
                                 </Typography>
                                 <Typography variant="body2" sx={{ mb: 1 }}>
                                   {document.last_attempt_at
                                     ? format(new Date(document.last_attempt_at), 'PPpp')
-                                    : 'No previous attempts'}
+                                    : t('documentManagement.details.noPreviousAttempts')}
                                 </Typography>
-                                
+
                                 <Typography variant="body2" color="text.secondary">
-                                  <strong>File Created:</strong>
+                                  <strong>{t('documentManagement.details.fileCreated')}:</strong>
                                 </Typography>
                                 <Typography variant="body2">
                                   {format(new Date(document.created_at), 'PPpp')}

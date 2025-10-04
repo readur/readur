@@ -23,6 +23,7 @@ import {
   Delete as DeleteIcon,
   DoneAll as DoneAllIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { NotificationType } from '../../types/notification';
 import { formatDistanceToNow } from 'date-fns';
@@ -34,6 +35,7 @@ interface NotificationPanelProps {
 
 const NotificationPanel: React.FC<NotificationPanelProps> = ({ anchorEl, onClose }) => {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotification, clearAll } = useNotifications();
 
   const getIcon = (type: NotificationType) => {
@@ -88,7 +90,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ anchorEl, onClose
       >
         <Stack direction="row" spacing={2} alignItems="center">
           <Typography variant="h6" fontWeight={600}>
-            Notifications
+            {t('notifications.title')}
           </Typography>
           {unreadCount > 0 && (
             <Chip
@@ -108,7 +110,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ anchorEl, onClose
               <IconButton
                 size="small"
                 onClick={markAllAsRead}
-                title="Mark all as read"
+                title={t('notifications.markAllAsRead')}
                 sx={{ opacity: 0.7, '&:hover': { opacity: 1 } }}
               >
                 <DoneAllIcon fontSize="small" />
@@ -116,7 +118,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ anchorEl, onClose
               <IconButton
                 size="small"
                 onClick={clearAll}
-                title="Clear all"
+                title={t('notifications.clearAll')}
                 sx={{ opacity: 0.7, '&:hover': { opacity: 1 } }}
               >
                 <DeleteIcon fontSize="small" />
@@ -139,7 +141,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ anchorEl, onClose
               color: 'text.secondary',
             }}
           >
-            <Typography variant="body2">No notifications</Typography>
+            <Typography variant="body2">{t('notifications.noNotifications')}</Typography>
           </Box>
         ) : (
           <List sx={{ p: 0 }}>

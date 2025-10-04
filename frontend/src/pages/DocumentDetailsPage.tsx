@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -65,6 +66,7 @@ import { useTheme as useMuiTheme } from '@mui/material/styles';
 import api from '../services/api';
 
 const DocumentDetailsPage: React.FC = () => {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { mode, modernTokens, glassEffect } = useTheme();
@@ -134,7 +136,7 @@ const DocumentDetailsPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to delete document:', error);
       // Show error message to user
-      alert('Failed to delete document. Please try again.');
+      alert(t('common.status.error'));
     } finally {
       setDeleting(false);
       setDeleteConfirmOpen(false);
@@ -170,7 +172,7 @@ const DocumentDetailsPage: React.FC = () => {
 
   const fetchDocumentDetails = async (): Promise<void> => {
     if (!id) {
-      setError('No document ID provided');
+      setError(t('documentDetails.errors.notFound'));
       setLoading(false);
       return;
     }
@@ -178,11 +180,11 @@ const DocumentDetailsPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await documentService.getById(id);
       setDocument(response.data);
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to load document details';
+      const errorMessage = err.message || t('common.status.error');
       setError(errorMessage);
       console.error('Failed to fetch document details:', err);
     } finally {
@@ -215,10 +217,10 @@ const DocumentDetailsPage: React.FC = () => {
       setOcrLoading(true);
       const response = await documentService.getOcrText(document.id);
       setOcrData(response.data);
-      setOcrText(response.data.ocr_text || 'No OCR text available');
+      setOcrText(response.data.ocr_text || t('documentDetails.ocr.noText'));
     } catch (err) {
       console.error('Failed to fetch OCR text:', err);
-      setOcrText('Failed to load OCR text. Please try again.');
+      setOcrText(t('documentDetails.ocr.loadFailed'));
     } finally {
       setOcrLoading(false);
     }
@@ -242,7 +244,7 @@ const DocumentDetailsPage: React.FC = () => {
       setShowProcessedImageDialog(true);
     } catch (err: any) {
       console.log('Processed image not available:', err);
-      alert('No processed image available for this document. This feature requires "Save Processed Images" to be enabled in OCR settings.');
+      alert(t('documentDetails.dialogs.processedImage.noImage'));
     } finally {
       setProcessedImageLoading(false);
     }
@@ -357,10 +359,10 @@ const DocumentDetailsPage: React.FC = () => {
           onClick={() => navigate('/documents')}
           sx={{ mb: 3 }}
         >
-          Back to Documents
+          {t('documentDetails.actions.backToDocuments')}
         </Button>
         <Alert severity="error">
-          {error || 'Document not found'}
+          {error || t('documentDetails.errors.notFound')}
         </Alert>
       </Box>
     );
@@ -380,7 +382,7 @@ const DocumentDetailsPage: React.FC = () => {
             <Button
               startIcon={<BackIcon />}
               onClick={() => navigate('/documents')}
-              sx={{ 
+              sx={{
                 mb: 3,
                 color: theme.palette.text.secondary,
                 '&:hover': {
@@ -388,7 +390,7 @@ const DocumentDetailsPage: React.FC = () => {
                 },
               }}
             >
-              Back to Documents
+              {t('documentDetails.actions.backToDocuments')}
             </Button>
             
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -403,12 +405,12 @@ const DocumentDetailsPage: React.FC = () => {
                   letterSpacing: '-0.02em',
                 }}
               >
-                {document?.original_filename || 'Document Details'}
+                {document?.original_filename || t('navigation.documents')}
               </Typography>
-              
+
               {/* Floating Action Menu */}
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <Tooltip title="Download">
+                <Tooltip title={t('documentDetails.actions.download')}>
                   <IconButton
                     onClick={handleDownload}
                     sx={{
@@ -424,8 +426,8 @@ const DocumentDetailsPage: React.FC = () => {
                     <DownloadIcon />
                   </IconButton>
                 </Tooltip>
-                
-                <Tooltip title="View Document">
+
+                <Tooltip title={t('documentDetails.actions.viewDocument')}>
                   <IconButton
                     onClick={handleViewDocument}
                     sx={{
@@ -441,9 +443,9 @@ const DocumentDetailsPage: React.FC = () => {
                     <ViewIcon />
                   </IconButton>
                 </Tooltip>
-                
+
                 {document?.has_ocr_text && (
-                  <Tooltip title="View OCR Text">
+                  <Tooltip title={t('documentDetails.actions.viewOcrText')}>
                     <IconButton
                       onClick={handleViewOcr}
                       sx={{
@@ -460,8 +462,8 @@ const DocumentDetailsPage: React.FC = () => {
                     </IconButton>
                   </Tooltip>
                 )}
-                
-                <Tooltip title="Delete Document">
+
+                <Tooltip title={t('documentDetails.actions.deleteDocument')}>
                   <IconButton
                     onClick={handleDeleteClick}
                     disabled={deleting}
@@ -483,9 +485,9 @@ const DocumentDetailsPage: React.FC = () => {
                 </Tooltip>
               </Box>
             </Box>
-            
+
             <Typography variant="body1" color="text.secondary" sx={{ fontSize: '1.1rem' }}>
-              Comprehensive document analysis and metadata viewer
+              {t('documentDetails.subtitle')}
             </Typography>
           </Box>
         </Fade>
@@ -586,16 +588,16 @@ const DocumentDetailsPage: React.FC = () => {
                   <Stack spacing={2}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="body2" color="text.secondary">
-                        File Size
+                        {t('documentDetails.metadata.fileSize')}
                       </Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
                         {formatFileSize(document.file_size)}
                       </Typography>
                     </Box>
-                    
+
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="body2" color="text.secondary">
-                        Upload Date
+                        {t('documentDetails.metadata.uploadDate')}
                       </Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
                         {formatDate(document.created_at)}
@@ -605,7 +607,7 @@ const DocumentDetailsPage: React.FC = () => {
                     {document.source_type && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="body2" color="text.secondary">
-                          Source Type
+                          {t('documentDetails.metadata.sourceType')}
                         </Typography>
                         <Chip 
                           label={document.source_type.replace('_', ' ').toUpperCase()}
@@ -622,7 +624,7 @@ const DocumentDetailsPage: React.FC = () => {
                     {document.source_path && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="body2" color="text.secondary">
-                          Original Path
+                          {t('documentDetails.metadata.originalPath')}
                         </Typography>
                         <Typography 
                           variant="body2" 
@@ -643,7 +645,7 @@ const DocumentDetailsPage: React.FC = () => {
                     {document.original_created_at && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="body2" color="text.secondary">
-                          Original Created
+                          {t('documentDetails.metadata.originalCreated')}
                         </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           {formatDate(document.original_created_at)}
@@ -654,7 +656,7 @@ const DocumentDetailsPage: React.FC = () => {
                     {document.original_modified_at && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="body2" color="text.secondary">
-                          Original Modified
+                          {t('documentDetails.metadata.originalModified')}
                         </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           {formatDate(document.original_modified_at)}
@@ -665,10 +667,10 @@ const DocumentDetailsPage: React.FC = () => {
                     {document.has_ocr_text && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="body2" color="text.secondary">
-                          OCR Status
+                          {t('documentDetails.metadata.ocrStatus')}
                         </Typography>
-                        <Chip 
-                          label="Text Extracted" 
+                        <Chip
+                          label={t('documentDetails.metadata.textExtracted')}
                           color="success"
                           size="small"
                           icon={<TextIcon sx={{ fontSize: 16 }} />}
@@ -680,7 +682,7 @@ const DocumentDetailsPage: React.FC = () => {
                   {/* Action Buttons */}
                   <Stack direction="row" spacing={1} sx={{ mt: 4 }} justifyContent="center">
                     {document.mime_type?.includes('image') && (
-                      <Tooltip title="View Processed Image">
+                      <Tooltip title={t('documentDetails.actions.viewProcessedImage')}>
                         <IconButton
                           onClick={handleViewProcessedImage}
                           disabled={processedImageLoading}
@@ -701,8 +703,8 @@ const DocumentDetailsPage: React.FC = () => {
                         </IconButton>
                       </Tooltip>
                     )}
-                    
-                    <Tooltip title="Retry OCR">
+
+                    <Tooltip title={t('documentDetails.actions.retryOcr')}>
                       <IconButton
                         onClick={handleRetryOcr}
                         disabled={retryingOcr}
@@ -722,8 +724,8 @@ const DocumentDetailsPage: React.FC = () => {
                         )}
                       </IconButton>
                     </Tooltip>
-                    
-                    <Tooltip title="Retry History">
+
+                    <Tooltip title={t('documentDetails.actions.retryHistory')}>
                       <IconButton
                         onClick={handleShowRetryHistory}
                         sx={{
@@ -779,10 +781,10 @@ const DocumentDetailsPage: React.FC = () => {
                     <CardContent sx={{ p: 4 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                         <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                          🔍 Extracted Text (OCR)
+                          {t('documentDetails.ocr.title')}
                         </Typography>
                         {ocrData?.ocr_text && (
-                          <Tooltip title="Expand to view full text with search">
+                          <Tooltip title={t('documentDetails.ocr.expandTooltip')}>
                             <IconButton
                               onClick={() => setExpandedOcrText(true)}
                               sx={{
@@ -797,18 +799,18 @@ const DocumentDetailsPage: React.FC = () => {
                             >
                               <ExpandIcon sx={{ mr: 1 }} />
                               <Typography variant="button" sx={{ fontSize: '0.75rem' }}>
-                                Expand
+                                {t('documentDetails.ocr.expand')}
                               </Typography>
                             </IconButton>
                           </Tooltip>
                         )}
                       </Box>
-                      
+
                       {ocrLoading ? (
                         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6 }}>
                           <CircularProgress size={32} sx={{ mr: 2 }} />
                           <Typography variant="h6" color="text.secondary">
-                            Loading OCR analysis...
+                            {t('documentDetails.ocr.loading')}
                           </Typography>
                         </Box>
                       ) : ocrData ? (
@@ -816,9 +818,9 @@ const DocumentDetailsPage: React.FC = () => {
                           {/* Enhanced OCR Stats */}
                           <Box sx={{ mb: 4, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                             {ocrData.ocr_confidence && (
-                              <Box 
-                                sx={{ 
-                                  p: 2, 
+                              <Box
+                                sx={{
+                                  p: 2,
                                   borderRadius: 2,
                                   backgroundColor: mode === 'light' ? modernTokens.colors.primary[100] : modernTokens.colors.primary[800],
                                   border: `1px solid ${mode === 'light' ? modernTokens.colors.primary[300] : modernTokens.colors.primary[600]}`,
@@ -830,14 +832,14 @@ const DocumentDetailsPage: React.FC = () => {
                                   {Math.round(ocrData.ocr_confidence)}%
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  Confidence
+                                  {t('documentDetails.ocr.confidence')}
                                 </Typography>
                               </Box>
                             )}
                             {ocrData.ocr_word_count && (
-                              <Box 
-                                sx={{ 
-                                  p: 2, 
+                              <Box
+                                sx={{
+                                  p: 2,
                                   borderRadius: 2,
                                   backgroundColor: mode === 'light' ? modernTokens.colors.secondary[100] : modernTokens.colors.secondary[800],
                                   border: `1px solid ${mode === 'light' ? modernTokens.colors.secondary[300] : modernTokens.colors.secondary[600]}`,
@@ -849,14 +851,14 @@ const DocumentDetailsPage: React.FC = () => {
                                   {ocrData.ocr_word_count.toLocaleString()}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  Words
+                                  {t('documentDetails.ocr.words')}
                                 </Typography>
                               </Box>
                             )}
                             {ocrData.ocr_processing_time_ms && (
-                              <Box 
-                                sx={{ 
-                                  p: 2, 
+                              <Box
+                                sx={{
+                                  p: 2,
                                   borderRadius: 2,
                                   backgroundColor: mode === 'light' ? modernTokens.colors.info[100] : modernTokens.colors.info[800],
                                   border: `1px solid ${mode === 'light' ? modernTokens.colors.info[300] : modernTokens.colors.info[600]}`,
@@ -868,7 +870,7 @@ const DocumentDetailsPage: React.FC = () => {
                                   {ocrData.ocr_processing_time_ms}ms
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  Processing Time
+                                  {t('documentDetails.ocr.processingTime')}
                                 </Typography>
                               </Box>
                             )}
@@ -876,15 +878,15 @@ const DocumentDetailsPage: React.FC = () => {
 
                           {/* OCR Error Display */}
                           {ocrData.ocr_error && (
-                            <Alert 
-                              severity="error" 
-                              sx={{ 
+                            <Alert
+                              severity="error"
+                              sx={{
                                 mb: 3,
                                 borderRadius: 2,
                               }}
                             >
                               <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                                OCR Processing Error
+                                {t('documentDetails.ocr.error')}
                               </Typography>
                               <Typography variant="body2">{ocrData.ocr_error}</Typography>
                             </Alert>
@@ -934,7 +936,7 @@ const DocumentDetailsPage: React.FC = () => {
                               </Typography>
                             ) : (
                               <Typography variant="body1" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', py: 4 }}>
-                                No OCR text available for this document.
+                                {t('documentDetails.ocr.noText')}
                               </Typography>
                             )}
                           </Paper>
@@ -943,19 +945,19 @@ const DocumentDetailsPage: React.FC = () => {
                           {ocrData.ocr_completed_at && (
                             <Box sx={{ mt: 3, pt: 3, borderTop: `1px solid ${theme.palette.divider}` }}>
                               <Typography variant="body2" color="text.secondary">
-                                ✅ Processing completed: {new Date(ocrData.ocr_completed_at).toLocaleString()}
+                                {t('documentDetails.ocr.completed', { date: new Date(ocrData.ocr_completed_at).toLocaleString() })}
                               </Typography>
                             </Box>
                           )}
                         </>
                       ) : (
-                        <Alert 
+                        <Alert
                           severity="info"
                           sx={{
                             borderRadius: 2,
                           }}
                         >
-                          OCR text is available but failed to load. Please try refreshing the page.
+                          {t('documentDetails.ocr.loadFailed')}
                         </Alert>
                       )}
                     </CardContent>
@@ -985,7 +987,7 @@ const DocumentDetailsPage: React.FC = () => {
                   <CardContent sx={{ p: 4 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
                       <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                        🏷️ Tags & Labels
+                        {t('documentDetails.tagsLabels.title')}
                       </Typography>
                       <Button
                         startIcon={<EditIcon />}
@@ -998,15 +1000,15 @@ const DocumentDetailsPage: React.FC = () => {
                           },
                         }}
                       >
-                        Edit Labels
+                        {t('documentDetails.actions.editLabels')}
                       </Button>
                     </Box>
-                    
+
                     {/* Tags */}
                     {document.tags && document.tags.length > 0 && (
                       <Box sx={{ mb: 3 }}>
                         <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                          Tags
+                          {t('documentDetails.tagsLabels.tags')}
                         </Typography>
                         <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
                           {document.tags.map((tag, index) => (
@@ -1028,7 +1030,7 @@ const DocumentDetailsPage: React.FC = () => {
                     {/* Labels */}
                     <Box>
                       <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                        Labels
+                        {t('documentDetails.tagsLabels.labels')}
                       </Typography>
                       {documentLabels.length > 0 ? (
                         <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
@@ -1047,7 +1049,7 @@ const DocumentDetailsPage: React.FC = () => {
                         </Stack>
                       ) : (
                         <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                          No labels assigned to this document
+                          {t('documentDetails.tagsLabels.noLabels')}
                         </Typography>
                       )}
                     </Box>
@@ -1070,22 +1072,22 @@ const DocumentDetailsPage: React.FC = () => {
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Extracted Text (OCR)
+              {t('documentDetails.dialogs.ocrText.title')}
             </Typography>
             {ocrData && (
               <Stack direction="row" spacing={1}>
                 {ocrData.ocr_confidence && (
-                  <Chip 
-                    label={`${Math.round(ocrData.ocr_confidence)}% confidence`} 
-                    color="primary" 
-                    size="small" 
+                  <Chip
+                    label={t('documentDetails.dialogs.ocrText.confidence', { percent: Math.round(ocrData.ocr_confidence) })}
+                    color="primary"
+                    size="small"
                   />
                 )}
                 {ocrData.ocr_word_count && (
-                  <Chip 
-                    label={`${ocrData.ocr_word_count} words`} 
-                    color="secondary" 
-                    size="small" 
+                  <Chip
+                    label={t('documentDetails.dialogs.ocrText.words', { count: ocrData.ocr_word_count })}
+                    color="secondary"
+                    size="small"
                   />
                 )}
               </Stack>
@@ -1097,14 +1099,14 @@ const DocumentDetailsPage: React.FC = () => {
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
               <CircularProgress />
               <Typography variant="body2" sx={{ ml: 2 }}>
-                Loading OCR text...
+                {t('documentDetails.dialogs.ocrText.loading')}
               </Typography>
             </Box>
           ) : (
             <>
               {ocrData && ocrData.ocr_error && (
                 <Alert severity="error" sx={{ mb: 2 }}>
-                  OCR Error: {ocrData.ocr_error}
+                  {t('documentDetails.dialogs.ocrText.error', { message: ocrData.ocr_error })}
                 </Alert>
               )}
               <Paper
@@ -1126,15 +1128,15 @@ const DocumentDetailsPage: React.FC = () => {
                     lineHeight: 1.6,
                   }}
                 >
-                  {ocrText || 'No OCR text available for this document.'}
+                  {ocrText || t('documentDetails.dialogs.ocrText.noText')}
                 </Typography>
               </Paper>
               {ocrData && (ocrData.ocr_processing_time_ms || ocrData.ocr_completed_at) && (
                 <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'grey.200' }}>
                   <Typography variant="caption" color="text.secondary">
-                    {ocrData.ocr_processing_time_ms && `Processing time: ${ocrData.ocr_processing_time_ms}ms`}
+                    {ocrData.ocr_processing_time_ms && t('documentDetails.dialogs.ocrText.processingTime', { time: ocrData.ocr_processing_time_ms })}
                     {ocrData.ocr_processing_time_ms && ocrData.ocr_completed_at && ' • '}
-                    {ocrData.ocr_completed_at && `Completed: ${new Date(ocrData.ocr_completed_at).toLocaleString()}`}
+                    {ocrData.ocr_completed_at && t('documentDetails.dialogs.ocrText.completed', { date: new Date(ocrData.ocr_completed_at).toLocaleString() })}
                   </Typography>
                 </Box>
               )}
@@ -1143,7 +1145,7 @@ const DocumentDetailsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowOcrDialog(false)}>
-            Close
+            {t('common.actions.close')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1158,7 +1160,7 @@ const DocumentDetailsPage: React.FC = () => {
         maxWidth="lg"
         fullWidth
         PaperProps={{
-          sx: { 
+          sx: {
             height: '90vh',
             backgroundColor: theme.palette.background.paper,
           }
@@ -1167,23 +1169,23 @@ const DocumentDetailsPage: React.FC = () => {
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              🔍 Extracted Text (OCR) - Full View
+              {t('documentDetails.dialogs.ocrExpanded.title')}
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               {ocrData && (
                 <Stack direction="row" spacing={1}>
                   {ocrData.ocr_confidence && (
-                    <Chip 
-                      label={`${Math.round(ocrData.ocr_confidence)}% confidence`} 
-                      color="primary" 
-                      size="small" 
+                    <Chip
+                      label={t('documentDetails.dialogs.ocrText.confidence', { percent: Math.round(ocrData.ocr_confidence) })}
+                      color="primary"
+                      size="small"
                     />
                   )}
                   {ocrData.ocr_word_count && (
-                    <Chip 
-                      label={`${ocrData.ocr_word_count} words`} 
-                      color="secondary" 
-                      size="small" 
+                    <Chip
+                      label={t('documentDetails.dialogs.ocrText.words', { count: ocrData.ocr_word_count })}
+                      color="secondary"
+                      size="small"
                     />
                   )}
                 </Stack>
@@ -1211,7 +1213,7 @@ const DocumentDetailsPage: React.FC = () => {
             <TextField
               fullWidth
               variant="outlined"
-              placeholder="Search within extracted text..."
+              placeholder={t('documentDetails.dialogs.ocrExpanded.searchPlaceholder')}
               value={ocrSearchTerm}
               onChange={(e) => setOcrSearchTerm(e.target.value)}
               InputProps={{
@@ -1242,7 +1244,9 @@ const DocumentDetailsPage: React.FC = () => {
                 {(() => {
                   const text = ocrData?.ocr_text || '';
                   const matches = text.toLowerCase().split(ocrSearchTerm.toLowerCase()).length - 1;
-                  return matches > 0 ? `${matches} match${matches === 1 ? '' : 'es'} found` : 'No matches found';
+                  return matches > 0
+                    ? t('documentDetails.dialogs.ocrExpanded.matches', { count: matches, plural: matches === 1 ? '' : 'es' })
+                    : t('documentDetails.dialogs.ocrExpanded.noMatches');
                 })()}
               </Typography>
             )}
@@ -1254,14 +1258,14 @@ const DocumentDetailsPage: React.FC = () => {
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 6 }}>
                 <CircularProgress />
                 <Typography variant="body2" sx={{ ml: 2 }}>
-                  Loading OCR text...
+                  {t('documentDetails.dialogs.ocrExpanded.loading')}
                 </Typography>
               </Box>
             ) : (
               <>
                 {ocrData && ocrData.ocr_error && (
                   <Alert severity="error" sx={{ mb: 2 }}>
-                    OCR Error: {ocrData.ocr_error}
+                    {t('documentDetails.dialogs.ocrExpanded.error', { message: ocrData.ocr_error })}
                   </Alert>
                 )}
                 <Paper
@@ -1290,16 +1294,16 @@ const DocumentDetailsPage: React.FC = () => {
                               '<mark style="background-color: #ffeb3b; color: #000; padding: 2px 4px; border-radius: 2px;">$1</mark>'
                             )
                           : ocrData.ocr_text
-                      ) : 'No OCR text available for this document.'
+                      ) : t('documentDetails.dialogs.ocrExpanded.noText')
                     }}
                   />
                 </Paper>
                 {ocrData && (ocrData.ocr_processing_time_ms || ocrData.ocr_completed_at) && (
                   <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
                     <Typography variant="caption" color="text.secondary">
-                      {ocrData.ocr_processing_time_ms && `Processing time: ${ocrData.ocr_processing_time_ms}ms`}
+                      {ocrData.ocr_processing_time_ms && t('documentDetails.dialogs.ocrText.processingTime', { time: ocrData.ocr_processing_time_ms })}
                       {ocrData.ocr_processing_time_ms && ocrData.ocr_completed_at && ' • '}
-                      {ocrData.ocr_completed_at && `Completed: ${new Date(ocrData.ocr_completed_at).toLocaleString()}`}
+                      {ocrData.ocr_completed_at && t('documentDetails.dialogs.ocrText.completed', { date: new Date(ocrData.ocr_completed_at).toLocaleString() })}
                     </Typography>
                   </Box>
                 )}
@@ -1331,7 +1335,7 @@ const DocumentDetailsPage: React.FC = () => {
                 size="small"
                 sx={{ mr: 1 }}
               >
-                Download
+                {t('common.actions.download')}
               </Button>
             </Box>
           </Box>
@@ -1347,7 +1351,7 @@ const DocumentDetailsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowViewDialog(false)}>
-            Close
+            {t('common.actions.close')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1360,36 +1364,35 @@ const DocumentDetailsPage: React.FC = () => {
         fullWidth
       >
         <DialogTitle>
-          Processed Image - OCR Enhancement Applied
+          {t('documentDetails.dialogs.processedImage.title')}
         </DialogTitle>
         <DialogContent>
           {processedImageUrl ? (
             <Box sx={{ textAlign: 'center', py: 2 }}>
-              <img 
+              <img
                 src={processedImageUrl}
                 alt="Processed image that was fed to OCR"
-                style={{ 
-                  maxWidth: '100%', 
-                  maxHeight: '70vh', 
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '70vh',
                   objectFit: 'contain',
                   border: '1px solid #ddd',
                   borderRadius: '4px'
                 }}
               />
               <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-                This is the enhanced image that was actually processed by the OCR engine.
-                You can adjust OCR enhancement settings in the Settings page.
+                {t('documentDetails.dialogs.processedImage.description')}
               </Typography>
             </Box>
           ) : (
             <Box sx={{ textAlign: 'center', py: 4 }}>
-              <Typography>No processed image available</Typography>
+              <Typography>{t('documentDetails.dialogs.processedImage.noImage')}</Typography>
             </Box>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowProcessedImageDialog(false)}>
-            Close
+            {t('common.actions.close')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1402,19 +1405,19 @@ const DocumentDetailsPage: React.FC = () => {
         fullWidth
       >
         <DialogTitle>
-          Edit Document Labels
+          {t('documentDetails.dialogs.editLabels.title')}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Select labels to assign to this document
+              {t('documentDetails.dialogs.editLabels.description')}
             </Typography>
             <LabelSelector
               selectedLabels={documentLabels}
               availableLabels={availableLabels}
               onLabelsChange={setDocumentLabels}
               onCreateLabel={handleCreateLabel}
-              placeholder="Choose labels for this document..."
+              placeholder={t('documentDetails.dialogs.editLabels.placeholder')}
               size="medium"
               disabled={labelsLoading}
             />
@@ -1422,14 +1425,14 @@ const DocumentDetailsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowLabelDialog(false)}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             onClick={() => handleSaveLabels(documentLabels)}
             sx={{ borderRadius: 2 }}
           >
-            Save Labels
+            {t('documentDetails.dialogs.editLabels.saveLabels')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1455,37 +1458,35 @@ const DocumentDetailsPage: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <DeleteIcon color="error" />
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Delete Document
+              {t('documentDetails.dialogs.delete.title')}
             </Typography>
           </Box>
         </DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            This action cannot be undone.
+            {t('documentDetails.dialogs.delete.warning')}
           </Alert>
-          <Typography variant="body1">
-            Are you sure you want to delete <strong>{document?.original_filename}</strong>?
-          </Typography>
+          <Typography variant="body1" dangerouslySetInnerHTML={{ __html: t('documentDetails.dialogs.delete.message', { filename: document?.original_filename }) }} />
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            This will permanently remove the document and all associated data including OCR text, labels, and processing history.
+            {t('documentDetails.dialogs.delete.details')}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => setDeleteConfirmOpen(false)}
             disabled={deleting}
           >
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             color="error"
             onClick={handleDeleteDocument}
             disabled={deleting}
             startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
             sx={{ borderRadius: 2 }}
           >
-            {deleting ? 'Deleting...' : 'Delete Document'}
+            {deleting ? t('documentDetails.dialogs.delete.deleting') : t('documentDetails.dialogs.delete.delete')}
           </Button>
         </DialogActions>
       </Dialog>

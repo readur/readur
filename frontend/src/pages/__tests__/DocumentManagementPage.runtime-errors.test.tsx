@@ -127,7 +127,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
       // We've successfully rendered the component without any crashes, which proves null safety
       await waitFor(() => {
         expect(screen.getByText('Document Management')).toBeInTheDocument();
-        expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+        expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
       }, { timeout: 5000 });
 
       // If there's any content, make sure it doesn't show confidence for null values
@@ -195,7 +195,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
       // Focus on testing that the component renders without crashing
       expect(screen.getByText('Document Management')).toBeInTheDocument();
-      expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+      expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
 
       // The fact that we got here means the component handled undefined ocr_confidence without crashing
     });
@@ -259,7 +259,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
       // Focus on testing that the component renders without crashing with valid confidence values
       expect(screen.getByText('Document Management')).toBeInTheDocument();
-      expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+      expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
 
       // The fact that we got here means the component handled valid ocr_confidence values without crashing
     });
@@ -325,7 +325,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
       // Focus on testing that the component renders without crashing with complex data
       expect(screen.getByText('Document Management')).toBeInTheDocument();
-      expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+      expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
 
       // The fact that we got here means the component handled complex document data without HTML validation errors
     });
@@ -389,7 +389,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
       // Focus on testing that the component renders without crashing with null error_message
       expect(screen.getByText('Document Management')).toBeInTheDocument();
-      expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+      expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
 
       // The fact that we got here means the component handled null error_message without crashing
     });
@@ -451,7 +451,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
       // Focus on testing that the component renders without crashing with both error fields
       expect(screen.getByText('Document Management')).toBeInTheDocument();
-      expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+      expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
 
       // The fact that we got here means the component handled both error_message and ocr_error fields without crashing
     });
@@ -513,7 +513,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
       // Focus on testing that the component renders without crashing with ocr_error fallback
       expect(screen.getByText('Document Management')).toBeInTheDocument();
-      expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+      expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
 
       // The fact that we got here means the component handled ocr_error fallback without crashing
     });
@@ -632,7 +632,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
       // Focus on testing that the component renders without crashing with edge case values
       expect(screen.getByText('Document Management')).toBeInTheDocument();
-      expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+      expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
 
       // The fact that we got here means the component handled edge case values without crashing
     });
@@ -696,7 +696,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
 
       // Focus on testing that the component renders without crashing with missing timestamps
       expect(screen.getByText('Document Management')).toBeInTheDocument();
-      expect(screen.getByText('Failed Documents')).toBeInTheDocument();
+      expect(screen.getAllByText(/Failed Documents/i).length).toBeGreaterThan(0);
 
       // The fact that we got here means the component handled missing timestamps without crashing
     });
