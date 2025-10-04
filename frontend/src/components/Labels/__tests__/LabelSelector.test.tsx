@@ -263,7 +263,7 @@ describe('LabelSelector Component', () => {
       
       await waitFor(() => {
         // Look for the create buttons - there should be multiple
-        expect(screen.getAllByText('Create "New Label"').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Create label "New Label"').length).toBeGreaterThan(0);
       });
     });
 
@@ -274,7 +274,7 @@ describe('LabelSelector Component', () => {
       await user.type(input, 'New Label');
       
       await waitFor(() => {
-        expect(screen.queryByText('Create "New Label"')).not.toBeInTheDocument();
+        expect(screen.queryByText('Create label "New Label"')).not.toBeInTheDocument();
       });
     });
 
@@ -332,10 +332,10 @@ describe('LabelSelector Component', () => {
       await user.type(input, 'New Label');
       
       await waitFor(() => {
-        expect(screen.getAllByText('Create "New Label"').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Create label "New Label"').length).toBeGreaterThan(0);
       });
       
-      const createButtons = screen.getAllByText('Create "New Label"');
+      const createButtons = screen.getAllByText('Create label "New Label"');
       await user.click(createButtons[0]);
       
       // Wait for dialog to open
@@ -482,10 +482,10 @@ describe('LabelSelector Component', () => {
       await user.type(input, 'New Label');
       
       await waitFor(() => {
-        expect(screen.getAllByText('Create "New Label"').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Create label "New Label"').length).toBeGreaterThan(0);
       });
       
-      const createButtons = screen.getAllByText('Create "New Label"');
+      const createButtons = screen.getAllByText('Create label "New Label"');
       await user.click(createButtons[0]);
       
       // Wait for dialog to open
