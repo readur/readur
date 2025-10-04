@@ -591,8 +591,8 @@ const DocumentsPage: React.FC = () => {
         }}>
           <Typography variant="body2" sx={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {t('documents.selection.count', {
-              count: selectedDocuments.size > 999 ? `${Math.floor(selectedDocuments.size/1000)}K` : selectedDocuments.size,
-              total: sortedDocuments.length > 999 ? `${Math.floor(sortedDocuments.length/1000)}K` : sortedDocuments.length
+              count: selectedDocuments.size,
+              total: sortedDocuments.length
             })}
           </Typography>
           <Button
@@ -612,7 +612,7 @@ const DocumentsPage: React.FC = () => {
             size="small"
             color="error"
           >
-            {t('documents.selection.deleteSelected', { count: selectedDocuments.size > 999 ? `${Math.floor(selectedDocuments.size/1000)}K` : selectedDocuments.size })}
+            {t('documents.selection.deleteSelected', { count: selectedDocuments.size })}
           </Button>
         </Box>
       )}

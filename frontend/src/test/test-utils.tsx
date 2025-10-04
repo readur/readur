@@ -2,7 +2,31 @@ import React from 'react'
 import { render, RenderOptions } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { vi } from 'vitest'
+import { I18nextProvider } from 'react-i18next'
+import i18n from 'i18next'
+import { initReactI18next } from 'react-i18next'
 import { NotificationProvider } from '../contexts/NotificationContext'
+
+// Initialize i18n for tests
+i18n
+  .use(initReactI18next)
+  .init({
+    lng: 'en',
+    fallbackLng: 'en',
+    ns: ['translation'],
+    defaultNS: 'translation',
+    resources: {
+      en: {
+        translation: require('../../public/locales/en/translation.json')
+      }
+    },
+    interpolation: {
+      escapeValue: false
+    },
+    react: {
+      useSuspense: false
+    }
+  })
 
 interface User {
   id: string
@@ -147,23 +171,25 @@ export const MockAuthProvider = ({
 }
 
 // Enhanced provider wrapper with theme and notification contexts
-const AllTheProviders = ({ 
-  children, 
+const AllTheProviders = ({
+  children,
   authValues,
   routerProps = {}
-}: { 
+}: {
   children: React.ReactNode
   authValues?: Partial<MockAuthContextType>
   routerProps?: any
 }) => {
   return (
-    <BrowserRouter {...routerProps}>
-      <NotificationProvider>
-        <MockAuthProvider mockValues={authValues}>
-          {children}
-        </MockAuthProvider>
-      </NotificationProvider>
-    </BrowserRouter>
+    <I18nextProvider i18n={i18n}>
+      <BrowserRouter {...routerProps}>
+        <NotificationProvider>
+          <MockAuthProvider mockValues={authValues}>
+            {children}
+          </MockAuthProvider>
+        </NotificationProvider>
+      </BrowserRouter>
+    </I18nextProvider>
   )
 }
 
