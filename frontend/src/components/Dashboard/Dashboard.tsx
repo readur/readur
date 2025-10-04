@@ -39,6 +39,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import api, { documentService } from '../../services/api';
+import { useTranslation } from 'react-i18next';
 
 interface Document {
   id: string;
@@ -214,7 +215,8 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Ico
 const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => {
   const navigate = useNavigate();
   const theme = useTheme();
-  
+  const { t } = useTranslation();
+
   // Ensure documents is always an array
   const safeDocuments = Array.isArray(documents) ? documents : [];
 
@@ -256,7 +258,7 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
     }}>
       <CardContent sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-          <Typography variant="h6" sx={{ 
+          <Typography variant="h6" sx={{
             fontWeight: 700,
             letterSpacing: '-0.025em',
             background: theme.palette.mode === 'light'
@@ -266,10 +268,10 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>
-            Recent Documents
+            {t('dashboard.recentDocuments.title')}
           </Typography>
           <Chip
-            label="View All"
+            label={t('dashboard.recentDocuments.viewAll')}
             onClick={() => navigate('/documents')}
             sx={{ 
               cursor: 'pointer',
@@ -302,15 +304,15 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
             }}>
               <DocumentIcon sx={{ fontSize: 32, color: '#6366f1' }} />
             </Box>
-            <Typography variant="body1" sx={{ 
+            <Typography variant="body1" sx={{
               color: 'text.secondary',
               fontWeight: 500,
               mb: 1,
             }}>
-              No documents yet
+              {t('dashboard.recentDocuments.noDocuments')}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Upload your first document to get started
+              {t('dashboard.recentDocuments.uploadFirst')}
             </Typography>
           </Box>
         ) : (
@@ -403,25 +405,26 @@ const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => 
 const QuickActions: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
-  
+  const { t } = useTranslation();
+
   const actions: QuickAction[] = [
     {
-      title: 'Upload Documents',
-      description: 'Add new files for OCR processing',
+      title: t('dashboard.quickActions.upload.title'),
+      description: t('dashboard.quickActions.upload.description'),
       icon: UploadIcon,
       color: '#6366f1',
       path: '/upload',
     },
     {
-      title: 'Search Library',
-      description: 'Find documents by content or metadata',
+      title: t('dashboard.quickActions.search.title'),
+      description: t('dashboard.quickActions.search.description'),
       icon: SearchIcon,
       color: '#10b981',
       path: '/search',
     },
     {
-      title: 'Browse Documents',
-      description: 'View and manage your document library',
+      title: t('dashboard.quickActions.browse.title'),
+      description: t('dashboard.quickActions.browse.description'),
       icon: SearchableIcon,
       color: '#f59e0b',
       path: '/documents',
@@ -440,7 +443,7 @@ const QuickActions: React.FC = () => {
       borderRadius: 3,
     }}>
       <CardContent sx={{ p: 3 }}>
-        <Typography variant="h6" sx={{ 
+        <Typography variant="h6" sx={{
           fontWeight: 700,
           letterSpacing: '-0.025em',
           background: theme.palette.mode === 'light'
@@ -451,7 +454,7 @@ const QuickActions: React.FC = () => {
           WebkitTextFillColor: 'transparent',
           mb: 3,
         }}>
-          Quick Actions
+          {t('dashboard.quickActions.title')}
         </Typography>
         <Grid container spacing={2}>
           {actions.map((action) => (
@@ -523,6 +526,7 @@ const Dashboard: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalDocuments: 0,
@@ -621,8 +625,8 @@ const Dashboard: React.FC = () => {
     <Box>
       {/* Welcome Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ 
-          fontWeight: 800, 
+        <Typography variant="h4" sx={{
+          fontWeight: 800,
           mb: 1,
           letterSpacing: '-0.025em',
           background: theme.palette.mode === 'light'
@@ -632,14 +636,14 @@ const Dashboard: React.FC = () => {
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
         }}>
-          Welcome back, {user?.username}! 👋
+          {t('common.welcomeBack', { username: user?.username })}
         </Typography>
         <Typography variant="h6" sx={{
           color: 'text.secondary',
           fontWeight: 500,
           letterSpacing: '0.025em',
         }}>
-          Here's what's happening with your documents today.
+          {t('dashboard.greeting')}
         </Typography>
       </Box>
 
@@ -647,42 +651,52 @@ const Dashboard: React.FC = () => {
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} lg={3}>
           <StatsCard
-            title="Total Documents"
+            title={t('dashboard.stats.totalDocuments.title')}
             value={loading ? '...' : stats.totalDocuments}
-            subtitle="Files in your library"
+            subtitle={t('dashboard.stats.totalDocuments.subtitle')}
             icon={DocumentIcon}
             color="#6366f1"
-            trend={stats.totalDocuments > 0 ? `${stats.totalDocuments} total` : 'No documents yet'}
+            trend={stats.totalDocuments > 0
+              ? t('dashboard.stats.totalDocuments.trend', { count: stats.totalDocuments })
+              : t('dashboard.stats.totalDocuments.trendEmpty')}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <StatsCard
-            title="Storage Used"
+            title={t('dashboard.stats.storageUsed.title')}
             value={loading ? '...' : formatBytes(stats.totalSize)}
-            subtitle="Total file size"
+            subtitle={t('dashboard.stats.storageUsed.subtitle')}
             icon={StorageIcon}
             color="#10b981"
-            trend={stats.totalSize > 0 ? `${formatBytes(stats.totalSize)} used` : 'No storage used'}
+            trend={stats.totalSize > 0
+              ? t('dashboard.stats.storageUsed.trend', { size: formatBytes(stats.totalSize) })
+              : t('dashboard.stats.storageUsed.trendEmpty')}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <StatsCard
-            title="OCR Processed"
+            title={t('dashboard.stats.ocrProcessed.title')}
             value={loading ? '...' : stats.ocrProcessed}
-            subtitle="Text extracted documents"
+            subtitle={t('dashboard.stats.ocrProcessed.subtitle')}
             icon={OcrIcon}
             color="#f59e0b"
-            trend={stats.totalDocuments > 0 ? `${Math.round((stats.ocrProcessed / stats.totalDocuments) * 100)}% completion` : '0% completion'}
+            trend={stats.totalDocuments > 0
+              ? t('dashboard.stats.ocrProcessed.trend', {
+                  percentage: Math.round((stats.ocrProcessed / stats.totalDocuments) * 100)
+                })
+              : t('dashboard.stats.ocrProcessed.trendEmpty')}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <StatsCard
-            title="Searchable"
+            title={t('dashboard.stats.searchable.title')}
             value={loading ? '...' : stats.searchablePages}
-            subtitle="Ready for search"
+            subtitle={t('dashboard.stats.searchable.subtitle')}
             icon={SearchableIcon}
             color="#8b5cf6"
-            trend={stats.searchablePages > 0 ? `${stats.searchablePages} indexed` : 'Nothing indexed yet'}
+            trend={stats.searchablePages > 0
+              ? t('dashboard.stats.searchable.trend', { count: stats.searchablePages })
+              : t('dashboard.stats.searchable.trendEmpty')}
           />
         </Grid>
       </Grid>

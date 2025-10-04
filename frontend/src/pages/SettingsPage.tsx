@@ -47,6 +47,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
 import LanguageSelector from '../components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 interface User {
   id: string;
@@ -191,6 +192,7 @@ function useDebounce<T extends (...args: any[]) => any>(func: T, delay: number):
 
 
 const SettingsPage: React.FC = () => {
+  const { t } = useTranslation();
   const { user: currentUser } = useAuth();
   const [tabValue, setTabValue] = useState<number>(0);
   const [settings, setSettings] = useState<Settings>({
@@ -347,7 +349,7 @@ const SettingsPage: React.FC = () => {
     } catch (error: any) {
       console.error('Error fetching settings:', error);
       if (error.response?.status !== 404) {
-        showSnackbar('Failed to load settings', 'error');
+        showSnackbar(t('settings.messages.settingsUpdateFailed'), 'error');
       }
     }
   };
@@ -359,7 +361,7 @@ const SettingsPage: React.FC = () => {
     } catch (error: any) {
       console.error('Error fetching users:', error);
       if (error.response?.status !== 404) {
-        showSnackbar('Failed to load users', 'error');
+        showSnackbar(t('settings.messages.settingsUpdateFailed'), 'error');
       }
     }
   };
@@ -380,22 +382,22 @@ const SettingsPage: React.FC = () => {
       
       // Only show success message for non-text inputs to reduce noise
       if (typeof value !== 'string') {
-        showSnackbar('Settings updated successfully', 'success');
+        showSnackbar(t('settings.messages.settingsUpdated'), 'success');
       }
     } catch (error) {
       console.error('Error updating settings:', error);
-      
+
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
-      
+
       // Handle specific settings errors
       if (ErrorHelper.isErrorCode(error, ErrorCodes.SETTINGS_INVALID_LANGUAGE)) {
-        showSnackbar('Invalid language selected. Please choose from available languages.', 'error');
+        showSnackbar(t('settings.messages.invalidLanguage'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SETTINGS_VALUE_OUT_OF_RANGE)) {
-        showSnackbar(`${errorInfo.message}. ${errorInfo.suggestedAction || ''}`, 'error');
+        showSnackbar(t('settings.messages.valueOutOfRange', { message: errorInfo.message, suggestedAction: errorInfo.suggestedAction || '' }), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.SETTINGS_CONFLICTING_SETTINGS)) {
-        showSnackbar('Conflicting settings detected. Please review your configuration.', 'warning');
+        showSnackbar(t('settings.messages.conflictingSettings'), 'warning');
       } else {
-        showSnackbar(errorInfo.message || 'Failed to update settings', 'error');
+        showSnackbar(errorInfo.message || t('settings.messages.settingsUpdateFailed'), 'error');
       }
     }
   };
@@ -405,7 +407,7 @@ const SettingsPage: React.FC = () => {
     try {
       if (userDialog.mode === 'create') {
         await api.post('/users', userForm);
-        showSnackbar('User created successfully', 'success');
+        showSnackbar(t('settings.messages.userCreated'), 'success');
       } else {
         const { password, ...updateData } = userForm;
         const payload: any = updateData;
@@ -413,30 +415,30 @@ const SettingsPage: React.FC = () => {
           payload.password = password;
         }
         await api.put(`/users/${userDialog.user?.id}`, payload);
-        showSnackbar('User updated successfully', 'success');
+        showSnackbar(t('settings.messages.userUpdated'), 'success');
       }
       fetchUsers();
       handleCloseUserDialog();
     } catch (error: any) {
       console.error('Error saving user:', error);
-      
+
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
-      
+
       // Handle specific user errors with better messages
       if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_DUPLICATE_USERNAME)) {
-        showSnackbar('This username is already taken. Please choose a different username.', 'error');
+        showSnackbar(t('settings.messages.duplicateUsername'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_DUPLICATE_EMAIL)) {
-        showSnackbar('This email address is already in use. Please use a different email.', 'error');
+        showSnackbar(t('settings.messages.duplicateEmail'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_INVALID_PASSWORD)) {
-        showSnackbar('Password must be at least 8 characters with uppercase, lowercase, and numbers.', 'error');
+        showSnackbar(t('settings.messages.invalidPassword'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_INVALID_EMAIL)) {
-        showSnackbar('Please enter a valid email address.', 'error');
+        showSnackbar(t('settings.messages.invalidEmail'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_INVALID_USERNAME)) {
-        showSnackbar('Username contains invalid characters. Please use only letters, numbers, and underscores.', 'error');
+        showSnackbar(t('settings.messages.invalidUsername'), 'error');
       } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
-        showSnackbar('You do not have permission to perform this action.', 'error');
+        showSnackbar(t('settings.messages.permissionDenied'), 'error');
       } else {
-        showSnackbar(errorInfo.message || 'Failed to save user', 'error');
+        showSnackbar(errorInfo.message || t('settings.messages.settingsUpdateFailed'), 'error');
       }
     } finally {
       setLoading(false);
@@ -445,31 +447,31 @@ const SettingsPage: React.FC = () => {
 
   const handleDeleteUser = async (userId: string): Promise<void> => {
     if (userId === currentUser?.id) {
-      showSnackbar('You cannot delete your own account', 'error');
+      showSnackbar(t('settings.messages.cannotDeleteSelf'), 'error');
       return;
     }
 
-    if (window.confirm('Are you sure you want to delete this user?')) {
+    if (window.confirm(t('settings.messages.confirmDeleteUser'))) {
       setLoading(true);
       try {
         await api.delete(`/users/${userId}`);
-        showSnackbar('User deleted successfully', 'success');
+        showSnackbar(t('settings.messages.userDeleted'), 'success');
         fetchUsers();
       } catch (error) {
         console.error('Error deleting user:', error);
-        
+
         const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
-        
+
         // Handle specific delete errors
         if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_DELETE_RESTRICTED)) {
-          showSnackbar('Cannot delete this user: They may have associated data or be the last admin.', 'error');
+          showSnackbar(t('settings.messages.cannotDeleteUser'), 'error');
         } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_NOT_FOUND)) {
-          showSnackbar('User not found. They may have already been deleted.', 'warning');
+          showSnackbar(t('settings.messages.userNotFound'), 'warning');
           fetchUsers(); // Refresh the list
         } else if (ErrorHelper.isErrorCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
-          showSnackbar('You do not have permission to delete users.', 'error');
+          showSnackbar(t('settings.messages.permissionDenied'), 'error');
         } else {
-          showSnackbar(errorInfo.message || 'Failed to delete user', 'error');
+          showSnackbar(errorInfo.message || t('settings.messages.settingsUpdateFailed'), 'error');
         }
       } finally {
         setLoading(false);
@@ -536,14 +538,14 @@ const SettingsPage: React.FC = () => {
     setOcrActionLoading(true);
     try {
       await queueService.pauseOcr();
-      showSnackbar('OCR processing paused successfully', 'success');
+      showSnackbar(t('settings.messages.ocrPaused'), 'success');
       fetchOcrStatus(); // Refresh status
     } catch (error: any) {
       console.error('Error pausing OCR:', error);
       if (error.response?.status === 403) {
-        showSnackbar('Admin access required to pause OCR processing', 'error');
+        showSnackbar(t('settings.messages.ocrPauseFailed'), 'error');
       } else {
-        showSnackbar('Failed to pause OCR processing', 'error');
+        showSnackbar(t('settings.messages.ocrPauseFailedGeneric'), 'error');
       }
     } finally {
       setOcrActionLoading(false);
@@ -554,14 +556,14 @@ const SettingsPage: React.FC = () => {
     setOcrActionLoading(true);
     try {
       await queueService.resumeOcr();
-      showSnackbar('OCR processing resumed successfully', 'success');
+      showSnackbar(t('settings.messages.ocrResumed'), 'success');
       fetchOcrStatus(); // Refresh status
     } catch (error: any) {
       console.error('Error resuming OCR:', error);
       if (error.response?.status === 403) {
-        showSnackbar('Admin access required to resume OCR processing', 'error');
+        showSnackbar(t('settings.messages.ocrResumeFailed'), 'error');
       } else {
-        showSnackbar('Failed to resume OCR processing', 'error');
+        showSnackbar(t('settings.messages.ocrResumeFailedGeneric'), 'error');
       }
     } finally {
       setOcrActionLoading(false);
@@ -576,9 +578,9 @@ const SettingsPage: React.FC = () => {
     } catch (error: any) {
       console.error('Error fetching server configuration:', error);
       if (error.response?.status === 403) {
-        showSnackbar('Admin access required to view server configuration', 'error');
+        showSnackbar(t('settings.messages.serverConfigLoadFailed'), 'error');
       } else if (error.response?.status !== 404) {
-        showSnackbar('Failed to load server configuration', 'error');
+        showSnackbar(t('settings.messages.serverConfigLoadFailedGeneric'), 'error');
       }
     } finally {
       setConfigLoading(false);
@@ -637,7 +639,7 @@ const SettingsPage: React.FC = () => {
     try {
       const response = await userWatchService.createUserWatchDirectory(userId);
       if (response.data.success) {
-        showSnackbar('Watch directory created successfully', 'success');
+        showSnackbar(t('settings.messages.watchDirectoryCreated'), 'success');
         // Refresh the watch directory info for this user
         try {
           const updatedResponse = await userWatchService.getUserWatchDirectory(userId);
@@ -650,18 +652,18 @@ const SettingsPage: React.FC = () => {
           console.error('Error refreshing watch directory info:', fetchError);
         }
       } else {
-        showSnackbar(response.data.message || 'Failed to create watch directory', 'error');
+        showSnackbar(response.data.message || t('settings.messages.watchDirectoryCreatedFailed'), 'error');
       }
     } catch (error: any) {
       console.error('Error creating watch directory:', error);
-      
+
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
       if (error.response?.status === 403) {
-        showSnackbar('Admin access required to create watch directories', 'error');
+        showSnackbar(t('settings.messages.permissionDenied'), 'error');
       } else if (error.response?.status === 409) {
-        showSnackbar('Watch directory already exists for this user', 'warning');
+        showSnackbar(t('settings.messages.watchDirectoryAlreadyExists'), 'warning');
       } else {
-        showSnackbar(errorInfo.message || 'Failed to create watch directory', 'error');
+        showSnackbar(errorInfo.message || t('settings.messages.watchDirectoryCreatedFailed'), 'error');
       }
     } finally {
       setUserWatchDirLoading(userId, false);
@@ -671,14 +673,14 @@ const SettingsPage: React.FC = () => {
   const handleViewWatchDirectory = (directoryPath: string): void => {
     // For now, just show the path in a snackbar
     // In a real implementation, this could open a file explorer or navigate to a directory view
-    showSnackbar(`Watch directory: ${directoryPath}`, 'info');
+    showSnackbar(t('settings.messages.watchDirectoryPath', { path: directoryPath }), 'info');
   };
 
   const handleRemoveWatchDirectory = (userId: string, username: string): void => {
     setConfirmDialog({
       open: true,
-      title: 'Remove Watch Directory',
-      message: `Are you sure you want to remove the watch directory for user "${username}"? This action cannot be undone and will stop monitoring their directory for new files.`,
+      title: t('settings.userManagement.confirmRemoveDirectory.title'),
+      message: t('settings.userManagement.confirmRemoveDirectory.message', { username }),
       onConfirm: () => confirmRemoveWatchDirectory(userId),
     });
   };
@@ -688,7 +690,7 @@ const SettingsPage: React.FC = () => {
     try {
       const response = await userWatchService.deleteUserWatchDirectory(userId);
       if (response.data.success) {
-        showSnackbar('Watch directory removed successfully', 'success');
+        showSnackbar(t('settings.messages.watchDirectoryRemoved'), 'success');
         // Update the watch directory info to reflect removal
         setUserWatchDirectories(prev => {
           const newMap = new Map(prev);
@@ -703,16 +705,16 @@ const SettingsPage: React.FC = () => {
           return newMap;
         });
       } else {
-        showSnackbar(response.data.message || 'Failed to remove watch directory', 'error');
+        showSnackbar(response.data.message || t('settings.messages.watchDirectoryRemoveFailed'), 'error');
       }
     } catch (error: any) {
       console.error('Error removing watch directory:', error);
-      
+
       const errorInfo = ErrorHelper.formatErrorForDisplay(error, true);
       if (error.response?.status === 403) {
-        showSnackbar('Admin access required to remove watch directories', 'error');
+        showSnackbar(t('settings.messages.permissionDenied'), 'error');
       } else if (error.response?.status === 404) {
-        showSnackbar('Watch directory not found or already removed', 'warning');
+        showSnackbar(t('settings.messages.watchDirectoryNotFound'), 'warning');
         // Update state to reflect that it doesn't exist
         setUserWatchDirectories(prev => {
           const newMap = new Map(prev);
@@ -727,7 +729,7 @@ const SettingsPage: React.FC = () => {
           return newMap;
         });
       } else {
-        showSnackbar(errorInfo.message || 'Failed to remove watch directory', 'error');
+        showSnackbar(errorInfo.message || t('settings.messages.watchDirectoryRemoveFailed'), 'error');
       }
     } finally {
       setUserWatchDirLoading(userId, false);
@@ -749,7 +751,7 @@ const SettingsPage: React.FC = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <CircularProgress size={16} />
           <Typography variant="body2" color="text.secondary">
-            Loading...
+            {t('settings.userManagement.watchDirectory.loading')}
           </Typography>
         </Box>
       );
@@ -758,7 +760,7 @@ const SettingsPage: React.FC = () => {
     if (!watchDirInfo) {
       return (
         <Typography variant="body2" color="text.secondary">
-          Unknown
+          {t('settings.userManagement.watchDirectory.statusUnknown')}
         </Typography>
       );
     }
@@ -775,11 +777,11 @@ const SettingsPage: React.FC = () => {
 
     const getStatusText = () => {
       if (watchDirInfo.exists && watchDirInfo.enabled) {
-        return 'Active';
+        return t('settings.userManagement.watchDirectory.statusActive');
       } else if (watchDirInfo.exists && !watchDirInfo.enabled) {
-        return 'Disabled';
+        return t('settings.userManagement.watchDirectory.statusDisabled');
       } else {
-        return 'Not Created';
+        return t('settings.userManagement.watchDirectory.statusNotCreated');
       }
     };
 
@@ -837,34 +839,34 @@ const SettingsPage: React.FC = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Typography variant="h4" sx={{ mb: 4 }}>
-        Settings
+        {t('settings.title')}
       </Typography>
 
       <Paper sx={{ width: '100%' }}>
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="settings tabs">
-          <Tab label="General" />
-          <Tab label="OCR Settings" />
-          <Tab label="User Management" />
-          <Tab label="Server Configuration" />
+          <Tab label={t('settings.tabs.general')} />
+          <Tab label={t('settings.tabs.ocrSettings')} />
+          <Tab label={t('settings.tabs.userManagement')} />
+          <Tab label={t('settings.tabs.serverConfiguration')} />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
           {tabValue === 0 && (
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
-                General Settings
+                {t('settings.general.title')}
               </Typography>
 
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    OCR Configuration
+                    {t('settings.general.ocrConfiguration.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Configure languages for OCR text extraction. Multiple languages help with mixed-language documents.
+                        {t('settings.general.ocrConfiguration.description')}
                       </Typography>
                       <Box sx={{ '& > div': { width: '100%' } }}>
                         <LanguageSelector
@@ -885,48 +887,48 @@ const SettingsPage: React.FC = () => {
                             disabled={loading}
                           />
                         }
-                        label="Auto-detect language combinations"
+                        label={t('settings.general.ocrConfiguration.autoDetectLanguageCombination')}
                       />
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                        Automatically suggest optimal language combinations based on document content analysis
+                        {t('settings.general.ocrConfiguration.autoDetectLanguageCombinationHelper')}
                       </Typography>
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
                         type="number"
-                        label="Concurrent OCR Jobs"
+                        label={t('settings.general.ocrConfiguration.concurrentOcrJobs')}
                         value={settings.concurrentOcrJobs}
                         onChange={(e) => handleSettingsChange('concurrentOcrJobs', parseInt(e.target.value))}
                         disabled={loading}
                         inputProps={{ min: 1, max: 16 }}
-                        helperText="Number of OCR jobs that can run simultaneously"
+                        helperText={t('settings.general.ocrConfiguration.concurrentOcrJobsHelper')}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
                         type="number"
-                        label="OCR Timeout (seconds)"
+                        label={t('settings.general.ocrConfiguration.ocrTimeout')}
                         value={settings.ocrTimeoutSeconds}
                         onChange={(e) => handleSettingsChange('ocrTimeoutSeconds', parseInt(e.target.value))}
                         disabled={loading}
                         inputProps={{ min: 30, max: 3600 }}
-                        helperText="Maximum time for OCR processing per file"
+                        helperText={t('settings.general.ocrConfiguration.ocrTimeoutHelper')}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <FormControl fullWidth>
-                        <InputLabel>CPU Priority</InputLabel>
+                        <InputLabel>{t('settings.general.ocrConfiguration.cpuPriority')}</InputLabel>
                         <Select
                           value={settings.cpuPriority}
-                          label="CPU Priority"
+                          label={t('settings.general.ocrConfiguration.cpuPriority')}
                           onChange={handleCpuPriorityChange}
                           disabled={loading}
                         >
-                          <MenuItem value="low">Low</MenuItem>
-                          <MenuItem value="normal">Normal</MenuItem>
-                          <MenuItem value="high">High</MenuItem>
+                          <MenuItem value="low">{t('settings.general.ocrConfiguration.cpuPriorityLow')}</MenuItem>
+                          <MenuItem value="normal">{t('settings.general.ocrConfiguration.cpuPriorityNormal')}</MenuItem>
+                          <MenuItem value="high">{t('settings.general.ocrConfiguration.cpuPriorityHigh')}</MenuItem>
                         </Select>
                       </FormControl>
                     </Grid>
@@ -939,12 +941,12 @@ const SettingsPage: React.FC = () => {
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
                     <StopIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    OCR Processing Controls (Admin Only)
+                    {t('settings.general.ocrControls.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
-                  
+
                   <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                    Control OCR processing to manage CPU usage and allow users to use the application without performance impact.
+                    {t('settings.general.ocrControls.description')}
                   </Typography>
 
                   <Grid container spacing={2} alignItems="center">
@@ -953,14 +955,14 @@ const SettingsPage: React.FC = () => {
                         <Button
                           variant={ocrStatus?.is_paused ? "outlined" : "contained"}
                           color={ocrStatus?.is_paused ? "success" : "warning"}
-                          startIcon={ocrActionLoading ? <CircularProgress size={16} /> : 
+                          startIcon={ocrActionLoading ? <CircularProgress size={16} /> :
                                    (ocrStatus?.is_paused ? <PlayArrowIcon /> : <PauseIcon />)}
                           onClick={ocrStatus?.is_paused ? handleResumeOcr : handlePauseOcr}
                           disabled={ocrActionLoading || loading}
                           size="large"
                         >
-                          {ocrActionLoading ? 'Processing...' : 
-                           ocrStatus?.is_paused ? 'Resume OCR Processing' : 'Pause OCR Processing'}
+                          {ocrActionLoading ? t('common.status.processing') :
+                           ocrStatus?.is_paused ? t('settings.general.ocrControls.resumeOcr') : t('settings.general.ocrControls.pauseOcr')}
                         </Button>
                       </Box>
                     </Grid>
@@ -969,16 +971,16 @@ const SettingsPage: React.FC = () => {
                       {ocrStatus && (
                         <Box>
                           <Chip
-                            label={`OCR Status: ${ocrStatus.status.toUpperCase()}`}
+                            label={t('settings.general.ocrControls.ocrStatusLabel', { status: ocrStatus.status.toUpperCase() })}
                             color={ocrStatus.is_paused ? "warning" : "success"}
                             variant="outlined"
                             icon={ocrStatus.is_paused ? <PauseIcon /> : <PlayArrowIcon />}
                             size="medium"
                           />
                           <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
-                            {ocrStatus.is_paused 
-                              ? 'OCR processing is paused. No new jobs will be processed.' 
-                              : 'OCR processing is active. Documents will be processed automatically.'}
+                            {ocrStatus.is_paused
+                              ? t('settings.general.ocrControls.ocrPausedMessage')
+                              : t('settings.general.ocrControls.ocrActiveMessage')}
                           </Typography>
                         </Box>
                       )}
@@ -988,9 +990,8 @@ const SettingsPage: React.FC = () => {
                   {ocrStatus?.is_paused && (
                     <Alert severity="warning" sx={{ mt: 2 }}>
                       <Typography variant="body2">
-                        <strong>OCR Processing Paused</strong><br />
-                        New documents will not be processed for OCR text extraction until processing is resumed.
-                        Users can still upload and view documents, but search functionality may be limited.
+                        <strong>{t('settings.general.ocrControls.pausedAlertTitle')}</strong><br />
+                        {t('settings.general.ocrControls.pausedAlertMessage')}
                       </Typography>
                     </Alert>
                   )}
@@ -1000,7 +1001,7 @@ const SettingsPage: React.FC = () => {
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    File Processing
+                    {t('settings.general.fileProcessing.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
                   <Grid container spacing={2}>
@@ -1008,24 +1009,24 @@ const SettingsPage: React.FC = () => {
                       <TextField
                         fullWidth
                         type="number"
-                        label="Max File Size (MB)"
+                        label={t('settings.general.fileProcessing.maxFileSize')}
                         value={settings.maxFileSizeMb}
                         onChange={(e) => handleSettingsChange('maxFileSizeMb', parseInt(e.target.value))}
                         disabled={loading}
                         inputProps={{ min: 1, max: 500 }}
-                        helperText="Maximum allowed file size for uploads"
+                        helperText={t('settings.general.fileProcessing.maxFileSizeHelper')}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
                         type="number"
-                        label="Memory Limit (MB)"
+                        label={t('settings.general.fileProcessing.memoryLimit')}
                         value={settings.memoryLimitMb}
                         onChange={(e) => handleSettingsChange('memoryLimitMb', parseInt(e.target.value))}
                         disabled={loading}
                         inputProps={{ min: 128, max: 4096 }}
-                        helperText="Memory limit per OCR job"
+                        helperText={t('settings.general.fileProcessing.memoryLimitHelper')}
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -1038,10 +1039,10 @@ const SettingsPage: React.FC = () => {
                               disabled={loading}
                             />
                           }
-                          label="Auto-rotate Images"
+                          label={t('settings.general.fileProcessing.autoRotateImages')}
                         />
                         <Typography variant="body2" color="text.secondary">
-                          Automatically detect and correct image orientation
+                          {t('settings.general.fileProcessing.autoRotateImagesHelper')}
                         </Typography>
                       </FormControl>
                     </Grid>
@@ -1055,13 +1056,13 @@ const SettingsPage: React.FC = () => {
                               disabled={loading}
                             />
                           }
-                          label="Enable Image Preprocessing"
+                          label={t('settings.general.fileProcessing.enableImagePreprocessing')}
                         />
                         <Typography variant="body2" color="text.secondary">
-                          Enhance images for better OCR accuracy (deskew, denoise, contrast)
+                          {t('settings.general.fileProcessing.enableImagePreprocessingHelper')}
                         </Typography>
                         <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
-                          ⚠️ Warning: Enabling preprocessing can significantly alter OCR text results and may reduce accuracy for some documents
+                          {t('settings.general.fileProcessing.preprocessingWarning')}
                         </Typography>
                       </FormControl>
                     </Grid>
@@ -1075,10 +1076,10 @@ const SettingsPage: React.FC = () => {
                               disabled={loading}
                             />
                           }
-                          label="Enable Background OCR"
+                          label={t('settings.general.fileProcessing.enableBackgroundOcr')}
                         />
                         <Typography variant="body2" color="text.secondary">
-                          Process OCR in the background after file upload
+                          {t('settings.general.fileProcessing.enableBackgroundOcrHelper')}
                         </Typography>
                       </FormControl>
                     </Grid>
@@ -1089,16 +1090,16 @@ const SettingsPage: React.FC = () => {
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    Search Configuration
+                    {t('settings.general.searchConfiguration.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                       <FormControl fullWidth>
-                        <InputLabel>Results Per Page</InputLabel>
+                        <InputLabel>{t('settings.general.searchConfiguration.resultsPerPage')}</InputLabel>
                         <Select
                           value={settings.searchResultsPerPage}
-                          label="Results Per Page"
+                          label={t('settings.general.searchConfiguration.resultsPerPage')}
                           onChange={handleResultsPerPageChange}
                           disabled={loading}
                         >
@@ -1113,24 +1114,24 @@ const SettingsPage: React.FC = () => {
                       <TextField
                         fullWidth
                         type="number"
-                        label="Snippet Length"
+                        label={t('settings.general.searchConfiguration.snippetLength')}
                         value={settings.searchSnippetLength}
                         onChange={(e) => handleSettingsChange('searchSnippetLength', parseInt(e.target.value))}
                         disabled={loading}
                         inputProps={{ min: 50, max: 500 }}
-                        helperText="Characters to show in search result previews"
+                        helperText={t('settings.general.searchConfiguration.snippetLengthHelper')}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
                         type="number"
-                        label="Fuzzy Search Threshold"
+                        label={t('settings.general.searchConfiguration.fuzzySearchThreshold')}
                         value={settings.fuzzySearchThreshold}
                         onChange={(e) => handleSettingsChange('fuzzySearchThreshold', parseFloat(e.target.value))}
                         disabled={loading}
                         inputProps={{ min: 0, max: 1, step: 0.1 }}
-                        helperText="Tolerance for spelling mistakes (0.0-1.0)"
+                        helperText={t('settings.general.searchConfiguration.fuzzySearchThresholdHelper')}
                       />
                     </Grid>
                   </Grid>
@@ -1140,7 +1141,7 @@ const SettingsPage: React.FC = () => {
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    Storage Management
+                    {t('settings.general.storageManagement.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
                   <Grid container spacing={2}>
@@ -1148,12 +1149,12 @@ const SettingsPage: React.FC = () => {
                       <TextField
                         fullWidth
                         type="number"
-                        label="Retention Days"
+                        label={t('settings.general.storageManagement.retentionDays')}
                         value={settings.retentionDays || ''}
                         onChange={(e) => handleSettingsChange('retentionDays', e.target.value ? parseInt(e.target.value) : null)}
                         disabled={loading}
                         inputProps={{ min: 1 }}
-                        helperText="Auto-delete documents after X days (leave empty to disable)"
+                        helperText={t('settings.general.storageManagement.retentionDaysHelper')}
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -1166,10 +1167,10 @@ const SettingsPage: React.FC = () => {
                               disabled={loading}
                             />
                           }
-                          label="Enable Auto Cleanup"
+                          label={t('settings.general.storageManagement.enableAutoCleanup')}
                         />
                         <Typography variant="body2" color="text.secondary">
-                          Automatically remove orphaned files and clean up storage
+                          {t('settings.general.storageManagement.enableAutoCleanupHelper')}
                         </Typography>
                       </FormControl>
                     </Grid>
@@ -1183,10 +1184,10 @@ const SettingsPage: React.FC = () => {
                               disabled={loading}
                             />
                           }
-                          label="Enable Compression"
+                          label={t('settings.general.storageManagement.enableCompression')}
                         />
                         <Typography variant="body2" color="text.secondary">
-                          Compress stored documents to save disk space
+                          {t('settings.general.storageManagement.enableCompressionHelper')}
                         </Typography>
                       </FormControl>
                     </Grid>
@@ -1199,16 +1200,16 @@ const SettingsPage: React.FC = () => {
           {tabValue === 1 && (
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
-                OCR Image Processing Settings
+                {t('settings.ocrSettings.title')}
               </Typography>
 
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    Enhancement Controls
+                    {t('settings.ocrSettings.enhancementControls.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
-                  
+
                   <FormControlLabel
                     control={
                       <Switch
@@ -1216,56 +1217,56 @@ const SettingsPage: React.FC = () => {
                         onChange={(e) => handleSettingsChange('ocrSkipEnhancement', e.target.checked)}
                       />
                     }
-                    label="Skip All Image Enhancement (Use Original Images Only)"
+                    label={t('settings.ocrSettings.enhancementControls.skipEnhancement')}
                     sx={{ mb: 2 }}
                   />
-                  
+
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Brightness Boost"
+                        label={t('settings.ocrSettings.enhancementControls.brightnessBoost')}
                         type="number"
                         value={settings.ocrBrightnessBoost}
                         onChange={(e) => handleSettingsChange('ocrBrightnessBoost', parseFloat(e.target.value) || 0)}
-                        helperText="Manual brightness adjustment (0 = auto, >0 = boost amount)"
+                        helperText={t('settings.ocrSettings.enhancementControls.brightnessBoostHelper')}
                         inputProps={{ step: 0.1, min: 0, max: 100 }}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Contrast Multiplier"
+                        label={t('settings.ocrSettings.enhancementControls.contrastMultiplier')}
                         type="number"
                         value={settings.ocrContrastMultiplier}
                         onChange={(e) => handleSettingsChange('ocrContrastMultiplier', parseFloat(e.target.value) || 1)}
-                        helperText="Manual contrast adjustment (1.0 = auto, >1.0 = increase)"
+                        helperText={t('settings.ocrSettings.enhancementControls.contrastMultiplierHelper')}
                         inputProps={{ step: 0.1, min: 0.1, max: 5 }}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <FormControl fullWidth>
-                        <InputLabel>Noise Reduction Level</InputLabel>
+                        <InputLabel>{t('settings.ocrSettings.enhancementControls.noiseReductionLevel')}</InputLabel>
                         <Select
                           value={settings.ocrNoiseReductionLevel}
-                          label="Noise Reduction Level"
+                          label={t('settings.ocrSettings.enhancementControls.noiseReductionLevel')}
                           onChange={(e) => handleSettingsChange('ocrNoiseReductionLevel', e.target.value as number)}
                         >
-                          <MenuItem value={0}>None</MenuItem>
-                          <MenuItem value={1}>Light</MenuItem>
-                          <MenuItem value={2}>Moderate</MenuItem>
-                          <MenuItem value={3}>Heavy</MenuItem>
+                          <MenuItem value={0}>{t('settings.ocrSettings.enhancementControls.noiseReductionNone')}</MenuItem>
+                          <MenuItem value={1}>{t('settings.ocrSettings.enhancementControls.noiseReductionLight')}</MenuItem>
+                          <MenuItem value={2}>{t('settings.ocrSettings.enhancementControls.noiseReductionModerate')}</MenuItem>
+                          <MenuItem value={3}>{t('settings.ocrSettings.enhancementControls.noiseReductionHeavy')}</MenuItem>
                         </Select>
                       </FormControl>
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Sharpening Strength"
+                        label={t('settings.ocrSettings.enhancementControls.sharpeningStrength')}
                         type="number"
                         value={settings.ocrSharpeningStrength}
                         onChange={(e) => handleSettingsChange('ocrSharpeningStrength', parseFloat(e.target.value) || 0)}
-                        helperText="Image sharpening amount (0 = auto, >0 = manual)"
+                        helperText={t('settings.ocrSettings.enhancementControls.sharpeningStrengthHelper')}
                         inputProps={{ step: 0.1, min: 0, max: 2 }}
                       />
                     </Grid>
@@ -1276,52 +1277,52 @@ const SettingsPage: React.FC = () => {
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    Quality Thresholds (when to apply enhancements)
+                    {t('settings.ocrSettings.qualityThresholds.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
-                  
+
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Brightness Threshold"
+                        label={t('settings.ocrSettings.qualityThresholds.brightnessThreshold')}
                         type="number"
                         value={settings.ocrQualityThresholdBrightness}
                         onChange={(e) => handleSettingsChange('ocrQualityThresholdBrightness', parseFloat(e.target.value) || 40)}
-                        helperText="Enhance if brightness below this value (0-255)"
+                        helperText={t('settings.ocrSettings.qualityThresholds.brightnessThresholdHelper')}
                         inputProps={{ step: 1, min: 0, max: 255 }}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Contrast Threshold"
+                        label={t('settings.ocrSettings.qualityThresholds.contrastThreshold')}
                         type="number"
                         value={settings.ocrQualityThresholdContrast}
                         onChange={(e) => handleSettingsChange('ocrQualityThresholdContrast', parseFloat(e.target.value) || 0.15)}
-                        helperText="Enhance if contrast below this value (0-1)"
+                        helperText={t('settings.ocrSettings.qualityThresholds.contrastThresholdHelper')}
                         inputProps={{ step: 0.01, min: 0, max: 1 }}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Noise Threshold"
+                        label={t('settings.ocrSettings.qualityThresholds.noiseThreshold')}
                         type="number"
                         value={settings.ocrQualityThresholdNoise}
                         onChange={(e) => handleSettingsChange('ocrQualityThresholdNoise', parseFloat(e.target.value) || 0.3)}
-                        helperText="Enhance if noise above this value (0-1)"
+                        helperText={t('settings.ocrSettings.qualityThresholds.noiseThresholdHelper')}
                         inputProps={{ step: 0.01, min: 0, max: 1 }}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Sharpness Threshold"
+                        label={t('settings.ocrSettings.qualityThresholds.sharpnessThreshold')}
                         type="number"
                         value={settings.ocrQualityThresholdSharpness}
                         onChange={(e) => handleSettingsChange('ocrQualityThresholdSharpness', parseFloat(e.target.value) || 0.15)}
-                        helperText="Enhance if sharpness below this value (0-1)"
+                        helperText={t('settings.ocrSettings.qualityThresholds.sharpnessThresholdHelper')}
                         inputProps={{ step: 0.01, min: 0, max: 1 }}
                       />
                     </Grid>
@@ -1332,10 +1333,10 @@ const SettingsPage: React.FC = () => {
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    Advanced Processing Options
+                    {t('settings.ocrSettings.advancedProcessing.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
-                  
+
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                       <FormControlLabel
@@ -1345,7 +1346,7 @@ const SettingsPage: React.FC = () => {
                             onChange={(e) => handleSettingsChange('ocrMorphologicalOperations', e.target.checked)}
                           />
                         }
-                        label="Morphological Operations (text cleanup)"
+                        label={t('settings.ocrSettings.advancedProcessing.morphologicalOperations')}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -1356,7 +1357,7 @@ const SettingsPage: React.FC = () => {
                             onChange={(e) => handleSettingsChange('ocrHistogramEqualization', e.target.checked)}
                           />
                         }
-                        label="Histogram Equalization"
+                        label={t('settings.ocrSettings.advancedProcessing.histogramEqualization')}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -1367,17 +1368,17 @@ const SettingsPage: React.FC = () => {
                             onChange={(e) => handleSettingsChange('saveProcessedImages', e.target.checked)}
                           />
                         }
-                        label="Save Processed Images for Review"
+                        label={t('settings.ocrSettings.advancedProcessing.saveProcessedImages')}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Adaptive Threshold Window Size"
+                        label={t('settings.ocrSettings.advancedProcessing.adaptiveThresholdWindowSize')}
                         type="number"
                         value={settings.ocrAdaptiveThresholdWindowSize}
                         onChange={(e) => handleSettingsChange('ocrAdaptiveThresholdWindowSize', parseInt(e.target.value) || 15)}
-                        helperText="Window size for contrast enhancement (odd number)"
+                        helperText={t('settings.ocrSettings.advancedProcessing.adaptiveThresholdWindowSizeHelper')}
                         inputProps={{ step: 2, min: 3, max: 101 }}
                       />
                     </Grid>
@@ -1388,41 +1389,41 @@ const SettingsPage: React.FC = () => {
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    Image Size and Scaling
+                    {t('settings.ocrSettings.imageSizeScaling.title')}
                   </Typography>
                   <Divider sx={{ mb: 2 }} />
-                  
+
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Max Image Width"
+                        label={t('settings.ocrSettings.imageSizeScaling.maxImageWidth')}
                         type="number"
                         value={settings.ocrMaxImageWidth}
                         onChange={(e) => handleSettingsChange('ocrMaxImageWidth', parseInt(e.target.value) || 10000)}
-                        helperText="Maximum image width in pixels"
+                        helperText={t('settings.ocrSettings.imageSizeScaling.maxImageWidthHelper')}
                         inputProps={{ step: 100, min: 100, max: 50000 }}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Max Image Height"
+                        label={t('settings.ocrSettings.imageSizeScaling.maxImageHeight')}
                         type="number"
                         value={settings.ocrMaxImageHeight}
                         onChange={(e) => handleSettingsChange('ocrMaxImageHeight', parseInt(e.target.value) || 10000)}
-                        helperText="Maximum image height in pixels"
+                        helperText={t('settings.ocrSettings.imageSizeScaling.maxImageHeightHelper')}
                         inputProps={{ step: 100, min: 100, max: 50000 }}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <TextField
                         fullWidth
-                        label="Upscale Factor"
+                        label={t('settings.ocrSettings.imageSizeScaling.upscaleFactor')}
                         type="number"
                         value={settings.ocrUpscaleFactor}
                         onChange={(e) => handleSettingsChange('ocrUpscaleFactor', parseFloat(e.target.value) || 1.0)}
-                        helperText="Image scaling factor (1.0 = no scaling)"
+                        helperText={t('settings.ocrSettings.imageSizeScaling.upscaleFactorHelper')}
                         inputProps={{ step: 0.1, min: 0.1, max: 5 }}
                       />
                     </Grid>
@@ -1436,7 +1437,7 @@ const SettingsPage: React.FC = () => {
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h6">
-                  User Management
+                  {t('settings.userManagement.title')}
                 </Typography>
                 <Button
                   variant="contained"
@@ -1444,7 +1445,7 @@ const SettingsPage: React.FC = () => {
                   onClick={() => handleOpenUserDialog('create')}
                   disabled={loading}
                 >
-                  Add User
+                  {t('settings.userManagement.addUser')}
                 </Button>
               </Box>
 
@@ -1452,11 +1453,11 @@ const SettingsPage: React.FC = () => {
                 <Table sx={{ minWidth: 800 }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell>Username</TableCell>
-                      <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Email</TableCell>
-                      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Created At</TableCell>
-                      <TableCell>Watch Directory</TableCell>
-                      <TableCell align="right">Actions</TableCell>
+                      <TableCell>{t('settings.userManagement.tableHeaders.username')}</TableCell>
+                      <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{t('settings.userManagement.tableHeaders.email')}</TableCell>
+                      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{t('settings.userManagement.tableHeaders.createdAt')}</TableCell>
+                      <TableCell>{t('settings.userManagement.tableHeaders.watchDirectory')}</TableCell>
+                      <TableCell align="right">{t('settings.userManagement.tableHeaders.actions')}</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1510,7 +1511,7 @@ const SettingsPage: React.FC = () => {
                               if (!watchDirInfo || !watchDirInfo.exists) {
                                 // Show Create Directory button
                                 return (
-                                  <Tooltip title="Create watch directory">
+                                  <Tooltip title={t('settings.userManagement.watchDirectory.createDirectory')}>
                                     <IconButton
                                       onClick={() => handleCreateWatchDirectory(user.id)}
                                       disabled={loading || isWatchDirLoading}
@@ -1529,7 +1530,7 @@ const SettingsPage: React.FC = () => {
                                 // Show View and Remove buttons
                                 return (
                                   <>
-                                    <Tooltip title="View watch directory">
+                                    <Tooltip title={t('settings.userManagement.watchDirectory.viewDirectory')}>
                                       <IconButton
                                         onClick={() => handleViewWatchDirectory(watchDirInfo.watch_directory_path)}
                                         disabled={loading || isWatchDirLoading}
@@ -1539,7 +1540,7 @@ const SettingsPage: React.FC = () => {
                                         <VisibilityIcon />
                                       </IconButton>
                                     </Tooltip>
-                                    <Tooltip title="Remove watch directory (Admin only)">
+                                    <Tooltip title={t('settings.userManagement.watchDirectory.removeDirectory')}>
                                       <IconButton
                                         onClick={() => handleRemoveWatchDirectory(user.id, user.username)}
                                         disabled={loading || isWatchDirLoading}
@@ -1557,11 +1558,11 @@ const SettingsPage: React.FC = () => {
                                 );
                               }
                             })()}
-                            
+
                             <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                            
+
                             {/* User Management Actions */}
-                            <Tooltip title="Edit user">
+                            <Tooltip title={t('settings.userManagement.watchDirectory.editUser')}>
                               <IconButton
                                 onClick={() => handleOpenUserDialog('edit', user)}
                                 disabled={loading}
@@ -1570,7 +1571,7 @@ const SettingsPage: React.FC = () => {
                                 <EditIcon />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title="Delete user">
+                            <Tooltip title={t('settings.userManagement.watchDirectory.deleteUser')}>
                               <IconButton
                                 onClick={() => handleDeleteUser(user.id)}
                                 disabled={loading || user.id === currentUser?.id}
@@ -1593,7 +1594,7 @@ const SettingsPage: React.FC = () => {
           {tabValue === 3 && (
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
-                Server Configuration (Admin Only)
+                {t('settings.serverConfiguration.title')}
               </Typography>
 
               {configLoading ? (
@@ -1605,22 +1606,22 @@ const SettingsPage: React.FC = () => {
                   <Card sx={{ mb: 3 }}>
                     <CardContent>
                       <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                        File Upload Configuration
+                        {t('settings.serverConfiguration.fileUpload.title')}
                       </Typography>
                       <Divider sx={{ mb: 2 }} />
                       <Grid container spacing={2}>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Max File Size</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.fileUpload.maxFileSize')}</Typography>
                           <Typography variant="h6">{serverConfig.max_file_size_mb} MB</Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Upload Path</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.fileUpload.uploadPath')}</Typography>
                           <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
                             {serverConfig.upload_path}
                           </Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Allowed File Types</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.fileUpload.allowedFileTypes')}</Typography>
                           <Box sx={{ mt: 1 }}>
                             {serverConfig.allowed_file_types.map((type) => (
                               <Chip key={type} label={type} size="small" sx={{ mr: 0.5, mb: 0.5 }} />
@@ -1629,7 +1630,7 @@ const SettingsPage: React.FC = () => {
                         </Grid>
                         {serverConfig.watch_folder && (
                           <Grid item xs={12} md={6}>
-                            <Typography variant="body2" color="text.secondary">Watch Folder</Typography>
+                            <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.fileUpload.watchFolder')}</Typography>
                             <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
                               {serverConfig.watch_folder}
                             </Typography>
@@ -1642,36 +1643,36 @@ const SettingsPage: React.FC = () => {
                   <Card sx={{ mb: 3 }}>
                     <CardContent>
                       <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                        OCR Processing Configuration
+                        {t('settings.serverConfiguration.ocrProcessing.title')}
                       </Typography>
                       <Divider sx={{ mb: 2 }} />
                       <Grid container spacing={2}>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Concurrent OCR Jobs</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.ocrProcessing.concurrentOcrJobs')}</Typography>
                           <Typography variant="h6">{serverConfig.concurrent_ocr_jobs}</Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">OCR Timeout</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.ocrProcessing.ocrTimeout')}</Typography>
                           <Typography variant="h6">{serverConfig.ocr_timeout_seconds}s</Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Memory Limit</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.ocrProcessing.memoryLimit')}</Typography>
                           <Typography variant="h6">{serverConfig.memory_limit_mb} MB</Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">OCR Language</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.ocrProcessing.ocrLanguage')}</Typography>
                           <Typography variant="h6">{serverConfig.ocr_language}</Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">CPU Priority</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.ocrProcessing.cpuPriority')}</Typography>
                           <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>
                             {serverConfig.cpu_priority}
                           </Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Background OCR</Typography>
-                          <Chip 
-                            label={serverConfig.enable_background_ocr ? 'Enabled' : 'Disabled'}
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.ocrProcessing.backgroundOcr')}</Typography>
+                          <Chip
+                            label={serverConfig.enable_background_ocr ? t('settings.serverConfiguration.ocrProcessing.enabled') : t('settings.serverConfiguration.ocrProcessing.disabled')}
                             color={serverConfig.enable_background_ocr ? 'success' : 'warning'}
                             size="small"
                           />
@@ -1683,35 +1684,35 @@ const SettingsPage: React.FC = () => {
                   <Card sx={{ mb: 3 }}>
                     <CardContent>
                       <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                        Server Information
+                        {t('settings.serverConfiguration.serverInformation.title')}
                       </Typography>
                       <Divider sx={{ mb: 2 }} />
                       <Grid container spacing={2}>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Server Host</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.serverInformation.serverHost')}</Typography>
                           <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
                             {serverConfig.server_host}
                           </Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Server Port</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.serverInformation.serverPort')}</Typography>
                           <Typography variant="h6">{serverConfig.server_port}</Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">JWT Secret</Typography>
-                          <Chip 
-                            label={serverConfig.jwt_secret_set ? 'Configured' : 'Not Set'}
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.serverInformation.jwtSecret')}</Typography>
+                          <Chip
+                            label={serverConfig.jwt_secret_set ? t('settings.serverConfiguration.serverInformation.configured') : t('settings.serverConfiguration.serverInformation.notSet')}
                             color={serverConfig.jwt_secret_set ? 'success' : 'error'}
                             size="small"
                           />
                         </Grid>
                         <Grid item xs={12} md={6}>
-                          <Typography variant="body2" color="text.secondary">Version</Typography>
+                          <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.serverInformation.version')}</Typography>
                           <Typography variant="h6">{serverConfig.version}</Typography>
                         </Grid>
                         {serverConfig.build_info && (
                           <Grid item xs={12}>
-                            <Typography variant="body2" color="text.secondary">Build Information</Typography>
+                            <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.serverInformation.buildInformation')}</Typography>
                             <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
                               {serverConfig.build_info}
                             </Typography>
@@ -1725,23 +1726,23 @@ const SettingsPage: React.FC = () => {
                     <Card sx={{ mb: 3 }}>
                       <CardContent>
                         <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                          Watch Folder Configuration
+                          {t('settings.serverConfiguration.watchFolderConfiguration.title')}
                         </Typography>
                         <Divider sx={{ mb: 2 }} />
                         <Grid container spacing={2}>
                           <Grid item xs={12} md={6}>
-                            <Typography variant="body2" color="text.secondary">Watch Interval</Typography>
+                            <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.watchFolderConfiguration.watchInterval')}</Typography>
                             <Typography variant="h6">{serverConfig.watch_interval_seconds}s</Typography>
                           </Grid>
                           {serverConfig.file_stability_check_ms && (
                             <Grid item xs={12} md={6}>
-                              <Typography variant="body2" color="text.secondary">File Stability Check</Typography>
+                              <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.watchFolderConfiguration.fileStabilityCheck')}</Typography>
                               <Typography variant="h6">{serverConfig.file_stability_check_ms}ms</Typography>
                             </Grid>
                           )}
                           {serverConfig.max_file_age_hours && (
                             <Grid item xs={12} md={6}>
-                              <Typography variant="body2" color="text.secondary">Max File Age</Typography>
+                              <Typography variant="body2" color="text.secondary">{t('settings.serverConfiguration.watchFolderConfiguration.maxFileAge')}</Typography>
                               <Typography variant="h6">{serverConfig.max_file_age_hours}h</Typography>
                             </Grid>
                           )}
@@ -1757,13 +1758,13 @@ const SettingsPage: React.FC = () => {
                       startIcon={<CloudSyncIcon />}
                       disabled={configLoading}
                     >
-                      Refresh Configuration
+                      {t('settings.serverConfiguration.refreshConfiguration')}
                     </Button>
                   </Box>
                 </>
               ) : (
                 <Alert severity="error">
-                  Failed to load server configuration. Admin access may be required.
+                  {t('settings.serverConfiguration.loadFailed')}
                 </Alert>
               )}
             </Box>
@@ -1773,14 +1774,14 @@ const SettingsPage: React.FC = () => {
 
       <Dialog open={userDialog.open} onClose={handleCloseUserDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {userDialog.mode === 'create' ? 'Create New User' : 'Edit User'}
+          {userDialog.mode === 'create' ? t('settings.userManagement.dialogs.createUser') : t('settings.userManagement.dialogs.editUser')}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Username"
+                label={t('settings.userManagement.dialogs.username')}
                 value={userForm.username}
                 onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
                 required
@@ -1789,7 +1790,7 @@ const SettingsPage: React.FC = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Email"
+                label={t('settings.userManagement.dialogs.email')}
                 type="email"
                 value={userForm.email}
                 onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
@@ -1799,7 +1800,7 @@ const SettingsPage: React.FC = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label={userDialog.mode === 'create' ? 'Password' : 'New Password (leave empty to keep current)'}
+                label={userDialog.mode === 'create' ? t('settings.userManagement.dialogs.password') : t('settings.userManagement.dialogs.newPassword')}
                 type="password"
                 value={userForm.password}
                 onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
@@ -1810,10 +1811,10 @@ const SettingsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseUserDialog} disabled={loading}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
           <Button onClick={handleUserSubmit} variant="contained" disabled={loading}>
-            {userDialog.mode === 'create' ? 'Create' : 'Update'}
+            {userDialog.mode === 'create' ? t('common.actions.create') : t('common.actions.update')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1836,7 +1837,7 @@ const SettingsPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseConfirmDialog} variant="outlined">
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
           <Button
             onClick={() => {
@@ -1847,7 +1848,7 @@ const SettingsPage: React.FC = () => {
             color="error"
             startIcon={<RemoveCircleIcon />}
           >
-            Remove Directory
+            {t('settings.userManagement.confirmRemoveDirectory.removeButton')}
           </Button>
         </DialogActions>
       </Dialog>

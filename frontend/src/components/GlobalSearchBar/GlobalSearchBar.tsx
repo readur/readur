@@ -33,6 +33,7 @@ import {
   AccessTime as TimeIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { documentService, SearchRequest, EnhancedDocument, SearchResponse } from '../../services/api';
 
 interface GlobalSearchBarProps {
@@ -43,6 +44,7 @@ interface GlobalSearchBarProps {
 const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
   const navigate = useNavigate();
   const theme = useTheme();
+  const { t } = useTranslation();
   const [query, setQuery] = useState<string>('');
   const [results, setResults] = useState<EnhancedDocument[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -333,7 +335,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
           <TextField
             ref={searchInputRef}
             size="small"
-            placeholder="Search documents..."
+            placeholder={t('search.searchPlaceholder')}
             value={query}
             onChange={handleInputChange}
             onFocus={handleInputFocus}
@@ -481,12 +483,12 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                       }}>
                         <CircularProgress size={20} thickness={4} sx={{ color: '#6366f1' }} />
                       </Box>
-                      <Typography variant="body2" sx={{ 
+                      <Typography variant="body2" sx={{
                         color: 'text.secondary',
                         fontWeight: 500,
                         letterSpacing: '0.025em',
                       }}>
-                        {isTyping ? 'Searching as you type...' : 'Searching...'}
+                        {isTyping ? t('search.searchingAsYouType') : t('search.searching')}
                       </Typography>
                     </Stack>
                   </Box>
@@ -510,8 +512,8 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                 )}
 
                 {!loading && !isTyping && query && results.length === 0 && (
-                  <Box sx={{ 
-                    p: 3, 
+                  <Box sx={{
+                    p: 3,
                     textAlign: 'center',
                     background: 'linear-gradient(135deg, rgba(99,102,241,0.02) 0%, rgba(139,92,246,0.02) 100%)',
                   }}>
@@ -521,7 +523,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                       letterSpacing: '0.025em',
                       mb: 1,
                     }}>
-                      No documents found for "{query}"
+                      {t('search.noDocumentsFound', { query })}
                     </Typography>
                     <Typography variant="caption" sx={{
                       color: 'text.secondary',
@@ -529,7 +531,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                       mb: 2,
                       display: 'block',
                     }}>
-                      Press Enter to search with advanced options
+                      {t('search.pressEnterAdvanced')}
                     </Typography>
                     
                     {/* Smart suggestions for no results */}
@@ -544,7 +546,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                           mb: 1.5,
                           display: 'block',
                         }}>
-                          Try these suggestions:
+                          {t('search.trySuggestions')}
                         </Typography>
                         <Stack direction="row" spacing={0.5} justifyContent="center" flexWrap="wrap">
                           {suggestions.map((suggestion, index) => (
@@ -593,7 +595,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                           textTransform: 'uppercase',
                           fontSize: '0.7rem',
                         }}>
-                          Quick Results
+                          {t('search.quickResults')}
                         </Typography>
                         <Box sx={{
                           px: 1.5,
@@ -606,7 +608,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                             fontWeight: 600,
                             fontSize: '0.7rem',
                           }}>
-                            {results.length} found
+                            {t('search.resultsCount', { count: results.length })}
                           </Typography>
                         </Box>
                       </Stack>
@@ -763,7 +765,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                               transition: 'color 0.2s ease-in-out',
                             }}
                           >
-                            View all results for "{query}"
+                            {t('search.viewAllResults', { query })}
                           </Typography>
                         </Box>
                       </Box>
@@ -785,7 +787,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                         textTransform: 'uppercase',
                         fontSize: '0.7rem',
                       }}>
-                        Recent Searches
+                        {t('search.recentSearches')}
                       </Typography>
                     </Box>
                     <List sx={{ py: 0 }}>
@@ -846,7 +848,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                       letterSpacing: '0.025em',
                       mb: 1,
                     }}>
-                      Start typing to search documents
+                      {t('search.startTyping')}
                     </Typography>
                     <Typography variant="caption" sx={{
                       color: 'text.secondary',
@@ -857,7 +859,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                       mb: 2,
                       display: 'block',
                     }}>
-                      Popular searches:
+                      {t('search.popularSearches')}
                     </Typography>
                     <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
                       {popularSearches.slice(0, 3).map((search, index) => (

@@ -38,6 +38,7 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { queueService, QueueStats, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 interface WatchConfig {
   watchFolder: string;
@@ -49,6 +50,7 @@ interface WatchConfig {
 }
 
 const WatchFolderPage: React.FC = () => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const { user } = useAuth();
   
@@ -200,7 +202,7 @@ const WatchFolderPage: React.FC = () => {
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" sx={{ 
+        <Typography variant="h4" sx={{
           fontWeight: 600,
           background: theme.palette.mode === 'light'
             ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
@@ -209,7 +211,7 @@ const WatchFolderPage: React.FC = () => {
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
         }}>
-          Watch Folder
+          {t('watchFolder.title')}
         </Typography>
         <Button
           variant="outlined"
@@ -223,9 +225,9 @@ const WatchFolderPage: React.FC = () => {
           disabled={loading || userWatchLoading}
           sx={{ mr: 2 }}
         >
-          Refresh All
+          {t('watchFolder.refreshAll')}
         </Button>
-        
+
         {queueStats && queueStats.failed_count > 0 && (
           <Button
             variant="contained"
@@ -234,7 +236,7 @@ const WatchFolderPage: React.FC = () => {
             onClick={requeueFailedJobs}
             disabled={requeuingFailed || loading}
           >
-            {requeuingFailed ? 'Requeuing...' : `Retry ${queueStats.failed_count} Failed Jobs`}
+            {requeuingFailed ? t('watchFolder.requeuing') : t('watchFolder.retryFailedJobs', { count: queueStats.failed_count })}
           </Button>
         )}
       </Box>
@@ -257,11 +259,11 @@ const WatchFolderPage: React.FC = () => {
           <CardContent>
             <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
               <PersonIcon color="primary" />
-              Personal Watch Directory
+              {t('watchFolder.personalWatchDirectory')}
               {user.role === 'Admin' && (
                 <Chip
                   icon={<AdminIcon />}
-                  label="Admin"
+                  label={t('watchFolder.admin')}
                   size="small"
                   color="primary"
                   variant="outlined"
@@ -287,7 +289,7 @@ const WatchFolderPage: React.FC = () => {
                 <Grid item xs={12} md={8}>
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Your Personal Watch Directory
+                      {t('watchFolder.yourPersonalWatchDirectory')}
                     </Typography>
                     <Typography variant="body1" sx={{ 
                       fontFamily: 'monospace', 
@@ -308,11 +310,11 @@ const WatchFolderPage: React.FC = () => {
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Box>
                       <Typography variant="body2" color="text.secondary">
-                        Directory Status
+                        {t('watchFolder.directoryStatus')}
                       </Typography>
                       <Chip
                         icon={userWatchInfo.exists ? <CheckCircleIcon /> : <ErrorIcon />}
-                        label={userWatchInfo.exists ? 'Directory Exists' : 'Directory Missing'}
+                        label={userWatchInfo.exists ? t('watchFolder.directoryExists') : t('watchFolder.directoryMissing')}
                         color={userWatchInfo.exists ? 'success' : 'error'}
                         variant="filled"
                         size="small"
@@ -320,11 +322,11 @@ const WatchFolderPage: React.FC = () => {
                     </Box>
                     <Box>
                       <Typography variant="body2" color="text.secondary">
-                        Watch Status
+                        {t('watchFolder.watchStatus')}
                       </Typography>
                       <Chip
                         icon={userWatchInfo.enabled ? <CheckCircleIcon /> : <ScheduleIcon />}
-                        label={userWatchInfo.enabled ? 'Enabled' : 'Disabled'}
+                        label={userWatchInfo.enabled ? t('watchFolder.enabled') : t('watchFolder.disabled')}
                         color={userWatchInfo.enabled ? 'success' : 'warning'}
                         variant="filled"
                         size="small"
@@ -343,7 +345,7 @@ const WatchFolderPage: React.FC = () => {
                       border: `1px solid ${theme.palette.info.main}`,
                     }}>
                       <Typography variant="body2" sx={{ mb: 2, color: 'info.contrastText' }}>
-                        Your personal watch directory doesn't exist yet. Create it to start uploading files to your own dedicated folder.
+                        {t('watchFolder.directoryNotExist')}
                       </Typography>
                       <Button
                         variant="contained"
@@ -353,7 +355,7 @@ const WatchFolderPage: React.FC = () => {
                         disabled={creatingDirectory}
                         sx={{ color: 'primary.contrastText' }}
                       >
-                        {creatingDirectory ? 'Creating Directory...' : 'Create Personal Directory'}
+                        {creatingDirectory ? t('watchFolder.creatingDirectory') : t('watchFolder.createPersonalDirectory')}
                       </Button>
                     </Box>
                   </Grid>
@@ -361,7 +363,7 @@ const WatchFolderPage: React.FC = () => {
               </Grid>
             ) : (
               <Alert severity="info">
-                Unable to load personal watch directory information. Please try refreshing the page.
+                {t('watchFolder.unableToLoad')}
               </Alert>
             )}
           </CardContent>
@@ -373,7 +375,7 @@ const WatchFolderPage: React.FC = () => {
         <Box sx={{ my: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
           <Divider sx={{ flex: 1 }} />
           <Typography variant="body2" color="text.secondary" sx={{ px: 2 }}>
-            System Configuration
+            {t('watchFolder.systemConfiguration')}
           </Typography>
           <Divider sx={{ flex: 1 }} />
         </Box>
@@ -384,10 +386,10 @@ const WatchFolderPage: React.FC = () => {
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <FolderIcon color="primary" />
-            Global Watch Folder Configuration
+            {t('watchFolder.globalWatchFolderConfiguration')}
             {user?.role === 'Admin' && (
               <Chip
-                label="Admin Only"
+                label={t('watchFolder.adminOnly')}
                 size="small"
                 color="secondary"
                 variant="outlined"
@@ -397,19 +399,19 @@ const WatchFolderPage: React.FC = () => {
           </Typography>
           {user?.role !== 'Admin' && (
             <Alert severity="info" sx={{ mb: 2 }}>
-              This is the system-wide watch folder configuration. All users can view this information.
+              {t('watchFolder.systemWideInfo')}
             </Alert>
           )}
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Watched Directory
+                  {t('watchFolder.watchedDirectory')}
                 </Typography>
-                <Typography variant="body1" sx={{ 
-                  fontFamily: 'monospace', 
-                  bgcolor: theme.palette.mode === 'light' ? 'grey.100' : 'grey.800', 
-                  p: 1, 
+                <Typography variant="body1" sx={{
+                  fontFamily: 'monospace',
+                  bgcolor: theme.palette.mode === 'light' ? 'grey.100' : 'grey.800',
+                  p: 1,
                   borderRadius: 1,
                   color: 'text.primary',
                 }}>
@@ -420,11 +422,11 @@ const WatchFolderPage: React.FC = () => {
             <Grid item xs={12} md={6}>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Status
+                  {t('watchFolder.status')}
                 </Typography>
                 <Chip
                   icon={getStatusIcon(watchConfig.isActive ? 'active' : 'error')}
-                  label={watchConfig.isActive ? 'Active' : 'Inactive'}
+                  label={watchConfig.isActive ? t('watchFolder.active') : t('watchFolder.inactive')}
                   color={getStatusColor(watchConfig.isActive ? 'active' : 'error')}
                   variant="filled"
                 />
@@ -433,7 +435,7 @@ const WatchFolderPage: React.FC = () => {
             <Grid item xs={12} md={4}>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Watch Strategy
+                  {t('watchFolder.watchStrategy')}
                 </Typography>
                 <Typography variant="body1" sx={{ textTransform: 'capitalize' }}>
                   {watchConfig.strategy}
@@ -443,27 +445,27 @@ const WatchFolderPage: React.FC = () => {
             <Grid item xs={12} md={4}>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Scan Interval
+                  {t('watchFolder.scanInterval')}
                 </Typography>
                 <Typography variant="body1">
-                  {watchConfig.watchInterval} seconds
+                  {t('watchFolder.seconds', { count: watchConfig.watchInterval })}
                 </Typography>
               </Box>
             </Grid>
             <Grid item xs={12} md={4}>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Max File Age
+                  {t('watchFolder.maxFileAge')}
                 </Typography>
                 <Typography variant="body1">
-                  {watchConfig.maxFileAge} hours
+                  {t('watchFolder.hours', { count: watchConfig.maxFileAge })}
                 </Typography>
               </Box>
             </Grid>
             <Grid item xs={12}>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Supported File Types
+                  {t('watchFolder.supportedFileTypes')}
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {watchConfig.allowedTypes.map((type) => (
@@ -488,7 +490,7 @@ const WatchFolderPage: React.FC = () => {
           <CardContent>
             <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
               <CloudUploadIcon color="primary" />
-              Processing Queue
+              {t('watchFolder.processingQueue')}
             </Typography>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6} md={3}>
@@ -501,14 +503,14 @@ const WatchFolderPage: React.FC = () => {
                   borderRadius: 2,
                   border: theme.palette.mode === 'dark' ? '1px solid rgba(2, 136, 209, 0.3)' : 'none'
                 }}>
-                  <Typography variant="h4" sx={{ 
-                    fontWeight: 600, 
-                    color: theme.palette.mode === 'dark' ? '#29b6f6' : 'info.dark' 
+                  <Typography variant="h4" sx={{
+                    fontWeight: 600,
+                    color: theme.palette.mode === 'dark' ? '#29b6f6' : 'info.dark'
                   }}>
                     {queueStats.pending_count}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Pending
+                    {t('watchFolder.pending')}
                   </Typography>
                 </Box>
               </Grid>
@@ -522,14 +524,14 @@ const WatchFolderPage: React.FC = () => {
                   borderRadius: 2,
                   border: theme.palette.mode === 'dark' ? '1px solid rgba(237, 108, 2, 0.3)' : 'none'
                 }}>
-                  <Typography variant="h4" sx={{ 
-                    fontWeight: 600, 
-                    color: theme.palette.mode === 'dark' ? '#ff9800' : 'warning.dark' 
+                  <Typography variant="h4" sx={{
+                    fontWeight: 600,
+                    color: theme.palette.mode === 'dark' ? '#ff9800' : 'warning.dark'
                   }}>
                     {queueStats.processing_count}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Processing
+                    {t('watchFolder.processing')}
                   </Typography>
                 </Box>
               </Grid>
@@ -543,35 +545,35 @@ const WatchFolderPage: React.FC = () => {
                   borderRadius: 2,
                   border: theme.palette.mode === 'dark' ? '1px solid rgba(211, 47, 47, 0.3)' : 'none'
                 }}>
-                  <Typography variant="h4" sx={{ 
-                    fontWeight: 600, 
-                    color: theme.palette.mode === 'dark' ? '#ef5350' : 'error.dark' 
+                  <Typography variant="h4" sx={{
+                    fontWeight: 600,
+                    color: theme.palette.mode === 'dark' ? '#ef5350' : 'error.dark'
                   }}>
                     {queueStats.failed_count}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Failed
+                    {t('watchFolder.failed')}
                   </Typography>
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <Box sx={{ 
-                  textAlign: 'center', 
-                  p: 2, 
-                  bgcolor: theme.palette.mode === 'dark' 
-                    ? 'rgba(46, 125, 50, 0.15)' 
-                    : 'success.light', 
+                <Box sx={{
+                  textAlign: 'center',
+                  p: 2,
+                  bgcolor: theme.palette.mode === 'dark'
+                    ? 'rgba(46, 125, 50, 0.15)'
+                    : 'success.light',
                   borderRadius: 2,
                   border: theme.palette.mode === 'dark' ? '1px solid rgba(46, 125, 50, 0.3)' : 'none'
                 }}>
-                  <Typography variant="h4" sx={{ 
-                    fontWeight: 600, 
-                    color: theme.palette.mode === 'dark' ? '#81c784' : 'success.dark' 
+                  <Typography variant="h4" sx={{
+                    fontWeight: 600,
+                    color: theme.palette.mode === 'dark' ? '#81c784' : 'success.dark'
                   }}>
                     {queueStats.completed_today}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Completed Today
+                    {t('watchFolder.completedToday')}
                   </Typography>
                 </Box>
               </Grid>
@@ -579,14 +581,14 @@ const WatchFolderPage: React.FC = () => {
 
             <Grid container spacing={2} sx={{ mt: 2 }}>
               <Grid item xs={12} md={6}>
-                <Box sx={{ 
-                  p: 2, 
-                  bgcolor: theme.palette.mode === 'light' ? 'grey.50' : 'grey.800', 
+                <Box sx={{
+                  p: 2,
+                  bgcolor: theme.palette.mode === 'light' ? 'grey.50' : 'grey.800',
                   borderRadius: 2,
                   border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : 'none',
                 }}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Average Wait Time
+                    {t('watchFolder.averageWaitTime')}
                   </Typography>
                   <Typography variant="h6">
                     {formatDuration(queueStats.avg_wait_time_minutes)}
@@ -594,14 +596,14 @@ const WatchFolderPage: React.FC = () => {
                 </Box>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Box sx={{ 
-                  p: 2, 
-                  bgcolor: theme.palette.mode === 'light' ? 'grey.50' : 'grey.800', 
+                <Box sx={{
+                  p: 2,
+                  bgcolor: theme.palette.mode === 'light' ? 'grey.50' : 'grey.800',
                   borderRadius: 2,
                   border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : 'none',
                 }}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Oldest Pending Item
+                    {t('watchFolder.oldestPendingItem')}
                   </Typography>
                   <Typography variant="h6">
                     {formatDuration(queueStats.oldest_pending_minutes)}
@@ -612,7 +614,7 @@ const WatchFolderPage: React.FC = () => {
 
             {lastRefresh && (
               <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                Last updated: {lastRefresh.toLocaleTimeString()}
+                {t('watchFolder.lastUpdated', { time: lastRefresh.toLocaleTimeString() })}
               </Typography>
             )}
           </CardContent>
@@ -624,39 +626,38 @@ const WatchFolderPage: React.FC = () => {
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <DescriptionIcon color="primary" />
-            How Watch Folder Works
+            {t('watchFolder.howWatchFolderWorks')}
           </Typography>
           <Typography variant="body1" sx={{ mb: 2 }}>
-            The watch folder system automatically monitors the configured directory for new files and processes them for OCR.
+            {t('watchFolder.watchFolderDescription')}
           </Typography>
-          
+
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle2" sx={{ mb: 1, color: 'primary.main' }}>
-              Processing Pipeline:
+              {t('watchFolder.processingPipeline')}
             </Typography>
             <Box sx={{ pl: 2 }}>
               <Typography variant="body2" sx={{ mb: 0.5 }}>
-                1. <strong>File Detection:</strong> New files are detected using hybrid watching (inotify + polling)
+                {t('watchFolder.pipelineSteps.fileDetection')}
               </Typography>
               <Typography variant="body2" sx={{ mb: 0.5 }}>
-                2. <strong>Validation:</strong> Files are checked for supported format and size limits
+                {t('watchFolder.pipelineSteps.validation')}
               </Typography>
               <Typography variant="body2" sx={{ mb: 0.5 }}>
-                3. <strong>Deduplication:</strong> System prevents processing of duplicate files
+                {t('watchFolder.pipelineSteps.deduplication')}
               </Typography>
               <Typography variant="body2" sx={{ mb: 0.5 }}>
-                4. <strong>Storage:</strong> Files are moved to the document storage system
+                {t('watchFolder.pipelineSteps.storage')}
               </Typography>
               <Typography variant="body2" sx={{ mb: 0.5 }}>
-                5. <strong>OCR Queue:</strong> Documents are queued for OCR processing with priority
+                {t('watchFolder.pipelineSteps.ocrQueue')}
               </Typography>
             </Box>
           </Box>
 
           <Alert severity="info" sx={{ mt: 2 }}>
             <Typography variant="body2">
-              The system uses a hybrid watching strategy that automatically detects filesystem type and chooses 
-              the optimal monitoring approach (inotify for local filesystems, polling for network mounts).
+              {t('watchFolder.hybridStrategyInfo')}
             </Typography>
           </Alert>
         </CardContent>

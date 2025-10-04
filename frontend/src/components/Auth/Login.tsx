@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { api, ErrorHelper, ErrorCodes } from '../../services/api';
+import { useTranslation } from 'react-i18next';
 
 interface LoginFormData {
   username: string;
@@ -42,7 +43,8 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const { mode } = useTheme();
   const theme = useMuiTheme();
-  
+  const { t } = useTranslation();
+
   const {
     register,
     handleSubmit,
@@ -62,20 +64,20 @@ const Login: React.FC = () => {
       
       // Handle specific login errors
       if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_INVALID_CREDENTIALS)) {
-        setError('Invalid username or password. Please check your credentials and try again.');
+        setError(t('auth.errors.invalidCredentials'));
       } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
-        setError('Your account has been disabled. Please contact an administrator for assistance.');
+        setError(t('auth.errors.accountDisabled'));
       } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_NOT_FOUND)) {
-        setError('No account found with this username. Please check your username or contact support.');
-      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || 
+        setError(t('auth.errors.userNotFound'));
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) ||
                  ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        setError('Your session has expired. Please try logging in again.');
+        setError(t('auth.errors.sessionExpired'));
       } else if (errorInfo.category === 'network') {
-        setError('Network error. Please check your connection and try again.');
+        setError(t('auth.errors.networkError'));
       } else if (errorInfo.category === 'server') {
-        setError('Server error. Please try again later or contact support if the problem persists.');
+        setError(t('auth.errors.serverError'));
       } else {
-        setError(errorInfo.message || 'Failed to log in. Please check your credentials.');
+        setError(errorInfo.message || t('auth.errors.loginFailed'));
       }
     } finally {
       setLoading(false);
@@ -99,13 +101,13 @@ const Login: React.FC = () => {
       
       // Handle specific OIDC errors
       if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_OIDC_AUTH_FAILED)) {
-        setError('OIDC authentication failed. Please check with your administrator.');
+        setError(t('auth.errors.oidcAuthFailed'));
       } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_AUTH_PROVIDER_NOT_CONFIGURED)) {
-        setError('OIDC is not configured on this server. Please use username/password login.');
+        setError(t('auth.errors.oidcNotConfigured'));
       } else if (errorInfo.category === 'network') {
-        setError('Network error. Please check your connection and try again.');
+        setError(t('auth.errors.networkError'));
       } else {
-        setError(errorInfo.message || 'Failed to initiate OIDC login. Please try again.');
+        setError(errorInfo.message || t('auth.errors.oidcInitFailed'));
       }
       setOidcLoading(false);
     }
@@ -161,18 +163,18 @@ const Login: React.FC = () => {
                     : '0 4px 12px rgba(0, 0, 0, 0.5)',
                 }}
               >
-                Welcome to Readur
+                {t('common.welcome', { appName: t('common.appName') })}
               </Typography>
               <Typography
                 variant="h6"
                 sx={{
-                  color: mode === 'light' 
+                  color: mode === 'light'
                     ? 'rgba(255, 255, 255, 0.8)'
                     : 'rgba(255, 255, 255, 0.9)',
                   fontWeight: 400,
                 }}
               >
-                Your intelligent document management platform
+                {t('auth.intelligentDocumentPlatform')}
               </Typography>
             </Box>
 
@@ -204,7 +206,7 @@ const Login: React.FC = () => {
                       color: 'text.primary',
                     }}
                   >
-                    Sign in to your account
+                    {t('auth.signInToAccount')}
                   </Typography>
 
                   {error && (
@@ -216,10 +218,10 @@ const Login: React.FC = () => {
                   <Box component="form" onSubmit={handleSubmit(onSubmit)}>
                     <TextField
                       fullWidth
-                      label="Username"
+                      label={t('auth.username')}
                       margin="normal"
                       {...register('username', {
-                        required: 'Username is required',
+                        required: t('auth.usernameRequired'),
                       })}
                       error={!!errors.username}
                       helperText={errors.username?.message}
@@ -235,11 +237,11 @@ const Login: React.FC = () => {
 
                     <TextField
                       fullWidth
-                      label="Password"
+                      label={t('auth.password')}
                       type={showPassword ? 'text' : 'password'}
                       margin="normal"
                       {...register('password', {
-                        required: 'Password is required',
+                        required: t('auth.passwordRequired'),
                       })}
                       error={!!errors.password}
                       helperText={errors.password?.message}
@@ -288,7 +290,7 @@ const Login: React.FC = () => {
                         },
                       }}
                     >
-                      {loading ? 'Signing in...' : 'Sign in'}
+                      {loading ? t('auth.signingIn') : t('auth.signIn')}
                     </Button>
 
                     <Box 
@@ -310,14 +312,14 @@ const Login: React.FC = () => {
                         },
                       }}
                     >
-                      <Typography 
-                        variant="body2" 
-                        sx={{ 
-                          px: 2, 
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          px: 2,
                           color: 'text.secondary',
                         }}
                       >
-                        or
+                        {t('common.or')}
                       </Typography>
                     </Box>
 
@@ -348,7 +350,7 @@ const Login: React.FC = () => {
                         },
                       }}
                     >
-                      {oidcLoading ? 'Redirecting...' : 'Sign in with OIDC'}
+                      {oidcLoading ? t('auth.redirecting') : t('auth.signInWithOIDC')}
                     </Button>
 
                     <Box sx={{ textAlign: 'center', mt: 2 }}>
@@ -363,12 +365,12 @@ const Login: React.FC = () => {
               <Typography
                 variant="body2"
                 sx={{
-                  color: mode === 'light' 
+                  color: mode === 'light'
                     ? 'rgba(255, 255, 255, 0.7)'
                     : 'rgba(255, 255, 255, 0.8)',
                 }}
               >
-                © 2026 Readur. Powered by advanced OCR and AI technology.
+                {t('common.copyright')}
               </Typography>
             </Box>
           </Box>

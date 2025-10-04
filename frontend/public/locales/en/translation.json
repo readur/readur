@@ -1,0 +1,1494 @@
+{
+  "common": {
+    "appName": "Readur",
+    "appTagline": "AI Document Platform",
+    "welcome": "Welcome to {{appName}}",
+    "welcomeBack": "Welcome back, {{username}}! 👋",
+    "or": "or",
+    "copyright": "© 2026 Readur. Powered by advanced OCR and AI technology.",
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "delete": "Delete",
+      "edit": "Edit",
+      "view": "View",
+      "download": "Download",
+      "upload": "Upload",
+      "search": "Search",
+      "filter": "Filter",
+      "sort": "Sort",
+      "clear": "Clear",
+      "refresh": "Refresh",
+      "retry": "Retry",
+      "create": "Create",
+      "update": "Update",
+      "viewDetails": "View Details",
+      "back": "Back"
+    },
+    "status": {
+      "loading": "Loading...",
+      "processing": "Processing...",
+      "completed": "Completed",
+      "failed": "Failed",
+      "pending": "Pending",
+      "success": "Success",
+      "error": "Error"
+    },
+    "time": {
+      "seconds": "{{count}} seconds",
+      "minutes": "{{count}} minutes",
+      "hours": "{{count}} hours",
+      "days": "{{count}} days"
+    },
+    "sizes": {
+      "bytes": "{{count}} Bytes",
+      "kb": "{{count}} KB",
+      "mb": "{{count}} MB",
+      "gb": "{{count}} GB"
+    },
+    "moreCount": "+{{count}} more",
+    "of": "of",
+    "and": "and"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "signInToAccount": "Sign in to your account",
+    "signInWithOIDC": "Sign in with OIDC",
+    "redirecting": "Redirecting...",
+    "username": "Username",
+    "password": "Password",
+    "usernameRequired": "Username is required",
+    "passwordRequired": "Password is required",
+    "logout": "Logout",
+    "profile": "Profile",
+    "intelligentDocumentPlatform": "Your intelligent document management platform",
+    "errors": {
+      "invalidCredentials": "Invalid username or password. Please check your credentials and try again.",
+      "accountDisabled": "Your account has been disabled. Please contact an administrator for assistance.",
+      "userNotFound": "No account found with this username. Please check your username or contact support.",
+      "sessionExpired": "Your session has expired. Please try logging in again.",
+      "networkError": "Network error. Please check your connection and try again.",
+      "serverError": "Server error. Please try again later or contact support if the problem persists.",
+      "oidcAuthFailed": "OIDC authentication failed. Please check with your administrator.",
+      "oidcNotConfigured": "OIDC is not configured on this server. Please use username/password login.",
+      "oidcInitFailed": "Failed to initiate OIDC login. Please try again.",
+      "loginFailed": "Failed to log in. Please check your credentials."
+    }
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "upload": "Upload",
+    "documents": "Documents",
+    "search": "Search",
+    "labels": "Labels",
+    "sources": "Sources",
+    "watchFolder": "Watch Folder",
+    "documentManagement": "Document Management",
+    "ignoredFiles": "Ignored Files"
+  },
+  "dashboard": {
+    "greeting": "Here's what's happening with your documents today.",
+    "stats": {
+      "totalDocuments": {
+        "title": "Total Documents",
+        "subtitle": "Files in your library",
+        "trend": "{{count}} total",
+        "trendEmpty": "No documents yet"
+      },
+      "storageUsed": {
+        "title": "Storage Used",
+        "subtitle": "Total file size",
+        "trend": "{{size}} used",
+        "trendEmpty": "No storage used"
+      },
+      "ocrProcessed": {
+        "title": "OCR Processed",
+        "subtitle": "Text extracted documents",
+        "trend": "{{percentage}}% completion",
+        "trendEmpty": "0% completion"
+      },
+      "searchable": {
+        "title": "Searchable",
+        "subtitle": "Ready for search",
+        "trend": "{{count}} indexed",
+        "trendEmpty": "Nothing indexed yet"
+      }
+    },
+    "recentDocuments": {
+      "title": "Recent Documents",
+      "viewAll": "View All",
+      "noDocuments": "No documents yet",
+      "uploadFirst": "Upload your first document to get started"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "upload": {
+        "title": "Upload Documents",
+        "description": "Add new files for OCR processing"
+      },
+      "search": {
+        "title": "Search Library",
+        "description": "Find documents by content or metadata"
+      },
+      "browse": {
+        "title": "Browse Documents",
+        "description": "View and manage your document library"
+      }
+    }
+  },
+  "search": {
+    "title": "Search Documents",
+    "placeholder": "Search documents by content, filename, or tags... Try 'invoice', 'contract', or tag:important",
+    "searchPlaceholder": "Search documents...",
+    "noResults": {
+      "title": "No results found for \"{{query}}\"",
+      "subtitle": "Try adjusting your search terms or filters",
+      "suggestions": {
+        "title": "Suggestions:",
+        "simpler": "Try simpler or more general terms",
+        "spelling": "Check spelling and try different keywords",
+        "removeFilters": "Remove some filters to broaden your search",
+        "useQuotes": "Use quotes for exact phrases"
+      }
+    },
+    "searching": "Searching...",
+    "searchingAsYouType": "Searching as you type...",
+    "quickResults": "Quick Results",
+    "resultsCount": "{{count}} found",
+    "viewAllResults": "View all results for \"{{query}}\"",
+    "recentSearches": "Recent Searches",
+    "startTyping": "Start typing to search documents",
+    "popularSearches": "Popular searches:",
+    "noDocumentsFound": "No documents found for \"{{query}}\"",
+    "pressEnterAdvanced": "Press Enter to search with advanced options",
+    "trySuggestions": "Try these suggestions:",
+    "settings": {
+      "title": "Search Settings"
+    },
+    "modes": {
+      "smart": "Smart",
+      "exactPhrase": "Exact phrase",
+      "similarWords": "Similar words",
+      "advanced": "Advanced",
+      "enhanced": "Enhanced"
+    },
+    "quickSuggestions": {
+      "title": "Quick suggestions:"
+    },
+    "relatedSearches": {
+      "title": "Related searches:"
+    },
+    "filters": {
+      "title": "Filters",
+      "tags": "Tags",
+      "selectTags": "Select Tags",
+      "ocrStatus": "OCR Status",
+      "ocrText": "OCR Text",
+      "allDocuments": "All Documents",
+      "hasOcrText": "Has OCR Text",
+      "noOcrText": "No OCR Text",
+      "dateRange": "Date Range",
+      "daysAgo": "Days ago: {{min}} - {{max}}",
+      "dateMarks": {
+        "today": "Today",
+        "30d": "30d",
+        "90d": "90d",
+        "1y": "1y"
+      },
+      "fileSize": "File Size",
+      "sizeRange": "Size: {{min}}MB - {{max}}MB"
+    },
+    "status": {
+      "searching": "Searching...",
+      "resultsFound": "{{count}} results found"
+    },
+    "display": {
+      "settings": "Display Settings",
+      "textSettings": "Text Display Settings",
+      "fontSizeLabel": "Font Size: {{size}}px",
+      "snippetsPerResult": "Snippets per result: {{count}}",
+      "contextLength": "Context Length: {{length}} characters",
+      "viewMode": {
+        "label": "View Mode",
+        "compact": "Compact",
+        "detailed": "Detailed",
+        "contextFocus": "Context Focus"
+      },
+      "highlightStyle": {
+        "label": "Highlight Style",
+        "background": "Background Color",
+        "underline": "Underline",
+        "bold": "Bold Text"
+      }
+    },
+    "results": {
+      "showing": "Showing:",
+      "snippetsCount": "{{count}} snippets",
+      "fontSize": "{{size}}px font",
+      "hasOcr": " • OCR",
+      "tags": "Tags:",
+      "pagination": "Showing {{start}}-{{end}} of {{total}} results"
+    },
+    "empty": {
+      "title": "Start searching your documents",
+      "subtitle": "Use the enhanced search bar above to find documents by content, filename, or tags"
+    },
+    "tips": {
+      "title": "Search Tips:",
+      "exactPhrase": "Use quotes for exact phrases: \"project plan\"",
+      "tags": "Search by tags: tag:important or tag:invoice",
+      "combine": "Combine terms: contract AND payment",
+      "wildcards": "Use wildcards: proj* for project, projects, etc."
+    },
+    "examples": {
+      "invoice": "Try: invoice",
+      "contract": "Try: contract",
+      "tagImportant": "Try: tag:important"
+    },
+    "actions": {
+      "clearFilters": "Clear Filters",
+      "newSearch": "New Search"
+    }
+  },
+  "upload": {
+    "title": "Upload Documents",
+    "subtitle": "Transform your documents with intelligent OCR processing",
+    "features": {
+      "aiOcr": {
+        "title": "AI-Powered OCR",
+        "description": "Advanced text extraction from any document type"
+      },
+      "fullTextSearch": {
+        "title": "Full-Text Search",
+        "description": "Find documents instantly by content or metadata"
+      },
+      "lightningFast": {
+        "title": "Lightning Fast",
+        "description": "Process documents in seconds, not minutes"
+      },
+      "secure": {
+        "title": "Secure & Private",
+        "description": "Your documents are encrypted and protected"
+      },
+      "multiLanguage": {
+        "title": "Multi-Language",
+        "description": "Support for 100+ languages and scripts"
+      }
+    },
+    "tips": {
+      "title": "📋 Upload Tips",
+      "highRes": "• For best OCR results, use high-resolution images",
+      "pdfText": "• PDF files with text layers are processed faster",
+      "clarity": "• Ensure documents are well-lit and clearly readable",
+      "maxSize": "• Maximum file size is 50MB per document"
+    },
+    "dropzone": {
+      "dragDrop": "Drag & drop files here",
+      "dropHere": "Drop files here",
+      "browse": "or click to browse your computer",
+      "chooseFiles": "Choose Files",
+      "maxFileSize": "Maximum file size: 50MB per file",
+      "fileTypes": {
+        "pdf": "PDF",
+        "images": "Images",
+        "text": "Text",
+        "word": "Word"
+      }
+    },
+    "languageSettings": {
+      "title": "🌐 OCR Language Settings",
+      "description": "Select languages for optimal OCR text recognition"
+    },
+    "labelAssignment": {
+      "title": "📋 Label Assignment",
+      "description": "Select labels to automatically assign to all uploaded documents",
+      "placeholder": "Choose labels for your documents...",
+      "helperText": "These labels will be applied to all uploaded documents"
+    },
+    "fileList": {
+      "title": "Files ({{count}})",
+      "clearCompleted": "Clear Completed",
+      "uploading": "Uploading... ({{completed}}/{{total}})",
+      "uploadingSimple": "Uploading...",
+      "uploadAll": "Upload All"
+    },
+    "errors": {
+      "sessionExpired": "Your session has expired. Please refresh the page and log in again.",
+      "labelPermissionDenied": "You do not have permission to access labels.",
+      "labelNetworkError": "Network error loading labels. Please check your connection.",
+      "fileTooLarge": "File is too large. Maximum size is 50MB.",
+      "unsupportedFormat": "Unsupported file format. Please use PDF, images, text, or Word documents.",
+      "processingFailed": "Failed to process document. Please try again or contact support.",
+      "permissionDenied": "You do not have permission to upload documents.",
+      "networkError": "Network error. Please check your connection and try again.",
+      "serverError": "Server error. Please try again later."
+    }
+  },
+  "documents": {
+    "title": "Documents",
+    "subtitle": "Manage and explore your document library",
+    "viewDocument": "View document",
+    "downloadDocument": "Download document",
+    "deleteDocument": "Delete document",
+    "unknownDocument": "Unknown Document",
+    "search": {
+      "placeholder": "Search documents..."
+    },
+    "selection": {
+      "select": "Select",
+      "cancel": "Cancel",
+      "count": "{{count}} of {{total}} documents selected",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "deleteSelected": "Delete Selected ({{count}})"
+    },
+    "filters": {
+      "ocrStatus": "OCR Status",
+      "all": "All",
+      "completed": "Completed",
+      "processing": "Processing",
+      "failed": "Failed",
+      "pending": "Pending"
+    },
+    "sort": {
+      "label": "Sort",
+      "newestFirst": "Newest First",
+      "oldestFirst": "Oldest First",
+      "nameAZ": "Name A-Z",
+      "nameZA": "Name Z-A",
+      "largestFirst": "Largest First",
+      "smallestFirst": "Smallest First"
+    },
+    "ocrStatus": {
+      "confidence": "OCR {{percent}}%",
+      "done": "OCR Done",
+      "processing": "Processing...",
+      "failed": "OCR Failed",
+      "pending": "Pending"
+    },
+    "actions": {
+      "editLabels": "Edit Labels",
+      "retryOcr": "Retry OCR",
+      "retryingOcr": "Retrying OCR...",
+      "retryHistory": "Retry History"
+    },
+    "empty": {
+      "title": "No documents found",
+      "searchSubtitle": "Try adjusting your search terms",
+      "uploadSubtitle": "Upload your first document to get started"
+    },
+    "dialogs": {
+      "editLabels": {
+        "title": "Edit Document Labels",
+        "placeholder": "Select labels for this document..."
+      },
+      "delete": {
+        "title": "Delete Document",
+        "message": "Are you sure you want to delete \"{{filename}}\"?",
+        "warning": "This action cannot be undone. The document file and all associated data will be permanently removed.",
+        "deleting": "Deleting...",
+        "delete": "Delete"
+      },
+      "bulkDelete": {
+        "title": "Delete Multiple Documents",
+        "message": "Are you sure you want to delete {{count}} selected document{{plural}}?",
+        "warning": "This action cannot be undone. All selected documents and their associated data will be permanently removed.",
+        "listTitle": "Documents to be deleted:",
+        "moreCount": "... and {{count}} more",
+        "deleteButton": "Delete {{count}} Document{{plural}}"
+      }
+    },
+    "pagination": {
+      "showing": "Showing {{start}}-{{end}} of {{total}} documents",
+      "withOcrStatus": " with OCR status: {{status}}",
+      "matching": " matching \"{{query}}\""
+    }
+  },
+  "documentDetails": {
+    "subtitle": "Comprehensive document analysis and metadata viewer",
+    "actions": {
+      "backToDocuments": "Back to Documents",
+      "download": "Download",
+      "viewDocument": "View Document",
+      "viewOcrText": "View OCR Text",
+      "viewProcessedImage": "View Processed Image",
+      "retryOcr": "Retry OCR",
+      "retryHistory": "Retry History",
+      "editLabels": "Edit Labels",
+      "deleteDocument": "Delete Document"
+    },
+    "errors": {
+      "notFound": "Document not found"
+    },
+    "metadata": {
+      "fileSize": "File Size",
+      "uploadDate": "Upload Date",
+      "sourceType": "Source Type",
+      "originalPath": "Original Path",
+      "originalCreated": "Original Created",
+      "originalModified": "Original Modified",
+      "ocrStatus": "OCR Status",
+      "textExtracted": "Text Extracted"
+    },
+    "ocr": {
+      "title": "🔍 Extracted Text (OCR)",
+      "expandTooltip": "Expand to view full text with search",
+      "expand": "Expand",
+      "loading": "Loading OCR analysis...",
+      "confidence": "Confidence",
+      "words": "Words",
+      "processingTime": "Processing Time",
+      "error": "OCR Processing Error",
+      "noText": "No OCR text available for this document.",
+      "completed": "✅ Processing completed: {{date}}",
+      "loadFailed": "OCR text is available but failed to load. Please try refreshing the page."
+    },
+    "tagsLabels": {
+      "title": "🏷️ Tags & Labels",
+      "tags": "Tags",
+      "labels": "Labels",
+      "noLabels": "No labels assigned to this document"
+    },
+    "dialogs": {
+      "ocrText": {
+        "title": "Extracted Text (OCR)",
+        "confidence": "{{percent}}% confidence",
+        "words": "{{count}} words",
+        "loading": "Loading OCR text...",
+        "error": "OCR Error: {{message}}",
+        "noText": "No OCR text available for this document.",
+        "processingTime": "Processing time: {{time}}ms",
+        "completed": "Completed: {{date}}"
+      },
+      "ocrExpanded": {
+        "title": "🔍 Extracted Text (OCR) - Full View",
+        "searchPlaceholder": "Search within extracted text...",
+        "matches": "{{count}} match{{plural}} found",
+        "noMatches": "No matches found",
+        "loading": "Loading OCR text...",
+        "error": "OCR Error: {{message}}",
+        "noText": "No OCR text available for this document."
+      },
+      "processedImage": {
+        "title": "Processed Image - OCR Enhancement Applied",
+        "description": "This is the enhanced image that was actually processed by the OCR engine. You can adjust OCR enhancement settings in the Settings page.",
+        "noImage": "No processed image available"
+      },
+      "editLabels": {
+        "title": "Edit Document Labels",
+        "description": "Select labels to assign to this document",
+        "placeholder": "Choose labels for this document...",
+        "saveLabels": "Save Labels"
+      },
+      "delete": {
+        "title": "Delete Document",
+        "warning": "This action cannot be undone.",
+        "message": "Are you sure you want to delete <strong>{{filename}}</strong>?",
+        "details": "This will permanently remove the document and all associated data including OCR text, labels, and processing history.",
+        "deleting": "Deleting...",
+        "delete": "Delete Document"
+      }
+    }
+  },
+  "ignoredFiles": {
+    "title": "Ignored Files",
+    "subtitle": "View and manage files that were intentionally ignored during processing",
+    "filters": {
+      "searchPlaceholder": "Search by filename or path...",
+      "reason": "Reason",
+      "allReasons": "All Reasons",
+      "duplicateHash": "Duplicate Hash",
+      "tooLarge": "Too Large",
+      "unsupportedFormat": "Unsupported Format",
+      "excluded": "Excluded",
+      "permissionDenied": "Permission Denied",
+      "corrupted": "Corrupted",
+      "other": "Other"
+    },
+    "table": {
+      "filename": "Filename",
+      "path": "Path",
+      "reason": "Reason",
+      "size": "Size",
+      "ignoredAt": "Ignored At"
+    },
+    "empty": {
+      "title": "No Ignored Files",
+      "subtitle": "No files have been ignored. All processed files were successfully handled."
+    },
+    "noResults": {
+      "title": "No Results Found",
+      "subtitle": "No ignored files match your current filters. Try adjusting your search or filter criteria."
+    },
+    "pagination": {
+      "showing": "Showing {{start}}-{{end}} of {{total}} ignored files"
+    },
+    "errors": {
+      "loadFailed": "Failed to load ignored files",
+      "tryAgain": "Please try again later"
+    },
+    "reasons": {
+      "duplicate_hash": "Duplicate Hash - File already exists in the system",
+      "file_too_large": "File Too Large - Exceeds maximum size limit",
+      "unsupported_format": "Unsupported Format - File type not supported",
+      "excluded_by_pattern": "Excluded - File matches exclusion pattern",
+      "permission_denied": "Permission Denied - Cannot access file",
+      "file_corrupted": "File Corrupted - Cannot read or process file",
+      "unknown": "Unknown - Reason not specified"
+    }
+  },
+  "documentManagement": {
+    "title": "Document Management",
+    "retryAll": "Retry All Documents",
+    "retrying": "Retrying All...",
+    "retryFailedOnly": "Retry Failed Only",
+    "tabs": {
+      "failedDocuments": "Failed Documents{{showCount, select, true { ({{count}}) } other {}}",
+      "failedDocumentsTooltip": "View and manage documents that failed during processing (OCR, ingestion, validation, etc.)",
+      "cleanup": "Document Cleanup{{showCount, select, true { ({{count}}) } other {}}",
+      "cleanupTooltip": "Manage and clean up documents with quality issues - low OCR confidence or failed processing",
+      "duplicates": "Duplicate Files{{showCount, select, true { ({{count}}) } other {}}",
+      "duplicatesTooltip": "View and manage duplicate document groups - documents with identical content",
+      "ignoredFiles": "Ignored Files{{showCount, select, true { ({{count}}) } other {}}",
+      "ignoredFilesTooltip": "Manage files that have been ignored during sync operations"
+    },
+    "stats": {
+      "totalFailed": "Total Failed",
+      "failureCategories": "Failure Categories",
+      "noFailureData": "No failure data available"
+    },
+    "advancedRetry": {
+      "title": "Advanced Retry Options",
+      "button": "Advanced Retry",
+      "description": "Use advanced filtering and selection options to retry specific subsets of failed documents based on file type, failure reason, size, and more."
+    },
+    "filters": {
+      "title": "Filter Options",
+      "stage": "Filter by Stage",
+      "reason": "Filter by Reason",
+      "allStages": "All Stages",
+      "allReasons": "All Reasons",
+      "clearFilters": "Clear Filters",
+      "stages": {
+        "ocr": "OCR Processing",
+        "ingestion": "Document Ingestion",
+        "validation": "Validation",
+        "storage": "File Storage",
+        "processing": "Processing",
+        "sync": "Synchronization"
+      },
+      "reasons": {
+        "duplicateContent": "Duplicate Content",
+        "lowConfidence": "Low OCR Confidence",
+        "unsupportedFormat": "Unsupported Format",
+        "fileTooLarge": "File Too Large",
+        "fileCorrupted": "File Corrupted",
+        "ocrTimeout": "OCR Timeout",
+        "pdfParsingError": "PDF Parsing Error",
+        "other": "Other"
+      }
+    },
+    "alerts": {
+      "noFailedTitle": "Great news!",
+      "noFailedMessage": "No documents have failed OCR processing. All your documents are processing successfully.",
+      "overviewTitle": "Failed Documents Overview",
+      "overviewMessage": "These documents failed at various stages of processing: ingestion, validation, OCR, storage, etc. Use the filters above to narrow down by failure stage or specific reason. You can retry processing for recoverable failures."
+    },
+    "table": {
+      "document": "Document",
+      "failureType": "Failure Type",
+      "retryCount": "Retry Count",
+      "lastFailed": "Last Failed",
+      "actions": "Actions",
+      "attempts": "{{count}} attempts",
+      "unknown": "Unknown"
+    },
+    "actions": {
+      "retryOcr": "Retry OCR",
+      "viewDetails": "View Details",
+      "retryHistory": "Retry History",
+      "download": "Download Document"
+    },
+    "details": {
+      "errorDetails": "Error Details",
+      "failureReason": "Failure Reason",
+      "notSpecified": "Not specified",
+      "ocrResults": "OCR Results",
+      "confidencePercent": "{{percent}}% confidence",
+      "wordsFound": "{{count}} words found",
+      "errorMessage": "Error Message",
+      "noErrorMessage": "No error message available",
+      "lastAttempt": "Last Attempt",
+      "noPreviousAttempts": "No previous attempts",
+      "fileCreated": "File Created"
+    },
+    "retry": {
+      "queuedSuccess": "OCR retry queued for \"{{filename}}\". Estimated wait time: {{minutes}} minutes.",
+      "unknown": "Unknown",
+      "failed": "Failed to retry OCR",
+      "processingFailed": "Failed to retry OCR processing",
+      "bulkSuccess": "Successfully queued {{count}} documents for OCR retry. Estimated processing time: {{minutes}} minutes.",
+      "noDocuments": "No documents found to retry",
+      "bulkFailed": "Failed to retry documents. Please try again.",
+      "requeuedSuccess": "Successfully queued {{count}} failed documents for OCR retry. Check the queue stats for progress.",
+      "noFailedDocuments": "No failed documents found to retry",
+      "requeuedFailed": "Failed to retry all failed OCR documents",
+      "advancedSuccess": "Successfully queued {{queued}} of {{matched}} documents for retry. Estimated processing time: {{minutes}} minutes."
+    },
+    "cleanup": {
+      "previewFailed": "Failed to preview low confidence documents",
+      "noDocuments": "No documents to delete",
+      "deleteFailed": "Failed to delete low confidence documents",
+      "previewFailedDocs": "Failed to preview failed documents",
+      "deleteFailedDocs": "Failed to delete failed documents"
+    },
+    "ignoredFiles": {
+      "removedSuccess": "Files removed from ignored list",
+      "deleteFailed": "Failed to delete ignored files",
+      "fileRemovedSuccess": "File removed from ignored list",
+      "fileDeleteFailed": "Failed to delete ignored file"
+    },
+    "errors": {
+      "loadFailedDocuments": "Failed to load failed documents",
+      "sessionExpired": "Your session has expired. Please refresh the page and log in again.",
+      "permissionDenied": "You do not have permission to view failed documents.",
+      "noFailedDocumentsFound": "No failed documents found or they may have been processed.",
+      "networkError": "Network error. Please check your connection and try again.",
+      "serverError": "Server error. Please try again later.",
+      "loadDuplicates": "Failed to load duplicate documents",
+      "permissionDeniedDuplicates": "You do not have permission to view duplicate documents.",
+      "documentNotFound": "Document not found. It may have been deleted or processed already.",
+      "cannotRetry": "Document cannot be retried due to processing issues. Please check the document format.",
+      "permissionDeniedRetry": "You do not have permission to retry OCR processing.",
+      "serverErrorSupport": "Server error. Please try again later or contact support.",
+      "loadIgnoredFiles": "Failed to load ignored files",
+      "permissionDeniedIgnored": "You do not have permission to view ignored files."
+    }
+  },
+  "watchFolder": {
+    "title": "Watch Folder",
+    "refreshAll": "Refresh All",
+    "retryFailedJobs": "Retry {{count}} Failed Jobs",
+    "requeuing": "Requeuing...",
+    "personalWatchDirectory": "Personal Watch Directory",
+    "admin": "Admin",
+    "directoryStatus": "Directory Status",
+    "directoryExists": "Directory Exists",
+    "directoryMissing": "Directory Missing",
+    "watchStatus": "Watch Status",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "yourPersonalWatchDirectory": "Your Personal Watch Directory",
+    "directoryNotExist": "Your personal watch directory doesn't exist yet. Create it to start uploading files to your own dedicated folder.",
+    "creatingDirectory": "Creating Directory...",
+    "createPersonalDirectory": "Create Personal Directory",
+    "unableToLoad": "Unable to load personal watch directory information. Please try refreshing the page.",
+    "systemConfiguration": "System Configuration",
+    "globalWatchFolderConfiguration": "Global Watch Folder Configuration",
+    "adminOnly": "Admin Only",
+    "systemWideInfo": "This is the system-wide watch folder configuration. All users can view this information.",
+    "watchedDirectory": "Watched Directory",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "watchStrategy": "Watch Strategy",
+    "scanInterval": "Scan Interval",
+    "seconds": "{{count}} seconds",
+    "maxFileAge": "Max File Age",
+    "hours": "{{count}} hours",
+    "supportedFileTypes": "Supported File Types",
+    "processingQueue": "Processing Queue",
+    "pending": "Pending",
+    "processing": "Processing",
+    "failed": "Failed",
+    "completedToday": "Completed Today",
+    "averageWaitTime": "Average Wait Time",
+    "oldestPendingItem": "Oldest Pending Item",
+    "lastUpdated": "Last updated: {{time}}",
+    "howWatchFolderWorks": "How Watch Folder Works",
+    "watchFolderDescription": "The watch folder system automatically monitors the configured directory for new files and processes them for OCR.",
+    "processingPipeline": "Processing Pipeline:",
+    "pipelineSteps": {
+      "fileDetection": "File Detection: New files are detected using hybrid watching (inotify + polling)",
+      "validation": "Validation: Files are checked for supported format and size limits",
+      "deduplication": "Deduplication: System prevents processing of duplicate files",
+      "storage": "Storage: Files are moved to the document storage system",
+      "ocrQueue": "OCR Queue: Documents are queued for OCR processing with priority"
+    },
+    "hybridStrategyInfo": "The system uses a hybrid watching strategy that automatically detects filesystem type and chooses the optimal monitoring approach (inotify for local filesystems, polling for network mounts)."
+  },
+  "settings": {
+    "title": "Settings",
+    "apiDocumentation": "API Documentation",
+    "debug": "Debug",
+    "language": "Language",
+    "selectLanguage": "Select language",
+    "tabs": {
+      "general": "General",
+      "ocrSettings": "OCR Settings",
+      "userManagement": "User Management",
+      "serverConfiguration": "Server Configuration"
+    },
+    "general": {
+      "title": "General Settings",
+      "ocrConfiguration": {
+        "title": "OCR Configuration",
+        "description": "Configure languages for OCR text extraction. Multiple languages help with mixed-language documents.",
+        "autoDetectLanguageCombination": "Auto-detect language combinations",
+        "autoDetectLanguageCombinationHelper": "Automatically suggest optimal language combinations based on document content analysis",
+        "concurrentOcrJobs": "Concurrent OCR Jobs",
+        "concurrentOcrJobsHelper": "Number of OCR jobs that can run simultaneously",
+        "ocrTimeout": "OCR Timeout (seconds)",
+        "ocrTimeoutHelper": "Maximum time for OCR processing per file",
+        "cpuPriority": "CPU Priority",
+        "cpuPriorityLow": "Low",
+        "cpuPriorityNormal": "Normal",
+        "cpuPriorityHigh": "High"
+      },
+      "ocrControls": {
+        "title": "OCR Processing Controls (Admin Only)",
+        "description": "Control OCR processing to manage CPU usage and allow users to use the application without performance impact.",
+        "pauseOcr": "Pause OCR Processing",
+        "resumeOcr": "Resume OCR Processing",
+        "ocrStatusLabel": "OCR Status: {{status}}",
+        "ocrPausedMessage": "OCR processing is paused. No new jobs will be processed.",
+        "ocrActiveMessage": "OCR processing is active. Documents will be processed automatically.",
+        "pausedAlertTitle": "OCR Processing Paused",
+        "pausedAlertMessage": "New documents will not be processed for OCR text extraction until processing is resumed. Users can still upload and view documents, but search functionality may be limited."
+      },
+      "fileProcessing": {
+        "title": "File Processing",
+        "maxFileSize": "Max File Size (MB)",
+        "maxFileSizeHelper": "Maximum allowed file size for uploads",
+        "memoryLimit": "Memory Limit (MB)",
+        "memoryLimitHelper": "Memory limit per OCR job",
+        "autoRotateImages": "Auto-rotate Images",
+        "autoRotateImagesHelper": "Automatically detect and correct image orientation",
+        "enableImagePreprocessing": "Enable Image Preprocessing",
+        "enableImagePreprocessingHelper": "Enhance images for better OCR accuracy (deskew, denoise, contrast)",
+        "preprocessingWarning": "⚠️ Warning: Enabling preprocessing can significantly alter OCR text results and may reduce accuracy for some documents",
+        "enableBackgroundOcr": "Enable Background OCR",
+        "enableBackgroundOcrHelper": "Process OCR in the background after file upload"
+      },
+      "searchConfiguration": {
+        "title": "Search Configuration",
+        "resultsPerPage": "Results Per Page",
+        "snippetLength": "Snippet Length",
+        "snippetLengthHelper": "Characters to show in search result previews",
+        "fuzzySearchThreshold": "Fuzzy Search Threshold",
+        "fuzzySearchThresholdHelper": "Tolerance for spelling mistakes (0.0-1.0)"
+      },
+      "storageManagement": {
+        "title": "Storage Management",
+        "retentionDays": "Retention Days",
+        "retentionDaysHelper": "Auto-delete documents after X days (leave empty to disable)",
+        "enableAutoCleanup": "Enable Auto Cleanup",
+        "enableAutoCleanupHelper": "Automatically remove orphaned files and clean up storage",
+        "enableCompression": "Enable Compression",
+        "enableCompressionHelper": "Compress stored documents to save disk space"
+      }
+    },
+    "ocrSettings": {
+      "title": "OCR Image Processing Settings",
+      "enhancementControls": {
+        "title": "Enhancement Controls",
+        "skipEnhancement": "Skip All Image Enhancement (Use Original Images Only)",
+        "brightnessBoost": "Brightness Boost",
+        "brightnessBoostHelper": "Manual brightness adjustment (0 = auto, >0 = boost amount)",
+        "contrastMultiplier": "Contrast Multiplier",
+        "contrastMultiplierHelper": "Manual contrast adjustment (1.0 = auto, >1.0 = increase)",
+        "noiseReductionLevel": "Noise Reduction Level",
+        "noiseReductionNone": "None",
+        "noiseReductionLight": "Light",
+        "noiseReductionModerate": "Moderate",
+        "noiseReductionHeavy": "Heavy",
+        "sharpeningStrength": "Sharpening Strength",
+        "sharpeningStrengthHelper": "Image sharpening amount (0 = auto, >0 = manual)"
+      },
+      "qualityThresholds": {
+        "title": "Quality Thresholds (when to apply enhancements)",
+        "brightnessThreshold": "Brightness Threshold",
+        "brightnessThresholdHelper": "Enhance if brightness below this value (0-255)",
+        "contrastThreshold": "Contrast Threshold",
+        "contrastThresholdHelper": "Enhance if contrast below this value (0-1)",
+        "noiseThreshold": "Noise Threshold",
+        "noiseThresholdHelper": "Enhance if noise above this value (0-1)",
+        "sharpnessThreshold": "Sharpness Threshold",
+        "sharpnessThresholdHelper": "Enhance if sharpness below this value (0-1)"
+      },
+      "advancedProcessing": {
+        "title": "Advanced Processing Options",
+        "morphologicalOperations": "Morphological Operations (text cleanup)",
+        "histogramEqualization": "Histogram Equalization",
+        "saveProcessedImages": "Save Processed Images for Review",
+        "adaptiveThresholdWindowSize": "Adaptive Threshold Window Size",
+        "adaptiveThresholdWindowSizeHelper": "Window size for contrast enhancement (odd number)"
+      },
+      "imageSizeScaling": {
+        "title": "Image Size and Scaling",
+        "maxImageWidth": "Max Image Width",
+        "maxImageWidthHelper": "Maximum image width in pixels",
+        "maxImageHeight": "Max Image Height",
+        "maxImageHeightHelper": "Maximum image height in pixels",
+        "upscaleFactor": "Upscale Factor",
+        "upscaleFactorHelper": "Image scaling factor (1.0 = no scaling)"
+      }
+    },
+    "userManagement": {
+      "title": "User Management",
+      "addUser": "Add User",
+      "tableHeaders": {
+        "username": "Username",
+        "email": "Email",
+        "createdAt": "Created At",
+        "watchDirectory": "Watch Directory",
+        "actions": "Actions"
+      },
+      "watchDirectory": {
+        "statusActive": "Active",
+        "statusDisabled": "Disabled",
+        "statusNotCreated": "Not Created",
+        "statusUnknown": "Unknown",
+        "loading": "Loading...",
+        "createDirectory": "Create watch directory",
+        "viewDirectory": "View watch directory",
+        "removeDirectory": "Remove watch directory (Admin only)",
+        "editUser": "Edit user",
+        "deleteUser": "Delete user"
+      },
+      "dialogs": {
+        "createUser": "Create New User",
+        "editUser": "Edit User",
+        "username": "Username",
+        "email": "Email",
+        "password": "Password",
+        "newPassword": "New Password (leave empty to keep current)"
+      },
+      "confirmRemoveDirectory": {
+        "title": "Remove Watch Directory",
+        "message": "Are you sure you want to remove the watch directory for user \"{{username}}\"? This action cannot be undone and will stop monitoring their directory for new files.",
+        "removeButton": "Remove Directory"
+      }
+    },
+    "serverConfiguration": {
+      "title": "Server Configuration (Admin Only)",
+      "fileUpload": {
+        "title": "File Upload Configuration",
+        "maxFileSize": "Max File Size",
+        "uploadPath": "Upload Path",
+        "allowedFileTypes": "Allowed File Types",
+        "watchFolder": "Watch Folder"
+      },
+      "ocrProcessing": {
+        "title": "OCR Processing Configuration",
+        "concurrentOcrJobs": "Concurrent OCR Jobs",
+        "ocrTimeout": "OCR Timeout",
+        "memoryLimit": "Memory Limit",
+        "ocrLanguage": "OCR Language",
+        "cpuPriority": "CPU Priority",
+        "backgroundOcr": "Background OCR",
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      },
+      "serverInformation": {
+        "title": "Server Information",
+        "serverHost": "Server Host",
+        "serverPort": "Server Port",
+        "jwtSecret": "JWT Secret",
+        "configured": "Configured",
+        "notSet": "Not Set",
+        "version": "Version",
+        "buildInformation": "Build Information"
+      },
+      "watchFolderConfiguration": {
+        "title": "Watch Folder Configuration",
+        "watchInterval": "Watch Interval",
+        "fileStabilityCheck": "File Stability Check",
+        "maxFileAge": "Max File Age"
+      },
+      "refreshConfiguration": "Refresh Configuration",
+      "loadFailed": "Failed to load server configuration. Admin access may be required."
+    },
+    "messages": {
+      "settingsUpdated": "Settings updated successfully",
+      "settingsUpdateFailed": "Failed to update settings",
+      "invalidLanguage": "Invalid language selected. Please choose from available languages.",
+      "valueOutOfRange": "{{message}}. {{suggestedAction}}",
+      "conflictingSettings": "Conflicting settings detected. Please review your configuration.",
+      "userCreated": "User created successfully",
+      "userUpdated": "User updated successfully",
+      "userDeleted": "User deleted successfully",
+      "cannotDeleteSelf": "You cannot delete your own account",
+      "confirmDeleteUser": "Are you sure you want to delete this user?",
+      "duplicateUsername": "This username is already taken. Please choose a different username.",
+      "duplicateEmail": "This email address is already in use. Please use a different email.",
+      "invalidPassword": "Password must be at least 8 characters with uppercase, lowercase, and numbers.",
+      "invalidEmail": "Please enter a valid email address.",
+      "invalidUsername": "Username contains invalid characters. Please use only letters, numbers, and underscores.",
+      "permissionDenied": "You do not have permission to perform this action.",
+      "cannotDeleteUser": "Cannot delete this user: They may have associated data or be the last admin.",
+      "userNotFound": "User not found. They may have already been deleted.",
+      "watchDirectoryCreated": "Watch directory created successfully",
+      "watchDirectoryCreatedFailed": "Failed to create watch directory",
+      "watchDirectoryAlreadyExists": "Watch directory already exists for this user",
+      "watchDirectoryPath": "Watch directory: {{path}}",
+      "watchDirectoryRemoved": "Watch directory removed successfully",
+      "watchDirectoryRemoveFailed": "Failed to remove watch directory",
+      "watchDirectoryNotFound": "Watch directory not found or already removed",
+      "ocrPaused": "OCR processing paused successfully",
+      "ocrPauseFailed": "Admin access required to pause OCR processing",
+      "ocrPauseFailedGeneric": "Failed to pause OCR processing",
+      "ocrResumed": "OCR processing resumed successfully",
+      "ocrResumeFailed": "Admin access required to resume OCR processing",
+      "ocrResumeFailedGeneric": "Failed to resume OCR processing",
+      "serverConfigLoadFailed": "Admin access required to view server configuration",
+      "serverConfigLoadFailedGeneric": "Failed to load server configuration"
+    }
+  },
+  "labels": {
+    "title": "Label Management",
+    "loading": "Loading labels...",
+    "search": {
+      "placeholder": "Search labels..."
+    },
+    "filters": {
+      "systemLabels": "System Labels"
+    },
+    "sections": {
+      "systemLabels": "System Labels",
+      "myLabels": "My Labels"
+    },
+    "badge": {
+      "system": "System"
+    },
+    "stats": {
+      "documents": "Documents: {{count}}",
+      "sources": "Sources: {{count}}"
+    },
+    "actions": {
+      "createLabel": "Create Label",
+      "editLabel": "Edit label",
+      "deleteLabel": "Delete label"
+    },
+    "create": {
+      "title": "Create New Label",
+      "editTitle": "Edit Label",
+      "nameLabel": "Label Name",
+      "nameRequired": "Name is required",
+      "descriptionLabel": "Description (optional)",
+      "colorLabel": "Color",
+      "customColorLabel": "Custom Color (hex)",
+      "iconLabel": "Icon (optional)",
+      "iconNone": "None",
+      "previewLabel": "Preview",
+      "cancel": "Cancel",
+      "create": "Create",
+      "update": "Update",
+      "saving": "Saving..."
+    },
+    "selector": {
+      "placeholder": "Search or create labels...",
+      "systemLabels": "System Labels",
+      "myLabels": "My Labels",
+      "createLabel": "Create label \"{{name}}\"",
+      "noLabelsFound": "No labels found",
+      "noLabelsMatch": "No labels match \"{{query}}\"",
+      "noLabelsAvailable": "No labels available"
+    },
+    "empty": {
+      "title": "No labels found",
+      "noMatch": "No labels match \"{{query}}\"",
+      "noLabels": "You haven't created any labels yet",
+      "createFirst": "Create Your First Label"
+    },
+    "dialogs": {
+      "delete": {
+        "title": "Delete Label",
+        "message": "Are you sure you want to delete the label \"{{name}}\"?",
+        "inUseWarning": " This label is currently used by {{count}} document(s)."
+      }
+    },
+    "errors": {
+      "sessionExpired": "Your session has expired. Please log in again.",
+      "permissionDenied": "You do not have permission to view labels.",
+      "serverError": "Server error. Please try again later.",
+      "networkError": "Network error. Please check your connection and try again.",
+      "loadFailed": "Failed to load labels. Please check your connection.",
+      "notFound": "Label not found. It may have been deleted by another user.",
+      "duplicateName": "A label with this name already exists. Please choose a different name.",
+      "systemModification": "System labels cannot be modified. Only user-created labels can be edited.",
+      "alreadyDeleted": "Label not found. It may have already been deleted.",
+      "inUse": "Cannot delete label because it is currently assigned to documents. Please remove the label from all documents first.",
+      "systemDelete": "System labels cannot be deleted. Only user-created labels can be removed.",
+      "invalidName": "Label name contains invalid characters. Please use only letters, numbers, and basic punctuation.",
+      "invalidColor": "Invalid color format. Please use a valid hex color like #0969da.",
+      "maxLabelsReached": "Maximum number of labels reached. Please delete some labels before creating new ones."
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllAsRead": "Mark all as read",
+    "clearAll": "Clear all",
+    "noNotifications": "No notifications"
+  },
+  "ocr": {
+    "languageSelector": {
+      "label": "OCR Language",
+      "loading": "Loading languages...",
+      "error": "Failed to load OCR languages",
+      "retry": "Retry",
+      "fallback": "English (Fallback)",
+      "current": "Current",
+      "languagesAvailable": "{{count}} language{{plural}} available",
+      "selectingWillUpdate": "Selecting \"{{language}}\" will update your default language"
+    }
+  },
+  "register": {
+    "title": "Create your Readur account",
+    "fields": {
+      "username": "Username",
+      "email": "Email",
+      "password": "Password"
+    },
+    "placeholders": {
+      "username": "Username",
+      "email": "Email",
+      "password": "Password"
+    },
+    "actions": {
+      "signup": "Sign up",
+      "creating": "Creating account..."
+    },
+    "links": {
+      "signin": "Already have an account? Sign in"
+    },
+    "errors": {
+      "failed": "Failed to register"
+    }
+  },
+  "debug": {
+    "title": "Document Processing Debug",
+    "subtitle": "Upload documents or analyze existing ones to troubleshoot OCR processing issues",
+    "errors": {
+      "enterDocumentId": "Please enter a document ID",
+      "documentNotFound": "Document {{documentId}} not found. It may still be processing or may have been moved to failed documents.",
+      "fetchFailed": "Failed to fetch debug information: {{message}}",
+      "debugError": "Debug Error"
+    },
+    "upload": {
+      "title": "Upload Document for Debug Analysis",
+      "description": "Upload a PDF or image file to analyze the processing pipeline in real-time",
+      "selectFile": "Please select a file to upload",
+      "uploading": "Uploading file...",
+      "uploadedStartingOcr": "Document uploaded successfully. Starting OCR processing...",
+      "uploadFailed": "Failed to upload document",
+      "uploadFailedStatus": "Upload failed",
+      "selectFileButton": "Select File",
+      "uploadDebugButton": "Upload & Debug",
+      "uploadingButton": "Uploading...",
+      "uploadProgress": "Upload Progress: {{percent}}%",
+      "selected": "Selected:",
+      "documentId": "Document ID:"
+    },
+    "monitoring": {
+      "processingComplete": "Processing {{status}}!",
+      "ocrInProgress": "OCR processing in progress...",
+      "queuedForOcr": "Document queued for OCR processing...",
+      "checkingStatus": "Checking processing status...",
+      "monitoringTimeout": "Monitoring stopped (timeout)"
+    },
+    "search": {
+      "title": "Debug Existing Document",
+      "description": "Enter a document ID to analyze the processing pipeline for an existing document",
+      "documentIdLabel": "Document ID",
+      "documentIdPlaceholder": "e.g., 123e4567-e89b-12d3-a456-426614174000",
+      "debugButton": "Debug"
+    },
+    "tabs": {
+      "uploadAndDebug": "Upload & Debug",
+      "searchExisting": "Search Existing",
+      "debugResults": "Debug Results"
+    },
+    "actions": {
+      "debugAnalysis": "Debug Analysis",
+      "showDebugDetails": "Show Debug Details",
+      "refreshStatus": "Refresh Status",
+      "viewDocument": "View Document"
+    },
+    "document": {
+      "title": "Document: {{filename}}",
+      "status": "Status: {{status}}",
+      "debugRunAt": "Debug run at: {{timestamp}}"
+    },
+    "pipeline": {
+      "title": "Processing Pipeline"
+    },
+    "steps": {
+      "fileInformation": {
+        "title": "File Information",
+        "filename": "Filename:",
+        "original": "Original:",
+        "size": "Size:",
+        "mimeType": "MIME Type:",
+        "fileExists": "File Exists:",
+        "yes": "Yes",
+        "no": "No"
+      },
+      "fileMetadata": {
+        "title": "File Metadata",
+        "actualSize": "Actual Size:",
+        "isFile": "Is File:",
+        "modified": "Modified:",
+        "created": "Created:",
+        "unknown": "Unknown",
+        "notAvailable": "File metadata not available"
+      },
+      "fileAnalysis": {
+        "title": "Detailed File Analysis",
+        "basicAnalysis": "Basic Analysis",
+        "fileType": "File Type:",
+        "size": "Size:",
+        "readable": "Readable:",
+        "fileError": "File Error:",
+        "pdfAnalysis": "PDF Analysis",
+        "validPdf": "Valid PDF:",
+        "pdfVersion": "PDF Version:",
+        "pages": "Pages:",
+        "hasText": "Has Text:",
+        "hasImages": "Has Images:",
+        "encrypted": "Encrypted:",
+        "fontCount": "Font Count:",
+        "textLength": "Text Length:",
+        "chars": "chars",
+        "pdfTextExtractionError": "PDF Text Extraction Error:",
+        "textPreview": "Text Preview",
+        "fileContent": "File Content",
+        "noPreview": "No preview available for this file type"
+      },
+      "queueStatus": {
+        "title": "Queue Status",
+        "userOcrEnabled": "User OCR Enabled:",
+        "queueEntries": "Queue Entries:",
+        "queueHistory": "Queue History",
+        "status": "Status",
+        "priority": "Priority",
+        "created": "Created",
+        "started": "Started",
+        "completed": "Completed",
+        "attempts": "Attempts",
+        "worker": "Worker"
+      },
+      "ocrResults": {
+        "title": "OCR Results",
+        "textLength": "Text Length:",
+        "characters": "characters",
+        "confidence": "Confidence:",
+        "wordCount": "Word Count:",
+        "processingTime": "Processing Time:",
+        "completedAt": "Completed:",
+        "notCompleted": "Not completed",
+        "processingDetails": "Processing Details",
+        "hasProcessedImage": "Has Processed Image:",
+        "imageSize": "Image Size:",
+        "fileSize": "File Size:",
+        "processingSteps": "Processing Steps:",
+        "none": "None",
+        "processingParameters": "Processing Parameters:"
+      },
+      "qualityValidation": {
+        "title": "Quality Thresholds",
+        "minConfidence": "Min Confidence:",
+        "brightness": "Brightness:",
+        "contrast": "Contrast:",
+        "noise": "Noise:",
+        "sharpness": "Sharpness:",
+        "actualValues": "Actual Values",
+        "confidence": "Confidence:",
+        "wordCount": "Word Count:",
+        "processedImageAvailable": "Processed Image Available:",
+        "qualityChecks": "Quality Checks"
+      }
+    },
+    "failedDocument": {
+      "title": "Failed Document Information",
+      "failureDetails": "Failure Details",
+      "failureReason": "Failure Reason:",
+      "failureStage": "Failure Stage:",
+      "retryCount": "Retry Count:",
+      "created": "Created:",
+      "lastRetry": "Last Retry:",
+      "failedOcrResults": "Failed OCR Results",
+      "ocrTextLength": "OCR Text Length:",
+      "ocrConfidence": "OCR Confidence:",
+      "wordCount": "Word Count:",
+      "processingTime": "Processing Time:",
+      "noOcrResults": "No OCR results available",
+      "errorMessage": "Error Message:",
+      "contentPreview": "Content Preview"
+    },
+    "processingLogs": {
+      "title": "Detailed Processing Logs",
+      "description": "Complete history of all OCR processing attempts for this document",
+      "attempt": "Attempt",
+      "status": "Status",
+      "priority": "Priority",
+      "created": "Created",
+      "started": "Started",
+      "completed": "Completed",
+      "duration": "Duration",
+      "waitTime": "Wait Time",
+      "attempts": "Attempts",
+      "worker": "Worker",
+      "error": "Error"
+    },
+    "fileAnalysisSummary": {
+      "title": "File Analysis Summary",
+      "fileProperties": "File Properties",
+      "fileType": "File Type:",
+      "size": "Size:",
+      "readable": "Readable:",
+      "pdfProperties": "PDF Properties",
+      "validPdf": "Valid PDF:",
+      "hasTextContent": "Has Text Content:",
+      "textLength": "Text Length:",
+      "pageCount": "Page Count:",
+      "encrypted": "Encrypted:",
+      "pdfTextExtractionIssue": "PDF Text Extraction Issue:"
+    },
+    "processedImages": {
+      "title": "Processed Images",
+      "originalDocument": "Original Document",
+      "processedImage": "Processed Image (OCR Input)",
+      "notAvailable": "Processed image not available"
+    },
+    "userSettings": {
+      "title": "User Settings",
+      "ocrSettings": "OCR Settings",
+      "backgroundOcr": "Background OCR:",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "minConfidence": "Min Confidence:",
+      "maxFileSize": "Max File Size:",
+      "qualityThresholds": "Quality Thresholds",
+      "brightness": "Brightness:",
+      "contrast": "Contrast:",
+      "noise": "Noise:",
+      "sharpness": "Sharpness:"
+    },
+    "preview": "Preview"
+  },
+  "sources": {
+    "title": "Document Sources",
+    "subtitle": "Connect and manage your document sources with intelligent syncing",
+    "empty": {
+      "title": "No Sources Configured",
+      "subtitle": "Connect your first document source to start automatically syncing and processing your files with AI-powered OCR.",
+      "addFirst": "Add Your First Source"
+    },
+    "actions": {
+      "addSource": "Add Source",
+      "editSource": "Edit Source",
+      "deleteSource": "Delete Source",
+      "testConnection": "Test Connection",
+      "testing": "Testing...",
+      "saveSource": "Save Source",
+      "createSource": "Create Source",
+      "updateSource": "Update Source",
+      "triggerSync": "Trigger Sync",
+      "stopSync": "Stop Sync",
+      "viewIgnoredFiles": "View Ignored Files",
+      "runValidation": "Run Validation Check",
+      "quickSync": "Quick Sync",
+      "deepScan": "Deep Scan"
+    },
+    "status": {
+      "autoRefreshing": "Auto-refreshing...",
+      "disabled": "Disabled",
+      "syncing": "Syncing",
+      "error": "Error",
+      "idle": "Idle"
+    },
+    "ocr": {
+      "pause": "Pause OCR",
+      "resume": "Resume OCR",
+      "pausedSuccess": "OCR processing paused successfully",
+      "pauseFailed": "Failed to pause OCR processing",
+      "resumedSuccess": "OCR processing resumed successfully",
+      "resumeFailed": "Failed to resume OCR processing"
+    },
+    "stats": {
+      "documentsStored": "Documents Stored",
+      "documentsStoredTooltip": "Total number of documents currently stored from this source",
+      "ocrProcessed": "OCR Processed",
+      "ocrProcessedTooltip": "Number of documents that have been successfully OCR'd",
+      "ocrCount": "{{count}} OCR'd",
+      "lastSync": "Last Sync",
+      "lastSyncTooltip": "When this source was last synchronized",
+      "never": "Never",
+      "filesPending": "Files Pending",
+      "filesPendingTooltip": "Files discovered but not yet processed during sync",
+      "totalSize": "Total Size",
+      "totalSizeTooltip": "Total size of files successfully downloaded from this source"
+    },
+    "types": {
+      "webdav": {
+        "name": "WebDAV",
+        "description": "Nextcloud, ownCloud, and other WebDAV servers"
+      },
+      "localFolder": {
+        "name": "Local Folder",
+        "description": "Monitor local filesystem directories"
+      },
+      "s3": {
+        "name": "S3 Compatible",
+        "description": "AWS S3, MinIO, and other S3-compatible storage"
+      }
+    },
+    "form": {
+      "sourceName": "Source Name",
+      "sourceType": "Source Type",
+      "sourceEnabled": "Source Enabled",
+      "sourceEnabledHelper": "Enable this source for syncing",
+      "sourceNamePlaceholder": "My Document Server"
+    },
+    "webdav": {
+      "title": "WebDAV Configuration",
+      "serverUrl": "Server URL",
+      "username": "Username",
+      "password": "Password",
+      "serverType": "Server Type",
+      "serverTypes": {
+        "nextcloud": "Nextcloud",
+        "nextcloudDesc": "Optimized for Nextcloud servers",
+        "owncloud": "ownCloud",
+        "owncloudDesc": "Optimized for ownCloud servers",
+        "generic": "Generic WebDAV",
+        "genericDesc": "Any standard WebDAV server"
+      }
+    },
+    "localFolder": {
+      "title": "Local Folder Configuration",
+      "description": "Monitor local filesystem directories for new documents. Ensure the application has read access to the specified paths.",
+      "recursive": "Recursive Scanning",
+      "recursiveDesc": "Scan subdirectories recursively",
+      "followSymlinks": "Follow Symbolic Links",
+      "followSymlinksDesc": "Follow symlinks when scanning directories"
+    },
+    "s3": {
+      "title": "S3 Compatible Storage Configuration",
+      "description": "Connect to AWS S3, MinIO, or any S3-compatible storage service. For MinIO, provide the endpoint URL of your server.",
+      "bucketName": "Bucket Name",
+      "region": "Region",
+      "accessKeyId": "Access Key ID",
+      "secretAccessKey": "Secret Access Key",
+      "endpointUrl": "Endpoint URL (Optional)",
+      "endpointUrlHelper": "Leave empty for AWS S3, or provide custom endpoint for MinIO/other S3-compatible storage",
+      "objectPrefix": "Object Key Prefix (Optional)",
+      "objectPrefixHelper": "Optional prefix to limit scanning to specific object keys"
+    },
+    "common": {
+      "folders": "Folders to Monitor",
+      "foldersDesc": "Specify the folders within your source to monitor for new documents",
+      "addFolder": "Add Folder Path",
+      "extensions": "File Extensions",
+      "extensionsDesc": "File types to sync and process with OCR.",
+      "addExtension": "Add Extension"
+    },
+    "advanced": {
+      "title": "Advanced Settings",
+      "description": "Configure automatic sync and advanced options",
+      "enableAutoSync": "Enable Automatic Sync",
+      "autoSyncDesc": "Automatically sync files on a schedule",
+      "autoSyncDescLocal": "Automatically scan for new files on a schedule",
+      "autoSyncDescS3": "Automatically check for new objects on a schedule",
+      "syncInterval": "Sync Interval (minutes)",
+      "syncIntervalHelper": "How often to check for new files (15 min - 24 hours)",
+      "syncIntervalHelperLocal": "How often to scan for new files (15 min - 24 hours)",
+      "syncIntervalHelperS3": "How often to check for new objects (15 min - 24 hours)"
+    },
+    "estimation": {
+      "title": "Crawl Estimation",
+      "description": "Estimate how many files will be processed and how long it will take.",
+      "estimate": "Estimate Crawl",
+      "estimating": "Estimating...",
+      "analyzing": "Analyzing folders and counting files...",
+      "results": "Estimation Results",
+      "files": "Estimated Files",
+      "time": "Estimated Time",
+      "size": "Estimated Size"
+    },
+    "dialog": {
+      "editTitle": "Edit Source",
+      "createTitle": "Create New Source",
+      "editSubtitle": "Update your source configuration",
+      "createSubtitle": "Connect a new document source"
+    },
+    "sync": {
+      "quickSyncDesc": "Fast incremental sync using ETags. Only processes new or changed files.",
+      "deepScanDesc": "Complete rescan that resets ETag expectations. Use for troubleshooting sync issues."
+    },
+    "validation": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "validating": "Validating",
+      "unknown": "Unknown",
+      "statusUnknown": "Validation status unknown",
+      "inProgress": "Validation check in progress",
+      "healthScore": "Health score: {{score}}",
+      "healthScoreIssues": "Health score: {{score}} - Issues detected",
+      "healthScoreCritical": "Health score: {{score}} - Critical issues"
+    },
+    "delete": {
+      "title": "Delete Source",
+      "message": "Are you sure you want to delete this source?",
+      "warning": "This action cannot be undone. All sync history and settings will be lost.",
+      "deleting": "Deleting..."
+    },
+    "messages": {
+      "createSuccess": "Source created successfully",
+      "updateSuccess": "Source updated successfully",
+      "deleteSuccess": "Source deleted successfully",
+      "syncStartSuccess": "Quick sync started successfully",
+      "deepScanSuccess": "Deep scan started successfully",
+      "syncStopSuccess": "Sync stopped successfully",
+      "connectionSuccess": "Connection successful!",
+      "estimationSuccess": "Crawl estimation completed"
+    },
+    "errors": {
+      "loadFailed": "Failed to load sources",
+      "saveFailed": "Failed to save source",
+      "deleteFailed": "Failed to delete source",
+      "testConnectionFailed": "Failed to test connection",
+      "syncStartFailed": "Failed to start sync",
+      "syncStopFailed": "Failed to stop sync",
+      "deepScanFailed": "Failed to start deep scan",
+      "estimateFailed": "Failed to estimate crawl",
+      "connectionFailed": "Connection failed",
+      "duplicateName": "A source with this name already exists. Please choose a different name.",
+      "invalidConfig": "Source configuration is invalid. Please check your settings and try again.",
+      "authFailed": "Authentication failed. Please verify your credentials.",
+      "connectionError": "Cannot connect to the source. Please check your network and server settings.",
+      "invalidPath": "Invalid path specified. Please check your folder paths and try again.",
+      "notFound": "Source not found. It may have already been deleted.",
+      "syncInProgress": "Cannot delete source while sync is in progress. Please stop the sync first.",
+      "alreadySyncing": "Source is already syncing. Please wait for the current sync to complete.",
+      "cannotConnect": "Cannot connect to source. Please check your connection and try again.",
+      "authFailedSource": "Authentication failed. Please verify your source credentials.",
+      "sourceDeleted": "Source not found. It may have been deleted.",
+      "connectionFailedUrl": "Connection failed. Please check your server URL and network connectivity.",
+      "authFailedCredentials": "Authentication failed. Please verify your username and password.",
+      "invalidFolderPath": "Invalid path specified. Please check your folder paths.",
+      "invalidSettings": "Configuration is invalid. Please review your settings.",
+      "timeout": "Connection timed out. Please check your network and try again.",
+      "deepScanWebdavOnly": "Deep scan is only supported for WebDAV sources",
+      "notSyncing": "Source is not currently syncing"
+    },
+    "labels": {
+      "recommended": "Recommended",
+      "notAvailable": "Not Available"
+    }
+  }
+}

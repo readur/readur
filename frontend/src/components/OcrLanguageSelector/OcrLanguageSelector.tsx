@@ -12,6 +12,7 @@ import {
   SelectChangeEvent,
 } from '@mui/material';
 import { Language as LanguageIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { ocrService, LanguageInfo } from '../../services/api';
 
 interface OcrLanguageSelectorProps {
@@ -37,6 +38,7 @@ const OcrLanguageSelector: React.FC<OcrLanguageSelectorProps> = ({
   required = false,
   helperText,
 }) => {
+  const { t } = useTranslation();
   const [languages, setLanguages] = useState<LanguageInfo[]>([]);
   const [currentUserLanguage, setCurrentUserLanguage] = useState<string>('eng');
   const [loading, setLoading] = useState<boolean>(true);
@@ -88,7 +90,7 @@ const OcrLanguageSelector: React.FC<OcrLanguageSelectorProps> = ({
         <Box sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
           <CircularProgress size={20} sx={{ mr: 1 }} />
           <Typography variant="body2" color="text.secondary">
-            Loading languages...
+            {t('ocr.languageSelector.loading')}
           </Typography>
         </Box>
       </FormControl>
@@ -98,16 +100,16 @@ const OcrLanguageSelector: React.FC<OcrLanguageSelectorProps> = ({
   if (error) {
     return (
       <Box>
-        <Alert 
-          severity="warning" 
+        <Alert
+          severity="warning"
           sx={{ mb: 1 }}
           action={
-            <Typography 
-              variant="button" 
+            <Typography
+              variant="button"
               onClick={fetchLanguages}
               sx={{ cursor: 'pointer', textDecoration: 'underline' }}
             >
-              Retry
+              {t('ocr.languageSelector.retry')}
             </Typography>
           }
         >
@@ -116,7 +118,7 @@ const OcrLanguageSelector: React.FC<OcrLanguageSelectorProps> = ({
         <FormControl fullWidth={fullWidth} size={size} disabled>
           <InputLabel>{label}</InputLabel>
           <Select value="eng">
-            <MenuItem value="eng">English (Fallback)</MenuItem>
+            <MenuItem value="eng">{t('ocr.languageSelector.fallback')}</MenuItem>
           </Select>
         </FormControl>
       </Box>
@@ -143,10 +145,10 @@ const OcrLanguageSelector: React.FC<OcrLanguageSelectorProps> = ({
                     {language.code}
                   </Typography>
                   {showCurrentIndicator && language.code === currentUserLanguage && (
-                    <Chip 
-                      label="Current" 
-                      size="small" 
-                      color="primary" 
+                    <Chip
+                      label={t('ocr.languageSelector.current')}
+                      size="small"
+                      color="primary"
                       variant="outlined"
                       sx={{ fontSize: '0.7rem', height: '20px' }}
                     />
@@ -162,12 +164,16 @@ const OcrLanguageSelector: React.FC<OcrLanguageSelectorProps> = ({
           </Typography>
         )}
       </FormControl>
-      
+
+
       {showCurrentIndicator && languages.length > 0 && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-          {languages.length} language{languages.length !== 1 ? 's' : ''} available
+          {t('ocr.languageSelector.languagesAvailable', {
+            count: languages.length,
+            plural: languages.length !== 1 ? 's' : ''
+          })}
           {value && value !== currentUserLanguage && (
-            <span> • Selecting "{getLanguageDisplay(value)}" will update your default language</span>
+            <span> • {t('ocr.languageSelector.selectingWillUpdate', { language: getLanguageDisplay(value) })}</span>
           )}
         </Typography>
       )}

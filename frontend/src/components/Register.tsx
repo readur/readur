@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 
 function Register() {
+  const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -18,7 +20,7 @@ function Register() {
     try {
       await register(username, email, password)
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to register')
+      setError(err.response?.data?.message || t('register.errors.failed'))
     } finally {
       setLoading(false)
     }
@@ -29,7 +31,7 @@ function Register() {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Create your Readur account
+            {t('register.title')}
           </h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -40,7 +42,7 @@ function Register() {
           )}
           <div>
             <label htmlFor="username" className="sr-only">
-              Username
+              {t('register.fields.username')}
             </label>
             <input
               id="username"
@@ -48,14 +50,14 @@ function Register() {
               type="text"
               required
               className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Username"
+              placeholder={t('register.placeholders.username')}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
           </div>
           <div>
             <label htmlFor="email" className="sr-only">
-              Email
+              {t('register.fields.email')}
             </label>
             <input
               id="email"
@@ -63,14 +65,14 @@ function Register() {
               type="email"
               required
               className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Email"
+              placeholder={t('register.placeholders.email')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div>
             <label htmlFor="password" className="sr-only">
-              Password
+              {t('register.fields.password')}
             </label>
             <input
               id="password"
@@ -78,7 +80,7 @@ function Register() {
               type="password"
               required
               className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Password"
+              placeholder={t('register.placeholders.password')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -89,12 +91,12 @@ function Register() {
               disabled={loading}
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              {loading ? 'Creating account...' : 'Sign up'}
+              {loading ? t('register.actions.creating') : t('register.actions.signup')}
             </button>
           </div>
           <div className="text-center">
             <Link to="/login" className="text-blue-600 hover:text-blue-500">
-              Already have an account? Sign in
+              {t('register.links.signin')}
             </Link>
           </div>
         </form>
