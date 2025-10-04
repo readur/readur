@@ -31,6 +31,7 @@ import {
   Assignment as AssignmentIcon,
   Schedule as ScheduleIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import Label, { type LabelData } from './Label';
 
 interface LabelCreateDialogProps {
@@ -80,6 +81,7 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
   prefilledName = '',
   editingLabel
 }) => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -113,9 +115,9 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim()) {
-      setNameError('Name is required');
+      setNameError(t('labels.errors.invalidName'));
       return;
     }
 
@@ -169,15 +171,15 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
       }}
     >
       <DialogTitle>
-        {editingLabel ? 'Edit Label' : 'Create New Label'}
+        {editingLabel ? t('labels.create.editTitle') : t('labels.create.title')}
       </DialogTitle>
-      
+
       <DialogContent sx={{ pt: 2 }}>
         <Grid container spacing={3}>
           {/* Name Field */}
           <Grid item xs={12}>
             <TextField
-              label="Label Name"
+              label={t('labels.create.nameLabel')}
               value={formData.name}
               onChange={(e) => {
                 setFormData({ ...formData, name: e.target.value });
@@ -195,7 +197,7 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
           {/* Description Field */}
           <Grid item xs={12}>
             <TextField
-              label="Description (optional)"
+              label={t('labels.create.descriptionLabel')}
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               fullWidth
@@ -208,7 +210,7 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
           {/* Color Selection */}
           <Grid item xs={12}>
             <Typography variant="subtitle2" gutterBottom>
-              Color
+              {t('labels.create.colorLabel')}
             </Typography>
             <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
               {predefinedColors.map((color) => (
@@ -231,7 +233,7 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
               ))}
             </Box>
             <TextField
-              label="Custom Color (hex)"
+              label={t('labels.create.customColorLabel')}
               value={formData.color}
               onChange={(e) => setFormData({ ...formData, color: e.target.value })}
               size="small"
@@ -257,7 +259,7 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
           {/* Icon Selection */}
           <Grid item xs={12}>
             <Typography variant="subtitle2" gutterBottom>
-              Icon (optional)
+              {t('labels.create.iconLabel')}
             </Typography>
             <Box display="flex" flexWrap="wrap" gap={1}>
               <IconButton
@@ -269,7 +271,7 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
                   backgroundColor: !formData.icon ? 'action.selected' : 'transparent',
                 }}
               >
-                <Typography variant="caption">None</Typography>
+                <Typography variant="caption">{t('labels.create.iconNone')}</Typography>
               </IconButton>
               {availableIcons.map((iconData) => {
                 const IconComponent = iconData.icon;
@@ -295,7 +297,7 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
           {/* Preview */}
           <Grid item xs={12}>
             <Typography variant="subtitle2" gutterBottom>
-              Preview
+              {t('labels.create.previewLabel')}
             </Typography>
             <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
               <Box display="flex" gap={1} flexWrap="wrap">
@@ -309,14 +311,14 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
 
       <DialogActions>
         <Button onClick={handleClose} disabled={loading}>
-          Cancel
+          {t('labels.create.cancel')}
         </Button>
         <Button
           type="submit"
           variant="contained"
           disabled={loading || !formData.name.trim()}
         >
-          {loading ? 'Saving...' : (editingLabel ? 'Update' : 'Create')}
+          {loading ? t('labels.create.saving') : (editingLabel ? t('labels.create.update') : t('labels.create.create'))}
         </Button>
       </DialogActions>
     </Dialog>

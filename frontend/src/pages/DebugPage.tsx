@@ -43,6 +43,7 @@ import {
   Refresh as RefreshIcon,
   Visibility as PreviewIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 
 interface DebugStep {
@@ -77,12 +78,13 @@ interface DebugInfo {
 }
 
 const DebugPage: React.FC = () => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<number>(0);
   const [documentId, setDocumentId] = useState<string>('');
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  
+
   // Upload functionality
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
@@ -126,7 +128,7 @@ const DebugPage: React.FC = () => {
   const fetchDebugInfo = useCallback(async (docId?: string, retryCount = 0) => {
     const targetDocId = docId || documentId;
     if (!targetDocId.trim()) {
-      setError('Please enter a document ID');
+      setError(t('debug.errors.enterDocumentId'));
       return;
     }
 
@@ -134,14 +136,14 @@ const DebugPage: React.FC = () => {
     if (retryCount === 0) {
       setError(''); // Only clear error on first attempt
     }
-    
+
     try {
       const response = await api.get(`/documents/${targetDocId}/debug`);
       setDebugInfo(response.data);
       setError(''); // Clear any previous errors
     } catch (err: any) {
       console.error('Debug fetch error:', err);
-      
+
       // If it's a 404 and we haven't retried much, try again after a short delay
       if (err.response?.status === 404 && retryCount < 3) {
         console.log(`Document not found, retrying in ${(retryCount + 1) * 1000}ms... (attempt ${retryCount + 1})`);
@@ -150,10 +152,10 @@ const DebugPage: React.FC = () => {
         }, (retryCount + 1) * 1000);
         return;
       }
-      
-      const errorMessage = err.response?.status === 404 
-        ? `Document ${targetDocId} not found. It may still be processing or may have been moved to failed documents.`
-        : err.response?.data?.message || `Failed to fetch debug information: ${err.message}`;
+
+      const errorMessage = err.response?.status === 404
+        ? t('debug.errors.documentNotFound', { documentId: targetDocId })
+        : err.response?.data?.message || t('debug.errors.fetchFailed', { message: err.message });
       setError(errorMessage);
       setDebugInfo(null);
     } finally {
@@ -161,7 +163,7 @@ const DebugPage: React.FC = () => {
         setLoading(false);
       }
     }
-  }, [documentId]);
+  }, [documentId, t]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -173,14 +175,14 @@ const DebugPage: React.FC = () => {
 
   const uploadDocument = useCallback(async () => {
     if (!selectedFile) {
-      setError('Please select a file to upload');
+      setError(t('debug.upload.selectFile'));
       return;
     }
 
     setUploading(true);
     setUploadProgress(0);
     setError('');
-    setProcessingStatus('Uploading file...');
+    setProcessingStatus(t('debug.upload.uploading'));
 
     try {
       const formData = new FormData();
@@ -191,7 +193,7 @@ const DebugPage: React.FC = () => {
           'Content-Type': 'multipart/form-data',
         },
         onUploadProgress: (progressEvent) => {
-          const progress = progressEvent.total 
+          const progress = progressEvent.total
             ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
             : 0;
           setUploadProgress(progress);
@@ -201,18 +203,18 @@ const DebugPage: React.FC = () => {
       const uploadedDoc = response.data;
       setUploadedDocumentId(uploadedDoc.id);
       setDocumentId(uploadedDoc.id);
-      setProcessingStatus('Document uploaded successfully. Starting OCR processing...');
-      
+      setProcessingStatus(t('debug.upload.uploadedStartingOcr'));
+
       // Start monitoring the processing
       startProcessingMonitor(uploadedDoc.id);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to upload document');
-      setProcessingStatus('Upload failed');
+      setError(err.response?.data?.message || t('debug.upload.uploadFailed'));
+      setProcessingStatus(t('debug.upload.uploadFailedStatus'));
     } finally {
       setUploading(false);
       setUploadProgress(0);
     }
-  }, [selectedFile]);
+  }, [selectedFile, t]);
 
   const startProcessingMonitor = useCallback((docId: string) => {
     // Clear any existing interval
@@ -224,23 +226,23 @@ const DebugPage: React.FC = () => {
       try {
         const response = await api.get(`/documents/${docId}`);
         const doc = response.data;
-        
+
         if (doc.ocr_status === 'completed' || doc.ocr_status === 'failed') {
-          setProcessingStatus(`Processing ${doc.ocr_status}!`);
+          setProcessingStatus(t('debug.monitoring.processingComplete', { status: doc.ocr_status }));
           clearInterval(interval);
           setMonitoringInterval(null);
-          
+
           // Auto-fetch debug info when processing is complete OR failed (but don't switch tabs)
           setTimeout(() => {
             fetchDebugInfo(docId);
             // Don't auto-switch tabs - let user decide when to view debug info
           }, 2000); // Give it a bit more time to ensure document is saved
         } else if (doc.ocr_status === 'processing') {
-          setProcessingStatus('OCR processing in progress...');
+          setProcessingStatus(t('debug.monitoring.ocrInProgress'));
         } else if (doc.ocr_status === 'pending') {
-          setProcessingStatus('Document queued for OCR processing...');
+          setProcessingStatus(t('debug.monitoring.queuedForOcr'));
         } else {
-          setProcessingStatus('Checking processing status...');
+          setProcessingStatus(t('debug.monitoring.checkingStatus'));
         }
       } catch (err) {
         console.error('Error monitoring processing:', err);
@@ -248,14 +250,14 @@ const DebugPage: React.FC = () => {
     }, 2000); // Check every 2 seconds
 
     setMonitoringInterval(interval);
-    
+
     // Auto-clear monitoring after 5 minutes
     setTimeout(() => {
       clearInterval(interval);
       setMonitoringInterval(null);
-      setProcessingStatus('Monitoring stopped (timeout)');
+      setProcessingStatus(t('debug.monitoring.monitoringTimeout'));
     }, 300000);
-  }, [monitoringInterval, fetchDebugInfo]);
+  }, [monitoringInterval, fetchDebugInfo, t]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -282,31 +284,31 @@ const DebugPage: React.FC = () => {
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom>File Information</Typography>
-                  <Typography><strong>Filename:</strong> {details.filename}</Typography>
-                  <Typography><strong>Original:</strong> {details.original_filename}</Typography>
-                  <Typography><strong>Size:</strong> {(details.file_size / 1024 / 1024).toFixed(2)} MB</Typography>
-                  <Typography><strong>MIME Type:</strong> {details.mime_type}</Typography>
-                  <Typography><strong>File Exists:</strong> <Chip 
-                    label={details.file_exists ? 'Yes' : 'No'} 
-                    color={details.file_exists ? 'success' : 'error'} 
-                    size="small" 
+                  <Typography variant="h6" gutterBottom>{t('debug.steps.fileInformation.title')}</Typography>
+                  <Typography><strong>{t('debug.steps.fileInformation.filename')}</strong> {details.filename}</Typography>
+                  <Typography><strong>{t('debug.steps.fileInformation.original')}</strong> {details.original_filename}</Typography>
+                  <Typography><strong>{t('debug.steps.fileInformation.size')}</strong> {(details.file_size / 1024 / 1024).toFixed(2)} MB</Typography>
+                  <Typography><strong>{t('debug.steps.fileInformation.mimeType')}</strong> {details.mime_type}</Typography>
+                  <Typography><strong>{t('debug.steps.fileInformation.fileExists')}</strong> <Chip
+                    label={details.file_exists ? t('debug.steps.fileInformation.yes') : t('debug.steps.fileInformation.no')}
+                    color={details.file_exists ? 'success' : 'error'}
+                    size="small"
                   /></Typography>
                 </Paper>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom>File Metadata</Typography>
+                  <Typography variant="h6" gutterBottom>{t('debug.steps.fileMetadata.title')}</Typography>
                   {details.file_metadata ? (
                     <>
-                      <Typography><strong>Actual Size:</strong> {(details.file_metadata.size / 1024 / 1024).toFixed(2)} MB</Typography>
-                      <Typography><strong>Is File:</strong> {details.file_metadata.is_file ? 'Yes' : 'No'}</Typography>
-                      <Typography><strong>Modified:</strong> {details.file_metadata.modified ? new Date(details.file_metadata.modified.secs_since_epoch * 1000).toLocaleString() : 'Unknown'}</Typography>
+                      <Typography><strong>{t('debug.steps.fileMetadata.actualSize')}</strong> {(details.file_metadata.size / 1024 / 1024).toFixed(2)} MB</Typography>
+                      <Typography><strong>{t('debug.steps.fileMetadata.isFile')}</strong> {details.file_metadata.is_file ? t('debug.steps.fileInformation.yes') : t('debug.steps.fileInformation.no')}</Typography>
+                      <Typography><strong>{t('debug.steps.fileMetadata.modified')}</strong> {details.file_metadata.modified ? new Date(details.file_metadata.modified.secs_since_epoch * 1000).toLocaleString() : t('debug.steps.fileMetadata.unknown')}</Typography>
                     </>
                   ) : (
-                    <Typography color="text.secondary">File metadata not available</Typography>
+                    <Typography color="text.secondary">{t('debug.steps.fileMetadata.notAvailable')}</Typography>
                   )}
-                  <Typography><strong>Created:</strong> {new Date(details.created_at).toLocaleString()}</Typography>
+                  <Typography><strong>{t('debug.steps.fileMetadata.created')}</strong> {new Date(details.created_at).toLocaleString()}</Typography>
                 </Paper>
               </Grid>
             </Grid>
@@ -541,12 +543,12 @@ const DebugPage: React.FC = () => {
       <Card sx={{ mb: 4 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Upload Document for Debug Analysis
+            {t('debug.upload.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Upload a PDF or image file to analyze the processing pipeline in real-time.
+            {t('debug.upload.description')}
           </Typography>
-          
+
           <Box sx={{ mb: 3 }}>
             <input
               accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp,.txt"
@@ -563,18 +565,18 @@ const DebugPage: React.FC = () => {
                 disabled={uploading}
                 sx={{ mr: 2 }}
               >
-                Select File
+                {t('debug.upload.selectFileButton')}
               </Button>
             </label>
-            
+
             {selectedFile && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="body2">
-                  <strong>Selected:</strong> {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                  <strong>{t('debug.upload.selected')}</strong> {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                 </Typography>
               </Box>
             )}
-            
+
             {selectedFile && (
               <Button
                 variant="contained"
@@ -583,15 +585,15 @@ const DebugPage: React.FC = () => {
                 startIcon={uploading ? <CircularProgress size={20} /> : <UploadIcon />}
                 sx={{ mt: 2 }}
               >
-                {uploading ? 'Uploading...' : 'Upload & Debug'}
+                {uploading ? t('debug.upload.uploadingButton') : t('debug.upload.uploadDebugButton')}
               </Button>
             )}
           </Box>
-          
+
           {uploading && uploadProgress > 0 && (
             <Box sx={{ mb: 2 }}>
               <Typography variant="body2" gutterBottom>
-                Upload Progress: {uploadProgress}%
+                {t('debug.upload.uploadProgress', { percent: uploadProgress })}
               </Typography>
               <LinearProgress variant="determinate" value={uploadProgress} />
             </Box>
@@ -615,7 +617,7 @@ const DebugPage: React.FC = () => {
           {uploadedDocumentId && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2">
-                <strong>Document ID:</strong> {uploadedDocumentId}
+                <strong>{t('debug.upload.documentId')}</strong> {uploadedDocumentId}
               </Typography>
               <Box sx={{ mt: 2 }}>
                 <Button
@@ -629,7 +631,7 @@ const DebugPage: React.FC = () => {
                   sx={{ mr: 1 }}
                   color={processingStatus.includes('failed') ? 'error' : 'primary'}
                 >
-                  {processingStatus.includes('failed') ? 'Show Debug Details' : 'Debug Analysis'}
+                  {processingStatus.includes('failed') ? t('debug.actions.showDebugDetails') : t('debug.actions.debugAnalysis')}
                 </Button>
                 <Button
                   variant="outlined"
@@ -638,7 +640,7 @@ const DebugPage: React.FC = () => {
                   startIcon={<RefreshIcon />}
                   sx={{ mr: 1 }}
                 >
-                  Refresh Status
+                  {t('debug.actions.refreshStatus')}
                 </Button>
                 <Button
                   variant="outlined"
@@ -646,7 +648,7 @@ const DebugPage: React.FC = () => {
                   onClick={() => window.open(`/api/documents/${uploadedDocumentId}/view`, '_blank')}
                   startIcon={<PreviewIcon />}
                 >
-                  View Document
+                  {t('debug.actions.viewDocument')}
                 </Button>
               </Box>
             </Box>
@@ -654,8 +656,8 @@ const DebugPage: React.FC = () => {
           
           {selectedFile && selectedFile.type.startsWith('image/') && (
             <Box sx={{ mt: 3 }}>
-              <Typography variant="h6" gutterBottom>Preview</Typography>
-              <Box 
+              <Typography variant="h6" gutterBottom>{t('debug.preview')}</Typography>
+              <Box
                 component="img"
                 src={URL.createObjectURL(selectedFile)}
                 alt="Document preview"
@@ -680,18 +682,18 @@ const DebugPage: React.FC = () => {
       <Card sx={{ mb: 4 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Debug Existing Document
+            {t('debug.search.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Enter a document ID to analyze the processing pipeline for an existing document.
+            {t('debug.search.description')}
           </Typography>
-          
+
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <TextField
-              label="Document ID"
+              label={t('debug.search.documentIdLabel')}
               value={documentId}
               onChange={(e) => setDocumentId(e.target.value)}
-              placeholder="e.g., 123e4567-e89b-12d3-a456-426614174000"
+              placeholder={t('debug.search.documentIdPlaceholder')}
               fullWidth
               size="small"
             />
@@ -701,10 +703,10 @@ const DebugPage: React.FC = () => {
               disabled={loading || !documentId.trim()}
               startIcon={loading ? <CircularProgress size={20} /> : <SearchIcon />}
             >
-              Debug
+              {t('debug.search.debugButton')}
             </Button>
           </Box>
-          
+
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {error}
@@ -720,36 +722,36 @@ const DebugPage: React.FC = () => {
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           <BugReportIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          Document Processing Debug
+          {t('debug.title')}
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Upload documents or analyze existing ones to troubleshoot OCR processing issues.
+          {t('debug.subtitle')}
         </Typography>
       </Box>
 
       <Card sx={{ mb: 4 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-            <Tab 
-              label="Upload & Debug" 
-              icon={<UploadIcon />} 
+            <Tab
+              label={t('debug.tabs.uploadAndDebug')}
+              icon={<UploadIcon />}
               iconPosition="start"
             />
-            <Tab 
-              label="Search Existing" 
-              icon={<SearchIcon />} 
+            <Tab
+              label={t('debug.tabs.searchExisting')}
+              icon={<SearchIcon />}
               iconPosition="start"
             />
             {debugInfo && (
-              <Tab 
-                label="Debug Results" 
-                icon={<PreviewIcon />} 
+              <Tab
+                label={t('debug.tabs.debugResults')}
+                icon={<PreviewIcon />}
                 iconPosition="start"
               />
             )}
           </Tabs>
         </Box>
-        
+
         <CardContent>
           {activeTab === 0 && renderUploadTab()}
           {activeTab === 1 && renderSearchTab()}
@@ -758,7 +760,7 @@ const DebugPage: React.FC = () => {
 
       {error && (
         <Alert severity="error" sx={{ mb: 4 }}>
-          <Typography variant="h6">Debug Error</Typography>
+          <Typography variant="h6">{t('debug.errors.debugError')}</Typography>
           {error}
         </Alert>
       )}
@@ -768,15 +770,15 @@ const DebugPage: React.FC = () => {
           <Card sx={{ mb: 4 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Document: {debugInfo.filename}
+                {t('debug.document.title', { filename: debugInfo.filename })}
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
-                <Chip 
-                  label={`Status: ${debugInfo.overall_status}`}
+                <Chip
+                  label={t('debug.document.status', { status: debugInfo.overall_status })}
                   color={getStatusColor(debugInfo.overall_status, debugInfo.overall_status === 'success')}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Debug run at: {new Date(debugInfo.debug_timestamp).toLocaleString()}
+                  {t('debug.document.debugRunAt', { timestamp: new Date(debugInfo.debug_timestamp).toLocaleString() })}
                 </Typography>
               </Box>
             </CardContent>
@@ -785,7 +787,7 @@ const DebugPage: React.FC = () => {
           <Card sx={{ mb: 4 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Processing Pipeline
+                {t('debug.pipeline.title')}
               </Typography>
               <Stepper orientation="vertical">
                 {(debugInfo.pipeline_steps || []).map((step) => (

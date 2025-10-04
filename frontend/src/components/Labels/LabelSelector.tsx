@@ -16,6 +16,7 @@ import {
   Button,
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import Label, { type LabelData } from './Label';
 import LabelCreateDialog from './LabelCreateDialog';
 
@@ -44,6 +45,7 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
   showCreateButton = true,
   maxTags
 }) => {
+  const { t } = useTranslation();
   const [inputValue, setInputValue] = useState('');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [prefilledName, setPrefilledName] = useState('');
@@ -116,7 +118,7 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
         inputValue={inputValue}
         onInputChange={(event, newInputValue) => setInputValue(newInputValue)}
         options={filteredOptions}
-        groupBy={(option: LabelData) => option.is_system ? 'System Labels' : 'My Labels'}
+        groupBy={(option: LabelData) => option.is_system ? t('labels.selector.systemLabels') : t('labels.selector.myLabels')}
         getOptionLabel={(option: LabelData) => option.name}
         isOptionEqualToValue={(option: LabelData, value: LabelData) => option.id === value.id}
         disabled={disabled}
@@ -130,7 +132,7 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
               endAdornment: (
                 <>
                   {canCreateNew && (
-                    <Tooltip title={`Create label "${inputValue}"`}>
+                    <Tooltip title={t('labels.selector.createLabel', { name: inputValue })}>
                       <IconButton
                         size="small"
                         onClick={handleCreateNew}
@@ -214,7 +216,7 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
                   <Box display="flex" alignItems="center" gap={1}>
                     <AddIcon fontSize="small" color="primary" />
                     <Typography variant="body2" color="primary">
-                      Create "{inputValue}"
+                      {t('labels.selector.createLabel', { name: inputValue })}
                     </Typography>
                   </Box>
                 </Box>
@@ -227,7 +229,7 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
             canCreateNew ? (
               <Box>
                 <Typography variant="body2" color="text.secondary">
-                  No labels found
+                  {t('labels.selector.noLabelsFound')}
                 </Typography>
                 <Button
                   startIcon={<AddIcon />}
@@ -235,13 +237,13 @@ const LabelSelector: React.FC<LabelSelectorProps> = ({
                   size="small"
                   sx={{ mt: 1 }}
                 >
-                  Create "{inputValue}"
+                  {t('labels.selector.createLabel', { name: inputValue })}
                 </Button>
               </Box>
             ) : (
-              `No labels match "${inputValue}"`
+              t('labels.selector.noLabelsMatch', { query: inputValue })
             )
-          ) : 'No labels available'
+          ) : t('labels.selector.noLabelsAvailable')
         }
         filterOptions={(options, { inputValue }) => {
           if (!inputValue) return options;

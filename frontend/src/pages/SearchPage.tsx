@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Typography,
@@ -140,6 +141,7 @@ interface SnippetSettings {
 }
 
 const SearchPage: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || '');
@@ -153,12 +155,12 @@ const SearchPage: React.FC = () => {
   const [searchProgress, setSearchProgress] = useState<number>(0);
   const [quickSuggestions, setQuickSuggestions] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState<boolean>(false);
-  const [searchTips] = useState<string[]>([
-    'Use quotes for exact phrases: "project plan"',
-    'Search by tags: tag:important or tag:invoice', 
-    'Combine terms: contract AND payment',
-    'Use wildcards: proj* for project, projects, etc.'
-  ]);
+  const searchTips = [
+    t('search.tips.exactPhrase'),
+    t('search.tips.tags'),
+    t('search.tips.combine'),
+    t('search.tips.wildcards')
+  ];
   
   // Search settings - consolidated into advanced settings
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
@@ -551,7 +553,7 @@ const SearchPage: React.FC = () => {
             mb: 2,
           }}
         >
-          Search Documents
+          {t('search.title')}
         </Typography>
         
         {/* Enhanced Search Bar */}
@@ -569,7 +571,7 @@ const SearchPage: React.FC = () => {
           <Box sx={{ position: 'relative' }}>
             <TextField
               fullWidth
-              placeholder="Search documents by content, filename, or tags... Try 'invoice', 'contract', or tag:important"
+              placeholder={t('search.placeholder')}
               variant="outlined"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -597,7 +599,7 @@ const SearchPage: React.FC = () => {
                           <ClearIcon />
                         </IconButton>
                       )}
-                      <Tooltip title="Search Settings">
+                      <Tooltip title={t('search.settings.title')}>
                         <IconButton
                           size="small"
                           onClick={() => setShowAdvanced(!showAdvanced)}
@@ -666,9 +668,9 @@ const SearchPage: React.FC = () => {
               gap: 2,
             }}>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-                <Chip 
+                <Chip
                   icon={<TrendingIcon />}
-                  label={`${totalResults} results`} 
+                  label={t('search.status.resultsFound', { count: totalResults })} 
                   size="small" 
                   color="primary"
                   variant="outlined"
@@ -682,9 +684,9 @@ const SearchPage: React.FC = () => {
                   sx={{ flexShrink: 0 }}
                 />
                 {advancedSettings.useEnhancedSearch && (
-                  <Chip 
+                  <Chip
                     icon={<SpeedIcon />}
-                    label="Enhanced" 
+                    label={t('search.modes.enhanced')} 
                     size="small" 
                     color="success"
                     variant="outlined"
@@ -701,10 +703,10 @@ const SearchPage: React.FC = () => {
                   onChange={handleSearchModeChange}
                   size="small"
                 >
-                  <ToggleButton value="simple">Smart</ToggleButton>
-                  <ToggleButton value="phrase">Exact phrase</ToggleButton>
-                  <ToggleButton value="fuzzy">Similar words</ToggleButton>
-                  <ToggleButton value="boolean">Advanced</ToggleButton>
+                  <ToggleButton value="simple">{t('search.modes.smart')}</ToggleButton>
+                  <ToggleButton value="phrase">{t('search.modes.exactPhrase')}</ToggleButton>
+                  <ToggleButton value="fuzzy">{t('search.modes.similarWords')}</ToggleButton>
+                  <ToggleButton value="boolean">{t('search.modes.advanced')}</ToggleButton>
                 </ToggleButtonGroup>
               </Box>
             </Box>
@@ -714,7 +716,7 @@ const SearchPage: React.FC = () => {
           {quickSuggestions.length > 0 && searchQuery && !loading && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Quick suggestions:
+                {t('search.quickSuggestions.title')}
               </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 {quickSuggestions.map((suggestion, index) => (
@@ -743,7 +745,7 @@ const SearchPage: React.FC = () => {
           {suggestions.length > 0 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Related searches:
+                {t('search.relatedSearches.title')}
               </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 {suggestions.map((suggestion, index) => (
@@ -798,10 +800,10 @@ const SearchPage: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                   <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <FilterIcon />
-                    Filters
+                    {t('search.filters.title')}
                   </Typography>
                   <Button size="small" onClick={handleClearFilters} startIcon={<ClearIcon />}>
-                    Clear
+                    {t('common.actions.clear')}
                   </Button>
                 </Box>
                 {/* Mobile filter content would go here - simplified */}
@@ -820,10 +822,10 @@ const SearchPage: React.FC = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                 <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <FilterIcon />
-                  Filters
+                  {t('search.filters.title')}
                 </Typography>
                 <Button size="small" onClick={handleClearFilters} startIcon={<ClearIcon />}>
-                  Clear
+                  {t('common.actions.clear')}
                 </Button>
               </Box>
 
@@ -831,16 +833,16 @@ const SearchPage: React.FC = () => {
                 {/* Tags Filter */}
                 <Accordion defaultExpanded>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle2">Tags</Typography>
+                    <Typography variant="subtitle2">{t('search.filters.tags')}</Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <FormControl fullWidth size="small">
-                      <InputLabel>Select Tags</InputLabel>
+                      <InputLabel>{t('search.filters.selectTags')}</InputLabel>
                       <Select<string[]>
                         multiple
                         value={selectedTags}
                         onChange={handleTagsChange}
-                        input={<OutlinedInput label="Select Tags" />}
+                        input={<OutlinedInput label={t('search.filters.selectTags')} />}
                         renderValue={(selected) => (
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, overflow: 'hidden' }}>
                             {selected.map((value) => (
@@ -885,19 +887,19 @@ const SearchPage: React.FC = () => {
                 {/* OCR Filter */}
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle2">OCR Status</Typography>
+                    <Typography variant="subtitle2">{t('search.filters.ocrStatus')}</Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <FormControl fullWidth size="small">
-                      <InputLabel>OCR Text</InputLabel>
+                      <InputLabel>{t('search.filters.ocrText')}</InputLabel>
                       <Select
                         value={hasOcr}
                         onChange={handleOcrChange}
-                        label="OCR Text"
+                        label={t('search.filters.ocrText')}
                       >
-                        <MenuItem value="all">All Documents</MenuItem>
-                        <MenuItem value="yes">Has OCR Text</MenuItem>
-                        <MenuItem value="no">No OCR Text</MenuItem>
+                        <MenuItem value="all">{t('search.filters.allDocuments')}</MenuItem>
+                        <MenuItem value="yes">{t('search.filters.hasOcrText')}</MenuItem>
+                        <MenuItem value="no">{t('search.filters.noOcrText')}</MenuItem>
                       </Select>
                     </FormControl>
                   </AccordionDetails>
@@ -906,11 +908,11 @@ const SearchPage: React.FC = () => {
                 {/* Date Range Filter */}
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle2">Date Range</Typography>
+                    <Typography variant="subtitle2">{t('search.filters.dateRange')}</Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Days ago: {dateRange[0]} - {dateRange[1]}
+                      {t('search.filters.daysAgo', { min: dateRange[0], max: dateRange[1] })}
                     </Typography>
                     <Slider
                       value={dateRange}
@@ -919,10 +921,10 @@ const SearchPage: React.FC = () => {
                       min={0}
                       max={365}
                       marks={[
-                        { value: 0, label: 'Today' },
-                        { value: 30, label: '30d' },
-                        { value: 90, label: '90d' },
-                        { value: 365, label: '1y' },
+                        { value: 0, label: t('search.filters.dateMarks.today') },
+                        { value: 30, label: t('search.filters.dateMarks.30d') },
+                        { value: 90, label: t('search.filters.dateMarks.90d') },
+                        { value: 365, label: t('search.filters.dateMarks.1y') },
                       ]}
                     />
                   </AccordionDetails>
@@ -931,11 +933,11 @@ const SearchPage: React.FC = () => {
                 {/* File Size Filter */}
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle2">File Size</Typography>
+                    <Typography variant="subtitle2">{t('search.filters.fileSize')}</Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Size: {fileSizeRange[0]}MB - {fileSizeRange[1]}MB
+                      {t('search.filters.sizeRange', { min: fileSizeRange[0], max: fileSizeRange[1] })}
                     </Typography>
                     <Slider
                       value={fileSizeRange}
@@ -965,7 +967,7 @@ const SearchPage: React.FC = () => {
             <Box sx={{ mb: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 1 }}>
                 <Typography variant="body2" color="text.secondary">
-                  {loading ? 'Searching...' : `${searchResults.length} results found`}
+                  {loading ? t('search.status.searching') : t('search.status.resultsFound', { count: searchResults.length })}
                 </Typography>
                 
                 {/* Snippet Settings Button */}
@@ -974,12 +976,12 @@ const SearchPage: React.FC = () => {
                   size="small"
                   startIcon={<TextFormatIcon />}
                   onClick={(e) => setSnippetSettingsAnchor(e.currentTarget)}
-                  sx={{ 
+                  sx={{
                     flexShrink: 0,
                     position: 'relative',
                   }}
                 >
-                  Display Settings
+                  {t('search.display.settings')}
                   {/* Show indicator if settings are customized */}
                   {(snippetSettings.viewMode !== 'detailed' || 
                     snippetSettings.highlightStyle !== 'background' || 
@@ -1004,16 +1006,16 @@ const SearchPage: React.FC = () => {
               {!loading && searchResults.length > 0 && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                   <Typography variant="caption" color="text.secondary">
-                    Showing:
+                    {t('search.results.showing')}
                   </Typography>
-                  <Chip 
-                    label={`${snippetSettings.maxSnippetsToShow} snippets`} 
+                  <Chip
+                    label={t('search.results.snippetsCount', { count: snippetSettings.maxSnippetsToShow })} 
                     size="small" 
                     variant="outlined"
                     sx={{ fontSize: '0.7rem' }}
                   />
-                  <Chip 
-                    label={`${snippetSettings.fontSize}px font`} 
+                  <Chip
+                    label={t('search.results.fontSize', { size: snippetSettings.fontSize })} 
                     size="small" 
                     variant="outlined"
                     sx={{ fontSize: '0.7rem' }}
@@ -1054,40 +1056,40 @@ const SearchPage: React.FC = () => {
               }}
             >
               <Typography variant="h6" color="text.secondary" gutterBottom>
-                No results found for "{searchQuery}"
+                {t('search.noResults.title', { query: searchQuery })}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Try adjusting your search terms or filters
+                {t('search.noResults.subtitle')}
               </Typography>
-              
+
               {/* Helpful suggestions for no results */}
               <Box sx={{ mb: 2 }}>
                 <Typography variant="subtitle2" color="text.primary" gutterBottom>
-                  Suggestions:
+                  {t('search.noResults.suggestions.title')}
                 </Typography>
                 <Stack spacing={1} alignItems="center">
-                  <Typography variant="body2" color="text.secondary">• Try simpler or more general terms</Typography>
-                  <Typography variant="body2" color="text.secondary">• Check spelling and try different keywords</Typography>
-                  <Typography variant="body2" color="text.secondary">• Remove some filters to broaden your search</Typography>
-                  <Typography variant="body2" color="text.secondary">• Use quotes for exact phrases</Typography>
+                  <Typography variant="body2" color="text.secondary">• {t('search.noResults.suggestions.simpler')}</Typography>
+                  <Typography variant="body2" color="text.secondary">• {t('search.noResults.suggestions.spelling')}</Typography>
+                  <Typography variant="body2" color="text.secondary">• {t('search.noResults.suggestions.removeFilters')}</Typography>
+                  <Typography variant="body2" color="text.secondary">• {t('search.noResults.suggestions.useQuotes')}</Typography>
                 </Stack>
               </Box>
               
               <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
-                <Button 
-                  size="small" 
-                  variant="outlined" 
+                <Button
+                  size="small"
+                  variant="outlined"
                   onClick={handleClearFilters}
                   startIcon={<ClearIcon />}
                 >
-                  Clear Filters
+                  {t('search.actions.clearFilters')}
                 </Button>
-                <Button 
-                  size="small" 
-                  variant="outlined" 
+                <Button
+                  size="small"
+                  variant="outlined"
                   onClick={() => setSearchQuery('')}
                 >
-                  New Search
+                  {t('search.actions.newSearch')}
                 </Button>
               </Stack>
             </Box>
@@ -1104,16 +1106,16 @@ const SearchPage: React.FC = () => {
             >
               <SearchIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
               <Typography variant="h6" color="text.secondary" gutterBottom>
-                Start searching your documents
+                {t('search.empty.title')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Use the enhanced search bar above to find documents by content, filename, or tags
+                {t('search.empty.subtitle')}
               </Typography>
-              
+
               {/* Search Tips */}
               <Box sx={{ mb: 3, maxWidth: 600, mx: 'auto' }}>
                 <Typography variant="subtitle2" color="text.primary" gutterBottom>
-                  Search Tips:
+                  {t('search.tips.title')}
                 </Typography>
                 <Stack spacing={1} alignItems="center">
                   {searchTips.map((tip, index) => (
@@ -1125,8 +1127,8 @@ const SearchPage: React.FC = () => {
               </Box>
               
               <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
-                <Chip 
-                  label="Try: invoice" 
+                <Chip
+                  label={t('search.examples.invoice')} 
                   size="small" 
                   variant="outlined" 
                   clickable
@@ -1135,8 +1137,8 @@ const SearchPage: React.FC = () => {
                     setCurrentPage(1);
                   }}
                 />
-                <Chip 
-                  label="Try: contract" 
+                <Chip
+                  label={t('search.examples.contract')} 
                   size="small" 
                   variant="outlined" 
                   clickable
@@ -1145,8 +1147,8 @@ const SearchPage: React.FC = () => {
                     setCurrentPage(1);
                   }}
                 />
-                <Chip 
-                  label="Try: tag:important" 
+                <Chip
+                  label={t('search.examples.tagImportant')} 
                   size="small" 
                   variant="outlined" 
                   clickable
@@ -1228,7 +1230,7 @@ const SearchPage: React.FC = () => {
                           }}>
                             <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
                               {formatFileSize(doc.file_size)} • {formatDate(doc.created_at)}
-                              {doc.has_ocr_text && ' • OCR'}
+                              {doc.has_ocr_text && t('search.results.hasOcr')}
                             </Typography>
                           </Box>
                           
@@ -1242,7 +1244,7 @@ const SearchPage: React.FC = () => {
                               alignItems: 'center',
                             }}>
                               <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
-                                Tags:
+                                {t('search.results.tags')}
                               </Typography>
                               {doc.tags.slice(0, 3).map((tag, index) => (
                                 <Chip 
@@ -1267,7 +1269,7 @@ const SearchPage: React.FC = () => {
                               ))}
                               {doc.tags.length > 3 && (
                                 <Typography variant="caption" color="text.secondary">
-                                  +{doc.tags.length - 3} more
+                                  {t('common.moreCount', { count: doc.tags.length - 3 })}
                                 </Typography>
                               )}
                             </Box>
@@ -1307,7 +1309,7 @@ const SearchPage: React.FC = () => {
                           justifyContent: 'flex-start',
                           pt: 0.5,
                         }}>
-                          <Tooltip title="View Details">
+                          <Tooltip title={t('common.actions.viewDetails')}>
                             <IconButton
                               className="search-filter-button search-focusable"
                               size="small"
@@ -1326,7 +1328,7 @@ const SearchPage: React.FC = () => {
                               <ViewIcon sx={{ fontSize: '1.1rem' }} />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Download">
+                          <Tooltip title={t('common.actions.download')}>
                             <IconButton
                               className="search-filter-button search-focusable"
                               size="small"
@@ -1378,7 +1380,11 @@ const SearchPage: React.FC = () => {
               {/* Results Summary */}
               <Box sx={{ textAlign: 'center', mt: 2, mb: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Showing {((currentPage - 1) * resultsPerPage) + 1}-{Math.min(currentPage * resultsPerPage, totalResults)} of {totalResults} results
+                  {t('search.results.pagination', {
+                    start: ((currentPage - 1) * resultsPerPage) + 1,
+                    end: Math.min(currentPage * resultsPerPage, totalResults),
+                    total: totalResults
+                  })}
                 </Typography>
               </Box>
             </>
@@ -1394,12 +1400,12 @@ const SearchPage: React.FC = () => {
         PaperProps={{ sx: { width: 320, p: 2 } }}
       >
         <Typography variant="subtitle2" sx={{ mb: 2 }}>
-          Text Display Settings
+          {t('search.display.textSettings')}
         </Typography>
         
         <Box mb={2}>
           <Typography variant="caption" color="text.secondary" gutterBottom>
-            View Mode
+            {t('search.display.viewMode.label')}
           </Typography>
           <RadioGroup
             value={snippetSettings.viewMode}
@@ -1408,17 +1414,17 @@ const SearchPage: React.FC = () => {
             <FormControlLabel
               value="compact"
               control={<Radio size="small" />}
-              label="Compact"
+              label={t('search.display.viewMode.compact')}
             />
             <FormControlLabel
               value="detailed"
               control={<Radio size="small" />}
-              label="Detailed"
+              label={t('search.display.viewMode.detailed')}
             />
             <FormControlLabel
               value="context"
               control={<Radio size="small" />}
-              label="Context Focus"
+              label={t('search.display.viewMode.contextFocus')}
             />
           </RadioGroup>
         </Box>
@@ -1427,7 +1433,7 @@ const SearchPage: React.FC = () => {
 
         <Box mb={2}>
           <Typography variant="caption" color="text.secondary" gutterBottom>
-            Highlight Style
+            {t('search.display.highlightStyle.label')}
           </Typography>
           <RadioGroup
             value={snippetSettings.highlightStyle}
@@ -1436,17 +1442,17 @@ const SearchPage: React.FC = () => {
             <FormControlLabel
               value="background"
               control={<Radio size="small" />}
-              label="Background Color"
+              label={t('search.display.highlightStyle.background')}
             />
             <FormControlLabel
               value="underline"
               control={<Radio size="small" />}
-              label="Underline"
+              label={t('search.display.highlightStyle.underline')}
             />
             <FormControlLabel
               value="bold"
               control={<Radio size="small" />}
-              label="Bold Text"
+              label={t('search.display.highlightStyle.bold')}
             />
           </RadioGroup>
         </Box>
@@ -1455,7 +1461,7 @@ const SearchPage: React.FC = () => {
 
         <Box mb={2}>
           <Typography variant="caption" color="text.secondary" gutterBottom>
-            Font Size: {snippetSettings.fontSize}px
+            {t('search.display.fontSizeLabel', { size: snippetSettings.fontSize })}
           </Typography>
           <Slider
             value={snippetSettings.fontSize}
@@ -1471,7 +1477,7 @@ const SearchPage: React.FC = () => {
 
         <Box mb={2}>
           <Typography variant="caption" color="text.secondary" gutterBottom>
-            Snippets per result: {snippetSettings.maxSnippetsToShow}
+            {t('search.display.snippetsPerResult', { count: snippetSettings.maxSnippetsToShow })}
           </Typography>
           <Slider
             value={snippetSettings.maxSnippetsToShow}
@@ -1488,7 +1494,7 @@ const SearchPage: React.FC = () => {
             <Divider sx={{ my: 2 }} />
             <Box>
               <Typography variant="caption" color="text.secondary" gutterBottom>
-                Context Length: {snippetSettings.contextLength} characters
+                {t('search.display.contextLength', { length: snippetSettings.contextLength })}
               </Typography>
               <Slider
                 value={snippetSettings.contextLength}

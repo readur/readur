@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Container,
   Typography,
@@ -35,6 +36,7 @@ import { useApi } from '../hooks/useApi';
 import { ErrorHelper, ErrorCodes } from '../services/api';
 
 const LabelsPage: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const api = useApi();
   
@@ -201,7 +203,7 @@ const LabelsPage: React.FC = () => {
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Typography>Loading labels...</Typography>
+        <Typography>{t('labels.loading')}</Typography>
       </Container>
     );
   }
@@ -211,14 +213,14 @@ const LabelsPage: React.FC = () => {
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Typography variant="h4" component="h1">
-          Label Management
+          {t('labels.title')}
         </Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => setCreateDialogOpen(true)}
         >
-          Create Label
+          {t('labels.actions.createLabel')}
         </Button>
       </Box>
 
@@ -235,7 +237,7 @@ const LabelsPage: React.FC = () => {
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth
-              placeholder="Search labels..."
+              placeholder={t('labels.search.placeholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
@@ -250,7 +252,7 @@ const LabelsPage: React.FC = () => {
           <Grid item xs={12} md={6}>
             <Box display="flex" gap={1} flexWrap="wrap">
               <Chip
-                label="System Labels"
+                label={t('labels.filters.systemLabels')}
                 color={showSystemLabels ? 'primary' : 'default'}
                 onClick={() => setShowSystemLabels(!showSystemLabels)}
                 variant={showSystemLabels ? 'filled' : 'outlined'}
@@ -266,7 +268,7 @@ const LabelsPage: React.FC = () => {
         {systemLabels.length > 0 && (
           <Box mb={4}>
             <Typography variant="h6" gutterBottom color="text.secondary">
-              System Labels
+              {t('labels.sections.systemLabels')}
             </Typography>
             <Grid container spacing={2}>
               {systemLabels.map((label) => (
@@ -276,7 +278,7 @@ const LabelsPage: React.FC = () => {
                       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
                         <Label label={label} showCount />
                         <Typography variant="caption" color="text.secondary">
-                          System
+                          {t('labels.badge.system')}
                         </Typography>
                       </Box>
                       {label.description && (
@@ -286,10 +288,10 @@ const LabelsPage: React.FC = () => {
                       )}
                       <Box mt={2} display="flex" gap={2}>
                         <Typography variant="caption" color="text.secondary">
-                          Documents: {label.document_count || 0}
+                          {t('labels.stats.documents', { count: label.document_count || 0 })}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Sources: {label.source_count || 0}
+                          {t('labels.stats.sources', { count: label.source_count || 0 })}
                         </Typography>
                       </Box>
                     </CardContent>
@@ -304,7 +306,7 @@ const LabelsPage: React.FC = () => {
         {userLabels.length > 0 && (
           <Box>
             <Typography variant="h6" gutterBottom>
-              My Labels
+              {t('labels.sections.myLabels')}
             </Typography>
             <Grid container spacing={2}>
               {userLabels.map((label) => (
@@ -314,7 +316,7 @@ const LabelsPage: React.FC = () => {
                       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
                         <Label label={label} showCount />
                         <Box>
-                          <Tooltip title="Edit label">
+                          <Tooltip title={t('labels.actions.editLabel')}>
                             <IconButton
                               size="small"
                               onClick={() => openEditDialog(label)}
@@ -322,7 +324,7 @@ const LabelsPage: React.FC = () => {
                               <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Delete label">
+                          <Tooltip title={t('labels.actions.deleteLabel')}>
                             <IconButton
                               size="small"
                               onClick={() => openDeleteDialog(label)}
@@ -340,10 +342,10 @@ const LabelsPage: React.FC = () => {
                       )}
                       <Box mt={2} display="flex" gap={2}>
                         <Typography variant="caption" color="text.secondary">
-                          Documents: {label.document_count || 0}
+                          {t('labels.stats.documents', { count: label.document_count || 0 })}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Sources: {label.source_count || 0}
+                          {t('labels.stats.sources', { count: label.source_count || 0 })}
                         </Typography>
                       </Box>
                     </CardContent>
@@ -358,12 +360,12 @@ const LabelsPage: React.FC = () => {
         {filteredLabels.length === 0 && (
           <Paper sx={{ p: 4, textAlign: 'center' }}>
             <Typography variant="h6" color="text.secondary" gutterBottom>
-              No labels found
+              {t('labels.empty.title')}
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
-              {searchTerm 
-                ? `No labels match "${searchTerm}"`
-                : "You haven't created any labels yet"
+              {searchTerm
+                ? t('labels.empty.noMatch', { query: searchTerm })
+                : t('labels.empty.noLabels')
               }
             </Typography>
             {!searchTerm && (
@@ -372,7 +374,7 @@ const LabelsPage: React.FC = () => {
                 startIcon={<AddIcon />}
                 onClick={() => setCreateDialogOpen(true)}
               >
-                Create Your First Label
+                {t('labels.empty.createFirst')}
               </Button>
             )}
           </Paper>
@@ -398,12 +400,12 @@ const LabelsPage: React.FC = () => {
           setLabelToDelete(null);
         }}
       >
-        <DialogTitle>Delete Label</DialogTitle>
+        <DialogTitle>{t('labels.dialogs.delete.title')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete the label "{labelToDelete?.name}"?
+            {t('labels.dialogs.delete.message', { name: labelToDelete?.name })}
             {(labelToDelete?.document_count || 0) > 0 && (
-              <> This label is currently used by {labelToDelete?.document_count} document(s).</>
+              <>{t('labels.dialogs.delete.inUseWarning', { count: labelToDelete?.document_count })}</>
             )}
           </DialogContentText>
         </DialogContent>
@@ -412,14 +414,14 @@ const LabelsPage: React.FC = () => {
             setDeleteDialogOpen(false);
             setLabelToDelete(null);
           }}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
           <Button
             onClick={() => labelToDelete && handleDeleteLabel(labelToDelete.id)}
             color="error"
             variant="contained"
           >
-            Delete
+            {t('common.actions.delete')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -45,11 +45,13 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import GlobalSearchBar from '../GlobalSearchBar';
 import ThemeToggle from '../ThemeToggle/ThemeToggle';
 import NotificationPanel from '../Notifications/NotificationPanel';
+import LanguageSwitcher from '../LanguageSwitcher';
+import { useTranslation } from 'react-i18next';
 
 const drawerWidth = 280;
 
 interface NavigationItem {
-  text: string;
+  textKey: string;
   icon: React.ComponentType<any>;
   path: string;
 }
@@ -63,16 +65,16 @@ interface User {
   email?: string;
 }
 
-const navigationItems: NavigationItem[] = [
-  { text: 'Dashboard', icon: DashboardIcon, path: '/dashboard' },
-  { text: 'Upload', icon: UploadIcon, path: '/upload' },
-  { text: 'Documents', icon: DocumentIcon, path: '/documents' },
-  { text: 'Search', icon: SearchIcon, path: '/search' },
-  { text: 'Labels', icon: LabelIcon, path: '/labels' },
-  { text: 'Sources', icon: StorageIcon, path: '/sources' },
-  { text: 'Watch Folder', icon: FolderIcon, path: '/watch' },
-  { text: 'Document Management', icon: ManageIcon, path: '/documents/management' },
-  { text: 'Ignored Files', icon: BlockIcon, path: '/ignored-files' },
+const getNavigationItems = (t: (key: string) => string): NavigationItem[] => [
+  { textKey: 'navigation.dashboard', icon: DashboardIcon, path: '/dashboard' },
+  { textKey: 'navigation.upload', icon: UploadIcon, path: '/upload' },
+  { textKey: 'navigation.documents', icon: DocumentIcon, path: '/documents' },
+  { textKey: 'navigation.search', icon: SearchIcon, path: '/search' },
+  { textKey: 'navigation.labels', icon: LabelIcon, path: '/labels' },
+  { textKey: 'navigation.sources', icon: StorageIcon, path: '/sources' },
+  { textKey: 'navigation.watchFolder', icon: FolderIcon, path: '/watch' },
+  { textKey: 'navigation.documentManagement', icon: ManageIcon, path: '/documents/management' },
+  { textKey: 'navigation.ignoredFiles', icon: BlockIcon, path: '/ignored-files' },
 ];
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
@@ -85,6 +87,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
+  const { t } = useTranslation();
+
+  const navigationItems = getNavigationItems(t);
 
   const handleDrawerToggle = (): void => {
     setMobileOpen(!mobileOpen);
@@ -182,8 +187,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             </Box>
           </Box>
           <Box>
-            <Typography variant="h6" sx={{ 
-              fontWeight: 800, 
+            <Typography variant="h6" sx={{
+              fontWeight: 800,
               color: 'text.primary',
               background: theme.palette.mode === 'light'
                 ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
@@ -193,16 +198,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               WebkitTextFillColor: 'transparent',
               letterSpacing: '-0.025em',
             }}>
-              Readur
+              {t('common.appName')}
             </Typography>
-            <Typography variant="caption" sx={{ 
-              color: 'text.secondary', 
+            <Typography variant="caption" sx={{
+              color: 'text.secondary',
               fontWeight: 500,
               letterSpacing: '0.05em',
               textTransform: 'uppercase',
               fontSize: '0.7rem',
             }}>
-              AI Document Platform
+              {t('common.appTagline')}
             </Typography>
           </Box>
         </Box>
@@ -258,7 +263,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           const Icon = item.icon;
           
           return (
-            <ListItem key={item.text} sx={{ px: 0, mb: 1 }}>
+            <ListItem key={item.textKey} sx={{ px: 0, mb: 1 }}>
               <ListItemButton
                 onClick={() => navigate(item.path)}
                 sx={{
@@ -315,8 +320,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 <ListItemIcon>
                   <Icon sx={{ fontSize: '1.25rem' }} />
                 </ListItemIcon>
-                <ListItemText 
-                  primary={item.text}
+                <ListItemText
+                  primary={t(item.textKey)}
                   primaryTypographyProps={{
                     fontSize: '0.9rem',
                     fontWeight: isActive ? 600 : 500,
@@ -429,8 +434,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             <MenuIcon />
           </IconButton>
           
-          <Typography variant="h6" noWrap component="div" sx={{ 
-            fontWeight: 700, 
+          <Typography variant="h6" noWrap component="div" sx={{
+            fontWeight: 700,
             mr: 1,
             fontSize: '1.1rem',
             background: theme.palette.mode === 'light'
@@ -441,7 +446,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             WebkitTextFillColor: 'transparent',
             letterSpacing: '-0.025em',
           }}>
-            {navigationItems.find(item => item.path === location.pathname)?.text || 'Dashboard'}
+            {navigationItems.find(item => item.path === location.pathname)?.textKey
+              ? t(navigationItems.find(item => item.path === location.pathname)!.textKey)
+              : t('navigation.dashboard')}
           </Typography>
 
           {/* Global Search Bar */}
@@ -488,8 +495,29 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             </Badge>
           </IconButton>
 
+          {/* Language Switcher */}
+          <Box sx={{
+            mr: 2,
+            background: theme.palette.mode === 'light'
+              ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
+              : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
+            backdropFilter: 'blur(10px)',
+            border: theme.palette.mode === 'light'
+              ? '1px solid rgba(255,255,255,0.3)'
+              : '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 2.5,
+            transition: 'all 0.2s ease-in-out',
+            '&:hover': {
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)',
+              transform: 'translateY(-2px)',
+              boxShadow: '0 8px 24px rgba(99,102,241,0.15)',
+            },
+          }}>
+            <LanguageSwitcher size="medium" color="inherit" />
+          </Box>
+
           {/* Theme Toggle */}
-          <Box sx={{ 
+          <Box sx={{
             mr: 2,
             background: theme.palette.mode === 'light'
               ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
@@ -570,21 +598,21 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
           >
             <MenuItem onClick={() => navigate('/profile')}>
-              <Avatar /> Profile
+              <Avatar /> {t('auth.profile')}
             </MenuItem>
             <MenuItem onClick={() => navigate('/settings')}>
-              <SettingsIcon sx={{ mr: 2 }} /> Settings
+              <SettingsIcon sx={{ mr: 2 }} /> {t('settings.title')}
             </MenuItem>
             <MenuItem onClick={() => navigate('/debug')}>
-              <BugReportIcon sx={{ mr: 2 }} /> Debug
+              <BugReportIcon sx={{ mr: 2 }} /> {t('settings.debug')}
             </MenuItem>
             <Divider />
             <MenuItem onClick={() => window.open('/swagger-ui', '_blank')}>
-              <ApiIcon sx={{ mr: 2 }} /> API Documentation
+              <ApiIcon sx={{ mr: 2 }} /> {t('settings.apiDocumentation')}
             </MenuItem>
             <Divider />
             <MenuItem onClick={handleLogout}>
-              <LogoutIcon sx={{ mr: 2 }} /> Logout
+              <LogoutIcon sx={{ mr: 2 }} /> {t('auth.logout')}
             </MenuItem>
           </Menu>
         </Toolbar>
