@@ -1249,7 +1249,7 @@ const DocumentManagementPage: React.FC = () => {
                                           variant="outlined"
                                         />
                                       )}
-                                      {document.ocr_word_count !== undefined && (
+                                      {document.ocr_word_count !== undefined && document.ocr_word_count !== null && (
                                         <Chip
                                           size="small"
                                           icon={<FindInPageIcon />}
@@ -1689,8 +1689,8 @@ const DocumentManagementPage: React.FC = () => {
                                 </Typography>
                               </TableCell>
                               <TableCell>
-                                <Typography variant="body2" color={doc.ocr_confidence ? 'warning.main' : 'error.main'}>
-                                  {doc.ocr_confidence ? `${doc.ocr_confidence.toFixed(1)}%` : 'N/A'}
+                                <Typography variant="body2" color={doc.ocr_confidence !== undefined && doc.ocr_confidence !== null ? 'warning.main' : 'error.main'}>
+                                  {doc.ocr_confidence !== undefined && doc.ocr_confidence !== null ? `${doc.ocr_confidence.toFixed(1)}%` : 'N/A'}
                                 </Typography>
                               </TableCell>
                               <TableCell>

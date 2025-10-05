@@ -306,8 +306,8 @@ mod tests {
             processed_image_path: None,
         };
         
-        let is_valid = service.validate_ocr_quality(&result, &settings);
-        assert!(is_valid);
+        let result_validation = service.validate_ocr_quality(&result, &settings);
+        assert!(result_validation.is_ok());
     }
 
     #[cfg(feature = "ocr")]
@@ -329,8 +329,8 @@ mod tests {
             processed_image_path: None,
         };
         
-        let is_valid = service.validate_ocr_quality(&result, &settings);
-        assert!(!is_valid);
+        let result_validation = service.validate_ocr_quality(&result, &settings);
+        assert!(result_validation.is_err());
     }
 
     #[cfg(feature = "ocr")]
@@ -351,8 +351,8 @@ mod tests {
             processed_image_path: None,
         };
         
-        let is_valid = service.validate_ocr_quality(&result, &settings);
-        assert!(!is_valid);
+        let result_validation = service.validate_ocr_quality(&result, &settings);
+        assert!(result_validation.is_err());
     }
 
     #[cfg(feature = "ocr")]
@@ -373,8 +373,8 @@ mod tests {
             processed_image_path: None,
         };
         
-        let is_valid = service.validate_ocr_quality(&result, &settings);
-        assert!(!is_valid);
+        let result_validation = service.validate_ocr_quality(&result, &settings);
+        assert!(result_validation.is_err());
     }
 
     #[cfg(feature = "ocr")]
@@ -395,8 +395,8 @@ mod tests {
             processed_image_path: None,
         };
         
-        let is_valid = service.validate_ocr_quality(&result, &settings);
-        assert!(is_valid);
+        let result_validation = service.validate_ocr_quality(&result, &settings);
+        assert!(result_validation.is_ok());
     }
 
     #[tokio::test]

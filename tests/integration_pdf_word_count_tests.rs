@@ -243,12 +243,12 @@ mod pdf_word_count_integration_tests {
         match service.extract_text_from_pdf(&pdf_path, &settings).await {
             Ok(result) => {
                 // Test quality validation
-                let is_valid = service.validate_ocr_quality(&result, &settings);
-                
+                let result_validation = service.validate_ocr_quality(&result, &settings);
+
                 if result.word_count > 0 {
-                    assert!(is_valid, "Good quality PDF should pass validation");
+                    assert!(result_validation.is_ok(), "Good quality PDF should pass validation");
                 } else {
-                    assert!(!is_valid, "PDF with 0 words should fail validation");
+                    assert!(result_validation.is_err(), "PDF with 0 words should fail validation");
                 }
                 
                 // Verify OCR result structure

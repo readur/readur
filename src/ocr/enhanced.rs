@@ -1662,41 +1662,54 @@ impl EnhancedOcrService {
     
     /// Validate OCR result quality
     #[cfg(feature = "ocr")]
-    pub fn validate_ocr_quality(&self, result: &OcrResult, settings: &Settings) -> bool {
+    pub fn validate_ocr_quality(&self, result: &OcrResult, settings: &Settings) -> Result<(), String> {
         // Check minimum confidence threshold
         if result.confidence < settings.ocr_min_confidence {
-            warn!(
-                "OCR result below confidence threshold: {:.1}% < {:.1}%", 
-                result.confidence, settings.ocr_min_confidence
-            );
-            return false;
+            return Err(format!(
+                "OCR confidence below threshold: {:.1}% (minimum: {:.1}%)",
+                result.confidence,
+                settings.ocr_min_confidence
+            ));
         }
-        
+
         // Check if text is reasonable (not just noise)
         if result.word_count == 0 {
-            warn!("OCR result contains no words");
-            return false;
+            return Err("No words detected in OCR output".to_string());
         }
-        
+
         // Check for reasonable character distribution
         let total_chars = result.text.len();
         if total_chars == 0 {
-            return false;
+            return Err("OCR result contains no characters".to_string());
         }
-        
+
+        // Count alphanumeric characters and digits separately
         let alphanumeric_chars = result.text.chars().filter(|c| c.is_alphanumeric()).count();
+        let digit_chars = result.text.chars().filter(|c| c.is_numeric()).count();
         let alphanumeric_ratio = alphanumeric_chars as f32 / total_chars as f32;
-        
-        // Expect at least 30% alphanumeric characters for valid text
-        if alphanumeric_ratio < 0.3 {
-            warn!(
-                "OCR result has low alphanumeric ratio: {:.1}%", 
-                alphanumeric_ratio * 100.0
+        let digit_ratio = digit_chars as f32 / total_chars as f32;
+
+        // Special handling for numeric-heavy documents (bills, transaction lists, etc.)
+        // If document has >40% digits, it's likely a valid numeric document
+        if digit_ratio > 0.4 {
+            debug!(
+                "Document has high numeric content: {:.1}% digits - accepting as valid numeric document",
+                digit_ratio * 100.0
             );
-            return false;
+            return Ok(());
         }
-        
-        true
+
+        // Expect at least 20% alphanumeric characters for valid text (relaxed from 30%)
+        const MIN_ALPHANUMERIC_RATIO: f32 = 0.20;
+        if alphanumeric_ratio < MIN_ALPHANUMERIC_RATIO {
+            return Err(format!(
+                "OCR result has low alphanumeric content: {:.1}% (minimum: {:.1}%)",
+                alphanumeric_ratio * 100.0,
+                MIN_ALPHANUMERIC_RATIO * 100.0
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -1711,8 +1724,8 @@ impl EnhancedOcrService {
     }
     
     
-    pub fn validate_ocr_quality(&self, _result: &OcrResult, _settings: &Settings) -> bool {
-        false
+    pub fn validate_ocr_quality(&self, _result: &OcrResult, _settings: &Settings) -> Result<(), String> {
+        Err("OCR feature not enabled".to_string())
     }
 
     pub fn count_words_safely(&self, text: &str) -> usize {

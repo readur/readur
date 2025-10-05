@@ -378,9 +378,8 @@ impl OcrQueueService {
                 match ocr_service.extract_text_with_context(&file_path, &mime_type, &filename, file_size, &settings).await {
                     Ok(ocr_result) => {
                         // Validate OCR quality
-                        if !ocr_service.validate_ocr_quality(&ocr_result, &settings) {
-                            let error_msg = format!("OCR quality below threshold: {:.1}% confidence, {} words", 
-                                                   ocr_result.confidence, ocr_result.word_count);
+                        if let Err(validation_error) = ocr_service.validate_ocr_quality(&ocr_result, &settings) {
+                            let error_msg = format!("OCR quality validation failed: {}", validation_error);
                             warn!("⚠️  OCR quality issues for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words", 
                                   filename, item.id, item.document_id, ocr_result.confidence, ocr_result.word_count);
                             
@@ -390,6 +389,9 @@ impl OcrQueueService {
                                 "low_ocr_confidence",
                                 &error_msg,
                                 item.attempts,
+                                Some(ocr_result.text.clone()),
+                                Some(ocr_result.confidence),
+                                Some(ocr_result.word_count as i32),
                             ).await;
 
                             // Mark as failed for quality issues with proper failure reason
@@ -433,13 +435,16 @@ impl OcrQueueService {
                                     
                                     // Use classification function to determine proper failure reason
                                     let (failure_reason, _should_suppress) = Self::classify_ocr_error(error_msg);
-                                    
+
                                     // Create failed document record using helper function
                                     let _ = self.create_failed_document_from_ocr_error(
                                         item.document_id,
                                         failure_reason,
                                         error_msg,
                                         item.attempts,
+                                        None,
+                                        None,
+                                        None,
                                     ).await;
                                     
                                     self.mark_failed(item.id, error_msg).await?;
@@ -451,13 +456,16 @@ impl OcrQueueService {
                                     
                                     // Use classification function to determine proper failure reason
                                     let (failure_reason, _should_suppress) = Self::classify_ocr_error(&error_msg);
-                                    
+
                                     // Create failed document record using helper function
                                     let _ = self.create_failed_document_from_ocr_error(
                                         item.document_id,
                                         failure_reason,
                                         &error_msg,
                                         item.attempts,
+                                        None,
+                                        None,
+                                        None,
                                     ).await;
                                     
                                     self.mark_failed(item.id, &error_msg).await?;
@@ -472,13 +480,16 @@ impl OcrQueueService {
                             
                             // Use classification function to determine proper failure reason
                             let (failure_reason, _should_suppress) = Self::classify_ocr_error(&error_msg);
-                            
+
                             // Create failed document record using helper function
                             let _ = self.create_failed_document_from_ocr_error(
                                 item.document_id,
                                 failure_reason,
                                 &error_msg,
                                 item.attempts,
+                                None,
+                                None,
+                                None,
                             ).await;
 
                             // Mark document as failed for no extractable text
@@ -560,6 +571,9 @@ impl OcrQueueService {
                             failure_reason,
                             &error_msg,
                             item.attempts,
+                            None,
+                            None,
+                            None,
                         ).await;
                         
                         // Always use 'failed' status with specific failure reason
@@ -1127,6 +1141,9 @@ impl OcrQueueService {
         failure_reason: &str,
         error_message: &str,
         retry_count: i32,
+        ocr_text: Option<String>,
+        ocr_confidence: Option<f32>,
+        ocr_word_count: Option<i32>,
     ) -> Result<()> {
         // Query document directly from database without user restrictions (OCR service context)
         let document_row = sqlx::query(
@@ -1166,9 +1183,9 @@ impl OcrQueueService {
                 mime_type: Some(mime_type),
                 content: None,
                 tags: Vec::new(),
-                ocr_text: None,
-                ocr_confidence: None,
-                ocr_word_count: None,
+                ocr_text,
+                ocr_confidence,
+                ocr_word_count,
                 ocr_processing_time_ms: None,
                 failure_reason: failure_reason.to_string(),
                 failure_stage: "ocr".to_string(),
