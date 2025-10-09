@@ -5,5 +5,14 @@
   "prHourlyLimit": 40,
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "Automatically merge minor and patch updates",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "minimumReleaseAge": "3 days"
+    }
   ]
 }
