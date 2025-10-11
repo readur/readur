@@ -53,6 +53,8 @@ async fn create_test_app_state() -> Arc<AppState> {
         oidc_client_secret: None,
         oidc_issuer_url: None,
         oidc_redirect_uri: None,
+        oidc_auto_register: None,
+        allow_local_auth: None,
         s3_enabled: false,
         s3_config: None,
     };
