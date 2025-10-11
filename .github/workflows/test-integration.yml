@@ -125,9 +125,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-release-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
+          key: ${{ runner.os }}-cargo-target-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-target-release-${{ hashFiles('**/Cargo.lock') }}-
             ${{ runner.os }}-cargo-target-release-
 
       - name: Build readur binary
