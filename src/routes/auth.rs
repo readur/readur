@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 use crate::{
     auth::{create_jwt, AuthUser},
-    models::{CreateUser, LoginRequest, LoginResponse, UserResponse, UserRole},
+    models::{CreateUser, LoginRequest, LoginResponse, User, UserResponse, UserRole},
+    oidc::OidcUserInfo,
     AppState,
 };
 
@@ -39,6 +40,18 @@ async fn register(
     State(state): State<Arc<AppState>>,
     Json(user_data): Json<CreateUser>,
 ) -> Response {
+    // Check if local authentication is enabled
+    if !state.config.allow_local_auth {
+        tracing::warn!("Local registration attempt rejected - local auth is disabled");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "Local registration is disabled",
+                "details": "This instance only allows OIDC authentication. Please contact your administrator."
+            }))
+        ).into_response();
+    }
+
     match state.db.create_user(user_data).await {
         Ok(user) => {
             let user_response: UserResponse = user.into();
@@ -84,6 +97,12 @@ async fn login(
     State(state): State<Arc<AppState>>,
     Json(login_data): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, StatusCode> {
+    // Check if local authentication is enabled
+    if !state.config.allow_local_auth {
+        tracing::warn!("Local authentication attempt rejected - local auth is disabled");
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     let user = state
         .db
         .get_user_by_username(&login_data.username)
@@ -204,47 +223,91 @@ async fn oidc_callback(
             StatusCode::UNAUTHORIZED
         })?;
 
-    // Find or create user in database
+    // Find or create user in database with email-based syncing
     let issuer_url = state.config.oidc_issuer_url.as_ref().unwrap();
     tracing::debug!("Looking up user by OIDC subject: {} and issuer: {}", user_info.sub, issuer_url);
+
     let user = match state.db.get_user_by_oidc_subject(&user_info.sub, issuer_url).await {
         Ok(Some(existing_user)) => {
             tracing::debug!("Found existing OIDC user: {}", existing_user.username);
             existing_user
         },
         Ok(None) => {
-            tracing::debug!("Creating new OIDC user");
-            // Create new user
-            let username = user_info.preferred_username
-                .or_else(|| user_info.email.clone())
-                .unwrap_or_else(|| format!("oidc_user_{}", &user_info.sub[..8]));
-            
-            let email = user_info.email.unwrap_or_else(|| format!("{}@oidc.local", username));
-            
-            tracing::debug!("New user details - username: {}, email: {}", username, email);
-            
-            let create_user = CreateUser {
-                username,
-                email: email.clone(),
-                password: "".to_string(), // Not used for OIDC users
-                role: Some(UserRole::User),
-            };
-            
-            let result = state.db.create_oidc_user(
-                create_user,
-                &user_info.sub,
-                issuer_url,
-                &email,
-            ).await;
-            
-            match result {
-                Ok(user) => {
-                    tracing::info!("Successfully created OIDC user: {}", user.username);
-                    user
-                },
-                Err(e) => {
-                    tracing::error!("Failed to create OIDC user: {} (full error: {:#})", e, e);
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            // No OIDC user found, check if there's an existing local user with this email
+            let email = user_info.email.clone();
+
+            if let Some(email_addr) = &email {
+                tracing::debug!("Checking for existing local user with email: {}", email_addr);
+                match state.db.get_user_by_email(email_addr).await {
+                    Ok(Some(existing_local_user)) => {
+                        // Found existing local user with matching email - link to OIDC
+                        tracing::info!(
+                            "Found existing local user '{}' with email '{}', linking to OIDC identity",
+                            existing_local_user.username,
+                            email_addr
+                        );
+
+                        match state.db.link_user_to_oidc(
+                            existing_local_user.id,
+                            &user_info.sub,
+                            issuer_url,
+                            email_addr,
+                        ).await {
+                            Ok(linked_user) => {
+                                tracing::info!(
+                                    "Successfully linked user '{}' to OIDC identity",
+                                    linked_user.username
+                                );
+                                linked_user
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to link existing user to OIDC: {}", e);
+                                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                            }
+                        }
+                    },
+                    Ok(None) => {
+                        // No existing user with this email
+                        if state.config.oidc_auto_register {
+                            // Auto-registration is enabled, create new OIDC user
+                            tracing::debug!("No existing user with this email, creating new OIDC user (auto-registration enabled)");
+                            create_new_oidc_user(
+                                &state,
+                                &user_info,
+                                issuer_url,
+                                email.as_deref(),
+                            ).await?
+                        } else {
+                            // Auto-registration is disabled, reject login
+                            tracing::warn!(
+                                "OIDC login attempted for unregistered email '{}', but auto-registration is disabled",
+                                email_addr
+                            );
+                            return Err(StatusCode::FORBIDDEN);
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!("Database error during email lookup: {}", e);
+                        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                    }
+                }
+            } else {
+                // No email provided by OIDC provider
+                if state.config.oidc_auto_register {
+                    // Auto-registration is enabled, create new user without email sync
+                    tracing::debug!("No email provided by OIDC, creating new user (auto-registration enabled)");
+                    create_new_oidc_user(
+                        &state,
+                        &user_info,
+                        issuer_url,
+                        None,
+                    ).await?
+                } else {
+                    // Auto-registration is disabled and no email to sync
+                    tracing::warn!(
+                        "OIDC login attempted without email claim, but auto-registration is disabled"
+                    );
+                    return Err(StatusCode::FORBIDDEN);
                 }
             }
         }
@@ -265,4 +328,50 @@ async fn oidc_callback(
         token,
         user: user.into(),
     }))
+}
+
+// Helper function to create a new OIDC user
+async fn create_new_oidc_user(
+    state: &Arc<AppState>,
+    user_info: &OidcUserInfo,
+    issuer_url: &str,
+    email: Option<&str>,
+) -> Result<User, StatusCode> {
+    tracing::debug!("Creating new OIDC user");
+
+    let username = user_info.preferred_username
+        .clone()
+        .or_else(|| email.map(|e| e.to_string()))
+        .unwrap_or_else(|| format!("oidc_user_{}", &user_info.sub[..8]));
+
+    let user_email = email
+        .map(|e| e.to_string())
+        .unwrap_or_else(|| format!("{}@oidc.local", username));
+
+    tracing::debug!("New user details - username: {}, email: {}", username, user_email);
+
+    let create_user = CreateUser {
+        username,
+        email: user_email.clone(),
+        password: "".to_string(), // Not used for OIDC users
+        role: Some(UserRole::User),
+    };
+
+    let result = state.db.create_oidc_user(
+        create_user,
+        &user_info.sub,
+        issuer_url,
+        &user_email,
+    ).await;
+
+    match result {
+        Ok(user) => {
+            tracing::info!("Successfully created OIDC user: {}", user.username);
+            Ok(user)
+        },
+        Err(e) => {
+            tracing::error!("Failed to create OIDC user: {} (full error: {:#})", e, e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
