@@ -204,10 +204,8 @@ pub fn create_test_config() -> Config {
         oidc_client_secret: None,
         oidc_issuer_url: None,
         oidc_redirect_uri: None,
-        oidc_auto_register: true,
-
-        // Authentication Configuration
-        allow_local_auth: true,
+        oidc_auto_register: None,
+        allow_local_auth: None,
 
         // S3 Configuration (disabled for tests by default)
         s3_enabled: false,
