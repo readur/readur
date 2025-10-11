@@ -216,7 +216,7 @@ impl Database {
 
         let row = sqlx::query(
             r#"
-            INSERT INTO users (username, email, role, created_at, updated_at, 
+            INSERT INTO users (username, email, role, created_at, updated_at,
                              oidc_subject, oidc_issuer, oidc_email, auth_provider)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id, username, email, password_hash, role, created_at, updated_at,
@@ -228,6 +228,76 @@ impl Database {
         .bind(user.role.as_ref().unwrap_or(&crate::models::UserRole::User).to_string())
         .bind(now)
         .bind(now)
+        .bind(oidc_subject)
+        .bind(oidc_issuer)
+        .bind(oidc_email)
+        .bind(AuthProvider::Oidc.to_string())
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(User {
+            id: row.get("id"),
+            username: row.get("username"),
+            email: row.get("email"),
+            password_hash: row.get("password_hash"),
+            role: row.get::<String, _>("role").try_into().unwrap_or(crate::models::UserRole::User),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            oidc_subject: row.get("oidc_subject"),
+            oidc_issuer: row.get("oidc_issuer"),
+            oidc_email: row.get("oidc_email"),
+            auth_provider: row.get::<String, _>("auth_provider").try_into().unwrap_or(AuthProvider::Oidc),
+        })
+    }
+
+    pub async fn get_user_by_email(&self, email: &str) -> Result<Option<User>> {
+        let row = sqlx::query(
+            "SELECT id, username, email, password_hash, role, created_at, updated_at,
+             oidc_subject, oidc_issuer, oidc_email, auth_provider FROM users WHERE email = $1"
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(row) => Ok(Some(User {
+                id: row.get("id"),
+                username: row.get("username"),
+                email: row.get("email"),
+                password_hash: row.get("password_hash"),
+                role: row.get::<String, _>("role").try_into().unwrap_or(crate::models::UserRole::User),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                oidc_subject: row.get("oidc_subject"),
+                oidc_issuer: row.get("oidc_issuer"),
+                oidc_email: row.get("oidc_email"),
+                auth_provider: row.get::<String, _>("auth_provider").try_into().unwrap_or(AuthProvider::Local),
+            })),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn link_user_to_oidc(
+        &self,
+        user_id: Uuid,
+        oidc_subject: &str,
+        oidc_issuer: &str,
+        oidc_email: &str,
+    ) -> Result<User> {
+        let row = sqlx::query(
+            r#"
+            UPDATE users
+            SET oidc_subject = $2,
+                oidc_issuer = $3,
+                oidc_email = $4,
+                auth_provider = $5,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, username, email, password_hash, role, created_at, updated_at,
+                      oidc_subject, oidc_issuer, oidc_email, auth_provider
+            "#
+        )
+        .bind(user_id)
         .bind(oidc_subject)
         .bind(oidc_issuer)
         .bind(oidc_email)

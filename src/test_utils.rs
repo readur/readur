@@ -835,7 +835,11 @@ impl TestConfigBuilder {
             oidc_client_secret: None,
             oidc_issuer_url: None,
             oidc_redirect_uri: None,
-            
+            oidc_auto_register: true,
+
+            // Authentication Configuration
+            allow_local_auth: true,
+
             // S3 Configuration
             s3_enabled: false,
             s3_config: None,
