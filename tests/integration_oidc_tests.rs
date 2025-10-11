@@ -132,8 +132,8 @@ mod tests {
             oidc_client_secret: Some("test-client-secret".to_string()),
             oidc_issuer_url: Some(mock_server.uri()),
             oidc_redirect_uri: Some("http://localhost:8000/auth/oidc/callback".to_string()),
-            oidc_auto_register: true,
-            allow_local_auth: true,
+            oidc_auto_register: Some(true),
+            allow_local_auth: Some(true),
             s3_enabled: false,
             s3_config: None,
         };
