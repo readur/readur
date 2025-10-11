@@ -33,6 +33,10 @@ pub struct Config {
     pub oidc_client_secret: Option<String>,
     pub oidc_issuer_url: Option<String>,
     pub oidc_redirect_uri: Option<String>,
+    pub oidc_auto_register: Option<bool>,
+
+    // Authentication Configuration
+    pub allow_local_auth: Option<bool>,
     
     // S3 Configuration
     pub s3_enabled: bool,
@@ -461,7 +465,49 @@ impl Config {
                     None
                 }
             },
-            
+            oidc_auto_register: match env::var("OIDC_AUTO_REGISTER") {
+                Ok(val) => match val.to_lowercase().as_str() {
+                    "true" | "1" | "yes" | "on" => {
+                        println!("✅ OIDC_AUTO_REGISTER: true (loaded from env)");
+                        Some(true)
+                    }
+                    "false" | "0" | "no" | "off" => {
+                        println!("✅ OIDC_AUTO_REGISTER: false (loaded from env)");
+                        Some(false)
+                    }
+                    _ => {
+                        println!("⚠️  OIDC_AUTO_REGISTER: Invalid value '{}', using default (false)", val);
+                        None
+                    }
+                },
+                Err(_) => {
+                    println!("⚠️  OIDC_AUTO_REGISTER: Not set, will use default (false)");
+                    None
+                }
+            },
+
+            // Authentication Configuration
+            allow_local_auth: match env::var("ALLOW_LOCAL_AUTH") {
+                Ok(val) => match val.to_lowercase().as_str() {
+                    "true" | "1" | "yes" | "on" => {
+                        println!("✅ ALLOW_LOCAL_AUTH: true (loaded from env)");
+                        Some(true)
+                    }
+                    "false" | "0" | "no" | "off" => {
+                        println!("✅ ALLOW_LOCAL_AUTH: false (loaded from env)");
+                        Some(false)
+                    }
+                    _ => {
+                        println!("⚠️  ALLOW_LOCAL_AUTH: Invalid value '{}', using default (true)", val);
+                        None
+                    }
+                },
+                Err(_) => {
+                    println!("⚠️  ALLOW_LOCAL_AUTH: Not set, will use default (true)");
+                    None
+                }
+            },
+
             // S3 Configuration
             s3_enabled: match env::var("S3_ENABLED") {
                 Ok(val) => {
@@ -575,6 +621,7 @@ impl Config {
         // OIDC validation
         if config.oidc_enabled {
             println!("🔐 OIDC is enabled");
+            println!("🔓 OIDC auto-registration: {}", config.oidc_auto_register.unwrap_or(false));
             if config.oidc_client_id.is_none() {
                 println!("❌ OIDC_CLIENT_ID is required when OIDC is enabled");
             }
@@ -589,6 +636,20 @@ impl Config {
             }
         } else {
             println!("🔐 OIDC is disabled");
+        }
+
+        // Authentication method validation
+        let allow_local_auth = config.allow_local_auth.unwrap_or(true);
+        println!("🔑 Local authentication (username/password): {}",
+            if allow_local_auth { "enabled" } else { "disabled" });
+
+        if !config.oidc_enabled && !allow_local_auth {
+            println!("❌ WARNING: Both OIDC and local authentication are disabled!");
+            println!("   You will not be able to log in. Enable at least one authentication method.");
+            return Err(anyhow::anyhow!(
+                "Invalid authentication configuration: Both OIDC and local auth are disabled. \
+                Enable at least one authentication method (OIDC_ENABLED=true or ALLOW_LOCAL_AUTH=true)"
+            ));
         }
         
         println!("✅ Configuration validation completed successfully!\n");

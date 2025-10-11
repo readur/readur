@@ -214,7 +214,7 @@ OIDC_ENABLED: true
 OIDC_ISSUER_URL: https://keycloak.example.com/auth/realms/readur
 OIDC_CLIENT_ID: readur-client
 OIDC_CLIENT_SECRET: your-client-secret
-OIDC_REDIRECT_URI: https://readur.example.com/auth/oidc/callback
+OIDC_REDIRECT_URI: https://readur.example.com/api/auth/oidc/callback
 OIDC_SCOPES: openid profile email
 ```
 
@@ -230,7 +230,7 @@ Keycloak client configuration:
   "frontchannelLogout": true,
   "protocol": "openid-connect",
   "redirectUris": [
-    "https://readur.example.com/auth/oidc/callback"
+    "https://readur.example.com/api/auth/oidc/callback"
   ],
   "webOrigins": [
     "https://readur.example.com"
@@ -246,7 +246,7 @@ OIDC_ENABLED: true
 OIDC_ISSUER_URL: https://your-tenant.auth0.com/
 OIDC_CLIENT_ID: your-client-id
 OIDC_CLIENT_SECRET: your-client-secret
-OIDC_REDIRECT_URI: https://readur.example.com/auth/oidc/callback
+OIDC_REDIRECT_URI: https://readur.example.com/api/auth/oidc/callback
 OIDC_SCOPES: openid profile email
 ```
 
@@ -258,7 +258,7 @@ OIDC_ENABLED: true
 OIDC_ISSUER_URL: https://your-org.okta.com/oauth2/default
 OIDC_CLIENT_ID: your-client-id
 OIDC_CLIENT_SECRET: your-client-secret
-OIDC_REDIRECT_URI: https://readur.example.com/auth/oidc/callback
+OIDC_REDIRECT_URI: https://readur.example.com/api/auth/oidc/callback
 ```
 
 #### Azure AD
@@ -269,7 +269,7 @@ OIDC_ENABLED: true
 OIDC_ISSUER_URL: https://login.microsoftonline.com/{tenant-id}/v2.0
 OIDC_CLIENT_ID: your-application-id
 OIDC_CLIENT_SECRET: your-client-secret
-OIDC_REDIRECT_URI: https://readur.example.com/auth/oidc/callback
+OIDC_REDIRECT_URI: https://readur.example.com/api/auth/oidc/callback
 OIDC_SCOPES: openid profile email User.Read
 ```
 
@@ -281,7 +281,7 @@ OIDC_ENABLED: true
 OIDC_ISSUER_URL: https://accounts.google.com
 OIDC_CLIENT_ID: your-client-id.apps.googleusercontent.com
 OIDC_CLIENT_SECRET: your-client-secret
-OIDC_REDIRECT_URI: https://readur.example.com/auth/oidc/callback
+OIDC_REDIRECT_URI: https://readur.example.com/api/auth/oidc/callback
 OIDC_SCOPES: openid profile email
 ```
 

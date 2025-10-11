@@ -34,7 +34,7 @@ OIDC_ENABLED: "true"
 OIDC_CLIENT_ID: "readur-client"
 OIDC_CLIENT_SECRET: "your-client-secret"
 OIDC_ISSUER_URL: "https://auth.example.com/realms/readur"
-OIDC_REDIRECT_URI: "https://readur.example.com/auth/oidc/callback"
+OIDC_REDIRECT_URI: "https://readur.example.com/api/auth/oidc/callback"
 OIDC_SCOPES: "openid profile email"
 ```
 
