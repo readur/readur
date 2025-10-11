@@ -41,7 +41,7 @@ async fn register(
     Json(user_data): Json<CreateUser>,
 ) -> Response {
     // Check if local authentication is enabled
-    if !state.config.allow_local_auth {
+    if !state.config.allow_local_auth.unwrap_or(true) {
         tracing::warn!("Local registration attempt rejected - local auth is disabled");
         return (
             StatusCode::FORBIDDEN,
@@ -98,7 +98,7 @@ async fn login(
     Json(login_data): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, StatusCode> {
     // Check if local authentication is enabled
-    if !state.config.allow_local_auth {
+    if !state.config.allow_local_auth.unwrap_or(true) {
         tracing::warn!("Local authentication attempt rejected - local auth is disabled");
         return Err(StatusCode::FORBIDDEN);
     }
@@ -268,7 +268,7 @@ async fn oidc_callback(
                     },
                     Ok(None) => {
                         // No existing user with this email
-                        if state.config.oidc_auto_register {
+                        if state.config.oidc_auto_register.unwrap_or(false) {
                             // Auto-registration is enabled, create new OIDC user
                             tracing::debug!("No existing user with this email, creating new OIDC user (auto-registration enabled)");
                             create_new_oidc_user(
@@ -293,7 +293,7 @@ async fn oidc_callback(
                 }
             } else {
                 // No email provided by OIDC provider
-                if state.config.oidc_auto_register {
+                if state.config.oidc_auto_register.unwrap_or(false) {
                     // Auto-registration is enabled, create new user without email sync
                     tracing::debug!("No email provided by OIDC, creating new user (auto-registration enabled)");
                     create_new_oidc_user(
