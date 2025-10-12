@@ -338,35 +338,49 @@ mod tests {
             .unwrap();
 
         let status = response.status();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        
-        if status != StatusCode::OK {
+
+        // Extract headers before consuming response
+        let headers = response.headers().clone();
+
+        if status != StatusCode::SEE_OTHER {
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
             let error_text = String::from_utf8_lossy(&body);
             eprintln!("Response status: {}", status);
             eprintln!("Response body: {}", error_text);
-            
+
             // Also check if we made the expected API calls to the mock server
             eprintln!("Mock server received calls:");
             let received_requests = mock_server.received_requests().await.unwrap();
             for req in received_requests {
                 eprintln!("  {} {} - {}", req.method, req.url.path(), String::from_utf8_lossy(&req.body));
             }
-            
+
             // Try to parse as JSON to see if there's a more detailed error message
             if let Ok(error_json) = serde_json::from_slice::<serde_json::Value>(&body) {
                 eprintln!("Error JSON: {:#}", error_json);
             }
         }
-        
-        assert_eq!(status, StatusCode::OK);
-        
-        let login_response: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        
-        assert!(login_response["token"].is_string());
-        assert_eq!(login_response["user"]["username"], test_username);
-        assert_eq!(login_response["user"]["email"], test_email);
+
+        // Expect a redirect (303 See Other) instead of JSON response
+        assert_eq!(status, StatusCode::SEE_OTHER);
+
+        // Extract the token from the Location header
+        let location = headers.get("location").unwrap().to_str().unwrap();
+        assert!(location.contains("/auth/callback?token="));
+
+        // Extract token from URL
+        let token_start = location.find("token=").unwrap() + 6;
+        let token = urlencoding::decode(&location[token_start..]).unwrap();
+
+        // Verify token is not empty
+        assert!(!token.is_empty());
+
+        // Verify user was created by checking database
+        let user = db.get_user_by_username(&test_username).await.unwrap().unwrap();
+        assert_eq!(user.username, test_username);
+        assert_eq!(user.email, test_email);
     }
 
     #[tokio::test]
