@@ -189,7 +189,7 @@ async fn oidc_login(State(state): State<Arc<AppState>>) -> Result<Redirect, Stat
 async fn oidc_callback(
     State(state): State<Arc<AppState>>,
     Query(params): Query<OidcCallbackQuery>,
-) -> Result<Json<LoginResponse>, StatusCode> {
+) -> Result<Redirect, StatusCode> {
     tracing::info!("OIDC callback called with params: code={:?}, state={:?}, error={:?}", 
         params.code, params.state, params.error);
     
@@ -324,10 +324,12 @@ async fn oidc_callback(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    Ok(Json(LoginResponse {
-        token,
-        user: user.into(),
-    }))
+    // Redirect to frontend with token in URL fragment
+    // The frontend should extract the token and store it
+    let redirect_url = format!("/#/auth/callback?token={}", urlencoding::encode(&token));
+    tracing::info!("OIDC authentication successful for user: {}, redirecting to: {}", user.username, redirect_url);
+
+    Ok(Redirect::to(&redirect_url))
 }
 
 // Helper function to create a new OIDC user
