@@ -339,6 +339,9 @@ mod tests {
 
         let status = response.status();
 
+        // Extract headers before consuming response
+        let headers = response.headers().clone();
+
         if status != StatusCode::SEE_OTHER {
             let body = axum::body::to_bytes(response.into_body(), usize::MAX)
                 .await
@@ -364,7 +367,7 @@ mod tests {
         assert_eq!(status, StatusCode::SEE_OTHER);
 
         // Extract the token from the Location header
-        let location = response.headers().get("location").unwrap().to_str().unwrap();
+        let location = headers.get("location").unwrap().to_str().unwrap();
         assert!(location.contains("/auth/callback?token="));
 
         // Extract token from URL
