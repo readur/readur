@@ -56,7 +56,7 @@ Configure OIDC by setting these environment variables:
 | `OIDC_CLIENT_SECRET` | ✅ | OAuth2 client secret from your provider | `very-secret-key` |
 | `OIDC_ISSUER_URL` | ✅ | OIDC provider's issuer URL | `https://accounts.google.com` |
 | `OIDC_REDIRECT_URI` | ✅ | Callback URL for your Readur instance | `https://readur.company.com/api/auth/oidc/callback` |
-| `OIDC_AUTO_REGISTER` | ❌ | Allow new users to self-register (default: `true`) | `true` or `false` |
+| `OIDC_AUTO_REGISTER` | ❌ | Allow new users to self-register (default: `false`) | `true` or `false` |
 | `ALLOW_LOCAL_AUTH` | ❌ | Allow username/password authentication (default: `true`) | `true` or `false` |
 
 ### Example Configurations
@@ -476,19 +476,19 @@ Readur intelligently handles existing local users when they first log in via OID
 
 The `OIDC_AUTO_REGISTER` setting controls whether new users can self-register:
 
-**When `OIDC_AUTO_REGISTER=true` (default)**:
+**When `OIDC_AUTO_REGISTER=true`**:
 - New OIDC users are automatically created when they first log in
 - Perfect for open environments where any company employee should get access
 - Username is derived from OIDC claims (preferred_username or email)
 - Users get the default "user" role
 
-**When `OIDC_AUTO_REGISTER=false`**:
+**When `OIDC_AUTO_REGISTER=false` (default)**:
 - Only existing users (pre-created by admin or linked by email) can log in
 - OIDC login attempts by unregistered users are rejected with HTTP 403
 - Ideal for production environments requiring controlled access
 - Admin must pre-create users before they can use OIDC
 
-**Migration Strategy**: Set to `false` initially, have existing users log in to link accounts, then enable for new users.
+**Migration Strategy**: The default (`false`) is ideal for production. Have existing users log in to link accounts by email, then optionally enable `true` for new user auto-registration.
 
 ### Disabling Local Authentication
 
