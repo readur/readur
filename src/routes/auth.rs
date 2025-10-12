@@ -207,7 +207,7 @@ async fn oidc_callback(
 
     // Exchange authorization code for access token
     let access_token = oidc_client
-        .exchange_code(&code)
+        .exchange_code(&code, params.state.as_deref())
         .await
         .map_err(|e| {
             tracing::error!("Failed to exchange code: {}", e);
