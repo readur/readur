@@ -58,7 +58,7 @@ function App(): React.ReactElement {
       <CssBaseline />
       <Routes>
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
-        <Route path="/auth/oidc/callback" element={<OidcCallback />} />
+        <Route path="/auth/callback" element={<OidcCallback />} />
         <Route
           path="/*"
           element={

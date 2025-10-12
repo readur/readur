@@ -14,9 +14,8 @@ const OidcCallback: React.FC = () => {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        const code = searchParams.get('code');
+        const token = searchParams.get('token');
         const error = searchParams.get('error');
-        const state = searchParams.get('state');
 
         if (error) {
           setError(`Authentication failed: ${error}`);
@@ -24,31 +23,23 @@ const OidcCallback: React.FC = () => {
           return;
         }
 
-        if (!code) {
-          setError('No authorization code received');
+        if (!token) {
+          setError('No authentication token received from server');
           setProcessing(false);
           return;
         }
 
-        // Call the backend OIDC callback endpoint
-        const response = await api.get(`/auth/oidc/callback?code=${code}&state=${state || ''}`);
-        
-        if (response.data && response.data.token) {
-          // Store the token and user data
-          localStorage.setItem('token', response.data.token);
-          api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-          
-          // Redirect to dashboard - the auth context will pick up the token on next page load
-          window.location.href = '/dashboard';
-        } else {
-          setError('Invalid response from authentication server');
-          setProcessing(false);
-        }
+        // Store the token and set up API authorization
+        localStorage.setItem('token', token);
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+        // Redirect to dashboard - the page will reload and AuthContext will pick up the token
+        window.location.href = '/dashboard';
       } catch (err: any) {
         console.error('OIDC callback error:', err);
-        
+
         const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
-        
+
         // Handle specific OIDC callback errors
         if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_OIDC_AUTH_FAILED)) {
           setError('OIDC authentication failed. Please try logging in again or contact your administrator.');
@@ -58,7 +49,7 @@ const OidcCallback: React.FC = () => {
           setError('Authentication failed. Your OIDC credentials may be invalid or expired.');
         } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
           setError('Your account has been disabled. Please contact an administrator for assistance.');
-        } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || 
+        } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) ||
                    ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
           setError('Authentication session expired. Please try logging in again.');
         } else if (errorInfo.category === 'network') {
@@ -68,7 +59,7 @@ const OidcCallback: React.FC = () => {
         } else {
           setError(errorInfo.message || 'Failed to complete authentication. Please try again.');
         }
-        
+
         setProcessing(false);
       }
     };

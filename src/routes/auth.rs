@@ -1,6 +1,6 @@
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{StatusCode, HeaderMap},
     response::{IntoResponse, Json, Response, Redirect},
     routing::{get, post},
     Router,
@@ -188,6 +188,7 @@ async fn oidc_login(State(state): State<Arc<AppState>>) -> Result<Redirect, Stat
 )]
 async fn oidc_callback(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(params): Query<OidcCallbackQuery>,
 ) -> Result<Redirect, StatusCode> {
     tracing::info!("OIDC callback called with params: code={:?}, state={:?}, error={:?}", 
@@ -326,8 +327,25 @@ async fn oidc_callback(
 
     // Redirect to frontend with token in URL fragment
     // The frontend should extract the token and store it
-    let redirect_url = format!("/#/auth/callback?token={}", urlencoding::encode(&token));
-    tracing::info!("OIDC authentication successful for user: {}, redirecting to: {}", user.username, redirect_url);
+    // Use absolute URL to ensure hash fragment is handled correctly by the browser
+    let host = headers
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("localhost:8000");
+
+    // Check if behind a proxy (X-Forwarded-Proto header)
+    let protocol = headers
+        .get("x-forwarded-proto")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("https");
+
+    let redirect_url = format!(
+        "{}://{}/auth/callback?token={}",
+        protocol,
+        host,
+        urlencoding::encode(&token)
+    );
+    tracing::info!("OIDC authentication successful for user: {}, redirecting to callback", user.username);
 
     Ok(Redirect::to(&redirect_url))
 }
