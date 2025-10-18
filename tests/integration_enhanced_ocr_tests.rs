@@ -319,18 +319,19 @@ mod tests {
         let service = EnhancedOcrService::new(temp_path, file_service);
         let mut settings = create_test_settings();
         settings.ocr_min_confidence = 50.0;
-        
+
         let result = OcrResult {
             text: "Poor quality text".to_string(),
-            confidence: 25.0, // Below threshold
+            confidence: 25.0, // Below threshold but still accepted
             processing_time_ms: 1000,
             word_count: 3,
             preprocessing_applied: vec![],
             processed_image_path: None,
         };
-        
+
+        // Low confidence is now accepted with a warning, not rejected
         let result_validation = service.validate_ocr_quality(&result, &settings);
-        assert!(result_validation.is_err());
+        assert!(result_validation.is_ok());
     }
 
     #[cfg(feature = "ocr")]
@@ -571,37 +572,37 @@ startxref
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
-        
+
         let mut handles = vec![];
-        
+
         // Process multiple files concurrently
         for i in 0..5 {
             let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
             let content = format!("Concurrent test content {}", i);
             fs::write(temp_file.path(), &content).unwrap();
-            
+
             let temp_path_clone = temp_dir.path().to_str().unwrap().to_string();
             let file_service_clone = create_test_file_service(&temp_path_clone).await;
             let service_clone = EnhancedOcrService::new(temp_path_clone, file_service_clone);
             let settings_clone = settings.clone();
             let file_path = temp_file.path().to_str().unwrap().to_string();
-            
+
             let handle = tokio::spawn(async move {
                 let result = service_clone
                     .extract_text(&file_path, "text/plain", &settings_clone)
                     .await;
-                
+
                 // Keep temp_file alive until task completes
                 drop(temp_file);
                 result
             });
-            
+
             handles.push(handle);
         }
-        
+
         // Wait for all tasks to complete
         let results = futures::future::join_all(handles).await;
-        
+
         // All tasks should succeed
         for (i, result) in results.into_iter().enumerate() {
             assert!(result.is_ok(), "Task {} failed", i);
@@ -609,5 +610,252 @@ startxref
             assert!(ocr_result.text.contains(&format!("Concurrent test content {}", i)));
             assert_eq!(ocr_result.confidence, 100.0);
         }
+    }
+
+    // New validation tests for updated OCR validation logic
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_validate_ocr_quality_below_hard_minimum() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
+        let settings = create_test_settings();
+
+        // Test OCR with confidence below the hard minimum (5%)
+        // This should be rejected as critically low/corrupted
+        let result = OcrResult {
+            text: "Some text".to_string(),
+            confidence: 4.9, // Below hard minimum of 5%
+            processing_time_ms: 1000,
+            word_count: 2,
+            preprocessing_applied: vec![],
+            processed_image_path: None,
+        };
+
+        let validation_result = service.validate_ocr_quality(&result, &settings);
+        assert!(validation_result.is_err(), "Expected validation to fail for confidence below hard minimum");
+
+        let error_msg = validation_result.unwrap_err();
+        assert!(error_msg.contains("critically low"),
+                "Expected 'critically low' in error message, got: {}", error_msg);
+    }
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_validate_ocr_quality_at_hard_minimum_boundary() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
+        let settings = create_test_settings();
+
+        // Test OCR with exactly 5% confidence (boundary case)
+        // This should be accepted (at the hard minimum threshold)
+        let result = OcrResult {
+            text: "Boundary test text".to_string(),
+            confidence: 5.0, // Exactly at hard minimum
+            processing_time_ms: 1000,
+            word_count: 3,
+            preprocessing_applied: vec![],
+            processed_image_path: None,
+        };
+
+        let validation_result = service.validate_ocr_quality(&result, &settings);
+        assert!(validation_result.is_ok(),
+                "Expected validation to pass at hard minimum boundary (5%)");
+    }
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_validate_ocr_quality_numeric_document() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
+        let settings = create_test_settings();
+
+        // Test invoice/receipt with >30% digits
+        // Should be accepted even with lower alphanumeric ratio due to high digit content
+        let result = OcrResult {
+            text: "Invoice #12345\n$1,234.56\n$2,345.67\nTotal: $3,580.23\n!!!".to_string(),
+            confidence: 60.0,
+            processing_time_ms: 1000,
+            word_count: 5,
+            preprocessing_applied: vec![],
+            processed_image_path: None,
+        };
+
+        // Calculate to verify we have >30% digits
+        let digit_count = result.text.chars().filter(|c| c.is_numeric()).count();
+        let total_chars = result.text.len();
+        let digit_ratio = digit_count as f32 / total_chars as f32;
+        assert!(digit_ratio > 0.3, "Test data should have >30% digits, got {:.1}%", digit_ratio * 100.0);
+
+        let validation_result = service.validate_ocr_quality(&result, &settings);
+        assert!(validation_result.is_ok(),
+                "Expected validation to pass for numeric document with {:.1}% digits", digit_ratio * 100.0);
+    }
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_validate_ocr_quality_numeric_document_boundary() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
+        let settings = create_test_settings();
+
+        // Test document with exactly 30% digits (boundary case)
+        // 30 digits + 70 non-digit chars = 100 total chars
+        let result = OcrResult {
+            text: "123456789012345678901234567890AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            confidence: 60.0,
+            processing_time_ms: 1000,
+            word_count: 2,
+            preprocessing_applied: vec![],
+            processed_image_path: None,
+        };
+
+        // Verify exactly 30% digits
+        let digit_count = result.text.chars().filter(|c| c.is_numeric()).count();
+        let total_chars = result.text.len();
+        let digit_ratio = digit_count as f32 / total_chars as f32;
+        assert_eq!(digit_count, 30, "Test data should have exactly 30 digits");
+        assert_eq!(total_chars, 100, "Test data should have exactly 100 chars");
+        assert!((digit_ratio - 0.3).abs() < 0.01, "Should have exactly 30% digits, got {:.1}%", digit_ratio * 100.0);
+
+        let validation_result = service.validate_ocr_quality(&result, &settings);
+        // At exactly 30%, it should NOT trigger the >30% special handling
+        // So it will be validated normally (which should pass with 100% alphanumeric)
+        assert!(validation_result.is_ok(),
+                "Expected validation to pass at 30% digit boundary");
+    }
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_validate_ocr_quality_alphanumeric_boundary() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
+        let settings = create_test_settings();
+
+        // Test text with exactly 10% alphanumeric characters (boundary case)
+        // 1 letter + 9 symbols = 10 total chars = 10% alphanumeric
+        let result = OcrResult {
+            text: "a!!!!!!!!!".to_string(), // 1 alphanumeric + 9 symbols = 10%
+            confidence: 60.0,
+            processing_time_ms: 1000,
+            word_count: 1,
+            preprocessing_applied: vec![],
+            processed_image_path: None,
+        };
+
+        // Verify exactly 10% alphanumeric
+        let alphanumeric_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
+        let total_chars = result.text.len();
+        let alphanumeric_ratio = alphanumeric_count as f32 / total_chars as f32;
+        assert_eq!(alphanumeric_count, 1, "Test data should have exactly 1 alphanumeric char");
+        assert_eq!(total_chars, 10, "Test data should have exactly 10 chars");
+        assert!((alphanumeric_ratio - 0.1).abs() < 0.01, "Should have exactly 10% alphanumeric, got {:.1}%", alphanumeric_ratio * 100.0);
+
+        let validation_result = service.validate_ocr_quality(&result, &settings);
+        assert!(validation_result.is_ok(),
+                "Expected validation to pass at 10% alphanumeric boundary");
+    }
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_validate_ocr_quality_below_alphanumeric_threshold() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
+        let settings = create_test_settings();
+
+        // Test text with <10% alphanumeric (pure garbage)
+        // 1 letter + 13 symbols = 14 total chars = 7.14% alphanumeric
+        let result = OcrResult {
+            text: "a!!!!!!!!!!!!!!".to_string(), // 1 alphanumeric + 14 symbols = ~7%
+            confidence: 60.0,
+            processing_time_ms: 1000,
+            word_count: 1,
+            preprocessing_applied: vec![],
+            processed_image_path: None,
+        };
+
+        // Verify <10% alphanumeric
+        let alphanumeric_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
+        let total_chars = result.text.len();
+        let alphanumeric_ratio = alphanumeric_count as f32 / total_chars as f32;
+        assert!(alphanumeric_ratio < 0.10, "Test data should have <10% alphanumeric, got {:.1}%", alphanumeric_ratio * 100.0);
+
+        let validation_result = service.validate_ocr_quality(&result, &settings);
+        assert!(validation_result.is_err(),
+                "Expected validation to fail for <10% alphanumeric content");
+
+        let error_msg = validation_result.unwrap_err();
+        assert!(error_msg.contains("non-alphanumeric"),
+                "Expected error about non-alphanumeric content, got: {}", error_msg);
+    }
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_validate_ocr_quality_empty_text() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
+        let settings = create_test_settings();
+
+        // Test completely empty text
+        // Should fail with "no characters" error (not "no words")
+        let result = OcrResult {
+            text: "".to_string(),
+            confidence: 60.0,
+            processing_time_ms: 1000,
+            word_count: 0,
+            preprocessing_applied: vec![],
+            processed_image_path: None,
+        };
+
+        let validation_result = service.validate_ocr_quality(&result, &settings);
+        assert!(validation_result.is_err(),
+                "Expected validation to fail for empty text");
+
+        let error_msg = validation_result.unwrap_err();
+        assert!(error_msg.contains("no characters"),
+                "Expected error about 'no characters' (not 'no words'), got: {}", error_msg);
+    }
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_validate_ocr_quality_whitespace_only() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service);
+        let settings = create_test_settings();
+
+        // Test text with only whitespace
+        // Has characters but no words - should fail with "No words" error
+        let result = OcrResult {
+            text: "    \n\n\t\t".to_string(),
+            confidence: 60.0,
+            processing_time_ms: 1000,
+            word_count: 0, // Whitespace doesn't count as words
+            preprocessing_applied: vec![],
+            processed_image_path: None,
+        };
+
+        let validation_result = service.validate_ocr_quality(&result, &settings);
+        assert!(validation_result.is_err(),
+                "Expected validation to fail for whitespace-only text");
+
+        let error_msg = validation_result.unwrap_err();
+        assert!(error_msg.contains("No words"),
+                "Expected error about 'No words' (not 'no characters'), got: {}", error_msg);
     }
 }

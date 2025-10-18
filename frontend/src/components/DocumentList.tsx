@@ -96,16 +96,14 @@ function DocumentList({ documents, loading }: DocumentListProps) {
   }
 
   const getOcrMetrics = (document: Document) => {
-    if (!document.has_ocr_text || !document.ocr_word_count) {
+    if (!document.has_ocr_text || document.ocr_word_count == null) {
       return null
     }
 
     const metrics = []
-    
-    if (document.ocr_word_count) {
-      metrics.push(`${document.ocr_word_count} words`)
-    }
-    
+
+    metrics.push(`${document.ocr_word_count} words`)
+
     if (document.ocr_processing_time_ms) {
       const seconds = (document.ocr_processing_time_ms / 1000).toFixed(1)
       metrics.push(`${seconds}s`)

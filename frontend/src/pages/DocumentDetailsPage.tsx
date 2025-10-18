@@ -836,7 +836,7 @@ const DocumentDetailsPage: React.FC = () => {
                                 </Typography>
                               </Box>
                             )}
-                            {ocrData.ocr_word_count && (
+                            {ocrData.ocr_word_count != null && (
                               <Box
                                 sx={{
                                   p: 2,
@@ -1083,7 +1083,7 @@ const DocumentDetailsPage: React.FC = () => {
                     size="small"
                   />
                 )}
-                {ocrData.ocr_word_count && (
+                {ocrData.ocr_word_count != null && (
                   <Chip
                     label={t('documentDetails.dialogs.ocrText.words', { count: ocrData.ocr_word_count })}
                     color="secondary"
@@ -1181,7 +1181,7 @@ const DocumentDetailsPage: React.FC = () => {
                       size="small"
                     />
                   )}
-                  {ocrData.ocr_word_count && (
+                  {ocrData.ocr_word_count != null && (
                     <Chip
                       label={t('documentDetails.dialogs.ocrText.words', { count: ocrData.ocr_word_count })}
                       color="secondary"

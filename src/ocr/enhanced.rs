@@ -1663,35 +1663,42 @@ impl EnhancedOcrService {
     /// Validate OCR result quality
     #[cfg(feature = "ocr")]
     pub fn validate_ocr_quality(&self, result: &OcrResult, settings: &Settings) -> Result<(), String> {
-        // Check minimum confidence threshold
-        if result.confidence < settings.ocr_min_confidence {
+        // Hard reject completely unreliable OCR (likely corrupted/garbage)
+        const HARD_MINIMUM_CONFIDENCE: f32 = 5.0;
+        if result.confidence < HARD_MINIMUM_CONFIDENCE {
             return Err(format!(
-                "OCR confidence below threshold: {:.1}% (minimum: {:.1}%)",
+                "OCR confidence critically low: {:.1}% (absolute minimum: {:.1}%) - likely corrupted input",
                 result.confidence,
-                settings.ocr_min_confidence
+                HARD_MINIMUM_CONFIDENCE
             ));
         }
 
-        // Check if text is reasonable (not just noise)
-        if result.word_count == 0 {
-            return Err("No words detected in OCR output".to_string());
+        // Log warning for low confidence instead of rejecting
+        if result.confidence < settings.ocr_min_confidence {
+            warn!(
+                "OCR confidence below recommended threshold: {:.1}% (recommended: {:.1}%) - accepting but flagging for review",
+                result.confidence,
+                settings.ocr_min_confidence
+            );
         }
 
-        // Check for reasonable character distribution
+        // Check empty text FIRST (before word count check)
         let total_chars = result.text.len();
         if total_chars == 0 {
             return Err("OCR result contains no characters".to_string());
         }
 
-        // Count alphanumeric characters and digits separately
-        let alphanumeric_chars = result.text.chars().filter(|c| c.is_alphanumeric()).count();
+        // THEN check word count
+        if result.word_count == 0 {
+            return Err("No words detected in OCR output".to_string());
+        }
+
+        // Special handling for numeric-heavy documents (bills, receipts, invoices)
         let digit_chars = result.text.chars().filter(|c| c.is_numeric()).count();
-        let alphanumeric_ratio = alphanumeric_chars as f32 / total_chars as f32;
         let digit_ratio = digit_chars as f32 / total_chars as f32;
 
-        // Special handling for numeric-heavy documents (bills, transaction lists, etc.)
-        // If document has >40% digits, it's likely a valid numeric document
-        if digit_ratio > 0.4 {
+        // If >30% digits, likely a valid numeric document - be more lenient
+        if digit_ratio > 0.3 {
             debug!(
                 "Document has high numeric content: {:.1}% digits - accepting as valid numeric document",
                 digit_ratio * 100.0
@@ -1699,15 +1706,28 @@ impl EnhancedOcrService {
             return Ok(());
         }
 
-        // Expect at least 20% alphanumeric characters for valid text (relaxed from 30%)
-        const MIN_ALPHANUMERIC_RATIO: f32 = 0.20;
+        // Count alphanumeric characters
+        let alphanumeric_chars = result.text.chars().filter(|c| c.is_alphanumeric()).count();
+        let alphanumeric_ratio = alphanumeric_chars as f32 / total_chars as f32;
+
+        // Relaxed threshold: only reject if >90% symbols (likely garbage)
+        // This allows bills/receipts with lots of numbers and special characters
+        const MIN_ALPHANUMERIC_RATIO: f32 = 0.10;
         if alphanumeric_ratio < MIN_ALPHANUMERIC_RATIO {
             return Err(format!(
-                "OCR result has low alphanumeric content: {:.1}% (minimum: {:.1}%)",
+                "OCR result has too much non-alphanumeric content: {:.1}% alphanumeric (minimum: {:.1}%)",
                 alphanumeric_ratio * 100.0,
                 MIN_ALPHANUMERIC_RATIO * 100.0
             ));
         }
+
+        // Log info for documents with reasonable content
+        debug!(
+            "OCR validation passed: {:.1}% confidence, {} words, {:.1}% alphanumeric",
+            result.confidence,
+            result.word_count,
+            alphanumeric_ratio * 100.0
+        );
 
         Ok(())
     }
