@@ -124,7 +124,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://localhost:8000
 
       - name: Upload Playwright Test Results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: playwright-results
