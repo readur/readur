@@ -7,14 +7,14 @@ import { vi } from 'vitest';
  */
 export const createComprehensiveAxiosMock = () => {
   const mockAxiosInstance = {
-    get: vi.fn().mockResolvedValue({ data: {} }),
-    post: vi.fn().mockResolvedValue({ data: { success: true } }),
-    put: vi.fn().mockResolvedValue({ data: { success: true } }),
-    delete: vi.fn().mockResolvedValue({ data: { success: true } }),
-    patch: vi.fn().mockResolvedValue({ data: { success: true } }),
-    request: vi.fn().mockResolvedValue({ data: { success: true } }),
-    head: vi.fn().mockResolvedValue({ data: {} }),
-    options: vi.fn().mockResolvedValue({ data: {} }),
+    get: vi.fn().mockResolvedValue({ status: 200, data: {} }),
+    post: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
+    put: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
+    delete: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
+    patch: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
+    request: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
+    head: vi.fn().mockResolvedValue({ status: 200, data: {} }),
+    options: vi.fn().mockResolvedValue({ status: 200, data: {} }),
     defaults: { 
       headers: { 
         common: {},
@@ -52,18 +52,27 @@ export const createComprehensiveAxiosMock = () => {
 /**
  * Creates comprehensive API service mocks
  */
-export const createComprehensiveApiMocks = () => ({
-  api: {
-    get: vi.fn().mockResolvedValue({ data: {} }),
-    post: vi.fn().mockResolvedValue({ data: { success: true } }),
-    put: vi.fn().mockResolvedValue({ data: { success: true } }),
-    delete: vi.fn().mockResolvedValue({ data: { success: true } }),
-    patch: vi.fn().mockResolvedValue({ data: { success: true } }),
+export const createComprehensiveApiMocks = () => {
+  const mockApi = {
+    get: vi.fn().mockResolvedValue({ status: 200, data: [] }),
+    post: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
+    put: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
+    delete: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
+    patch: vi.fn().mockResolvedValue({ status: 200, data: { success: true } }),
     defaults: { headers: { common: {} } },
-  },
-  documentService: {
-    getRetryRecommendations: vi.fn().mockResolvedValue({ 
-      data: { recommendations: [], total_recommendations: 0 } 
+    interceptors: {
+      request: { use: vi.fn(), eject: vi.fn() },
+      response: { use: vi.fn(), eject: vi.fn() },
+    },
+  };
+
+  return {
+    api: mockApi,
+    default: mockApi, // Add default export for api
+    documentService: {
+      getById: vi.fn().mockResolvedValue({ data: {} }),
+    getRetryRecommendations: vi.fn().mockResolvedValue({
+      data: { recommendations: [], total_recommendations: 0 }
     }),
     bulkRetryOcr: vi.fn().mockResolvedValue({ data: { success: true } }),
     getFailedDocuments: vi.fn().mockResolvedValue({
@@ -80,30 +89,30 @@ export const createComprehensiveApiMocks = () => ({
         statistics: { total_duplicate_groups: 0 },
       },
     }),
-    enhancedSearch: vi.fn().mockResolvedValue({ 
-      data: { 
-        documents: [], 
-        total: 0, 
-        query_time_ms: 0, 
-        suggestions: [] 
-      } 
+    enhancedSearch: vi.fn().mockResolvedValue({
+      data: {
+        documents: [],
+        total: 0,
+        query_time_ms: 0,
+        suggestions: []
+      }
     }),
-    search: vi.fn().mockResolvedValue({ 
-      data: { 
-        documents: [], 
-        total: 0, 
-        query_time_ms: 0, 
-        suggestions: [] 
-      } 
+    search: vi.fn().mockResolvedValue({
+      data: {
+        documents: [],
+        total: 0,
+        query_time_ms: 0,
+        suggestions: []
+      }
     }),
     getOcrText: vi.fn().mockResolvedValue({ data: {} }),
     upload: vi.fn().mockResolvedValue({ data: {} }),
     list: vi.fn().mockResolvedValue({ data: [] }),
-    listWithPagination: vi.fn().mockResolvedValue({ 
-      data: { 
-        documents: [], 
-        pagination: { total: 0, limit: 20, offset: 0, has_more: false } 
-      } 
+    listWithPagination: vi.fn().mockResolvedValue({
+      data: {
+        documents: [],
+        pagination: { total: 0, limit: 20, offset: 0, has_more: false }
+      }
     }),
     delete: vi.fn().mockResolvedValue({}),
     bulkDelete: vi.fn().mockResolvedValue({}),
@@ -122,7 +131,8 @@ export const createComprehensiveApiMocks = () => ({
   queueService: {
     getQueueStatus: vi.fn().mockResolvedValue({ data: { active: 0, waiting: 0 } }),
   },
-});
+}};
+
 
 /**
  * Standard pattern for mocking both axios and API services
