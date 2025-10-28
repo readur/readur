@@ -13,6 +13,7 @@ import {
   IconButton,
   Paper,
   Alert,
+  AlertTitle,
   CircularProgress,
   Tooltip,
   Dialog,
@@ -24,6 +25,7 @@ import {
   Skeleton,
   TextField,
   InputAdornment,
+  Snackbar,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
@@ -52,6 +54,9 @@ import {
   OpenInFull as ExpandIcon,
   Close as CloseIcon,
   Delete as DeleteIcon,
+  Schedule as ScheduleIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { documentService, OcrResponse, type Document } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
@@ -72,6 +77,67 @@ const DocumentDetailsPage: React.FC = () => {
   const { mode, modernTokens, glassEffect } = useTheme();
   const theme = useMuiTheme();
   const [document, setDocument] = useState<Document | null>(null);
+
+  // Helper function to render OCR status badge
+  const getOcrStatusBadge = (status?: string) => {
+    if (!status || status === 'pending') {
+      return (
+        <Chip
+          icon={<ScheduleIcon sx={{ fontSize: 18 }} />}
+          label="Pending OCR"
+          sx={{
+            backgroundColor: theme.palette.warning.light,
+            color: theme.palette.warning.dark,
+            border: `1px solid ${theme.palette.warning.main}`,
+            fontWeight: 600,
+          }}
+        />
+      );
+    }
+
+    if (status === 'processing') {
+      return (
+        <Chip
+          icon={<CircularProgress size={16} sx={{ ml: 1 }} />}
+          label="Processing..."
+          sx={{
+            backgroundColor: theme.palette.info.light,
+            color: theme.palette.info.dark,
+            border: `1px solid ${theme.palette.info.main}`,
+            fontWeight: 600,
+          }}
+        />
+      );
+    }
+
+    if (status === 'completed') {
+      return (
+        <Chip
+          icon={<CheckCircleIcon sx={{ fontSize: 18 }} />}
+          label="Completed"
+          color="success"
+          sx={{
+            fontWeight: 600,
+          }}
+        />
+      );
+    }
+
+    if (status === 'failed') {
+      return (
+        <Chip
+          icon={<ErrorIcon sx={{ fontSize: 18 }} />}
+          label="Failed"
+          color="error"
+          sx={{
+            fontWeight: 600,
+          }}
+        />
+      );
+    }
+
+    return null;
+  };
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
@@ -92,15 +158,20 @@ const DocumentDetailsPage: React.FC = () => {
   // Retry functionality state
   const [retryingOcr, setRetryingOcr] = useState<boolean>(false);
   const [retryHistoryModalOpen, setRetryHistoryModalOpen] = useState<boolean>(false);
-  
+
   // Delete functionality state
   const [deleting, setDeleting] = useState<boolean>(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
 
+  // Snackbar state for retry feedback
+  const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false);
+  const [snackbarMessage, setSnackbarMessage] = useState<string>('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+
   // Retry handlers
   const handleRetryOcr = async () => {
     if (!document) return;
-    
+
     setRetryingOcr(true);
     try {
       await documentService.bulkRetryOcr({
@@ -108,13 +179,22 @@ const DocumentDetailsPage: React.FC = () => {
         document_ids: [document.id],
         priority_override: 15,
       });
-      
-      // Show success message and refresh document
+
+      // Show success message
+      setSnackbarMessage('OCR retry initiated successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+
+      // Refresh document after a brief delay
       setTimeout(() => {
         fetchDocumentDetails();
       }, 1000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to retry OCR:', error);
+      // Show error message
+      setSnackbarMessage(`Failed to retry OCR: ${error.message || 'Unknown error'}`);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     } finally {
       setRetryingOcr(false);
     }
@@ -169,6 +249,21 @@ const DocumentDetailsPage: React.FC = () => {
   useEffect(() => {
     fetchAvailableLabels();
   }, []);
+
+  // Auto-refresh during OCR processing
+  useEffect(() => {
+    if (!document) return;
+
+    const isProcessing = document.ocr_status === 'processing' || retryingOcr;
+
+    if (isProcessing) {
+      const interval = setInterval(() => {
+        fetchDocumentDetails();
+      }, 3000); // Poll every 3 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [document?.ocr_status, retryingOcr]);
 
   const fetchDocumentDetails = async (): Promise<void> => {
     if (!id) {
@@ -492,8 +587,37 @@ const DocumentDetailsPage: React.FC = () => {
           </Box>
         </Fade>
 
+        {/* OCR Status Alert - Shows when failed */}
+        {document?.ocr_status === 'failed' && (
+          <Fade in timeout={600}>
+            <Alert
+              severity="error"
+              sx={{
+                mb: 4,
+                borderRadius: 3,
+                border: `1px solid ${theme.palette.error.main}`,
+              }}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={handleRetryOcr}
+                  disabled={retryingOcr}
+                  startIcon={retryingOcr ? <CircularProgress size={16} /> : <RefreshIcon />}
+                  sx={{ fontWeight: 600 }}
+                >
+                  Retry OCR
+                </Button>
+              }
+            >
+              <AlertTitle sx={{ fontWeight: 700 }}>OCR Processing Failed</AlertTitle>
+              {document.ocr_failure_reason || document.ocr_error || 'OCR processing encountered an error. You can retry the operation.'}
+            </Alert>
+          </Fade>
+        )}
+
         {/* Modern Content Layout */}
-        <Fade in timeout={800}>
+        <Fade in timeout={700}>
           <Grid container spacing={4}>
             {/* Hero Document Preview */}
             <Grid item xs={12} lg={5}>
@@ -664,19 +788,43 @@ const DocumentDetailsPage: React.FC = () => {
                       </Box>
                     )}
                     
-                    {document.has_ocr_text && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    {/* OCR Status with Retry Info */}
+                    <Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                         <Typography variant="body2" color="text.secondary">
                           {t('documentDetails.metadata.ocrStatus')}
                         </Typography>
-                        <Chip
-                          label={t('documentDetails.metadata.textExtracted')}
-                          color="success"
-                          size="small"
-                          icon={<TextIcon sx={{ fontSize: 16 }} />}
-                        />
+                        {getOcrStatusBadge(document.ocr_status)}
                       </Box>
-                    )}
+
+                      {/* Retry Count Indicator */}
+                      {document.ocr_retry_count != null && document.ocr_retry_count > 0 && (
+                        <Box
+                          onClick={handleShowRetryHistory}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                            cursor: 'pointer',
+                            p: 1,
+                            mt: 1,
+                            borderRadius: 1.5,
+                            backgroundColor: theme.palette.action.hover,
+                            border: `1px solid ${theme.palette.divider}`,
+                            transition: 'all 0.2s ease',
+                            '&:hover': {
+                              backgroundColor: theme.palette.action.selected,
+                              borderColor: theme.palette.info.main,
+                            },
+                          }}
+                        >
+                          <HistoryIcon sx={{ fontSize: 16, color: theme.palette.info.main }} />
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: theme.palette.text.secondary }}>
+                            Retried {document.ocr_retry_count}× - click for history
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
                   </Stack>
                   
                   {/* Action Buttons */}
@@ -1490,6 +1638,26 @@ const DocumentDetailsPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for Retry Feedback */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity={snackbarSeverity}
+          sx={{
+            width: '100%',
+            borderRadius: 2,
+            boxShadow: theme.shadows[8],
+          }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

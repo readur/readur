@@ -1,0 +1,20 @@
+# Development Dockerfile for frontend with Vite hot-reloading
+FROM node:22-bookworm
+
+WORKDIR /app
+
+# Copy package files for dependency installation
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# The source code will be mounted as a volume for hot-reloading
+# Vite's dev server provides hot module replacement (HMR)
+
+EXPOSE 3456
+
+# Run Vite dev server
+# --host 0.0.0.0 allows connections from outside the container
+# --port is set via CLIENT_PORT environment variable in vite.config.ts
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

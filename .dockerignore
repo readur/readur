@@ -1,0 +1,76 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+docs/
+site/
+
+# Development files
+.env
+.env.dev
+.env.test
+*.log
+
+# Test files and data
+test_data/
+test_files/
+test-uploads/
+test-results/
+tests/
+
+# Build artifacts
+target/
+frontend/dist/
+frontend/node_modules/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CI/CD
+.woodpecker/
+.claude/
+
+# Docker files (no need to copy into image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Temporary files
+*.tmp
+*.bak
+.DS_Store
+
+# Uploads and watch directories (will be mounted)
+readur_uploads/
+readur_watch/
+uploads/
+
+# Other
+charts/
+scripts/
+Makefile
+requirements.txt
+*.sh
+grafana-dashboard.json
+nginx.conf
+ssl/
+config/
+.cargo/
+renovate.json
+mkdocs.yml
+.playwright-mcp/

@@ -1,0 +1,73 @@
+# Development Dockerfile with hot-reloading support for Rust backend
+FROM rust:1.90-bookworm
+
+# Install system dependencies for OCR and PDF processing
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-spa \
+    tesseract-ocr-fra \
+    tesseract-ocr-deu \
+    tesseract-ocr-ita \
+    tesseract-ocr-por \
+    tesseract-ocr-rus \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-chi-tra \
+    tesseract-ocr-jpn \
+    tesseract-ocr-kor \
+    tesseract-ocr-ara \
+    tesseract-ocr-hin \
+    tesseract-ocr-nld \
+    tesseract-ocr-swe \
+    tesseract-ocr-nor \
+    tesseract-ocr-dan \
+    tesseract-ocr-fin \
+    tesseract-ocr-pol \
+    tesseract-ocr-ces \
+    tesseract-ocr-hun \
+    tesseract-ocr-tur \
+    tesseract-ocr-tha \
+    tesseract-ocr-vie \
+    libtesseract-dev \
+    libleptonica-dev \
+    pkg-config \
+    libclang-dev \
+    clang \
+    poppler-utils \
+    ocrmypdf \
+    curl \
+    # Legacy DOC file support
+    antiword \
+    catdoc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-watch for auto-recompilation
+RUN cargo install cargo-watch
+
+WORKDIR /app
+
+# Create necessary directories
+RUN mkdir -p /app/uploads /app/watch /app/frontend
+
+# Copy dependency files first for better caching
+COPY Cargo.toml Cargo.lock ./
+
+# Create dummy source files for all binaries to build dependencies
+# This significantly speeds up the first cargo-watch build
+RUN mkdir -p src/bin && \
+    echo "fn main() {}" > src/main.rs && \
+    echo "fn main() {}" > src/bin/test_runner.rs && \
+    echo "fn main() {}" > src/bin/analyze-webdav-performance.rs && \
+    cargo build && \
+    rm -rf src target
+
+# The actual source code will be mounted as a volume
+# This allows for hot-reloading without rebuilding the image
+
+EXPOSE 8000
+
+# Use cargo-watch to automatically rebuild and restart on file changes
+# --why: shows what triggered the rebuild
+# --ignore: ignore certain file patterns to avoid unnecessary rebuilds
+# Run the main readur binary
+CMD ["cargo", "watch", "-x", "run --bin readur", "--why", "--ignore", "frontend/*", "--ignore", "*.md", "--ignore", "test*"]

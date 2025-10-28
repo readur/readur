@@ -1693,40 +1693,29 @@ impl EnhancedOcrService {
             return Err("No words detected in OCR output".to_string());
         }
 
-        // Special handling for numeric-heavy documents (bills, receipts, invoices)
-        let digit_chars = result.text.chars().filter(|c| c.is_numeric()).count();
-        let digit_ratio = digit_chars as f32 / total_chars as f32;
+        // Count valuable content: letters + digits (explicitly treating digits as good content)
+        let content_chars = result.text.chars().filter(|c| c.is_alphanumeric()).count();
+        let content_ratio = content_chars as f32 / total_chars as f32;
 
-        // If >30% digits, likely a valid numeric document - be more lenient
-        if digit_ratio > 0.3 {
-            debug!(
-                "Document has high numeric content: {:.1}% digits - accepting as valid numeric document",
-                digit_ratio * 100.0
-            );
-            return Ok(());
-        }
-
-        // Count alphanumeric characters
-        let alphanumeric_chars = result.text.chars().filter(|c| c.is_alphanumeric()).count();
-        let alphanumeric_ratio = alphanumeric_chars as f32 / total_chars as f32;
-
-        // Relaxed threshold: only reject if >90% symbols (likely garbage)
-        // This allows bills/receipts with lots of numbers and special characters
-        const MIN_ALPHANUMERIC_RATIO: f32 = 0.10;
-        if alphanumeric_ratio < MIN_ALPHANUMERIC_RATIO {
+        // Only reject if >90% symbols (likely OCR garbage)
+        // This allows bills/receipts/invoices with numbers and formatting characters
+        const MIN_CONTENT_RATIO: f32 = 0.10;
+        if content_ratio < MIN_CONTENT_RATIO {
+            let symbol_ratio = 1.0 - content_ratio;
             return Err(format!(
-                "OCR result has too much non-alphanumeric content: {:.1}% alphanumeric (minimum: {:.1}%)",
-                alphanumeric_ratio * 100.0,
-                MIN_ALPHANUMERIC_RATIO * 100.0
+                "OCR result has too little meaningful content: {:.1}% content (letters+digits), {:.1}% symbols/formatting (minimum content: {:.1}%)",
+                content_ratio * 100.0,
+                symbol_ratio * 100.0,
+                MIN_CONTENT_RATIO * 100.0
             ));
         }
 
         // Log info for documents with reasonable content
         debug!(
-            "OCR validation passed: {:.1}% confidence, {} words, {:.1}% alphanumeric",
+            "OCR validation passed: {:.1}% confidence, {} words, {:.1}% content (letters+digits)",
             result.confidence,
             result.word_count,
-            alphanumeric_ratio * 100.0
+            content_ratio * 100.0
         );
 
         Ok(())

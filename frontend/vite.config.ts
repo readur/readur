@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react'
 // Support environment variables for development
 const BACKEND_PORT = process.env.BACKEND_PORT || '8000'
 const CLIENT_PORT = process.env.CLIENT_PORT || '5173'
+// Allow overriding the proxy target for Docker development
+const PROXY_TARGET = process.env.VITE_API_PROXY_TARGET || `http://localhost:${BACKEND_PORT}`
 
 export default defineConfig({
   plugins: [react()],
@@ -15,7 +17,7 @@ export default defineConfig({
     port: parseInt(CLIENT_PORT),
     proxy: {
       '/api': {
-        target: `http://localhost:${BACKEND_PORT}`,
+        target: PROXY_TARGET,
         changeOrigin: true,
       },
     },

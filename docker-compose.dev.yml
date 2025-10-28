@@ -1,0 +1,122 @@
+# Docker Compose configuration for development with hot-reloading
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: readur
+      POSTGRES_PASSWORD: readur
+      POSTGRES_DB: readur
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U readur"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      # Database configuration
+      DATABASE_URL: postgresql://readur:readur@postgres/readur
+
+      # Server configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8000
+
+      # Security
+      JWT_SECRET: dev-secret-key-change-in-production
+
+      # File paths
+      UPLOAD_PATH: /app/uploads
+      WATCH_FOLDER: /app/watch
+
+      # OCR configuration
+      OCR_LANGUAGE: eng
+      CONCURRENT_OCR_JOBS: 4
+      OCR_TIMEOUT_SECONDS: 300
+      MAX_FILE_SIZE_MB: 50
+
+      # Performance
+      MEMORY_LIMIT_MB: 512
+      CPU_PRIORITY: normal
+
+      # File watching
+      ALLOWED_FILE_TYPES: pdf,txt,doc,docx,png,jpg,jpeg
+      WATCH_INTERVAL_SECONDS: 30
+      FILE_STABILITY_CHECK_MS: 1000
+      MAX_FILE_AGE_HOURS: 24
+
+      # Development mode
+      RUST_LOG: debug
+      RUST_BACKTRACE: 1
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      # Mount source code for hot-reloading
+      - ./src:/app/src
+      - ./Cargo.toml:/app/Cargo.toml
+      - ./Cargo.lock:/app/Cargo.lock
+      - ./migrations:/app/migrations
+
+      # Persistent storage
+      - ./readur_uploads:/app/uploads
+      - ./readur_watch:/app/watch
+
+      # Cache cargo registry and git dependencies to speed up rebuilds
+      - cargo_registry:/usr/local/cargo/registry
+      - cargo_git:/usr/local/cargo/git
+
+      # Cache build artifacts (but not the final binary)
+      - target_cache:/app/target
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # No healthcheck in dev mode to avoid noise during restarts
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      # Configure Vite to proxy API requests to the backend service
+      # In Docker network, services can communicate by service name
+      VITE_API_PROXY_TARGET: http://backend:8000
+
+      # Use a less common port to avoid conflicts
+      CLIENT_PORT: 3456
+
+    ports:
+      - "3456:3456"
+
+    volumes:
+      # Mount entire frontend directory for hot-reloading
+      # This is simpler and avoids file vs directory mount issues
+      - ./frontend:/app
+
+      # Exclude node_modules - use the container's version
+      - /app/node_modules
+
+      # Exclude any build artifacts
+      - /app/dist
+
+    depends_on:
+      - backend
+
+    # Enable stdin and tty for interactive npm commands
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data_dev:
+  cargo_registry:
+  cargo_git:
+  target_cache:

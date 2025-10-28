@@ -61,6 +61,10 @@ export interface Document {
   ocr_word_count?: number
   ocr_processing_time_ms?: number
   ocr_status?: string
+  ocr_error?: string
+  ocr_failure_reason?: string
+  ocr_retry_count?: number
+  ocr_completed_at?: string
 }
 
 export interface SearchRequest {
@@ -113,6 +117,10 @@ export interface EnhancedDocument {
   ocr_word_count?: number
   ocr_processing_time_ms?: number
   ocr_status?: string
+  ocr_error?: string
+  ocr_failure_reason?: string
+  ocr_retry_count?: number
+  ocr_completed_at?: string
   search_rank?: number
   snippets: SearchSnippet[]
 }
@@ -250,6 +258,8 @@ export interface OcrResponse {
   ocr_processing_time_ms?: number
   ocr_status?: string
   ocr_error?: string
+  ocr_failure_reason?: string
+  ocr_retry_count?: number
   ocr_completed_at?: string
 }
 

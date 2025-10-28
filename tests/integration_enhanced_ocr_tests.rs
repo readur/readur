@@ -366,7 +366,7 @@ mod tests {
         let settings = create_test_settings();
         
         let result = OcrResult {
-            text: "!!!@@@###$$$%%%^^^&&&***".to_string(), // Mostly symbols, < 30% alphanumeric
+            text: "!!!@@@###$$$%%%^^^&&&***".to_string(), // Mostly symbols, < 10% content
             confidence: 85.0,
             processing_time_ms: 1000,
             word_count: 1,
@@ -676,8 +676,8 @@ startxref
         let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
 
-        // Test invoice/receipt with >30% digits
-        // Should be accepted even with lower alphanumeric ratio due to high digit content
+        // Test invoice/receipt with lots of digits
+        // Should be accepted because digits count as valuable content (letters+digits >= 10%)
         let result = OcrResult {
             text: "Invoice #12345\n$1,234.56\n$2,345.67\nTotal: $3,580.23\n!!!".to_string(),
             confidence: 60.0,
@@ -687,15 +687,15 @@ startxref
             processed_image_path: None,
         };
 
-        // Calculate to verify we have >30% digits
-        let digit_count = result.text.chars().filter(|c| c.is_numeric()).count();
+        // Calculate to verify we have good content ratio (letters + digits)
+        let content_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
         let total_chars = result.text.len();
-        let digit_ratio = digit_count as f32 / total_chars as f32;
-        assert!(digit_ratio > 0.3, "Test data should have >30% digits, got {:.1}%", digit_ratio * 100.0);
+        let content_ratio = content_count as f32 / total_chars as f32;
+        assert!(content_ratio >= 0.10, "Test data should have >=10% content, got {:.1}%", content_ratio * 100.0);
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
         assert!(validation_result.is_ok(),
-                "Expected validation to pass for numeric document with {:.1}% digits", digit_ratio * 100.0);
+                "Expected validation to pass for numeric document with {:.1}% content", content_ratio * 100.0);
     }
 
     #[cfg(feature = "ocr")]
@@ -707,8 +707,8 @@ startxref
         let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
 
-        // Test document with exactly 30% digits (boundary case)
-        // 30 digits + 70 non-digit chars = 100 total chars
+        // Test document with 30% digits and 70% letters (100% content)
+        // Should easily pass since content ratio = 100%
         let result = OcrResult {
             text: "123456789012345678901234567890AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
             confidence: 60.0,
@@ -718,19 +718,18 @@ startxref
             processed_image_path: None,
         };
 
-        // Verify exactly 30% digits
-        let digit_count = result.text.chars().filter(|c| c.is_numeric()).count();
+        // Verify 100% content (30% digits + 70% letters)
+        let content_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
         let total_chars = result.text.len();
-        let digit_ratio = digit_count as f32 / total_chars as f32;
-        assert_eq!(digit_count, 30, "Test data should have exactly 30 digits");
+        let content_ratio = content_count as f32 / total_chars as f32;
+        assert_eq!(content_count, 100, "Test data should have 100% content");
         assert_eq!(total_chars, 100, "Test data should have exactly 100 chars");
-        assert!((digit_ratio - 0.3).abs() < 0.01, "Should have exactly 30% digits, got {:.1}%", digit_ratio * 100.0);
+        assert!((content_ratio - 1.0).abs() < 0.01, "Should have 100% content, got {:.1}%", content_ratio * 100.0);
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
-        // At exactly 30%, it should NOT trigger the >30% special handling
-        // So it will be validated normally (which should pass with 100% alphanumeric)
+        // Should pass easily with 100% content (letters + digits)
         assert!(validation_result.is_ok(),
-                "Expected validation to pass at 30% digit boundary");
+                "Expected validation to pass with 100% content");
     }
 
     #[cfg(feature = "ocr")]
@@ -742,10 +741,10 @@ startxref
         let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
 
-        // Test text with exactly 10% alphanumeric characters (boundary case)
-        // 1 letter + 9 symbols = 10 total chars = 10% alphanumeric
+        // Test text with exactly 10% content (letters+digits) - boundary case
+        // 1 letter + 9 symbols = 10 total chars = 10% content
         let result = OcrResult {
-            text: "a!!!!!!!!!".to_string(), // 1 alphanumeric + 9 symbols = 10%
+            text: "a!!!!!!!!!".to_string(), // 1 letter + 9 symbols = 10% content
             confidence: 60.0,
             processing_time_ms: 1000,
             word_count: 1,
@@ -753,17 +752,17 @@ startxref
             processed_image_path: None,
         };
 
-        // Verify exactly 10% alphanumeric
-        let alphanumeric_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
+        // Verify exactly 10% content (letters+digits)
+        let content_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
         let total_chars = result.text.len();
-        let alphanumeric_ratio = alphanumeric_count as f32 / total_chars as f32;
-        assert_eq!(alphanumeric_count, 1, "Test data should have exactly 1 alphanumeric char");
+        let content_ratio = content_count as f32 / total_chars as f32;
+        assert_eq!(content_count, 1, "Test data should have exactly 1 content char");
         assert_eq!(total_chars, 10, "Test data should have exactly 10 chars");
-        assert!((alphanumeric_ratio - 0.1).abs() < 0.01, "Should have exactly 10% alphanumeric, got {:.1}%", alphanumeric_ratio * 100.0);
+        assert!((content_ratio - 0.1).abs() < 0.01, "Should have exactly 10% content, got {:.1}%", content_ratio * 100.0);
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
         assert!(validation_result.is_ok(),
-                "Expected validation to pass at 10% alphanumeric boundary");
+                "Expected validation to pass at 10% content boundary");
     }
 
     #[cfg(feature = "ocr")]
@@ -775,10 +774,10 @@ startxref
         let service = EnhancedOcrService::new(temp_path, file_service);
         let settings = create_test_settings();
 
-        // Test text with <10% alphanumeric (pure garbage)
-        // 1 letter + 13 symbols = 14 total chars = 7.14% alphanumeric
+        // Test text with <10% content (letters+digits) - pure garbage
+        // 1 letter + 14 symbols = 15 total chars = 6.67% content
         let result = OcrResult {
-            text: "a!!!!!!!!!!!!!!".to_string(), // 1 alphanumeric + 14 symbols = ~7%
+            text: "a!!!!!!!!!!!!!!".to_string(), // 1 letter + 14 symbols = ~7% content
             confidence: 60.0,
             processing_time_ms: 1000,
             word_count: 1,
@@ -786,19 +785,19 @@ startxref
             processed_image_path: None,
         };
 
-        // Verify <10% alphanumeric
-        let alphanumeric_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
+        // Verify <10% content (letters+digits)
+        let content_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
         let total_chars = result.text.len();
-        let alphanumeric_ratio = alphanumeric_count as f32 / total_chars as f32;
-        assert!(alphanumeric_ratio < 0.10, "Test data should have <10% alphanumeric, got {:.1}%", alphanumeric_ratio * 100.0);
+        let content_ratio = content_count as f32 / total_chars as f32;
+        assert!(content_ratio < 0.10, "Test data should have <10% content, got {:.1}%", content_ratio * 100.0);
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
         assert!(validation_result.is_err(),
-                "Expected validation to fail for <10% alphanumeric content");
+                "Expected validation to fail for <10% content");
 
         let error_msg = validation_result.unwrap_err();
-        assert!(error_msg.contains("non-alphanumeric"),
-                "Expected error about non-alphanumeric content, got: {}", error_msg);
+        assert!(error_msg.contains("meaningful content"),
+                "Expected error about meaningful content, got: {}", error_msg);
     }
 
     #[cfg(feature = "ocr")]
