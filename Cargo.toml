@@ -88,7 +88,7 @@ rand = "0.8"
 testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
-rust_xlsxwriter = "0.90"  # For creating proper XLSX test files
+rust_xlsxwriter = "0.91"  # For creating proper XLSX test files
 
 # Enable test-utils feature for all tests
 readur = { path = ".", features = ["test-utils"] }
