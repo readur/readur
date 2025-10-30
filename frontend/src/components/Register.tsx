@@ -1,16 +1,45 @@
-import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 
+interface AuthConfig {
+  allow_local_auth: boolean;
+  oidc_enabled: boolean;
+}
+
 function Register() {
+  const navigate = useNavigate()
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [configLoading, setConfigLoading] = useState(true)
   const { register } = useAuth()
+
+  // Fetch authentication configuration and redirect if local auth is disabled
+  useEffect(() => {
+    const fetchAuthConfig = async () => {
+      try {
+        const response = await fetch('/api/auth/config');
+        if (response.ok) {
+          const config: AuthConfig = await response.json();
+          if (!config.allow_local_auth) {
+            // Redirect to login if local auth is disabled
+            navigate('/login');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch auth config:', err);
+      } finally {
+        setConfigLoading(false);
+      }
+    };
+
+    fetchAuthConfig();
+  }, [navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,6 +53,16 @@ function Register() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (configLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="text-center">
+          <p className="text-gray-600">{t('common.loading', 'Loading...')}</p>
+        </div>
+      </div>
+    )
   }
 
   return (

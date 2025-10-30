@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
@@ -20,8 +20,15 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/register", post(register))
         .route("/login", post(login))
         .route("/me", get(me))
+        .route("/config", get(get_auth_config))
         .route("/oidc/login", get(oidc_login))
         .route("/oidc/callback", get(oidc_callback))
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct AuthConfig {
+    allow_local_auth: bool,
+    oidc_enabled: bool,
 }
 
 
@@ -80,6 +87,26 @@ async fn register(
             ).into_response()
         }
     }
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/auth/config",
+    tag = "auth",
+    responses(
+        (status = 200, description = "Authentication configuration", body = AuthConfig),
+    )
+)]
+async fn get_auth_config(
+    State(state): State<Arc<AppState>>,
+) -> Json<AuthConfig> {
+    let allow_local_auth = state.config.allow_local_auth.unwrap_or(true);
+    let oidc_enabled = state.oidc_client.is_some();
+
+    Json(AuthConfig {
+        allow_local_auth,
+        oidc_enabled,
+    })
 }
 
 #[utoipa::path(
