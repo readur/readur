@@ -131,9 +131,12 @@ impl EnhancedOcrService {
             
             Ok((text, confidence))
         }).await??;
-        
+
         let (text, confidence) = ocr_result;
-        
+
+        // Sanitize null bytes to prevent PostgreSQL errors
+        let text = Self::remove_null_bytes(&text);
+
         let processing_time = start_time.elapsed().as_millis() as u64;
         let word_count = text.split_whitespace().count();
         
@@ -917,6 +920,10 @@ impl EnhancedOcrService {
                 // Check if quick extraction got good results
                 if self.is_text_extraction_quality_sufficient(&text, word_count, file_size) {
                     info!("PDF text extraction successful for '{}' using quick method", file_path);
+
+                    // Sanitize null bytes to prevent PostgreSQL errors
+                    let text = Self::remove_null_bytes(&text);
+
                     return Ok(OcrResult {
                         text,
                         confidence: 95.0,
@@ -946,7 +953,10 @@ impl EnhancedOcrService {
                     let processing_time = start_time.elapsed().as_millis() as u64;
                     let word_count = self.count_words_safely(&text);
                     info!("Direct text extraction succeeded as last resort for: {}", file_path);
-                    
+
+                    // Sanitize null bytes to prevent PostgreSQL errors
+                    let text = Self::remove_null_bytes(&text);
+
                     return Ok(OcrResult {
                         text,
                         confidence: 50.0, // Lower confidence for direct extraction
@@ -1155,9 +1165,12 @@ impl EnhancedOcrService {
         let processing_time = start_time.elapsed().as_millis() as u64;
         let word_count = self.count_words_safely(&ocr_text_result);
         
-        info!("OCR extraction completed for '{}': {} words in {}ms", 
+        info!("OCR extraction completed for '{}': {} words in {}ms",
               file_path, word_count, processing_time);
-        
+
+        // Sanitize null bytes to prevent PostgreSQL errors
+        let ocr_text_result = Self::remove_null_bytes(&ocr_text_result);
+
         Ok(OcrResult {
             text: ocr_text_result,
             confidence: 85.0, // OCR is generally lower confidence than direct text extraction
