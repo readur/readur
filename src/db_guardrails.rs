@@ -559,22 +559,22 @@ mod tests {
     fn test_sanitize_text_for_db() {
         // Test removing null bytes
         let text_with_nulls = "Hello\0World\0!";
-        let sanitized = TransactionManager::sanitize_text_for_db(text_with_nulls);
+        let sanitized = DocumentTransactionManager::sanitize_text_for_db(text_with_nulls);
         assert_eq!(sanitized, "HelloWorld!");
-        
+
         // Test preserving normal text
         let normal_text = "This is a normal PDF text with special chars: €£¥";
-        let sanitized = TransactionManager::sanitize_text_for_db(normal_text);
+        let sanitized = DocumentTransactionManager::sanitize_text_for_db(normal_text);
         assert_eq!(sanitized, normal_text);
-        
+
         // Test handling empty string
         let empty = "";
-        let sanitized = TransactionManager::sanitize_text_for_db(empty);
+        let sanitized = DocumentTransactionManager::sanitize_text_for_db(empty);
         assert_eq!(sanitized, "");
-        
+
         // Test handling text with multiple null bytes
         let many_nulls = "\0\0Start\0Middle\0\0End\0\0";
-        let sanitized = TransactionManager::sanitize_text_for_db(many_nulls);
+        let sanitized = DocumentTransactionManager::sanitize_text_for_db(many_nulls);
         assert_eq!(sanitized, "StartMiddleEnd");
     }
 }
