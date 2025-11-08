@@ -3,6 +3,7 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf, Component};
 use tracing::{warn, debug};
+use rand::Rng;
 
 /// Validate and sanitize file paths to prevent path traversal attacks
 pub fn validate_and_sanitize_path(input_path: &str) -> Result<String> {
@@ -225,6 +226,35 @@ pub fn validate_path_within_base(path: &str, base_dir: &str) -> Result<()> {
     Ok(())
 }
 
+/// Generate a cryptographically secure random password
+///
+/// Generates a password with the specified length containing:
+/// - Uppercase letters (A-Z)
+/// - Lowercase letters (a-z)
+/// - Numbers (0-9)
+/// - Special characters (!@#$%^&*-_=+)
+///
+/// # Arguments
+/// * `length` - The desired password length (minimum 12, recommended 24+)
+///
+/// # Returns
+/// A randomly generated password string
+pub fn generate_secure_password(length: usize) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                            abcdefghijklmnopqrstuvwxyz\
+                            0123456789\
+                            !@#$%^&*-_=+";
+
+    let mut rng = rand::thread_rng();
+
+    (0..length)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,24 +359,66 @@ mod tests {
     #[test]
     fn test_validate_path_within_base_traversal_attempts() {
         use std::fs;
-        
+
         let test_base = "test_security_validation";
         fs::create_dir_all(test_base).unwrap_or(());
-        
+
         // Test various path traversal attempts
         let traversal_attempts = vec![
             "../../../etc/passwd",
-            "./test_security_validation/../../../etc/passwd", 
+            "./test_security_validation/../../../etc/passwd",
             "test_security_validation/../outside.txt",
             "./test_security_validation/documents/../../outside.txt",
         ];
-        
+
         for attempt in traversal_attempts {
             let result = validate_path_within_base(attempt, "./test_security_validation");
             assert!(result.is_err(), "Should reject path traversal attempt: {}", attempt);
         }
-        
+
         // Clean up
         fs::remove_dir_all(test_base).unwrap_or(());
+    }
+
+    #[test]
+    fn test_generate_secure_password_length() {
+        // Test default length
+        let password = generate_secure_password(24);
+        assert_eq!(password.len(), 24, "Password should be exactly 24 characters");
+
+        // Test different lengths
+        let password_12 = generate_secure_password(12);
+        assert_eq!(password_12.len(), 12, "Password should be exactly 12 characters");
+
+        let password_32 = generate_secure_password(32);
+        assert_eq!(password_32.len(), 32, "Password should be exactly 32 characters");
+    }
+
+    #[test]
+    fn test_generate_secure_password_character_composition() {
+        let password = generate_secure_password(100); // Use longer password for better test coverage
+
+        // Check for uppercase letters
+        let has_uppercase = password.chars().any(|c| c.is_ascii_uppercase());
+        assert!(has_uppercase, "Password should contain at least one uppercase letter");
+
+        // Check for lowercase letters
+        let has_lowercase = password.chars().any(|c| c.is_ascii_lowercase());
+        assert!(has_lowercase, "Password should contain at least one lowercase letter");
+
+        // Check for digits
+        let has_digit = password.chars().any(|c| c.is_ascii_digit());
+        assert!(has_digit, "Password should contain at least one digit");
+
+        // Check for special characters
+        let special_chars = "!@#$%^&*-_=+";
+        let has_special = password.chars().any(|c| special_chars.contains(c));
+        assert!(has_special, "Password should contain at least one special character");
+
+        // Ensure all characters are from the allowed charset
+        let charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*-_=+";
+        for ch in password.chars() {
+            assert!(charset.contains(ch), "Password contains invalid character: {}", ch);
+        }
     }
 }
