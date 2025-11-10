@@ -365,7 +365,7 @@ jobs:
 
       - name: Upload stress test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: webdav-stress-test-artifacts-${{ github.run_id }}
           path: |
