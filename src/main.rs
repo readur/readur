@@ -7,12 +7,32 @@ use std::sync::Arc;
 use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
 use tracing::{info, error, warn};
 use anyhow;
-use sqlx::{Row, Column};
+use sqlx::Column;
+use clap::{Parser, Subcommand};
 
 use readur::{config::Config, db::Database, AppState, *};
 
+mod commands;
+
 #[cfg(test)]
 mod tests;
+
+/// Readur - Document Management System
+#[derive(Parser)]
+#[command(name = "readur")]
+#[command(about = "Readur document management system", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Start the Readur web server (default)
+    Serve,
+    /// Reset the admin user's password
+    ResetAdminPassword,
+}
 
 /// Determines the correct path for static files based on the environment
 /// Checks multiple possible locations in order of preference
@@ -53,6 +73,9 @@ fn determine_static_files_path() -> std::path::PathBuf {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Parse CLI arguments
+    let cli = Cli::parse();
+
     // Initialize logging with custom filters to reduce spam from noisy crates
     // Users can override with RUST_LOG environment variable, e.g.:
     // RUST_LOG=debug cargo run                                          (enable debug for all)
@@ -63,13 +86,37 @@ async fn main() -> anyhow::Result<()> {
             // Default filter when RUST_LOG is not set
             tracing_subscriber::EnvFilter::new("info")
                 .add_directive("pdf_extract=error".parse().unwrap())           // Suppress pdf_extract WARN spam
-                .add_directive("sqlx::postgres::notice=warn".parse().unwrap()) // Suppress PostgreSQL NOTICE spam  
+                .add_directive("sqlx::postgres::notice=warn".parse().unwrap()) // Suppress PostgreSQL NOTICE spam
                 .add_directive("readur=info".parse().unwrap())                 // Keep our app logs at info
         });
-    
+
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .init();
+
+    // Handle CLI commands
+    match cli.command {
+        Some(Commands::ResetAdminPassword) => {
+            // For reset-admin-password command, we only need database connection
+            println!("\n🔑 RESET ADMIN PASSWORD");
+            println!("{}", "=".repeat(60));
+
+            // Load minimal config (we only need database URL)
+            let config = Config::from_env()?;
+
+            // Connect to database
+            let db = Database::new(&config.database_url).await?;
+
+            // Run reset command
+            commands::reset_admin_password(&db).await?;
+
+            return Ok(());
+        }
+        Some(Commands::Serve) | None => {
+            // Default: Start the web server
+            // Continue with normal server startup below
+        }
+    }
     
     println!("\n🚀 READUR APPLICATION STARTUP");
     println!("{}", "=".repeat(60));

@@ -319,4 +319,48 @@ impl Database {
             auth_provider: row.get::<String, _>("auth_provider").try_into().unwrap_or(AuthProvider::Oidc),
         })
     }
+
+    /// Reset a user's password by username
+    ///
+    /// This function is useful for password recovery and admin password resets.
+    /// The password is automatically hashed with bcrypt before storing.
+    ///
+    /// # Arguments
+    /// * `username` - The username of the user whose password should be reset
+    /// * `new_password` - The new plaintext password (will be hashed)
+    ///
+    /// # Returns
+    /// The updated User object, or an error if the user doesn't exist
+    pub async fn reset_user_password(&self, username: &str, new_password: &str) -> Result<User> {
+        let password_hash = bcrypt::hash(new_password, 12)?;
+
+        let row = sqlx::query(
+            r#"
+            UPDATE users
+            SET password_hash = $2,
+                updated_at = NOW()
+            WHERE username = $1
+            RETURNING id, username, email, password_hash, role, created_at, updated_at,
+                      oidc_subject, oidc_issuer, oidc_email, auth_provider
+            "#
+        )
+        .bind(username)
+        .bind(&password_hash)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(User {
+            id: row.get("id"),
+            username: row.get("username"),
+            email: row.get("email"),
+            password_hash: row.get("password_hash"),
+            role: row.get::<String, _>("role").try_into().unwrap_or(crate::models::UserRole::User),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            oidc_subject: row.get("oidc_subject"),
+            oidc_issuer: row.get("oidc_issuer"),
+            oidc_email: row.get("oidc_email"),
+            auth_provider: row.get::<String, _>("auth_provider").try_into().unwrap_or(AuthProvider::Local),
+        })
+    }
 }
