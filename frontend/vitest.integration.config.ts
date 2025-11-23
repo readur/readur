@@ -9,8 +9,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['src/test/setup.ts'],
+    setupFiles: ['src/test/setup-integration.ts'],
     include: ['**/*.integration.test.{js,jsx,ts,tsx}'],
+    testTimeout: 10000, // Longer timeout for integration tests
+    hookTimeout: 10000,
   },
   server: {
     port: parseInt(CLIENT_PORT),
