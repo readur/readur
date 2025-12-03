@@ -89,7 +89,7 @@ services:
 
   # Frontend test runner service
   frontend_test:
-    image: node:22-alpine
+    image: node:24-alpine
     container_name: readur_frontend_test
     working_dir: /app
     environment:
@@ -107,7 +107,7 @@ services:
 
   # Frontend development server for E2E tests
   frontend_dev:
-    image: node:22-alpine
+    image: node:24-alpine
     container_name: readur_frontend_dev
     working_dir: /app
     environment:
