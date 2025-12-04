@@ -333,7 +333,7 @@ services:
       - readur
 
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.readur.rule=Host(`readur.company.com`)"

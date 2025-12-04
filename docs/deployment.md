@@ -30,7 +30,7 @@ For production deployments, create a custom `docker-compose.prod.yml`:
 ```yaml
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     ports:
       - "8000:8000"
     environment:
@@ -328,7 +328,7 @@ scrape_configs:
 version: '3.8'
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     deploy:
       replicas: 1  # MUST be 1 - Readur doesn't support multiple instances
       restart_policy:
@@ -366,7 +366,7 @@ spec:
     spec:
       containers:
       - name: readur
-        image: readur:latest
+        image: ghcr.io/readur/readur:main
         env:
         - name: JWT_SECRET
           valueFrom:

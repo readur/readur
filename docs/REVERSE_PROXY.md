@@ -60,7 +60,7 @@ version: '3.8'
 
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     environment:
       SERVER_PORT: 3000
       DATABASE_URL: postgresql://readur:readur@postgres/readur
@@ -150,7 +150,7 @@ version: '3.8'
 
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     environment:
       SERVER_PORT: 3000
     labels:

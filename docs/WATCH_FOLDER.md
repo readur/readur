@@ -40,7 +40,7 @@ Perfect for scenarios where you want to automatically process files from:
 ```yaml
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     volumes:
       # Mount your folder to the watch directory
       - /path/to/your/documents:/app/watch
@@ -97,7 +97,7 @@ docker run -d \
 ```yaml
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     volumes:
       - /mnt/nfs/documents:/app/watch
       - readur_uploads:/app/uploads

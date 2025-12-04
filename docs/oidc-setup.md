@@ -97,7 +97,7 @@ ALLOW_LOCAL_AUTH=true  # Keep local auth for development
 version: '3.8'
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     environment:
       # Core settings
       DATABASE_URL: postgresql://readur:readur@postgres:5432/readur
@@ -326,7 +326,7 @@ services:
       - redis
 
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     environment:
       DATABASE_URL: postgresql://readur:readur@postgres:5432/readur
 

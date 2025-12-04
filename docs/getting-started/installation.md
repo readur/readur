@@ -116,7 +116,7 @@ Create `docker-compose.prod.yml`:
 ```yaml
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     ports:
       - "8000:8000"
     environment:

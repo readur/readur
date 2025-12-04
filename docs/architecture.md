@@ -615,7 +615,7 @@ Since Readur is a single-instance application, scaling is achieved through:
 version: '3.8'
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     # Single instance only - do NOT use replicas
     deploy:
       replicas: 1  # MUST be 1
@@ -723,7 +723,7 @@ spec:
     spec:
       containers:
       - name: readur
-        image: readur:latest
+        image: ghcr.io/readur/readur:main
         ports:
         - containerPort: 8080
         resources:
