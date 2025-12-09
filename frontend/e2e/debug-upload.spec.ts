@@ -5,13 +5,13 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('Debug Upload', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ authenticatedPage }) => {
-    helpers = new TestHelpers(authenticatedPage);
-    await authenticatedPage.goto('/upload');
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
+    await dynamicAdminPage.goto('/upload');
     await helpers.waitForLoadingToComplete();
   });
 
-  test('should debug upload workflow', async ({ authenticatedPage: page }) => {
+  test('should debug upload workflow', async ({ dynamicAdminPage: page }) => {
     console.log('Starting upload debug test...');
     
     // Find file input

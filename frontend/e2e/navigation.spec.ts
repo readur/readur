@@ -4,11 +4,11 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('Navigation', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ authenticatedPage }) => {
-    helpers = new TestHelpers(authenticatedPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
   });
 
-  test('should check available routes after login', async ({ authenticatedPage: page }) => {
+  test('should check available routes after login', async ({ dynamicAdminPage: page }) => {
     // Check current URL after login
     console.log('Current URL after login:', page.url());
     
@@ -50,7 +50,7 @@ test.describe('Navigation', () => {
     }
   });
 
-  test('should check what elements are on dashboard', async ({ authenticatedPage: page }) => {
+  test('should check what elements are on dashboard', async ({ dynamicAdminPage: page }) => {
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle', { timeout: 5000 });
     

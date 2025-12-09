@@ -5,20 +5,20 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('Search Functionality', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ authenticatedPage }) => {
-    helpers = new TestHelpers(authenticatedPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
     await helpers.navigateToPage('/search');
     // Ensure we have test documents for search functionality
     await helpers.ensureTestDocumentsExist();
   });
 
-  test.skip('should display search interface', async ({ authenticatedPage: page }) => {
+  test.skip('should display search interface', async ({ dynamicAdminPage: page }) => {
     // Check for search components
     await expect(page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]')).toBeVisible();
     await expect(page.locator('button:has-text("Search"), [data-testid="search-button"]')).toBeVisible();
   });
 
-  test.skip('should perform basic search', async ({ authenticatedPage: page }) => {
+  test.skip('should perform basic search', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Search for known OCR content from test images
@@ -39,7 +39,7 @@ test.describe('Search Functionality', () => {
     });
   });
 
-  test.skip('should show search suggestions', async ({ authenticatedPage: page }) => {
+  test.skip('should show search suggestions', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Start typing "Test" to trigger suggestions based on OCR content
@@ -51,7 +51,7 @@ test.describe('Search Functionality', () => {
     });
   });
 
-  test.skip('should filter search results', async ({ authenticatedPage: page }) => {
+  test.skip('should filter search results', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Search for content that should match multiple test images
@@ -76,7 +76,7 @@ test.describe('Search Functionality', () => {
     }
   });
 
-  test.skip('should perform advanced search', async ({ authenticatedPage: page }) => {
+  test.skip('should perform advanced search', async ({ dynamicAdminPage: page }) => {
     // Look for advanced search toggle
     const advancedToggle = page.locator('[data-testid="advanced-search"], button:has-text("Advanced"), .advanced-toggle');
     
@@ -103,7 +103,7 @@ test.describe('Search Functionality', () => {
     }
   });
 
-  test.skip('should handle empty search results', async ({ authenticatedPage: page }) => {
+  test.skip('should handle empty search results', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Search for something that doesn't exist
@@ -118,7 +118,7 @@ test.describe('Search Functionality', () => {
     });
   });
 
-  test.skip('should navigate to document from search results', async ({ authenticatedPage: page }) => {
+  test.skip('should navigate to document from search results', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Perform search
@@ -137,7 +137,7 @@ test.describe('Search Functionality', () => {
     }
   });
 
-  test.skip('should preserve search state on page reload', async ({ authenticatedPage: page }) => {
+  test.skip('should preserve search state on page reload', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Perform search
@@ -156,7 +156,7 @@ test.describe('Search Functionality', () => {
     });
   });
 
-  test.skip('should sort search results', async ({ authenticatedPage: page }) => {
+  test.skip('should sort search results', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Perform search
@@ -175,7 +175,7 @@ test.describe('Search Functionality', () => {
     }
   });
 
-  test.skip('should paginate search results', async ({ authenticatedPage: page }) => {
+  test.skip('should paginate search results', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Perform search
@@ -197,7 +197,7 @@ test.describe('Search Functionality', () => {
     }
   });
 
-  test.skip('should highlight search terms in results', async ({ authenticatedPage: page }) => {
+  test.skip('should highlight search terms in results', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Perform search with specific term
@@ -212,7 +212,7 @@ test.describe('Search Functionality', () => {
     });
   });
 
-  test.skip('should clear search results', async ({ authenticatedPage: page }) => {
+  test.skip('should clear search results', async ({ dynamicAdminPage: page }) => {
     const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
     
     // Perform search

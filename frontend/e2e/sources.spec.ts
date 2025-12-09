@@ -5,18 +5,18 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('Source Management', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ adminPage }) => {
-    helpers = new TestHelpers(adminPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
     await helpers.navigateToPage('/sources');
   });
 
-  test.skip('should display sources interface', async ({ adminPage: page }) => {
+  test.skip('should display sources interface', async ({ dynamicAdminPage: page }) => {
     // Check for sources page components
     await expect(page.locator('[data-testid="sources-list"], .sources-list, .sources-container')).toBeVisible();
     await expect(page.locator('button:has-text("Add Source"), [data-testid="add-source"]')).toBeVisible();
   });
 
-  test.skip('should create a new local folder source', async ({ adminPage: page }) => {
+  test.skip('should create a new local folder source', async ({ dynamicAdminPage: page }) => {
     // Click add source button
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
@@ -51,7 +51,7 @@ test.describe('Source Management', () => {
     await expect(page.locator(':has-text("Test Local Folder")')).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test.skip('should create a new WebDAV source', async ({ adminPage: page }) => {
+  test.skip('should create a new WebDAV source', async ({ dynamicAdminPage: page }) => {
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
     await expect(page.locator('[data-testid="add-source-form"], .add-source-modal, .source-form')).toBeVisible();
@@ -79,7 +79,7 @@ test.describe('Source Management', () => {
     await expect(page.locator(':has-text("Test WebDAV")')).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test.skip('should create a new S3 source', async ({ adminPage: page }) => {
+  test.skip('should create a new S3 source', async ({ dynamicAdminPage: page }) => {
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
     await expect(page.locator('[data-testid="add-source-form"], .add-source-modal, .source-form')).toBeVisible();
@@ -108,7 +108,7 @@ test.describe('Source Management', () => {
     await expect(page.locator(':has-text("Test S3 Bucket")')).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test('should edit existing source', async ({ adminPage: page }) => {
+  test('should edit existing source', async ({ dynamicAdminPage: page }) => {
     // Look for existing source to edit
     const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
     
@@ -138,7 +138,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should delete source', async ({ adminPage: page }) => {
+  test('should delete source', async ({ dynamicAdminPage: page }) => {
     // First wait for sources list to load
     await helpers.waitForLoadingToComplete();
     
@@ -298,7 +298,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test.skip('should start source sync', async ({ adminPage: page }) => {
+  test.skip('should start source sync', async ({ dynamicAdminPage: page }) => {
     const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
     
     if (await firstSource.isVisible()) {
@@ -319,7 +319,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should stop source sync', async ({ adminPage: page }) => {
+  test('should stop source sync', async ({ dynamicAdminPage: page }) => {
     const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
     
     if (await firstSource.isVisible()) {
@@ -347,7 +347,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should display source status and statistics', async ({ adminPage: page }) => {
+  test('should display source status and statistics', async ({ dynamicAdminPage: page }) => {
     // First wait for sources list to load
     await helpers.waitForLoadingToComplete();
     
@@ -420,7 +420,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test.skip('should test source connection', async ({ adminPage: page }) => {
+  test.skip('should test source connection', async ({ dynamicAdminPage: page }) => {
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
     await expect(page.locator('[data-testid="add-source-form"], .add-source-modal')).toBeVisible();
@@ -451,7 +451,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should filter sources by type', async ({ adminPage: page }) => {
+  test('should filter sources by type', async ({ dynamicAdminPage: page }) => {
     // Look for filter dropdown
     const filterDropdown = page.locator('[data-testid="source-filter"], select[name="filter"], .source-filter');
     if (await filterDropdown.isVisible()) {
@@ -467,7 +467,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should display sync history', async ({ adminPage: page }) => {
+  test('should display sync history', async ({ dynamicAdminPage: page }) => {
     const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
     
     if (await firstSource.isVisible()) {
@@ -482,7 +482,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test.skip('should validate required fields in source creation', async ({ adminPage: page }) => {
+  test.skip('should validate required fields in source creation', async ({ dynamicAdminPage: page }) => {
     await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
     
     await expect(page.locator('[data-testid="add-source-form"], .add-source-modal')).toBeVisible();
@@ -501,7 +501,7 @@ test.describe('Source Management', () => {
     }
   });
 
-  test('should schedule automatic sync', async ({ adminPage: page }) => {
+  test('should schedule automatic sync', async ({ dynamicAdminPage: page }) => {
     // First wait for sources list to load
     await helpers.waitForLoadingToComplete();
     

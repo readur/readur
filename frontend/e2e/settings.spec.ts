@@ -5,17 +5,17 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('Settings Management', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ authenticatedPage }) => {
-    helpers = new TestHelpers(authenticatedPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
     await helpers.navigateToPage('/settings');
   });
 
-  test.skip('should display settings interface', async ({ authenticatedPage: page }) => {
+  test.skip('should display settings interface', async ({ dynamicAdminPage: page }) => {
     // Check for settings page components
     await expect(page.locator('[data-testid="settings-container"], .settings-page, .settings-form')).toBeVisible();
   });
 
-  test('should update OCR settings', async ({ authenticatedPage: page }) => {
+  test('should update OCR settings', async ({ dynamicAdminPage: page }) => {
     // Look for OCR settings section
     const ocrSection = page.locator('[data-testid="ocr-settings"], .ocr-section, .settings-section:has-text("OCR")');
     if (await ocrSection.isVisible()) {
@@ -35,7 +35,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should update watch folder settings', async ({ authenticatedPage: page }) => {
+  test('should update watch folder settings', async ({ dynamicAdminPage: page }) => {
     // Navigate to watch folder section if it's a separate page
     const watchFolderNav = page.locator('a[href="/watch-folder"], [data-testid="watch-folder-nav"]');
     if (await watchFolderNav.isVisible()) {
@@ -67,7 +67,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should update notification settings', async ({ authenticatedPage: page }) => {
+  test('should update notification settings', async ({ dynamicAdminPage: page }) => {
     const notificationSection = page.locator('[data-testid="notification-settings"], .notification-section, .settings-section:has-text("Notification")');
     if (await notificationSection.isVisible()) {
       // Enable notifications
@@ -96,7 +96,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should update search settings', async ({ authenticatedPage: page }) => {
+  test('should update search settings', async ({ dynamicAdminPage: page }) => {
     const searchSection = page.locator('[data-testid="search-settings"], .search-section, .settings-section:has-text("Search")');
     if (await searchSection.isVisible()) {
       // Configure search results per page
@@ -120,7 +120,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should reset settings to defaults', async ({ authenticatedPage: page }) => {
+  test('should reset settings to defaults', async ({ dynamicAdminPage: page }) => {
     // Look for reset button
     const resetButton = page.locator('button:has-text("Reset"), button:has-text("Default"), [data-testid="reset-settings"]');
     if (await resetButton.isVisible()) {
@@ -142,7 +142,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should validate settings before saving', async ({ authenticatedPage: page }) => {
+  test('should validate settings before saving', async ({ dynamicAdminPage: page }) => {
     // Try to set invalid values
     const pathInput = page.locator('input[name="watchPath"], [data-testid="watch-path"]');
     if (await pathInput.isVisible()) {
@@ -159,7 +159,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should export settings', async ({ authenticatedPage: page }) => {
+  test('should export settings', async ({ dynamicAdminPage: page }) => {
     const exportButton = page.locator('button:has-text("Export"), [data-testid="export-settings"]');
     if (await exportButton.isVisible()) {
       // Set up download listener
@@ -173,7 +173,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should import settings', async ({ authenticatedPage: page }) => {
+  test('should import settings', async ({ dynamicAdminPage: page }) => {
     const importButton = page.locator('button:has-text("Import"), [data-testid="import-settings"]');
     if (await importButton.isVisible()) {
       // Look for file input
@@ -202,7 +202,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should display current system status', async ({ authenticatedPage: page }) => {
+  test('should display current system status', async ({ dynamicAdminPage: page }) => {
     // Look for system status section
     const statusSection = page.locator('[data-testid="system-status"], .status-section, .settings-section:has-text("Status")');
     if (await statusSection.isVisible()) {
@@ -211,7 +211,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should test OCR functionality', async ({ authenticatedPage: page }) => {
+  test('should test OCR functionality', async ({ dynamicAdminPage: page }) => {
     const ocrSection = page.locator('[data-testid="ocr-settings"], .ocr-section');
     if (await ocrSection.isVisible()) {
       const testButton = page.locator('button:has-text("Test OCR"), [data-testid="test-ocr"]');
@@ -228,7 +228,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should clear cache', async ({ authenticatedPage: page }) => {
+  test('should clear cache', async ({ dynamicAdminPage: page }) => {
     const clearCacheButton = page.locator('button:has-text("Clear Cache"), [data-testid="clear-cache"]');
     if (await clearCacheButton.isVisible()) {
       const clearResponse = helpers.waitForApiCall('/api/cache/clear');
@@ -240,7 +240,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should update user profile', async ({ authenticatedPage: page }) => {
+  test('should update user profile', async ({ dynamicAdminPage: page }) => {
     // Look for user profile section
     const profileSection = page.locator('[data-testid="profile-settings"], .profile-section, .settings-section:has-text("Profile")');
     if (await profileSection.isVisible()) {
@@ -265,7 +265,7 @@ test.describe('Settings Management', () => {
     }
   });
 
-  test('should change password', async ({ authenticatedPage: page }) => {
+  test('should change password', async ({ dynamicAdminPage: page }) => {
     const passwordSection = page.locator('[data-testid="password-settings"], .password-section, .settings-section:has-text("Password")');
     if (await passwordSection.isVisible()) {
       await page.fill('input[name="currentPassword"], [data-testid="current-password"]', 'currentpass');
