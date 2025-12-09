@@ -787,7 +787,7 @@ mod tests {
     #[tokio::test]
     async fn test_cascade_delete_on_document_removal() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -865,15 +865,108 @@ mod tests {
             .await;
 
             assert!(label.is_ok());
-            
+
             Ok(())
         }.await;
-        
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
+
+        result.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_document_labels_with_all_fields() {
+        let ctx = TestContext::new().await;
+
+        // Ensure cleanup happens even if test fails
+        let result: Result<()> = async {
+            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let user = auth_helper.create_test_user().await;
+
+            // Create document
+            let document_id = Uuid::new_v4();
+            sqlx::query(
+                r#"
+                INSERT INTO documents (
+                    id, user_id, filename, original_filename, file_path,
+                    file_size, mime_type, created_at, updated_at
+                )
+                VALUES ($1, $2, $3, $3, $4, 1024, 'application/pdf', NOW(), NOW())
+                "#,
+            )
+            .bind(document_id)
+            .bind(user.user_response.id)
+            .bind("test_document.pdf")
+            .bind("/test/test_document.pdf")
+            .execute(&ctx.state.db.pool)
+            .await
+            .expect("Failed to create test document");
+
+            // Create label with ALL optional fields populated
+            let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
+                r#"
+                INSERT INTO labels (user_id, name, description, color, background_color, icon)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING id
+                "#,
+            )
+            .bind(user.user_response.id)
+            .bind("Complete Label")
+            .bind("This label has all fields populated")
+            .bind("#FF5733")
+            .bind("#FFA500")
+            .bind("star")
+            .fetch_one(&ctx.state.db.pool)
+            .await
+            .expect("Failed to create label with all fields");
+
+            // Assign label to document
+            sqlx::query(
+                r#"
+                INSERT INTO document_labels (document_id, label_id, assigned_by)
+                VALUES ($1, $2, $3)
+                "#,
+            )
+            .bind(document_id)
+            .bind(label_id)
+            .bind(user.user_response.id)
+            .execute(&ctx.state.db.pool)
+            .await
+            .expect("Failed to assign label");
+
+            // Test the fixed get_document_labels query - this should retrieve ALL fields
+            let labels = ctx.state.db.get_document_labels(document_id).await
+                .expect("Failed to get document labels");
+
+            // Verify we got the label
+            assert_eq!(labels.len(), 1);
+            let label = &labels[0];
+
+            // Verify ALL fields are correctly retrieved (this was the bug fix - previously description,
+            // background_color, icon, and is_system were missing from the SELECT clause)
+            assert_eq!(label.name, "Complete Label");
+            assert_eq!(label.description.as_ref().unwrap(), "This label has all fields populated");
+            assert_eq!(label.color, "#FF5733");
+            assert_eq!(label.background_color.as_ref().unwrap(), "#FFA500");
+            assert_eq!(label.icon.as_ref().unwrap(), "star");
+            assert_eq!(label.user_id, Some(user.user_response.id));
+            assert!(!label.is_system);
+
+            // Verify the counts are also returned (as 0 since this query doesn't join for counts)
+            assert_eq!(label.document_count, 0);
+            assert_eq!(label.source_count, 0);
+
+            Ok(())
+        }.await;
+
+        // Always cleanup database connections and test data
+        if let Err(e) = ctx.cleanup_and_close().await {
+            eprintln!("Warning: Test cleanup failed: {}", e);
+        }
+
         result.unwrap();
     }
 }
