@@ -5,12 +5,12 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('WebDAV Workflow (Dynamic Auth)', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ authenticatedPage }) => {
-    helpers = new TestHelpers(authenticatedPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
     await helpers.navigateToPage('/sources');
   });
 
-  test.skip('should create and configure WebDAV source with dynamic admin', async ({ authenticatedPage: page }) => {
+  test.skip('should create and configure WebDAV source with dynamic admin', async ({ dynamicAdminPage: page }) => {
     // Increase timeout for this test as WebDAV operations can be slow
     test.setTimeout(60000);
     
@@ -352,7 +352,7 @@ test.describe('WebDAV Workflow (Dynamic Auth)', () => {
     console.log('✅ WebDAV source creation test completed by authenticated admin');
   });
 
-  test('should test WebDAV connection with dynamic admin', async ({ authenticatedPage: page }) => {
+  test('should test WebDAV connection with dynamic admin', async ({ dynamicAdminPage: page }) => {
     console.log('Testing WebDAV connection with authenticated admin');
     
     // This test assumes a WebDAV source exists from the previous test or setup

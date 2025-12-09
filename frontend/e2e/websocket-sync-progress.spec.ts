@@ -5,8 +5,8 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('WebSocket Sync Progress', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ adminPage }) => {
-    helpers = new TestHelpers(adminPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
     await helpers.navigateToPage('/sources');
   });
 
@@ -99,7 +99,7 @@ test.describe('WebSocket Sync Progress', () => {
     return fallbackElement;
   }
 
-  test('should establish WebSocket connection for sync progress', async ({ adminPage: page }) => {
+  test('should establish WebSocket connection for sync progress', async ({ dynamicAdminPage: page }) => {
     // Add browser console logging to debug WebSocket connections
     const consoleLogs: string[] = [];
     page.on('console', msg => {
@@ -177,7 +177,7 @@ test.describe('WebSocket Sync Progress', () => {
     await expect(progressIndicators).toBeVisible({ timeout: TIMEOUTS.short });
   });
 
-  test('should handle WebSocket connection errors gracefully', async ({ adminPage: page }) => {
+  test('should handle WebSocket connection errors gracefully', async ({ dynamicAdminPage: page }) => {
     // Mock WebSocket connection failure
     await page.route('**/sync/progress/ws**', route => {
       route.abort('connectionrefused');
@@ -215,7 +215,7 @@ test.describe('WebSocket Sync Progress', () => {
     }
   });
 
-  test('should automatically reconnect on WebSocket disconnection', async ({ adminPage: page }) => {
+  test('should automatically reconnect on WebSocket disconnection', async ({ dynamicAdminPage: page }) => {
     // Create and sync a source
     const sourceName = await helpers.createTestSource('Reconnect Test Source', 'webdav');
     
@@ -266,7 +266,7 @@ test.describe('WebSocket Sync Progress', () => {
     await expect(finalStatus).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test('should display real-time progress updates via WebSocket', async ({ adminPage: page }) => {
+  test('should display real-time progress updates via WebSocket', async ({ dynamicAdminPage: page }) => {
     // Create a source and start sync
     const sourceName = await helpers.createTestSource('Progress Updates Test', 'webdav');
     
@@ -303,7 +303,7 @@ test.describe('WebSocket Sync Progress', () => {
     await expect(statsLocator).toBeVisible({ timeout: TIMEOUTS.short });
   });
 
-  test('should handle multiple concurrent WebSocket connections', async ({ adminPage: page }) => {
+  test('should handle multiple concurrent WebSocket connections', async ({ dynamicAdminPage: page }) => {
     // Create multiple sources
     const sourceNames = [];
     const baseNames = ['Multi Source 1', 'Multi Source 2'];
@@ -370,7 +370,7 @@ test.describe('WebSocket Sync Progress', () => {
     console.log('Multiple concurrent WebSocket test completed - infrastructure verified');
   });
 
-  test('should authenticate WebSocket connection with JWT token', async ({ adminPage: page }) => {
+  test('should authenticate WebSocket connection with JWT token', async ({ dynamicAdminPage: page }) => {
     // Check that user has a valid JWT token stored
     const tokenInfo = await page.evaluate(() => {
       const token = localStorage.getItem('token');
@@ -403,7 +403,7 @@ test.describe('WebSocket Sync Progress', () => {
     console.log('WebSocket authentication test passed - connection established successfully');
   });
 
-  test('should handle WebSocket authentication failures', async ({ adminPage: page }) => {
+  test('should handle WebSocket authentication failures', async ({ dynamicAdminPage: page }) => {
     // Mock authentication failure for WebSocket connections
     await page.route('**/sync/progress/ws**', route => {
       if (route.request().url().includes('token=')) {
@@ -476,7 +476,7 @@ test.describe('WebSocket Sync Progress', () => {
     }
   });
 
-  test('should properly clean up WebSocket connections on component unmount', async ({ adminPage: page }) => {
+  test('should properly clean up WebSocket connections on component unmount', async ({ dynamicAdminPage: page }) => {
     // Instead of creating a new source, just use existing sources to test component lifecycle
     // This avoids the hanging issue with source creation
     
@@ -514,7 +514,7 @@ test.describe('WebSocket Sync Progress', () => {
     console.log('WebSocket cleanup test completed - component lifecycle verified via reload');
   });
 
-  test('should handle WebSocket message parsing errors', async ({ adminPage: page }) => {
+  test('should handle WebSocket message parsing errors', async ({ dynamicAdminPage: page }) => {
     // Mock WebSocket with malformed messages
     await page.addInitScript(() => {
       const originalWebSocket = window.WebSocket;
@@ -561,7 +561,7 @@ test.describe('WebSocket Sync Progress', () => {
     await expect(page.locator('body')).toBeVisible();
   });
 
-  test('should display WebSocket connection status indicators', async ({ adminPage: page }) => {
+  test('should display WebSocket connection status indicators', async ({ dynamicAdminPage: page }) => {
     // Create and sync a source
     const sourceName = await helpers.createTestSource('Status Test Source', 'webdav');
     
@@ -586,7 +586,7 @@ test.describe('WebSocket Sync Progress', () => {
     await expect(statusChip).toHaveClass(/MuiChip-root/);
   });
 
-  test('should support WebSocket connection health monitoring', async ({ adminPage: page }) => {
+  test('should support WebSocket connection health monitoring', async ({ dynamicAdminPage: page }) => {
     // This test verifies that the WebSocket connection monitors connection health
     
     let heartbeatReceived = false;
@@ -651,7 +651,7 @@ test.describe('WebSocket Sync Progress - Cross-browser Compatibility', () => {
     await syncCard.click();
   }
 
-  test('should work in different browser engines', async ({ adminPage: page }) => {
+  test('should work in different browser engines', async ({ dynamicAdminPage: page }) => {
     // This test would run across different browsers (Chrome, Firefox, Safari)
     // The test framework should handle this automatically
     

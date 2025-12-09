@@ -1,7 +1,6 @@
-import { TEST_CREDENTIALS } from '../fixtures/auth';
-
+// Test users are now created dynamically via E2ETestAuthHelper
+// Invalid credentials for testing error cases
 export const TEST_USERS = {
-  valid: TEST_CREDENTIALS.admin,
   invalid: {
     username: 'invaliduser',
     password: 'wrongpassword'

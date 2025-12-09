@@ -5,12 +5,12 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('OCR Retry Workflow', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ adminPage }) => {
-    helpers = new TestHelpers(adminPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
     await helpers.navigateToPage('/documents');
   });
 
-  test('should display failed OCR documents', async ({ adminPage: page }) => {
+  test('should display failed OCR documents', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 
@@ -38,7 +38,7 @@ test.describe('OCR Retry Workflow', () => {
     }
   });
 
-  test('should retry individual failed OCR document', async ({ adminPage: page }) => {
+  test('should retry individual failed OCR document', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 
@@ -76,7 +76,7 @@ test.describe('OCR Retry Workflow', () => {
     }
   });
 
-  test('should bulk retry multiple failed OCR documents', async ({ adminPage: page }) => {
+  test('should bulk retry multiple failed OCR documents', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 
@@ -130,7 +130,7 @@ test.describe('OCR Retry Workflow', () => {
     }
   });
 
-  test('should show OCR retry history', async ({ adminPage: page }) => {
+  test('should show OCR retry history', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 
@@ -153,7 +153,7 @@ test.describe('OCR Retry Workflow', () => {
     }
   });
 
-  test('should display OCR failure reasons', async ({ adminPage: page }) => {
+  test('should display OCR failure reasons', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 
@@ -185,7 +185,7 @@ test.describe('OCR Retry Workflow', () => {
     }
   });
 
-  test('should filter failed documents by failure type', async ({ adminPage: page }) => {
+  test('should filter failed documents by failure type', async ({ dynamicAdminPage: page }) => {
     await page.goto('/documents');
     await helpers.waitForLoadingToComplete();
 

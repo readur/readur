@@ -57,23 +57,7 @@ export class E2ETestAuthHelper {
 
       if (!response.ok()) {
         const errorText = await response.text();
-        console.warn(`Warning: Failed to create dynamic test user. Status: ${response.status()}, Body: ${errorText}`);
-        
-        // Fallback to seeded admin user (since no regular user is seeded)
-        console.log('Falling back to seeded admin user...');
-        return {
-          credentials: {
-            username: 'admin',
-            email: 'admin@test.com',
-            password: 'readur2024'
-          },
-          userResponse: {
-            id: 'seeded-admin',
-            username: 'admin',
-            email: 'admin@test.com',
-            role: 'Admin'
-          }
-        };
+        throw new Error(`Failed to create dynamic test user. Status: ${response.status()}, Body: ${errorText}`);
       }
 
       const userResponse: TestUserResponse = await response.json();
@@ -84,22 +68,7 @@ export class E2ETestAuthHelper {
       };
     } catch (error) {
       console.error('❌ Failed to create E2E test user:', error);
-      
-      // Fallback to seeded admin user (since no regular user is seeded)
-      console.log('Falling back to seeded admin user due to error...');
-      return {
-        credentials: {
-          username: 'admin',
-          email: 'admin@test.com',
-          password: 'readur2024'
-        },
-        userResponse: {
-          id: 'seeded-admin',
-          username: 'admin',
-          email: 'admin@test.com',
-          role: 'Admin'
-        }
-      };
+      throw error;
     }
   }
 
@@ -129,23 +98,7 @@ export class E2ETestAuthHelper {
 
       if (!response.ok()) {
         const errorText = await response.text();
-        console.warn(`Warning: Failed to create dynamic admin user. Status: ${response.status()}, Body: ${errorText}`);
-        
-        // Fallback to seeded admin user
-        console.log('Falling back to seeded admin user...');
-        return {
-          credentials: {
-            username: 'admin',
-            email: 'admin@test.com',
-            password: 'readur2024'
-          },
-          userResponse: {
-            id: 'seeded-admin',
-            username: 'admin',
-            email: 'admin@test.com',
-            role: 'Admin'
-          }
-        };
+        throw new Error(`Failed to create dynamic admin user. Status: ${response.status()}, Body: ${errorText}`);
       }
 
       const userResponse: TestUserResponse = await response.json();
@@ -156,22 +109,7 @@ export class E2ETestAuthHelper {
       };
     } catch (error) {
       console.error('❌ Failed to create E2E admin user:', error);
-      
-      // Fallback to seeded admin user
-      console.log('Falling back to seeded admin user due to error...');
-      return {
-        credentials: {
-          username: 'admin',
-          email: 'admin@test.com',
-          password: 'readur2024'
-        },
-        userResponse: {
-          id: 'seeded-admin',
-          username: 'admin',
-          email: 'admin@test.com',
-          role: 'Admin'
-        }
-      };
+      throw error;
     }
   }
 

@@ -5,12 +5,12 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('WebDAV Workflow', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ authenticatedPage }) => {
-    helpers = new TestHelpers(authenticatedPage);
+  test.beforeEach(async ({ dynamicAdminPage }) => {
+    helpers = new TestHelpers(dynamicAdminPage);
     await helpers.navigateToPage('/sources');
   });
 
-  test.skip('should create and configure WebDAV source', async ({ authenticatedPage: page }) => {
+  test.skip('should create and configure WebDAV source', async ({ dynamicAdminPage: page }) => {
     // Increase timeout for this test as WebDAV operations can be slow
     // This addresses the timeout issues with Material-UI Select components
     test.setTimeout(60000);
@@ -223,7 +223,7 @@ test.describe('WebDAV Workflow', () => {
     }
   });
 
-  test('should test WebDAV connection', async ({ authenticatedPage: page }) => {
+  test('should test WebDAV connection', async ({ dynamicAdminPage: page }) => {
     // This test assumes a WebDAV source exists from the previous test or setup
     await page.goto('/sources');
     await helpers.waitForLoadingToComplete();
@@ -256,7 +256,7 @@ test.describe('WebDAV Workflow', () => {
     }
   });
 
-  test('should initiate WebDAV sync', async ({ authenticatedPage: page }) => {
+  test('should initiate WebDAV sync', async ({ dynamicAdminPage: page }) => {
     await page.goto('/sources');
     await helpers.waitForLoadingToComplete();
 
@@ -287,7 +287,7 @@ test.describe('WebDAV Workflow', () => {
     }
   });
 
-  test('should show WebDAV sync history', async ({ authenticatedPage: page }) => {
+  test('should show WebDAV sync history', async ({ dynamicAdminPage: page }) => {
     await page.goto('/sources');
     await helpers.waitForLoadingToComplete();
 
@@ -310,7 +310,7 @@ test.describe('WebDAV Workflow', () => {
     }
   });
 
-  test('should handle WebDAV source deletion', async ({ authenticatedPage: page }) => {
+  test('should handle WebDAV source deletion', async ({ dynamicAdminPage: page }) => {
     await page.goto('/sources');
     await helpers.waitForLoadingToComplete();
 
