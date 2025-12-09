@@ -13,50 +13,33 @@ async fn setup_simple_test_context() -> TestContext {
 
 #[tokio::test]
 async fn test_get_available_languages_success() {
-    // No tessdata setup needed - using system tesseract installation
-    
-    // Use the existing admin credentials to test against the running server
-    let client = reqwest::Client::new();
-    
-    // Login with admin credentials
-    let login_response = client
-        .post("http://localhost:8000/api/auth/login")
-        .json(&serde_json::json!({
-            "username": "admin",
-            "password": "readur2024"
-        }))
-        .send()
-        .await
-        .expect("Failed to login");
-    
-    let login_data: serde_json::Value = login_response.json().await.expect("Failed to parse login data");
-    let token = login_data["token"].as_str().expect("Missing token");
+    let ctx = setup_simple_test_context().await;
 
-    // Test against the running server
-    let response = client
-        .get("http://localhost:8000/api/ocr/languages")
+    // Create test user and get token
+    let auth_helper = readur::test_utils::TestAuthHelper::new(ctx.app().clone());
+    let mut test_user = auth_helper.create_test_user().await;
+    let token = test_user.login(&auth_helper).await.unwrap();
+
+    let request = Request::builder()
+        .method("GET")
+        .uri("/api/ocr/languages")
         .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .expect("Failed to make request");
+        .body(Body::empty())
+        .unwrap();
 
-    let status = response.status();
-    if status != 200 {
-        println!("🔍 AssertRequest Debug Info for: get available languages");
-        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
-        println!("📤 Request Payload: (empty - GET request)");
-        println!("📊 Response Status: {} (expected: 200)", status);
-        println!("📝 Response Body:");
-        let error_text = response.text().await.unwrap_or_else(|_| "Unable to read response body".to_string());
-        println!("{}", error_text);
-        panic!("Expected status 200, got {}. Response: {}", status, error_text);
-    }
+    let response = ctx.app().clone().oneshot(request).await.unwrap();
 
-    let body: serde_json::Value = response.json().await.expect("Failed to parse JSON");
-    
+    let body = AssertRequest::assert_response(
+        response,
+        StatusCode::OK,
+        "get available languages",
+        "/api/ocr/languages",
+        None::<&serde_json::Value>,
+    ).await.expect("Response assertion failed");
+
     if body.get("available_languages").is_none() {
         println!("🔍 AssertRequest Debug Info for: available_languages field check");
-        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+        println!("🔗 Request URL: /api/ocr/languages");
         println!("📤 Request Payload: (empty - GET request)");
         println!("📊 Response Status: 200");
         println!("📝 Response Body:");
@@ -65,21 +48,21 @@ async fn test_get_available_languages_success() {
     }
 
     let languages = body["available_languages"].as_array().unwrap();
-    if languages.len() < 1 {
+    if languages.is_empty() {
         println!("🔍 AssertRequest Debug Info for: minimum languages check");
-        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+        println!("🔗 Request URL: /api/ocr/languages");
         println!("📤 Request Payload: (empty - GET request)");
         println!("📊 Response Status: 200");
         println!("📝 Response Body:");
         println!("{}", serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string()));
-        panic!("Expected at least 1 language, got {}", languages.len());
+        panic!("Expected at least 1 language, got 0");
     }
 
     // Check that languages have the expected structure
     for (i, lang) in languages.iter().enumerate() {
         if lang.get("code").is_none() || lang.get("name").is_none() {
             println!("🔍 AssertRequest Debug Info for: language structure check");
-            println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+            println!("🔗 Request URL: /api/ocr/languages");
             println!("📤 Request Payload: (empty - GET request)");
             println!("📊 Response Status: 200");
             println!("📝 Response Body:");
@@ -95,7 +78,7 @@ async fn test_get_available_languages_success() {
     });
     if !has_english {
         println!("🔍 AssertRequest Debug Info for: English language check");
-        println!("🔗 Request URL: http://localhost:8000/api/ocr/languages");
+        println!("🔗 Request URL: /api/ocr/languages");
         println!("📤 Request Payload: (empty - GET request)");
         println!("📊 Response Status: 200");
         println!("📝 Response Body:");
