@@ -5,12 +5,116 @@
 Readur includes several Rust-based command-line utilities for system administration and maintenance. These are compiled binaries (not Python scripts) designed for system administrators and DevOps teams managing Readur deployments.
 
 **Available CLI Tools:**
+- `readur reset-admin-password` - Reset the admin user's password
 - `migrate_to_s3` - Migrate documents between storage backends
 - `batch_ingest` - Bulk import documents
 - `debug_pdf_extraction` - Debug PDF processing issues
 - `enqueue_pending_ocr` - Re-queue documents for OCR processing
 - `test_metadata` - Test metadata extraction
 - `test_runner` - Run test suites
+
+## reset-admin-password
+
+**Purpose:** Reset the admin user's password when locked out or for security rotation
+
+This is a subcommand of the main `readur` binary, not a separate tool.
+
+### Usage
+```bash
+readur reset-admin-password
+```
+
+### Help Output
+```
+Reset the admin user's password
+
+Usage: readur reset-admin-password
+
+Options:
+  -h, --help  Print help
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ADMIN_USERNAME` | Username of the admin account to reset | `admin` |
+| `ADMIN_PASSWORD` | New password to set (min 8 characters) | Auto-generated 24-char secure password |
+
+### Examples
+
+#### Docker Deployments
+```bash
+# Reset with auto-generated password (recommended)
+docker exec readur-app readur reset-admin-password
+
+# Reset with custom password
+docker exec -e ADMIN_PASSWORD="your-secure-password" readur-app readur reset-admin-password
+
+# Reset a different admin user
+docker exec -e ADMIN_USERNAME="custom-admin" readur-app readur reset-admin-password
+
+# Reset with both custom username and password
+docker exec -e ADMIN_USERNAME="superadmin" -e ADMIN_PASSWORD="new-secure-pass" \
+  readur-app readur reset-admin-password
+```
+
+#### Direct/Binary Deployments
+```bash
+# Auto-generated password
+readur reset-admin-password
+
+# Custom password via environment variable
+ADMIN_PASSWORD="new-secure-password" readur reset-admin-password
+
+# Custom admin username
+ADMIN_USERNAME="admin2" ADMIN_PASSWORD="secure123!" readur reset-admin-password
+```
+
+#### Kubernetes Deployments
+```bash
+# Find the pod
+kubectl get pods -l app=readur
+
+# Reset with auto-generated password
+kubectl exec deployment/readur -- readur reset-admin-password
+
+# Reset with custom password
+kubectl exec deployment/readur -- env ADMIN_PASSWORD="secure-pass" readur reset-admin-password
+```
+
+### Example Output
+```
+🔑 RESET ADMIN PASSWORD
+============================================================
+
+==============================================
+  ADMIN PASSWORD RESET SUCCESSFUL
+==============================================
+
+Username: admin
+Password: xK9mP2nQ7rT4wY6zA3cF8gH1
+
+⚠️  SAVE THESE CREDENTIALS IMMEDIATELY!
+⚠️  This password will not be shown again.
+
+==============================================
+```
+
+### Security Notes
+
+- The generated password is cryptographically secure (24 characters)
+- Passwords are never logged or stored in plain text
+- Always change auto-generated passwords after first login
+- Use environment variables, never pass passwords as command-line arguments
+- Requires database connectivity to function
+
+### When to Use
+
+- Forgot admin password
+- Security incident requiring credential rotation
+- Initial setup after database restoration
+- Periodic security compliance password rotation
 
 ## migrate_to_s3
 
