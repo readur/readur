@@ -21,7 +21,7 @@ This guide walks you through everything you need to know to effectively use Read
 
 ## Getting Started
 
-When you first access Readur, navigate to your installation URL (typically `http://localhost:8000` for local installations) and log in with the default admin credentials: username `admin` and password `readur2024`. The very first thing you should do is change this default password to something secure.
+When you first access Readur, navigate to your installation URL (typically `http://localhost:8000` for local installations) and log in with the admin credentials. The username is `admin` and the password is auto-generated on first startup - check your container logs (`docker compose logs readur`) and look for "READUR ADMIN USER CREATED" to find your password. Save this password immediately as it won't be shown again.
 
 Take a moment to configure your user preferences through the settings menu. If you work with documents in languages other than English, set your preferred OCR language now - this will improve text extraction accuracy for your documents. You can also adjust search settings and display preferences to match how you like to work.
 

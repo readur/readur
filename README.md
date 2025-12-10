@@ -42,11 +42,27 @@ docker compose up --build -d
 open http://localhost:8000
 ```
 
-**Default login credentials:**
+**Admin credentials:**
 - Username: `admin`
-- Password: `readur2024`
+- Password: Auto-generated on first run (check container logs)
 
-> ⚠️ **Important**: Change the default admin password immediately after first login!
+On first startup, Readur generates a secure admin password and displays it in the logs:
+```
+==============================================
+  READUR ADMIN USER CREATED
+==============================================
+
+Username: admin
+Password: [your-generated-password]
+
+⚠️   SAVE THESE CREDENTIALS IMMEDIATELY!
+⚠️   This password will not be shown again.
+==============================================
+```
+
+View the logs with: `docker compose logs readur`
+
+To reset the admin password later, run: `readur reset-admin-password`
 
 ## 📚 Documentation
 

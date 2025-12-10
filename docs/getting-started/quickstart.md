@@ -39,9 +39,11 @@ Open your browser and navigate to:
 http://localhost:8000
 ```
 
-Login with default credentials:
+Login with your admin credentials:
 - **Username**: `admin`
-- **Password**: `readur2024`
+- **Password**: Check the container logs for the auto-generated password
+
+On first startup, Readur generates a secure admin password and displays it in the logs. View the logs with `docker-compose logs` and look for the "READUR ADMIN USER CREATED" section. Save this password immediately - it won't be shown again.
 
 ### Step 4: Upload Your First Document
 
@@ -54,10 +56,10 @@ Now you can test Readur's core functionality by uploading a document. Click the 
 If you prefer working with APIs or want to automate document uploads, you can use Readur's REST API. First, authenticate to get an access token:
 
 ```bash
-# Authenticate and get a session token
+# Authenticate and get a session token (use your generated password from the logs)
 TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"readur2024"}' | jq -r .token)
+  -d '{"username":"admin","password":"YOUR_GENERATED_PASSWORD"}' | jq -r .token)
 
 # Upload a document using the API
 curl -X POST http://localhost:8000/api/documents/upload \
@@ -73,9 +75,15 @@ Once the OCR indicator shows green (processing complete), you can test Readur's 
 
 ## Common First Tasks
 
-### Change Admin Password
+### Resetting Admin Password
 
-Security should be your first priority after getting Readur running. The default admin password is publicly documented, so change it immediately to protect your installation. Navigate to **Settings** → **User Management**, click on the admin user entry, enter a strong new password, and save your changes. This single step prevents unauthorized access to your document collection.
+If you lose your admin password or need to reset it, you can use the built-in CLI command:
+
+```bash
+docker exec readur readur reset-admin-password
+```
+
+This generates a new secure password and displays it. You can also set a specific password using the `ADMIN_PASSWORD` environment variable.
 
 ### Add Your First Source
 

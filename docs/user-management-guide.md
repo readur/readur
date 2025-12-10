@@ -104,7 +104,7 @@ See the [OIDC Setup Guide](oidc-setup.md) for detailed configuration instruction
 
 **Default Admin Account:**
 - Username: `admin`
-- Default Password: `readur2024` ⚠️ **Change immediately in production!**
+- Password: Auto-generated on first startup (check container logs for "READUR ADMIN USER CREATED")
 
 ## Admin User Management
 
