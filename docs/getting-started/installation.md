@@ -225,17 +225,20 @@ docker logs -f readur
    http://localhost:8000
    ```
 
-2. **Login with Default Credentials**
+2. **Login with Admin Credentials**
    - Username: `admin`
-   - Password: `readur2024`
-   
-   ⚠️ **Security**: Change the admin password immediately after first login
+   - Password: Check the container logs for your auto-generated password
 
-3. **Change Admin Password**
-   - Navigate to Settings → User Management
-   - Click on admin user
-   - Set a strong password
-   - Save changes
+   On first startup, Readur generates a secure admin password and displays it in the logs.
+   View the logs with `docker compose logs readur` and look for "READUR ADMIN USER CREATED".
+
+   **Save this password immediately - it won't be shown again.**
+
+3. **Resetting Admin Password**
+   If you lose your password, reset it with:
+   ```bash
+   docker exec readur readur reset-admin-password
+   ```
 
 ### Essential Configuration
 
@@ -484,10 +487,10 @@ deploy:
 Upload your first document:
 
 ```bash
-# 1. Login to get token
+# 1. Login to get token (use your generated password from the logs)
 TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"readur2024"}' | jq -r .token)
+  -d '{"username":"admin","password":"YOUR_GENERATED_PASSWORD"}' | jq -r .token)
 
 # 2. Upload a PDF
 curl -X POST http://localhost:8000/api/documents/upload \
