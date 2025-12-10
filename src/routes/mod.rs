@@ -3,6 +3,7 @@ pub mod documents;
 pub mod documents_ocr_retry;
 pub mod ignored_files;
 pub mod labels;
+pub mod llm;
 pub mod metrics;
 pub mod notifications;
 pub mod ocr;

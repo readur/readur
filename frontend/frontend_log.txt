@@ -1,0 +1,17 @@
+
+> readur-frontend@2.5.3 dev
+> vite
+
+
+  VITE v7.2.6  ready in 443 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+10:03:16 PM [vite] http proxy error: /api/auth/config
+AggregateError [ECONNREFUSED]:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+10:03:16 PM [vite] http proxy error: /api/auth/config
+AggregateError [ECONNREFUSED]:
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)

@@ -8,6 +8,7 @@ pub mod s3_error_classifier;
 pub mod source_error_tracker;
 pub mod sync_progress_tracker;
 pub mod user_watch_service;
+pub mod llm;
 pub mod webdav;
 pub mod webdav_metrics_simple;
 pub mod webdav_metrics_integration;

@@ -57,8 +57,10 @@ import {
   Schedule as ScheduleIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
+  Hub as HubIcon,
 } from '@mui/icons-material';
 import { documentService, OcrResponse, type Document } from '../services/api';
+import { analyzeDocument, getDocumentGraph } from '../services/llm';
 import DocumentViewer from '../components/DocumentViewer';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { type LabelData } from '../components/Labels/Label';
@@ -167,6 +169,26 @@ const DocumentDetailsPage: React.FC = () => {
   const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string>('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const handleAnalyze = async () => {
+    if (!document) return;
+    setAnalyzing(true);
+    try {
+        await analyzeDocument(document.id);
+        setSnackbarMessage('Analysis completed. Graph updated.');
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+        // Optionally navigate to a graph view or refresh
+    } catch (e) {
+        setSnackbarMessage('Analysis failed.');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+    } finally {
+        setAnalyzing(false);
+    }
+  };
 
   // Retry handlers
   const handleRetryOcr = async () => {
@@ -829,6 +851,27 @@ const DocumentDetailsPage: React.FC = () => {
                   
                   {/* Action Buttons */}
                   <Stack direction="row" spacing={1} sx={{ mt: 4 }} justifyContent="center">
+                    <Tooltip title="Analyze with LLM">
+                        <IconButton
+                            onClick={handleAnalyze}
+                            disabled={analyzing}
+                            sx={{
+                                backgroundColor: theme.palette.primary.light,
+                                color: theme.palette.primary.dark,
+                                '&:hover': {
+                                backgroundColor: theme.palette.primary[200],
+                                transform: 'scale(1.1)',
+                                },
+                            }}
+                        >
+                            {analyzing ? (
+                                <CircularProgress size={20} />
+                            ) : (
+                                <HubIcon />
+                            )}
+                        </IconButton>
+                    </Tooltip>
+
                     {document.mime_type?.includes('image') && (
                       <Tooltip title={t('documentDetails.actions.viewProcessedImage')}>
                         <IconButton
