@@ -2,6 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   PWA & iOS Safe Area Support
+   ============================================ */
+
+/* Ensure the entire app respects iOS safe areas */
+:root {
+  /* Define safe area insets for iOS devices */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* PWA-specific styles */
+@media all and (display-mode: standalone) {
+  /* Remove system tap highlight on iOS PWA */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent pull-to-refresh on iOS */
+  body {
+    overscroll-behavior-y: contain;
+  }
+
+  /* Improve iOS PWA scrolling performance */
+  html {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* iOS-specific optimizations */
+@supports (-webkit-touch-callout: none) {
+  /* Disable callout on iOS when long-pressing */
+  * {
+    -webkit-touch-callout: none;
+  }
+
+  /* Allow callout on text content */
+  p, span, div[contenteditable="true"] {
+    -webkit-touch-callout: default;
+  }
+
+  /* Smooth momentum scrolling on iOS */
+  .scrollable-content {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Fix iOS input zoom issue */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch-optimized tap targets (minimum 44x44px for iOS) */
+@media (pointer: coarse) {
+  button,
+  a,
+  .MuiIconButton-root,
+  .MuiButton-root,
+  .MuiChip-root.MuiChip-clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Bottom navigation touch targets */
+  .MuiBottomNavigationAction-root {
+    min-height: 56px;
+  }
+}
+
+/* Prevent iOS double-tap zoom on buttons */
+button,
+input[type="button"],
+input[type="submit"] {
+  touch-action: manipulation;
+}
+
+/* iOS status bar color adaptation */
+@media (prefers-color-scheme: dark) {
+  html {
+    background-color: #1e1e1e;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  html {
+    background-color: #ffffff;
+  }
+}
+
 /* Enhanced search responsiveness styles */
 .search-input-responsive {
   transition: all 0.2s ease-in-out;
