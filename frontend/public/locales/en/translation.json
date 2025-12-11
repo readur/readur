@@ -545,13 +545,13 @@
     "retrying": "Retrying All...",
     "retryFailedOnly": "Retry Failed Only",
     "tabs": {
-      "failedDocuments": "Failed Documents{{showCount, select, true { ({{count}}) } other {}}",
+      "failedDocuments": "Failed Documents{{showCount, select, true { ({{count}}) } other {}}}",
       "failedDocumentsTooltip": "View and manage documents that failed during processing (OCR, ingestion, validation, etc.)",
-      "cleanup": "Document Cleanup{{showCount, select, true { ({{count}}) } other {}}",
+      "cleanup": "Document Cleanup{{showCount, select, true { ({{count}}) } other {}}}",
       "cleanupTooltip": "Manage and clean up documents with quality issues - low OCR confidence or failed processing",
-      "duplicates": "Duplicate Files{{showCount, select, true { ({{count}}) } other {}}",
+      "duplicates": "Duplicate Files{{showCount, select, true { ({{count}}) } other {}}}",
       "duplicatesTooltip": "View and manage duplicate document groups - documents with identical content",
-      "ignoredFiles": "Ignored Files{{showCount, select, true { ({{count}}) } other {}}",
+      "ignoredFiles": "Ignored Files{{showCount, select, true { ({{count}}) } other {}}}",
       "ignoredFilesTooltip": "Manage files that have been ignored during sync operations"
     },
     "stats": {
