@@ -1489,6 +1489,16 @@
     "labels": {
       "recommended": "Recommandé",
       "notAvailable": "Non disponible"
+    },
+    "urlPreview": {
+      "title": "Exemple d'URL de synchronisation :",
+      "legend": {
+        "serverUrl": "URL du serveur",
+        "webdavPath": "Chemin WebDAV",
+        "bucketPrefix": "Bucket/Préfixe",
+        "watchDirectory": "Répertoire surveillé",
+        "exampleFile": "Fichier exemple"
+      }
     }
   }
 }

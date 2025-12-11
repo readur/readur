@@ -370,10 +370,12 @@ const SourcesPage: React.FC = () => {
 
     const getLabelForType = (type: 'server' | 'path' | 'folder' | 'file') => {
       switch (type) {
-        case 'server': return 'Server URL';
-        case 'path': return formData.source_type === 'webdav' ? 'WebDAV Path' : 'Bucket/Prefix';
-        case 'folder': return 'Watch Directory';
-        case 'file': return 'Example File';
+        case 'server': return t('sources.urlPreview.legend.serverUrl');
+        case 'path': return formData.source_type === 'webdav'
+          ? t('sources.urlPreview.legend.webdavPath')
+          : t('sources.urlPreview.legend.bucketPrefix');
+        case 'folder': return t('sources.urlPreview.legend.watchDirectory');
+        case 'file': return t('sources.urlPreview.legend.exampleFile');
         default: return '';
       }
     };
@@ -392,7 +394,7 @@ const SourcesPage: React.FC = () => {
         }}
       >
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Example sync URL:
+          {t('sources.urlPreview.title')}
         </Typography>
         <Box
           sx={{
