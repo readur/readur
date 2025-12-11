@@ -46,7 +46,6 @@ import GlobalSearchBar from '../GlobalSearchBar';
 import ThemeToggle from '../ThemeToggle/ThemeToggle';
 import NotificationPanel from '../Notifications/NotificationPanel';
 import LanguageSwitcher from '../LanguageSwitcher';
-import BottomNavigation from './BottomNavigation';
 import { useTranslation } from 'react-i18next';
 
 const drawerWidth = 280;
@@ -422,15 +421,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           boxShadow: theme.palette.mode === 'light'
             ? '0 4px 32px rgba(0,0,0,0.04)'
             : '0 4px 32px rgba(0,0,0,0.2)',
-          // iOS safe area support
-          paddingTop: 'env(safe-area-inset-top, 0px)',
         }}
       >
-        <Toolbar sx={{
-          minHeight: { xs: '56px', sm: '64px' },
-          paddingLeft: { xs: '8px', sm: '16px' },
-          paddingRight: { xs: '8px', sm: '16px' },
-        }}>
+        <Toolbar>
           <IconButton
             color="inherit"
             aria-label="open drawer"
@@ -458,15 +451,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               : t('navigation.dashboard')}
           </Typography>
 
-          {/* Global Search Bar - Hidden on mobile, use search page instead */}
-          <Box sx={{
-            flexGrow: 2,
-            display: { xs: 'none', md: 'flex' },
-            justifyContent: 'center',
-            mx: 1,
-            flex: '1 1 auto',
-            minWidth: 0 // Allow flex item to shrink below content size
-          }}>
+          {/* Global Search Bar */}
+          <Box sx={{ flexGrow: 2, display: 'flex', justifyContent: 'center', mx: 1, flex: '1 1 auto' }}>
             <GlobalSearchBar />
           </Box>
 
@@ -671,37 +657,18 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           width: { md: `calc(100% - ${drawerWidth}px)` },
           minHeight: '100vh',
           backgroundColor: 'background.default',
-          // Add padding for bottom navigation on mobile
-          paddingBottom: {
-            xs: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-            md: 0,
-          },
         }}
       >
         <Toolbar />
-        <Box sx={{
-          p: { xs: 2, sm: 3 },
-          // iOS safe area support for notched devices
-          paddingLeft: {
-            xs: 'max(16px, env(safe-area-inset-left, 0px))',
-            sm: 'max(24px, env(safe-area-inset-left, 0px))',
-          },
-          paddingRight: {
-            xs: 'max(16px, env(safe-area-inset-right, 0px))',
-            sm: 'max(24px, env(safe-area-inset-right, 0px))',
-          },
-        }}>
+        <Box sx={{ p: 3 }}>
           {children}
         </Box>
       </Box>
 
-      {/* Bottom Navigation (Mobile Only) */}
-      <BottomNavigation />
-
       {/* Notification Panel */}
-      <NotificationPanel
-        anchorEl={notificationAnchorEl}
-        onClose={handleNotificationClose}
+      <NotificationPanel 
+        anchorEl={notificationAnchorEl} 
+        onClose={handleNotificationClose} 
       />
     </Box>
   );
