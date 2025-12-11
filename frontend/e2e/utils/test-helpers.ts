@@ -1,8 +1,193 @@
 import { Page, expect } from '@playwright/test';
 import { TEST_FILES } from './test-data';
+import * as path from 'path';
+import * as fs from 'fs';
+import { fileURLToPath } from 'url';
+
+// ES Module compatibility for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export class TestHelpers {
   constructor(private page: Page) {}
+
+  /**
+   * Get auth token from localStorage (must be logged in via UI first)
+   */
+  async getAuthToken(): Promise<string> {
+    const token = await this.page.evaluate(() => localStorage.getItem('token'));
+    if (!token) {
+      throw new Error('No auth token found in localStorage. Ensure user is logged in.');
+    }
+    return token;
+  }
+
+  /**
+   * Upload a document via API (faster and more reliable than UI)
+   * Returns the document ID
+   */
+  async uploadDocumentViaAPI(filePath: string): Promise<string> {
+    const token = await this.getAuthToken();
+
+    // Resolve the file path relative to the frontend directory (two levels up from e2e/utils/)
+    const absolutePath = path.resolve(__dirname, '../..', filePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      throw new Error(`Test file not found: ${absolutePath}`);
+    }
+
+    const fileBuffer = fs.readFileSync(absolutePath);
+    const fileName = path.basename(absolutePath);
+
+    const response = await this.page.request.post('/api/documents', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      multipart: {
+        file: {
+          name: fileName,
+          mimeType: this.getMimeType(fileName),
+          buffer: fileBuffer,
+        }
+      },
+      timeout: 60000
+    });
+
+    if (!response.ok()) {
+      const errorText = await response.text();
+      throw new Error(`Failed to upload document via API: ${response.status()} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log(`✅ Uploaded document via API: ${fileName} (ID: ${result.id || result.document_id})`);
+    return result.id || result.document_id;
+  }
+
+  /**
+   * Get document details via API
+   */
+  async getDocumentViaAPI(documentId: string): Promise<any> {
+    const token = await this.getAuthToken();
+
+    const response = await this.page.request.get(`/api/documents/${documentId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      timeout: 10000
+    });
+
+    if (!response.ok()) {
+      throw new Error(`Failed to get document: ${response.status()}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Wait for OCR processing to complete on a document
+   */
+  async waitForOCRComplete(documentId: string, timeoutMs: number = 120000): Promise<any> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+      const doc = await this.getDocumentViaAPI(documentId);
+
+      if (doc.ocr_status === 'completed' || doc.ocr_status === 'success') {
+        console.log(`✅ OCR completed for document ${documentId}`);
+        return doc;
+      }
+
+      if (doc.ocr_status === 'failed' || doc.ocr_status === 'error') {
+        console.log(`❌ OCR failed for document ${documentId}`);
+        return doc;
+      }
+
+      // Wait before checking again
+      await this.page.waitForTimeout(2000);
+    }
+
+    throw new Error(`OCR did not complete within ${timeoutMs}ms for document ${documentId}`);
+  }
+
+  /**
+   * Delete a document via API
+   */
+  async deleteDocumentViaAPI(documentId: string): Promise<void> {
+    const token = await this.getAuthToken();
+
+    const response = await this.page.request.delete(`/api/documents/${documentId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      timeout: 10000
+    });
+
+    if (!response.ok()) {
+      console.warn(`Failed to delete document ${documentId}: ${response.status()}`);
+    } else {
+      console.log(`🗑️ Deleted document ${documentId}`);
+    }
+  }
+
+  /**
+   * Get OCR languages via API
+   */
+  async getOCRLanguagesViaAPI(): Promise<any[]> {
+    const token = await this.getAuthToken();
+
+    const response = await this.page.request.get('/api/ocr/languages', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      timeout: 10000
+    });
+
+    if (!response.ok()) {
+      throw new Error(`Failed to get OCR languages: ${response.status()}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Update settings via API
+   */
+  async updateSettingsViaAPI(settings: Record<string, any>): Promise<void> {
+    const token = await this.getAuthToken();
+
+    const response = await this.page.request.put('/api/settings', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      data: settings,
+      timeout: 10000
+    });
+
+    if (!response.ok()) {
+      throw new Error(`Failed to update settings: ${response.status()}`);
+    }
+
+    console.log('✅ Settings updated via API');
+  }
+
+  /**
+   * Get MIME type for a file
+   */
+  private getMimeType(fileName: string): string {
+    const ext = path.extname(fileName).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.pdf': 'application/pdf',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.txt': 'text/plain',
+    };
+    return mimeTypes[ext] || 'application/octet-stream';
+  }
 
   async waitForApiCall(urlPattern: string | RegExp, timeout = 10000) {
     return this.page.waitForResponse(resp => 

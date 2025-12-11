@@ -367,8 +367,8 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
             }}
             sx={{
               width: '100%',
-              minWidth: { xs: 0, sm: 400, md: 600 },
-              maxWidth: { xs: '100%', sm: 600, md: 800, lg: 1200 },
+              minWidth: 600,
+              maxWidth: 1200,
               '& .MuiOutlinedInput-root': {
                 background: theme.palette.mode === 'light'
                   ? 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.90) 100%)'

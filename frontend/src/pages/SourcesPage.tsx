@@ -279,6 +279,170 @@ const SourcesPage: React.FC = () => {
     }
   };
 
+  // Helper function to build example sync URL based on source type and configuration
+  const buildExampleSyncUrl = (): { parts: { text: string; type: 'server' | 'path' | 'folder' | 'file' }[] } | null => {
+    const exampleFile = 'document1.pdf';
+    const firstFolder = formData.watch_folders.length > 0 ? formData.watch_folders[0] : '/Documents';
+
+    if (formData.source_type === 'webdav') {
+      if (!formData.server_url) return null;
+
+      let serverUrl = formData.server_url.trim();
+      // Add https:// if no protocol specified
+      if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
+        serverUrl = `https://${serverUrl}`;
+      }
+      serverUrl = serverUrl.replace(/\/+$/, ''); // Remove trailing slashes
+
+      let webdavPath = '';
+      if (formData.server_type === 'nextcloud') {
+        // Nextcloud uses /remote.php/dav/files/{username}
+        if (!serverUrl.includes('/remote.php/dav/files/')) {
+          webdavPath = `/remote.php/dav/files/${formData.username || 'username'}`;
+        }
+      } else if (formData.server_type === 'owncloud') {
+        // ownCloud uses /remote.php/webdav
+        if (!serverUrl.includes('/remote.php/webdav')) {
+          webdavPath = '/remote.php/webdav';
+        }
+      }
+      // For generic, use the URL as-is
+
+      const cleanFolder = firstFolder.replace(/^\/+/, ''); // Remove leading slashes
+
+      return {
+        parts: [
+          { text: serverUrl, type: 'server' },
+          { text: webdavPath, type: 'path' },
+          { text: `/${cleanFolder}`, type: 'folder' },
+          { text: `/${exampleFile}`, type: 'file' },
+        ],
+      };
+    } else if (formData.source_type === 's3') {
+      if (!formData.bucket_name) return null;
+
+      const endpoint = formData.endpoint_url?.trim() || `https://s3.${formData.region || 'us-east-1'}.amazonaws.com`;
+      const cleanEndpoint = endpoint.replace(/\/+$/, '');
+      const prefix = formData.prefix?.trim().replace(/^\/+|\/+$/g, '') || '';
+      const cleanFolder = firstFolder.replace(/^\/+|\/+$/, '');
+
+      const parts: { text: string; type: 'server' | 'path' | 'folder' | 'file' }[] = [
+        { text: cleanEndpoint, type: 'server' },
+        { text: `/${formData.bucket_name}`, type: 'path' },
+        { text: `/${cleanFolder}`, type: 'folder' },
+        { text: `/${exampleFile}`, type: 'file' },
+      ];
+      // Insert prefix after bucket if present
+      if (prefix) {
+        parts.splice(2, 0, { text: `/${prefix}`, type: 'path' });
+      }
+
+      return { parts };
+    } else if (formData.source_type === 'local_folder') {
+      if (formData.watch_folders.length === 0) return null;
+
+      return {
+        parts: [
+          { text: firstFolder, type: 'folder' },
+          { text: `/${exampleFile}`, type: 'file' },
+        ],
+      };
+    }
+
+    return null;
+  };
+
+  // URL Preview Component
+  const UrlPreviewBox = () => {
+    const urlParts = buildExampleSyncUrl();
+
+    if (!urlParts) return null;
+
+    const getColorForType = (type: 'server' | 'path' | 'folder' | 'file') => {
+      switch (type) {
+        case 'server': return theme.palette.primary.main;
+        case 'path': return theme.palette.info.main;
+        case 'folder': return theme.palette.success.main;
+        case 'file': return theme.palette.text.secondary;
+        default: return theme.palette.text.primary;
+      }
+    };
+
+    const getLabelForType = (type: 'server' | 'path' | 'folder' | 'file') => {
+      switch (type) {
+        case 'server': return t('sources.urlPreview.legend.serverUrl');
+        case 'path': return formData.source_type === 'webdav'
+          ? t('sources.urlPreview.legend.webdavPath')
+          : t('sources.urlPreview.legend.bucketPrefix');
+        case 'folder': return t('sources.urlPreview.legend.watchDirectory');
+        case 'file': return t('sources.urlPreview.legend.exampleFile');
+        default: return '';
+      }
+    };
+
+    // Get unique types for legend
+    const uniqueTypes = Array.from(new Set(urlParts.parts.map(p => p.type)));
+
+    return (
+      <Box
+        sx={{
+          mt: 2,
+          p: 2,
+          borderRadius: 2,
+          bgcolor: alpha(theme.palette.background.default, 0.5),
+          border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+        }}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          {t('sources.urlPreview.title')}
+        </Typography>
+        <Box
+          sx={{
+            fontFamily: 'monospace',
+            fontSize: '0.85rem',
+            wordBreak: 'break-all',
+            p: 1.5,
+            bgcolor: alpha(theme.palette.common.black, 0.02),
+            borderRadius: 1,
+            mb: 1.5,
+          }}
+        >
+          {urlParts.parts.map((part, index) => (
+            <Box
+              key={index}
+              component="span"
+              sx={{
+                color: getColorForType(part.type),
+                fontWeight: part.type === 'folder' ? 600 : 400,
+                textDecoration: part.type === 'folder' ? 'underline' : 'none',
+                textDecorationStyle: part.type === 'folder' ? 'dotted' : undefined,
+              }}
+            >
+              {part.text}
+            </Box>
+          ))}
+        </Box>
+        <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+          {uniqueTypes.map((type) => (
+            <Stack key={type} direction="row" alignItems="center" spacing={0.5}>
+              <Box
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  bgcolor: getColorForType(type),
+                }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {getLabelForType(type)}
+              </Typography>
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+    );
+  };
+
   const handleCreateSource = () => {
     setEditingSource(null);
     setFormData({
@@ -1635,7 +1799,7 @@ const SourcesPage: React.FC = () => {
                       Folders to Monitor
                     </Typography>
                   </Stack>
-                  
+
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Specify which folders to scan for files. Use absolute paths starting with "/".
                   </Typography>
@@ -1646,14 +1810,14 @@ const SourcesPage: React.FC = () => {
                       value={newFolder}
                       onChange={(e) => setNewFolder(e.target.value)}
                       placeholder="/Documents"
-                      sx={{ 
+                      sx={{
                         flexGrow: 1,
-                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 }
                       }}
                     />
-                    <Button 
-                      variant="outlined" 
-                      onClick={addFolder} 
+                    <Button
+                      variant="outlined"
+                      onClick={addFolder}
                       disabled={!newFolder}
                       sx={{ borderRadius: 2, px: 3 }}
                     >
@@ -1667,8 +1831,8 @@ const SourcesPage: React.FC = () => {
                         key={index}
                         label={folder}
                         onDelete={() => removeFolder(folder)}
-                        sx={{ 
-                          mr: 1, 
+                        sx={{
+                          mr: 1,
                           mb: 1,
                           borderRadius: 2,
                           bgcolor: alpha(theme.palette.secondary.main, 0.1),
@@ -1677,6 +1841,9 @@ const SourcesPage: React.FC = () => {
                       />
                     ))}
                   </Box>
+
+                  {/* URL Preview */}
+                  <UrlPreviewBox />
 
                   {/* File Extensions */}
                   <Stack direction="row" alignItems="center" spacing={2} mb={2}>
@@ -1984,7 +2151,7 @@ const SourcesPage: React.FC = () => {
                       Directories to Monitor
                     </Typography>
                   </Stack>
-                  
+
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Specify which local directories to scan for files. Use absolute paths.
                   </Typography>
@@ -1995,14 +2162,14 @@ const SourcesPage: React.FC = () => {
                       value={newFolder}
                       onChange={(e) => setNewFolder(e.target.value)}
                       placeholder="/home/user/Documents"
-                      sx={{ 
+                      sx={{
                         flexGrow: 1,
-                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 }
                       }}
                     />
-                    <Button 
-                      variant="outlined" 
-                      onClick={addFolder} 
+                    <Button
+                      variant="outlined"
+                      onClick={addFolder}
                       disabled={!newFolder}
                       sx={{ borderRadius: 2, px: 3 }}
                     >
@@ -2016,8 +2183,8 @@ const SourcesPage: React.FC = () => {
                         key={index}
                         label={folder}
                         onDelete={() => removeFolder(folder)}
-                        sx={{ 
-                          mr: 1, 
+                        sx={{
+                          mr: 1,
                           mb: 1,
                           borderRadius: 2,
                           bgcolor: alpha(theme.palette.secondary.main, 0.1),
@@ -2027,10 +2194,13 @@ const SourcesPage: React.FC = () => {
                     ))}
                   </Box>
 
+                  {/* URL Preview */}
+                  <UrlPreviewBox />
+
                   {/* File Extensions */}
                   <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-                    <Avatar 
-                      sx={{ 
+                    <Avatar
+                      sx={{
                         bgcolor: alpha(theme.palette.warning.main, 0.1),
                         color: theme.palette.warning.main,
                         width: 32,
@@ -2237,7 +2407,7 @@ const SourcesPage: React.FC = () => {
                       Object Prefixes to Monitor
                     </Typography>
                   </Stack>
-                  
+
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Specify which object prefixes (like folders) to scan for files.
                   </Typography>
@@ -2248,14 +2418,14 @@ const SourcesPage: React.FC = () => {
                       value={newFolder}
                       onChange={(e) => setNewFolder(e.target.value)}
                       placeholder="documents/"
-                      sx={{ 
+                      sx={{
                         flexGrow: 1,
-                        '& .MuiOutlinedInput-root': { borderRadius: 2 } 
+                        '& .MuiOutlinedInput-root': { borderRadius: 2 }
                       }}
                     />
-                    <Button 
-                      variant="outlined" 
-                      onClick={addFolder} 
+                    <Button
+                      variant="outlined"
+                      onClick={addFolder}
                       disabled={!newFolder}
                       sx={{ borderRadius: 2, px: 3 }}
                     >
@@ -2269,8 +2439,8 @@ const SourcesPage: React.FC = () => {
                         key={index}
                         label={folder}
                         onDelete={() => removeFolder(folder)}
-                        sx={{ 
-                          mr: 1, 
+                        sx={{
+                          mr: 1,
                           mb: 1,
                           borderRadius: 2,
                           bgcolor: alpha(theme.palette.secondary.main, 0.1),
@@ -2280,10 +2450,13 @@ const SourcesPage: React.FC = () => {
                     ))}
                   </Box>
 
+                  {/* URL Preview */}
+                  <UrlPreviewBox />
+
                   {/* File Extensions */}
                   <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-                    <Avatar 
-                      sx={{ 
+                    <Avatar
+                      sx={{
                         bgcolor: alpha(theme.palette.warning.main, 0.1),
                         color: theme.palette.warning.main,
                         width: 32,

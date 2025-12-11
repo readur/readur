@@ -90,7 +90,7 @@ docker-compose up -d
 open http://localhost:8000
 ```
 
-Log in with the default credentials (admin / readur2024) and change the password immediately. Then upload a document and watch Readur extract the text automatically.
+Check the container logs (`docker compose logs readur`) for your auto-generated admin password - look for "READUR ADMIN USER CREATED" and save the password immediately. Log in with username `admin` and your generated password, then upload a document and watch Readur extract the text automatically.
 
 ## How People Use Readur
 

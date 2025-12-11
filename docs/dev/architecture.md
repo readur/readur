@@ -240,12 +240,12 @@ sequenceDiagram
 ```yaml
 # Multiple backend instances
 backend-1:
-  image: readur:latest
+  image: ghcr.io/readur/readur:main
   environment:
     - INSTANCE_ID=1
 
 backend-2:
-  image: readur:latest
+  image: ghcr.io/readur/readur:main
   environment:
     - INSTANCE_ID=2
 

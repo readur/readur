@@ -327,7 +327,7 @@ spec:
     spec:
       containers:
       - name: readur
-        image: readur:latest
+        image: ghcr.io/readur/readur:main
         envFrom:
         - configMapRef:
             name: readur-config

@@ -503,7 +503,7 @@ version: '3.8'
 
 services:
   readur:
-    image: readur:latest
+    image: ghcr.io/readur/readur:main
     environment:
       - ENABLE_PER_USER_WATCH=true
       - USER_WATCH_BASE_DIR=/app/user_watch
@@ -539,7 +539,7 @@ spec:
     spec:
       containers:
       - name: readur
-        image: readur:latest
+        image: ghcr.io/readur/readur:main
         envFrom:
         - configMapRef:
             name: readur-config

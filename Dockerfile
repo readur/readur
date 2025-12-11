@@ -1,5 +1,5 @@
 # --- Frontend build stage ---
-FROM node:22-bookworm as frontend-builder
+FROM node:24-bookworm as frontend-builder
 
 WORKDIR /frontend
 COPY frontend/package*.json ./
@@ -8,7 +8,7 @@ COPY frontend ./
 RUN npm run build
 
 # --- Backend build stage ---
-FROM rust:1.90-bookworm as backend-builder
+FROM rust:1.91-bookworm as backend-builder
 
 # Install system dependencies for OCR and PDF processing
 RUN apt-get update && apt-get install -y \
