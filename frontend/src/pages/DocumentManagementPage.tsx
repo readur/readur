@@ -922,7 +922,7 @@ const DocumentManagementPage: React.FC = () => {
               icon={<ErrorIcon />}
               label={
                 statistics
-                  ? t('documentManagement.tabs.failedDocumentsWithCount', { count: statistics.total_failed })
+                  ? `${t('documentManagement.tabs.failedDocuments')} (${statistics.total_failed})`
                   : t('documentManagement.tabs.failedDocuments')
               }
               iconPosition="start"
@@ -933,9 +933,7 @@ const DocumentManagementPage: React.FC = () => {
               icon={<DeleteIcon />}
               label={
                 (previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0) > 0
-                  ? t('documentManagement.tabs.cleanupWithCount', {
-                      count: (previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0)
-                    })
+                  ? `${t('documentManagement.tabs.cleanup')} (${(previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0)})`
                   : t('documentManagement.tabs.cleanup')
               }
               iconPosition="start"
@@ -946,7 +944,7 @@ const DocumentManagementPage: React.FC = () => {
               icon={<FileCopyIcon />}
               label={
                 duplicateStatistics
-                  ? t('documentManagement.tabs.duplicatesWithCount', { count: duplicateStatistics.total_duplicate_groups })
+                  ? `${t('documentManagement.tabs.duplicates')} (${duplicateStatistics.total_duplicate_groups})`
                   : t('documentManagement.tabs.duplicates')
               }
               iconPosition="start"
@@ -957,7 +955,7 @@ const DocumentManagementPage: React.FC = () => {
               icon={<BlockIcon />}
               label={
                 ignoredFilesStats
-                  ? t('documentManagement.tabs.ignoredFilesWithCount', { count: ignoredFilesStats.total_ignored_files })
+                  ? `${t('documentManagement.tabs.ignoredFiles')} (${ignoredFilesStats.total_ignored_files})`
                   : t('documentManagement.tabs.ignoredFiles')
               }
               iconPosition="start"

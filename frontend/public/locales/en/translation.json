@@ -546,16 +546,12 @@
     "retryFailedOnly": "Retry Failed Only",
     "tabs": {
       "failedDocuments": "Failed Documents",
-      "failedDocumentsWithCount": "Failed Documents ({{count}})",
       "failedDocumentsTooltip": "View and manage documents that failed during processing (OCR, ingestion, validation, etc.)",
       "cleanup": "Document Cleanup",
-      "cleanupWithCount": "Document Cleanup ({{count}})",
       "cleanupTooltip": "Manage and clean up documents with quality issues - low OCR confidence or failed processing",
       "duplicates": "Duplicate Files",
-      "duplicatesWithCount": "Duplicate Files ({{count}})",
       "duplicatesTooltip": "View and manage duplicate document groups - documents with identical content",
       "ignoredFiles": "Ignored Files",
-      "ignoredFilesWithCount": "Ignored Files ({{count}})",
       "ignoredFilesTooltip": "Manage files that have been ignored during sync operations"
     },
     "stats": {
