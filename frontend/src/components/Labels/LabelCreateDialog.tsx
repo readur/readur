@@ -130,7 +130,9 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
         background_color: formData.background_color || undefined,
         icon: formData.icon || undefined,
       });
-      handleClose();
+      // Call onClose directly after successful submission
+      // Don't use handleClose() here to avoid race conditions with loading state
+      onClose();
     } catch (error) {
       console.error('Failed to save label:', error);
       // Could add error handling UI here
