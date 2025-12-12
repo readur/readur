@@ -920,40 +920,44 @@ const DocumentManagementPage: React.FC = () => {
           <Tooltip title={t('documentManagement.tabs.failedDocumentsTooltip')}>
             <Tab
               icon={<ErrorIcon />}
-              label={t('documentManagement.tabs.failedDocuments', {
-                count: statistics ? statistics.total_failed : 0,
-                showCount: statistics ? true : false
-              })}
+              label={
+                statistics
+                  ? `${t('documentManagement.tabs.failedDocuments')} (${statistics.total_failed})`
+                  : t('documentManagement.tabs.failedDocuments')
+              }
               iconPosition="start"
             />
           </Tooltip>
           <Tooltip title={t('documentManagement.tabs.cleanupTooltip')}>
             <Tab
               icon={<DeleteIcon />}
-              label={t('documentManagement.tabs.cleanup', {
-                count: (previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0),
-                showCount: (previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0) > 0
-              })}
+              label={
+                (previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0) > 0
+                  ? `${t('documentManagement.tabs.cleanup')} (${(previewData?.matched_count || 0) + (failedPreviewData?.matched_count || 0)})`
+                  : t('documentManagement.tabs.cleanup')
+              }
               iconPosition="start"
             />
           </Tooltip>
           <Tooltip title={t('documentManagement.tabs.duplicatesTooltip')}>
             <Tab
               icon={<FileCopyIcon />}
-              label={t('documentManagement.tabs.duplicates', {
-                count: duplicateStatistics ? duplicateStatistics.total_duplicate_groups : 0,
-                showCount: duplicateStatistics ? true : false
-              })}
+              label={
+                duplicateStatistics
+                  ? `${t('documentManagement.tabs.duplicates')} (${duplicateStatistics.total_duplicate_groups})`
+                  : t('documentManagement.tabs.duplicates')
+              }
               iconPosition="start"
             />
           </Tooltip>
           <Tooltip title={t('documentManagement.tabs.ignoredFilesTooltip')}>
             <Tab
               icon={<BlockIcon />}
-              label={t('documentManagement.tabs.ignoredFiles', {
-                count: ignoredFilesStats ? ignoredFilesStats.total_ignored_files : 0,
-                showCount: ignoredFilesStats ? true : false
-              })}
+              label={
+                ignoredFilesStats
+                  ? `${t('documentManagement.tabs.ignoredFiles')} (${ignoredFilesStats.total_ignored_files})`
+                  : t('documentManagement.tabs.ignoredFiles')
+              }
               iconPosition="start"
             />
           </Tooltip>

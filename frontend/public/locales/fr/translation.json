@@ -545,13 +545,13 @@
     "retrying": "Nouvelle tentative pour tous...",
     "retryFailedOnly": "Réessayer uniquement les échecs",
     "tabs": {
-      "failedDocuments": "Documents échoués{{showCount, select, true { ({{count}}) } other {}}",
+      "failedDocuments": "Documents échoués",
       "failedDocumentsTooltip": "Afficher et gérer les documents qui ont échoué lors du traitement (OCR, ingestion, validation, etc.)",
-      "cleanup": "Nettoyage des documents{{showCount, select, true { ({{count}}) } other {}}",
+      "cleanup": "Nettoyage des documents",
       "cleanupTooltip": "Gérer et nettoyer les documents avec des problèmes de qualité - faible confiance OCR ou échec de traitement",
-      "duplicates": "Fichiers en double{{showCount, select, true { ({{count}}) } other {}}",
+      "duplicates": "Fichiers en double",
       "duplicatesTooltip": "Afficher et gérer les groupes de documents en double - documents avec un contenu identique",
-      "ignoredFiles": "Fichiers ignorés{{showCount, select, true { ({{count}}) } other {}}",
+      "ignoredFiles": "Fichiers ignorés",
       "ignoredFilesTooltip": "Gérer les fichiers qui ont été ignorés lors des opérations de synchronisation"
     },
     "stats": {

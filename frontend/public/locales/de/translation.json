@@ -545,13 +545,13 @@
     "retrying": "Alle werden wiederholt...",
     "retryFailedOnly": "Nur fehlgeschlagene wiederholen",
     "tabs": {
-      "failedDocuments": "Fehlgeschlagene Dokumente{{showCount, select, true { ({{count}}) } other {}}",
+      "failedDocuments": "Fehlgeschlagene Dokumente",
       "failedDocumentsTooltip": "Dokumente anzeigen und verwalten, die während der Verarbeitung fehlgeschlagen sind (OCR, Aufnahme, Validierung, usw.)",
-      "cleanup": "Dokumentbereinigung{{showCount, select, true { ({{count}}) } other {}}",
+      "cleanup": "Dokumentbereinigung",
       "cleanupTooltip": "Dokumente mit Qualitätsproblemen verwalten und bereinigen - niedrige OCR-Konfidenz oder fehlgeschlagene Verarbeitung",
-      "duplicates": "Doppelte Dateien{{showCount, select, true { ({{count}}) } other {}}",
+      "duplicates": "Doppelte Dateien",
       "duplicatesTooltip": "Doppelte Dokumentgruppen anzeigen und verwalten - Dokumente mit identischem Inhalt",
-      "ignoredFiles": "Ignorierte Dateien{{showCount, select, true { ({{count}}) } other {}}",
+      "ignoredFiles": "Ignorierte Dateien",
       "ignoredFilesTooltip": "Dateien verwalten, die während der Synchronisierung ignoriert wurden"
     },
     "stats": {
