@@ -335,35 +335,37 @@ const Login: React.FC = () => {
                           {loading ? t('auth.signingIn') : t('auth.signIn')}
                         </Button>
 
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            my: 2,
-                            '&::before': {
-                              content: '""',
-                              flex: 1,
-                              height: '1px',
-                              backgroundColor: 'divider',
-                            },
-                            '&::after': {
-                              content: '""',
-                              flex: 1,
-                              height: '1px',
-                              backgroundColor: 'divider',
-                            },
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
+                        {authConfig.oidc_enabled && (
+                          <Box
                             sx={{
-                              px: 2,
-                              color: 'text.secondary',
+                              display: 'flex',
+                              alignItems: 'center',
+                              my: 2,
+                              '&::before': {
+                                content: '""',
+                                flex: 1,
+                                height: '1px',
+                                backgroundColor: 'divider',
+                              },
+                              '&::after': {
+                                content: '""',
+                                flex: 1,
+                                height: '1px',
+                                backgroundColor: 'divider',
+                              },
                             }}
                           >
-                            {t('common.or')}
-                          </Typography>
-                        </Box>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                px: 2,
+                                color: 'text.secondary',
+                              }}
+                            >
+                              {t('common.or')}
+                            </Typography>
+                          </Box>
+                        )}
                       </>
                     )}
 
