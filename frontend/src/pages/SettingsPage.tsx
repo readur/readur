@@ -47,6 +47,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
 import LanguageSelector from '../components/LanguageSelector';
+import { usePWA } from '../hooks/usePWA';
 import { useTranslation } from 'react-i18next';
 
 interface User {
@@ -194,6 +195,7 @@ function useDebounce<T extends (...args: any[]) => any>(func: T, delay: number):
 const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
   const { user: currentUser } = useAuth();
+  const isPWA = usePWA();
   const [tabValue, setTabValue] = useState<number>(0);
   const [settings, setSettings] = useState<Settings>({
     ocrLanguage: 'eng',
@@ -837,20 +839,41 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" sx={{ mb: 4 }}>
+    <Container
+      maxWidth="lg"
+      sx={{
+        mt: 4,
+        mb: 4,
+        px: isPWA ? { xs: 1, sm: 2, md: 3 } : undefined,
+      }}
+    >
+      <Typography variant="h4" sx={{ mb: 4, px: isPWA ? { xs: 1, sm: 0 } : 0 }}>
         {t('settings.title')}
       </Typography>
 
       <Paper sx={{ width: '100%' }}>
-        <Tabs value={tabValue} onChange={handleTabChange} aria-label="settings tabs">
+        <Tabs
+          value={tabValue}
+          onChange={handleTabChange}
+          aria-label="settings tabs"
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          sx={{
+            '& .MuiTabs-scrollButtons': {
+              '&.Mui-disabled': {
+                opacity: 0.3,
+              },
+            },
+          }}
+        >
           <Tab label={t('settings.tabs.general')} />
           <Tab label={t('settings.tabs.ocrSettings')} />
           <Tab label={t('settings.tabs.userManagement')} />
           <Tab label={t('settings.tabs.serverConfiguration')} />
         </Tabs>
 
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ p: { xs: 2, sm: 3 } }}>
           {tabValue === 0 && (
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
