@@ -46,6 +46,8 @@ import GlobalSearchBar from '../GlobalSearchBar';
 import ThemeToggle from '../ThemeToggle/ThemeToggle';
 import NotificationPanel from '../Notifications/NotificationPanel';
 import LanguageSwitcher from '../LanguageSwitcher';
+import BottomNavigation from './BottomNavigation';
+import { usePWA } from '../../hooks/usePWA';
 import { useTranslation } from 'react-i18next';
 
 const drawerWidth = 280;
@@ -80,6 +82,7 @@ const getNavigationItems = (t: (key: string) => string): NavigationItem[] => [
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const theme = useMuiTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isPWA = usePWA();
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [notificationAnchorEl, setNotificationAnchorEl] = useState<null | HTMLElement>(null);
@@ -660,16 +663,23 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         }}
       >
         <Toolbar />
-        <Box sx={{ p: 3 }}>
+        <Box sx={{
+          p: 3,
+          // Add bottom padding when bottom nav is visible (PWA mode on mobile)
+          pb: isPWA && isMobile ? 'calc(64px + 24px + env(safe-area-inset-bottom, 0px))' : 3,
+        }}>
           {children}
         </Box>
       </Box>
 
       {/* Notification Panel */}
-      <NotificationPanel 
-        anchorEl={notificationAnchorEl} 
-        onClose={handleNotificationClose} 
+      <NotificationPanel
+        anchorEl={notificationAnchorEl}
+        onClose={handleNotificationClose}
       />
+
+      {/* Bottom Navigation (PWA only) */}
+      <BottomNavigation />
     </Box>
   );
 };
