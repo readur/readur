@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -108,10 +108,11 @@ const DocumentsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortField>('created_at');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [ocrFilter, setOcrFilter] = useState<string>('');
-  
+
   // Labels state
   const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
   const [labelsLoading, setLabelsLoading] = useState<boolean>(false);
@@ -140,24 +141,57 @@ const DocumentsPage: React.FC = () => {
   const [retryHistoryModalOpen, setRetryHistoryModalOpen] = useState<boolean>(false);
   const [selectedDocumentForHistory, setSelectedDocumentForHistory] = useState<string | null>(null);
 
+  // Debounce search query to avoid making too many requests
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      // Reset to first page when search query changes
+      if (searchQuery !== debouncedSearchQuery) {
+        setPagination(prev => ({ ...prev, offset: 0 }));
+      }
+    }, 300); // 300ms debounce delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   useEffect(() => {
     fetchDocuments();
     fetchLabels();
-  }, [pagination?.limit, pagination?.offset, ocrFilter]);
+  }, [pagination?.limit, pagination?.offset, ocrFilter, debouncedSearchQuery]);
 
   const fetchDocuments = async (): Promise<void> => {
     if (!pagination) return;
-    
+
     try {
       setLoading(true);
-      const response = await documentService.listWithPagination(
-        pagination.limit, 
-        pagination.offset, 
-        ocrFilter || undefined
-      );
-      // Backend returns wrapped object with documents and pagination
-      setDocuments(response.data.documents || []);
-      setPagination(response.data.pagination || { total: 0, limit: 20, offset: 0, has_more: false });
+
+      // If there's a search query, use the search API to search all documents
+      if (debouncedSearchQuery.trim()) {
+        const response = await documentService.enhancedSearch({
+          query: debouncedSearchQuery.trim(),
+          limit: pagination.limit,
+          offset: pagination.offset,
+          include_snippets: false,
+        });
+
+        setDocuments(response.data.documents || []);
+        setPagination({
+          total: response.data.total || 0,
+          limit: pagination.limit,
+          offset: pagination.offset,
+          has_more: (pagination.offset + pagination.limit) < (response.data.total || 0)
+        });
+      } else {
+        // Otherwise, use normal pagination to list recent documents
+        const response = await documentService.listWithPagination(
+          pagination.limit,
+          pagination.offset,
+          ocrFilter || undefined
+        );
+        // Backend returns wrapped object with documents and pagination
+        setDocuments(response.data.documents || []);
+        setPagination(response.data.pagination || { total: 0, limit: 20, offset: 0, has_more: false });
+      }
     } catch (err) {
       setError(t('common.status.error'));
       console.error(err);
@@ -263,12 +297,9 @@ const DocumentsPage: React.FC = () => {
     });
   };
 
-  const filteredDocuments = (documents || []).filter(doc =>
-    doc.original_filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    doc.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
-  const sortedDocuments = [...filteredDocuments].sort((a, b) => {
+  // No need for client-side filtering anymore - search is done on the server
+  // When searchQuery is set, documents are already filtered by the server-side search API
+  const sortedDocuments = [...(documents || [])].sort((a, b) => {
     let aValue: any = a[sortBy];
     let bValue: any = b[sortBy];
     

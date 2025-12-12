@@ -6,6 +6,7 @@ import { I18nextProvider } from 'react-i18next'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { NotificationProvider } from '../contexts/NotificationContext'
+import { createMatchMediaMock, createResponsiveMatchMediaMock } from './pwa-test-utils'
 
 // Initialize i18n for tests
 i18n
@@ -244,6 +245,77 @@ export const renderWithAdminUser = (
   options?: Omit<RenderOptions, 'wrapper'>
 ) => {
   return renderWithAuthenticatedUser(ui, createMockAdminUser(), options)
+}
+
+/**
+ * Renders component with PWA mode enabled
+ * Sets up window.matchMedia to simulate standalone display mode
+ */
+export const renderWithPWA = (
+  ui: React.ReactElement,
+  options?: Omit<RenderOptions, 'wrapper'> & {
+    authValues?: Partial<MockAuthContextType>
+    routerProps?: any
+  }
+) => {
+  // Set up matchMedia to return true for standalone mode
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: createMatchMediaMock(true),
+  })
+
+  return renderWithProviders(ui, options)
+}
+
+/**
+ * Renders component with mobile viewport simulation
+ * Mocks useMediaQuery to return true for mobile breakpoints
+ */
+export const renderWithMobile = (
+  ui: React.ReactElement,
+  options?: Omit<RenderOptions, 'wrapper'> & {
+    authValues?: Partial<MockAuthContextType>
+    routerProps?: any
+  }
+) => {
+  // Set up matchMedia to simulate mobile viewport (max-width: 900px)
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: createResponsiveMatchMediaMock({
+      '(max-width: 900px)': true,
+      '(max-width:900px)': true, // Without spaces variant
+    }),
+  })
+
+  return renderWithProviders(ui, options)
+}
+
+/**
+ * Renders component with both PWA mode and mobile viewport
+ * Combines PWA standalone mode with mobile breakpoint simulation
+ */
+export const renderWithPWAMobile = (
+  ui: React.ReactElement,
+  options?: Omit<RenderOptions, 'wrapper'> & {
+    authValues?: Partial<MockAuthContextType>
+    routerProps?: any
+  }
+) => {
+  // Set up matchMedia to handle both PWA and mobile queries
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: createResponsiveMatchMediaMock({
+      'standalone': true,
+      '(display-mode: standalone)': true,
+      '(max-width: 900px)': true,
+      '(max-width:900px)': true,
+    }),
+  })
+
+  return renderWithProviders(ui, options)
 }
 
 // Mock localStorage consistently across tests

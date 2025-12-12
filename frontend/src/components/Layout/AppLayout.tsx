@@ -46,6 +46,8 @@ import GlobalSearchBar from '../GlobalSearchBar';
 import ThemeToggle from '../ThemeToggle/ThemeToggle';
 import NotificationPanel from '../Notifications/NotificationPanel';
 import LanguageSwitcher from '../LanguageSwitcher';
+import BottomNavigation from './BottomNavigation';
+import { usePWA } from '../../hooks/usePWA';
 import { useTranslation } from 'react-i18next';
 
 const drawerWidth = 280;
@@ -80,6 +82,7 @@ const getNavigationItems = (t: (key: string) => string): NavigationItem[] => [
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const theme = useMuiTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isPWA = usePWA();
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [notificationAnchorEl, setNotificationAnchorEl] = useState<null | HTMLElement>(null);
@@ -438,6 +441,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             fontWeight: 700,
             mr: 1,
             fontSize: '1.1rem',
+            display: isPWA ? 'none' : 'block',
             background: theme.palette.mode === 'light'
               ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
               : 'linear-gradient(135deg, #f8fafc 0%, #a855f7 100%)',
@@ -452,15 +456,24 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </Typography>
 
           {/* Global Search Bar */}
-          <Box sx={{ flexGrow: 2, display: 'flex', justifyContent: 'center', mx: 1, flex: '1 1 auto' }}>
+          <Box sx={{
+            flexGrow: 2,
+            display: 'flex',
+            justifyContent: 'center',
+            mx: { xs: 0.5, md: 1 },
+            flex: '1 1 auto',
+            minWidth: { xs: 0, md: 'auto' },
+            overflow: 'hidden',
+          }}>
             <GlobalSearchBar />
           </Box>
 
           {/* Notifications */}
-          <IconButton 
+          <IconButton
             onClick={handleNotificationClick}
-            sx={{ 
-              mr: 2,
+            sx={{
+              mr: { xs: 1, md: 2 },
+              display: isPWA ? 'none' : 'flex',
               color: 'text.secondary',
               background: theme.palette.mode === 'light'
                 ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
@@ -480,8 +493,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               },
             }}
           >
-            <Badge 
-              badgeContent={unreadCount} 
+            <Badge
+              badgeContent={unreadCount}
               sx={{
                 '& .MuiBadge-badge': {
                   background: 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)',
@@ -497,7 +510,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
           {/* Language Switcher */}
           <Box sx={{
-            mr: 2,
+            mr: { xs: 1, md: 2 },
+            display: isPWA ? 'none' : { xs: 'none', sm: 'block' },
             background: theme.palette.mode === 'light'
               ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
               : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
@@ -518,7 +532,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
           {/* Theme Toggle */}
           <Box sx={{
-            mr: 2,
+            mr: { xs: 1, md: 2 },
             background: theme.palette.mode === 'light'
               ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
               : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
@@ -660,16 +674,23 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         }}
       >
         <Toolbar />
-        <Box sx={{ p: 3 }}>
+        <Box sx={{
+          p: 3,
+          // Add bottom padding when bottom nav is visible (PWA mode on mobile)
+          pb: isPWA && isMobile ? 'calc(64px + 24px + 8px + env(safe-area-inset-bottom, 0px))' : 3,
+        }}>
           {children}
         </Box>
       </Box>
 
       {/* Notification Panel */}
-      <NotificationPanel 
-        anchorEl={notificationAnchorEl} 
-        onClose={handleNotificationClose} 
+      <NotificationPanel
+        anchorEl={notificationAnchorEl}
+        onClose={handleNotificationClose}
       />
+
+      {/* Bottom Navigation (PWA only) */}
+      <BottomNavigation />
     </Box>
   );
 };
