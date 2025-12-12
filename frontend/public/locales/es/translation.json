@@ -498,13 +498,13 @@
     "retrying": "Reintentando Todos...",
     "retryFailedOnly": "Reintentar Solo Fallidos",
     "tabs": {
-      "failedDocuments": "Documentos Fallidos{{showCount, select, true { ({{count}}) } other {}}",
+      "failedDocuments": "Documentos Fallidos",
       "failedDocumentsTooltip": "Ver y gestionar documentos que fallaron durante el procesamiento (OCR, ingesta, validación, etc.)",
-      "cleanup": "Limpieza de Documentos{{showCount, select, true { ({{count}}) } other {}}",
+      "cleanup": "Limpieza de Documentos",
       "cleanupTooltip": "Gestionar y limpiar documentos con problemas de calidad - baja confianza de OCR o procesamiento fallido",
-      "duplicates": "Archivos Duplicados{{showCount, select, true { ({{count}}) } other {}}",
+      "duplicates": "Archivos Duplicados",
       "duplicatesTooltip": "Ver y gestionar grupos de documentos duplicados - documentos con contenido idéntico",
-      "ignoredFiles": "Archivos Ignorados{{showCount, select, true { ({{count}}) } other {}}",
+      "ignoredFiles": "Archivos Ignorados",
       "ignoredFilesTooltip": "Gestionar archivos que han sido ignorados durante operaciones de sincronización"
     },
     "stats": {
