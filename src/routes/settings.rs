@@ -187,9 +187,15 @@ async fn get_server_configuration(
     }
 
     let config = &state.config;
-    
-    // Get default settings for reference
-    let default_settings = crate::models::Settings::default();
+
+    // Get user settings from database, fallback to defaults
+    let user_settings = state
+        .db
+        .get_user_settings(auth_user.user.id)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(crate::models::Settings::default);
     
     // Parse server_address to get host and port
     let (server_host, server_port) = if let Some(colon_pos) = config.server_address.rfind(':') {
@@ -201,22 +207,22 @@ async fn get_server_configuration(
     };
     
     let server_config = ServerConfiguration {
-        max_file_size_mb: config.max_file_size_mb,
-        concurrent_ocr_jobs: default_settings.concurrent_ocr_jobs,
-        ocr_timeout_seconds: default_settings.ocr_timeout_seconds,
-        memory_limit_mb: default_settings.memory_limit_mb as u64,
-        cpu_priority: default_settings.cpu_priority,
+        max_file_size_mb: user_settings.max_file_size_mb as u64,
+        concurrent_ocr_jobs: user_settings.concurrent_ocr_jobs,
+        ocr_timeout_seconds: user_settings.ocr_timeout_seconds,
+        memory_limit_mb: user_settings.memory_limit_mb as u64,
+        cpu_priority: user_settings.cpu_priority,
         server_host,
         server_port,
         jwt_secret_set: !config.jwt_secret.is_empty(),
         upload_path: config.upload_path.clone(),
         watch_folder: Some(config.watch_folder.clone()),
-        ocr_language: default_settings.ocr_language,
-        allowed_file_types: default_settings.allowed_file_types,
+        ocr_language: user_settings.ocr_language,
+        allowed_file_types: user_settings.allowed_file_types,
         watch_interval_seconds: config.watch_interval_seconds,
         file_stability_check_ms: config.file_stability_check_ms,
         max_file_age_hours: config.max_file_age_hours,
-        enable_background_ocr: default_settings.enable_background_ocr,
+        enable_background_ocr: user_settings.enable_background_ocr,
         version: env!("CARGO_PKG_VERSION").to_string(),
         build_info: option_env!("BUILD_INFO").map(|s| s.to_string()),
     };
