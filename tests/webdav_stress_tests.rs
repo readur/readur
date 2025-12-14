@@ -483,18 +483,26 @@ pub struct LoopDetectionMonitor {
     suspected_loops: Arc<RwLock<HashSet<String>>>,
     monitoring_active: Arc<AtomicBool>,
     detection_threshold: usize,
+    /// Threshold for rapid repeated access detection (accesses in 60 seconds)
+    /// Derived as detection_threshold / 2 to allow for legitimate concurrent access
+    rapid_access_threshold: usize,
     circuit_breaker: Arc<CircuitBreaker>,
     cleanup_interval: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl LoopDetectionMonitor {
     pub fn new(detection_threshold: usize) -> Self {
+        // Derive rapid access threshold as half of detection threshold
+        // This allows for legitimate concurrent operations while still detecting loops
+        let rapid_access_threshold = std::cmp::max(detection_threshold / 2, 10);
+
         let monitor = Self {
             directory_access_counts: Arc::new(RwLock::new(BoundedLruCache::new(1000))), // Max 1000 directories
             access_timestamps: Arc::new(RwLock::new(BoundedLruCache::new(1000))), // Max 1000 directories
             suspected_loops: Arc::new(RwLock::new(HashSet::new())),
             monitoring_active: Arc::new(AtomicBool::new(true)),
             detection_threshold,
+            rapid_access_threshold,
             circuit_breaker: Arc::new(CircuitBreaker::new(10, Duration::from_secs(60))),
             cleanup_interval: Arc::new(Mutex::new(None)),
         };
@@ -612,11 +620,11 @@ impl LoopDetectionMonitor {
             let recent_accesses = timestamp_queue.iter()
                 .filter(|&&timestamp| timestamp > now - Duration::from_secs(60))
                 .count();
-            
-            if recent_accesses > 8 {
+
+            if recent_accesses > self.rapid_access_threshold {
                 warn!(
-                    "Rapid repeated access pattern detected for directory: {} ({} accesses in last minute)",
-                    directory_path, recent_accesses
+                    "Rapid repeated access pattern detected for directory: {} ({} accesses in last minute, threshold: {})",
+                    directory_path, recent_accesses, self.rapid_access_threshold
                 );
                 self.suspected_loops.write().await.insert(directory_path.to_string());
                 return Err(anyhow::anyhow!("Rapid access pattern detected"));
