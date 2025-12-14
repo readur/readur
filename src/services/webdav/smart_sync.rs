@@ -12,6 +12,56 @@ use crate::webdav_xml_parser::compare_etags;
 use crate::services::source_error_tracker::SourceErrorTracker;
 use super::{WebDAVService, SyncProgress};
 
+/// Normalize a path by removing trailing slashes for consistent comparison
+/// This handles inconsistencies where WebDAV servers may return paths with or without trailing slashes
+fn normalize_path(path: &str) -> String {
+    path.trim_end_matches('/').to_string()
+}
+
+/// Check if a path is an immediate child of a parent path
+/// This is used to filter directory comparisons to only check immediate children,
+/// not deeply nested directories during shallow discovery
+fn is_immediate_child(parent_path: &str, child_path: &str) -> bool {
+    let parent = normalize_path(parent_path);
+    let child = normalize_path(child_path);
+
+    // Handle root path special case: "/" normalizes to ""
+    // For root, immediate children are paths like "/Documents" (one segment after root)
+    if parent.is_empty() {
+        // Child should start with "/" and have exactly one path segment
+        if !child.starts_with('/') {
+            return false;
+        }
+        // Remove the leading slash and check for no more slashes
+        let remaining = &child[1..];
+        return !remaining.is_empty() && !remaining.contains('/');
+    }
+
+    // Child path must be longer than parent
+    if child.len() <= parent.len() {
+        return false;
+    }
+
+    // Child must start with parent followed by a path separator
+    // This prevents "/Documents" from matching "/DocumentsBackup"
+    let expected_prefix = format!("{}/", parent);
+
+    if !child.starts_with(&expected_prefix) {
+        return false;
+    }
+
+    // Get the remaining path after parent (excluding the separator)
+    let remaining = &child[expected_prefix.len()..];
+
+    // If remaining is empty, this is not a valid child
+    if remaining.is_empty() {
+        return false;
+    }
+
+    // Immediate child has no additional slashes in the remaining path
+    !remaining.contains('/')
+}
+
 /// Smart sync service that provides intelligent WebDAV synchronization
 /// by comparing directory ETags to avoid unnecessary scans
 #[derive(Clone)]
@@ -85,10 +135,12 @@ impl SmartSyncService {
             .map_err(|e| anyhow::anyhow!("Failed to fetch known directories: {}", e))?;
         
         // Filter to only directories under the current folder path
+        // Use normalized paths (without trailing slashes) for consistent comparison
+        let normalized_folder_path = normalize_path(folder_path);
         let relevant_dirs: HashMap<String, String> = known_directories
             .into_iter()
-            .filter(|dir| dir.directory_path.starts_with(folder_path))
-            .map(|dir| (dir.directory_path, dir.directory_etag))
+            .filter(|dir| normalize_path(&dir.directory_path).starts_with(&normalized_folder_path))
+            .map(|dir| (normalize_path(&dir.directory_path), dir.directory_etag))
             .collect();
         
         if relevant_dirs.is_empty() {
@@ -109,44 +161,63 @@ impl SmartSyncService {
                 
                 // Check if any immediate subdirectories have changed ETags
                 for directory in &root_discovery.directories {
-                    match relevant_dirs.get(&directory.relative_path) {
+                    // Use normalized path for HashMap lookup to handle trailing slash differences
+                    let normalized_dir_path = normalize_path(&directory.relative_path);
+                    match relevant_dirs.get(&normalized_dir_path) {
                         Some(known_etag) => {
                             // Use proper ETag comparison that handles weak/strong semantics
                             if !compare_etags(known_etag, &directory.etag) {
-                                info!("[{}] 🔄 Directory changed: '{}' (old: {}, new: {})", 
+                                info!("[{}] 🔄 Directory changed: '{}' (old: {}, new: {})",
                                       eval_request_id, directory.relative_path, known_etag, directory.etag);
-                                changed_directories.push(directory.relative_path.clone());
+                                changed_directories.push(normalized_dir_path);
                             } else {
-                                debug!("[{}] ✅ Directory unchanged: '{}' (ETag: {})", 
+                                debug!("[{}] ✅ Directory unchanged: '{}' (ETag: {})",
                                        eval_request_id, directory.relative_path, directory.etag);
                             }
                         }
                         None => {
-                            info!("[{}] ✨ New directory discovered: '{}'", 
+                            info!("[{}] ✨ New directory discovered: '{}'",
                                   eval_request_id, directory.relative_path);
-                            new_directories.push(directory.relative_path.clone());
+                            new_directories.push(normalized_dir_path);
                         }
                     }
                 }
 
                 // Check for deleted directories (directories that were known but not discovered)
+                // IMPORTANT: Only check immediate children of folder_path, not nested directories
+                // Shallow discovery only returns immediate children, so checking nested directories
+                // would falsely flag them as deleted
                 let discovered_paths: std::collections::HashSet<String> = root_discovery.directories
                     .iter()
-                    .map(|d| d.relative_path.clone())
+                    .map(|d| normalize_path(&d.relative_path))
                     .collect();
-                
+
+                // Count immediate children for logging
+                let immediate_children_count = relevant_dirs
+                    .keys()
+                    .filter(|p| is_immediate_child(&normalized_folder_path, p))
+                    .count();
+
+                debug!("[{}] Checking {} immediate children for deletions (filtered from {} total known directories)",
+                       eval_request_id, immediate_children_count, relevant_dirs.len());
+
                 let mut deleted_directories = Vec::new();
                 for (known_path, _) in &relevant_dirs {
-                    if !discovered_paths.contains(known_path.as_str()) {
-                        info!("[{}] 🗑️ Directory deleted: '{}'", eval_request_id, known_path);
-                        deleted_directories.push(known_path.clone());
+                    // Only check deletion for immediate children of the folder being scanned
+                    // Nested directories (e.g., /folder/sub/deep/) won't appear in shallow discovery
+                    // and should not be flagged as deleted
+                    if is_immediate_child(&normalized_folder_path, known_path) {
+                        if !discovered_paths.contains(known_path.as_str()) {
+                            info!("[{}] 🗑️ Directory deleted: '{}'", eval_request_id, known_path);
+                            deleted_directories.push(known_path.clone());
+                        }
                     }
                 }
-                
+
                 // If directories were deleted, we need to clean them up
                 if !deleted_directories.is_empty() {
-                    info!("[{}] Found {} deleted directories that need cleanup: {:?}", 
-                          eval_request_id, deleted_directories.len(), 
+                    info!("[{}] Found {} deleted directories that need cleanup: {:?}",
+                          eval_request_id, deleted_directories.len(),
                           deleted_directories.iter().take(3).collect::<Vec<_>>());
                     // We'll handle deletion in the sync operation itself
                 }
@@ -438,5 +509,103 @@ impl SmartSyncService {
             directories_scanned,
             directories_skipped: 0, // TODO: Could track this if needed
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_path_removes_trailing_slash() {
+        assert_eq!(normalize_path("/Documents/"), "/Documents");
+        assert_eq!(normalize_path("/Documents"), "/Documents");
+        assert_eq!(normalize_path("/"), "");
+        assert_eq!(normalize_path(""), "");
+    }
+
+    #[test]
+    fn test_normalize_path_handles_multiple_trailing_slashes() {
+        assert_eq!(normalize_path("/Documents///"), "/Documents");
+        assert_eq!(normalize_path("/path/to/folder//"), "/path/to/folder");
+    }
+
+    #[test]
+    fn test_is_immediate_child_basic() {
+        // Basic immediate children
+        assert!(is_immediate_child("/Documents", "/Documents/Projects"));
+        assert!(is_immediate_child("/Documents", "/Documents/Archive"));
+        assert!(is_immediate_child("/", "/Documents"));
+    }
+
+    #[test]
+    fn test_is_immediate_child_with_trailing_slashes() {
+        // Should work regardless of trailing slashes
+        assert!(is_immediate_child("/Documents/", "/Documents/Projects/"));
+        assert!(is_immediate_child("/Documents", "/Documents/Projects/"));
+        assert!(is_immediate_child("/Documents/", "/Documents/Projects"));
+    }
+
+    #[test]
+    fn test_is_immediate_child_nested_not_immediate() {
+        // Nested directories should NOT be immediate children
+        assert!(!is_immediate_child("/Documents", "/Documents/Projects/Work"));
+        assert!(!is_immediate_child("/Documents", "/Documents/Projects/Work/Deep"));
+        assert!(!is_immediate_child("/", "/Documents/Projects"));
+    }
+
+    #[test]
+    fn test_is_immediate_child_same_path() {
+        // Same path is not a child of itself
+        assert!(!is_immediate_child("/Documents", "/Documents"));
+        assert!(!is_immediate_child("/Documents/", "/Documents/"));
+        assert!(!is_immediate_child("/Documents", "/Documents/"));
+    }
+
+    #[test]
+    fn test_is_immediate_child_unrelated_paths() {
+        // Unrelated paths
+        assert!(!is_immediate_child("/Documents", "/Photos/Album"));
+        assert!(!is_immediate_child("/Documents", "/Other"));
+    }
+
+    #[test]
+    fn test_is_immediate_child_similar_names() {
+        // Similar but different paths (DocumentsBackup is not under Documents)
+        assert!(!is_immediate_child("/Documents", "/DocumentsBackup"));
+        assert!(!is_immediate_child("/Documents", "/DocumentsBackup/Folder"));
+    }
+
+    #[test]
+    fn test_deletion_detection_scenario() {
+        // Simulate the bug scenario:
+        // - Parent folder: /Documents
+        // - Known directories in DB: /Documents/Projects, /Documents/Projects/Work, /Documents/Archive
+        // - Shallow discovery returns only: /Documents/Projects, /Documents/Archive
+        //
+        // The bug was: /Documents/Projects/Work was flagged as deleted
+        // The fix: Only immediate children should be checked for deletion
+
+        let parent = "/Documents";
+        let known_dirs = vec![
+            "/Documents/Projects",
+            "/Documents/Projects/Work",        // nested - should NOT be checked
+            "/Documents/Projects/Work/Deep",   // deeply nested - should NOT be checked
+            "/Documents/Archive",
+        ];
+
+        // Only immediate children should be considered for deletion detection
+        let immediate_children: Vec<_> = known_dirs
+            .iter()
+            .filter(|p| is_immediate_child(parent, p))
+            .collect();
+
+        assert_eq!(immediate_children.len(), 2);
+        assert!(immediate_children.contains(&&"/Documents/Projects"));
+        assert!(immediate_children.contains(&&"/Documents/Archive"));
+
+        // Nested directories should NOT be in the list
+        assert!(!immediate_children.contains(&&"/Documents/Projects/Work"));
+        assert!(!immediate_children.contains(&&"/Documents/Projects/Work/Deep"));
     }
 }
