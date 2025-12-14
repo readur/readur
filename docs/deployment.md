@@ -7,6 +7,8 @@ This guide covers production deployment strategies, SSL setup, monitoring, backu
 ## Table of Contents
 
 - [Production Docker Compose](#production-docker-compose)
+- [Volume Path Syntax](#volume-path-syntax)
+- [Platform-Specific Deployment Notes](#platform-specific-deployment-notes)
 - [Network Filesystem Mounts](#network-filesystem-mounts)
   - [NFS Mounts](#nfs-mounts)
   - [SMB/CIFS Mounts](#smbcifs-mounts)
@@ -129,6 +131,173 @@ EOF
 
 # Deploy
 docker compose -f docker-compose.prod.yml --env-file .env up -d
+```
+
+## Volume Path Syntax
+
+Understanding Docker volume path syntax is critical for successful deployments, especially when using container management tools like Portainer or running on NAS devices.
+
+### Path Types
+
+| Syntax | Example | Description |
+|--------|---------|-------------|
+| `./path` | `./uploads:/app/uploads` | **Relative path** - relative to the docker-compose.yml file location |
+| `/path` | `/DATA/uploads:/app/uploads` | **Absolute path** - absolute path on the host filesystem |
+| `name:` | `postgres_data:/var/lib/postgresql/data` | **Named volume** - Docker-managed volume |
+
+### Common Mistakes
+
+**Mistake 1: Using relative path when absolute is needed**
+
+```yaml
+# WRONG - Creates ./DATA/AppData relative to compose file
+volumes:
+  - ./DATA/AppData/readur/uploads:/app/uploads
+
+# CORRECT - Uses absolute path /DATA/AppData on host
+volumes:
+  - /DATA/AppData/readur/uploads:/app/uploads
+```
+
+**Mistake 2: Case sensitivity on Linux**
+
+Linux filesystems are case-sensitive. `/DATA` and `/data` are different directories:
+
+```yaml
+# These are DIFFERENT paths on Linux:
+- /DATA/uploads:/app/uploads   # Capital DATA
+- /data/uploads:/app/uploads   # Lowercase data
+```
+
+**Mistake 3: Path doesn't exist**
+
+Docker will attempt to create the host path, but this fails if:
+- The parent directory doesn't exist
+- Docker lacks write permission to create it
+- The filesystem is read-only
+
+```bash
+# Create directories before starting containers
+mkdir -p /DATA/AppData/readur/uploads
+mkdir -p /DATA/AppData/readur/watch
+```
+
+### Recommended Approach
+
+For most deployments, use **named volumes** for database storage and **bind mounts** for user-accessible directories:
+
+```yaml
+volumes:
+  # Named volume for database (Docker manages location)
+  postgres_data:
+
+services:
+  postgres:
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Named volume
+
+  readur:
+    volumes:
+      # Bind mounts for user-accessible directories
+      - /path/to/your/uploads:/app/uploads      # Absolute path
+      - /path/to/your/documents:/app/watch      # Absolute path
+```
+
+## Platform-Specific Deployment Notes
+
+Different platforms have specific requirements for volume paths and Docker configuration.
+
+### Portainer
+
+When deploying via Portainer's Stacks feature:
+
+1. **Use absolute paths** - Relative paths (starting with `./`) are resolved from Portainer's working directory, not where you expect
+2. **Create directories first** - Portainer won't create host directories automatically
+3. **Check the Volumes tab** - Verify volume mappings after deployment
+
+```yaml
+# Recommended for Portainer deployments
+services:
+  readur:
+    volumes:
+      - /srv/readur/uploads:/app/uploads
+      - /srv/readur/watch:/app/watch
+```
+
+### ZimaOS
+
+ZimaOS uses `/DATA/AppData/` as the standard location for application data:
+
+```yaml
+services:
+  readur:
+    volumes:
+      - /DATA/AppData/readur/uploads:/app/uploads
+      - /DATA/AppData/readur/watch:/app/watch
+
+  postgres:
+    volumes:
+      - /DATA/AppData/readur/postgres_data:/var/lib/postgresql/data
+```
+
+**Important:** Use `/DATA` (absolute), not `./DATA` (relative).
+
+### Unraid
+
+Unraid uses `/mnt/user/appdata/` for container data:
+
+```yaml
+services:
+  readur:
+    volumes:
+      - /mnt/user/appdata/readur/uploads:/app/uploads
+      - /mnt/user/appdata/readur/watch:/app/watch
+
+  postgres:
+    volumes:
+      - /mnt/user/appdata/readur/postgres:/var/lib/postgresql/data
+```
+
+### Synology DSM
+
+Synology NAS devices use volume-based paths:
+
+```yaml
+services:
+  readur:
+    volumes:
+      - /volume1/docker/readur/uploads:/app/uploads
+      - /volume1/docker/readur/watch:/app/watch
+
+  postgres:
+    volumes:
+      - /volume1/docker/readur/postgres:/var/lib/postgresql/data
+```
+
+**Note:** Ensure the `docker` shared folder exists and the Docker user has write permissions.
+
+### QNAP
+
+QNAP NAS devices typically use:
+
+```yaml
+services:
+  readur:
+    volumes:
+      - /share/Container/readur/uploads:/app/uploads
+      - /share/Container/readur/watch:/app/watch
+```
+
+### TrueNAS SCALE
+
+TrueNAS SCALE uses dataset paths:
+
+```yaml
+services:
+  readur:
+    volumes:
+      - /mnt/pool/apps/readur/uploads:/app/uploads
+      - /mnt/pool/apps/readur/watch:/app/watch
 ```
 
 ## Network Filesystem Mounts

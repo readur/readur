@@ -399,6 +399,169 @@ MemoryMax=2G
 MemoryHigh=1.5G
 ```
 
+### Docker Volume Mount Issues
+
+#### Problem: "read-only file system" error when starting container
+
+**Symptoms:**
+- Container fails to start
+- Error: `error while creating mount source path '...': mkdir /data: read-only file system`
+- Error: `cannot create directory '...': Read-only file system`
+
+**Diagnosis:**
+```bash
+# Check if the path exists on the host
+ls -la /DATA/AppData/readur/
+
+# Check filesystem mount options
+mount | grep -E "DATA|data"
+
+# Verify Docker can write to the parent directory
+docker run --rm -v /DATA:/test alpine touch /test/testfile && echo "Writable" || echo "Read-only"
+```
+
+**Common Causes and Solutions:**
+
+**Cause 1: Using relative path instead of absolute path**
+
+This is the most common issue, especially with Portainer deployments:
+
+```yaml
+# WRONG - Relative path (starts with ./)
+volumes:
+  - ./DATA/AppData/readur/uploads:/app/uploads
+
+# CORRECT - Absolute path (starts with /)
+volumes:
+  - /DATA/AppData/readur/uploads:/app/uploads
+```
+
+The `./` prefix means "relative to the docker-compose.yml location," which may not be where you expect, especially in Portainer.
+
+**Cause 2: Parent directory doesn't exist**
+
+Docker cannot create nested directories if parent directories don't exist:
+
+```bash
+# Create the full directory structure first
+mkdir -p /DATA/AppData/readur/uploads
+mkdir -p /DATA/AppData/readur/watch
+mkdir -p /DATA/AppData/readur/postgres_data
+
+# Set appropriate permissions
+chmod 755 /DATA/AppData/readur/uploads
+chmod 755 /DATA/AppData/readur/watch
+```
+
+**Cause 3: Case sensitivity mismatch**
+
+Linux filesystems are case-sensitive:
+
+```bash
+# These are DIFFERENT directories on Linux:
+/DATA/AppData    # Uppercase
+/data/appdata    # Lowercase
+
+# Check what actually exists
+ls -la / | grep -i data
+```
+
+**Cause 4: Filesystem mounted as read-only**
+
+Some NAS systems mount certain paths as read-only:
+
+```bash
+# Check mount options
+mount | grep DATA
+
+# If read-only, you may need to use a different path
+# or remount with write permissions (consult your NAS documentation)
+```
+
+#### Problem: "permission denied" when container tries to write files
+
+**Symptoms:**
+- Container starts but crashes when writing files
+- Error: `Permission denied` in container logs
+- Uploaded files fail to save
+
+**Diagnosis:**
+```bash
+# Check host directory ownership
+ls -la /path/to/uploads/
+
+# Check what user the container runs as
+docker exec readur id
+
+# Test write access from container
+docker exec readur touch /app/uploads/test.txt
+```
+
+**Solutions:**
+
+**Fix ownership on host:**
+```bash
+# Option 1: Change ownership to match container user (usually UID 1000)
+sudo chown -R 1000:1000 /path/to/uploads
+
+# Option 2: Make directory world-writable (less secure)
+sudo chmod -R 777 /path/to/uploads
+```
+
+**Use Docker user mapping:**
+```yaml
+services:
+  readur:
+    user: "${UID}:${GID}"  # Run as current user
+    volumes:
+      - /path/to/uploads:/app/uploads
+```
+
+#### Problem: Volume data not persisting after container restart
+
+**Symptoms:**
+- Data disappears after `docker-compose down && docker-compose up`
+- Uploaded documents are gone after restart
+
+**Diagnosis:**
+```bash
+# List all volumes
+docker volume ls
+
+# Inspect volume to see mount point
+docker volume inspect readur_uploads
+
+# Check if using bind mount or named volume
+docker inspect readur | grep -A 10 "Mounts"
+```
+
+**Solutions:**
+
+**Ensure volumes are defined correctly:**
+```yaml
+services:
+  readur:
+    volumes:
+      # Bind mount - data stored at host path
+      - /srv/readur/uploads:/app/uploads
+
+      # OR named volume - Docker manages storage
+      - readur_uploads:/app/uploads
+
+volumes:
+  readur_uploads:  # Must be defined if using named volume
+```
+
+**Don't use `docker-compose down -v`:**
+```bash
+# This DELETES volumes (and your data!)
+docker-compose down -v  # DANGEROUS
+
+# This preserves volumes
+docker-compose down     # Safe
+docker-compose up -d
+```
+
 ### File Storage Issues
 
 #### Problem: File upload fails
