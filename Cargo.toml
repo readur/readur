@@ -80,7 +80,7 @@ stress-testing = ["test-utils"]
 
 [dev-dependencies]
 tempfile = "3"
-wiremock = "0.6" 
+wiremock = "0.6"
 tokio-test = "0.4"
 futures = "0.3"
 rand = "0.8"
@@ -89,6 +89,12 @@ testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
 rust_xlsxwriter = "0.92"  # For creating proper XLSX test files
+# WebDAV server for realistic stress testing
+dav-server = { version = "0.8", features = ["memfs"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
 
 # Enable test-utils feature for all tests
 readur = { path = ".", features = ["test-utils"] }

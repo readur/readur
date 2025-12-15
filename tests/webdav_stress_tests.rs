@@ -1,6 +1,6 @@
 /*
  * WebDAV Stress Testing Suite
- * 
+ *
  * Comprehensive stress tests for WebDAV sync functionality with infinite loop detection.
  * These tests create complex directory structures and monitor for problematic behavior
  * patterns that could indicate infinite loops or performance issues.
@@ -15,8 +15,14 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tokio::time::{sleep, timeout, interval};
 use tokio::net::TcpListener;
-use axum::{Router, routing::any, http::StatusCode, response::IntoResponse};
 use tracing::{debug, error, info, warn};
+
+// dav-server imports for realistic WebDAV testing
+use dav_server::{fakels::FakeLs, memfs::MemFs, DavHandler};
+use http_body_util::{BodyExt, Full};
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper_util::rt::TokioIo;
 
 #[cfg(feature = "stress-testing")]
 use readur::services::webdav::{WebDAVService, WebDAVConfig};
@@ -31,17 +37,26 @@ fn init_tracing() {
     });
 }
 
-/// Mock WebDAV server for testing
+/// Realistic WebDAV server for testing using dav-server with in-memory filesystem
 struct MockWebDAVServer {
     port: u16,
     server_handle: Option<tokio::task::JoinHandle<()>>,
+    shutdown_signal: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl MockWebDAVServer {
     async fn start() -> Result<Self> {
-        let app = Router::new()
-            .route("/", any(mock_webdav_handler))
-            .fallback(mock_webdav_handler);
+        // Create in-memory filesystem with realistic test structure
+        let memfs = MemFs::new();
+
+        // Create the test directory structure that matches the test paths
+        Self::create_test_structure(&memfs).await?;
+
+        // Build the WebDAV handler
+        let dav_handler = DavHandler::builder()
+            .filesystem(memfs)
+            .locksystem(FakeLs::new())
+            .build_handler();
 
         let listener = TcpListener::bind("127.0.0.1:0").await
             .map_err(|e| anyhow!("Failed to bind to port: {}", e))?;
@@ -49,21 +64,166 @@ impl MockWebDAVServer {
             .map_err(|e| anyhow!("Failed to get local address: {}", e))?
             .port();
 
+        let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
         let server_handle = tokio::spawn(async move {
-            if let Err(e) = axum::serve(listener, app).await {
-                error!("Mock WebDAV server error: {}", e);
+            loop {
+                tokio::select! {
+                    result = listener.accept() => {
+                        match result {
+                            Ok((stream, _addr)) => {
+                                let io = TokioIo::new(stream);
+                                let handler = dav_handler.clone();
+
+                                tokio::spawn(async move {
+                                    let service = service_fn(move |req| {
+                                        let handler = handler.clone();
+                                        async move {
+                                            let response = handler.handle(req).await;
+                                            // Convert DavResponse to hyper Response
+                                            let (parts, body) = response.into_parts();
+                                            let body_bytes = body.collect().await
+                                                .map(|c| c.to_bytes())
+                                                .unwrap_or_default();
+                                            Ok::<_, std::convert::Infallible>(
+                                                hyper::Response::from_parts(parts, Full::new(body_bytes))
+                                            )
+                                        }
+                                    });
+
+                                    if let Err(e) = http1::Builder::new()
+                                        .serve_connection(io, service)
+                                        .await
+                                    {
+                                        debug!("WebDAV connection error: {}", e);
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                error!("Failed to accept connection: {}", e);
+                            }
+                        }
+                    }
+                    _ = &mut shutdown_rx => {
+                        info!("WebDAV server shutting down");
+                        break;
+                    }
+                }
             }
         });
 
         // Give the server a moment to start
         sleep(Duration::from_millis(100)).await;
 
-        info!("Mock WebDAV server started on port {}", port);
+        info!("Realistic WebDAV server (dav-server) started on port {}", port);
 
         Ok(Self {
             port,
             server_handle: Some(server_handle),
+            shutdown_signal: Some(shutdown_tx),
         })
+    }
+
+    /// Create a realistic test directory structure in the in-memory filesystem
+    async fn create_test_structure(memfs: &MemFs) -> Result<()> {
+        use dav_server::davpath::DavPath;
+        use dav_server::fs::{DavFile, DavFileSystem, OpenOptions};
+        use bytes::Bytes;
+
+        // Define the directory structure matching our test paths
+        let directories = vec![
+            "/main-structure",
+            "/main-structure/documents",
+            "/main-structure/images",
+            "/main-structure/archives",
+            "/loop-traps",
+            "/loop-traps/deep-nesting",
+            "/loop-traps/deep-nesting/level1",
+            "/loop-traps/deep-nesting/level1/level2",
+            "/loop-traps/deep-nesting/level1/level2/level3",
+            "/symlink-test",
+            "/symlink-test/folder1",
+            "/symlink-test/folder2",
+            "/test-repo-1",
+            "/test-repo-1/src",
+            "/test-repo-1/docs",
+            "/large-directory",
+            "/unicode-test",
+            "/unicode-test/subfolder1",
+            "/unicode-test/subfolder2",
+        ];
+
+        // Create directories
+        for dir_path in &directories {
+            let path = DavPath::new(dir_path)
+                .map_err(|e| anyhow!("Invalid path {}: {:?}", dir_path, e))?;
+            if let Err(e) = memfs.create_dir(&path).await {
+                debug!("Directory {} may already exist: {:?}", dir_path, e);
+            }
+        }
+
+        // Helper to create a file with content
+        async fn create_file(memfs: &MemFs, file_path: &str, content: &str) -> Result<()> {
+            let path = DavPath::new(file_path)
+                .map_err(|e| anyhow!("Invalid path {}: {:?}", file_path, e))?;
+            let options = OpenOptions {
+                read: false,
+                write: true,
+                append: false,
+                truncate: true,
+                create: true,
+                create_new: false,
+                size: Some(content.len() as u64),
+                checksum: None,
+            };
+            let mut file = memfs.open(&path, options).await
+                .map_err(|e| anyhow!("Failed to create file {}: {:?}", file_path, e))?;
+            file.write_bytes(Bytes::from(content.to_string())).await
+                .map_err(|e| anyhow!("Failed to write to file {}: {:?}", file_path, e))?;
+            Ok(())
+        }
+
+        // Create some test files in various directories
+        let files = vec![
+            ("/main-structure/readme.txt", "Main structure readme content"),
+            ("/main-structure/documents/report.pdf", "Fake PDF content for testing"),
+            ("/main-structure/documents/notes.txt", "Some notes here"),
+            ("/main-structure/images/photo.jpg", "Fake JPEG data"),
+            ("/loop-traps/trap-file.txt", "Loop trap test file"),
+            ("/loop-traps/deep-nesting/nested-file.txt", "Deeply nested file"),
+            ("/loop-traps/deep-nesting/level1/level2/level3/bottom.txt", "Bottom of nesting"),
+            ("/symlink-test/test.txt", "Symlink test file"),
+            ("/symlink-test/folder1/file1.txt", "File in folder1"),
+            ("/symlink-test/folder2/file2.txt", "File in folder2"),
+            ("/test-repo-1/README.md", "# Test Repository\n\nThis is a test."),
+            ("/test-repo-1/src/main.rs", "fn main() { println!(\"Hello\"); }"),
+            ("/test-repo-1/docs/guide.md", "# User Guide"),
+            ("/unicode-test/subfolder1/test1.txt", "Unicode test content 1"),
+            ("/unicode-test/subfolder2/test2.txt", "Unicode test content 2"),
+        ];
+
+        let num_files = files.len();
+
+        // Add many files to large-directory for stress testing
+        for i in 0..50 {
+            let path_str = format!("/large-directory/file_{:04}.txt", i);
+            let content = format!("Content of file {}", i);
+            if let Err(e) = create_file(memfs, &path_str, &content).await {
+                debug!("Failed to create file {}: {:?}", path_str, e);
+            }
+        }
+
+        // Create the regular test files
+        for (file_path, content) in files {
+            if let Err(e) = create_file(memfs, file_path, content).await {
+                debug!("Failed to create file {}: {:?}", file_path, e);
+            }
+        }
+
+        info!("Created test directory structure with {} directories and {} files",
+              directories.len(), num_files + 50);
+
+        Ok(())
     }
 
     fn url(&self) -> String {
@@ -71,71 +231,26 @@ impl MockWebDAVServer {
     }
 
     async fn stop(&mut self) {
+        // Send shutdown signal
+        if let Some(tx) = self.shutdown_signal.take() {
+            let _ = tx.send(());
+        }
+
+        // Wait for server to stop
         if let Some(handle) = self.server_handle.take() {
             handle.abort();
-            let _ = handle.await; // Ignore the abort error
+            let _ = handle.await;
         }
     }
 }
 
 impl Drop for MockWebDAVServer {
     fn drop(&mut self) {
+        if let Some(tx) = self.shutdown_signal.take() {
+            let _ = tx.send(());
+        }
         if let Some(handle) = self.server_handle.take() {
             handle.abort();
-        }
-    }
-}
-
-/// Mock WebDAV request handler that responds with valid WebDAV XML
-async fn mock_webdav_handler(req: axum::extract::Request) -> impl IntoResponse {
-    let path = req.uri().path();
-    let method = req.method();
-
-    debug!("Mock WebDAV request: {} {}", method, path);
-
-    match method.as_str() {
-        "PROPFIND" => {
-            // Return a valid WebDAV PROPFIND response
-            let response_body = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>{}</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-        <d:displayname>{}</d:displayname>
-        <d:getlastmodified>Wed, 01 Jan 2025 12:00:00 GMT</d:getlastmodified>
-        <d:creationdate>2025-01-01T12:00:00Z</d:creationdate>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>{}/test-file.txt</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:displayname>test-file.txt</d:displayname>
-        <d:getcontentlength>42</d:getcontentlength>
-        <d:getlastmodified>Wed, 01 Jan 2025 12:00:00 GMT</d:getlastmodified>
-        <d:creationdate>2025-01-01T12:00:00Z</d:creationdate>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>"#, path, path.trim_start_matches('/'), path);
-
-            (StatusCode::MULTI_STATUS, [("Content-Type", "application/xml; charset=utf-8")], response_body)
-        },
-        "GET" => {
-            if path.ends_with(".txt") {
-                (StatusCode::OK, [("Content-Type", "text/plain")], "Mock file content".to_string())
-            } else {
-                (StatusCode::NOT_FOUND, [("Content-Type", "text/plain")], "Not found".to_string())
-            }
-        },
-        _ => {
-            (StatusCode::METHOD_NOT_ALLOWED, [("Content-Type", "text/plain")], "Method not allowed".to_string())
         }
     }
 }
@@ -755,6 +870,14 @@ fn get_stress_test_config(mock_server_url: Option<String>) -> Result<StressTestC
         .unwrap_or_else(|_| "120".to_string()) // Shorter timeout for tests
         .parse::<u64>()?;
 
+    // Calculate loop detection threshold based on stress level
+    // The test cycles through 8 paths, so each path is accessed (operation_count / 8) times
+    // We set the threshold to 3x the expected accesses to allow for legitimate concurrent access
+    // while still detecting actual infinite loops (which would have much higher access counts)
+    let num_test_paths = 8;
+    let expected_accesses_per_path = stress_level.operation_count() / num_test_paths;
+    let loop_detection_threshold = std::cmp::max(expected_accesses_per_path * 3, 20);
+
     Ok(StressTestConfig {
         webdav_server_url,
         username,
@@ -762,7 +885,7 @@ fn get_stress_test_config(mock_server_url: Option<String>) -> Result<StressTestC
         stress_level,
         test_timeout_seconds,
         max_concurrent_operations: 4, // Reduced for tests
-        loop_detection_threshold: 20, // Lower threshold for tests
+        loop_detection_threshold,
         scan_timeout_seconds: 15, // Shorter scan timeout
     })
 }
@@ -774,11 +897,22 @@ async fn test_infinite_loop_detection() -> Result<()> {
 
     info!("Starting infinite loop detection stress test");
 
-    // Start mock WebDAV server
-    let mut mock_server = MockWebDAVServer::start().await
-        .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+    // Use real WebDAV server if WEBDAV_SERVER_URL is set (e.g., in CI with Dufs),
+    // otherwise fall back to mock server for local testing
+    let mut mock_server: Option<MockWebDAVServer> = None;
+    let config = if std::env::var("WEBDAV_SERVER_URL").is_ok() {
+        info!("Using real WebDAV server from WEBDAV_SERVER_URL environment variable");
+        get_stress_test_config(None)?
+    } else {
+        info!("No WEBDAV_SERVER_URL set, starting mock WebDAV server for local testing");
+        let server = MockWebDAVServer::start().await
+            .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+        let url = server.url();
+        mock_server = Some(server);
+        get_stress_test_config(Some(url))?
+    };
 
-    let config = get_stress_test_config(Some(mock_server.url()))?;
+    info!("WebDAV server URL: {}", config.webdav_server_url);
     let webdav_service = create_stress_test_webdav_service(&config)?;
     let loop_monitor = Arc::new(LoopDetectionMonitor::new(config.loop_detection_threshold));
 
@@ -823,7 +957,9 @@ async fn test_infinite_loop_detection() -> Result<()> {
 
     // Clean up monitoring resources
     loop_monitor.stop_monitoring().await;
-    mock_server.stop().await;
+    if let Some(mut server) = mock_server {
+        server.stop().await;
+    }
 
     cleanup_result
 }
@@ -888,9 +1024,13 @@ async fn perform_loop_detection_test(
                            result.files.len(), result.directories.len(), path);
                     
                     // If we find subdirectories, recursively scan some of them
-                    for subdir in result.directories.iter().take(3) {
+                    // Skip directories that match the parent path (mock server returns parent as a directory)
+                    for subdir in result.directories.iter()
+                        .filter(|d| d.relative_path != path && d.relative_path.trim_end_matches('/') != path)
+                        .take(3)
+                    {
                         monitor.record_directory_access(&subdir.relative_path).await;
-                        
+
                         match service.discover_files(&subdir.relative_path, false).await {
                             Ok(files) => {
                                 debug!("Found {} files in subdirectory {}", files.len(), subdir.relative_path);
@@ -960,11 +1100,22 @@ async fn test_directory_scanning_stress() -> Result<()> {
 
     info!("Starting directory scanning stress test");
 
-    // Start mock WebDAV server
-    let mut mock_server = MockWebDAVServer::start().await
-        .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+    // Use real WebDAV server if WEBDAV_SERVER_URL is set (e.g., in CI with Dufs),
+    // otherwise fall back to mock server for local testing
+    let mut mock_server: Option<MockWebDAVServer> = None;
+    let config = if std::env::var("WEBDAV_SERVER_URL").is_ok() {
+        info!("Using real WebDAV server from WEBDAV_SERVER_URL environment variable");
+        get_stress_test_config(None)?
+    } else {
+        info!("No WEBDAV_SERVER_URL set, starting mock WebDAV server for local testing");
+        let server = MockWebDAVServer::start().await
+            .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+        let url = server.url();
+        mock_server = Some(server);
+        get_stress_test_config(Some(url))?
+    };
 
-    let config = get_stress_test_config(Some(mock_server.url()))?;
+    info!("WebDAV server URL: {}", config.webdav_server_url);
     let webdav_service = create_stress_test_webdav_service(&config)?;
     
     // Test deep recursive scanning
@@ -1017,8 +1168,10 @@ async fn test_directory_scanning_stress() -> Result<()> {
         }
     };
 
-    // Clean up mock server
-    mock_server.stop().await;
+    // Clean up mock server if we started one
+    if let Some(mut server) = mock_server {
+        server.stop().await;
+    }
 
     result
 }
@@ -1233,11 +1386,22 @@ async fn test_concurrent_webdav_access() -> Result<()> {
 
     info!("Starting concurrent WebDAV access stress test");
 
-    // Start mock WebDAV server
-    let mut mock_server = MockWebDAVServer::start().await
-        .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+    // Use real WebDAV server if WEBDAV_SERVER_URL is set (e.g., in CI with Dufs),
+    // otherwise fall back to mock server for local testing
+    let mut mock_server: Option<MockWebDAVServer> = None;
+    let config = if std::env::var("WEBDAV_SERVER_URL").is_ok() {
+        info!("Using real WebDAV server from WEBDAV_SERVER_URL environment variable");
+        get_stress_test_config(None)?
+    } else {
+        info!("No WEBDAV_SERVER_URL set, starting mock WebDAV server for local testing");
+        let server = MockWebDAVServer::start().await
+            .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+        let url = server.url();
+        mock_server = Some(server);
+        get_stress_test_config(Some(url))?
+    };
 
-    let config = get_stress_test_config(Some(mock_server.url()))?;
+    info!("WebDAV server URL: {}", config.webdav_server_url);
     let webdav_service = create_stress_test_webdav_service(&config)?;
     
     let concurrent_operations = config.stress_level.concurrent_operations();
@@ -1266,8 +1430,8 @@ async fn test_concurrent_webdav_access() -> Result<()> {
             let test_paths = vec![
                 "/",
                 "/main-structure",
-                "/docs-structure",
-                "/images-structure",
+                "/loop-traps",
+                "/test-repo-1",
                 "/large-directory",
                 "/unicode-test",
             ];
@@ -1354,8 +1518,10 @@ async fn test_concurrent_webdav_access() -> Result<()> {
     info!("Total operations: {} ({}% success rate)", total_operations, success_rate);
     info!("Operations per second: {:.2}", total_operations as f64 / total_time.as_secs_f64());
     
-    // Clean up mock server
-    mock_server.stop().await;
+    // Clean up mock server if we started one
+    if let Some(mut server) = mock_server {
+        server.stop().await;
+    }
 
     // Test passes if success rate is reasonable (>= 80%)
     if success_rate >= 80.0 {
@@ -1374,11 +1540,22 @@ async fn test_edge_case_handling() -> Result<()> {
 
     info!("Starting edge case handling stress test");
 
-    // Start mock WebDAV server
-    let mut mock_server = MockWebDAVServer::start().await
-        .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+    // Use real WebDAV server if WEBDAV_SERVER_URL is set (e.g., in CI with Dufs),
+    // otherwise fall back to mock server for local testing
+    let mut mock_server: Option<MockWebDAVServer> = None;
+    let config = if std::env::var("WEBDAV_SERVER_URL").is_ok() {
+        info!("Using real WebDAV server from WEBDAV_SERVER_URL environment variable");
+        get_stress_test_config(None)?
+    } else {
+        info!("No WEBDAV_SERVER_URL set, starting mock WebDAV server for local testing");
+        let server = MockWebDAVServer::start().await
+            .map_err(|e| anyhow!("Failed to start mock server: {}", e))?;
+        let url = server.url();
+        mock_server = Some(server);
+        get_stress_test_config(Some(url))?
+    };
 
-    let config = get_stress_test_config(Some(mock_server.url()))?;
+    info!("WebDAV server URL: {}", config.webdav_server_url);
     let webdav_service = create_stress_test_webdav_service(&config)?;
 
     // Test various edge cases that might cause infinite loops or crashes
@@ -1452,8 +1629,10 @@ async fn test_edge_case_handling() -> Result<()> {
     info!("  - Expected failures: {}", expected_failures);
     info!("  - Timeouts: {}", timeouts);
     
-    // Clean up mock server
-    mock_server.stop().await;
+    // Clean up mock server if we started one
+    if let Some(mut server) = mock_server {
+        server.stop().await;
+    }
 
     // Test passes if no timeouts occurred (timeouts suggest infinite loops)
     if timeouts == 0 {
