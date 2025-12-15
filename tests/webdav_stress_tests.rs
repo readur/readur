@@ -924,16 +924,23 @@ async fn test_infinite_loop_detection() -> Result<()> {
 
     // Always clean up resources
     let cleanup_result = match test_result {
-        Ok(Ok(())) => {
+        Ok(Ok((successful, failed))) => {
             info!("Loop detection test completed successfully");
 
             // Analyze results
             let stats = loop_monitor.get_statistics().await;
             info!("Loop detection statistics: {:?}", stats);
 
+            // Test should fail if ALL operations failed (indicates server connectivity issue)
+            if successful == 0 && failed > 0 {
+                error!("❌ All {} operations failed - server connectivity issue", failed);
+                return Err(anyhow!("All operations failed - unable to connect to WebDAV server"));
+            }
+
             // Test should pass if no infinite loops were detected
             if stats.suspected_loop_count == 0 {
-                info!("✅ No infinite loops detected - test passed");
+                info!("✅ No infinite loops detected - test passed ({} successful, {} failed operations)",
+                      successful, failed);
                 Ok(())
             } else {
                 error!("❌ {} suspected infinite loops detected", stats.suspected_loop_count);
@@ -968,7 +975,7 @@ async fn perform_loop_detection_test(
     webdav_service: &WebDAVService,
     loop_monitor: &Arc<LoopDetectionMonitor>,
     config: &StressTestConfig,
-) -> Result<()> {
+) -> Result<(usize, usize)> {  // Returns (successful, failed) counts
     info!("Performing WebDAV operations with loop detection monitoring...");
     
     let test_paths = vec![
@@ -1085,12 +1092,12 @@ async fn perform_loop_detection_test(
     if final_stats.suspected_loop_count > 0 {
         warn!("Final loop detection results:");
         for dir in &final_stats.suspected_directories {
-            warn!("  - {}: {} accesses", dir, 
+            warn!("  - {}: {} accesses", dir,
                   final_stats.max_accesses_per_directory);
         }
     }
-    
-    Ok(())
+
+    Ok((successful, failed))
 }
 
 #[cfg(feature = "stress-testing")]

@@ -183,9 +183,11 @@ jobs:
           echo $! > dufs.pid
 
           # Wait for server to start
+          # Use 127.0.0.1 to avoid IPv6 resolution issues
+          sleep 2
           for i in {1..30}; do
             # Test with basic auth header instead of URL auth
-            response=$(curl -s -o /dev/null -w "%{http_code}" -u testuser:testpass123 http://localhost:8080/ || echo "000")
+            response=$(curl -s -o /dev/null -w "%{http_code}" -u testuser:testpass123 http://127.0.0.1:8080/ || echo "000")
             if [ "$response" = "200" ] || [ "$response" = "401" ] || [ "$response" = "403" ]; then
               echo "WebDAV server is ready (HTTP $response)"
               break
@@ -195,12 +197,12 @@ jobs:
           done
 
           # Final verification
-          if ! curl -s -u testuser:testpass123 http://localhost:8080/ > /dev/null; then
+          if ! curl -s -u testuser:testpass123 http://127.0.0.1:8080/ > /dev/null; then
             echo "WARNING: WebDAV server may require authentication adjustments"
-            cat /tmp/dufs.log || true
+            cat dufs.log || true
           fi
         env:
-          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_SERVER_URL: http://127.0.0.1:8080
           WEBDAV_USERNAME: testuser
           WEBDAV_PASSWORD: testpass123
 
@@ -228,7 +230,7 @@ jobs:
           DEBUG: 1
           TESTCONTAINERS_RYUK_DISABLED: true
           DOCKER_HOST: unix:///var/run/docker.sock
-          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_SERVER_URL: http://127.0.0.1:8080
           WEBDAV_USERNAME: testuser
           WEBDAV_PASSWORD: testpass123
 
