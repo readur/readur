@@ -165,7 +165,10 @@ jobs:
           # Store credentials in environment for reuse
           echo "WEBDAV_TEST_USERNAME=${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}" >> $GITHUB_ENV
           echo "WEBDAV_TEST_PASSWORD=${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" >> $GITHUB_ENV
-          
+
+          # Give the server a moment to start before health checks
+          sleep 2
+
           # Wait for server to start with exponential backoff
           attempt=1
           max_attempts=30
@@ -173,7 +176,8 @@ jobs:
 
           while [ $attempt -le $max_attempts ]; do
             # Test with basic auth header instead of URL auth
-            response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" http://localhost:8080/ || echo "000")
+            # Use 127.0.0.1 to avoid IPv6 resolution issues
+            response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" http://127.0.0.1:8080/ || echo "000")
             if [ "$response" = "200" ] || [ "$response" = "401" ] || [ "$response" = "403" ]; then
               echo "Dufs WebDAV server is ready after $attempt attempts (HTTP $response)"
               break
@@ -187,14 +191,14 @@ jobs:
           done
 
           # Verify server responds
-          response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" http://localhost:8080/ || echo "000")
+          response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" http://127.0.0.1:8080/ || echo "000")
           if [ "$response" = "000" ]; then
             echo "ERROR: Dufs server is not responding!"
             cat dufs.log
             exit 1
           fi
-          
-          echo "WebDAV server ready at http://localhost:8080"
+
+          echo "WebDAV server ready at http://127.0.0.1:8080"
 
       - name: Generate complex test data structures
         run: |
@@ -256,14 +260,14 @@ jobs:
         id: loop_detection
         run: |
           echo "=== Starting WebDAV Loop Detection Stress Tests ==="
-          
+
           # Run the stress tests with loop monitoring
           timeout 1800s cargo test --release --test webdav_stress_tests \
             --features stress-testing -- \
             --test-threads=4 \
             --nocapture \
             test_infinite_loop_detection || test_exit_code=$?
-          
+
           # Check if tests passed or timed out due to infinite loops
           if [ "${test_exit_code:-0}" -eq 124 ]; then
             echo "::error::Tests timed out - possible infinite loop detected!"
@@ -273,10 +277,10 @@ jobs:
             echo "::error::Stress tests failed with exit code: ${test_exit_code}"
             exit $test_exit_code
           fi
-          
+
           echo "Loop detection tests completed successfully"
         env:
-          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_SERVER_URL: http://127.0.0.1:8080
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}
           STRESS_LEVEL: ${{ github.event.inputs.stress_level || 'medium' }}
@@ -285,42 +289,42 @@ jobs:
       - name: Run WebDAV directory scanning stress tests
         run: |
           echo "=== Starting Directory Scanning Stress Tests ==="
-          
+
           cargo test --release --test webdav_stress_tests \
             --features stress-testing -- \
             --test-threads=2 \
             --nocapture \
             test_directory_scanning_stress
         env:
-          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_SERVER_URL: http://127.0.0.1:8080
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}
 
       - name: Run WebDAV concurrent access stress tests
         run: |
           echo "=== Starting Concurrent Access Stress Tests ==="
-          
+
           cargo test --release --test webdav_stress_tests \
             --features stress-testing -- \
             --test-threads=8 \
             --nocapture \
             test_concurrent_webdav_access
         env:
-          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_SERVER_URL: http://127.0.0.1:8080
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}
 
       - name: Run WebDAV edge case handling tests
         run: |
           echo "=== Starting Edge Case Handling Tests ==="
-          
+
           cargo test --release --test webdav_stress_tests \
             --features stress-testing -- \
             --test-threads=2 \
             --nocapture \
             test_edge_case_handling
         env:
-          WEBDAV_SERVER_URL: http://localhost:8080
+          WEBDAV_SERVER_URL: http://127.0.0.1:8080
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}
 
