@@ -194,11 +194,22 @@ jobs:
           response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ secrets.WEBDAV_TEST_USERNAME || 'testuser' }}:${{ secrets.WEBDAV_TEST_PASSWORD || 'securepassword123' }}" http://127.0.0.1:8080/ || echo "000")
           if [ "$response" = "000" ]; then
             echo "ERROR: Dufs server is not responding!"
-            cat dufs.log
+            cat dufs.log || echo "No dufs.log found"
             exit 1
           fi
 
-          echo "WebDAV server ready at http://127.0.0.1:8080"
+          # Verify the process is actually running
+          if ! kill -0 $(cat dufs.pid) 2>/dev/null; then
+            echo "ERROR: Dufs process (PID $(cat dufs.pid)) is not running!"
+            cat dufs.log || echo "No dufs.log found"
+            exit 1
+          fi
+
+          echo "✅ WebDAV server ready at http://127.0.0.1:8080 (PID: $(cat dufs.pid))"
+
+          # Log which port is actually being used
+          echo "Listening ports:"
+          ss -tlnp | grep 8080 || netstat -tlnp 2>/dev/null | grep 8080 || echo "Could not check ports"
 
       - name: Generate complex test data structures
         run: |
@@ -261,6 +272,41 @@ jobs:
         run: |
           echo "=== Starting WebDAV Loop Detection Stress Tests ==="
 
+          # Verify Dufs server is still running before test
+          echo "Checking Dufs server health..."
+          if ! kill -0 $DUFS_PID 2>/dev/null; then
+            echo "::warning::Dufs server (PID $DUFS_PID) is not running! Restarting..."
+            dufs ${{ env.WEBDAV_TEST_ROOT }}/webdav-server \
+              --bind 0.0.0.0:8080 \
+              --enable-cors \
+              --allow-all \
+              --auth ${{ env.WEBDAV_TEST_USERNAME }}:${{ env.WEBDAV_TEST_PASSWORD }}@/:rw \
+              --log-file dufs.log &
+            export DUFS_PID=$!
+            echo "DUFS_PID=$DUFS_PID" >> $GITHUB_ENV
+            sleep 3
+          fi
+
+          # Verify connectivity with curl
+          max_retries=10
+          retry=0
+          while [ $retry -lt $max_retries ]; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ env.WEBDAV_TEST_USERNAME }}:${{ env.WEBDAV_TEST_PASSWORD }}" http://127.0.0.1:8080/ 2>/dev/null || echo "000")
+            if [ "$response" = "200" ] || [ "$response" = "401" ] || [ "$response" = "403" ]; then
+              echo "✅ Dufs server is responding (HTTP $response)"
+              break
+            fi
+            retry=$((retry + 1))
+            echo "Waiting for Dufs server... (attempt $retry/$max_retries, HTTP $response)"
+            sleep 2
+          done
+
+          if [ "$response" = "000" ]; then
+            echo "::error::Dufs server is not responding after restart!"
+            cat dufs.log || true
+            exit 1
+          fi
+
           # Run the stress tests with loop monitoring
           timeout 1800s cargo test --release --test webdav_stress_tests \
             --features stress-testing -- \
@@ -290,6 +336,30 @@ jobs:
         run: |
           echo "=== Starting Directory Scanning Stress Tests ==="
 
+          # Verify Dufs server is still running before test
+          echo "Checking Dufs server health..."
+          if ! kill -0 $DUFS_PID 2>/dev/null; then
+            echo "::warning::Dufs server (PID $DUFS_PID) is not running! Restarting..."
+            dufs ${{ env.WEBDAV_TEST_ROOT }}/webdav-server \
+              --bind 0.0.0.0:8080 \
+              --enable-cors \
+              --allow-all \
+              --auth ${{ env.WEBDAV_TEST_USERNAME }}:${{ env.WEBDAV_TEST_PASSWORD }}@/:rw \
+              --log-file dufs.log &
+            export DUFS_PID=$!
+            echo "DUFS_PID=$DUFS_PID" >> $GITHUB_ENV
+            sleep 3
+          fi
+
+          # Verify connectivity with curl
+          response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ env.WEBDAV_TEST_USERNAME }}:${{ env.WEBDAV_TEST_PASSWORD }}" http://127.0.0.1:8080/ 2>/dev/null || echo "000")
+          if [ "$response" = "000" ]; then
+            echo "::error::Dufs server is not responding!"
+            cat dufs.log || true
+            exit 1
+          fi
+          echo "✅ Dufs server is responding (HTTP $response)"
+
           cargo test --release --test webdav_stress_tests \
             --features stress-testing -- \
             --test-threads=2 \
@@ -304,6 +374,30 @@ jobs:
         run: |
           echo "=== Starting Concurrent Access Stress Tests ==="
 
+          # Verify Dufs server is still running before test
+          echo "Checking Dufs server health..."
+          if ! kill -0 $DUFS_PID 2>/dev/null; then
+            echo "::warning::Dufs server (PID $DUFS_PID) is not running! Restarting..."
+            dufs ${{ env.WEBDAV_TEST_ROOT }}/webdav-server \
+              --bind 0.0.0.0:8080 \
+              --enable-cors \
+              --allow-all \
+              --auth ${{ env.WEBDAV_TEST_USERNAME }}:${{ env.WEBDAV_TEST_PASSWORD }}@/:rw \
+              --log-file dufs.log &
+            export DUFS_PID=$!
+            echo "DUFS_PID=$DUFS_PID" >> $GITHUB_ENV
+            sleep 3
+          fi
+
+          # Verify connectivity with curl
+          response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ env.WEBDAV_TEST_USERNAME }}:${{ env.WEBDAV_TEST_PASSWORD }}" http://127.0.0.1:8080/ 2>/dev/null || echo "000")
+          if [ "$response" = "000" ]; then
+            echo "::error::Dufs server is not responding!"
+            cat dufs.log || true
+            exit 1
+          fi
+          echo "✅ Dufs server is responding (HTTP $response)"
+
           cargo test --release --test webdav_stress_tests \
             --features stress-testing -- \
             --test-threads=8 \
@@ -317,6 +411,30 @@ jobs:
       - name: Run WebDAV edge case handling tests
         run: |
           echo "=== Starting Edge Case Handling Tests ==="
+
+          # Verify Dufs server is still running before test
+          echo "Checking Dufs server health..."
+          if ! kill -0 $DUFS_PID 2>/dev/null; then
+            echo "::warning::Dufs server (PID $DUFS_PID) is not running! Restarting..."
+            dufs ${{ env.WEBDAV_TEST_ROOT }}/webdav-server \
+              --bind 0.0.0.0:8080 \
+              --enable-cors \
+              --allow-all \
+              --auth ${{ env.WEBDAV_TEST_USERNAME }}:${{ env.WEBDAV_TEST_PASSWORD }}@/:rw \
+              --log-file dufs.log &
+            export DUFS_PID=$!
+            echo "DUFS_PID=$DUFS_PID" >> $GITHUB_ENV
+            sleep 3
+          fi
+
+          # Verify connectivity with curl
+          response=$(curl -s -o /dev/null -w "%{http_code}" -u "${{ env.WEBDAV_TEST_USERNAME }}:${{ env.WEBDAV_TEST_PASSWORD }}" http://127.0.0.1:8080/ 2>/dev/null || echo "000")
+          if [ "$response" = "000" ]; then
+            echo "::error::Dufs server is not responding!"
+            cat dufs.log || true
+            exit 1
+          fi
+          echo "✅ Dufs server is responding (HTTP $response)"
 
           cargo test --release --test webdav_stress_tests \
             --features stress-testing -- \
@@ -404,17 +522,32 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          # Stop servers
-          if [ -n "$READUR_PID" ] && kill -0 $READUR_PID 2>/dev/null; then
-            kill $READUR_PID || true
+          echo "=== Final Server Status ==="
+          # Check if servers are still running
+          if [ -n "$READUR_PID" ]; then
+            if kill -0 $READUR_PID 2>/dev/null; then
+              echo "Readur server (PID $READUR_PID) is still running"
+              kill $READUR_PID || true
+            else
+              echo "::warning::Readur server (PID $READUR_PID) was NOT running at cleanup"
+            fi
           fi
-          
-          if [ -n "$DUFS_PID" ] && kill -0 $DUFS_PID 2>/dev/null; then
-            kill $DUFS_PID || true
+
+          if [ -n "$DUFS_PID" ]; then
+            if kill -0 $DUFS_PID 2>/dev/null; then
+              echo "Dufs server (PID $DUFS_PID) is still running"
+              kill $DUFS_PID || true
+            else
+              echo "::warning::Dufs server (PID $DUFS_PID) was NOT running at cleanup - it likely crashed during tests"
+            fi
           fi
-          
+
+          # Show final dufs.log for diagnostics
+          echo "=== Final Dufs Log ==="
+          cat dufs.log 2>/dev/null | tail -100 || echo "No dufs.log found"
+
           # Clean up temp files
           rm -rf ${{ env.WEBDAV_TEST_ROOT }} || true
-          
+
           echo "=== Final disk usage ==="
           df -h
