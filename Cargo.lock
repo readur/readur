@@ -3705,7 +3705,7 @@ dependencies = [
 
 [[package]]
 name = "readur"
-version = "2.5.3"
+version = "2.7.2"
 dependencies = [
  "anyhow",
  "async-trait",

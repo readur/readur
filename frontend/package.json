@@ -1,6 +1,6 @@
 {
   "name": "readur-frontend",
-  "version": "2.5.3",
+  "version": "2.7.2",
   "private": true,
   "type": "module",
   "scripts": {
