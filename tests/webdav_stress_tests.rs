@@ -914,6 +914,40 @@ async fn test_infinite_loop_detection() -> Result<()> {
 
     info!("WebDAV server URL: {}", config.webdav_server_url);
     let webdav_service = create_stress_test_webdav_service(&config)?;
+
+    // Pre-flight connectivity check - fail fast if server is not reachable
+    info!("🔍 Performing pre-flight connectivity check...");
+    match timeout(
+        Duration::from_secs(10),
+        webdav_service.discover_files("/", false)
+    ).await {
+        Ok(Ok(_)) => {
+            info!("✅ Pre-flight check passed - WebDAV server is reachable");
+        }
+        Ok(Err(e)) => {
+            error!("❌ Pre-flight check FAILED - WebDAV server is not reachable: {}", e);
+            if let Some(mut server) = mock_server {
+                server.stop().await;
+            }
+            return Err(anyhow!(
+                "Pre-flight connectivity check failed - WebDAV server at {} is not responding: {}. \
+                 Please ensure the server is running and accessible.",
+                config.webdav_server_url, e
+            ));
+        }
+        Err(_) => {
+            error!("❌ Pre-flight check TIMED OUT - WebDAV server is not responding");
+            if let Some(mut server) = mock_server {
+                server.stop().await;
+            }
+            return Err(anyhow!(
+                "Pre-flight connectivity check timed out - WebDAV server at {} is not responding within 10 seconds. \
+                 Please ensure the server is running and accessible.",
+                config.webdav_server_url
+            ));
+        }
+    }
+
     let loop_monitor = Arc::new(LoopDetectionMonitor::new(config.loop_detection_threshold));
 
     // Test with timeout to prevent actual infinite loops in CI
@@ -1124,7 +1158,38 @@ async fn test_directory_scanning_stress() -> Result<()> {
 
     info!("WebDAV server URL: {}", config.webdav_server_url);
     let webdav_service = create_stress_test_webdav_service(&config)?;
-    
+
+    // Pre-flight connectivity check - fail fast if server is not reachable
+    info!("🔍 Performing pre-flight connectivity check...");
+    match timeout(
+        Duration::from_secs(10),
+        webdav_service.discover_files("/", false)
+    ).await {
+        Ok(Ok(_)) => {
+            info!("✅ Pre-flight check passed - WebDAV server is reachable");
+        }
+        Ok(Err(e)) => {
+            error!("❌ Pre-flight check FAILED - WebDAV server is not reachable: {}", e);
+            if let Some(mut server) = mock_server {
+                server.stop().await;
+            }
+            return Err(anyhow!(
+                "Pre-flight connectivity check failed - WebDAV server at {} is not responding: {}",
+                config.webdav_server_url, e
+            ));
+        }
+        Err(_) => {
+            error!("❌ Pre-flight check TIMED OUT - WebDAV server is not responding");
+            if let Some(mut server) = mock_server {
+                server.stop().await;
+            }
+            return Err(anyhow!(
+                "Pre-flight connectivity check timed out - WebDAV server at {} is not responding within 10 seconds",
+                config.webdav_server_url
+            ));
+        }
+    }
+
     // Test deep recursive scanning
     let deep_scan_result = timeout(
         Duration::from_secs(config.test_timeout_seconds / 2),
@@ -1410,11 +1475,42 @@ async fn test_concurrent_webdav_access() -> Result<()> {
 
     info!("WebDAV server URL: {}", config.webdav_server_url);
     let webdav_service = create_stress_test_webdav_service(&config)?;
-    
+
+    // Pre-flight connectivity check - fail fast if server is not reachable
+    info!("🔍 Performing pre-flight connectivity check...");
+    match timeout(
+        Duration::from_secs(10),
+        webdav_service.discover_files("/", false)
+    ).await {
+        Ok(Ok(_)) => {
+            info!("✅ Pre-flight check passed - WebDAV server is reachable");
+        }
+        Ok(Err(e)) => {
+            error!("❌ Pre-flight check FAILED - WebDAV server is not reachable: {}", e);
+            if let Some(mut server) = mock_server {
+                server.stop().await;
+            }
+            return Err(anyhow!(
+                "Pre-flight connectivity check failed - WebDAV server at {} is not responding: {}",
+                config.webdav_server_url, e
+            ));
+        }
+        Err(_) => {
+            error!("❌ Pre-flight check TIMED OUT - WebDAV server is not responding");
+            if let Some(mut server) = mock_server {
+                server.stop().await;
+            }
+            return Err(anyhow!(
+                "Pre-flight connectivity check timed out - WebDAV server at {} is not responding within 10 seconds",
+                config.webdav_server_url
+            ));
+        }
+    }
+
     let concurrent_operations = config.stress_level.concurrent_operations();
     let operations_per_worker = 20;
-    
-    info!("Starting {} concurrent workers, {} operations each", 
+
+    info!("Starting {} concurrent workers, {} operations each",
           concurrent_operations, operations_per_worker);
     
     let mut handles = Vec::new();
@@ -1564,6 +1660,37 @@ async fn test_edge_case_handling() -> Result<()> {
 
     info!("WebDAV server URL: {}", config.webdav_server_url);
     let webdav_service = create_stress_test_webdav_service(&config)?;
+
+    // Pre-flight connectivity check - fail fast if server is not reachable
+    info!("🔍 Performing pre-flight connectivity check...");
+    match timeout(
+        Duration::from_secs(10),
+        webdav_service.discover_files("/", false)
+    ).await {
+        Ok(Ok(_)) => {
+            info!("✅ Pre-flight check passed - WebDAV server is reachable");
+        }
+        Ok(Err(e)) => {
+            error!("❌ Pre-flight check FAILED - WebDAV server is not reachable: {}", e);
+            if let Some(mut server) = mock_server {
+                server.stop().await;
+            }
+            return Err(anyhow!(
+                "Pre-flight connectivity check failed - WebDAV server at {} is not responding: {}",
+                config.webdav_server_url, e
+            ));
+        }
+        Err(_) => {
+            error!("❌ Pre-flight check TIMED OUT - WebDAV server is not responding");
+            if let Some(mut server) = mock_server {
+                server.stop().await;
+            }
+            return Err(anyhow!(
+                "Pre-flight connectivity check timed out - WebDAV server at {} is not responding within 10 seconds",
+                config.webdav_server_url
+            ));
+        }
+    }
 
     // Test various edge cases that might cause infinite loops or crashes
     let edge_case_paths = vec![
