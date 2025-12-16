@@ -121,6 +121,13 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
       return;
     }
 
+    // Disallow commas in label names (breaks comma-separated search filters)
+    // Also check for URL-encoded commas (%2c) which could cause issues in query parameters
+    if (formData.name.includes(',') || formData.name.toLowerCase().includes('%2c')) {
+      setNameError(t('labels.errors.commaNotAllowed'));
+      return;
+    }
+
     setLoading(true);
     try {
       await onSubmit({
