@@ -650,7 +650,7 @@ This tests the error handling for files that aren't actually PDFs.";
         let storage_config = StorageConfig::Local { upload_path: "tests".to_string() };
         let storage_backend = create_storage_backend(storage_config).await.unwrap();
         let file_service = FileService::with_storage("tests".to_string(), storage_backend);
-        let ocr_service = EnhancedOcrService::new("tests".to_string(), file_service);
+        let ocr_service = EnhancedOcrService::new("tests".to_string(), file_service, 100, 100);
         let settings = Settings::default();
         
         // Test all malformed PDFs with enhanced OCR

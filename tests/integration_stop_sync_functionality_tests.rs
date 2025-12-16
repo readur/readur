@@ -71,6 +71,8 @@ async fn create_test_app_state() -> Arc<AppState> {
         db.pool.clone(),
         4,
         file_service.clone(),
+        100,
+        100,
     ));
     
     Arc::new(AppState {

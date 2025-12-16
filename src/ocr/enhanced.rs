@@ -65,11 +65,12 @@ pub struct OcrResult {
 pub struct EnhancedOcrService {
     pub temp_dir: String,
     pub file_service: FileService,
+    pub max_pdf_size: u64,
+    pub max_office_document_size: u64,
 }
 
 impl EnhancedOcrService {
     // Security limits for Office document processing
-    const MAX_OFFICE_DOCUMENT_SIZE: u64 = 100 * 1024 * 1024; // 100MB for all Office documents
     const MAX_ENTRY_NAME_LENGTH: usize = 255; // Maximum length of entry names
 
     /// Remove null bytes from text to prevent PostgreSQL errors
@@ -93,8 +94,13 @@ impl EnhancedOcrService {
     }
 
 
-    pub fn new(temp_dir: String, file_service: FileService) -> Self {
-        Self { temp_dir, file_service }
+    pub fn new(temp_dir: String, file_service: FileService, max_pdf_size_mb: u64, max_office_document_size_mb: u64) -> Self {
+        Self {
+            temp_dir,
+            file_service,
+            max_pdf_size: max_pdf_size_mb * 1024 * 1024,
+            max_office_document_size: max_office_document_size_mb * 1024 * 1024,
+        }
     }
     
 
@@ -874,13 +880,12 @@ impl EnhancedOcrService {
         let metadata = tokio::fs::metadata(file_path).await?;
         let file_size = metadata.len();
         
-        // Limit PDF size to 100MB to prevent memory exhaustion
-        const MAX_PDF_SIZE: u64 = 100 * 1024 * 1024; // 100MB
-        if file_size > MAX_PDF_SIZE {
+        // Check PDF size against configured limit
+        if file_size > self.max_pdf_size {
             return Err(anyhow!(
                 "PDF file too large: {:.1} MB (max: {:.1} MB). Consider splitting the PDF.",
                 file_size as f64 / (1024.0 * 1024.0),
-                MAX_PDF_SIZE as f64 / (1024.0 * 1024.0)
+                self.max_pdf_size as f64 / (1024.0 * 1024.0)
             ));
         }
         
@@ -1485,11 +1490,11 @@ impl EnhancedOcrService {
         let metadata = tokio::fs::metadata(file_path).await?;
         let file_size = metadata.len();
         
-        if file_size > Self::MAX_OFFICE_DOCUMENT_SIZE {
+        if file_size > self.max_office_document_size {
             return Err(anyhow!(
                 "Office document too large: {:.1} MB (max: {:.1} MB). Consider converting to PDF or splitting the document.",
                 file_size as f64 / (1024.0 * 1024.0),
-                Self::MAX_OFFICE_DOCUMENT_SIZE as f64 / (1024.0 * 1024.0)
+                self.max_office_document_size as f64 / (1024.0 * 1024.0)
             ));
         }
         

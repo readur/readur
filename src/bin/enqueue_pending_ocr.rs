@@ -41,7 +41,14 @@ async fn main() -> Result<()> {
             .with_context(|| "Failed to create file service with storage backend")?
     );
     
-    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service);
+    let queue_service = OcrQueueService::new(
+        db.clone(),
+        db.get_pool().clone(),
+        1,
+        file_service,
+        config.max_pdf_size_mb,
+        config.max_office_document_size_mb,
+    );
     
     // Find documents with pending OCR status that aren't in the queue
     let pending_documents = sqlx::query(

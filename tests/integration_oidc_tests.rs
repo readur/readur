@@ -75,7 +75,9 @@ mod tests {
                     db.clone(),
                     db.pool.clone(),
                     2,
-                    file_service.clone()
+                    file_service.clone(),
+                    100,
+                    100,
                 )),
                 oidc_client: None,
                 sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
@@ -179,7 +181,9 @@ mod tests {
                     db.clone(),
                     db.pool.clone(),
                     2,
-                    file_service.clone()
+                    file_service.clone(),
+                    100,
+                    100,
                 )),
                 oidc_client,
                 sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),

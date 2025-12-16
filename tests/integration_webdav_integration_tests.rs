@@ -121,7 +121,7 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
     let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
     let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage("/tmp/test_uploads".to_string(), storage_backend));
     
-    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 4, file_service.clone()));
+    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 4, file_service.clone(), 100, 100));
     
     // Create AppState
     let state = Arc::new(AppState { 

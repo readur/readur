@@ -108,7 +108,9 @@ This document provides a comprehensive reference for all configuration options a
 | `OCR_RETRY_ATTEMPTS` | Integer | `3` | OCR retry attempts | No |
 | `OCR_RETRY_DELAY` | Integer | `60` | Delay between retries (seconds) | No |
 | `OCR_CONFIDENCE_THRESHOLD` | Float | `0.6` | Minimum OCR confidence | No |
-| `MAX_FILE_SIZE_MB` | Integer | `100` | Maximum file size for OCR | No |
+| `MAX_FILE_SIZE_MB` | Integer | `50` | Maximum file size for upload | No |
+| `MAX_PDF_SIZE_MB` | Integer | `100` | Maximum PDF file size for OCR processing | No |
+| `MAX_OFFICE_DOCUMENT_SIZE_MB` | Integer | `100` | Maximum Office document size for text extraction | No |
 | `OCR_DPI` | Integer | `300` | DPI for image processing | No |
 | `OCR_PSM` | Integer | `3` | Tesseract page segmentation mode | No |
 | `OCR_OEM` | Integer | `1` | Tesseract OCR engine mode | No |

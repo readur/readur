@@ -337,7 +337,7 @@ pub async fn create_test_database_from_options(options: &TestAppStateOptions) ->
 
 /// Creates a test OcrQueueService with proper error handling
 pub fn create_test_queue_service(db: Database, pool: PgPool, concurrent_jobs: usize, file_service: Arc<FileService>) -> Result<Arc<OcrQueueService>, TestHelperError> {
-    Ok(Arc::new(OcrQueueService::new(db, pool, concurrent_jobs, file_service)))
+    Ok(Arc::new(OcrQueueService::new(db, pool, concurrent_jobs, file_service, 100, 100)))
 }
 
 /// Creates a test AppState with default configuration and services

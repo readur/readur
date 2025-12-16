@@ -52,7 +52,7 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
     let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await?;
     let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
     
-    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 1, file_service.clone()));
+    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 1, file_service.clone(), 100, 100));
     
     Ok(Arc::new(AppState {
         db: db.clone(),

@@ -291,10 +291,12 @@ impl TestContext {
         ));
         
         let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(
-            db.clone(), 
-            db.pool.clone(), 
-            2, 
-            file_service.clone()
+            db.clone(),
+            db.pool.clone(),
+            2,
+            file_service.clone(),
+            100, // Default 100MB for tests
+            100, // Default 100MB for tests
         ));
 
         let state = Arc::new(AppState { 
