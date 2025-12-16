@@ -61,18 +61,23 @@ async fn search_documents(
         return Err(SearchError::invalid_pagination(offset, limit));
     }
     
+    // Get total count (without pagination) for proper pagination support
+    let total = state
+        .db
+        .count_search_documents(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .await
+        .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
+
+    // Check if too many results
+    if total > 10000 {
+        return Err(SearchError::too_many_results(total, 10000));
+    }
+
     let documents = state
         .db
         .search_documents(auth_user.user.id, &search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
-    
-    let total = documents.len() as i64;
-    
-    // Check if too many results
-    if total > 10000 {
-        return Err(SearchError::too_many_results(total, 10000));
-    }
 
     let response = SearchResponse {
         documents: documents.into_iter().map(|doc| EnhancedDocumentResponse {
@@ -132,14 +137,21 @@ async fn enhanced_search_documents(
     let suggestions = generate_search_suggestions(&search_request.query);
 
     let start_time = std::time::Instant::now();
+
+    // Get total count (without pagination) for proper pagination support
+    let total = state
+        .db
+        .count_search_documents(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let documents = state
         .db
         .enhanced_search_documents_with_role(auth_user.user.id, auth_user.user.role, &search_request)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     let query_time = start_time.elapsed().as_millis() as u64;
-    let total = documents.len() as i64;
 
     let response = SearchResponse {
         documents,
