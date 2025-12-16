@@ -166,20 +166,25 @@ impl Database {
         }).collect())
     }
 
-    /// Gets tag facets (aggregated counts by tag)
-    pub async fn get_tag_facets(&self, user_id: Uuid, user_role: UserRole) -> Result<Vec<FacetItem>> {
-        let mut query = QueryBuilder::<Postgres>::new(
-            "SELECT unnest(tags) as value, COUNT(*) as count FROM documents WHERE 1=1"
-        );
+    /// Gets tag facets (aggregated counts by label)
+    pub async fn get_tag_facets(&self, user_id: Uuid, _user_role: UserRole) -> Result<Vec<FacetItem>> {
+        let query = sqlx::query_as::<_, (String, i64)>(
+            r#"
+            SELECT l.name as value, COUNT(DISTINCT dl.document_id) as count
+            FROM labels l
+            LEFT JOIN document_labels dl ON l.id = dl.label_id
+            WHERE (l.user_id = $1 OR l.is_system = true)
+            GROUP BY l.id, l.name
+            ORDER BY count DESC, l.name
+            "#
+        )
+        .bind(user_id);
 
-        apply_role_based_filter(&mut query, user_id, user_role);
-        query.push(" GROUP BY unnest(tags) ORDER BY count DESC, value");
+        let rows = query.fetch_all(&self.pool).await?;
 
-        let rows = query.build().fetch_all(&self.pool).await?;
-
-        Ok(rows.into_iter().map(|row| FacetItem {
-            value: row.get("value"),
-            count: row.get("count"),
+        Ok(rows.into_iter().map(|(value, count)| FacetItem {
+            value,
+            count,
         }).collect())
     }
 

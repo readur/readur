@@ -23,11 +23,12 @@ impl Database {
             query.push("))");
         }
 
-        // Add tag filtering
+        // Add label filtering (tags param contains label names)
         if let Some(ref tags) = search_request.tags {
             if !tags.is_empty() {
-                query.push(" AND tags && ");
+                query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
                 query.push_bind(tags);
+                query.push("))");
             }
         }
 
@@ -128,11 +129,12 @@ impl Database {
             }
         }
 
-        // Add filtering
+        // Add label filtering (tags param contains label names)
         if let Some(ref tags) = search_request.tags {
             if !tags.is_empty() {
-                query.push(" AND tags && ");
+                query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
                 query.push_bind(tags);
+                query.push("))");
             }
         }
 

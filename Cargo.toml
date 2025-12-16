@@ -21,6 +21,7 @@ path = "src/bin/analyze-webdav-performance.rs"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8", features = ["multipart", "ws"] }
+axum-extra = { version = "0.10", features = ["query"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 serde = { version = "1", features = ["derive"] }

@@ -1,10 +1,11 @@
 use axum::{
-    extract::{Query, State},
+    extract::State,
     http::StatusCode,
     response::Json,
     routing::get,
     Router,
 };
+use axum_extra::extract::Query;
 use std::sync::Arc;
 
 use crate::{
@@ -43,8 +44,10 @@ async fn search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, SearchError> {
-    // Validate query length
-    if search_request.query.len() < 2 {
+    // Validate query length (allow empty query if filters are present)
+    let has_filters = search_request.tags.as_ref().map_or(false, |t| !t.is_empty())
+        || search_request.mime_types.as_ref().map_or(false, |m| !m.is_empty());
+    if search_request.query.len() < 2 && !has_filters {
         return Err(SearchError::query_too_short(search_request.query.len(), 2));
     }
     if search_request.query.len() > 1000 {
@@ -118,9 +121,16 @@ async fn enhanced_search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, StatusCode> {
+    // Validate query length (allow empty query if filters are present)
+    let has_filters = search_request.tags.as_ref().map_or(false, |t| !t.is_empty())
+        || search_request.mime_types.as_ref().map_or(false, |m| !m.is_empty());
+    if search_request.query.len() < 2 && !has_filters {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
     // Generate suggestions before moving search_request
     let suggestions = generate_search_suggestions(&search_request.query);
-    
+
     let start_time = std::time::Instant::now();
     let documents = state
         .db

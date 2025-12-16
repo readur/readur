@@ -6,10 +6,13 @@ use super::responses::EnhancedDocumentResponse;
 #[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
 pub struct SearchRequest {
     /// Search query text (searches both document content and OCR-extracted text)
+    #[serde(default)]
     pub query: String,
-    /// Filter by specific tags
+    /// Filter by specific tags (label names)
+    #[serde(default)]
     pub tags: Option<Vec<String>>,
     /// Filter by MIME types (e.g., "application/pdf", "image/png")
+    #[serde(default)]
     pub mime_types: Option<Vec<String>>,
     /// Maximum number of results to return (default: 25)
     pub limit: Option<i64>,
@@ -48,28 +51,20 @@ impl Default for SearchMode {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SearchResponse {
-    /// List of matching documents with enhanced metadata and snippets
     pub documents: Vec<EnhancedDocumentResponse>,
-    /// Total number of documents matching the search criteria
     pub total: i64,
-    /// Time taken to execute the search in milliseconds
     pub query_time_ms: u64,
-    /// Search suggestions for query improvement
     pub suggestions: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct FacetItem {
-    /// The facet value (e.g., mime type or tag)
     pub value: String,
-    /// Number of documents with this value
     pub count: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SearchFacetsResponse {
-    /// MIME type facets with counts
     pub mime_types: Vec<FacetItem>,
-    /// Tag facets with counts
     pub tags: Vec<FacetItem>,
 }
