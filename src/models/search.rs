@@ -1,7 +1,40 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::{ToSchema, IntoParams};
 
 use super::responses::EnhancedDocumentResponse;
+
+/// Maximum length for comma-separated query parameters (DoS protection)
+const MAX_COMMA_SEPARATED_LENGTH: usize = 2000;
+/// Maximum number of items in a comma-separated list (DoS protection)
+const MAX_COMMA_SEPARATED_ITEMS: usize = 50;
+
+/// Deserializes a comma-separated string into Vec<String>.
+///
+/// Handles: "a,b,c" -> vec!["a", "b", "c"]
+/// - Trims whitespace from each value
+/// - Filters empty values
+/// - Returns None if result is empty or input exceeds limits
+fn deserialize_comma_separated<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+    Ok(opt.and_then(|s| {
+        // DoS protection: reject overly long inputs
+        if s.len() > MAX_COMMA_SEPARATED_LENGTH {
+            return None;
+        }
+
+        let vec: Vec<String> = s
+            .split(',')
+            .map(|x| x.trim().to_string())
+            .filter(|x| !x.is_empty())
+            .take(MAX_COMMA_SEPARATED_ITEMS)
+            .collect();
+
+        if vec.is_empty() { None } else { Some(vec) }
+    }))
+}
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
 pub struct SearchRequest {
@@ -9,10 +42,10 @@ pub struct SearchRequest {
     #[serde(default)]
     pub query: String,
     /// Filter by specific tags (label names)
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_comma_separated")]
     pub tags: Option<Vec<String>>,
     /// Filter by MIME types (e.g., "application/pdf", "image/png")
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_comma_separated")]
     pub mime_types: Option<Vec<String>>,
     /// Maximum number of results to return (default: 25)
     pub limit: Option<i64>,

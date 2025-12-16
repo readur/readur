@@ -273,8 +273,8 @@ const SearchPage: React.FC = () => {
       
       const searchRequest: SearchRequest = {
         query: query.trim(),
-        tags: filters.tags?.length ? filters.tags : undefined,
-        mime_types: filters.mimeTypes?.length ? filters.mimeTypes : undefined,
+        tags: filters.tags?.length ? filters.tags.join(',') : undefined,
+        mime_types: filters.mimeTypes?.length ? filters.mimeTypes.join(',') : undefined,
         limit: resultsPerPage,
         offset: (page - 1) * resultsPerPage,
         include_snippets: advancedSettings.includeSnippets,

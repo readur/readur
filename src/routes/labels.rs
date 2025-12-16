@@ -174,6 +174,12 @@ pub async fn create_label(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    // Disallow commas in label names (breaks comma-separated search filters)
+    // Note: URL-encoded values (%2c) are decoded by serde before reaching here
+    if payload.name.contains(',') {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
     // Validate color format
     if !payload.color.starts_with('#') || payload.color.len() != 7 {
         return Err(StatusCode::BAD_REQUEST);
@@ -287,6 +293,14 @@ pub async fn update_label(
     Json(payload): Json<UpdateLabel>,
 ) -> Result<Json<Label>, StatusCode> {
     let user_id = auth_user.user.id;
+
+    // Disallow commas in label names (breaks comma-separated search filters)
+    // Note: URL-encoded values (%2c) are decoded by serde before reaching here
+    if let Some(ref name) = payload.name {
+        if name.contains(',') {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
 
     // Validate color formats if provided
     if let Some(ref color) = payload.color {

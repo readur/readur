@@ -5,19 +5,6 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  paramsSerializer: {
-    serialize: (params) => {
-      const searchParams = new URLSearchParams()
-      Object.entries(params).forEach(([key, value]) => {
-        if (Array.isArray(value)) {
-          value.forEach(v => searchParams.append(key, String(v)))
-        } else if (value !== undefined && value !== null) {
-          searchParams.append(key, String(value))
-        }
-      })
-      return searchParams.toString()
-    }
-  }
 })
 
 export { api }
@@ -82,8 +69,8 @@ export interface Document {
 
 export interface SearchRequest {
   query: string
-  tags?: string[]
-  mime_types?: string[]
+  tags?: string  // Comma-separated label names (e.g., "important,work")
+  mime_types?: string  // Comma-separated MIME types (e.g., "application/pdf,image/png")
   limit?: number
   offset?: number
   include_snippets?: boolean

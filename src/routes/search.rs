@@ -1,11 +1,10 @@
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     response::Json,
     routing::get,
     Router,
 };
-use axum_extra::extract::Query;
 use std::sync::Arc;
 
 use crate::{
