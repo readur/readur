@@ -191,8 +191,8 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
         {editingLabel ? t('labels.create.editTitle') : t('labels.create.title')}
       </DialogTitle>
 
-      <DialogContent sx={{ pt: 4 }}>
-        <Grid container spacing={3}>
+      <DialogContent>
+        <Grid container spacing={3} sx={{ mt: 0.5 }}>
           {/* Name Field */}
           <Grid item xs={12}>
             <TextField
