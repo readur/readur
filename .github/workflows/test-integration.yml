@@ -37,6 +37,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+
     steps:
       - name: Free disk space
         run: |
@@ -166,45 +167,56 @@ jobs:
 
       - name: Setup WebDAV server for stress tests
         run: |
-          # Install Dufs WebDAV server (WebDAV is supported by default)
-          cargo install dufs
-
-          # Create WebDAV test directory
+          # Create WebDAV test directory and generate test data
           mkdir -p ${{ runner.temp }}/webdav-server
+          chmod +x scripts/generate-webdav-test-data.sh
+          ./scripts/generate-webdav-test-data.sh \
+            --webdav-root "${{ runner.temp }}/webdav-server" \
+            --stress-level light \
+            --include-large-directories \
+            --include-unicode-names
 
-          # Start Dufs server in background with WebDAV support
-          dufs ${{ runner.temp }}/webdav-server \
-            --bind 0.0.0.0:8080 \
-            --enable-cors \
-            --allow-all \
-            --auth testuser:testpass123@/:rw \
-            --log-file dufs.log &
+          # Start Dufs WebDAV server as a Docker container (more reliable than background process)
+          docker run -d \
+            --name dufs-webdav \
+            --network host \
+            -v "${{ runner.temp }}/webdav-server:/data:rw" \
+            sigoden/dufs:latest \
+            /data \
+            -p 8080 \
+            -A \
+            -a testuser:testpass123@/:rw
 
-          echo $! > dufs.pid
-
-          # Wait for server to start
-          # Use 127.0.0.1 to avoid IPv6 resolution issues
-          sleep 2
+          # Wait for container to be ready
+          echo "Waiting for Dufs WebDAV container to start..."
           for i in {1..30}; do
-            # Test with basic auth header instead of URL auth
-            response=$(curl -s -o /dev/null -w "%{http_code}" -u testuser:testpass123 http://127.0.0.1:8080/ || echo "000")
-            if [ "$response" = "200" ] || [ "$response" = "401" ] || [ "$response" = "403" ]; then
-              echo "WebDAV server is ready (HTTP $response)"
-              break
+            if docker ps | grep -q dufs-webdav; then
+              response=$(curl -s -o /dev/null -w "%{http_code}" -u testuser:testpass123 http://127.0.0.1:8080/ 2>/dev/null || echo "000")
+              if [ "$response" = "200" ]; then
+                echo "✅ Dufs WebDAV server is ready (HTTP $response)"
+                break
+              fi
             fi
-            echo "Waiting for WebDAV server... (attempt $i/30, HTTP response: $response)"
+            echo "Waiting for Dufs... (attempt $i/30, HTTP response: $response)"
             sleep 1
           done
 
-          # Final verification
-          if ! curl -s -u testuser:testpass123 http://127.0.0.1:8080/ > /dev/null; then
-            echo "WARNING: WebDAV server may require authentication adjustments"
-            cat dufs.log || true
+          # Verify container is running and accessible
+          if ! docker ps | grep -q dufs-webdav; then
+            echo "❌ ERROR: Dufs container is not running!"
+            docker logs dufs-webdav 2>&1 || true
+            exit 1
           fi
-        env:
-          WEBDAV_SERVER_URL: http://127.0.0.1:8080
-          WEBDAV_USERNAME: testuser
-          WEBDAV_PASSWORD: testpass123
+
+          # Final connectivity test
+          if ! curl -s -u testuser:testpass123 http://127.0.0.1:8080/ > /dev/null; then
+            echo "❌ ERROR: Cannot connect to Dufs WebDAV server"
+            docker logs dufs-webdav 2>&1 || true
+            exit 1
+          fi
+
+          echo "✅ Dufs WebDAV server is running and accessible"
+          docker logs dufs-webdav 2>&1 | tail -5
 
       - name: Run integration tests
         run: |
@@ -241,9 +253,13 @@ jobs:
           df -h
           echo "=== Temp directory usage ==="
           du -sh ${{ runner.temp }} || echo "Could not check temp directory"
-          echo "=== Server logs ==="
+          echo "=== Readur Server logs ==="
           cat server.log || echo "No server logs found"
-          echo "=== End of server logs ==="
+          echo "=== Dufs WebDAV Docker logs ==="
+          docker logs dufs-webdav 2>&1 || echo "No Dufs container logs found"
+          echo "=== Dufs container status ==="
+          docker ps -a | grep dufs || echo "No Dufs container found"
+          echo "=== End of logs ==="
 
       - name: Stop servers
         if: always()
@@ -254,11 +270,10 @@ jobs:
             rm readur.pid
           fi
 
-          # Stop WebDAV server
-          if [ -f dufs.pid ]; then
-            kill $(cat dufs.pid) || true
-            rm dufs.pid
-          fi
+          # Stop Dufs WebDAV Docker container
+          echo "Stopping Dufs WebDAV container..."
+          docker stop dufs-webdav 2>/dev/null || true
+          docker rm dufs-webdav 2>/dev/null || true
 
   frontend-integration-tests:
     name: Frontend Integration Tests
