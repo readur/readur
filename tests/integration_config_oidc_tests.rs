@@ -74,6 +74,8 @@ mod tests {
             allow_local_auth: None,
             s3_enabled: false,
             s3_config: None,
+            max_pdf_size_mb: 100,
+            max_office_document_size_mb: 100,
         }
     }
 
