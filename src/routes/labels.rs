@@ -12,7 +12,7 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, Row};
 
-use crate::{auth::AuthUser, AppState};
+use crate::{auth::AuthUser, errors::label::LabelError, AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Label {
@@ -166,22 +166,28 @@ pub async fn create_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(payload): Json<CreateLabel>,
-) -> Result<Json<Label>, StatusCode> {
+) -> Result<Json<Label>, LabelError> {
     let user_id = auth_user.user.id;
 
     // Validate name is not empty
     if payload.name.trim().is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(LabelError::invalid_name(payload.name.clone(), "Name cannot be empty".to_string()));
+    }
+
+    // Disallow commas in label names (breaks comma-separated search filters)
+    // Note: URL-encoded values (%2c) are decoded by serde before reaching here
+    if payload.name.contains(',') {
+        return Err(LabelError::invalid_name(payload.name.clone(), "Name cannot contain commas".to_string()));
     }
 
     // Validate color format
     if !payload.color.starts_with('#') || payload.color.len() != 7 {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(LabelError::invalid_color(&payload.color));
     }
 
     if let Some(ref bg_color) = payload.background_color {
         if !bg_color.starts_with('#') || bg_color.len() != 7 {
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(LabelError::invalid_color(bg_color));
         }
     }
 
@@ -189,14 +195,14 @@ pub async fn create_label(
         r#"
         INSERT INTO labels (user_id, name, description, color, background_color, icon)
         VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING 
-            id, user_id, name, description, color, background_color, icon, 
+        RETURNING
+            id, user_id, name, description, color, background_color, icon,
             is_system, created_at, updated_at,
             0::bigint as document_count, 0::bigint as source_count
         "#
     )
     .bind(user_id)
-    .bind(payload.name)
+    .bind(&payload.name)
     .bind(payload.description)
     .bind(payload.color)
     .bind(payload.background_color)
@@ -206,9 +212,9 @@ pub async fn create_label(
     .map_err(|e| {
         tracing::error!("Failed to create label: {}", e);
         if e.to_string().contains("duplicate key") {
-            StatusCode::CONFLICT
+            LabelError::duplicate_name(payload.name.clone())
         } else {
-            StatusCode::INTERNAL_SERVER_ERROR
+            LabelError::invalid_name(payload.name.clone(), e.to_string())
         }
     })?;
 
@@ -285,19 +291,31 @@ pub async fn update_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(payload): Json<UpdateLabel>,
-) -> Result<Json<Label>, StatusCode> {
+) -> Result<Json<Label>, LabelError> {
     let user_id = auth_user.user.id;
+
+    // Validate name if provided
+    if let Some(ref name) = payload.name {
+        if name.trim().is_empty() {
+            return Err(LabelError::invalid_name(name.clone(), "Name cannot be empty".to_string()));
+        }
+        // Disallow commas in label names (breaks comma-separated search filters)
+        // Note: URL-encoded values (%2c) are decoded by serde before reaching here
+        if name.contains(',') {
+            return Err(LabelError::invalid_name(name.clone(), "Name cannot contain commas".to_string()));
+        }
+    }
 
     // Validate color formats if provided
     if let Some(ref color) = payload.color {
         if !color.starts_with('#') || color.len() != 7 {
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(LabelError::invalid_color(color));
         }
     }
 
-    if let Some(ref bg_color) = payload.background_color.as_ref() {
+    if let Some(ref bg_color) = payload.background_color {
         if !bg_color.starts_with('#') || bg_color.len() != 7 {
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(LabelError::invalid_color(bg_color));
         }
     }
 
@@ -311,18 +329,18 @@ pub async fn update_label(
     .await
     .map_err(|e| {
         tracing::error!("Failed to check label existence: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
+        LabelError::NotFound
     })?;
 
     if existing.is_none() {
-        return Err(StatusCode::NOT_FOUND);
+        return Err(LabelError::NotFound);
     }
 
     // Use COALESCE to update only provided fields
     let label = sqlx::query_as::<_, Label>(
         r#"
-        UPDATE labels 
-        SET 
+        UPDATE labels
+        SET
             name = COALESCE($2, name),
             description = COALESCE($3, description),
             color = COALESCE($4, color),
@@ -330,14 +348,14 @@ pub async fn update_label(
             icon = COALESCE($6, icon),
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
-        RETURNING 
-            id, user_id, name, description, color, background_color, icon, 
+        RETURNING
+            id, user_id, name, description, color, background_color, icon,
             is_system, created_at, updated_at,
             0::bigint as document_count, 0::bigint as source_count
         "#
     )
     .bind(label_id)
-    .bind(payload.name)
+    .bind(&payload.name)
     .bind(payload.description)
     .bind(payload.color)
     .bind(payload.background_color)
@@ -347,9 +365,9 @@ pub async fn update_label(
     .map_err(|e| {
         tracing::error!("Failed to update label: {}", e);
         if e.to_string().contains("duplicate key") {
-            StatusCode::CONFLICT
+            LabelError::duplicate_name(payload.name.clone().unwrap_or_default())
         } else {
-            StatusCode::INTERNAL_SERVER_ERROR
+            LabelError::invalid_name(payload.name.clone().unwrap_or_default(), e.to_string())
         }
     })?;
 

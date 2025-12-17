@@ -12,6 +12,7 @@ import {
   Paper,
   Tooltip,
 } from '@mui/material';
+import axios from 'axios';
 import Grid from '@mui/material/GridLegacy';
 import {
   Star as StarIcon,
@@ -121,6 +122,13 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
       return;
     }
 
+    // Disallow commas in label names (breaks comma-separated search filters)
+    // Also check for URL-encoded commas (%2c) which could cause issues in query parameters
+    if (formData.name.includes(',') || formData.name.toLowerCase().includes('%2c')) {
+      setNameError(t('labels.errors.commaNotAllowed'));
+      return;
+    }
+
     setLoading(true);
     try {
       await onSubmit({
@@ -135,7 +143,14 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
       onClose();
     } catch (error) {
       console.error('Failed to save label:', error);
-      // Could add error handling UI here
+      // Extract error message from backend JSON response
+      if (axios.isAxiosError(error) && error.response?.data?.error) {
+        setNameError(error.response.data.error);
+      } else if (error instanceof Error) {
+        setNameError(error.message);
+      } else {
+        setNameError(t('labels.errors.serverError'));
+      }
     } finally {
       setLoading(false);
     }
@@ -176,8 +191,8 @@ const LabelCreateDialog: React.FC<LabelCreateDialogProps> = ({
         {editingLabel ? t('labels.create.editTitle') : t('labels.create.title')}
       </DialogTitle>
 
-      <DialogContent sx={{ pt: 2 }}>
-        <Grid container spacing={3}>
+      <DialogContent>
+        <Grid container spacing={3} sx={{ mt: 0.5 }}>
           {/* Name Field */}
           <Grid item xs={12}>
             <TextField
