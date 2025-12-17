@@ -175,8 +175,14 @@ impl TestAppStateOptions {
 /// Creates a test configuration with sensible defaults
 /// All fields are populated to avoid compilation errors when new fields are added
 pub fn create_test_config() -> Config {
+    create_test_config_with_db(&default_test_db_url())
+}
+
+/// Creates a test configuration with a specific database URL
+/// Use this when you need to provide a custom database connection string
+pub fn create_test_config_with_db(database_url: &str) -> Config {
     Config {
-        database_url: default_test_db_url(),
+        database_url: database_url.to_string(),
         server_address: "127.0.0.1:0".to_string(),
         jwt_secret: "test_jwt_secret_for_integration_tests".to_string(),
         upload_path: "/tmp/test_uploads".to_string(),

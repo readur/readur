@@ -14,6 +14,7 @@ use readur::{
     AppState,
     config::Config,
     db::Database,
+    test_helpers::create_test_config_with_db,
 };
 
 // Removed constant - will use environment variables instead
@@ -82,36 +83,15 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
     let database_url = std::env::var("TEST_DATABASE_URL")
         .or_else(|_| std::env::var("DATABASE_URL"))
         .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-    
+
     // Create test configuration with custom database URL
-    let config = Config {
-        database_url: database_url.clone(),
-        server_address: "127.0.0.1:0".to_string(),
-        jwt_secret: "test_jwt_secret_for_integration_tests".to_string(),
-        upload_path: "/tmp/test_uploads".to_string(),
-        watch_folder: "/tmp/test_watch".to_string(),
-        user_watch_base_dir: "/tmp/user_watch".to_string(),
-        enable_per_user_watch: false,
-        allowed_file_types: vec!["pdf".to_string(), "png".to_string()],
-        watch_interval_seconds: Some(10),
-        file_stability_check_ms: Some(1000),
-        max_file_age_hours: Some(24),
-        memory_limit_mb: 512,
-        concurrent_ocr_jobs: 4,
-        max_file_size_mb: 50,
-        ocr_timeout_seconds: 300,
-        ocr_language: "eng".to_string(),
-        cpu_priority: "normal".to_string(),
-        oidc_enabled: false,
-        oidc_client_id: None,
-        oidc_client_secret: None,
-        oidc_issuer_url: None,
-        oidc_redirect_uri: None,
-        oidc_auto_register: None,
-        allow_local_auth: None,
-        s3_enabled: false,
-        s3_config: None,
-    };
+    let mut config = create_test_config_with_db(&database_url);
+    config.server_address = "127.0.0.1:0".to_string();
+    config.jwt_secret = "test_jwt_secret_for_integration_tests".to_string();
+    config.allowed_file_types = vec!["pdf".to_string(), "png".to_string()];
+    config.file_stability_check_ms = Some(1000);
+    config.memory_limit_mb = 512;
+    config.concurrent_ocr_jobs = 4;
 
     // Create test services
     let db = Database::new(&database_url).await.unwrap();

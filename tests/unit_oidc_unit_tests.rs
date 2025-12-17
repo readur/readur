@@ -1,36 +1,22 @@
 use readur::config::Config;
 use readur::oidc::OidcClient;
+use readur::test_helpers::create_test_config_with_db;
 use wiremock::{matchers::{method, path}, Mock, MockServer, ResponseTemplate};
 
 fn create_test_config_with_oidc(issuer_url: &str) -> Config {
-    Config {
-        database_url: "postgresql://test:test@localhost/test".to_string(),
-        server_address: "127.0.0.1:8000".to_string(),
-        jwt_secret: "test-secret".to_string(),
-        upload_path: "./test-uploads".to_string(),
-        watch_folder: "./test-watch".to_string(),
-        user_watch_base_dir: "./user_watch".to_string(),
-        enable_per_user_watch: false,
-        allowed_file_types: vec!["pdf".to_string()],
-        watch_interval_seconds: Some(30),
-        file_stability_check_ms: Some(500),
-        max_file_age_hours: None,
-        ocr_language: "eng".to_string(),
-        concurrent_ocr_jobs: 2,
-        ocr_timeout_seconds: 60,
-        max_file_size_mb: 10,
-        memory_limit_mb: 256,
-        cpu_priority: "normal".to_string(),
-        oidc_enabled: true,
-        oidc_client_id: Some("test-client-id".to_string()),
-        oidc_client_secret: Some("test-client-secret".to_string()),
-        oidc_issuer_url: Some(issuer_url.to_string()),
-        oidc_redirect_uri: Some("http://localhost:8000/auth/oidc/callback".to_string()),
-        oidc_auto_register: Some(true),
-        allow_local_auth: Some(true),
-        s3_enabled: false,
-        s3_config: None,
-    }
+    let mut config = create_test_config_with_db("postgresql://test:test@localhost/test");
+    config.server_address = "127.0.0.1:8000".to_string();
+    config.jwt_secret = "test-secret".to_string();
+    config.upload_path = "./test-uploads".to_string();
+    config.watch_folder = "./test-watch".to_string();
+    config.oidc_enabled = true;
+    config.oidc_client_id = Some("test-client-id".to_string());
+    config.oidc_client_secret = Some("test-client-secret".to_string());
+    config.oidc_issuer_url = Some(issuer_url.to_string());
+    config.oidc_redirect_uri = Some("http://localhost:8000/auth/oidc/callback".to_string());
+    config.oidc_auto_register = Some(true);
+    config.allow_local_auth = Some(true);
+    config
 }
 
 #[tokio::test]

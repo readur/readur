@@ -9,6 +9,7 @@ use readur::{
     db::Database,
     config::Config,
     models::{FileIngestionInfo, Document, Source, SourceType, SourceStatus},
+    test_helpers::create_test_config_with_db,
 };
 
 // Helper function to calculate file hash
@@ -116,39 +117,15 @@ async fn create_test_user(db: &Database, username: &str) -> Result<Uuid> {
 }
 
 async fn create_test_app_state() -> Result<Arc<AppState>> {
-    let config = Config::from_env().unwrap_or_else(|_| {
-        let database_url = std::env::var("DATABASE_URL")
-            .or_else(|_| std::env::var("TEST_DATABASE_URL"))
-            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-        Config {
-            database_url,
-            server_address: "127.0.0.1:8000".to_string(),
-            jwt_secret: "test-secret".to_string(),
-            upload_path: "./test-uploads".to_string(),
-            watch_folder: "./test-watch".to_string(),
-            user_watch_base_dir: "./user_watch".to_string(),
-            enable_per_user_watch: false,
-            allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
-            watch_interval_seconds: Some(30),
-            file_stability_check_ms: Some(500),
-            max_file_age_hours: None,
-            ocr_language: "eng".to_string(),
-            concurrent_ocr_jobs: 2,
-            ocr_timeout_seconds: 60,
-            max_file_size_mb: 10,
-            memory_limit_mb: 256,
-            cpu_priority: "normal".to_string(),
-            oidc_enabled: false,
-            oidc_client_id: None,
-            oidc_client_secret: None,
-            oidc_issuer_url: None,
-            oidc_redirect_uri: None,
-            oidc_auto_register: None,
-            allow_local_auth: None,
-            s3_enabled: false,
-            s3_config: None,
-        }
-    });
+    let database_url = std::env::var("DATABASE_URL")
+        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
+        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+
+    let mut config = create_test_config_with_db(&database_url);
+    config.server_address = "127.0.0.1:8000".to_string();
+    config.jwt_secret = "test-secret".to_string();
+    config.upload_path = "./test-uploads".to_string();
+    config.watch_folder = "./test-watch".to_string();
     let db = Database::new(&config.database_url).await?;
     
     // Create file service
