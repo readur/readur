@@ -193,7 +193,9 @@ pub fn create_test_config() -> Config {
         concurrent_ocr_jobs: 2,
         ocr_timeout_seconds: 60,
         max_file_size_mb: 50,
-        
+        max_pdf_size_mb: 100,
+        max_office_document_size_mb: 100,
+
         // Performance
         memory_limit_mb: 256,
         cpu_priority: "normal".to_string(),
