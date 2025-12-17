@@ -135,11 +135,9 @@ services:
     container_name: readur_dufs_webdav
     command: >
       /data
-      --bind 0.0.0.0:8080
-      --enable-cors
-      --allow-all
-      --auth webdav_user:webdav_pass
-      --log-level debug
+      -p 8080
+      -A
+      -a webdav_user:webdav_pass@/:rw
     volumes:
       # Using tmpfs for ephemeral WebDAV test data
       - type: tmpfs
