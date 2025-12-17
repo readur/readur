@@ -23,11 +23,12 @@ impl Database {
             query.push("))");
         }
 
-        // Add tag filtering
+        // Add label filtering (tags param contains label names)
         if let Some(ref tags) = search_request.tags {
             if !tags.is_empty() {
-                query.push(" AND tags && ");
+                query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
                 query.push_bind(tags);
+                query.push("))");
             }
         }
 
@@ -128,11 +129,12 @@ impl Database {
             }
         }
 
-        // Add filtering
+        // Add label filtering (tags param contains label names)
         if let Some(ref tags) = search_request.tags {
             if !tags.is_empty() {
-                query.push(" AND tags && ");
+                query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
                 query.push_bind(tags);
+                query.push("))");
             }
         }
 
@@ -255,5 +257,67 @@ impl Database {
         // Remove duplicates and limit total snippets
         snippets.truncate(5);
         snippets
+    }
+
+    /// Counts total matching documents for pagination (without applying LIMIT/OFFSET)
+    pub async fn count_search_documents(&self, user_id: Uuid, user_role: UserRole, search_request: &SearchRequest) -> Result<i64> {
+        let search_query = search_request.query.trim();
+
+        let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM documents WHERE 1=1");
+
+        apply_role_based_filter(&mut query, user_id, user_role);
+
+        // Add search conditions (same as enhanced_search_documents_with_role)
+        if !search_query.is_empty() {
+            match search_request.search_mode.as_ref().unwrap_or(&SearchMode::Simple) {
+                SearchMode::Simple => {
+                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ plainto_tsquery('english', ");
+                    query.push_bind(search_query);
+                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ plainto_tsquery('english', ");
+                    query.push_bind(search_query);
+                    query.push("))");
+                }
+                SearchMode::Phrase => {
+                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ phraseto_tsquery('english', ");
+                    query.push_bind(search_query);
+                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ phraseto_tsquery('english', ");
+                    query.push_bind(search_query);
+                    query.push("))");
+                }
+                SearchMode::Boolean => {
+                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ to_tsquery('english', ");
+                    query.push_bind(search_query);
+                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ to_tsquery('english', ");
+                    query.push_bind(search_query);
+                    query.push("))");
+                }
+                SearchMode::Fuzzy => {
+                    query.push(" AND similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
+                    query.push_bind(search_query);
+                    query.push(") > 0.3");
+                }
+            }
+        }
+
+        // Add label filtering (tags param contains label names)
+        if let Some(ref tags) = search_request.tags {
+            if !tags.is_empty() {
+                query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
+                query.push_bind(tags);
+                query.push("))");
+            }
+        }
+
+        // Add MIME type filtering
+        if let Some(ref mime_types) = search_request.mime_types {
+            if !mime_types.is_empty() {
+                query.push(" AND mime_type = ANY(");
+                query.push_bind(mime_types);
+                query.push(")");
+            }
+        }
+
+        let row: (i64,) = query.build_query_as().fetch_one(&self.pool).await?;
+        Ok(row.0)
     }
 }

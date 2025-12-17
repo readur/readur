@@ -62,7 +62,7 @@ import {
   TrendingUp as TrendingIcon,
   TextFormat as TextFormatIcon,
 } from '@mui/icons-material';
-import { documentService, SearchRequest } from '../services/api';
+import { documentService, SearchRequest, api } from '../services/api';
 import SearchGuidance from '../components/SearchGuidance';
 import EnhancedSearchGuide from '../components/EnhancedSearchGuide';
 import MimeTypeFacetFilter from '../components/MimeTypeFacetFilter';
@@ -250,7 +250,9 @@ const SearchPage: React.FC = () => {
   }, []);
 
   const performSearch = useCallback(async (query: string, filters: SearchFilters = {}, page: number = 1): Promise<void> => {
-    if (!query.trim()) {
+    const hasFilters = (filters.tags?.length ?? 0) > 0 ||
+                       (filters.mimeTypes?.length ?? 0) > 0;
+    if (!query.trim() && !hasFilters) {
       setSearchResults([]);
       setTotalResults(0);
       setQueryTime(0);
@@ -271,8 +273,8 @@ const SearchPage: React.FC = () => {
       
       const searchRequest: SearchRequest = {
         query: query.trim(),
-        tags: filters.tags?.length ? filters.tags : undefined,
-        mime_types: filters.mimeTypes?.length ? filters.mimeTypes : undefined,
+        tags: filters.tags?.length ? filters.tags.join(',') : undefined,
+        mime_types: filters.mimeTypes?.length ? filters.mimeTypes.join(',') : undefined,
         limit: resultsPerPage,
         offset: (page - 1) * resultsPerPage,
         include_snippets: advancedSettings.includeSnippets,
@@ -321,11 +323,7 @@ const SearchPage: React.FC = () => {
       setTotalResults(response.data.total || results.length);
       setQueryTime(response.data.query_time_ms || 0);
       setSuggestions(response.data.suggestions || []);
-      
-      // Extract unique tags for filter options
-      const tags = [...new Set(results.flatMap(doc => doc.tags || []))].filter(tag => typeof tag === 'string');
-      setAvailableTags(tags);
-      
+
       // Clear progress after a brief delay
       setTimeout(() => setSearchProgress(0), 500);
       
@@ -355,6 +353,20 @@ const SearchPage: React.FC = () => {
     debounce((query: string) => generateQuickSuggestions(query), 150),
     [generateQuickSuggestions]
   );
+
+  // Load available tags from labels API on component mount
+  useEffect(() => {
+    const loadLabels = async () => {
+      try {
+        const response = await api.get('/labels?include_counts=true');
+        const labelNames = (response.data || []).map((label: any) => label.name);
+        setAvailableTags(labelNames);
+      } catch (error) {
+        console.error('Failed to load labels:', error);
+      }
+    };
+    loadLabels();
+  }, []);
 
   // Handle URL search params
   useEffect(() => {

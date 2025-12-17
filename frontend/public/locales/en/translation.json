@@ -1023,6 +1023,7 @@
       "inUse": "Cannot delete label because it is currently assigned to documents. Please remove the label from all documents first.",
       "systemDelete": "System labels cannot be deleted. Only user-created labels can be removed.",
       "invalidName": "Label name contains invalid characters. Please use only letters, numbers, and basic punctuation.",
+      "commaNotAllowed": "Label names cannot contain commas.",
       "invalidColor": "Invalid color format. Please use a valid hex color like #0969da.",
       "maxLabelsReached": "Maximum number of labels reached. Please delete some labels before creating new ones."
     }

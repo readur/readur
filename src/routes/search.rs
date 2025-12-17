@@ -43,8 +43,10 @@ async fn search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, SearchError> {
-    // Validate query length
-    if search_request.query.len() < 2 {
+    // Validate query length (allow empty query if filters are present)
+    let has_filters = search_request.tags.as_ref().map_or(false, |t| !t.is_empty())
+        || search_request.mime_types.as_ref().map_or(false, |m| !m.is_empty());
+    if search_request.query.len() < 2 && !has_filters {
         return Err(SearchError::query_too_short(search_request.query.len(), 2));
     }
     if search_request.query.len() > 1000 {
@@ -58,18 +60,23 @@ async fn search_documents(
         return Err(SearchError::invalid_pagination(offset, limit));
     }
     
+    // Get total count (without pagination) for proper pagination support
+    let total = state
+        .db
+        .count_search_documents(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .await
+        .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
+
+    // Check if too many results
+    if total > 10000 {
+        return Err(SearchError::too_many_results(total, 10000));
+    }
+
     let documents = state
         .db
         .search_documents(auth_user.user.id, &search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
-    
-    let total = documents.len() as i64;
-    
-    // Check if too many results
-    if total > 10000 {
-        return Err(SearchError::too_many_results(total, 10000));
-    }
 
     let response = SearchResponse {
         documents: documents.into_iter().map(|doc| EnhancedDocumentResponse {
@@ -118,18 +125,32 @@ async fn enhanced_search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, StatusCode> {
+    // Validate query length (allow empty query if filters are present)
+    let has_filters = search_request.tags.as_ref().map_or(false, |t| !t.is_empty())
+        || search_request.mime_types.as_ref().map_or(false, |m| !m.is_empty());
+    if search_request.query.len() < 2 && !has_filters {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
     // Generate suggestions before moving search_request
     let suggestions = generate_search_suggestions(&search_request.query);
-    
+
     let start_time = std::time::Instant::now();
+
+    // Get total count (without pagination) for proper pagination support
+    let total = state
+        .db
+        .count_search_documents(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let documents = state
         .db
         .enhanced_search_documents_with_role(auth_user.user.id, auth_user.user.role, &search_request)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     let query_time = start_time.elapsed().as_millis() as u64;
-    let total = documents.len() as i64;
 
     let response = SearchResponse {
         documents,
