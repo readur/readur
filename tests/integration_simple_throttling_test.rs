@@ -52,10 +52,12 @@ impl SimpleThrottleTest {
         
         // Create queue service with throttling (max 15 concurrent jobs)
         let queue_service = Arc::new(OcrQueueService::new(
-            db.clone(), 
-            pool.clone(), 
+            db.clone(),
+            pool.clone(),
             15,  // This should prevent DB pool exhaustion
-            file_service
+            file_service,
+            100,
+            100,
         ));
         
         Ok(Self {
@@ -151,7 +153,7 @@ impl SimpleThrottleTest {
             let handle = tokio::spawn(async move {
                 let worker_name = format!("worker-{}", worker_id);
                 let file_service = create_test_file_service("/tmp").await;
-                let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service);
+                let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service, 100, 100);
                 let mut jobs_processed = 0;
                 
                 info!("Worker {} starting", worker_name);

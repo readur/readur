@@ -291,10 +291,12 @@ impl TestContext {
         ));
         
         let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(
-            db.clone(), 
-            db.pool.clone(), 
-            2, 
-            file_service.clone()
+            db.clone(),
+            db.pool.clone(),
+            2,
+            file_service.clone(),
+            100, // Default 100MB for tests
+            100, // Default 100MB for tests
         ));
 
         let state = Arc::new(AppState { 
@@ -825,7 +827,9 @@ impl TestConfigBuilder {
             concurrent_ocr_jobs: self.concurrent_ocr_jobs,
             ocr_timeout_seconds: self.ocr_timeout_seconds,
             max_file_size_mb: self.max_file_size_mb,
-            
+            max_pdf_size_mb: 100,
+            max_office_document_size_mb: 100,
+
             // Performance
             memory_limit_mb: self.memory_limit_mb as usize,
             cpu_priority: "normal".to_string(),

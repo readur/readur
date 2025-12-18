@@ -37,7 +37,14 @@ pub async fn start_folder_watcher(config: Config, db: Database, file_service: st
     info!("Upload folder canonical path: {:?}", upload_canonical);
     
     // Use the provided file service
-    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service.clone());
+    let queue_service = OcrQueueService::new(
+        db.clone(),
+        db.get_pool().clone(),
+        1,
+        file_service.clone(),
+        config.max_pdf_size_mb,
+        config.max_office_document_size_mb,
+    );
     
     // Initialize user watch components if enabled
     let user_watch_manager = if config.enable_per_user_watch {

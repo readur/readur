@@ -74,7 +74,14 @@ async fn main() -> Result<()> {
     // Initialize storage backend
     file_service.initialize_storage().await?;
     
-    let queue_service = OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service.clone());
+    let queue_service = OcrQueueService::new(
+        db.clone(),
+        db.get_pool().clone(),
+        1,
+        file_service.clone(),
+        config.max_pdf_size_mb,
+        config.max_office_document_size_mb,
+    );
     
     let ingester = BatchIngester::new(db, queue_service, (*file_service).clone(), config);
     

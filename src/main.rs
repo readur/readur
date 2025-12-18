@@ -389,10 +389,12 @@ async fn main() -> anyhow::Result<()> {
     // Create shared OCR queue service for both web and background operations
     let concurrent_jobs = 15; // Limit concurrent OCR jobs to prevent DB pool exhaustion
     let shared_queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
-        background_db.clone(), 
-        background_db.get_pool().clone(), 
+        background_db.clone(),
+        background_db.get_pool().clone(),
         concurrent_jobs,
-        file_service.clone()
+        file_service.clone(),
+        config.max_pdf_size_mb,
+        config.max_office_document_size_mb,
     ));
     
     // Initialize OIDC client if enabled

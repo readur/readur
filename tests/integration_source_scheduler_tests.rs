@@ -194,6 +194,8 @@ async fn create_test_app_state() -> Arc<AppState> {
         allow_local_auth: None,
         s3_enabled: false,
         s3_config: None,
+            max_pdf_size_mb: 100,
+            max_office_document_size_mb: 100,
     };
 
     // Use smaller connection pool for tests to avoid exhaustion  
@@ -204,7 +206,7 @@ async fn create_test_app_state() -> Arc<AppState> {
     let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
     let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage("/tmp/test_uploads".to_string(), storage_backend));
     
-    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2, file_service.clone()));
+    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2, file_service.clone(), 100, 100));
     
     Arc::new(AppState {
         db: db.clone(),

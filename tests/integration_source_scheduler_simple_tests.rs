@@ -10,11 +10,12 @@ use chrono::Utc;
 use serde_json::json;
 
 use readur::{
-    AppState, 
+    AppState,
     config::Config,
     db::Database,
     models::{Source, SourceType, SourceStatus, WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig},
     scheduling::source_scheduler::SourceScheduler,
+    test_helpers::create_test_config_with_db,
 };
 
 /// Create a test app state
@@ -22,35 +23,10 @@ async fn create_test_app_state() -> Arc<AppState> {
     let database_url = std::env::var("TEST_DATABASE_URL")
         .or_else(|_| std::env::var("DATABASE_URL"))
         .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-    
-    let config = Config {
-        database_url,
-        server_address: "127.0.0.1:8080".to_string(),
-        jwt_secret: "test_secret".to_string(),
-        upload_path: "/tmp/test_uploads".to_string(),
-        watch_folder: "/tmp/watch".to_string(),
-        user_watch_base_dir: "./user_watch".to_string(),
-        enable_per_user_watch: false,
-        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
-        watch_interval_seconds: Some(10),
-        file_stability_check_ms: Some(1000),
-        max_file_age_hours: Some(24),
-        ocr_language: "eng".to_string(),
-        concurrent_ocr_jobs: 4,
-        ocr_timeout_seconds: 300,
-        max_file_size_mb: 100,
-        memory_limit_mb: 512,
-        cpu_priority: "normal".to_string(),
-        oidc_enabled: false,
-        oidc_client_id: None,
-        oidc_client_secret: None,
-        oidc_issuer_url: None,
-        oidc_redirect_uri: None,
-        oidc_auto_register: None,
-        allow_local_auth: None,
-        s3_enabled: false,
-        s3_config: None,
-    };
+
+    let mut config = create_test_config_with_db(&database_url);
+    config.server_address = "127.0.0.1:8080".to_string();
+    config.jwt_secret = "test_secret".to_string();
 
     let db = Database::new(&config.database_url).await.unwrap();
     
@@ -59,7 +35,7 @@ async fn create_test_app_state() -> Arc<AppState> {
     let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
     let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
     
-    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2, file_service.clone()));
+    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2, file_service.clone(), 100, 100));
     Arc::new(AppState {
         db: db.clone(),
         config,

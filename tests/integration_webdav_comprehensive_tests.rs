@@ -8,7 +8,7 @@ use readur::{
     scheduling::webdav_scheduler::WebDAVScheduler,
     models::*,
     db::Database,
-    config::Config,
+    test_helpers::create_test_config_with_db,
     AppState,
 };
 
@@ -325,40 +325,14 @@ fn test_backoff_calculation() {
 #[test]
 fn test_webdav_scheduler_creation() {
     // Create mock state - in a real test environment you'd use test database
-    let config = Config {
-        database_url: "postgres://test".to_string(),
-        server_address: "127.0.0.1:3000".to_string(),
-        upload_path: "/tmp/test_uploads".to_string(),
-        watch_folder: "/tmp/test_watch".to_string(),
-        user_watch_base_dir: "./user_watch".to_string(),
-        enable_per_user_watch: false,
-        jwt_secret: "test_secret".to_string(),
-        allowed_file_types: vec!["pdf".to_string(), "png".to_string()],
-        watch_interval_seconds: Some(10),
-        file_stability_check_ms: Some(1000),
-        max_file_age_hours: Some(24),
-        cpu_priority: "normal".to_string(),
-        memory_limit_mb: 512,
-        concurrent_ocr_jobs: 4,
-        max_file_size_mb: 50,
-        ocr_language: "eng".to_string(),
-        ocr_timeout_seconds: 300,
-        oidc_enabled: false,
-        oidc_client_id: None,
-        oidc_client_secret: None,
-        oidc_issuer_url: None,
-        oidc_redirect_uri: None,
-        oidc_auto_register: None,
-        allow_local_auth: None,
-        s3_enabled: false,
-        s3_config: None,
-    };
+    let mut config = create_test_config_with_db("postgres://test");
+    config.server_address = "127.0.0.1:3000".to_string();
 
     // Note: This is a minimal test since we can't easily mock the database
     // In a full integration test, you'd set up a test database
-    
+
     assert_eq!(config.server_address, "127.0.0.1:3000");
     assert_eq!(config.upload_path, "/tmp/test_uploads");
-    
+
     // The scheduler would be tested with a real database in integration tests
 }

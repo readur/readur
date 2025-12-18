@@ -22,7 +22,9 @@ pub struct Config {
     pub concurrent_ocr_jobs: usize,
     pub ocr_timeout_seconds: u64,
     pub max_file_size_mb: u64,
-    
+    pub max_pdf_size_mb: u64,
+    pub max_office_document_size_mb: u64,
+
     // Performance
     pub memory_limit_mb: usize,
     pub cpu_priority: String,
@@ -374,7 +376,47 @@ impl Config {
                     }
                 }
             },
-                
+            max_pdf_size_mb: {
+                match env::var("MAX_PDF_SIZE_MB") {
+                    Ok(val) => match val.parse::<u64>() {
+                        Ok(parsed) => {
+                            println!("✅ MAX_PDF_SIZE_MB: {} (loaded from env)", parsed);
+                            parsed
+                        }
+                        Err(e) => {
+                            let default_size = 100;
+                            println!("❌ MAX_PDF_SIZE_MB: Invalid value '{}' - {}, using default {}", val, e, default_size);
+                            default_size
+                        }
+                    },
+                    Err(_) => {
+                        let default_size = 100;
+                        println!("⚠️  MAX_PDF_SIZE_MB: {} (using default - env var not set)", default_size);
+                        default_size
+                    }
+                }
+            },
+            max_office_document_size_mb: {
+                match env::var("MAX_OFFICE_DOCUMENT_SIZE_MB") {
+                    Ok(val) => match val.parse::<u64>() {
+                        Ok(parsed) => {
+                            println!("✅ MAX_OFFICE_DOCUMENT_SIZE_MB: {} (loaded from env)", parsed);
+                            parsed
+                        }
+                        Err(e) => {
+                            let default_size = 100;
+                            println!("❌ MAX_OFFICE_DOCUMENT_SIZE_MB: Invalid value '{}' - {}, using default {}", val, e, default_size);
+                            default_size
+                        }
+                    },
+                    Err(_) => {
+                        let default_size = 100;
+                        println!("⚠️  MAX_OFFICE_DOCUMENT_SIZE_MB: {} (using default - env var not set)", default_size);
+                        default_size
+                    }
+                }
+            },
+
             // Performance Configuration
             memory_limit_mb: {
                 match env::var("MEMORY_LIMIT_MB") {
@@ -600,6 +642,8 @@ impl Config {
         println!("⚙️  Concurrent OCR jobs: {}", config.concurrent_ocr_jobs);
         println!("⏱️  OCR timeout: {}s", config.ocr_timeout_seconds);
         println!("📏 Max file size: {}MB", config.max_file_size_mb);
+        println!("📄 Max PDF size: {}MB", config.max_pdf_size_mb);
+        println!("📑 Max Office document size: {}MB", config.max_office_document_size_mb);
         println!("💾 Memory limit: {}MB", config.memory_limit_mb);
         
         // Warning checks

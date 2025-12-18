@@ -1,23 +1,24 @@
 #[cfg(test)]
 mod tests {
     use readur::config::Config;
+    use readur::test_helpers::create_test_config;
     use std::env;
     use std::sync::Mutex;
-    
+
     // Mutex to ensure OIDC tests run sequentially to avoid race conditions
     static OIDC_TEST_MUTEX: Mutex<()> = Mutex::new(());
-    
+
     // Helper function to safely run a test with environment isolation
-    fn run_with_env_isolation<F, R>(test_fn: F) -> R 
-    where 
+    fn run_with_env_isolation<F, R>(test_fn: F) -> R
+    where
         F: FnOnce() -> R,
     {
         let _guard = OIDC_TEST_MUTEX.lock().unwrap();
-        
+
         // Store original environment values
         let original_values: Vec<(String, Option<String>)> = vec![
             "OIDC_ENABLED",
-            "OIDC_CLIENT_ID", 
+            "OIDC_CLIENT_ID",
             "OIDC_CLIENT_SECRET",
             "OIDC_ISSUER_URL",
             "OIDC_REDIRECT_URI",
@@ -26,15 +27,15 @@ mod tests {
         ].into_iter().map(|key| {
             (key.to_string(), env::var(key).ok())
         }).collect();
-        
+
         // Clean up environment first
         for (key, _) in &original_values {
             env::remove_var(key);
         }
-        
+
         // Run the test
         let result = test_fn();
-        
+
         // Restore original environment
         for (key, original_value) in original_values {
             env::remove_var(&key);
@@ -42,39 +43,15 @@ mod tests {
                 env::set_var(&key, value);
             }
         }
-        
+
         result
     }
 
     fn create_base_config() -> Config {
-        Config {
-            database_url: "postgresql://test:test@localhost/test".to_string(),
-            server_address: "127.0.0.1:8000".to_string(),
-            jwt_secret: "test-secret".to_string(),
-            upload_path: "./test-uploads".to_string(),
-            watch_folder: "./test-watch".to_string(),
-            user_watch_base_dir: "./user_watch".to_string(),
-            enable_per_user_watch: false,
-            allowed_file_types: vec!["pdf".to_string()],
-            watch_interval_seconds: Some(30),
-            file_stability_check_ms: Some(500),
-            max_file_age_hours: None,
-            ocr_language: "eng".to_string(),
-            concurrent_ocr_jobs: 2,
-            ocr_timeout_seconds: 60,
-            max_file_size_mb: 10,
-            memory_limit_mb: 256,
-            cpu_priority: "normal".to_string(),
-            oidc_enabled: false,
-            oidc_client_id: None,
-            oidc_client_secret: None,
-            oidc_issuer_url: None,
-            oidc_redirect_uri: None,
-            oidc_auto_register: None,
-            allow_local_auth: None,
-            s3_enabled: false,
-            s3_config: None,
-        }
+        let mut config = create_test_config();
+        config.database_url = "postgresql://test:test@localhost/test".to_string();
+        config.server_address = "127.0.0.1:8000".to_string();
+        config
     }
 
     #[test]
@@ -134,7 +111,7 @@ mod tests {
                 env::remove_var("OIDC_ENABLED");
                 env::remove_var("DATABASE_URL");
                 env::remove_var("JWT_SECRET");
-                
+
                 env::set_var("OIDC_ENABLED", value);
                 env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
                 env::set_var("JWT_SECRET", "test-secret");
@@ -246,7 +223,7 @@ mod tests {
         });
     }
 
-    #[test] 
+    #[test]
     fn test_oidc_config_precedence() {
         run_with_env_isolation(|| {
             // Test that environment variables take precedence

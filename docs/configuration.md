@@ -57,7 +57,9 @@ All application settings can be configured via environment variables:
 | `OCR_LANGUAGE` | `eng` | OCR language code (eng, fra, deu, spa, etc.) |
 | `CONCURRENT_OCR_JOBS` | `4` | Maximum parallel OCR processes |
 | `OCR_TIMEOUT_SECONDS` | `300` | OCR processing timeout per file |
-| `MAX_FILE_SIZE_MB` | `50` | Maximum file size for processing |
+| `MAX_FILE_SIZE_MB` | `50` | Maximum file size for upload |
+| `MAX_PDF_SIZE_MB` | `100` | Maximum PDF file size for OCR processing |
+| `MAX_OFFICE_DOCUMENT_SIZE_MB` | `100` | Maximum Office document size for text extraction |
 | `AUTO_ROTATE_IMAGES` | `true` | Automatically rotate images for better OCR |
 | `ENABLE_IMAGE_PREPROCESSING` | `true` | Apply image enhancement before OCR |
 

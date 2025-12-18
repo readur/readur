@@ -48,13 +48,22 @@ pub struct OcrQueueService {
     processing_throttler: Arc<RequestThrottler>,
     is_paused: Arc<AtomicBool>,
     file_service: std::sync::Arc<crate::services::file_service::FileService>,
+    max_pdf_size_mb: u64,
+    max_office_document_size_mb: u64,
 }
 
 impl OcrQueueService {
-    pub fn new(db: Database, pool: PgPool, max_concurrent_jobs: usize, file_service: std::sync::Arc<crate::services::file_service::FileService>) -> Self {
+    pub fn new(
+        db: Database,
+        pool: PgPool,
+        max_concurrent_jobs: usize,
+        file_service: std::sync::Arc<crate::services::file_service::FileService>,
+        max_pdf_size_mb: u64,
+        max_office_document_size_mb: u64,
+    ) -> Self {
         let worker_id = format!("worker-{}-{}", hostname::get().unwrap_or_default().to_string_lossy(), Uuid::new_v4());
         let transaction_manager = DocumentTransactionManager::new(pool.clone());
-        
+
         // Create a processing throttler to limit concurrent OCR operations
         // This prevents overwhelming the database connection pool
         let processing_throttler = Arc::new(RequestThrottler::new(
@@ -62,7 +71,7 @@ impl OcrQueueService {
             60, // 60 second max wait time for OCR processing
             format!("ocr-processing-{}", worker_id),
         ));
-        
+
         Self {
             db,
             pool,
@@ -72,6 +81,8 @@ impl OcrQueueService {
             processing_throttler,
             is_paused: Arc::new(AtomicBool::new(false)),
             file_service,
+            max_pdf_size_mb,
+            max_office_document_size_mb,
         }
     }
     
@@ -626,7 +637,12 @@ impl OcrQueueService {
     /// Start the worker loop
     pub async fn start_worker(self: Arc<Self>) -> Result<()> {
         let semaphore = Arc::new(Semaphore::new(self.max_concurrent_jobs));
-        let ocr_service = Arc::new(EnhancedOcrService::new("/tmp".to_string(), (*self.file_service).clone()));
+        let ocr_service = Arc::new(EnhancedOcrService::new(
+            "/tmp".to_string(),
+            (*self.file_service).clone(),
+            self.max_pdf_size_mb,
+            self.max_office_document_size_mb,
+        ));
         
         info!(
             "Starting OCR worker {} with {} concurrent jobs",

@@ -140,6 +140,8 @@ async fn test_docx_text_extraction() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -173,6 +175,8 @@ async fn test_xlsx_text_extraction() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -205,6 +209,8 @@ async fn test_null_byte_removal() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -239,6 +245,8 @@ async fn test_preserve_formatting() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -274,6 +282,8 @@ async fn test_empty_docx() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -303,6 +313,8 @@ async fn test_corrupted_docx() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -340,6 +352,8 @@ async fn test_legacy_doc_extraction() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -388,6 +402,8 @@ async fn test_legacy_doc_error_when_tools_unavailable() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -435,6 +451,8 @@ async fn test_file_size_limit() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -480,6 +498,8 @@ async fn test_legacy_doc_enhanced_error_message() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -519,6 +539,8 @@ async fn test_doc_extraction_multiple_strategies() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();
@@ -553,6 +575,8 @@ async fn test_doc_error_message_includes_processing_time() {
     let ocr_service = EnhancedOcrService {
         temp_dir: temp_dir.path().to_str().unwrap().to_string(),
         file_service: FileService::new(temp_dir.path().to_str().unwrap().to_string()),
+        max_pdf_size: 100 * 1024 * 1024,
+        max_office_document_size: 100 * 1024 * 1024,
     };
     
     let settings = Settings::default();

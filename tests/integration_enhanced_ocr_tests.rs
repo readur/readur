@@ -26,7 +26,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
         
         // Service should be created successfully
         assert!(!service.temp_dir.is_empty());
@@ -52,7 +52,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
         
         // Test normal whitespace-separated text
         let text = "Hello world this is a test";
@@ -70,7 +70,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
         
         // Test continuous text without spaces (like some PDF extractions)
         let text = "HelloWorldThisIsAContinuousText";
@@ -88,7 +88,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
         
         // Test empty text
         let count = service.count_words_safely("");
@@ -119,7 +119,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
         
         // Test with large text (over 1MB) to trigger sampling
         let word = "test ";
@@ -136,7 +136,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         
         // Test letter transition detection
         let text = "OneWordAnotherWordFinalWord";
@@ -178,7 +178,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
@@ -203,7 +203,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
@@ -231,7 +231,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::new().unwrap();
@@ -251,7 +251,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let result = service
@@ -266,7 +266,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
@@ -293,7 +293,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let mut settings = create_test_settings();
         settings.ocr_min_confidence = 30.0;
         
@@ -316,7 +316,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let mut settings = create_test_settings();
         settings.ocr_min_confidence = 50.0;
 
@@ -340,7 +340,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let result = OcrResult {
@@ -362,7 +362,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let result = OcrResult {
@@ -384,7 +384,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let result = OcrResult {
@@ -405,7 +405,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let test_cases = vec![
@@ -436,7 +436,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
@@ -456,7 +456,7 @@ mod tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         // Minimal PDF with "Hello" text
@@ -530,7 +530,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
         
         let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
@@ -570,7 +570,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         let mut handles = vec![];
@@ -583,7 +583,7 @@ startxref
 
             let temp_path_clone = temp_dir.path().to_str().unwrap().to_string();
             let file_service_clone = create_test_file_service(&temp_path_clone).await;
-            let service_clone = EnhancedOcrService::new(temp_path_clone, file_service_clone);
+            let service_clone = EnhancedOcrService::new(temp_path_clone, file_service_clone, 100, 100);
             let settings_clone = settings.clone();
             let file_path = temp_file.path().to_str().unwrap().to_string();
 
@@ -620,7 +620,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         // Test OCR with confidence below the hard minimum (5%)
@@ -648,7 +648,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         // Test OCR with exactly 5% confidence (boundary case)
@@ -673,7 +673,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         // Test invoice/receipt with lots of digits
@@ -704,7 +704,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         // Test document with 30% digits and 70% letters (100% content)
@@ -738,7 +738,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         // Test text with exactly 10% content (letters+digits) - boundary case
@@ -771,7 +771,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         // Test text with <10% content (letters+digits) - pure garbage
@@ -806,7 +806,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         // Test completely empty text
@@ -835,7 +835,7 @@ startxref
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service);
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
         let settings = create_test_settings();
 
         // Test text with only whitespace

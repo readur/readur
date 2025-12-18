@@ -1,5 +1,6 @@
 mod tests {
     use readur::models::{AuthProvider, CreateUser, UserRole};
+    use readur::test_helpers::create_test_config_with_db;
     use axum::http::StatusCode;
     use serde_json::json;
     use tower::util::ServiceExt;
@@ -13,38 +14,15 @@ mod tests {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
             .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-        
-        let config = readur::config::Config {
-            database_url: database_url.clone(),
-            server_address: "127.0.0.1:0".to_string(),
-            jwt_secret: "test-secret".to_string(),
-            upload_path: "./test-uploads".to_string(),
-            watch_folder: "./test-watch".to_string(),
-            user_watch_base_dir: "./user_watch".to_string(),
-            enable_per_user_watch: false,
-            allowed_file_types: vec!["pdf".to_string()],
-            watch_interval_seconds: Some(30),
-            file_stability_check_ms: Some(500),
-            max_file_age_hours: None,
-            ocr_language: "eng".to_string(),
-            concurrent_ocr_jobs: 2,
-            ocr_timeout_seconds: 60,
-            max_file_size_mb: 10,
-            memory_limit_mb: 256,
-            cpu_priority: "normal".to_string(),
-            oidc_enabled: false,
-            oidc_client_id: None,
-            oidc_client_secret: None,
-            oidc_issuer_url: None,
-            oidc_redirect_uri: None,
-            oidc_auto_register: None,
-            allow_local_auth: None,
-            s3_enabled: false,
-            s3_config: None,
-        };
+
+        let mut config = create_test_config_with_db(&database_url);
+        config.server_address = "127.0.0.1:0".to_string();
+        config.jwt_secret = "test-secret".to_string();
+        config.upload_path = "./test-uploads".to_string();
+        config.watch_folder = "./test-watch".to_string();
 
         let db = readur::db::Database::new(&config.database_url).await.unwrap();
-        
+
         // Retry migration up to 3 times to handle concurrent test execution
         for attempt in 1..=3 {
             match db.migrate().await {
@@ -75,7 +53,9 @@ mod tests {
                     db.clone(),
                     db.pool.clone(),
                     2,
-                    file_service.clone()
+                    file_service.clone(),
+                    100,
+                    100,
                 )),
                 oidc_client: None,
                 sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
@@ -107,36 +87,20 @@ mod tests {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
             .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-        
+
         // Update the app state to include OIDC client
-        let config = readur::config::Config {
-            database_url: database_url.clone(),
-            server_address: "127.0.0.1:0".to_string(),
-            jwt_secret: "test-secret".to_string(),
-            upload_path: "./test-uploads".to_string(),
-            watch_folder: "./test-watch".to_string(),
-            user_watch_base_dir: "./user_watch".to_string(),
-            enable_per_user_watch: false,
-            allowed_file_types: vec!["pdf".to_string()],
-            watch_interval_seconds: Some(30),
-            file_stability_check_ms: Some(500),
-            max_file_age_hours: None,
-            ocr_language: "eng".to_string(),
-            concurrent_ocr_jobs: 2,
-            ocr_timeout_seconds: 60,
-            max_file_size_mb: 10,
-            memory_limit_mb: 256,
-            cpu_priority: "normal".to_string(),
-            oidc_enabled: true,
-            oidc_client_id: Some("test-client-id".to_string()),
-            oidc_client_secret: Some("test-client-secret".to_string()),
-            oidc_issuer_url: Some(mock_server.uri()),
-            oidc_redirect_uri: Some("http://localhost:8000/auth/oidc/callback".to_string()),
-            oidc_auto_register: Some(true),
-            allow_local_auth: Some(true),
-            s3_enabled: false,
-            s3_config: None,
-        };
+        let mut config = create_test_config_with_db(&database_url);
+        config.server_address = "127.0.0.1:0".to_string();
+        config.jwt_secret = "test-secret".to_string();
+        config.upload_path = "./test-uploads".to_string();
+        config.watch_folder = "./test-watch".to_string();
+        config.oidc_enabled = true;
+        config.oidc_client_id = Some("test-client-id".to_string());
+        config.oidc_client_secret = Some("test-client-secret".to_string());
+        config.oidc_issuer_url = Some(mock_server.uri());
+        config.oidc_redirect_uri = Some("http://localhost:8000/auth/oidc/callback".to_string());
+        config.oidc_auto_register = Some(true);
+        config.allow_local_auth = Some(true);
 
         let oidc_client = match OidcClient::new(&config).await {
             Ok(client) => Some(Arc::new(client)),
@@ -179,7 +143,9 @@ mod tests {
                     db.clone(),
                     db.pool.clone(),
                     2,
-                    file_service.clone()
+                    file_service.clone(),
+                    100,
+                    100,
                 )),
                 oidc_client,
                 sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
