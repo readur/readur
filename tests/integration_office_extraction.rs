@@ -30,7 +30,7 @@ impl OfficeTestDocuments {
         let mut zip = zip::ZipWriter::new(file);
         
         // Add [Content_Types].xml
-        zip.start_file("[Content_Types].xml", zip::write::FileOptions::default())?;
+        zip.start_file("[Content_Types].xml", zip::write::SimpleFileOptions::default())?;
         zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -39,14 +39,14 @@ impl OfficeTestDocuments {
 </Types>"#)?;
         
         // Add _rels/.rels
-        zip.start_file("_rels/.rels", zip::write::FileOptions::default())?;
+        zip.start_file("_rels/.rels", zip::write::SimpleFileOptions::default())?;
         zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>"#)?;
         
         // Add word/document.xml with the actual content
-        zip.start_file("word/document.xml", zip::write::FileOptions::default())?;
+        zip.start_file("word/document.xml", zip::write::SimpleFileOptions::default())?;
         let document_xml = format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
     <w:body>
@@ -72,7 +72,7 @@ impl OfficeTestDocuments {
         let mut zip = zip::ZipWriter::new(file);
         
         // Add [Content_Types].xml with shared strings support
-        zip.start_file("[Content_Types].xml", zip::write::FileOptions::default())?;
+        zip.start_file("[Content_Types].xml", zip::write::SimpleFileOptions::default())?;
         zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -83,14 +83,14 @@ impl OfficeTestDocuments {
 </Types>"#)?;
         
         // Add _rels/.rels
-        zip.start_file("_rels/.rels", zip::write::FileOptions::default())?;
+        zip.start_file("_rels/.rels", zip::write::SimpleFileOptions::default())?;
         zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>"#)?;
         
         // Add xl/workbook.xml
-        zip.start_file("xl/workbook.xml", zip::write::FileOptions::default())?;
+        zip.start_file("xl/workbook.xml", zip::write::SimpleFileOptions::default())?;
         zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
     <sheets>
@@ -99,7 +99,7 @@ impl OfficeTestDocuments {
 </workbook>"#)?;
         
         // Add xl/_rels/workbook.xml.rels with shared strings relationship
-        zip.start_file("xl/_rels/workbook.xml.rels", zip::write::FileOptions::default())?;
+        zip.start_file("xl/_rels/workbook.xml.rels", zip::write::SimpleFileOptions::default())?;
         zip.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
@@ -107,7 +107,7 @@ impl OfficeTestDocuments {
 </Relationships>"#)?;
         
         // Add xl/sharedStrings.xml with the text content
-        zip.start_file("xl/sharedStrings.xml", zip::write::FileOptions::default())?;
+        zip.start_file("xl/sharedStrings.xml", zip::write::SimpleFileOptions::default())?;
         let mut shared_strings_xml = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="{count}" uniqueCount="{count}">"#);
         shared_strings_xml = shared_strings_xml.replace("{count}", &content.len().to_string());
@@ -122,7 +122,7 @@ impl OfficeTestDocuments {
         zip.write_all(shared_strings_xml.as_bytes())?;
         
         // Add xl/worksheets/sheet1.xml with references to shared strings
-        zip.start_file("xl/worksheets/sheet1.xml", zip::write::FileOptions::default())?;
+        zip.start_file("xl/worksheets/sheet1.xml", zip::write::SimpleFileOptions::default())?;
         let mut worksheet_xml = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
     <sheetData>"#);

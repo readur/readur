@@ -4,7 +4,7 @@ use readur::services::file_service::FileService;
 use std::fs;
 use std::io::Write;
 use tempfile::TempDir;
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 use zip::{ZipWriter, CompressionMethod};
 
 /// Helper function to create a proper DOCX file for testing
@@ -13,7 +13,7 @@ fn create_test_docx(content: &str) -> Vec<u8> {
     let mut buffer = Vec::new();
     {
         let mut zip = ZipWriter::new(std::io::Cursor::new(&mut buffer));
-        let options = FileOptions::default().compression_method(CompressionMethod::Deflated);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
         
         // Add [Content_Types].xml - More comprehensive structure
         zip.start_file("[Content_Types].xml", options).unwrap();

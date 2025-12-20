@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 use oauth2::{
-    basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
-    ClientSecret, CsrfToken, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId,
+    ClientSecret, CsrfToken, EndpointNotSet, EndpointSet, PkceCodeChallenge, PkceCodeVerifier,
+    RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -11,6 +12,11 @@ use std::time::{Duration, Instant};
 use url::Url;
 
 use crate::config::Config;
+
+// Type alias for the fully-configured OAuth2 client (oauth2 5.0 uses typestate pattern)
+// HasAuthUrl=EndpointSet, HasDeviceAuthUrl=EndpointNotSet, HasIntrospectionUrl=EndpointNotSet,
+// HasRevocationUrl=EndpointNotSet, HasTokenUrl=EndpointSet
+type ConfiguredBasicClient = BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OidcDiscovery {
@@ -33,7 +39,7 @@ type PkceStore = Mutex<HashMap<String, (PkceCodeVerifier, Instant)>>;
 
 #[derive(Debug)]
 pub struct OidcClient {
-    oauth_client: BasicClient,
+    oauth_client: ConfiguredBasicClient,
     discovery: OidcDiscovery,
     http_client: Client,
     is_public_client: bool,
@@ -69,14 +75,15 @@ impl OidcClient {
         // Discover OIDC endpoints
         let discovery = Self::discover_endpoints(&http_client, issuer_url).await?;
 
-        // Create OAuth2 client
-        let oauth_client = BasicClient::new(
-            ClientId::new(client_id.clone()),
-            client_secret_opt.map(|s| ClientSecret::new(s.clone())),
-            AuthUrl::new(discovery.authorization_endpoint.clone())?,
-            Some(TokenUrl::new(discovery.token_endpoint.clone())?),
-        )
-        .set_redirect_uri(RedirectUrl::new(redirect_uri.clone())?);
+        // Create OAuth2 client using builder pattern (oauth2 5.0 API)
+        let mut oauth_client = BasicClient::new(ClientId::new(client_id.clone()))
+            .set_auth_uri(AuthUrl::new(discovery.authorization_endpoint.clone())?)
+            .set_token_uri(TokenUrl::new(discovery.token_endpoint.clone())?)
+            .set_redirect_uri(RedirectUrl::new(redirect_uri.clone())?);
+
+        if let Some(secret) = client_secret_opt {
+            oauth_client = oauth_client.set_client_secret(ClientSecret::new(secret.clone()));
+        }
 
         Ok(Self {
             oauth_client,
@@ -166,8 +173,15 @@ impl OidcClient {
             }
         }
 
+        // Create HTTP client for token exchange (oauth2 5.0 uses reqwest::Client directly)
+        // Note: For SSRF protection, consider using redirect::Policy::none() in production
+        let oauth_http_client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| anyhow!("Failed to build HTTP client: {}", e))?;
+
         let token_result = token_request
-            .request_async(async_http_client)
+            .request_async(&oauth_http_client)
             .await
             .map_err(|e| anyhow!("Failed to exchange authorization code: {}", e))?;
 
