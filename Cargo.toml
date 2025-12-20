@@ -50,7 +50,7 @@ raw-cpuid = { version = "11", optional = true }
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 quick-xml = { version = "0.37", features = ["serialize"] }
 urlencoding = "2.1"
-oauth2 = "4.4"
+oauth2 = "5"
 url = "2.4"
 dotenvy = "0.15"
 hostname = "0.4"
@@ -65,11 +65,11 @@ aws-credential-types = { version = "1.2", optional = true }
 aws-types = { version = "1.3", optional = true }
 sha2 = "0.10"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
-testcontainers = { version = "0.24", optional = true }
-testcontainers-modules = { version = "0.12", features = ["postgres"], optional = true }
+testcontainers = { version = "0.26", optional = true }
+testcontainers-modules = { version = "0.14", features = ["postgres"], optional = true }
 # Office document support - now using XML extraction only
-zip = "0.6"             # Still needed for other archive handling
-rand = "0.8"
+zip = "7"             # Still needed for other archive handling
+rand = "0.9"
 
 [features]
 default = ["ocr", "s3"]
@@ -83,10 +83,10 @@ tempfile = "3"
 wiremock = "0.6"
 tokio-test = "0.4"
 futures = "0.3"
-rand = "0.8"
+rand = "0.9"
 # Database testing dependencies
-testcontainers = "0.24"
-testcontainers-modules = { version = "0.12", features = ["postgres"] }
+testcontainers = "0.26"
+testcontainers-modules = { version = "0.14", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
 rust_xlsxwriter = "0.92"  # For creating proper XLSX test files
 # WebDAV server for realistic stress testing

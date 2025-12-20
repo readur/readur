@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 use oauth2::{
-    basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
-    ClientSecret, CsrfToken, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId,
+    ClientSecret, CsrfToken, PkceCodeChallenge, PkceCodeVerifier,
+    RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -33,7 +34,14 @@ type PkceStore = Mutex<HashMap<String, (PkceCodeVerifier, Instant)>>;
 
 #[derive(Debug)]
 pub struct OidcClient {
-    oauth_client: BasicClient,
+    // Store configuration instead of the oauth2 client to avoid complex typestate types.
+    // The oauth2 5.0 crate uses a typestate pattern that makes storing a configured client
+    // in a struct unwieldy. Instead, we store the config and build the client on-demand.
+    // This is cheap: just struct construction with pre-validated URLs (no network calls).
+    // The expensive OIDC discovery happens once in `new()`.
+    client_id: String,
+    client_secret: Option<String>,
+    redirect_uri: String,
     discovery: OidcDiscovery,
     http_client: Client,
     is_public_client: bool,
@@ -49,11 +57,12 @@ impl OidcClient {
         let client_id = config
             .oidc_client_id
             .as_ref()
-            .ok_or_else(|| anyhow!("OIDC client ID not configured"))?;
+            .ok_or_else(|| anyhow!("OIDC client ID not configured"))?
+            .clone();
 
         // Client secret is optional - if not provided, this is a public client
-        let client_secret_opt = config.oidc_client_secret.as_ref();
-        let is_public_client = client_secret_opt.is_none();
+        let client_secret = config.oidc_client_secret.clone();
+        let is_public_client = client_secret.is_none();
 
         let issuer_url = config
             .oidc_issuer_url
@@ -62,24 +71,18 @@ impl OidcClient {
         let redirect_uri = config
             .oidc_redirect_uri
             .as_ref()
-            .ok_or_else(|| anyhow!("OIDC redirect URI not configured"))?;
+            .ok_or_else(|| anyhow!("OIDC redirect URI not configured"))?
+            .clone();
 
         let http_client = Client::new();
 
         // Discover OIDC endpoints
         let discovery = Self::discover_endpoints(&http_client, issuer_url).await?;
 
-        // Create OAuth2 client
-        let oauth_client = BasicClient::new(
-            ClientId::new(client_id.clone()),
-            client_secret_opt.map(|s| ClientSecret::new(s.clone())),
-            AuthUrl::new(discovery.authorization_endpoint.clone())?,
-            Some(TokenUrl::new(discovery.token_endpoint.clone())?),
-        )
-        .set_redirect_uri(RedirectUrl::new(redirect_uri.clone())?);
-
         Ok(Self {
-            oauth_client,
+            client_id,
+            client_secret,
+            redirect_uri,
             discovery,
             http_client,
             is_public_client,
@@ -89,7 +92,7 @@ impl OidcClient {
 
     async fn discover_endpoints(client: &Client, issuer_url: &str) -> Result<OidcDiscovery> {
         let discovery_url = format!("{}/.well-known/openid-configuration", issuer_url.trim_end_matches('/'));
-        
+
         let response = client
             .get(&discovery_url)
             .send()
@@ -111,11 +114,21 @@ impl OidcClient {
         Ok(discovery)
     }
 
-    pub fn get_authorization_url(&self) -> (Url, CsrfToken) {
+    pub fn get_authorization_url(&self) -> Result<(Url, CsrfToken)> {
         // Clean up expired PKCE verifiers (older than 10 minutes)
         self.cleanup_expired_verifiers();
 
-        let mut auth_request = self.oauth_client
+        // Build OAuth2 client on-demand - this is cheap (just struct construction, no I/O)
+        let mut oauth_client = BasicClient::new(ClientId::new(self.client_id.clone()))
+            .set_auth_uri(AuthUrl::new(self.discovery.authorization_endpoint.clone())?)
+            .set_token_uri(TokenUrl::new(self.discovery.token_endpoint.clone())?)
+            .set_redirect_uri(RedirectUrl::new(self.redirect_uri.clone())?);
+
+        if let Some(secret) = &self.client_secret {
+            oauth_client = oauth_client.set_client_secret(ClientSecret::new(secret.clone()));
+        }
+
+        let mut auth_request = oauth_client
             .authorize_url(CsrfToken::new_random)
             .add_scope(Scope::new("openid".to_string()))
             .add_scope(Scope::new("email".to_string()))
@@ -134,10 +147,10 @@ impl OidcClient {
                 csrf_token.secret().clone(),
                 (pkce_verifier, Instant::now() + Duration::from_secs(600)), // 10 minute expiry
             );
-            (url, csrf_token)
+            Ok((url, csrf_token))
         } else {
             // Confidential client - no PKCE needed
-            auth_request.url()
+            Ok(auth_request.url())
         }
     }
 
@@ -148,8 +161,17 @@ impl OidcClient {
     }
 
     pub async fn exchange_code(&self, code: &str, state: Option<&str>) -> Result<String> {
-        let mut token_request = self
-            .oauth_client
+        // Build OAuth2 client on-demand - this is cheap (just struct construction, no I/O)
+        let mut oauth_client = BasicClient::new(ClientId::new(self.client_id.clone()))
+            .set_auth_uri(AuthUrl::new(self.discovery.authorization_endpoint.clone())?)
+            .set_token_uri(TokenUrl::new(self.discovery.token_endpoint.clone())?)
+            .set_redirect_uri(RedirectUrl::new(self.redirect_uri.clone())?);
+
+        if let Some(secret) = &self.client_secret {
+            oauth_client = oauth_client.set_client_secret(ClientSecret::new(secret.clone()));
+        }
+
+        let mut token_request = oauth_client
             .exchange_code(AuthorizationCode::new(code.to_string()));
 
         // For public clients, retrieve and use the PKCE verifier
@@ -166,8 +188,14 @@ impl OidcClient {
             }
         }
 
+        // Create HTTP client for token exchange with redirect disabled for SSRF protection
+        let oauth_http_client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| anyhow!("Failed to build HTTP client: {}", e))?;
+
         let token_result = token_request
-            .request_async(async_http_client)
+            .request_async(&oauth_http_client)
             .await
             .map_err(|e| anyhow!("Failed to exchange authorization code: {}", e))?;
 
@@ -206,4 +234,3 @@ pub struct OidcAuthResponse {
     pub email: Option<String>,
     pub is_new_user: bool,
 }
-
