@@ -81,7 +81,7 @@ async fn test_get_authorization_url() {
     let config = create_test_config_with_oidc(&mock_server.uri());
     let oidc_client = OidcClient::new(&config).await.unwrap();
     
-    let (auth_url, csrf_token) = oidc_client.get_authorization_url();
+    let (auth_url, csrf_token) = oidc_client.get_authorization_url().unwrap();
     
     assert!(auth_url.to_string().contains("/auth"));
     assert!(auth_url.to_string().contains("client_id=test-client-id"));

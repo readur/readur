@@ -197,8 +197,10 @@ async fn oidc_login(State(state): State<Arc<AppState>>) -> Result<Redirect, Stat
         .as_ref()
         .ok_or(StatusCode::BAD_REQUEST)?;
 
-    let (auth_url, _csrf_token) = oidc_client.get_authorization_url();
-    
+    let (auth_url, _csrf_token) = oidc_client
+        .get_authorization_url()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Redirect::to(auth_url.as_str()))
 }
 
