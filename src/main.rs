@@ -387,7 +387,8 @@ async fn main() -> anyhow::Result<()> {
     }
     
     // Create shared OCR queue service for both web and background operations
-    let concurrent_jobs = 15; // Limit concurrent OCR jobs to prevent DB pool exhaustion
+    let concurrent_jobs = config.concurrent_ocr_jobs; // Use CPU-aware configuration
+    println!("🧠 OCR queue configured for {} concurrent jobs", concurrent_jobs);
     let shared_queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
         background_db.clone(),
         background_db.get_pool().clone(),
@@ -473,26 +474,32 @@ async fn main() -> anyhow::Result<()> {
         }
     });
     
-    // Create dedicated runtime for OCR processing to prevent interference with WebDAV
+    // Create dedicated runtimes using CPU allocation
+    println!("\n⚙️  CREATING DEDICATED RUNTIMES:");
+    println!("{}", "=".repeat(50));
+    
+    let cpu_allocation = &config.cpu_allocation;
+    
     let ocr_runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(3)  // Dedicated threads for OCR work
+        .worker_threads(cpu_allocation.ocr_cores)
         .thread_name("readur-ocr")
         .enable_all()
         .build()?;
+    println!("✅ OCR runtime created with {} worker threads", cpu_allocation.ocr_cores);
     
-    // Create separate runtime for other background tasks (WebDAV, maintenance)
     let background_runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)  // Dedicated threads for WebDAV and maintenance
+        .worker_threads(cpu_allocation.background_cores)
         .thread_name("readur-background")
         .enable_all()
         .build()?;
+    println!("✅ Background runtime created with {} worker threads", cpu_allocation.background_cores);
         
-    // Create dedicated runtime for database-heavy operations
     let db_runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)  // Dedicated threads for intensive DB operations
+        .worker_threads(cpu_allocation.db_cores)
         .thread_name("readur-db")
         .enable_all()
         .build()?;
+    println!("✅ Database runtime created with {} worker threads", cpu_allocation.db_cores);
     
     // Start OCR queue worker on dedicated OCR runtime using shared queue service
     let queue_worker = shared_queue_service.clone();
@@ -623,6 +630,10 @@ async fn main() -> anyhow::Result<()> {
     println!("📁 Upload Directory: {}", config.upload_path);
     println!("👁️  Watch Directory: {}", config.watch_folder);
     println!("🔄 Source Scheduler: Will start in 30 seconds");
+    println!("🧮 CPU Allocation: {} web / {} backend cores", 
+             config.cpu_allocation.web_cores, config.cpu_allocation.backend_cores);
+    println!("🧠 OCR Processing: {} concurrent jobs on {} cores", 
+             config.concurrent_ocr_jobs, config.cpu_allocation.ocr_cores);
     println!("📋 Check logs above for any configuration warnings");
     println!("{}", "=".repeat(60));
     
