@@ -78,7 +78,6 @@ async fn setup_authenticated_client() -> Result<(Client, String), Box<dyn std::e
 /// This test verifies that the route is correctly registered.
 /// A 405 (Method Not Allowed) would indicate a route mismatch bug.
 #[tokio::test]
-#[ignore] // Requires running server
 async fn test_test_connection_route_exists_webdav() {
     let (client, token) = match setup_authenticated_client().await {
         Ok(result) => result,
@@ -132,7 +131,6 @@ async fn test_test_connection_route_exists_webdav() {
 
 /// Test that POST /api/sources/test-connection works for local_folder type
 #[tokio::test]
-#[ignore] // Requires running server
 async fn test_test_connection_route_exists_local_folder() {
     let (client, token) = match setup_authenticated_client().await {
         Ok(result) => result,
@@ -182,7 +180,6 @@ async fn test_test_connection_route_exists_local_folder() {
 
 /// Test that POST /api/sources/test-connection works for s3 type
 #[tokio::test]
-#[ignore] // Requires running server
 async fn test_test_connection_route_exists_s3() {
     let (client, token) = match setup_authenticated_client().await {
         Ok(result) => result,
@@ -235,7 +232,6 @@ async fn test_test_connection_route_exists_s3() {
 /// Test that the OLD route /api/sources/test returns 404 (not found)
 /// This ensures we don't have duplicate routes
 #[tokio::test]
-#[ignore] // Requires running server
 async fn test_old_test_route_does_not_exist() {
     let (client, token) = match setup_authenticated_client().await {
         Ok(result) => result,
@@ -280,7 +276,6 @@ async fn test_old_test_route_does_not_exist() {
 
 /// Test that unauthenticated requests return 401
 #[tokio::test]
-#[ignore] // Requires running server
 async fn test_test_connection_requires_authentication() {
     let client = Client::new();
 
