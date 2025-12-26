@@ -31,7 +31,7 @@ pub fn router() -> Router<Arc<AppState>> {
         
         // Validation operations
         .route("/{id}/validate", post(validate_source))
-        .route("/test", post(test_connection_with_config))
+        .route("/test-connection", post(test_connection_with_config))
         
         // Estimation operations
         .route("/{id}/estimate", get(estimate_crawl))
