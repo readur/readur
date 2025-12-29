@@ -44,6 +44,7 @@ infer = "0.19"
 tesseract = { version = "0.15", optional = true }
 image = { version = "0.25", features = ["png", "jpeg", "tiff", "bmp"], optional = true }
 imageproc = { version = "0.25", optional = true }
+kamadak-exif = { version = "0.6.1", optional = true }
 thiserror = "2.0"
 sysinfo = "0.37"
 raw-cpuid = { version = "11", optional = true }
@@ -73,7 +74,7 @@ rand = "0.9"
 
 [features]
 default = ["ocr", "s3"]
-ocr = ["tesseract", "image", "imageproc", "raw-cpuid"]
+ocr = ["tesseract", "image", "imageproc", "raw-cpuid", "kamadak-exif"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types"]
 test-utils = ["testcontainers", "testcontainers-modules"]
 stress-testing = ["test-utils"]

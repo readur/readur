@@ -15,6 +15,10 @@ use chrono::Utc;
 use crate::models::{Document, FileIngestionInfo};
 use crate::db::Database;
 use crate::services::file_service::FileService;
+#[cfg(feature = "ocr")]
+use image::{DynamicImage, ImageFormat};
+#[cfg(feature = "ocr")]
+use exif::{In, Tag, Reader as ExifReader};
 
 #[derive(Debug, Clone)]
 pub enum DeduplicationPolicy {
@@ -170,10 +174,33 @@ impl DocumentIngestionService {
 
         // Generate document ID upfront so we can use it for storage path
         let document_id = Uuid::new_v4();
+
+        // Rotate image if settings.auto_rotate_images based on EXIF data
+        let file_data = if request.mime_type.starts_with("image/") {
+            // Here is an image, get settings for user
+            match self.db.get_user_settings(request.user_id).await? {
+                Some(settings) if settings.auto_rotate_images => { 
+                    match self.auto_rotate_image(&request.file_data) {
+                        Ok(rotated_data) => rotated_data,
+                        Err(e) => {
+                            warn!("Failed to auto-rotate image {}: {}, proceeding with original data", request.filename, e);
+                            request.file_data
+                        }
+                    }
+                 }
+                _ => {
+                    // Auto-rotation disabled, use original data
+                    request.file_data
+                }
+            }
+        } else {
+            // Not an image, use original data
+            request.file_data
+        };
         
         // Save file to storage - use S3 if configured, otherwise local storage
         let file_path = match self.file_service
-            .save_document_file(request.user_id, document_id, &request.filename, &request.file_data)
+            .save_document_file(request.user_id, document_id, &request.filename, &file_data)
             .await {
                 Ok(path) => path,
                 Err(e) => {
@@ -317,6 +344,67 @@ impl DocumentIngestionService {
         hasher.update(data);
         let result = hasher.finalize();
         format!("{:x}", result)
+    }
+
+    /// Auto-rotate image bytes according to EXIF orientation tag (if present).
+    ///
+    /// Returns the possibly-rotated image bytes encoded back into the original format.
+    pub fn auto_rotate_image(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        Self::auto_rotate_image_bytes(data)
+    }
+
+    /// Static helper to make testing easier.
+    pub fn auto_rotate_image_bytes(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        // If compiled without image support, return an error so callers can fall back
+        // to using the original bytes (ingest_document handles errors by falling back).
+        #[cfg(not(feature = "ocr"))]
+        {
+            return Err("image support not compiled in".into());
+        }
+
+        #[cfg(feature = "ocr")]
+        {
+            // First, attempt to read EXIF orientation if available
+            let mut orientation: Option<u16> = None;
+
+            let mut cursor = std::io::Cursor::new(data);
+            if let Ok(exif) = ExifReader::new().read_from_container(&mut cursor) {
+                if let Some(field) = exif.get_field(Tag::Orientation, In::PRIMARY) {
+                    if let exif::Value::Short(ref vals) = field.value {
+                        if let Some(v) = vals.get(0) {
+                            orientation = Some(*v);
+                        }
+                    }
+                }
+            }
+
+            // If no orientation tag found, return original bytes unchanged
+            if orientation.is_none() {
+                return Ok(data.to_vec());
+            }
+
+            // Load the image, apply the transformation, and encode back into original format.
+            let mut img = image::load_from_memory(data)?;
+
+            match orientation.unwrap() {
+                1 => { /* normal */ }
+                2 => img = img.fliph(),              // Mirror horizontal
+                3 => img = img.rotate180(),         // Rotate 180
+                4 => img = img.flipv(),             // Mirror vertical
+                5 => { img = img.rotate90(); img = img.fliph(); } // Mirror horizontal and rotate 270
+                6 => img = img.rotate90(),          // Rotate 90
+                7 => { img = img.rotate270(); img = img.fliph(); } // Mirror horizontal and rotate 90
+                8 => img = img.rotate270(),         // Rotate 270
+                _ => { /* Unknown orientation; do nothing */ }
+            }
+
+            // Re-encode using the original format guessed from bytes
+            let fmt = image::guess_format(data).unwrap_or(ImageFormat::Png);
+            let mut out = Vec::new();
+            img.write_to(&mut std::io::Cursor::new(&mut out), fmt)?;
+
+            Ok(out)
+        }
     }
 
     /// Ingest document from source with FileIngestionInfo metadata
@@ -474,3 +562,28 @@ impl DocumentIngestionService {
 }
 
 // TODO: Add comprehensive tests once test_helpers module is available
+
+#[cfg(test)]
+mod tests {
+    use super::DocumentIngestionService;
+    use std::fs;
+
+    #[test]
+    fn auto_rotate_no_exif_returns_same_bytes() {
+        // Uses a test PNG that doesn't have EXIF orientation data
+        let data = fs::read("test_files/portrait_100x200.png").expect("read test image");
+
+        // If image feature is not enabled, the function returns an Err which the caller
+        // in production handles by falling back to original bytes. For the unit test,
+        // if image support is not available we'll just skip asserting equality.
+        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
+            Ok(result) => {
+                // No EXIF orientation present in this test file, so result should be identical
+                assert_eq!(result, data);
+            }
+            Err(_) => {
+                // Image support not compiled in, treat as skip
+            }
+        }
+    }
+}
