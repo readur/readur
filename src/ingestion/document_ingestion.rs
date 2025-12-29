@@ -16,7 +16,7 @@ use crate::models::{Document, FileIngestionInfo};
 use crate::db::Database;
 use crate::services::file_service::FileService;
 #[cfg(feature = "ocr")]
-use image::{DynamicImage, ImageFormat};
+use image::ImageFormat;
 #[cfg(feature = "ocr")]
 use exif::{In, Tag, Reader as ExifReader};
 
