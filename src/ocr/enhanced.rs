@@ -914,14 +914,41 @@ impl EnhancedOcrService {
                 On macOS: 'brew install ocrmypdf'."
             ));
         }
-        
-        // First try to extract text without OCR for performance (using --skip-text)
+
+        // Check if PDF contains ANY embedded images
+        // If it does, we MUST use image-based OCR to capture content from both text layers AND images
+        let has_images = self.pdf_has_images(file_path).await;
+
+        if has_images {
+            // PDF has images - use image-based OCR to capture EVERYTHING (text + images)
+            info!("PDF '{}' has embedded images, using image-based OCR for comprehensive extraction", file_path);
+
+            if self.is_pdftoppm_available().await {
+                match self.extract_text_from_pdf_via_images(file_path, settings, start_time).await {
+                    Ok(result) if result.word_count > 0 => {
+                        info!("PDF image-based OCR successful for '{}': {} words", file_path, result.word_count);
+                        return Ok(result);
+                    }
+                    Ok(_) => {
+                        warn!("Image-based OCR returned no words for '{}', falling back to ocrmypdf", file_path);
+                    }
+                    Err(e) => {
+                        warn!("Image-based OCR failed for '{}': {}, falling back to ocrmypdf", file_path, e);
+                    }
+                }
+            }
+
+            // Fallback to ocrmypdf for PDFs with images
+            return self.extract_text_from_pdf_with_ocr(file_path, settings, start_time).await;
+        }
+
+        // No images detected - use fast pdftotext extraction
         let quick_extraction_result = self.extract_pdf_text_quick(file_path).await;
-        
+
         match quick_extraction_result {
             Ok((text, extraction_time)) => {
                 let word_count = self.count_words_safely(&text);
-                
+
                 // Check if quick extraction got good results
                 if self.is_text_extraction_quality_sufficient(&text, word_count, file_size) {
                     info!("PDF text extraction successful for '{}' using quick method", file_path);
@@ -945,42 +972,25 @@ impl EnhancedOcrService {
                 warn!("Quick PDF extraction failed for '{}': {}, using full OCR", file_path, e);
             }
         }
-        
-        // If quick extraction failed or was insufficient, use full OCR
-        let full_ocr_result = self.extract_text_from_pdf_with_ocr(file_path, settings, start_time).await;
-        
-        // If OCR also fails, try direct text extraction as last resort
-        if full_ocr_result.is_err() {
-            warn!("Full OCR failed, trying direct text extraction as last resort for: {}", file_path);
-            
-            match self.extract_text_from_pdf_bytes(file_path).await {
-                Ok(text) if !text.trim().is_empty() => {
-                    let processing_time = start_time.elapsed().as_millis() as u64;
-                    let word_count = self.count_words_safely(&text);
-                    info!("Direct text extraction succeeded as last resort for: {}", file_path);
 
-                    // Sanitize null bytes to prevent PostgreSQL errors
-                    let text = Self::remove_null_bytes(&text);
-
-                    return Ok(OcrResult {
-                        text,
-                        confidence: 50.0, // Lower confidence for direct extraction
-                        processing_time_ms: processing_time,
-                        word_count,
-                        preprocessing_applied: vec!["Direct PDF text extraction (last resort)".to_string()],
-                        processed_image_path: None,
-                    });
+        // pdftotext failed/insufficient - try image-based OCR then ocrmypdf
+        if self.is_pdftoppm_available().await {
+            match self.extract_text_from_pdf_via_images(file_path, settings, start_time).await {
+                Ok(result) if result.word_count > 0 => {
+                    info!("PDF image-based OCR successful for '{}': {} words", file_path, result.word_count);
+                    return Ok(result);
                 }
                 Ok(_) => {
-                    warn!("Direct text extraction returned empty text for: {}", file_path);
+                    warn!("Image-based OCR returned no words for '{}', trying ocrmypdf", file_path);
                 }
                 Err(e) => {
-                    warn!("Direct text extraction also failed for {}: {}", file_path, e);
+                    warn!("Image-based OCR failed for '{}': {}, trying ocrmypdf", file_path, e);
                 }
             }
         }
-        
-        full_ocr_result
+
+        // Fall back to ocrmypdf
+        self.extract_text_from_pdf_with_ocr(file_path, settings, start_time).await
     }
     
     /// Assess if text extraction quality is sufficient or if OCR fallback is needed
@@ -990,52 +1000,53 @@ impl EnhancedOcrService {
         if word_count == 0 {
             return false;
         }
-        
-        // For very small files, low word count might be normal
-        if file_size < 50_000 && word_count >= 1 {
-            return true;
-        }
-        
-        // Calculate word density (words per KB)
-        let file_size_kb = (file_size as f64) / 1024.0;
-        let word_density = (word_count as f64) / file_size_kb;
-        
-        // Reasonable thresholds based on typical PDF content:
-        // - Text-based PDFs typically have 50-200 words per KB
-        // - Below 5 words per KB suggests mostly images/scanned content
-        // - But if we have a substantial number of words (>50), accept it regardless of density
-        const MIN_WORD_DENSITY: f64 = 5.0;
-        const MIN_WORDS_FOR_LARGE_FILES: usize = 10;
-        const SUBSTANTIAL_WORD_COUNT: usize = 50;
-        
-        // If we have substantial text, accept it regardless of density
-        if word_count >= SUBSTANTIAL_WORD_COUNT {
-            debug!("PDF has substantial text content: {} words, accepting regardless of density", word_count);
-            return true;
-        }
-        
-        if word_density < MIN_WORD_DENSITY && word_count < MIN_WORDS_FOR_LARGE_FILES {
-            debug!("PDF appears to be image-based: {} words in {:.1} KB (density: {:.2} words/KB)", 
-                   word_count, file_size_kb, word_density);
-            return false;
-        }
-        
-        // Additional check: if text is mostly non-alphanumeric, might be extraction artifacts
+
+        // ALWAYS check alphanumeric ratio first - this catches garbage text regardless of word count
+        // This prevents the issue where raw PDF byte extraction produces high word counts but garbage text
         let alphanumeric_chars = text.chars().filter(|c| c.is_alphanumeric()).count();
-        let alphanumeric_ratio = if text.len() > 0 {
+        let alphanumeric_ratio = if !text.is_empty() {
             (alphanumeric_chars as f64) / (text.len() as f64)
         } else {
             0.0
         };
-        
-        // If less than 30% alphanumeric content, likely poor extraction
+
+        // If less than 30% alphanumeric content, likely poor extraction (PDF metadata, binary garbage, etc.)
         if alphanumeric_ratio < 0.3 {
-            debug!("PDF text has low alphanumeric content: {:.1}% ({} of {} chars)", 
+            debug!("PDF text has low alphanumeric content: {:.1}% ({} of {} chars) - needs OCR",
                    alphanumeric_ratio * 100.0, alphanumeric_chars, text.len());
             return false;
         }
-        
-        debug!("PDF text extraction quality sufficient: {} words, {:.2} words/KB, {:.1}% alphanumeric", 
+
+        // For very small files, low word count might be normal
+        if file_size < 50_000 && word_count >= 1 {
+            debug!("Small PDF with {} words and {:.1}% alphanumeric - accepting", word_count, alphanumeric_ratio * 100.0);
+            return true;
+        }
+
+        // Calculate word density (words per KB)
+        let file_size_kb = (file_size as f64) / 1024.0;
+        let word_density = (word_count as f64) / file_size_kb;
+
+        // Reasonable thresholds based on typical PDF content:
+        // - Text-based PDFs typically have 50-200 words per KB
+        // - Below 5 words per KB suggests mostly images/scanned content
+        const MIN_WORD_DENSITY: f64 = 5.0;
+        const MIN_WORDS_FOR_LARGE_FILES: usize = 10;
+        const SUBSTANTIAL_WORD_COUNT: usize = 50;
+
+        // If we have substantial text with good alphanumeric ratio, accept it
+        if word_count >= SUBSTANTIAL_WORD_COUNT {
+            debug!("PDF has substantial text content: {} words, {:.1}% alphanumeric - accepting", word_count, alphanumeric_ratio * 100.0);
+            return true;
+        }
+
+        if word_density < MIN_WORD_DENSITY && word_count < MIN_WORDS_FOR_LARGE_FILES {
+            debug!("PDF appears to be image-based: {} words in {:.1} KB (density: {:.2} words/KB)",
+                   word_count, file_size_kb, word_density);
+            return false;
+        }
+
+        debug!("PDF text extraction quality sufficient: {} words, {:.2} words/KB, {:.1}% alphanumeric",
                word_count, word_density, alphanumeric_ratio * 100.0);
         true
     }
@@ -1186,18 +1197,18 @@ impl EnhancedOcrService {
         })
     }
     
-    /// Progressive PDF text extraction with fallback strategies
+    /// Quick PDF text extraction using pdftotext (for text-based PDFs)
     #[cfg(feature = "ocr")]
     async fn extract_pdf_text_quick(&self, file_path: &str) -> Result<(String, u64)> {
         let start_time = std::time::Instant::now();
-        
+
         // Generate temporary file path for text extraction
-        let temp_text_filename = format!("quick_text_{}_{}.txt", 
-            std::process::id(), 
+        let temp_text_filename = format!("quick_text_{}_{}.txt",
+            std::process::id(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
         );
         let temp_text_path = format!("{}/{}", self.temp_dir, temp_text_filename);
-        
+
         // Strategy 1: Fast text extraction using pdftotext (for existing text)
         debug!("Trying pdftotext for existing text extraction: {}", file_path);
         debug!("Using temp file path: {}", temp_text_path);
@@ -1207,7 +1218,7 @@ impl EnhancedOcrService {
             .arg(&temp_text_path)
             .output()
             .await;
-        
+
         if let Ok(output) = pdftotext_result {
             debug!("pdftotext exit status: {}", output.status);
             if !output.stderr.is_empty() {
@@ -1218,14 +1229,14 @@ impl EnhancedOcrService {
                     let _ = tokio::fs::remove_file(&temp_text_path).await;
                     let word_count = text.split_whitespace().count();
                     debug!("pdftotext extracted {} words from temp file", word_count);
-                    
+
                     // If we got substantial text (more than a few words), use it
                     if word_count > 5 {
                         let processing_time = start_time.elapsed().as_millis() as u64;
                         info!("pdftotext extracted {} words from: {}", word_count, file_path);
                         return Ok((text.trim().to_string(), processing_time));
                     } else {
-                        debug!("pdftotext only extracted {} words, will try direct extraction before OCR", word_count);
+                        debug!("pdftotext only extracted {} words, will need OCR", word_count);
                     }
                 } else {
                     debug!("Failed to read pdftotext output file: {}", temp_text_path);
@@ -1237,32 +1248,10 @@ impl EnhancedOcrService {
         } else {
             debug!("Failed to execute pdftotext command");
         }
-        
-        info!("pdftotext extraction insufficient for '{}', trying direct extraction before OCR", file_path);
-        
-        // Strategy 2: Try direct text extraction (often works when pdftotext fails)
-        match self.extract_text_from_pdf_bytes(file_path).await {
-            Ok(text) if !text.trim().is_empty() => {
-                let word_count = text.split_whitespace().count();
-                if word_count > 5 {
-                    let processing_time = start_time.elapsed().as_millis() as u64;
-                    info!("Direct text extraction succeeded for '{}': {} words", file_path, word_count);
-                    return Ok((text, processing_time));
-                } else {
-                    debug!("Direct extraction only got {} words, trying OCR", word_count);
-                }
-            }
-            Ok(_) => {
-                debug!("Direct text extraction returned empty text");
-            }
-            Err(e) => {
-                debug!("Direct text extraction failed: {}", e);
-            }
-        }
-        
-        info!("Direct extraction insufficient for '{}', using OCR extraction", file_path);
-        
-        // Strategy 3: Use ocrmypdf --sidecar to extract existing OCR text
+
+        info!("pdftotext extraction insufficient for '{}', will use OCR", file_path);
+
+        // Strategy 2: Use ocrmypdf --sidecar to extract existing OCR text layer (if PDF already has one)
         let ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
             .arg("--sidecar")
             .arg(&temp_text_path)
@@ -1270,13 +1259,13 @@ impl EnhancedOcrService {
             .arg("-")  // Dummy output (we only want sidecar)
             .output()
             .await;
-        
+
         if let Ok(output) = &ocrmypdf_result {
             if output.status.success() {
                 if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
                     let _ = tokio::fs::remove_file(&temp_text_path).await;
                     let word_count = text.split_whitespace().count();
-                    if word_count > 0 {
+                    if word_count > 5 {
                         let processing_time = start_time.elapsed().as_millis() as u64;
                         info!("ocrmypdf --sidecar extracted {} words from: {}", word_count, file_path);
                         return Ok((text.trim().to_string(), processing_time));
@@ -1285,154 +1274,13 @@ impl EnhancedOcrService {
             } else {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 debug!("ocrmypdf --sidecar failed: {}", stderr);
-                
-                // Check if the error indicates the page already has text
-                if stderr.contains("page already has text") {
-                    // This is good - it means there's already text, we should use pdftotext
-                    warn!("ocrmypdf detected existing text in PDF, this should have been caught by pdftotext");
-                }
             }
         }
-        
-        // Strategy 3: Last resort - direct byte-level text extraction
-        warn!("Standard extraction methods failed, trying direct text extraction from: {}", file_path);
-        
-        match self.extract_text_from_pdf_bytes(file_path).await {
-            Ok(text) if !text.trim().is_empty() => {
-                let processing_time = start_time.elapsed().as_millis() as u64;
-                let word_count = text.split_whitespace().count();
-                info!("Direct text extraction succeeded for '{}': {} words", file_path, word_count);
-                Ok((text, processing_time))
-            }
-            Ok(_) => {
-                warn!("Direct text extraction returned empty text for: {}", file_path);
-                // If all strategies fail, return the last error
-                if let Ok(ref output) = ocrmypdf_result {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    Err(anyhow!("All PDF extraction strategies failed. Last error: {}", stderr))
-                } else {
-                    Err(anyhow!("All PDF extraction strategies failed"))
-                }
-            }
-            Err(e) => {
-                warn!("Direct text extraction also failed for {}: {}", file_path, e);
-                // If all strategies fail, return the last error
-                if let Ok(ref output) = ocrmypdf_result {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    Err(anyhow!("All PDF extraction strategies failed. Last error: {}", stderr))
-                } else {
-                    Err(anyhow!("All PDF extraction strategies failed: {}", e))
-                }
-            }
-        }
+
+        // Quick extraction strategies exhausted - return error to trigger full OCR
+        Err(anyhow!("Quick PDF text extraction failed - PDF may contain only images"))
     }
-    
-    /// Last resort: extract readable text directly from PDF bytes
-    /// This can find text that's embedded in the PDF even if the structure is corrupted
-    #[cfg(feature = "ocr")]
-    async fn extract_text_from_pdf_bytes(&self, file_path: &str) -> Result<String> {
-        let bytes = tokio::fs::read(file_path).await?;
-        
-        // Look for text strings in the PDF
-        let mut extracted_text = String::new();
-        let mut current_text = String::new();
-        let mut in_text_object = false;
-        let mut in_string = false;
-        let mut escape_next = false;
-        
-        for &byte in &bytes {
-            let char = byte as char;
-            
-            // Look for text objects (BT...ET blocks)
-            if !in_text_object && char == 'B' {
-                // Check if this might be the start of "BT" (Begin Text)
-                if let Some(_window) = bytes.windows(2).find(|w| w == b"BT") {
-                    in_text_object = true;
-                    continue;
-                }
-            }
-            
-            if in_text_object && char == 'E' {
-                // Check if this might be the start of "ET" (End Text)
-                if let Some(_window) = bytes.windows(2).find(|w| w == b"ET") {
-                    in_text_object = false;
-                    if !current_text.trim().is_empty() {
-                        extracted_text.push_str(&current_text);
-                        extracted_text.push(' ');
-                        current_text.clear();
-                    }
-                    continue;
-                }
-            }
-            
-            // Look for text strings in parentheses (text) or brackets
-            if in_text_object {
-                if char == '(' && !escape_next {
-                    in_string = true;
-                    continue;
-                }
-                
-                if char == ')' && !escape_next && in_string {
-                    in_string = false;
-                    current_text.push(' ');
-                    continue;
-                }
-                
-                if in_string {
-                    if escape_next {
-                        escape_next = false;
-                        current_text.push(char);
-                    } else if char == '\\' {
-                        escape_next = true;
-                    } else {
-                        current_text.push(char);
-                    }
-                }
-            }
-        }
-        
-        // Also try to find any readable ASCII text in the PDF
-        let mut ascii_text = String::new();
-        let mut current_word = String::new();
-        
-        for &byte in &bytes {
-            if byte >= 32 && byte <= 126 {  // Printable ASCII
-                current_word.push(byte as char);
-            } else {
-                if current_word.len() > 3 {  // Only keep words longer than 3 characters
-                    ascii_text.push_str(&current_word);
-                    ascii_text.push(' ');
-                }
-                current_word.clear();
-            }
-        }
-        
-        // Add the last word if it's long enough
-        if current_word.len() > 3 {
-            ascii_text.push_str(&current_word);
-        }
-        
-        // Combine both extraction methods
-        let mut final_text = extracted_text;
-        if !ascii_text.trim().is_empty() {
-            final_text.push_str("\\n");
-            final_text.push_str(&ascii_text);
-        }
-        
-        // Clean up the text
-        let cleaned_text = final_text
-            .split_whitespace()
-            .filter(|word| word.len() > 1)  // Filter out single characters
-            .collect::<Vec<_>>()
-            .join(" ");
-        
-        if cleaned_text.trim().is_empty() {
-            Err(anyhow!("No readable text found in PDF"))
-        } else {
-            Ok(cleaned_text)
-        }
-    }
-    
+
     /// Check if ocrmypdf is available on the system
     #[cfg(feature = "ocr")]
     async fn is_ocrmypdf_available(&self) -> bool {
@@ -1444,6 +1292,177 @@ impl EnhancedOcrService {
             Ok(output) => output.status.success(),
             Err(_) => false,
         }
+    }
+
+    /// Check if pdftoppm (from poppler-utils) is available on the system
+    #[cfg(feature = "ocr")]
+    pub async fn is_pdftoppm_available(&self) -> bool {
+        match tokio::process::Command::new("pdftoppm")
+            .arg("-v")
+            .output()
+            .await
+        {
+            Ok(output) => output.status.success(),
+            Err(_) => false,
+        }
+    }
+
+    /// Check if PDF contains ANY embedded images using pdfimages -list
+    /// If images are detected, we should use image-based OCR to capture content from both
+    /// the text layer AND any embedded images (hybrid PDFs)
+    #[cfg(feature = "ocr")]
+    pub async fn pdf_has_images(&self, file_path: &str) -> bool {
+        let output = match tokio::process::Command::new("pdfimages")
+            .arg("-list")
+            .arg(file_path)
+            .output()
+            .await
+        {
+            Ok(o) => o,
+            Err(_) => return false, // If pdfimages unavailable, assume no images
+        };
+
+        if !output.status.success() {
+            return false;
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Count image lines (skip header and separator lines)
+        let image_count = stdout.lines()
+            .skip(2)
+            .filter(|line| line.contains("image"))
+            .count();
+
+        // ANY images detected means we should use image-based OCR
+        if image_count > 0 {
+            info!("PDF '{}' contains {} embedded images", file_path, image_count);
+            true
+        } else {
+            debug!("PDF '{}' has no embedded images", file_path);
+            false
+        }
+    }
+
+    /// Get the number of pages in a PDF using pdfinfo
+    #[cfg(feature = "ocr")]
+    pub async fn get_pdf_page_count(&self, file_path: &str) -> Result<usize> {
+        let output = tokio::process::Command::new("pdfinfo")
+            .arg(file_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(anyhow!("pdfinfo failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if line.starts_with("Pages:") {
+                if let Some(count_str) = line.split_whitespace().last() {
+                    return count_str.parse().map_err(|e| anyhow!("Failed to parse page count: {}", e));
+                }
+            }
+        }
+        Err(anyhow!("Could not find page count in pdfinfo output"))
+    }
+
+    /// Convert PDF pages to PNG images using pdftoppm
+    #[cfg(feature = "ocr")]
+    async fn extract_pdf_pages_as_images(&self, file_path: &str, page_count: usize) -> Result<Vec<String>> {
+        let temp_prefix = format!("{}/pdf_page_{}_{}",
+            self.temp_dir,
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
+        );
+
+        // Convert all pages to PNG at 300 DPI for good OCR quality
+        let output = tokio::process::Command::new("pdftoppm")
+            .arg("-png")
+            .arg("-r")
+            .arg("300")
+            .arg(file_path)
+            .arg(&temp_prefix)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(anyhow!("pdftoppm failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+
+        // Collect generated image paths
+        let mut image_paths = Vec::new();
+        for page_num in 1..=page_count {
+            let image_path = format!("{}-{}.png", temp_prefix, page_num);
+            if tokio::fs::metadata(&image_path).await.is_ok() {
+                image_paths.push(image_path);
+            }
+        }
+
+        if image_paths.is_empty() {
+            return Err(anyhow!("pdftoppm did not produce any image files"));
+        }
+
+        Ok(image_paths)
+    }
+
+    /// Extract text from PDF by converting pages to images and OCRing each page
+    #[cfg(feature = "ocr")]
+    async fn extract_text_from_pdf_via_images(&self, file_path: &str, settings: &Settings, start_time: std::time::Instant) -> Result<OcrResult> {
+        info!("Extracting PDF text via image conversion: {}", file_path);
+
+        // Get page count
+        let page_count = self.get_pdf_page_count(file_path).await?;
+        info!("PDF has {} pages", page_count);
+
+        // Convert pages to images
+        let image_paths = self.extract_pdf_pages_as_images(file_path, page_count).await?;
+
+        // OCR each page
+        let mut all_text = String::new();
+        let mut total_confidence = 0.0f32;
+        let mut total_words = 0usize;
+        let mut successful_pages = 0usize;
+
+        for (i, image_path) in image_paths.iter().enumerate() {
+            info!("OCR processing page {}/{}", i + 1, page_count);
+
+            match self.extract_text_from_image(image_path, settings).await {
+                Ok(result) => {
+                    if !all_text.is_empty() && !result.text.is_empty() {
+                        all_text.push_str("\n\n--- Page Break ---\n\n");
+                    }
+                    all_text.push_str(&result.text);
+                    total_confidence += result.confidence;
+                    total_words += result.word_count;
+                    successful_pages += 1;
+                }
+                Err(e) => {
+                    warn!("Failed to OCR page {}: {}", i + 1, e);
+                }
+            }
+
+            // Clean up page image immediately after processing
+            let _ = tokio::fs::remove_file(image_path).await;
+        }
+
+        if successful_pages == 0 {
+            return Err(anyhow!("Failed to OCR any pages from PDF"));
+        }
+
+        let avg_confidence = total_confidence / successful_pages as f32;
+        let processing_time = start_time.elapsed().as_millis() as u64;
+
+        info!("PDF image OCR completed: {} pages, {} words, {:.1}% avg confidence",
+              successful_pages, total_words, avg_confidence);
+
+        Ok(OcrResult {
+            text: Self::remove_null_bytes(&all_text),
+            confidence: avg_confidence,
+            processing_time_ms: processing_time,
+            word_count: total_words,
+            preprocessing_applied: vec![format!("PDF page-to-image OCR ({} pages)", successful_pages)],
+            processed_image_path: None,
+        })
     }
     
     #[cfg(not(feature = "ocr"))]
