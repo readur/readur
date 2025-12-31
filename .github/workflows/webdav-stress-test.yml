@@ -123,7 +123,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -133,7 +133,7 @@ jobs:
             ${{ runner.os }}-cargo-stress-
 
       - name: Cache target directory  
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: target
           key: ${{ runner.os }}-cargo-target-stress-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/*.rs') }}
