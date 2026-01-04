@@ -12,6 +12,13 @@ mod pdf_word_count_integration_tests {
     }
 
     fn create_temp_dir() -> TempDir {
+        // Ensure the temp directory parent exists (CI sets TMPDIR to a custom path)
+        if let Ok(tmpdir) = std::env::var("TMPDIR") {
+            let tmpdir_path = std::path::Path::new(&tmpdir);
+            if !tmpdir_path.exists() {
+                std::fs::create_dir_all(tmpdir_path).ok();
+            }
+        }
         TempDir::new().expect("Failed to create temp directory")
     }
 
