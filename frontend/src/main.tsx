@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
 import { AuthProvider } from './contexts/AuthContext'
+import { FeatureFlagsProvider } from './contexts/FeatureFlagsContext'
 import './i18n/config'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <Suspense fallback={<div>Loading...</div>}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <FeatureFlagsProvider>
+            <App />
+          </FeatureFlagsProvider>
         </AuthProvider>
       </BrowserRouter>
     </Suspense>
