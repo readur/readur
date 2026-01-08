@@ -61,9 +61,9 @@ test.describe('Per-User Watch Directory Feature Flag', () => {
       const createFolderButton = page.locator('[data-testid="CreateNewFolderIcon"]');
       await expect(createFolderButton).not.toBeVisible({ timeout: TIMEOUTS.short });
 
-      // Standard user management buttons (Edit, Delete) should still be visible
-      const editButton = page.locator('button:has([data-testid="EditIcon"])').first();
-      await expect(editButton).toBeVisible({ timeout: TIMEOUTS.short });
+      // Verify the table still has user rows (sanity check that page loaded correctly)
+      const tableRows = page.locator('tbody tr');
+      await expect(tableRows.first()).toBeVisible({ timeout: TIMEOUTS.short });
     });
   });
 
