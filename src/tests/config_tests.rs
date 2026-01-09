@@ -9,6 +9,7 @@ fn clear_db_env_vars() {
     env::remove_var("POSTGRES_DB");
     env::remove_var("POSTGRES_USER");
     env::remove_var("POSTGRES_PASSWORD");
+    env::remove_var("ENABLE_PER_USER_WATCH");
 }
 
 // Helper function to set minimum required environment variables
@@ -236,4 +237,41 @@ fn test_mixed_case_environment_variables() {
 
     // Should use the correctly cased variable
     assert!(config.database_url.contains("@mixed_case_host"));
+}
+
+#[test]
+fn test_enable_per_user_watch_defaults_to_false() {
+    clear_db_env_vars();
+    set_minimum_env_vars();
+
+    let config = Config::from_env().expect("Config should load successfully");
+
+    // Should default to false when not set
+    assert!(!config.enable_per_user_watch);
+}
+
+#[test]
+fn test_enable_per_user_watch_set_to_true() {
+    clear_db_env_vars();
+    set_minimum_env_vars();
+
+    env::set_var("ENABLE_PER_USER_WATCH", "true");
+
+    let config = Config::from_env().expect("Config should load successfully");
+
+    // Should be true when set to "true"
+    assert!(config.enable_per_user_watch);
+}
+
+#[test]
+fn test_enable_per_user_watch_set_to_false() {
+    clear_db_env_vars();
+    set_minimum_env_vars();
+
+    env::set_var("ENABLE_PER_USER_WATCH", "false");
+
+    let config = Config::from_env().expect("Config should load successfully");
+
+    // Should be false when set to "false"
+    assert!(!config.enable_per_user_watch);
 }

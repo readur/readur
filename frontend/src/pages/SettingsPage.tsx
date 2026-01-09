@@ -44,6 +44,7 @@ import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon,
          Error as ErrorIcon, Visibility as VisibilityIcon, CreateNewFolder as CreateNewFolderIcon,
          RemoveCircle as RemoveCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
 import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
 import LanguageSelector from '../components/LanguageSelector';
@@ -195,6 +196,8 @@ function useDebounce<T extends (...args: any[]) => any>(func: T, delay: number):
 const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
   const { user: currentUser } = useAuth();
+  const { flags } = useFeatureFlags();
+  const perUserWatchEnabled = flags.enablePerUserWatch;
   const isPWA = usePWA();
   const [tabValue, setTabValue] = useState<number>(0);
   const [settings, setSettings] = useState<Settings>({
@@ -294,10 +297,10 @@ const SettingsPage: React.FC = () => {
 
   // Fetch watch directory information after users are loaded
   useEffect(() => {
-    if (users.length > 0) {
+    if (users.length > 0 && perUserWatchEnabled) {
       fetchUserWatchDirectories();
     }
-  }, [users]);
+  }, [users, perUserWatchEnabled]);
 
   const fetchSettings = async (): Promise<void> => {
     try {
@@ -1479,7 +1482,9 @@ const SettingsPage: React.FC = () => {
                       <TableCell>{t('settings.userManagement.tableHeaders.username')}</TableCell>
                       <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{t('settings.userManagement.tableHeaders.email')}</TableCell>
                       <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{t('settings.userManagement.tableHeaders.createdAt')}</TableCell>
-                      <TableCell>{t('settings.userManagement.tableHeaders.watchDirectory')}</TableCell>
+                      {perUserWatchEnabled && (
+                        <TableCell>{t('settings.userManagement.tableHeaders.watchDirectory')}</TableCell>
+                      )}
                       <TableCell align="right">{t('settings.userManagement.tableHeaders.actions')}</TableCell>
                     </TableRow>
                   </TableHead>
@@ -1515,9 +1520,11 @@ const SettingsPage: React.FC = () => {
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                           {new Date(user.created_at).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>
-                          {renderWatchDirectoryStatus(user.id, user.username)}
-                        </TableCell>
+                        {perUserWatchEnabled && (
+                          <TableCell>
+                            {renderWatchDirectoryStatus(user.id, user.username)}
+                          </TableCell>
+                        )}
                         <TableCell align="right">
                           <Box sx={{ 
                             display: 'flex', 
@@ -1527,62 +1534,66 @@ const SettingsPage: React.FC = () => {
                             minWidth: { xs: 'auto', sm: '200px' }
                           }}>
                             {/* Watch Directory Actions */}
-                            {(() => {
-                              const watchDirInfo = userWatchDirectories.get(user.id);
-                              const isWatchDirLoading = watchDirLoading.get(user.id) || false;
-                              
-                              if (!watchDirInfo || !watchDirInfo.exists) {
-                                // Show Create Directory button
-                                return (
-                                  <Tooltip title={t('settings.userManagement.watchDirectory.createDirectory')}>
-                                    <IconButton
-                                      onClick={() => handleCreateWatchDirectory(user.id)}
-                                      disabled={loading || isWatchDirLoading}
-                                      color="primary"
-                                      size="small"
-                                    >
-                                      {isWatchDirLoading ? (
-                                        <CircularProgress size={16} />
-                                      ) : (
-                                        <CreateNewFolderIcon />
-                                      )}
-                                    </IconButton>
-                                  </Tooltip>
-                                );
-                              } else {
-                                // Show View and Remove buttons
-                                return (
-                                  <>
-                                    <Tooltip title={t('settings.userManagement.watchDirectory.viewDirectory')}>
-                                      <IconButton
-                                        onClick={() => handleViewWatchDirectory(watchDirInfo.watch_directory_path)}
-                                        disabled={loading || isWatchDirLoading}
-                                        color="info"
-                                        size="small"
-                                      >
-                                        <VisibilityIcon />
-                                      </IconButton>
-                                    </Tooltip>
-                                    <Tooltip title={t('settings.userManagement.watchDirectory.removeDirectory')}>
-                                      <IconButton
-                                        onClick={() => handleRemoveWatchDirectory(user.id, user.username)}
-                                        disabled={loading || isWatchDirLoading}
-                                        color="error"
-                                        size="small"
-                                      >
-                                        {isWatchDirLoading ? (
-                                          <CircularProgress size={16} />
-                                        ) : (
-                                          <RemoveCircleIcon />
-                                        )}
-                                      </IconButton>
-                                    </Tooltip>
-                                  </>
-                                );
-                              }
-                            })()}
+                            {perUserWatchEnabled && (
+                              <>
+                                {(() => {
+                                  const watchDirInfo = userWatchDirectories.get(user.id);
+                                  const isWatchDirLoading = watchDirLoading.get(user.id) || false;
 
-                            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                                  if (!watchDirInfo || !watchDirInfo.exists) {
+                                    // Show Create Directory button
+                                    return (
+                                      <Tooltip title={t('settings.userManagement.watchDirectory.createDirectory')}>
+                                        <IconButton
+                                          onClick={() => handleCreateWatchDirectory(user.id)}
+                                          disabled={loading || isWatchDirLoading}
+                                          color="primary"
+                                          size="small"
+                                        >
+                                          {isWatchDirLoading ? (
+                                            <CircularProgress size={16} />
+                                          ) : (
+                                            <CreateNewFolderIcon />
+                                          )}
+                                        </IconButton>
+                                      </Tooltip>
+                                    );
+                                  } else {
+                                    // Show View and Remove buttons
+                                    return (
+                                      <>
+                                        <Tooltip title={t('settings.userManagement.watchDirectory.viewDirectory')}>
+                                          <IconButton
+                                            onClick={() => handleViewWatchDirectory(watchDirInfo.watch_directory_path)}
+                                            disabled={loading || isWatchDirLoading}
+                                            color="info"
+                                            size="small"
+                                          >
+                                            <VisibilityIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title={t('settings.userManagement.watchDirectory.removeDirectory')}>
+                                          <IconButton
+                                            onClick={() => handleRemoveWatchDirectory(user.id, user.username)}
+                                            disabled={loading || isWatchDirLoading}
+                                            color="error"
+                                            size="small"
+                                          >
+                                            {isWatchDirLoading ? (
+                                              <CircularProgress size={16} />
+                                            ) : (
+                                              <RemoveCircleIcon />
+                                            )}
+                                          </IconButton>
+                                        </Tooltip>
+                                      </>
+                                    );
+                                  }
+                                })()}
+
+                                <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                              </>
+                            )}
 
                             {/* User Management Actions */}
                             <Tooltip title={t('settings.userManagement.watchDirectory.editUser')}>

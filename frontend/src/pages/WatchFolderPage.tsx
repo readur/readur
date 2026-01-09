@@ -38,6 +38,7 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { queueService, QueueStats, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
 import { useTranslation } from 'react-i18next';
 
 interface WatchConfig {
@@ -53,7 +54,9 @@ const WatchFolderPage: React.FC = () => {
   const { t } = useTranslation();
   const theme = useTheme();
   const { user } = useAuth();
-  
+  const { flags } = useFeatureFlags();
+  const perUserWatchEnabled = flags.enablePerUserWatch;
+
   // Queue statistics state
   const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -80,12 +83,12 @@ const WatchFolderPage: React.FC = () => {
 
   useEffect(() => {
     fetchQueueStats();
-    if (user) {
+    if (user && perUserWatchEnabled) {
       fetchUserWatchDirectory();
     }
     const interval = setInterval(fetchQueueStats, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, perUserWatchEnabled]);
 
   const fetchUserWatchDirectory = async (): Promise<void> => {
     if (!user) return;
@@ -218,7 +221,7 @@ const WatchFolderPage: React.FC = () => {
           startIcon={<RefreshIcon />}
           onClick={() => {
             fetchQueueStats();
-            if (user) {
+            if (user && perUserWatchEnabled) {
               fetchUserWatchDirectory();
             }
           }}
@@ -253,8 +256,8 @@ const WatchFolderPage: React.FC = () => {
         </Alert>
       )}
 
-      {/* User Watch Directory - Only show for authenticated users */}
-      {user && (
+      {/* User Watch Directory - Only show for authenticated users when feature is enabled */}
+      {user && perUserWatchEnabled && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -291,10 +294,10 @@ const WatchFolderPage: React.FC = () => {
                     <Typography variant="body2" color="text.secondary">
                       {t('watchFolder.yourPersonalWatchDirectory')}
                     </Typography>
-                    <Typography variant="body1" sx={{ 
-                      fontFamily: 'monospace', 
-                      bgcolor: theme.palette.mode === 'light' ? 'grey.100' : 'grey.800', 
-                      p: 1, 
+                    <Typography variant="body1" sx={{
+                      fontFamily: 'monospace',
+                      bgcolor: theme.palette.mode === 'light' ? 'grey.100' : 'grey.800',
+                      p: 1,
                       borderRadius: 1,
                       color: 'text.primary',
                       display: 'flex',
@@ -334,12 +337,12 @@ const WatchFolderPage: React.FC = () => {
                     </Box>
                   </Box>
                 </Grid>
-                
+
                 {!userWatchInfo.exists && (
                   <Grid item xs={12}>
-                    <Box sx={{ 
-                      mt: 2, 
-                      p: 2, 
+                    <Box sx={{
+                      mt: 2,
+                      p: 2,
                       bgcolor: theme.palette.mode === 'light' ? 'info.light' : 'info.dark',
                       borderRadius: 2,
                       border: `1px solid ${theme.palette.info.main}`,
@@ -371,7 +374,7 @@ const WatchFolderPage: React.FC = () => {
       )}
 
       {/* Divider between Personal and Global sections */}
-      {user && (
+      {user && perUserWatchEnabled && (
         <Box sx={{ my: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
           <Divider sx={{ flex: 1 }} />
           <Typography variant="body2" color="text.secondary" sx={{ px: 2 }}>

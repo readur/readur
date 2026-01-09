@@ -29,6 +29,7 @@ pub fn router() -> Router<Arc<AppState>> {
 struct AuthConfig {
     allow_local_auth: bool,
     oidc_enabled: bool,
+    enable_per_user_watch: bool,
 }
 
 
@@ -102,10 +103,12 @@ async fn get_auth_config(
 ) -> Json<AuthConfig> {
     let allow_local_auth = state.config.allow_local_auth.unwrap_or(true);
     let oidc_enabled = state.oidc_client.is_some();
+    let enable_per_user_watch = state.config.enable_per_user_watch;
 
     Json(AuthConfig {
         allow_local_auth,
         oidc_enabled,
+        enable_per_user_watch,
     })
 }
 
