@@ -62,7 +62,10 @@ Password: [your-generated-password]
 
 View the logs with: `docker compose logs readur`
 
-To reset the admin password later, run: `readur reset-admin-password`
+To reset the admin password later:
+```bash
+docker compose exec readur readur reset-admin-password
+```
 
 ## 📚 Documentation
 

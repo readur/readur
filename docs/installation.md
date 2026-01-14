@@ -48,7 +48,10 @@ Password: [your-generated-password]
 
 View the logs with: `docker compose logs readur`
 
-To reset the admin password later, run: `readur reset-admin-password`
+To reset the admin password later:
+```bash
+docker compose exec readur readur reset-admin-password
+```
 
 ### What You Get
 
@@ -173,6 +176,18 @@ npm run dev
 ```bash
 npm run build
 # Built files in frontend/dist/
+```
+
+### Resetting Admin Password
+
+For manual installations, reset the admin password using:
+```bash
+./target/release/readur reset-admin-password
+```
+
+Or if running via `cargo run`:
+```bash
+cargo run -- reset-admin-password
 ```
 
 ## Verifying Installation
