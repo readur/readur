@@ -1,16 +1,22 @@
 # Self-Hosting Quick Start
 
-## Purpose
-
 Get Readur running on your own server in 15 minutes. This guide covers the essential steps for a basic self-hosted deployment.
 
 ## Prerequisites
 
-- Linux server (Ubuntu 20.04+ or similar)
-- Docker and Docker Compose installed
-- 4GB RAM minimum (8GB recommended)
-- 20GB free disk space for documents
-- Domain name (optional, for HTTPS access)
+Before starting, ensure you have:
+
+- **Linux server**: Ubuntu 20.04+, Debian 11+, or similar distribution
+- **Docker Engine 24.0+**: [Installation guide](https://docs.docker.com/engine/install/)
+- **Docker Compose v2+**: Usually included with Docker Engine; verify with `docker compose version`
+- **System resources**:
+  - 4GB RAM minimum (8GB+ recommended for OCR processing)
+  - 20GB free disk space (more for large document libraries)
+  - 2+ CPU cores recommended
+- **Network access**: Ability to open port 8000 (or your chosen port) for web access
+- **Domain name**: Optional, but recommended for HTTPS access
+
+**Note**: This guide uses `docker compose` (Docker Compose v2). If you have the older standalone version, replace `docker compose` with `docker-compose`.
 
 ## Step 1: Download Readur
 
@@ -29,50 +35,117 @@ Create your environment file from the template:
 cp .env.example .env
 ```
 
-Edit the `.env` file with essential settings:
+Open `.env` in your preferred editor and configure these essential settings:
 
 ```bash
-# Core settings
-APP_SECRET_KEY=your-secret-key-here  # Generate with: openssl rand -hex 32
-POSTGRES_PASSWORD=secure-password-here
-ADMIN_PASSWORD=your-admin-password
+# Database connection (default works with Docker Compose)
+DATABASE_URL=postgresql://readur:readur@postgres/readur
 
-# Storage (choose one)
-STORAGE_BACKEND=local  # or 's3' for cloud storage
-LOCAL_STORAGE_PATH=/data/readur/documents
+# Security - IMPORTANT: Change this in production!
+# Generate a secure key with: openssl rand -hex 32
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 
-# Optional: External access
-APP_HOST=0.0.0.0  # Allow external connections
-APP_PORT=8000
+# Server binding
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+
+# OCR settings
+OCR_LANGUAGE=eng
+CONCURRENT_OCR_JOBS=4
 ```
+
+### Admin Password
+
+By default, Readur auto-generates a secure admin password on first startup and displays it once in the logs. You can also set it explicitly in `.env`:
+
+```bash
+# Optional: Set a custom admin password (minimum 8 characters)
+ADMIN_PASSWORD=YourSecurePassword123!
+```
+
+**Tip**: For production deployments, we recommend letting Readur auto-generate the password and saving it immediately from the startup logs.
 
 ## Step 3: Start Services
 
-Launch Readur with Docker Compose:
+Build and launch Readur with Docker Compose:
 
 ```bash
-docker-compose up -d
+docker compose up -d --build
 ```
+
+This command:
+
+1. Builds the Readur container image (first run takes 3-5 minutes)
+2. Starts the PostgreSQL database
+3. Runs database migrations automatically
+4. Starts the Readur application
 
 Monitor the startup process:
 
 ```bash
-docker-compose logs -f
+docker compose logs -f readur
 ```
 
-Wait for the message: `Application startup complete`
+Look for these indicators of successful startup:
 
-## Step 4: Access Readur
+- `Database migrations completed successfully`
+- `Server listening on 0.0.0.0:8000`
 
-Open your browser and navigate to:
-- **Local access**: http://localhost:8000
-- **Network access**: http://your-server-ip:8000
+**First-time startup**: If you did not set `ADMIN_PASSWORD`, look for a line like:
 
-Login with default credentials:
+```
+READUR ADMIN USER CREATED - Password: AbCdEf123456...
+```
+
+**Save this password immediately** - it is only displayed once!
+
+Press `Ctrl+C` to stop following the logs once startup is complete.
+
+## Step 4: Verify Installation
+
+Before proceeding, verify everything is running correctly:
+
+```bash
+# Check all services are running
+docker compose ps
+```
+
+You should see both `readur` and `postgres` with status `running` or `healthy`.
+
+Test the health endpoint:
+
+```bash
+curl http://localhost:8000/api/health
+```
+
+Expected response: `{"status":"ok"}` or similar JSON indicating healthy status.
+
+**Storage locations on your host machine:**
+
+| Location | Purpose |
+|----------|---------|
+| `./readur_uploads/` | Processed documents storage |
+| `./readur_watch/` | Drop files here for automatic import |
+
+These directories are created automatically when Readur starts.
+
+## Step 5: Access Readur
+
+Open your web browser and navigate to:
+
+- **From the same machine**: http://localhost:8000
+- **From your network**: http://your-server-ip:8000
+
+You should see the Readur login page.
+
+**Login credentials:**
+
 - Username: `admin`
-- Password: (the one you set in ADMIN_PASSWORD)
+- Password: The password you set in `ADMIN_PASSWORD`, or the auto-generated password from the startup logs
 
-## Step 5: Initial Setup
+**Congratulations!** You now have Readur running. Continue to the next step to upload your first document.
+
+## Step 6: Initial Setup
 
 ### Upload Your First Document
 
@@ -81,93 +154,236 @@ Login with default credentials:
 3. Enable **Process with OCR** for scanned documents
 4. Click **Upload Files**
 
+Watch as Readur processes the document and extracts text automatically.
+
 ### Configure OCR Languages
 
-1. Go to **Settings** → **OCR Configuration**
+1. Go to **Settings** > **OCR Configuration**
 2. Select your primary languages
-3. Adjust OCR workers based on server capacity
+3. Adjust `CONCURRENT_OCR_JOBS` in `.env` based on server capacity
 
 ### Set Up Automatic Import (Optional)
 
-1. Navigate to **Settings** → **Sources**
-2. Add a watch folder:
-   ```
-   Path: /data/watch
-   Auto-process: Enabled
-   OCR: Enabled
-   ```
-3. Any files placed in this folder will be automatically imported
+Readur can automatically import files placed in a watch folder.
+
+**Option 1: Use the default watch folder**
+
+Simply copy files to the `./readur_watch/` directory on your host machine:
+
+```bash
+cp ~/my-document.pdf ./readur_watch/
+```
+
+Readur checks for new files every 30 seconds by default.
+
+**Option 2: Configure via the web interface**
+
+1. Navigate to **Settings** > **Sources**
+2. Add or modify the watch folder configuration
+3. Enable **Auto-process** and **OCR** as needed
 
 ## Next Steps
 
 ### Security Hardening
 
-For production use, implement these security measures:
+For production deployments, implement these security measures:
 
-1. **Enable HTTPS**: See [Reverse Proxy Setup](../self-hosting/reverse-proxy.md)
-2. **Change default passwords**: Update all default credentials
-3. **Configure firewall**: Restrict access to necessary ports only
-4. **Enable authentication**: Set up [OIDC/SSO](../self-hosting/authentication.md)
+1. **Enable HTTPS**: Set up a reverse proxy with TLS certificates. See [Reverse Proxy Setup](../REVERSE_PROXY.md)
 
-### Performance Optimization
+2. **Use strong secrets**: Ensure `JWT_SECRET` is a long, random string:
+   ```bash
+   openssl rand -hex 32
+   ```
 
-Tune for your workload:
+3. **Configure firewall**: Only expose necessary ports (typically just 80/443 through your reverse proxy)
+
+4. **Enable SSO** (optional): Set up [OIDC Authentication](../oidc-setup.md) for enterprise environments
+
+### Performance Tuning
+
+Adjust these settings in `.env` based on your hardware:
 
 ```bash
-# In .env file
-OCR_WORKERS=4  # Increase for faster processing
-POSTGRES_MAX_CONNECTIONS=100
-UPLOAD_MAX_SIZE_MB=100
+# Increase for faster OCR processing (uses more CPU/memory)
+CONCURRENT_OCR_JOBS=4
+
+# Memory limit per OCR job
+MEMORY_LIMIT_MB=512
+
+# Maximum file sizes
+MAX_FILE_SIZE_MB=50
+MAX_PDF_SIZE_MB=100
 ```
+
+See [Performance Tuning Guide](../performance-tuning.md) for detailed recommendations.
 
 ### Backup Configuration
 
-Set up automated backups:
+Create a backup script for your Readur data:
 
 ```bash
-# Create backup script
-cat > backup.sh << 'EOF'
 #!/bin/bash
-docker-compose exec postgres pg_dump -U readur > backup-$(date +%Y%m%d).sql
-tar -czf documents-$(date +%Y%m%d).tar.gz /data/readur/documents
-EOF
+# backup-readur.sh
 
-chmod +x backup.sh
+BACKUP_DIR="/path/to/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# Backup database
+docker compose exec -T postgres pg_dump -U readur readur > "$BACKUP_DIR/readur-db-$DATE.sql"
+
+# Backup uploaded documents
+tar -czf "$BACKUP_DIR/readur-uploads-$DATE.tar.gz" ./readur_uploads
+
+echo "Backup completed: $DATE"
 ```
+
+Make it executable and schedule with cron:
+
+```bash
+chmod +x backup-readur.sh
+```
+
+See [Backup & Recovery Guide](../backup-recovery.md) for automated backup solutions.
+
+### Updating Readur
+
+To update to the latest version:
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Rebuild and restart
+docker compose up -d --build
+```
+
+Check the release notes for breaking changes before updating.
 
 ## Troubleshooting
 
 ### Container Won't Start
 
-Check logs for specific errors:
+Check the logs for specific errors:
+
 ```bash
-docker-compose logs readur
-docker-compose logs postgres
+docker compose logs readur
+docker compose logs postgres
+```
+
+**Common causes:**
+
+- Port 8000 already in use (see "Port Conflict" below)
+- Insufficient memory
+- Database connection failed
+
+### Port Conflict
+
+If port 8000 is already in use:
+
+```bash
+# Check what is using port 8000
+ss -tlnp | grep 8000
+```
+
+**Solution**: Either stop the conflicting service, or change Readur's port in `.env`:
+
+```bash
+SERVER_PORT=8080
+```
+
+Then update the port mapping in `docker-compose.yml` (`"8080:8080"`) and restart:
+
+```bash
+docker compose up -d
+```
+
+### Database Connection Errors
+
+If you see "connection refused" or "database does not exist":
+
+```bash
+# Verify PostgreSQL is running and healthy
+docker compose ps postgres
+
+# Check PostgreSQL logs
+docker compose logs postgres
+```
+
+**Solution**: Wait for PostgreSQL to fully start (check for "database system is ready"), then restart Readur:
+
+```bash
+docker compose restart readur
+```
+
+### Permission Denied Errors
+
+If uploads or watch folder operations fail:
+
+```bash
+# Check directory ownership
+ls -la ./readur_uploads ./readur_watch
+
+# Fix permissions if needed (Linux)
+sudo chown -R 1000:1000 ./readur_uploads ./readur_watch
 ```
 
 ### OCR Not Processing
 
-Verify OCR service is running:
+Verify OCR functionality:
+
 ```bash
-docker-compose ps
-docker-compose logs ocr-worker
+# Check Readur logs for OCR-related messages
+docker compose logs readur | grep -i ocr
 ```
 
-### Can't Access from Browser
+**Common causes:**
 
-Check firewall settings:
+- `CONCURRENT_OCR_JOBS=0` in your `.env` file
+- Insufficient memory for OCR processing
+- Unsupported file format
+
+### Cannot Access from Browser
+
+1. **Check the service is running:**
+   ```bash
+   docker compose ps
+   ```
+
+2. **Verify the port is listening:**
+   ```bash
+   ss -tlnp | grep 8000
+   ```
+
+3. **Check firewall settings:**
+   ```bash
+   # Ubuntu/Debian with UFW
+   sudo ufw allow 8000/tcp
+
+   # RHEL/CentOS with firewalld
+   sudo firewall-cmd --add-port=8000/tcp --permanent
+   sudo firewall-cmd --reload
+   ```
+
+4. **Test local connectivity:**
+   ```bash
+   curl http://localhost:8000/api/health
+   ```
+
+### Forgot Admin Password
+
+If you lost the auto-generated admin password:
+
 ```bash
-sudo ufw allow 8000/tcp
+# Reset the admin password
+docker compose exec readur readur reset-admin-password
 ```
 
-Verify service is listening:
-```bash
-netstat -tlnp | grep 8000
-```
+This will generate and display a new password.
 
 ## Related Documentation
 
 - [Complete Self-Hosting Guide](../self-hosting/index.md) - Comprehensive setup and configuration
-- [Storage Configuration](../self-hosting/storage.md) - S3, WebDAV, and local storage options
-- [Performance Tuning](../self-hosting/performance.md) - Optimize for your hardware
-- [Backup Strategies](../self-hosting/backup.md) - Protect your data
+- [S3 Storage Guide](../s3-storage-guide.md) - Cloud storage configuration
+- [Performance Tuning](../performance-tuning.md) - Optimize for your hardware
+- [Backup & Recovery](../backup-recovery.md) - Protect your data
+- [Reverse Proxy Setup](../REVERSE_PROXY.md) - HTTPS and domain configuration
