@@ -18,9 +18,75 @@ Before starting, ensure you have:
 
 **Note**: This guide uses `docker compose` (Docker Compose v2). If you have the older standalone version, replace `docker compose` with `docker-compose`.
 
-## Step 1: Download Readur
+## Step 1: Choose Your Installation Method
 
-Clone the repository and navigate to the directory:
+Readur offers two installation methods:
+
+| Method | Best For | Updates |
+|--------|----------|---------|
+| **Official Container** (Recommended) | Most users | Pull new image |
+| **Build from Source** | Development, customization | Rebuild from git |
+
+### Option A: Official Docker Container (Recommended)
+
+Use the pre-built container from GitHub Container Registry for the fastest setup:
+
+```bash
+# Create a directory for Readur
+mkdir readur && cd readur
+
+# Download the docker-compose file for the official image
+curl -O https://raw.githubusercontent.com/readur/readur/main/docker-compose.official.yml
+
+# Rename for convenience
+mv docker-compose.official.yml docker-compose.yml
+```
+
+Or create `docker-compose.yml` manually:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: readur
+      POSTGRES_PASSWORD: readur
+      POSTGRES_DB: readur
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U readur"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  readur:
+    image: ghcr.io/readur/readur:latest
+    environment:
+      DATABASE_URL: postgresql://readur:readur@postgres/readur
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8000
+      UPLOAD_PATH: /app/uploads
+      WATCH_FOLDER: /app/watch
+      OCR_LANGUAGE: eng
+      CONCURRENT_OCR_JOBS: 4
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./readur_uploads:/app/uploads
+      - ./readur_watch:/app/watch
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+```
+
+### Option B: Build from Source
+
+Clone the repository if you need to customize Readur or contribute to development:
 
 ```bash
 git clone https://github.com/readur/readur.git
@@ -29,7 +95,19 @@ cd readur
 
 ## Step 2: Configure Environment
 
-Create your environment file from the template:
+Create your environment file:
+
+**For Option A (Official Container):**
+
+```bash
+# Create .env file with your secrets
+cat > .env << 'EOF'
+JWT_SECRET=your-secret-key-change-this
+ADMIN_PASSWORD=YourSecurePassword123!
+EOF
+```
+
+**For Option B (Build from Source):**
 
 ```bash
 cp .env.example .env
@@ -67,18 +145,29 @@ ADMIN_PASSWORD=YourSecurePassword123!
 
 ## Step 3: Start Services
 
-Build and launch Readur with Docker Compose:
+Launch Readur with Docker Compose:
+
+**For Option A (Official Container):**
+
+```bash
+docker compose up -d
+```
+
+This pulls the pre-built image and starts immediately.
+
+**For Option B (Build from Source):**
 
 ```bash
 docker compose up -d --build
 ```
 
-This command:
+This builds the image locally (first run takes 3-5 minutes).
 
-1. Builds the Readur container image (first run takes 3-5 minutes)
-2. Starts the PostgreSQL database
-3. Runs database migrations automatically
-4. Starts the Readur application
+**Both options:**
+
+1. Start the PostgreSQL database
+2. Run database migrations automatically
+3. Start the Readur application
 
 Monitor the startup process:
 
@@ -247,7 +336,19 @@ See [Backup & Recovery Guide](../backup-recovery.md) for automated backup soluti
 
 ### Updating Readur
 
-To update to the latest version:
+#### Manual Updates
+
+**For Option A (Official Container):**
+
+```bash
+# Pull the latest image
+docker compose pull
+
+# Restart with the new image
+docker compose up -d
+```
+
+**For Option B (Build from Source):**
 
 ```bash
 # Pull latest changes
@@ -257,7 +358,66 @@ git pull origin main
 docker compose up -d --build
 ```
 
-Check the release notes for breaking changes before updating.
+Check the [release notes](https://github.com/readur/readur/releases) for breaking changes before updating.
+
+#### Automatic Updates with Watchtower
+
+[Watchtower](https://containrrr.dev/watchtower/) can automatically update your Readur container when new versions are released.
+
+**Add Watchtower to your `docker-compose.yml`:**
+
+```yaml
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Check for updates daily at 4 AM
+      WATCHTOWER_SCHEDULE: "0 0 4 * * *"
+      # Only update containers with the label
+      WATCHTOWER_LABEL_ENABLE: "true"
+      # Clean up old images
+      WATCHTOWER_CLEANUP: "true"
+      # Optional: Send notifications
+      # WATCHTOWER_NOTIFICATIONS: slack
+      # WATCHTOWER_NOTIFICATION_SLACK_HOOK_URL: https://hooks.slack.com/...
+    restart: unless-stopped
+```
+
+**Add the Watchtower label to your Readur service:**
+
+```yaml
+  readur:
+    image: ghcr.io/readur/readur:latest
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    # ... rest of configuration
+```
+
+**Or run Watchtower standalone:**
+
+```bash
+docker run -d \
+  --name watchtower \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  containrrr/watchtower \
+  --schedule "0 0 4 * * *" \
+  --cleanup \
+  readur
+```
+
+This checks for updates daily at 4 AM and automatically restarts Readur with the new image.
+
+**Watchtower configuration options:**
+
+| Option | Description |
+|--------|-------------|
+| `WATCHTOWER_SCHEDULE` | Cron expression for update checks (default: every 24h) |
+| `WATCHTOWER_CLEANUP` | Remove old images after updating |
+| `WATCHTOWER_LABEL_ENABLE` | Only update labeled containers |
+| `WATCHTOWER_NOTIFICATIONS` | Send notifications (email, slack, etc.) |
+
+See the [Watchtower documentation](https://containrrr.dev/watchtower/) for more options.
 
 ## Troubleshooting
 
