@@ -194,7 +194,7 @@ nav:
   - Quick Start:
     - Self-Hosting: quickstart/self-hosting.md
     - Docker Setup: quickstart/docker.md
-    - Development: quickstart/development.md
+    - Development: dev/development.md
     
   - Self-Hosting:
     - Overview: self-hosting/index.md

@@ -129,7 +129,7 @@ Use the [Docker Quick Start](quickstart/docker.md) to get Readur running in 5 mi
 The [Self-Hosting Guide](self-hosting/index.md) covers everything you need for production deployment: backup strategies, performance optimization, SSL setup, and monitoring.
 
 ### Building or Contributing to Readur?
-The [Development Quick Start](quickstart/development.md) helps you set up a development environment and understand the codebase if you want to contribute or customize Readur.
+The [Development Guide](dev/development.md) helps you set up a development environment and understand the codebase if you want to contribute or customize Readur.
 
 ## Find What You Need
 
