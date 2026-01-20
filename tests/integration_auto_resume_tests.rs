@@ -10,30 +10,15 @@
  * - Error handling during resume
  */
 
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
-use chrono::{Utc, DateTime};
+use chrono::Utc;
 use serde_json::json;
 use tokio::time::{sleep, timeout};
 
 use readur::{
-    AppState,
     models::{Source, SourceType, SourceStatus, WebDAVSourceConfig, CreateNotification},
-    scheduling::source_scheduler::SourceScheduler,
-    test_helpers::{create_test_app_state_with_options, TestAppStateOptions},
 };
-
-/// Create a test app state
-async fn create_test_app_state() -> Arc<AppState> {
-    let options = TestAppStateOptions::new()
-        .with_upload_path("/tmp/test_uploads")
-        .with_concurrent_ocr_jobs(4);
-    
-    return create_test_app_state_with_options(options)
-        .await
-        .expect("Failed to create test app state");
-}
 
 /// Create a source that appears to be interrupted during sync
 fn create_interrupted_source(user_id: Uuid, source_type: SourceType) -> Source {
@@ -510,7 +495,8 @@ fn get_retry_delay_for_failure(failure: &ResumeFailure) -> Duration {
 
 #[tokio::test]
 async fn test_resume_state_persistence() {
-    let state = create_test_app_state().await;
+    // Note: This test validates the in-memory ResumeState tracking logic.
+    // Database persistence of resume state is tested in integration_source_scheduler_tests.rs
     let user_id = Uuid::new_v4();
     
     // Create a source that appears interrupted
