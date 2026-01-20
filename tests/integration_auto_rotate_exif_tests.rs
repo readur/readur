@@ -14,11 +14,8 @@ use image::GenericImageView;
 
 use readur::{
     AppState,
-    db::Database,
     models::{CreateUser, UserRole, UpdateSettings},
-    services::file_service::FileService,
-    storage::{StorageConfig, factory::create_storage_backend},
-    test_helpers::create_test_config_with_db,
+    test_utils::TestContext,
     ingestion::document_ingestion::{DocumentIngestionService, DocumentIngestionRequest, DeduplicationPolicy, IngestionResult},
 };
 
@@ -32,57 +29,20 @@ fn create_test_user_with_suffix(suffix: &str) -> CreateUser {
     }
 }
 
-/// Create test app state with database connection
-async fn create_test_app_state() -> Result<Arc<AppState>> {
-    let database_url = std::env::var("DATABASE_URL")
-        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+/// Test context wrapper that provides access to AppState via testcontainers
+struct AutoRotateTestContext {
+    ctx: TestContext,
+}
 
-    let mut config = create_test_config_with_db(&database_url);
-    config.server_address = "127.0.0.1:8000".to_string();
-    config.jwt_secret = "test-secret".to_string();
-    config.upload_path = "./test-uploads-autorotate".to_string();
-    config.watch_folder = "./test-watch".to_string();
+impl AutoRotateTestContext {
+    async fn new() -> Self {
+        let ctx = TestContext::new().await;
+        Self { ctx }
+    }
 
-    // Create upload directory if it doesn't exist
-    std::fs::create_dir_all(&config.upload_path).ok();
-
-    let db = Database::new(&config.database_url).await?;
-
-    let storage_config = StorageConfig::Local {
-        upload_path: config.upload_path.clone(),
-    };
-    let storage_backend = create_storage_backend(storage_config)
-        .await
-        .expect("Failed to create test storage backend");
-    let file_service = Arc::new(FileService::with_storage(
-        config.upload_path.clone(),
-        storage_backend,
-    ));
-
-    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(
-        db.clone(),
-        db.get_pool().clone(),
-        1,
-        file_service.clone(),
-        100,
-        100,
-    ));
-
-    Ok(Arc::new(AppState {
-        db: db.clone(),
-        config,
-        file_service,
-        webdav_scheduler: None,
-        source_scheduler: None,
-        queue_service,
-        oidc_client: None,
-        sync_progress_tracker: std::sync::Arc::new(
-            readur::services::sync_progress_tracker::SyncProgressTracker::new(),
-        ),
-        user_watch_service: None,
-        webdav_metrics_collector: None,
-    }))
+    fn state(&self) -> &Arc<AppState> {
+        self.ctx.state()
+    }
 }
 
 /// Create an UpdateSettings with auto_rotate_images set
@@ -147,7 +107,8 @@ fn create_settings_with_auto_rotate(enabled: bool) -> UpdateSettings {
 
 #[tokio::test]
 async fn test_auto_rotate_enabled_rotates_image_with_exif_orientation_6() -> Result<()> {
-    let state = create_test_app_state().await?;
+    let test_ctx = AutoRotateTestContext::new().await;
+    let state = test_ctx.state();
     let user = create_test_user_with_suffix(&format!("{}", Uuid::new_v4().simple()));
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
@@ -225,7 +186,8 @@ async fn test_auto_rotate_enabled_rotates_image_with_exif_orientation_6() -> Res
 
 #[tokio::test]
 async fn test_auto_rotate_disabled_preserves_original_orientation() -> Result<()> {
-    let state = create_test_app_state().await?;
+    let test_ctx = AutoRotateTestContext::new().await;
+    let state = test_ctx.state();
     let user = create_test_user_with_suffix(&format!("{}", Uuid::new_v4().simple()));
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
@@ -302,7 +264,8 @@ async fn test_auto_rotate_disabled_preserves_original_orientation() -> Result<()
 
 #[tokio::test]
 async fn test_auto_rotate_with_orientation_8_rotate_270() -> Result<()> {
-    let state = create_test_app_state().await?;
+    let test_ctx = AutoRotateTestContext::new().await;
+    let state = test_ctx.state();
     let user = create_test_user_with_suffix(&format!("{}", Uuid::new_v4().simple()));
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
@@ -372,7 +335,8 @@ async fn test_auto_rotate_with_orientation_8_rotate_270() -> Result<()> {
 
 #[tokio::test]
 async fn test_auto_rotate_with_orientation_3_rotate_180() -> Result<()> {
-    let state = create_test_app_state().await?;
+    let test_ctx = AutoRotateTestContext::new().await;
+    let state = test_ctx.state();
     let user = create_test_user_with_suffix(&format!("{}", Uuid::new_v4().simple()));
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
@@ -448,7 +412,8 @@ async fn test_auto_rotate_with_orientation_3_rotate_180() -> Result<()> {
 
 #[tokio::test]
 async fn test_auto_rotate_no_exif_preserves_image() -> Result<()> {
-    let state = create_test_app_state().await?;
+    let test_ctx = AutoRotateTestContext::new().await;
+    let state = test_ctx.state();
     let user = create_test_user_with_suffix(&format!("{}", Uuid::new_v4().simple()));
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
@@ -518,7 +483,8 @@ async fn test_auto_rotate_no_exif_preserves_image() -> Result<()> {
 
 #[tokio::test]
 async fn test_auto_rotate_non_image_file_not_affected() -> Result<()> {
-    let state = create_test_app_state().await?;
+    let test_ctx = AutoRotateTestContext::new().await;
+    let state = test_ctx.state();
     let user = create_test_user_with_suffix(&format!("{}", Uuid::new_v4().simple()));
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
@@ -582,7 +548,8 @@ async fn test_auto_rotate_non_image_file_not_affected() -> Result<()> {
 
 #[tokio::test]
 async fn test_auto_rotate_fallback_on_corrupted_image() -> Result<()> {
-    let state = create_test_app_state().await?;
+    let test_ctx = AutoRotateTestContext::new().await;
+    let state = test_ctx.state();
     let user = create_test_user_with_suffix(&format!("{}", Uuid::new_v4().simple()));
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
@@ -647,7 +614,8 @@ async fn test_auto_rotate_fallback_on_corrupted_image() -> Result<()> {
 
 #[tokio::test]
 async fn test_auto_rotate_with_all_orientations() -> Result<()> {
-    let state = create_test_app_state().await?;
+    let test_ctx = AutoRotateTestContext::new().await;
+    let state = test_ctx.state();
     let user = create_test_user_with_suffix(&format!("{}", Uuid::new_v4().simple()));
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
