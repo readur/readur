@@ -167,8 +167,13 @@ async fn start_notify_watcher(
         match res {
             Ok(event) => {
                 for path in event.paths {
-                    if let Err(e) = process_file(&path, &db, &file_service, &queue_service, &config, &user_watch_manager).await {
-                        error!("Failed to process file {:?}: {}", path, e);
+                    let stability_ms = config.file_stability_check_ms.unwrap_or(1000);
+                    if is_file_stable(&path, stability_ms).await {
+                        if let Err(e) = process_file(&path, &db, &file_service, &queue_service, &config, &user_watch_manager).await {
+                            error!("Failed to process file {:?}: {}", path, e);
+                        }
+                    } else {
+                        debug!("File {:?} not stable yet, skipping", path);
                     }
                 }
             }
@@ -251,7 +256,8 @@ async fn scan_directory(
                     // Check if this is a new file or modified file
                     if !known_files.contains(&file_info) {
                         // Wait a bit to ensure file is fully written
-                        if is_file_stable(&path).await {
+                        let stability_ms = config.file_stability_check_ms.unwrap_or(1000);
+                        if is_file_stable(&path, stability_ms).await {
                             debug!("Found new/modified file: {:?}", path);
                             if let Err(e) = process_file(&path, db, file_service, queue_service, config, user_watch_manager).await {
                                 error!("Failed to process file {:?}: {}", path, e);
@@ -269,20 +275,23 @@ async fn scan_directory(
     Ok(())
 }
 
-async fn is_file_stable(path: &Path) -> bool {
-    // Check if file size is stable (not currently being written)
+async fn is_file_stable(path: &Path, stability_check_ms: u64) -> bool {
+    // Check if file size AND modification time are stable (not currently being written)
     if let Ok(metadata1) = tokio::fs::metadata(path).await {
         let size1 = metadata1.len();
-        
-        // Wait a short time
-        sleep(Duration::from_millis(500)).await;
-        
+        let mtime1 = metadata1.modified().ok();
+
+        // Wait for the configured stability check duration
+        sleep(Duration::from_millis(stability_check_ms)).await;
+
         if let Ok(metadata2) = tokio::fs::metadata(path).await {
             let size2 = metadata2.len();
-            return size1 == size2;
+            let mtime2 = metadata2.modified().ok();
+            // File is stable only if both size AND mtime are unchanged
+            return size1 == size2 && mtime1 == mtime2;
         }
     }
-    
+
     // If we can't read metadata, assume it's not stable
     false
 }
