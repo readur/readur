@@ -1113,32 +1113,36 @@ impl EnhancedOcrService {
                     if result.is_ok() && result.as_ref().unwrap().status.success() {
                         return result;
                     }
-                    
-                    // Strategy 3: Last resort - minimal processing (skips very large pages)
-                    eprintln!("Recovery mode failed, trying minimal processing...");
-                    std::process::Command::new("ocrmypdf")
-                        .arg("--force-ocr")
-                        .arg("--skip-big")  // Skip very large pages that might cause memory issues
-                        .arg("--language")
-                        .arg("eng")
-                        .arg(&file_path)
-                        .arg(&temp_ocr_path)
-                        .output()
+
+                    // Both strategies failed - return the last result for error reporting
+                    eprintln!("All OCR strategies failed for file: {}", file_path);
+                    result
                 }
             })
         ).await;
-        
+
         let ocrmypdf_output = match ocrmypdf_result {
             Ok(Ok(output)) => output?,
             Ok(Err(e)) => return Err(anyhow!("Failed to join ocrmypdf task: {}", e)),
             Err(_) => return Err(anyhow!("ocrmypdf timed out after 5 minutes for file '{}'", file_path)),
         };
-        
+
         if !ocrmypdf_output.status.success() {
             let stderr = String::from_utf8_lossy(&ocrmypdf_output.stderr);
             let stdout = String::from_utf8_lossy(&ocrmypdf_output.stdout);
             return Err(anyhow!(
-                "ocrmypdf failed for '{}': Exit code {}\nStderr: {}\nStdout: {}",
+                "OCR failed for '{}' after trying multiple strategies.\n\
+                \n\
+                Exit code: {}\n\
+                Error output:\n{}\n{}\n\
+                \n\
+                Possible causes and solutions:\n\
+                1. PDF contains very large images (high DPI scans) - try reducing image resolution before upload\n\
+                2. Insufficient memory - increase container memory limits (recommended: 2GB+ for large PDFs)\n\
+                3. Corrupted or malformed PDF - try re-scanning or re-creating the PDF\n\
+                4. Unsupported PDF features - ensure the PDF is not password-protected\n\
+                \n\
+                For large documents, consider splitting into smaller files before uploading.",
                 file_path, ocrmypdf_output.status.code().unwrap_or(-1), stderr, stdout
             ));
         }

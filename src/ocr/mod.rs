@@ -136,36 +136,40 @@ impl OcrService {
                     .await?;
                     
                 if !output.status.success() {
-                    // Final fallback: minimal processing (may skip large pages)
-                    output = tokio::process::Command::new("ocrmypdf")
-                        .arg("--skip-big")   // Skip very large pages to avoid memory issues
-                        .arg("--sidecar")
-                        .arg(&temp_text_path)
-                        .arg(file_path)
-                        .arg("-")
-                        .output()
-                        .await?;
-                        
-                    if !output.status.success() {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        // Clean up temp file on error
-                        let _ = tokio::fs::remove_file(&temp_text_path).await;
-                        
-                        // Last resort: try direct text extraction
-                        match self.extract_text_from_pdf_bytes(file_path).await {
-                            Ok(text) if !text.trim().is_empty() => {
-                                return Ok(text);
-                            }
-                            Ok(_) => {
-                                // Empty text from direct extraction
-                            }
-                            Err(_) => {
-                                // Direct extraction also failed
-                            }
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+
+                    // Clean up temp file on error
+                    let _ = tokio::fs::remove_file(&temp_text_path).await;
+
+                    // Last resort: try direct text extraction
+                    match self.extract_text_from_pdf_bytes(file_path).await {
+                        Ok(text) if !text.trim().is_empty() => {
+                            return Ok(text);
                         }
-                        
-                        return Err(anyhow!("Failed to extract text from PDF after trying multiple strategies: {}", stderr));
+                        Ok(_) => {
+                            // Empty text from direct extraction
+                        }
+                        Err(_) => {
+                            // Direct extraction also failed
+                        }
                     }
+
+                    // Provide a detailed error message with troubleshooting steps
+                    return Err(anyhow!(
+                        "OCR failed for PDF '{}' after trying multiple strategies.\n\
+                        \n\
+                        Error from ocrmypdf:\n{}\n{}\n\
+                        \n\
+                        Possible causes and solutions:\n\
+                        1. PDF contains very large images (high DPI scans) - try reducing image resolution before upload\n\
+                        2. Insufficient memory - increase container memory limits or process smaller batches\n\
+                        3. Corrupted PDF - try re-scanning or re-creating the PDF\n\
+                        4. Unsupported PDF format - ensure the PDF is not password-protected or malformed\n\
+                        \n\
+                        For large documents, consider splitting into smaller files before uploading.",
+                        file_path, stderr, stdout
+                    ));
                 }
             }
             
