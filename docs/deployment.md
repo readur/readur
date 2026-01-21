@@ -9,6 +9,7 @@ This guide covers production deployment strategies, SSL setup, monitoring, backu
 - [Production Docker Compose](#production-docker-compose)
 - [Volume Path Syntax](#volume-path-syntax)
 - [Platform-Specific Deployment Notes](#platform-specific-deployment-notes)
+  - [Synology NAS](synology.md) - Complete Synology deployment guide
 - [Network Filesystem Mounts](#network-filesystem-mounts)
   - [NFS Mounts](#nfs-mounts)
   - [SMB/CIFS Mounts](#smbcifs-mounts)
@@ -18,6 +19,7 @@ This guide covers production deployment strategies, SSL setup, monitoring, backu
   - [Traefik Configuration](#traefik-configuration)
 - [Health Checks](#health-checks)
 - [Backup Strategy](#backup-strategy)
+- [Upgrading PostgreSQL](postgres-upgrade.md)
 - [Monitoring](#monitoring)
 - [Deployment Platforms](#deployment-platforms)
   - [Docker Swarm](#docker-swarm)
@@ -91,7 +93,7 @@ services:
           cpus: '0.5'
 
   postgres:
-    image: postgres:15
+    image: postgres:16.8-alpine
     environment:
       - POSTGRES_USER=readur
       - POSTGRES_PASSWORD=${DB_PASSWORD}
@@ -260,21 +262,15 @@ services:
 
 ### Synology DSM
 
-Synology NAS devices use volume-based paths:
+Synology NAS devices require special configuration due to DSM's permission model and potential port conflicts.
 
-```yaml
-services:
-  readur:
-    volumes:
-      - /volume1/docker/readur/uploads:/app/uploads
-      - /volume1/docker/readur/watch:/app/watch
+**Key considerations:**
+- Use port `5433:5432` for PostgreSQL to avoid DSM internal conflicts
+- Use named Docker volumes for PostgreSQL data (avoids permission errors)
+- Pin specific PostgreSQL versions (e.g., `postgres:16.8-alpine`)
+- Create directories via File Station before deploying
 
-  postgres:
-    volumes:
-      - /volume1/docker/readur/postgres:/var/lib/postgresql/data
-```
-
-**Note:** Ensure the `docker` shared folder exists and the Docker user has write permissions.
+For complete setup instructions, troubleshooting, and performance tuning, see the **[Synology Deployment Guide](synology.md)**.
 
 ### QNAP
 
@@ -416,6 +412,8 @@ For example, if you change the server to run on port 3000:
 - Update healthcheck to: `http://localhost:3000/api/health`
 
 ## Backup Strategy
+
+> **Upgrading PostgreSQL?** See the dedicated [PostgreSQL Upgrade Guide](postgres-upgrade.md) for major version migrations (e.g., 15 → 16).
 
 Create an automated backup script:
 
