@@ -93,17 +93,23 @@ services:
           cpus: '0.5'
 
   postgres:
-    image: postgres:16.8-alpine
+    image: postgres:16
     environment:
       - POSTGRES_USER=readur
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=readur
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8
-    
+
+    # Exclude from WUD and Watchtower auto-updates to prevent version incompatibility
+    # See: https://github.com/orgs/readur/discussions/480
+    labels:
+      - "wud.trigger.exclude=docker.autoupdate"
+      - "com.centurylinklabs.watchtower.monitor-only=true"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-config:/etc/postgresql/conf.d:ro
-    
+
     # PostgreSQL optimization for document search
     command: >
       postgres
@@ -111,9 +117,9 @@ services:
       -c effective_cache_size=1GB
       -c max_connections=100
       -c default_text_search_config=pg_catalog.english
-    
+
     restart: unless-stopped
-    
+
     # Don't expose port in production
     # ports:
     #   - "5433:5432"
@@ -267,7 +273,7 @@ Synology NAS devices require special configuration due to DSM's permission model
 **Key considerations:**
 - Use port `5433:5432` for PostgreSQL to avoid DSM internal conflicts
 - Use named Docker volumes for PostgreSQL data (avoids permission errors)
-- Pin specific PostgreSQL versions (e.g., `postgres:16.8-alpine`)
+- Pin specific PostgreSQL versions (e.g., `postgres:16`)
 - Create directories via File Station before deploying
 
 For complete setup instructions, troubleshooting, and performance tuning, see the **[Synology Deployment Guide](synology.md)**.

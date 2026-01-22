@@ -68,8 +68,12 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16.8-alpine    # Pin specific version to avoid update issues
+    image: postgres:16    # Pin specific version to avoid update issues
     container_name: readur-postgres
+    # Exclude from WUD and Watchtower auto-updates to prevent version incompatibility
+    labels:
+      - "wud.trigger.exclude=docker.autoupdate"
+      - "com.centurylinklabs.watchtower.monitor-only=true"
     environment:
       POSTGRES_USER: readur
       POSTGRES_PASSWORD: readur
@@ -167,7 +171,7 @@ Ensure the Docker user can read/write to these directories:
 |-------|----------|
 | **Port 5432 conflict** | DSM may use 5432 internally. Map to `5433:5432` instead. Readur still connects internally on 5432. |
 | **Permission errors on postgres data** | Use named volumes (`postgres_data:`) instead of host paths |
-| **"postgres: not found" error** | Pin specific version (e.g., `postgres:16.8-alpine`) and re-pull image |
+| **"postgres: not found" error** | Pin specific version (e.g., `postgres:16`) and re-pull image |
 | **Watch folder permissions** | Mount with `:ro` flag; create folders via File Station first |
 | **External DB access** | Use port 5433 from Synology host (e.g., pgAdmin). Container-to-container uses 5432. |
 | **Low memory NAS** | Reduce `CONCURRENT_OCR_JOBS` to 1 or 2 |
@@ -197,7 +201,7 @@ volumes:
 /usr/local/bin/docker-entrypoint.sh: exec: postgres: not found
 ```
 
-**Cause:** Corrupted image download or version mismatch.
+**Cause:** Corrupted image download, version mismatch, or auto-update tools (WUD/Watchtower) upgraded PostgreSQL to an incompatible version.
 
 **Solution:** Remove and re-pull the postgres image:
 
@@ -210,12 +214,42 @@ cd /volume1/docker/readur
 docker compose down -v
 
 # Remove and re-pull the image
-docker rmi postgres:16.8-alpine
-docker pull postgres:16.8-alpine
+docker rmi postgres:16
+docker pull postgres:16
 
 # Restart
 docker compose up -d
 ```
+
+### Auto-Update Tools Breaking PostgreSQL
+
+If you use container auto-update tools like [WUD (What's Up Docker)](https://github.com/getwud/wud) or [Watchtower](https://github.com/containrrr/watchtower), they may automatically update PostgreSQL to a version incompatible with Readur.
+
+**Symptoms:**
+- Readur was working but suddenly stopped after an auto-update
+- PostgreSQL container fails to start
+- Errors like "postgres: not found" appear
+
+**Solution:** Exclude the PostgreSQL container from auto-updates by adding labels:
+
+```yaml
+postgres:
+    image: postgres:16
+    # Exclude from WUD and Watchtower auto-updates
+    labels:
+      - "wud.trigger.exclude=docker.autoupdate"
+      - "com.centurylinklabs.watchtower.monitor-only=true"
+    container_name: readur-postgres
+    environment:
+      POSTGRES_USER: readur
+      POSTGRES_PASSWORD: readur
+      POSTGRES_DB: readur
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+```
+
+These labels tell WUD and Watchtower to skip updating the PostgreSQL container, keeping it at the pinned version.
 
 ### Container Keeps Restarting
 

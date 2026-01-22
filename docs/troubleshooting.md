@@ -93,6 +93,48 @@ sudo chmod -R 755 ./uploads
 docker run --user $(id -u):$(id -g) readur:latest
 ```
 
+#### Problem: Auto-update tools break PostgreSQL
+
+**Symptoms:**
+- Readur was working but suddenly stopped after a container update
+- PostgreSQL container fails to start with "postgres: not found" error
+- Container logs show version mismatch errors
+
+**Cause:** Container auto-update tools like [WUD (What's Up Docker)](https://github.com/getwud/wud) or [Watchtower](https://github.com/containrrr/watchtower) may automatically update PostgreSQL to a version incompatible with Readur or with your existing data.
+
+**Solution:** Exclude the PostgreSQL container from auto-updates by adding labels to your docker-compose.yml:
+
+```yaml
+postgres:
+  image: postgres:16
+  # Exclude from WUD and Watchtower auto-updates
+  labels:
+    - "wud.trigger.exclude=docker.autoupdate"
+    - "com.centurylinklabs.watchtower.monitor-only=true"
+  # ... rest of configuration
+```
+
+If PostgreSQL was already updated, you'll need to restore from backup or migrate your data:
+
+```bash
+# Stop containers
+docker compose down
+
+# Remove the corrupted postgres volume
+docker volume rm readur_postgres_data
+
+# Re-pull the correct version
+docker pull postgres:16
+
+# Restart (this creates a fresh database)
+docker compose up -d
+
+# If you have a backup, restore it:
+gunzip -c backup.sql.gz | docker exec -i readur-postgres psql -U readur
+```
+
+For more details, see [GitHub Discussion #480](https://github.com/orgs/readur/discussions/480).
+
 #### Problem: Build fails with Rust compilation errors
 
 **Solutions:**

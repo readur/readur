@@ -61,10 +61,10 @@ Change the PostgreSQL version to your target version:
 
 ```yaml
 # Before
-image: postgres:15.10-alpine
+image: postgres:15
 
 # After
-image: postgres:16.8-alpine
+image: postgres:16
 ```
 
 ### 6. Remove the old data volume

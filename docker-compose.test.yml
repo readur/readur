@@ -1,6 +1,6 @@
 services:
   postgres_test:
-    image: postgres:18.2-alpine
+    image: postgres:18
     container_name: readur_postgres_test
     environment:
       POSTGRES_USER: readur_test
