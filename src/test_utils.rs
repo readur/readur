@@ -846,6 +846,9 @@ impl TestConfigBuilder {
             // S3 Configuration
             s3_enabled: false,
             s3_config: None,
+            
+            // CPU Allocation
+            cpu_allocation: crate::cpu_allocation::CpuAllocation::from_auto_allocation(4).unwrap(),
         }
     }
 }
