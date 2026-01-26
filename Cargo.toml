@@ -46,7 +46,7 @@ image = { version = "0.25", features = ["png", "jpeg", "tiff", "bmp"], optional 
 imageproc = { version = "0.25", optional = true }
 kamadak-exif = { version = "0.6.1", optional = true }
 thiserror = "2.0"
-sysinfo = "0.37"
+sysinfo = "0.38"
 raw-cpuid = { version = "11", optional = true }
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 quick-xml = { version = "0.37", features = ["serialize"] }
