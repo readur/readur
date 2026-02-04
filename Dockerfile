@@ -108,6 +108,11 @@ RUN chmod 755 /app/watch
 # Copy built frontend from frontend-builder
 COPY --from=frontend-builder /frontend/dist /app/frontend/dist
 
+# Copy entrypoint script for dynamic language installation
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 EXPOSE 8000
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["./readur"]
