@@ -49,6 +49,10 @@ WORKDIR /app
 # Create necessary directories
 RUN mkdir -p /app/uploads /app/watch /app/frontend
 
+# Copy entrypoint script for dynamic language installation
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Copy dependency files first for better caching
 COPY Cargo.toml Cargo.lock ./
 
@@ -70,4 +74,5 @@ EXPOSE 8000
 # --why: shows what triggered the rebuild
 # --ignore: ignore certain file patterns to avoid unnecessary rebuilds
 # Run the main readur binary
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["cargo", "watch", "-x", "run --bin readur", "--why", "--ignore", "frontend/*", "--ignore", "*.md", "--ignore", "test*"]
