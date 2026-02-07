@@ -1,8 +1,8 @@
 use anyhow::Result;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use std::collections::HashSet;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
@@ -163,14 +163,51 @@ async fn start_notify_watcher(
         }
     }
     
+    let watch_interval = Duration::from_secs(config.watch_interval_seconds.unwrap_or(30));
+    let mut known_files: HashMap<PathBuf, SystemTime> = HashMap::new();
+    let mut last_processed: HashMap<PathBuf, Instant> = HashMap::new();
+
     while let Some(res) = rx.recv().await {
         match res {
             Ok(event) => {
+                if !is_relevant_event(&event.kind) {
+                    debug!("Ignoring irrelevant event: {:?}", event.kind);
+                    continue;
+                }
+
                 for path in event.paths {
+                    // Debounce: skip if processed within the watch interval
+                    if let Some(&last) = last_processed.get(&path) {
+                        let elapsed = last.elapsed();
+                        if elapsed < watch_interval {
+                            debug!("Debouncing file {:?} (processed {:.1}s ago)", path, elapsed.as_secs_f64());
+                            continue;
+                        }
+                    }
+
+                    // Mtime dedup: skip if mtime hasn't changed
+                    let current_mtime = tokio::fs::metadata(&path)
+                        .await
+                        .ok()
+                        .and_then(|m| m.modified().ok());
+
+                    if let Some(mtime) = current_mtime {
+                        if known_files.get(&path) == Some(&mtime) {
+                            debug!("Skipping unchanged file {:?} (mtime unchanged)", path);
+                            continue;
+                        }
+                    }
+
                     let stability_ms = config.file_stability_check_ms.unwrap_or(1000);
                     if is_file_stable(&path, stability_ms).await {
                         if let Err(e) = process_file(&path, &db, &file_service, &queue_service, &config, &user_watch_manager).await {
                             error!("Failed to process file {:?}: {}", path, e);
+                        } else {
+                            // Update tracking on successful processing
+                            if let Some(mtime) = current_mtime {
+                                known_files.insert(path.clone(), mtime);
+                            }
+                            last_processed.insert(path, Instant::now());
                         }
                     } else {
                         debug!("File {:?} not stable yet, skipping", path);
@@ -296,6 +333,22 @@ async fn is_file_stable(path: &Path, stability_check_ms: u64) -> bool {
     false
 }
 
+/// Filter notify events to only process relevant filesystem changes.
+/// Allows: file creation, content modification, renames, and ambiguous events.
+/// Rejects: access-only, removal, and metadata-only changes.
+fn is_relevant_event(kind: &EventKind) -> bool {
+    use notify::event::ModifyKind;
+
+    matches!(
+        kind,
+        EventKind::Create(_)
+            | EventKind::Modify(ModifyKind::Data(_))
+            | EventKind::Modify(ModifyKind::Name(_))
+            | EventKind::Modify(ModifyKind::Any)
+            | EventKind::Any
+    )
+}
+
 async fn process_file(
     path: &std::path::Path,
     db: &Database,
@@ -381,7 +434,7 @@ async fn process_file(
         }
     }
     
-    info!("Processing new file: {:?} (from watch directory: {})", path, config.watch_folder);
+    info!("Processing file: {:?} (from watch directory: {})", path, config.watch_folder);
     
     let file_data = tokio::fs::read(path).await?;
     let file_size = file_data.len() as i64;
@@ -484,7 +537,7 @@ async fn process_file(
             info!("Successfully queued file for OCR: {} (size: {} bytes)", file_info.name, file_info.size);
         }
         IngestionResult::Skipped { existing_document_id, reason } => {
-            info!("Skipped duplicate watch folder file {}: {} (existing: {})", file_info.name, reason, existing_document_id);
+            debug!("Skipped duplicate watch folder file {}: {} (existing: {})", file_info.name, reason, existing_document_id);
         }
         IngestionResult::ExistingDocument(doc) => {
             info!("Found existing document for watch folder file {}: {} (not re-queuing for OCR)", file_info.name, doc.id);
@@ -650,3 +703,55 @@ fn clean_pdf_data(data: &[u8]) -> &[u8] {
     data
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::{AccessKind, CreateKind, DataChange, MetadataKind, ModifyKind, RemoveKind, RenameMode};
+
+    #[test]
+    fn relevant_event_accepts_create() {
+        assert!(is_relevant_event(&EventKind::Create(CreateKind::File)));
+        assert!(is_relevant_event(&EventKind::Create(CreateKind::Any)));
+    }
+
+    #[test]
+    fn relevant_event_accepts_data_modification() {
+        assert!(is_relevant_event(&EventKind::Modify(ModifyKind::Data(DataChange::Content))));
+        assert!(is_relevant_event(&EventKind::Modify(ModifyKind::Data(DataChange::Any))));
+    }
+
+    #[test]
+    fn relevant_event_accepts_rename() {
+        assert!(is_relevant_event(&EventKind::Modify(ModifyKind::Name(RenameMode::To))));
+        assert!(is_relevant_event(&EventKind::Modify(ModifyKind::Name(RenameMode::Any))));
+    }
+
+    #[test]
+    fn relevant_event_accepts_ambiguous() {
+        assert!(is_relevant_event(&EventKind::Modify(ModifyKind::Any)));
+        assert!(is_relevant_event(&EventKind::Any));
+    }
+
+    #[test]
+    fn relevant_event_rejects_access() {
+        assert!(!is_relevant_event(&EventKind::Access(AccessKind::Read)));
+        assert!(!is_relevant_event(&EventKind::Access(AccessKind::Any)));
+    }
+
+    #[test]
+    fn relevant_event_rejects_remove() {
+        assert!(!is_relevant_event(&EventKind::Remove(RemoveKind::File)));
+        assert!(!is_relevant_event(&EventKind::Remove(RemoveKind::Any)));
+    }
+
+    #[test]
+    fn relevant_event_rejects_metadata_only() {
+        assert!(!is_relevant_event(&EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any))));
+        assert!(!is_relevant_event(&EventKind::Modify(ModifyKind::Metadata(MetadataKind::WriteTime))));
+    }
+
+    #[test]
+    fn relevant_event_rejects_other() {
+        assert!(!is_relevant_event(&EventKind::Other));
+    }
+}
