@@ -66,7 +66,7 @@ aws-credential-types = { version = "1.2", optional = true }
 aws-types = { version = "1.3", optional = true }
 sha2 = "0.10"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
-testcontainers = { version = "0.26", optional = true }
+testcontainers = { version = "0.27", optional = true }
 testcontainers-modules = { version = "0.14", features = ["postgres"], optional = true }
 # Office document support - now using XML extraction only
 zip = "7"             # Still needed for other archive handling
@@ -86,7 +86,7 @@ tokio-test = "0.4"
 futures = "0.3"
 rand = "0.9"
 # Database testing dependencies
-testcontainers = "0.26"
+testcontainers = "0.27"
 testcontainers-modules = { version = "0.14", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
 rust_xlsxwriter = "0.92"  # For creating proper XLSX test files
