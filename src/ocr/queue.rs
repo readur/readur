@@ -807,7 +807,7 @@ impl OcrQueueService {
         .bind(document_id)
         .bind(user_id)
         .bind(original_image_path)
-        .bind(permanent_path.to_string_lossy().as_ref())
+        .bind(permanent_path.to_string_lossy().to_string())
         .bind(&processing_parameters)
         .bind(processing_steps)
         .bind(image_width as i32)
