@@ -105,7 +105,7 @@ ENABLE_PER_USER_WATCH=true
 # Set the base directory for user watch folders
 USER_WATCH_BASE_DIR=/data/user_watch
 
-# Configure watch interval (optional, default: 60 seconds)
+# Debounce and polling interval (optional, default: 30 seconds)
 WATCH_INTERVAL_SECONDS=30
 
 # Set file stability check (optional, default: 2000ms)
@@ -479,7 +479,7 @@ curl -X DELETE "https://readur.example.com/api/users/${USER_ID}/watch-directory"
 |----------|------|---------|-------------|
 | `ENABLE_PER_USER_WATCH` | Boolean | `false` | Enable/disable per-user watch directories |
 | `USER_WATCH_BASE_DIR` | String | `./user_watch` | Base directory for all user watch folders |
-| `WATCH_INTERVAL_SECONDS` | Integer | `60` | How often to scan for new files (seconds) |
+| `WATCH_INTERVAL_SECONDS` | Integer | `30` | Minimum interval between re-processing the same file; also controls polling frequency for network filesystems |
 | `FILE_STABILITY_CHECK_MS` | Integer | `2000` | Time to wait for file size stability (milliseconds) |
 | `MAX_FILE_AGE_HOURS` | Integer | `24` | Maximum age of files to process (hours) |
 

@@ -43,7 +43,7 @@ All application settings can be configured via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WATCH_FOLDER` | `./watch` | Directory to monitor for new files |
-| `WATCH_INTERVAL_SECONDS` | `30` | Polling interval for network filesystems (seconds) |
+| `WATCH_INTERVAL_SECONDS` | `30` | Minimum interval between re-processing the same file; also controls polling frequency for network filesystems |
 | `FILE_STABILITY_CHECK_MS` | `500` | Time to wait for file write completion (milliseconds) |
 | `MAX_FILE_AGE_HOURS` | _(none)_ | Skip files older than this many hours |
 | `FORCE_POLLING_WATCH` | _(none)_ | Force polling mode even for local filesystems |

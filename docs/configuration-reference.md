@@ -87,7 +87,7 @@ This document provides a comprehensive reference for all configuration options a
 | `WATCH_FOLDER` | String | `./watch` | Global watch directory | No |
 | `USER_WATCH_BASE_DIR` | String | `./user_watch` | Base directory for per-user folders | No |
 | `ENABLE_PER_USER_WATCH` | Boolean | `false` | Enable per-user watch directories | No |
-| `WATCH_INTERVAL_SECONDS` | Integer | `60` | Scan interval in seconds | No |
+| `WATCH_INTERVAL_SECONDS` | Integer | `30` | Minimum interval between re-processing the same file; also controls polling frequency for network filesystems | No |
 | `FILE_STABILITY_CHECK_MS` | Integer | `2000` | File stability check delay (ms) | No |
 | `MAX_FILE_AGE_HOURS` | Integer | `24` | Maximum file age to process | No |
 | `WATCH_RECURSIVE` | Boolean | `true` | Watch subdirectories recursively | No |

@@ -60,7 +60,7 @@ docker compose up -d
 | Setting | Default | What it does |
 |---------|---------|-------------|
 | `WATCH_FOLDER` | `./watch` | Which folder to monitor |
-| `WATCH_INTERVAL_SECONDS` | `30` | How often to check for new files (network drives) |
+| `WATCH_INTERVAL_SECONDS` | `30` | Minimum interval between re-processing the same file; also controls polling frequency for network filesystems |
 | `MAX_FILE_AGE_HOURS` | _(none)_ | Ignore files older than this |
 | `ALLOWED_FILE_TYPES` | `pdf,png,jpg,jpeg,tiff,bmp,txt,doc,docx` | Which file types to process |
 
@@ -137,8 +137,9 @@ export FORCE_POLLING_WATCH=1
 
 ### Local Filesystems
 ```bash
-# Optimal settings for local storage (default behavior)
-# No special configuration needed - uses inotify automatically
+# Uses inotify automatically for instant file detection.
+# WATCH_INTERVAL_SECONDS controls debounce (minimum time before
+# re-processing the same file). Default 30s is suitable for most setups.
 ```
 
 ## Supported File Types
