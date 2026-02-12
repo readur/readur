@@ -89,7 +89,7 @@ rand = "0.9"
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
-rust_xlsxwriter = "0.92"  # For creating proper XLSX test files
+rust_xlsxwriter = "0.93"  # For creating proper XLSX test files
 # WebDAV server for realistic stress testing
 dav-server = { version = "0.10", features = ["memfs"] }
 hyper = { version = "1", features = ["server", "http1"] }
