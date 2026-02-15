@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -14,7 +14,7 @@ import {
 import { Refresh as RefreshIcon, Language as LanguageIcon } from '@mui/icons-material';
 import OcrLanguageSelector from '../OcrLanguageSelector';
 import LanguageSelector from '../LanguageSelector';
-import { ocrService, ErrorHelper, ErrorCodes } from '../../services/api';
+import { ocrService, ErrorHelper, ErrorCodes, LanguageInfo } from '../../services/api';
 
 interface OcrRetryDialogProps {
   open: boolean;
@@ -43,61 +43,30 @@ const OcrRetryDialog: React.FC<OcrRetryDialogProps> = ({
   const [primaryLanguage, setPrimaryLanguage] = useState<string>('');
   const [useMultiLanguage, setUseMultiLanguage] = useState<boolean>(false);
   const [retrying, setRetrying] = useState<boolean>(false);
+  const [languageMap, setLanguageMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    ocrService.getAvailableLanguages()
+      .then((response) => {
+        const map: Record<string, string> = {};
+        response.data.available_languages.forEach((lang: LanguageInfo) => {
+          map[lang.code] = lang.name;
+        });
+        setLanguageMap(map);
+      })
+      .catch(() => {
+        // Fallback handled by getLanguageDisplayName returning the code
+      });
+  }, []);
 
   const handleLanguagesChange = (languages: string[], primary?: string) => {
     setSelectedLanguages(languages);
     setPrimaryLanguage(primary || languages[0] || '');
   };
 
-  // Simple language code to name mapping for display
-  const getLanguageDisplayName = (langCode: string): string => {
-    const languageNames: Record<string, string> = {
-      'eng': 'English',
-      'spa': 'Spanish',  
-      'fra': 'French',
-      'deu': 'German',
-      'ita': 'Italian',
-      'por': 'Portuguese',
-      'rus': 'Russian',
-      'jpn': 'Japanese',
-      'chi_sim': 'Chinese (Simplified)',
-      'chi_tra': 'Chinese (Traditional)',
-      'kor': 'Korean',
-      'ara': 'Arabic',
-      'hin': 'Hindi',
-      'tha': 'Thai',
-      'vie': 'Vietnamese',
-      'pol': 'Polish',
-      'nld': 'Dutch',
-      'dan': 'Danish',
-      'nor': 'Norwegian',
-      'swe': 'Swedish',
-      'fin': 'Finnish',
-      'ces': 'Czech',
-      'hun': 'Hungarian',
-      'tur': 'Turkish',
-      'heb': 'Hebrew',
-      'ukr': 'Ukrainian',
-      'bul': 'Bulgarian',
-      'ron': 'Romanian',
-      'hrv': 'Croatian',
-      'slk': 'Slovak',
-      'slv': 'Slovenian',
-      'est': 'Estonian',
-      'lav': 'Latvian',
-      'lit': 'Lithuanian',
-      'ell': 'Greek',
-      'cat': 'Catalan',
-      'eus': 'Basque',
-      'gla': 'Scottish Gaelic',
-      'gle': 'Irish',
-      'cym': 'Welsh',
-      'isl': 'Icelandic',
-      'mlt': 'Maltese',
-      'afr': 'Afrikaans',
-    };
-    return languageNames[langCode] || langCode;
-  };
+  const getLanguageDisplayName = useCallback((langCode: string): string => {
+    return languageMap[langCode] || langCode;
+  }, [languageMap]);
 
   const handleRetry = async () => {
     if (!document) return;

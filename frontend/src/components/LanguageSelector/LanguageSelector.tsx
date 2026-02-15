@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import { LanguageInfo } from '../../services/api'
+import { LanguageInfo, ocrService } from '../../services/api'
 import { useTheme } from '@mui/material/styles'
-import { Box, Typography, Chip, Button, Paper, Divider, Popper, ClickAwayListener } from '@mui/material'
+import { Box, Typography, Chip, Button, Paper, Divider, Popper, ClickAwayListener, CircularProgress, Alert } from '@mui/material'
 
 interface LanguageSelectorProps {
   selectedLanguages: string[]
@@ -14,34 +14,6 @@ interface LanguageSelectorProps {
   className?: string
 }
 
-// Common languages with display names
-const COMMON_LANGUAGES: LanguageInfo[] = [
-  { code: 'eng', name: 'English', installed: true },
-  { code: 'spa', name: 'Spanish', installed: true },
-  { code: 'fra', name: 'French', installed: true },
-  { code: 'deu', name: 'German', installed: true },
-  { code: 'ita', name: 'Italian', installed: true },
-  { code: 'por', name: 'Portuguese', installed: true },
-  { code: 'rus', name: 'Russian', installed: true },
-  { code: 'chi_sim', name: 'Chinese (Simplified)', installed: true },
-  { code: 'chi_tra', name: 'Chinese (Traditional)', installed: true },
-  { code: 'jpn', name: 'Japanese', installed: true },
-  { code: 'kor', name: 'Korean', installed: true },
-  { code: 'ara', name: 'Arabic', installed: true },
-  { code: 'hin', name: 'Hindi', installed: true },
-  { code: 'nld', name: 'Dutch', installed: true },
-  { code: 'swe', name: 'Swedish', installed: true },
-  { code: 'nor', name: 'Norwegian', installed: true },
-  { code: 'dan', name: 'Danish', installed: true },
-  { code: 'fin', name: 'Finnish', installed: true },
-  { code: 'pol', name: 'Polish', installed: true },
-  { code: 'ces', name: 'Czech', installed: true },
-  { code: 'hun', name: 'Hungarian', installed: true },
-  { code: 'tur', name: 'Turkish', installed: true },
-  { code: 'tha', name: 'Thai', installed: true },
-  { code: 'vie', name: 'Vietnamese', installed: true },
-]
-
 function LanguageSelector({
   selectedLanguages,
   primaryLanguage,
@@ -52,9 +24,28 @@ function LanguageSelector({
   className = '',
 }: LanguageSelectorProps) {
   const theme = useTheme()
-  const [availableLanguages, setAvailableLanguages] = useState<LanguageInfo[]>(COMMON_LANGUAGES)
+  const [availableLanguages, setAvailableLanguages] = useState<LanguageInfo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const anchorRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const fetchLanguages = async () => {
+      try {
+        setLoading(true)
+        setError('')
+        const response = await ocrService.getAvailableLanguages()
+        setAvailableLanguages(response.data.available_languages)
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to load OCR languages')
+        setAvailableLanguages([{ code: 'eng', name: 'English', installed: true }])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchLanguages()
+  }, [])
 
   // Auto-set primary language to first selected if not specified
   const effectivePrimary = primaryLanguage || selectedLanguages[0] || ''
@@ -105,6 +96,27 @@ function LanguageSelector({
   const getLanguageName = (code: string) => {
     const language = availableLanguages.find(lang => lang.code === code)
     return language?.name || code
+  }
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', p: 2 }} className={className}>
+        <CircularProgress size={20} sx={{ mr: 1 }} />
+        <Typography variant="body2" color="text.secondary">
+          Loading languages...
+        </Typography>
+      </Box>
+    )
+  }
+
+  if (error) {
+    return (
+      <Box className={className}>
+        <Alert severity="warning" sx={{ mb: 1 }}>
+          {error}
+        </Alert>
+      </Box>
+    )
   }
 
   return (
