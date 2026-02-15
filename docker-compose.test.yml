@@ -6,10 +6,11 @@ services:
       POSTGRES_USER: readur_test
       POSTGRES_PASSWORD: readur_test
       POSTGRES_DB: readur_test
+      # Explicit PGDATA ensures compatibility across PostgreSQL 17 and 18+
+      PGDATA: /var/lib/postgresql/data
     volumes:
-      # Using tmpfs for ephemeral test data
       - type: tmpfs
-        target: /var/lib/postgresql/data
+        target: /var/lib/postgresql
     ports:
       - "5433:5432"  # Different port to avoid conflict
     healthcheck:

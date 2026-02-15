@@ -5,8 +5,10 @@ services:
       POSTGRES_USER: readur
       POSTGRES_PASSWORD: readur
       POSTGRES_DB: readur
+      # Explicit PGDATA ensures compatibility across PostgreSQL 17 and 18+
+      PGDATA: /var/lib/postgresql/data
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     ports:
       - "5432:5432"
     healthcheck:
