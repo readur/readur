@@ -32,6 +32,11 @@ export const documentService = {
   bulkRetryOcr: vi.fn(),
 }
 
+// Mock OCR service
+export const ocrService = {
+  getAvailableLanguages: vi.fn(),
+}
+
 // Mock WebSocket constants  
 const WEBSOCKET_CONNECTING = 0;
 const WEBSOCKET_OPEN = 1;

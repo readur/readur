@@ -66,6 +66,7 @@ scripts/
 Makefile
 requirements.txt
 *.sh
+!docker-entrypoint.sh
 grafana-dashboard.json
 nginx.conf
 ssl/

@@ -52,6 +52,8 @@ services:
       CONCURRENT_OCR_JOBS: 4
       OCR_TIMEOUT_SECONDS: 300
       MAX_FILE_SIZE_MB: 50
+      # Additional OCR languages (comma-separated, installed at container startup)
+      # READUR_EXTRA_OCR_LANGUAGES: fas,heb,ukr
       
       # Performance
       MEMORY_LIMIT_MB: 512
