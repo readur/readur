@@ -218,6 +218,9 @@ pub fn create_test_config_with_db(database_url: &str) -> Config {
         // S3 Configuration (disabled for tests by default)
         s3_enabled: false,
         s3_config: None,
+        
+        // CPU Allocation (create a simple test allocation)
+        cpu_allocation: crate::cpu_allocation::CpuAllocation::from_auto_allocation(4).unwrap(),
     }
 }
 
