@@ -163,6 +163,20 @@ export class MockSyncProgressWebSocket {
 // Create current mock instance holder
 let currentMockSyncProgressWebSocket: MockSyncProgressWebSocket | null = null;
 
+// Mock OCR service
+export const ocrService = {
+  getAvailableLanguages: vi.fn(),
+  getHealthStatus: vi.fn(),
+  retryWithLanguage: vi.fn(),
+}
+
+// Mock queue service
+export const queueService = {
+  getQueueStatus: vi.fn(),
+  pauseOcr: vi.fn(),
+  resumeOcr: vi.fn(),
+}
+
 // Mock sources service
 export const sourcesService = {
   triggerSync: vi.fn(),

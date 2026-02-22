@@ -13,30 +13,7 @@ FROM rust:1.93-bookworm as backend-builder
 # Install system dependencies for OCR and PDF processing
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
-    tesseract-ocr-eng \
-    tesseract-ocr-spa \
-    tesseract-ocr-fra \
-    tesseract-ocr-deu \
-    tesseract-ocr-ita \
-    tesseract-ocr-por \
-    tesseract-ocr-rus \
-    tesseract-ocr-chi-sim \
-    tesseract-ocr-chi-tra \
-    tesseract-ocr-jpn \
-    tesseract-ocr-kor \
-    tesseract-ocr-ara \
-    tesseract-ocr-hin \
-    tesseract-ocr-nld \
-    tesseract-ocr-swe \
-    tesseract-ocr-nor \
-    tesseract-ocr-dan \
-    tesseract-ocr-fin \
-    tesseract-ocr-pol \
-    tesseract-ocr-ces \
-    tesseract-ocr-hun \
-    tesseract-ocr-tur \
-    tesseract-ocr-tha \
-    tesseract-ocr-vie \
+    tesseract-ocr-all \
     libtesseract-dev \
     libleptonica-dev \
     pkg-config \
@@ -58,30 +35,7 @@ FROM debian:bookworm-slim
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
-    tesseract-ocr-eng \
-    tesseract-ocr-spa \
-    tesseract-ocr-fra \
-    tesseract-ocr-deu \
-    tesseract-ocr-ita \
-    tesseract-ocr-por \
-    tesseract-ocr-rus \
-    tesseract-ocr-chi-sim \
-    tesseract-ocr-chi-tra \
-    tesseract-ocr-jpn \
-    tesseract-ocr-kor \
-    tesseract-ocr-ara \
-    tesseract-ocr-hin \
-    tesseract-ocr-nld \
-    tesseract-ocr-swe \
-    tesseract-ocr-nor \
-    tesseract-ocr-dan \
-    tesseract-ocr-fin \
-    tesseract-ocr-pol \
-    tesseract-ocr-ces \
-    tesseract-ocr-hun \
-    tesseract-ocr-tur \
-    tesseract-ocr-tha \
-    tesseract-ocr-vie \
+    tesseract-ocr-all \
     ca-certificates \
     poppler-utils \
     ocrmypdf \
