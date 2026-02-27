@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::env;
 
 use crate::models::S3SourceConfig;
+use crate::cpu_allocation::CpuAllocation;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -43,6 +44,9 @@ pub struct Config {
     // S3 Configuration
     pub s3_enabled: bool,
     pub s3_config: Option<S3SourceConfig>,
+    
+    // CPU Core Allocation
+    pub cpu_allocation: CpuAllocation,
 }
 
 impl Config {
@@ -602,7 +606,40 @@ impl Config {
             } else {
                 None
             },
+            
+            // Placeholder CPU allocation - will be replaced after detection
+            cpu_allocation: CpuAllocation::from_auto_allocation(4).unwrap(),
         };
+        
+        // Initialize CPU allocation
+        println!("\n🧮 CPU CORE ALLOCATION:");
+        println!("{}", "=".repeat(50));
+        let cpu_allocation = match CpuAllocation::detect_and_allocate() {
+            Ok(allocation) => {
+                allocation.log_allocation();
+                allocation.validate_allocation()?;
+                allocation
+            }
+            Err(e) => {
+                println!("❌ Failed to detect and allocate CPU cores: {}", e);
+                return Err(e);
+            }
+        };
+        
+        // Update concurrent OCR jobs based on CPU allocation if not manually set
+        let concurrent_ocr_jobs = if env::var("CONCURRENT_OCR_JOBS").is_ok() {
+            config.concurrent_ocr_jobs  // Keep user-specified value
+        } else {
+            let recommended = cpu_allocation.recommended_concurrent_ocr_jobs();
+            println!("🧠 Adjusting concurrent OCR jobs from {} to {} based on CPU allocation", 
+                     config.concurrent_ocr_jobs, recommended);
+            recommended
+        };
+        
+        // Update the config with CPU allocation and adjusted OCR jobs
+        let mut config = config;
+        config.cpu_allocation = cpu_allocation;
+        config.concurrent_ocr_jobs = concurrent_ocr_jobs;
         
         println!("\n🔍 CONFIGURATION VALIDATION:");
         println!("{}", "=".repeat(50));
