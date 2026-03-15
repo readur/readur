@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import DocumentDetailsPage from '../DocumentDetailsPage';
@@ -9,24 +9,12 @@ import * as apiModule from '../../services/api';
 
 const theme = createTheme();
 
-// Mock all the child components to simplify rendering
+// Mock child components that are not part of the new tab system
 vi.mock('../../components/DocumentViewer', () => ({
-  default: () => null,
+  default: () => <div data-testid="document-viewer">Document Viewer</div>,
 }));
 
 vi.mock('../../components/Labels/LabelSelector', () => ({
-  default: () => null,
-}));
-
-vi.mock('../../components/MetadataDisplay', () => ({
-  default: () => null,
-}));
-
-vi.mock('../../components/FileIntegrityDisplay', () => ({
-  default: () => null,
-}));
-
-vi.mock('../../components/ProcessingTimeline', () => ({
   default: () => null,
 }));
 
@@ -43,6 +31,19 @@ vi.mock('react-i18next', () => ({
         'documentDetails.ocr.confidence': 'Confidence',
         'documentDetails.ocr.words': 'Words',
         'documentDetails.ocr.processingTime': 'Processing Time',
+        'documentDetails.ocr.loading': 'Loading OCR analysis...',
+        'documentDetails.ocr.noText': 'No OCR text available for this document.',
+        'documentDetails.ocr.loadFailed': 'OCR text is available but failed to load.',
+        'documentDetails.actions.backToDocuments': 'Back to Documents',
+        'documentDetails.actions.download': 'Download',
+        'documentDetails.actions.deleteDocument': 'Delete Document',
+        'documentDetails.actions.viewProcessedImage': 'View Processed Image',
+        'documentDetails.tabs.preview': 'Preview',
+        'documentDetails.tabs.ocrText': 'OCR Text',
+        'documentDetails.tabs.details': 'Details',
+        'documentDetails.tabs.activity': 'Activity',
+        'documentDetails.dialogs.ocrExpanded.searchPlaceholder': 'Search within extracted text...',
+        'documentDetails.errors.notFound': 'Document not found',
       };
       return translations[key] || key;
     },
@@ -104,6 +105,14 @@ const renderDocumentDetailsPage = (documentId = 'test-doc-id') => {
   );
 };
 
+/**
+ * Helper to navigate to OCR Text tab
+ */
+const switchToOcrTab = () => {
+  const ocrTab = screen.getByRole('tab', { name: 'OCR Text' });
+  fireEvent.click(ocrTab);
+};
+
 describe('DocumentDetailsPage - OCR Word Count Display', () => {
   beforeEach(() => {
     // Mock window.matchMedia (needed for ThemeContext)
@@ -134,7 +143,7 @@ describe('DocumentDetailsPage - OCR Word Count Display', () => {
 
   /**
    * Test Case 1: Verify OCR word count of 0 renders correctly
-   * The component should display "0" when ocr_word_count is 0 (using != null check)
+   * The component should display "0 words" in the metadata line when ocr_word_count is 0
    */
   test('displays OCR word count of 0 correctly', async () => {
     const mockDocument = createBaseMockDocument({
@@ -147,33 +156,25 @@ describe('DocumentDetailsPage - OCR Word Count Display', () => {
       ocr_text: '', // Empty document
     });
 
-    // Mock the document service methods
     vi.spyOn(apiModule.documentService, 'getById').mockResolvedValue({ data: mockDocument } as any);
     vi.spyOn(apiModule.documentService, 'getOcrText').mockResolvedValue({ data: mockOcrData } as any);
-    vi.spyOn(apiModule.documentService, 'getThumbnail').mockRejectedValue(new Error('No thumbnail'));
 
     renderDocumentDetailsPage();
 
     // Wait for the document to load
     await waitFor(() => {
-      expect(screen.getByText('test.pdf')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'test.pdf' })).toBeInTheDocument();
     }, { timeout: 3000 });
 
-    // Wait for OCR data to load
+    // OCR Text is the default tab — verify "0 words" is in the metadata line
     await waitFor(() => {
-      expect(apiModule.documentService.getOcrText).toHaveBeenCalled();
-    }, { timeout: 3000 });
-
-    // Verify that the word count section renders with value "0"
-    await waitFor(() => {
-      expect(screen.getByText('0')).toBeInTheDocument();
-      expect(screen.getByText('Words')).toBeInTheDocument();
+      expect(screen.getByText(/0 words/)).toBeInTheDocument();
     }, { timeout: 3000 });
   });
 
   /**
    * Test Case 2: Verify OCR word count of null does not render
-   * When ocr_word_count is null, the word count stat box should not appear
+   * When ocr_word_count is null, the word count should not appear in metadata
    */
   test('does not display word count when ocr_word_count is null', async () => {
     const mockDocument = createBaseMockDocument({
@@ -187,34 +188,26 @@ describe('DocumentDetailsPage - OCR Word Count Display', () => {
 
     vi.spyOn(apiModule.documentService, 'getById').mockResolvedValue({ data: mockDocument } as any);
     vi.spyOn(apiModule.documentService, 'getOcrText').mockResolvedValue({ data: mockOcrData } as any);
-    vi.spyOn(apiModule.documentService, 'getThumbnail').mockRejectedValue(new Error('No thumbnail'));
 
     renderDocumentDetailsPage();
 
     // Wait for the document to load
     await waitFor(() => {
-      expect(screen.getByText('test.pdf')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'test.pdf' })).toBeInTheDocument();
     }, { timeout: 3000 });
 
-    // Wait for OCR data to load
+    // OCR Text is the default tab — wait for OCR data to load
     await waitFor(() => {
       expect(apiModule.documentService.getOcrText).toHaveBeenCalled();
     }, { timeout: 3000 });
 
-    // Wait for component to finish rendering
-    await waitFor(() => {
-      // The document title should be visible
-      expect(screen.getByText('test.pdf')).toBeInTheDocument();
-    }, { timeout: 3000 });
-
-    // Word count stat box should not render - check there's no "Words" label
-    const wordsLabels = screen.queryAllByText('Words');
-    expect(wordsLabels.length).toBe(0);
+    // Word count should NOT appear in metadata line
+    expect(screen.queryByText(/\d+ words/i)).not.toBeInTheDocument();
   });
 
   /**
    * Test Case 3: Verify OCR word count of undefined does not render
-   * When ocr_word_count is undefined (field not present), the stat box should not appear
+   * When ocr_word_count is undefined (field not present), it should not appear
    */
   test('does not display word count when ocr_word_count is undefined', async () => {
     const mockDocument = createBaseMockDocument({
@@ -235,34 +228,26 @@ describe('DocumentDetailsPage - OCR Word Count Display', () => {
 
     vi.spyOn(apiModule.documentService, 'getById').mockResolvedValue({ data: mockDocument } as any);
     vi.spyOn(apiModule.documentService, 'getOcrText').mockResolvedValue({ data: mockOcrData } as any);
-    vi.spyOn(apiModule.documentService, 'getThumbnail').mockRejectedValue(new Error('No thumbnail'));
 
     renderDocumentDetailsPage();
 
     // Wait for the document to load
     await waitFor(() => {
-      expect(screen.getByText('test.pdf')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'test.pdf' })).toBeInTheDocument();
     }, { timeout: 3000 });
 
-    // Wait for OCR data to load
+    // OCR Text is the default tab — wait for OCR data to load
     await waitFor(() => {
       expect(apiModule.documentService.getOcrText).toHaveBeenCalled();
     }, { timeout: 3000 });
 
-    // Wait for component to finish rendering
-    await waitFor(() => {
-      // The document title should be visible
-      expect(screen.getByText('test.pdf')).toBeInTheDocument();
-    }, { timeout: 3000 });
-
-    // Word count should NOT render - no "Words" label
-    const wordsLabels = screen.queryAllByText('Words');
-    expect(wordsLabels.length).toBe(0);
+    // Word count should NOT appear
+    expect(screen.queryByText(/\d+ words/i)).not.toBeInTheDocument();
   });
 
   /**
    * Test Case 4: Verify valid OCR word count renders correctly
-   * A normal document with a valid word count should display properly
+   * A normal document with a valid word count should display in the metadata line
    */
   test('displays valid OCR word count correctly', async () => {
     const mockDocument = createBaseMockDocument({
@@ -279,36 +264,25 @@ describe('DocumentDetailsPage - OCR Word Count Display', () => {
 
     vi.spyOn(apiModule.documentService, 'getById').mockResolvedValue({ data: mockDocument } as any);
     vi.spyOn(apiModule.documentService, 'getOcrText').mockResolvedValue({ data: mockOcrData } as any);
-    vi.spyOn(apiModule.documentService, 'getThumbnail').mockRejectedValue(new Error('No thumbnail'));
 
     renderDocumentDetailsPage();
 
-    // Wait for the document to load
+    // Wait for the document to load and OCR data to be fetched
     await waitFor(() => {
-      expect(screen.getByText('test.pdf')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'test.pdf' })).toBeInTheDocument();
     }, { timeout: 3000 });
 
-    // Wait for OCR data to load
     await waitFor(() => {
       expect(apiModule.documentService.getOcrText).toHaveBeenCalled();
     }, { timeout: 3000 });
 
-    // Verify word count displays with proper formatting
+    // OCR Text is the default tab — verify metadata line
+    // Format: "96% confidence · 290 words · 1500ms · Completed Jan 1"
     await waitFor(() => {
-      expect(screen.getByText('290')).toBeInTheDocument();
-      expect(screen.getByText('Words')).toBeInTheDocument();
-    }, { timeout: 3000 });
-
-    // Also verify confidence is displayed (95.5 rounds to 96)
-    await waitFor(() => {
-      expect(screen.getByText(/96%/)).toBeInTheDocument();
-      expect(screen.getByText('Confidence')).toBeInTheDocument();
-    }, { timeout: 3000 });
-
-    // Verify processing time is displayed
-    await waitFor(() => {
-      expect(screen.getByText('1500ms')).toBeInTheDocument();
-      expect(screen.getByText('Processing Time')).toBeInTheDocument();
+      const metadataText = screen.getByText(/confidence/);
+      expect(metadataText.textContent).toMatch(/96% confidence/);
+      expect(metadataText.textContent).toMatch(/290 words/);
+      expect(metadataText.textContent).toMatch(/1500ms/);
     }, { timeout: 3000 });
   });
 });
