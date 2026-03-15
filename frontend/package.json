@@ -35,7 +35,7 @@
     "i18next-http-backend": "^3.0.2",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "react-dropzone": "^14.2.3",
+    "react-dropzone": "^15.0.0",
     "react-hook-form": "^7.43.0",
     "react-i18next": "^16.0.0",
     "react-router-dom": "^7.0.0",
