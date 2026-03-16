@@ -426,25 +426,29 @@ describe('LabelCreateDialog Component', () => {
 
     test('should not call onClose during loading', async () => {
       const onClose = vi.fn();
-      const onSubmit = vi.fn().mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
-      
+      let resolveSubmit: () => void;
+      const onSubmit = vi.fn().mockImplementation(() => new Promise<void>(resolve => { resolveSubmit = resolve; }));
+
       renderLabelCreateDialog({ onClose, onSubmit });
-      
+
       const nameInput = screen.getByLabelText(/label name/i);
       await user.type(nameInput, 'Test Label');
-      
+
       const createButton = screen.getByText('Create');
-      await user.click(createButton);
-      
+      // Don't await user.click — awaiting waits for the async form handler to finish,
+      // which would resolve the promise before we can check the loading state
+      void user.click(createButton);
+
       // Wait for loading state to be set and check Cancel button is disabled
       await waitFor(() => {
         const cancelButton = screen.getByText('Cancel');
         expect(cancelButton).toBeDisabled();
       });
-      
+
       expect(onClose).not.toHaveBeenCalled();
-      
-      // Wait for submission to complete
+
+      // Now resolve the submission and wait for loading to clear
+      resolveSubmit!();
       await waitFor(() => {
         expect(screen.queryByText('Saving...')).not.toBeInTheDocument();
       });
