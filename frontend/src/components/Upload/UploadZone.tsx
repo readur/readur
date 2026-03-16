@@ -91,7 +91,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
         setSelectedLanguages([userLang]);
         setPrimaryLanguage(userLang);
       } catch {
-        // Fallback eng si l API echoue
+        // Fallback to `eng` as primary language
         setSelectedLanguages(['eng']);
         setPrimaryLanguage('eng');
       }
