@@ -30,7 +30,7 @@ import {
 import { useDropzone, FileRejection, DropzoneOptions } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { api, ErrorHelper, ErrorCodes } from '../../services/api';
+import { api, ErrorHelper, ErrorCodes, ocrService } from '../../services/api';
 import { useNotifications } from '../../contexts/NotificationContext';
 import LabelSelector from '../Labels/LabelSelector';
 import { type LabelData } from '../Labels/Label';
@@ -76,11 +76,27 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onUploadComplete }) => {
   const [selectedLabels, setSelectedLabels] = useState<LabelData[]>([]);
   const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
   const [labelsLoading, setLabelsLoading] = useState<boolean>(false);
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['eng']);
-  const [primaryLanguage, setPrimaryLanguage] = useState<string>('eng');
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+  const [primaryLanguage, setPrimaryLanguage] = useState<string>('');
 
   useEffect(() => {
     fetchLabels();
+  }, []);
+
+  useEffect(() => {
+    const fetchUserLanguage = async () => {
+      try {
+        const response = await ocrService.getAvailableLanguages();
+        const userLang = response.data.current_user_language || 'eng';
+        setSelectedLanguages([userLang]);
+        setPrimaryLanguage(userLang);
+      } catch {
+        // Fallback to `eng` as primary language
+        setSelectedLanguages(['eng']);
+        setPrimaryLanguage('eng');
+      }
+    };
+    fetchUserLanguage();
   }, []);
 
   const fetchLabels = async () => {
