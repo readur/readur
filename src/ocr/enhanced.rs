@@ -14,9 +14,14 @@ use imageproc::{
 #[cfg(feature = "ocr")]
 use tesseract::{Tesseract, PageSegMode, OcrEngineMode};
 
+use std::sync::Arc;
 use crate::models::Settings;
 use crate::services::file_service::FileService;
 use super::xml_extractor::XmlOfficeExtractor;
+
+/// Callback for reporting OCR progress (current_page, total_pages).
+/// Called synchronously; implementations should use tokio::spawn for async work.
+pub type ProgressCallback = Arc<dyn Fn(i32, i32) + Send + Sync>;
 // Removed text_sanitization import - now using minimal inline sanitization
 
 /// RAII guard for automatic cleanup of temporary files
@@ -872,7 +877,7 @@ impl EnhancedOcrService {
     
     /// Extract text from PDF using ocrmypdf
     #[cfg(feature = "ocr")]
-    pub async fn extract_text_from_pdf(&self, file_path: &str, settings: &Settings) -> Result<OcrResult> {
+    pub async fn extract_text_from_pdf(&self, file_path: &str, settings: &Settings, progress_callback: Option<ProgressCallback>) -> Result<OcrResult> {
         let start_time = std::time::Instant::now();
         info!("Extracting text from PDF: {}", file_path);
         
@@ -924,7 +929,7 @@ impl EnhancedOcrService {
             info!("PDF '{}' has embedded images, using image-based OCR for comprehensive extraction", file_path);
 
             if self.is_pdftoppm_available().await {
-                match self.extract_text_from_pdf_via_images(file_path, settings, start_time).await {
+                match self.extract_text_from_pdf_via_images(file_path, settings, start_time, progress_callback.clone()).await {
                     Ok(result) if result.word_count > 0 => {
                         info!("PDF image-based OCR successful for '{}': {} words", file_path, result.word_count);
                         return Ok(result);
@@ -975,7 +980,7 @@ impl EnhancedOcrService {
 
         // pdftotext failed/insufficient - try image-based OCR then ocrmypdf
         if self.is_pdftoppm_available().await {
-            match self.extract_text_from_pdf_via_images(file_path, settings, start_time).await {
+            match self.extract_text_from_pdf_via_images(file_path, settings, start_time, progress_callback).await {
                 Ok(result) if result.word_count > 0 => {
                     info!("PDF image-based OCR successful for '{}': {} words", file_path, result.word_count);
                     return Ok(result);
@@ -1411,12 +1416,17 @@ impl EnhancedOcrService {
 
     /// Extract text from PDF by converting pages to images and OCRing each page
     #[cfg(feature = "ocr")]
-    async fn extract_text_from_pdf_via_images(&self, file_path: &str, settings: &Settings, start_time: std::time::Instant) -> Result<OcrResult> {
+    async fn extract_text_from_pdf_via_images(&self, file_path: &str, settings: &Settings, start_time: std::time::Instant, progress_callback: Option<ProgressCallback>) -> Result<OcrResult> {
         info!("Extracting PDF text via image conversion: {}", file_path);
 
         // Get page count
         let page_count = self.get_pdf_page_count(file_path).await?;
         info!("PDF has {} pages", page_count);
+
+        // Report total pages via progress callback
+        if let Some(ref cb) = progress_callback {
+            cb(0, page_count as i32);
+        }
 
         // Convert pages to images
         let image_paths = self.extract_pdf_pages_as_images(file_path, page_count).await?;
@@ -1429,6 +1439,11 @@ impl EnhancedOcrService {
 
         for (i, image_path) in image_paths.iter().enumerate() {
             info!("OCR processing page {}/{}", i + 1, page_count);
+
+            // Report per-page progress
+            if let Some(ref cb) = progress_callback {
+                cb((i + 1) as i32, page_count as i32);
+            }
 
             match self.extract_text_from_image(image_path, settings).await {
                 Ok(result) => {
@@ -1492,16 +1507,16 @@ impl EnhancedOcrService {
     }
 
     /// Extract text from any supported file type with enhanced logging
-    pub async fn extract_text_with_context(&self, file_path: &str, mime_type: &str, filename: &str, file_size: i64, settings: &Settings) -> Result<OcrResult> {
+    pub async fn extract_text_with_context(&self, file_path: &str, mime_type: &str, filename: &str, file_size: i64, settings: &Settings, progress_callback: Option<ProgressCallback>) -> Result<OcrResult> {
         // Format file size for better readability
         let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
-        
+
         info!(
-            "Starting OCR extraction | File: '{}' | Type: {} | Size: {:.2} MB | Path: {}", 
+            "Starting OCR extraction | File: '{}' | Type: {} | Size: {:.2} MB | Path: {}",
             filename, mime_type, file_size_mb, file_path
         );
-        
-        self.extract_text(file_path, mime_type, settings).await
+
+        self.extract_text(file_path, mime_type, settings, progress_callback).await
     }
 
     /// Extract text from Office documents (DOCX, DOC, Excel) using XML extraction
@@ -1545,14 +1560,14 @@ impl EnhancedOcrService {
     }
 
     /// Extract text from any supported file type
-    pub async fn extract_text(&self, file_path: &str, mime_type: &str, settings: &Settings) -> Result<OcrResult> {
+    pub async fn extract_text(&self, file_path: &str, mime_type: &str, settings: &Settings, progress_callback: Option<ProgressCallback>) -> Result<OcrResult> {
         // Resolve the actual file path
         let resolved_path = self.resolve_file_path(file_path).await?;
         match mime_type {
             "application/pdf" => {
                 #[cfg(feature = "ocr")]
                 {
-                    self.extract_text_from_pdf(&resolved_path, settings).await
+                    self.extract_text_from_pdf(&resolved_path, settings, progress_callback).await
                 }
                 #[cfg(not(feature = "ocr"))]
                 {
@@ -1769,7 +1784,7 @@ impl EnhancedOcrService {
         Err(anyhow::anyhow!("OCR feature not enabled"))
     }
     
-    pub async fn extract_text_from_pdf(&self, _file_path: &str, _settings: &Settings) -> Result<OcrResult> {
+    pub async fn extract_text_from_pdf(&self, _file_path: &str, _settings: &Settings, _progress_callback: Option<ProgressCallback>) -> Result<OcrResult> {
         Err(anyhow::anyhow!("OCR feature not enabled"))
     }
     

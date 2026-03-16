@@ -8,6 +8,7 @@ import {
   IconButton,
   Tooltip,
   CircularProgress,
+  LinearProgress,
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -70,7 +71,7 @@ const DocumentDetailsHeader: React.FC<DocumentDetailsHeaderProps> = ({
       return (
         <Chip
           icon={<ScheduleIcon sx={{ fontSize: 16 }} />}
-          label="Pending OCR"
+          label={t('documents.ocrStatus.pending')}
           size="small"
           sx={{
             backgroundColor: theme.palette.warning.light,
@@ -81,24 +82,41 @@ const DocumentDetailsHeader: React.FC<DocumentDetailsHeaderProps> = ({
       );
     }
     if (status === 'processing') {
+      const progressCurrent = document.ocr_progress_current;
+      const progressTotal = document.ocr_progress_total;
+      const hasProgress = progressTotal && progressTotal > 0;
+      const progressLabel = hasProgress
+        ? `${t('documents.ocrStatus.processing')} (${progressCurrent || 0}/${progressTotal})`
+        : t('documents.ocrStatus.processing');
+      const progressPercent = hasProgress ? ((progressCurrent || 0) / progressTotal) * 100 : 0;
+
       return (
-        <Chip
-          icon={<CircularProgress size={14} sx={{ ml: 0.5 }} />}
-          label="Processing..."
-          size="small"
-          sx={{
-            backgroundColor: theme.palette.info.light,
-            color: theme.palette.info.dark,
-            fontWeight: 600,
-          }}
-        />
+        <Stack direction="column" spacing={0.5}>
+          <Chip
+            icon={<CircularProgress size={14} sx={{ ml: 0.5 }} />}
+            label={progressLabel}
+            size="small"
+            sx={{
+              backgroundColor: theme.palette.info.light,
+              color: theme.palette.info.dark,
+              fontWeight: 600,
+            }}
+          />
+          {hasProgress && (
+            <LinearProgress
+              variant="determinate"
+              value={progressPercent}
+              sx={{ borderRadius: 1, height: 4 }}
+            />
+          )}
+        </Stack>
       );
     }
     if (status === 'completed') {
       return (
         <Chip
           icon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
-          label="OCR Complete"
+          label={t('documents.ocrStatus.done')}
           size="small"
           color="success"
           sx={{ fontWeight: 600 }}
@@ -110,7 +128,7 @@ const DocumentDetailsHeader: React.FC<DocumentDetailsHeaderProps> = ({
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip
             icon={<ErrorIcon sx={{ fontSize: 16 }} />}
-            label="OCR Failed"
+            label={t('documents.ocrStatus.failed')}
             size="small"
             color="error"
             sx={{ fontWeight: 600 }}

@@ -45,6 +45,21 @@ pub async fn get_document_ocr(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
+    // Fetch progress from ocr_queue when actively processing
+    let pages_processed = if document.ocr_status.as_deref() == Some("processing") {
+        sqlx::query_as::<_, (Option<i32>,)>(
+            "SELECT progress_current FROM ocr_queue WHERE document_id = $1 AND status = 'processing' LIMIT 1"
+        )
+        .bind(document_id)
+        .fetch_optional(&state.db.pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|row| row.0)
+    } else {
+        None
+    };
+
     let response = DocumentOcrResponse {
         id: document.id,
         filename: document.original_filename,
@@ -53,8 +68,8 @@ pub async fn get_document_ocr(
         ocr_confidence: document.ocr_confidence,
         ocr_status: document.ocr_status,
         ocr_processing_time_ms: document.ocr_processing_time_ms,
-        detected_language: None, // This would need to be stored separately if needed
-        pages_processed: None,   // This would need to be stored separately if needed
+        detected_language: None,
+        pages_processed,
     };
 
     Ok(ResponseJson(response))

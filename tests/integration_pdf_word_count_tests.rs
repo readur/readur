@@ -107,7 +107,7 @@ mod pdf_word_count_integration_tests {
         
         // Note: This test may fail because our mock PDF might not be perfectly formatted
         // for pdf-extract, but it demonstrates the testing pattern
-        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings).await {
+        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings, None).await {
             Ok(result) => {
                 assert!(result.word_count > 0, "Should extract words from PDF with normal text");
                 assert!(result.confidence >= 90.0, "PDF extraction should have high confidence");
@@ -132,7 +132,7 @@ mod pdf_word_count_integration_tests {
         let pdf_content = "HelloWorldThisIsAContinuousTextWithoutSpaces";
         let pdf_file = create_mock_pdf_file(pdf_content);
         
-        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings).await {
+        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings, None).await {
             Ok(result) => {
                 // The enhanced word counting should detect words even without spaces
                 assert!(result.word_count > 0, "Should detect words in continuous text: got {} words", result.word_count);
@@ -161,7 +161,7 @@ mod pdf_word_count_integration_tests {
         let pdf_content = "ABC123xyz789!@#DefGhi456";
         let pdf_file = create_mock_pdf_file(pdf_content);
         
-        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings).await {
+        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings, None).await {
             Ok(result) => {
                 // Should detect alphanumeric patterns as words
                 assert!(result.word_count > 0, "Should detect words in mixed content: got {} words", result.word_count);
@@ -185,7 +185,7 @@ mod pdf_word_count_integration_tests {
         let pdf_content = "   \n\t  ";
         let pdf_file = create_mock_pdf_file(pdf_content);
 
-        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings).await {
+        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings, None).await {
             Ok(result) => {
                 // Empty PDFs may return 0 words (proper handling) or extract PDF structure text
                 // Both behaviors are acceptable depending on the PDF extraction implementation
@@ -216,7 +216,7 @@ mod pdf_word_count_integration_tests {
         let pdf_content = "!@#$%^&*()_+-=[]{}|;':\",./<>?";
         let pdf_file = create_mock_pdf_file(pdf_content);
 
-        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings).await {
+        match service.extract_text_from_pdf(pdf_file.path().to_str().unwrap(), &settings, None).await {
             Ok(result) => {
                 // Punctuation-only PDFs may return 0 words or extract PDF structure text
                 // Both behaviors are acceptable depending on the PDF extraction implementation
@@ -253,7 +253,7 @@ mod pdf_word_count_integration_tests {
             pdf_file.path().to_str().unwrap().to_string()
         };
         
-        match service.extract_text_from_pdf(&pdf_path, &settings).await {
+        match service.extract_text_from_pdf(&pdf_path, &settings, None).await {
             Ok(result) => {
                 // Test quality validation
                 let result_validation = service.validate_ocr_quality(&result, &settings);

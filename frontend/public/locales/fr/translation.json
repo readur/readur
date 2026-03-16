@@ -366,7 +366,7 @@
       "done": "OCR terminé",
       "processing": "Traitement en cours...",
       "failed": "OCR échoué",
-      "pending": "En attente"
+      "pending": "En file d'attente"
     },
     "actions": {
       "editLabels": "Modifier les étiquettes",

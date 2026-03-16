@@ -67,6 +67,12 @@ pub struct DocumentResponse {
     pub ocr_processing_time_ms: Option<i32>,
     /// Current status of OCR processing (pending, processing, completed, failed)
     pub ocr_status: Option<String>,
+    /// Current page being processed (for multi-page documents during OCR)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub ocr_progress_current: Option<i32>,
+    /// Total pages to process (for multi-page documents during OCR)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub ocr_progress_total: Option<i32>,
     /// Original file creation timestamp from source system
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub original_created_at: Option<DateTime<Utc>>,
@@ -281,6 +287,8 @@ impl From<Document> for DocumentResponse {
             ocr_word_count: doc.ocr_word_count,
             ocr_processing_time_ms: doc.ocr_processing_time_ms,
             ocr_status: doc.ocr_status,
+            ocr_progress_current: None, // Populated from ocr_queue when status is 'processing'
+            ocr_progress_total: None,
             original_created_at: doc.original_created_at,
             original_modified_at: doc.original_modified_at,
             source_path: doc.source_path,

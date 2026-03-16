@@ -255,6 +255,22 @@ impl OcrQueueService {
             "message" => "Successfully claimed job, updating to processing state"
         );
 
+        // Step 2b: Also update the document's ocr_status to 'processing'
+        // so the frontend sees the transition (fixes #598)
+        let document_id: Uuid = job_row.as_ref().unwrap().get("document_id");
+        sqlx::query(
+            r#"
+            UPDATE documents
+            SET ocr_status = 'processing',
+                updated_at = NOW()
+            WHERE id = $1
+              AND ocr_status = 'pending'
+            "#
+        )
+        .bind(document_id)
+        .execute(&mut *tx)
+        .await?;
+
         // Step 3: Get the updated job details
         let row = sqlx::query(
             r#"
@@ -296,6 +312,25 @@ impl OcrQueueService {
         
         // If all retry attempts failed, return None
         Ok(None)
+    }
+
+    /// Update OCR progress for a document (page X of Y)
+    pub async fn update_progress(&self, document_id: Uuid, current: i32, total: i32) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE ocr_queue
+            SET progress_current = $2,
+                progress_total = $3
+            WHERE document_id = $1
+              AND status = 'processing'
+            "#
+        )
+        .bind(document_id)
+        .bind(current)
+        .bind(total)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     /// Mark an item as completed
@@ -385,8 +420,25 @@ impl OcrQueueService {
                     crate::models::Settings::default()
                 };
 
+                // Create progress callback to report page-level OCR progress
+                let progress_pool = self.pool.clone();
+                let progress_doc_id = item.document_id;
+                let progress_callback: Option<crate::ocr::enhanced::ProgressCallback> = Some(Arc::new(move |current: i32, total: i32| {
+                    let pool = progress_pool.clone();
+                    tokio::spawn(async move {
+                        let _ = sqlx::query(
+                            "UPDATE ocr_queue SET progress_current = $2, progress_total = $3 WHERE document_id = $1 AND status = 'processing'"
+                        )
+                        .bind(progress_doc_id)
+                        .bind(current)
+                        .bind(total)
+                        .execute(&pool)
+                        .await;
+                    });
+                }));
+
                 // Perform enhanced OCR
-                match ocr_service.extract_text_with_context(&file_path, &mime_type, &filename, file_size, &settings).await {
+                match ocr_service.extract_text_with_context(&file_path, &mime_type, &filename, file_size, &settings, progress_callback).await {
                     Ok(ocr_result) => {
                         // Validate OCR quality
                         if let Err(validation_error) = ocr_service.validate_ocr_quality(&ocr_result, &settings) {

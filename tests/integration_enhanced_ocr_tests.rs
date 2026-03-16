@@ -186,7 +186,7 @@ mod tests {
         fs::write(temp_file.path(), test_content).unwrap();
         
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings)
+            .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings, None)
             .await;
         
         assert!(result.is_ok());
@@ -217,6 +217,7 @@ mod tests {
                 "test_file.txt",
                 19, // Length of "Context test content"
                 &settings,
+                None,
             )
             .await;
         
@@ -238,7 +239,7 @@ mod tests {
         fs::write(temp_file.path(), "some content").unwrap();
         
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "application/unknown", &settings)
+            .extract_text(temp_file.path().to_str().unwrap(), "application/unknown", &settings, None)
             .await;
         
         assert!(result.is_err());
@@ -255,7 +256,7 @@ mod tests {
         let settings = create_test_settings();
         
         let result = service
-            .extract_text("/nonexistent/file.txt", "text/plain", &settings)
+            .extract_text("/nonexistent/file.txt", "text/plain", &settings, None)
             .await;
         
         assert!(result.is_err());
@@ -278,7 +279,7 @@ mod tests {
         drop(large_content); // Explicitly free memory
         
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings)
+            .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings, None)
             .await;
         
         // Should fail due to size limit
@@ -422,7 +423,7 @@ mod tests {
             fs::write(temp_file.path(), content).unwrap();
             
             let result = service
-                .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings)
+                .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings, None)
                 .await;
             
             assert!(result.is_ok());
@@ -443,7 +444,7 @@ mod tests {
         fs::write(temp_file.path(), "Not a valid PDF").unwrap();
         
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings)
+            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings, None)
             .await;
         
         assert!(result.is_err());
@@ -501,7 +502,7 @@ startxref
         fs::write(temp_file.path(), pdf_content).unwrap();
         
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings)
+            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings, None)
             .await;
         
         match result {
@@ -542,7 +543,7 @@ startxref
         drop(large_pdf_content); // Explicitly free memory
         
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings)
+            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings, None)
             .await;
         
         assert!(result.is_err());
@@ -589,7 +590,7 @@ startxref
 
             let handle = tokio::spawn(async move {
                 let result = service_clone
-                    .extract_text(&file_path, "text/plain", &settings_clone)
+                    .extract_text(&file_path, "text/plain", &settings_clone, None)
                     .await;
 
                 // Keep temp_file alive until task completes
@@ -856,5 +857,134 @@ startxref
         let error_msg = validation_result.unwrap_err();
         assert!(error_msg.contains("No words"),
                 "Expected error about 'No words' (not 'no characters'), got: {}", error_msg);
+    }
+
+    // --- Progress callback tests (Issue #598) ---
+
+    #[tokio::test]
+    async fn test_extract_text_accepts_none_progress_callback() {
+        // Verify that passing None as progress callback works correctly
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
+        let settings = create_test_settings();
+
+        let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
+        fs::write(temp_file.path(), "Progress callback test content").unwrap();
+
+        let result = service
+            .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings, None)
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().text.trim(), "Progress callback test content");
+    }
+
+    #[tokio::test]
+    async fn test_extract_text_with_context_accepts_progress_callback() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicI32, Ordering};
+        use readur::ocr::enhanced::ProgressCallback;
+
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
+        let settings = create_test_settings();
+
+        let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
+        fs::write(temp_file.path(), "Callback test").unwrap();
+
+        // Create a callback that tracks invocations
+        let call_count = Arc::new(AtomicI32::new(0));
+        let call_count_clone = call_count.clone();
+        let callback: ProgressCallback = Arc::new(move |_current, _total| {
+            call_count_clone.fetch_add(1, Ordering::SeqCst);
+        });
+
+        let result = service
+            .extract_text_with_context(
+                temp_file.path().to_str().unwrap(),
+                "text/plain",
+                "test.txt",
+                12,
+                &settings,
+                Some(callback),
+            )
+            .await;
+
+        assert!(result.is_ok());
+        // Plain text extraction doesn't invoke the progress callback
+        // (it's only used for PDF page-by-page processing)
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_progress_callback_type_is_send_sync() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicI32, Ordering};
+        use readur::ocr::enhanced::ProgressCallback;
+
+        // Verify the ProgressCallback type can be shared across threads
+        let current_page = Arc::new(AtomicI32::new(0));
+        let total_pages = Arc::new(AtomicI32::new(0));
+
+        let current_clone = current_page.clone();
+        let total_clone = total_pages.clone();
+
+        let callback: ProgressCallback = Arc::new(move |current, total| {
+            current_clone.store(current, Ordering::SeqCst);
+            total_clone.store(total, Ordering::SeqCst);
+        });
+
+        // Simulate calling from different async contexts
+        let cb1 = callback.clone();
+        let handle = tokio::spawn(async move {
+            cb1(5, 10);
+        });
+        handle.await.unwrap();
+
+        assert_eq!(current_page.load(Ordering::SeqCst), 5);
+        assert_eq!(total_pages.load(Ordering::SeqCst), 10);
+
+        // Call again with updated values
+        callback(8, 10);
+        assert_eq!(current_page.load(Ordering::SeqCst), 8);
+        assert_eq!(total_pages.load(Ordering::SeqCst), 10);
+    }
+
+    #[cfg(feature = "ocr")]
+    #[tokio::test]
+    async fn test_extract_text_from_pdf_accepts_progress_callback() {
+        let temp_dir = create_temp_dir();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
+        let file_service = create_test_file_service(&temp_path).await;
+        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100);
+        let settings = create_test_settings();
+
+        // Create a minimal valid PDF
+        let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
+        let pdf_content = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n190\n%%EOF";
+        fs::write(temp_file.path(), pdf_content).unwrap();
+
+        // extract_text_from_pdf should accept None progress callback
+        let result = service
+            .extract_text_from_pdf(temp_file.path().to_str().unwrap(), &settings, None)
+            .await;
+
+        // May succeed or fail depending on PDF tools installed,
+        // but should not panic with None callback
+        match result {
+            Ok(r) => assert!(r.confidence >= 0.0),
+            Err(e) => {
+                let msg = e.to_string();
+                // Expected errors for minimal PDF without real content
+                assert!(
+                    msg.contains("ocrmypdf") || msg.contains("PDF") || msg.contains("extract"),
+                    "Unexpected error: {}", msg
+                );
+            }
+        }
     }
 }

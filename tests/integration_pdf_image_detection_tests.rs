@@ -154,7 +154,7 @@ mod pdf_image_detection_tests {
         let pdf_file = create_text_only_pdf(text_content);
         let pdf_path = pdf_file.path().to_str().unwrap();
 
-        match service.extract_text_from_pdf(pdf_path, &settings).await {
+        match service.extract_text_from_pdf(pdf_path, &settings, None).await {
             Ok(result) => {
                 // Text-only PDFs should use pdftotext (fast extraction)
                 let used_pdftotext = result.preprocessing_applied.iter()
@@ -200,7 +200,7 @@ mod pdf_image_detection_tests {
         let service = create_ocr_service(temp_path).await;
         let settings = create_test_settings();
 
-        match service.extract_text_from_pdf(test_pdf_path, &settings).await {
+        match service.extract_text_from_pdf(test_pdf_path, &settings, None).await {
             Ok(result) => {
                 // Image-based PDFs should use pdftoppm + Tesseract
                 let used_image_ocr = result.preprocessing_applied.iter()
@@ -263,7 +263,7 @@ mod pdf_image_detection_tests {
         let service = create_ocr_service(temp_path).await;
         let settings = create_test_settings();
 
-        match service.extract_text_from_pdf(test_pdf_path, &settings).await {
+        match service.extract_text_from_pdf(test_pdf_path, &settings, None).await {
             Ok(result) => {
                 // The extracted text should NOT contain common garbage patterns
                 let garbage_patterns = [
@@ -376,7 +376,7 @@ mod pdf_image_detection_tests {
         assert!(has_images, "TEST2.pdf should be detected as having images");
 
         // Step 2: Extract text and verify it's not garbage
-        match service.extract_text_from_pdf(test_pdf_path, &settings).await {
+        match service.extract_text_from_pdf(test_pdf_path, &settings, None).await {
             Ok(result) => {
                 println!("=== Issue #439 Regression Test Results ===");
                 println!("Word count: {}", result.word_count);

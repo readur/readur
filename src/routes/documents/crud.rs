@@ -369,6 +369,19 @@ pub async fn get_document_by_id(
     response.labels = labels;
     response.username = username;
 
+    // Populate OCR progress from ocr_queue when actively processing
+    if response.ocr_status.as_deref() == Some("processing") {
+        if let Ok(Some(row)) = sqlx::query_as::<_, (Option<i32>, Option<i32>)>(
+            "SELECT progress_current, progress_total FROM ocr_queue WHERE document_id = $1 AND status = 'processing' LIMIT 1"
+        )
+        .bind(document_id)
+        .fetch_optional(&state.db.pool)
+        .await {
+            response.ocr_progress_current = row.0;
+            response.ocr_progress_total = row.1;
+        }
+    }
+
     Ok(Json(response))
 }
 

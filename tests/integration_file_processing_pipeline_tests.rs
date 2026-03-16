@@ -413,6 +413,8 @@ impl FileProcessingTestClient {
                                 ocr_word_count: doc.ocr_word_count,
                                 ocr_processing_time_ms: doc.ocr_processing_time_ms,
                                 ocr_status: doc.ocr_status.clone(),
+                                ocr_progress_current: doc.ocr_progress_current,
+                                ocr_progress_total: doc.ocr_progress_total,
                                 original_created_at: doc.original_created_at,
                                 original_modified_at: doc.original_modified_at,
                                 source_path: doc.source_path.clone(),

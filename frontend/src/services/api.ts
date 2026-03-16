@@ -61,6 +61,8 @@ export interface Document {
   ocr_word_count?: number
   ocr_processing_time_ms?: number
   ocr_status?: string
+  ocr_progress_current?: number
+  ocr_progress_total?: number
   ocr_error?: string
   ocr_failure_reason?: string
   ocr_retry_count?: number
