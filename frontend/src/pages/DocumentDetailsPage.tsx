@@ -285,7 +285,7 @@ const DocumentDetailsPage: React.FC = () => {
   // Auto-refresh during OCR processing
   useEffect(() => {
     if (!document) return;
-    const isProcessing = document.ocr_status === 'processing' || retryingOcr;
+    const isProcessing = document.ocr_status === 'pending' || document.ocr_status === 'processing' || retryingOcr;
     if (isProcessing) {
       const interval = setInterval(() => { fetchDocumentDetails(); }, 3000);
       return () => clearInterval(interval);

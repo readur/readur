@@ -669,7 +669,8 @@ This tests the error handling for files that aren't actually PDFs.";
                     "application/pdf",
                     &Path::new(test_file).file_name().unwrap().to_str().unwrap(),
                     1024, // file_size
-                    &settings
+                    &settings,
+                    None,
                 ).await;
                 
                 // The enhanced OCR service might succeed or fail gracefully
@@ -758,5 +759,136 @@ This tests the error handling for files that aren't actually PDFs.";
         for result in results {
             assert!(result.is_ok(), "Task should complete without panicking");
         }
+    }
+
+    // --- DocumentResponse progress fields (Issue #598) ---
+
+    #[test]
+    fn test_document_response_serializes_progress_fields() {
+        use crate::models::DocumentResponse;
+
+        let response = DocumentResponse {
+            id: uuid::Uuid::new_v4(),
+            filename: "test.pdf".to_string(),
+            original_filename: "test.pdf".to_string(),
+            file_path: "/uploads/test.pdf".to_string(),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            tags: vec![],
+            labels: vec![],
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            user_id: uuid::Uuid::new_v4(),
+            username: None,
+            file_hash: None,
+            has_ocr_text: false,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            ocr_status: Some("processing".to_string()),
+            ocr_progress_current: Some(5),
+            ocr_progress_total: Some(20),
+            original_created_at: None,
+            original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
+            source_metadata: None,
+        };
+
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["ocr_status"], "processing");
+        assert_eq!(json["ocr_progress_current"], 5);
+        assert_eq!(json["ocr_progress_total"], 20);
+    }
+
+    #[test]
+    fn test_document_response_omits_null_progress_fields() {
+        use crate::models::DocumentResponse;
+
+        let response = DocumentResponse {
+            id: uuid::Uuid::new_v4(),
+            filename: "test.pdf".to_string(),
+            original_filename: "test.pdf".to_string(),
+            file_path: "/uploads/test.pdf".to_string(),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            tags: vec![],
+            labels: vec![],
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            user_id: uuid::Uuid::new_v4(),
+            username: None,
+            file_hash: None,
+            has_ocr_text: false,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            ocr_status: Some("completed".to_string()),
+            ocr_progress_current: None,
+            ocr_progress_total: None,
+            original_created_at: None,
+            original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
+            source_metadata: None,
+        };
+
+        let json = serde_json::to_value(&response).unwrap();
+        // Progress fields should be omitted when None (skip_serializing_if)
+        assert!(!json.as_object().unwrap().contains_key("ocr_progress_current"));
+        assert!(!json.as_object().unwrap().contains_key("ocr_progress_total"));
+    }
+
+    #[test]
+    fn test_document_response_from_document_sets_progress_to_none() {
+        use crate::models::{Document, DocumentResponse};
+
+        let doc = Document {
+            id: uuid::Uuid::new_v4(),
+            filename: "test.pdf".to_string(),
+            original_filename: "test.pdf".to_string(),
+            file_path: "/uploads/test.pdf".to_string(),
+            file_size: 1024,
+            mime_type: "application/pdf".to_string(),
+            content: None,
+            ocr_text: None,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            ocr_status: Some("processing".to_string()),
+            ocr_error: None,
+            ocr_completed_at: None,
+            ocr_retry_count: None,
+            ocr_failure_reason: None,
+            tags: vec![],
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            user_id: uuid::Uuid::new_v4(),
+            file_hash: None,
+            original_created_at: None,
+            original_modified_at: None,
+            source_path: None,
+            source_type: None,
+            source_id: None,
+            file_permissions: None,
+            file_owner: None,
+            file_group: None,
+            source_metadata: None,
+        };
+
+        let response = DocumentResponse::from(doc);
+        // Progress fields should be None when created from Document
+        // (they're populated from ocr_queue separately in the route handler)
+        assert!(response.ocr_progress_current.is_none());
+        assert!(response.ocr_progress_total.is_none());
+        assert_eq!(response.ocr_status, Some("processing".to_string()));
     }
 }

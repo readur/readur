@@ -251,7 +251,7 @@ impl OCRPipelineTestHarness {
         info!("🔍 Starting OCR processing for document {}", doc_id);
         let settings = readur::models::Settings::default();
         
-        let ocr_result = match self.ocr_service.extract_text(&doc_details.file_path, "text/plain", &settings).await {
+        let ocr_result = match self.ocr_service.extract_text(&doc_details.file_path, "text/plain", &settings, None).await {
             Ok(result) => {
                 info!("✅ OCR extraction successful: {:.1}% confidence, {} words", 
                       result.confidence, result.word_count);
@@ -423,7 +423,7 @@ impl OCRPipelineTestHarness {
                     info!("🔍 Starting OCR processing for document {}", doc_id);
                     let settings = readur::models::Settings::default();
                     
-                    let ocr_result = match ocr_service.extract_text(&file_path, "text/plain", &settings).await {
+                    let ocr_result = match ocr_service.extract_text(&file_path, "text/plain", &settings, None).await {
                         Ok(result) => {
                             info!("✅ OCR extraction successful: {:.1}% confidence, {} words", 
                                   result.confidence, result.word_count);

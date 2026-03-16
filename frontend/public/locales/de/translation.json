@@ -366,7 +366,7 @@
       "done": "OCR Abgeschlossen",
       "processing": "Wird verarbeitet...",
       "failed": "OCR Fehlgeschlagen",
-      "pending": "Ausstehend"
+      "pending": "In Warteschlange"
     },
     "actions": {
       "editLabels": "Labels bearbeiten",

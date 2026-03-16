@@ -1,5 +1,5 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import DocumentDetailsPage from '../DocumentDetailsPage';
@@ -284,5 +284,151 @@ describe('DocumentDetailsPage - OCR Word Count Display', () => {
       expect(metadataText.textContent).toMatch(/290 words/);
       expect(metadataText.textContent).toMatch(/1500ms/);
     }, { timeout: 3000 });
+  });
+});
+
+describe('DocumentDetailsPage - OCR Polling Behavior', () => {
+  beforeEach(() => {
+    // Mock window.matchMedia (needed for ThemeContext)
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    // Mock the api.get method for labels
+    vi.spyOn(apiModule.default, 'get').mockResolvedValue({
+      status: 200,
+      data: [],
+    } as any);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Test: Verify polling starts when document ocr_status is 'pending'
+   * Issue #598: polling should trigger for 'pending' status in addition to 'processing'
+   */
+  test('starts polling when document status is pending', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const mockDocument = createBaseMockDocument({
+      has_ocr_text: false,
+      ocr_status: 'pending',
+    });
+
+    const mockOcrData = createMockOcrResponse({
+      ocr_status: 'pending',
+      has_ocr_text: false,
+      ocr_text: '',
+    });
+
+    const getByIdSpy = vi.spyOn(apiModule.documentService, 'getById').mockResolvedValue({ data: mockDocument } as any);
+    vi.spyOn(apiModule.documentService, 'getOcrText').mockResolvedValue({ data: mockOcrData } as any);
+
+    renderDocumentDetailsPage();
+
+    // Wait for the initial document load
+    await waitFor(() => {
+      expect(getByIdSpy).toHaveBeenCalledTimes(1);
+    });
+
+    // Advance timers by 3 seconds to trigger the polling interval
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    // fetchDocumentDetails should have been called again due to polling
+    await waitFor(() => {
+      expect(getByIdSpy).toHaveBeenCalledTimes(2);
+    });
+
+    vi.useRealTimers();
+  });
+
+  /**
+   * Test: Verify polling starts when document ocr_status is 'processing'
+   */
+  test('starts polling when document status is processing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const mockDocument = createBaseMockDocument({
+      has_ocr_text: false,
+      ocr_status: 'processing',
+    });
+
+    const mockOcrData = createMockOcrResponse({
+      ocr_status: 'processing',
+      has_ocr_text: false,
+      ocr_text: '',
+    });
+
+    const getByIdSpy = vi.spyOn(apiModule.documentService, 'getById').mockResolvedValue({ data: mockDocument } as any);
+    vi.spyOn(apiModule.documentService, 'getOcrText').mockResolvedValue({ data: mockOcrData } as any);
+
+    renderDocumentDetailsPage();
+
+    // Wait for the initial document load
+    await waitFor(() => {
+      expect(getByIdSpy).toHaveBeenCalledTimes(1);
+    });
+
+    // Advance timers by 3 seconds to trigger the polling interval
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    // fetchDocumentDetails should have been called again due to polling
+    await waitFor(() => {
+      expect(getByIdSpy).toHaveBeenCalledTimes(2);
+    });
+
+    vi.useRealTimers();
+  });
+
+  /**
+   * Test: Verify polling does NOT start when document ocr_status is 'completed'
+   */
+  test('does not poll when document status is completed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const mockDocument = createBaseMockDocument({
+      has_ocr_text: true,
+      ocr_status: 'completed',
+    });
+
+    const mockOcrData = createMockOcrResponse({
+      ocr_status: 'completed',
+    });
+
+    const getByIdSpy = vi.spyOn(apiModule.documentService, 'getById').mockResolvedValue({ data: mockDocument } as any);
+    vi.spyOn(apiModule.documentService, 'getOcrText').mockResolvedValue({ data: mockOcrData } as any);
+
+    renderDocumentDetailsPage();
+
+    // Wait for the initial document load
+    await waitFor(() => {
+      expect(getByIdSpy).toHaveBeenCalledTimes(1);
+    });
+
+    // Advance timers by 3 seconds -- no polling should occur
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    // fetchDocumentDetails should NOT have been called again
+    expect(getByIdSpy).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
   });
 });
