@@ -363,50 +363,60 @@ describe('LabelCreateDialog Component', () => {
 
   describe('Loading State', () => {
     test('should show loading state during submission', async () => {
-      const onSubmit = vi.fn().mockImplementation(() => new Promise(resolve => setTimeout(resolve, 500)));
+      let resolveSubmit!: () => void;
+      const onSubmit = vi.fn().mockImplementation(
+        () => new Promise<void>(resolve => { resolveSubmit = resolve; })
+      );
       renderLabelCreateDialog({ onSubmit });
-      
+
       const nameInput = screen.getByLabelText(/label name/i);
       await user.type(nameInput, 'Test Label');
-      
+
       const createButton = screen.getByText('Create');
-      
+
       // Initially button should show "Create"
       expect(createButton).toHaveTextContent('Create');
       expect(createButton).not.toBeDisabled();
-      
+
       await user.click(createButton);
-      
+
       // Wait for loading state to appear - the button text should change to "Saving..."
       await waitFor(() => {
         expect(createButton).toHaveTextContent('Saving...');
-      }, { timeout: 2000 });
-      
+      });
+
       expect(createButton).toBeDisabled();
-      
-      // Wait for submission to complete
+
+      // Let submission complete
+      resolveSubmit();
+
       await waitFor(() => {
         expect(createButton).not.toHaveTextContent('Saving...');
-      }, { timeout: 3000 });
+      });
     });
 
     test('should disable form fields during submission', async () => {
-      const onSubmit = vi.fn().mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
+      let resolveSubmit!: () => void;
+      const onSubmit = vi.fn().mockImplementation(
+        () => new Promise<void>(resolve => { resolveSubmit = resolve; })
+      );
       renderLabelCreateDialog({ onSubmit });
-      
+
       const nameInput = screen.getByLabelText(/label name/i);
       await user.type(nameInput, 'Test Label');
-      
+
       const createButton = screen.getByText('Create');
       await user.click(createButton);
-      
-      // Wait for loading state to take effect
+
+      // Loading stays true until we explicitly resolve
       await waitFor(() => {
         expect(nameInput).toBeDisabled();
       });
       expect(screen.getByLabelText(/description/i)).toBeDisabled();
-      
-      // Wait for submission to complete
+
+      // Let submission complete
+      resolveSubmit();
+
       await waitFor(() => {
         expect(nameInput).not.toBeDisabled();
       });
