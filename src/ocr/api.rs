@@ -43,9 +43,10 @@ pub struct OcrRequest {
     )
 )]
 pub async fn health_check(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<OcrHealthResponse>, (StatusCode, Json<OcrErrorResponse>)> {
-    let service = EnhancedOcrService::new();
+    let service = EnhancedOcrService::new()
+        .with_timeout(state.config.ocr_timeout_seconds);
     let diagnostics = service.get_diagnostics().await;
     
     let health_checker = crate::ocr::health::OcrHealthChecker::new();
@@ -94,10 +95,11 @@ pub async fn health_check(
     )
 )]
 pub async fn perform_ocr(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(request): Json<OcrRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<OcrErrorResponse>)> {
-    let service = EnhancedOcrService::new();
+    let service = EnhancedOcrService::new()
+        .with_timeout(state.config.ocr_timeout_seconds);
     let lang = request.language.as_deref().unwrap_or("eng");
     let use_fallback = request.use_fallback.unwrap_or(true);
     

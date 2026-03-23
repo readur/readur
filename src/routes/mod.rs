@@ -15,3 +15,5 @@ pub mod sources;
 pub mod users;
 pub mod webdav;
 pub mod webdav_scan_failures;
+pub mod shared_links;
+pub mod comments;

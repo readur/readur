@@ -168,6 +168,52 @@ mod tests {
         assert_eq!(health_checker.get_language_display_name("unknown"), "unknown");
     }
 
+    /// Flags only available in ocrmypdf >= 16.0 that must NOT be used.
+    /// The Docker image ships ocrmypdf 14.x (from Debian/Ubuntu packages).
+    /// See: https://github.com/readur/readur/issues/604
+    const OCRMYPDF_UNSUPPORTED_FLAGS: &[&str] = &[
+        "--fix-metadata",
+        "--continue-on-soft-render-error",
+        "--no-update-metadata",
+    ];
+
+    #[test]
+    fn test_ocrmypdf_strategy1_uses_only_supported_flags() {
+        let args = crate::ocr::enhanced::ocrmypdf_strategy1_args();
+        for arg in &args {
+            assert!(
+                !OCRMYPDF_UNSUPPORTED_FLAGS.contains(arg),
+                "ocrmypdf strategy 1 contains unsupported flag '{}' — not available in ocrmypdf 14.x (Docker image version)",
+                arg
+            );
+        }
+    }
+
+    #[test]
+    fn test_ocrmypdf_strategy2_uses_only_supported_flags() {
+        let args = crate::ocr::enhanced::ocrmypdf_strategy2_args();
+        for arg in &args {
+            assert!(
+                !OCRMYPDF_UNSUPPORTED_FLAGS.contains(arg),
+                "ocrmypdf strategy 2 contains unsupported flag '{}' — not available in ocrmypdf 14.x (Docker image version)",
+                arg
+            );
+        }
+    }
+
+    #[test]
+    fn test_ocrmypdf_strategies_contain_required_flags() {
+        let s1 = crate::ocr::enhanced::ocrmypdf_strategy1_args();
+        assert!(s1.contains(&"--force-ocr"), "Strategy 1 must include --force-ocr");
+        assert!(s1.contains(&"--language"), "Strategy 1 must include --language");
+        assert!(s1.contains(&"eng"), "Strategy 1 must include eng language");
+
+        let s2 = crate::ocr::enhanced::ocrmypdf_strategy2_args();
+        assert!(s2.contains(&"--force-ocr"), "Strategy 2 must include --force-ocr");
+        assert!(s2.contains(&"--language"), "Strategy 2 must include --language");
+        assert!(s2.contains(&"eng"), "Strategy 2 must include eng language");
+    }
+
     #[test]
     fn test_language_validation_integration() {
         let health_checker = OcrHealthChecker::new();

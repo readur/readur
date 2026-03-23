@@ -395,6 +395,7 @@ async fn main() -> anyhow::Result<()> {
         file_service.clone(),
         config.max_pdf_size_mb,
         config.max_office_document_size_mb,
+        config.ocr_timeout_seconds,
     ));
     
     // Initialize OIDC client if enabled
@@ -587,6 +588,9 @@ async fn main() -> anyhow::Result<()> {
         .nest("/api/users", readur::routes::users::router())
         .nest("/api/webdav", readur::routes::webdav::router())
         .nest("/api/webdav/scan/failures", readur::routes::webdav_scan_failures::router())
+        .nest("/api/shared-links", readur::routes::shared_links::authenticated_router())
+        .nest("/api/public/shared", readur::routes::shared_links::public_router())
+        .nest("/api/comments", readur::routes::comments::router())
         .merge(readur::swagger::create_swagger_router())
         .fallback_service(
             ServeDir::new(&static_dir)

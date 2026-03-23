@@ -50,6 +50,7 @@ pub struct OcrQueueService {
     file_service: std::sync::Arc<crate::services::file_service::FileService>,
     max_pdf_size_mb: u64,
     max_office_document_size_mb: u64,
+    ocr_timeout_seconds: u64,
 }
 
 impl OcrQueueService {
@@ -60,6 +61,7 @@ impl OcrQueueService {
         file_service: std::sync::Arc<crate::services::file_service::FileService>,
         max_pdf_size_mb: u64,
         max_office_document_size_mb: u64,
+        ocr_timeout_seconds: u64,
     ) -> Self {
         let worker_id = format!("worker-{}-{}", hostname::get().unwrap_or_default().to_string_lossy(), Uuid::new_v4());
         let transaction_manager = DocumentTransactionManager::new(pool.clone());
@@ -83,6 +85,7 @@ impl OcrQueueService {
             file_service,
             max_pdf_size_mb,
             max_office_document_size_mb,
+            ocr_timeout_seconds,
         }
     }
     
@@ -694,6 +697,7 @@ impl OcrQueueService {
             (*self.file_service).clone(),
             self.max_pdf_size_mb,
             self.max_office_document_size_mb,
+            self.ocr_timeout_seconds,
         ));
         
         info!(

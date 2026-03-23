@@ -297,6 +297,7 @@ impl TestContext {
             file_service.clone(),
             100, // Default 100MB for tests
             100, // Default 100MB for tests
+            300, // Default 300s OCR timeout for tests
         ));
 
         let state = Arc::new(AppState { 
@@ -846,6 +847,9 @@ impl TestConfigBuilder {
             // S3 Configuration
             s3_enabled: false,
             s3_config: None,
+
+            // Public URL
+            public_url: None,
         }
     }
 }

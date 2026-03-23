@@ -218,6 +218,9 @@ pub fn create_test_config_with_db(database_url: &str) -> Config {
         // S3 Configuration (disabled for tests by default)
         s3_enabled: false,
         s3_config: None,
+
+        // Public URL
+        public_url: None,
     }
 }
 
@@ -345,7 +348,7 @@ pub async fn create_test_database_from_options(options: &TestAppStateOptions) ->
 
 /// Creates a test OcrQueueService with proper error handling
 pub fn create_test_queue_service(db: Database, pool: PgPool, concurrent_jobs: usize, file_service: Arc<FileService>) -> Result<Arc<OcrQueueService>, TestHelperError> {
-    Ok(Arc::new(OcrQueueService::new(db, pool, concurrent_jobs, file_service, 100, 100)))
+    Ok(Arc::new(OcrQueueService::new(db, pool, concurrent_jobs, file_service, 100, 100, 300)))
 }
 
 /// Creates a test AppState with default configuration and services

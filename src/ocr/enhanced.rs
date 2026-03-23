@@ -24,6 +24,29 @@ use super::xml_extractor::XmlOfficeExtractor;
 pub type ProgressCallback = Arc<dyn Fn(i32, i32) + Send + Sync>;
 // Removed text_sanitization import - now using minimal inline sanitization
 
+/// Arguments for ocrmypdf Strategy 1: Standard OCR with cleaning.
+/// These must only use flags supported by ocrmypdf >= 14.0.
+pub fn ocrmypdf_strategy1_args() -> Vec<&'static str> {
+    vec![
+        "--force-ocr",
+        "-O2",
+        "--deskew",
+        "--clean",
+        "--language", "eng",
+    ]
+}
+
+/// Arguments for ocrmypdf Strategy 2: Recovery mode with reduced optimization.
+/// These must only use flags supported by ocrmypdf >= 14.0.
+pub fn ocrmypdf_strategy2_args() -> Vec<&'static str> {
+    vec![
+        "--force-ocr",
+        "--remove-background",
+        "-O1",
+        "--language", "eng",
+    ]
+}
+
 /// RAII guard for automatic cleanup of temporary files
 struct FileCleanupGuard {
     file_path: String,
@@ -72,6 +95,7 @@ pub struct EnhancedOcrService {
     pub file_service: FileService,
     pub max_pdf_size: u64,
     pub max_office_document_size: u64,
+    pub ocr_timeout_seconds: u64,
 }
 
 impl EnhancedOcrService {
@@ -99,12 +123,13 @@ impl EnhancedOcrService {
     }
 
 
-    pub fn new(temp_dir: String, file_service: FileService, max_pdf_size_mb: u64, max_office_document_size_mb: u64) -> Self {
+    pub fn new(temp_dir: String, file_service: FileService, max_pdf_size_mb: u64, max_office_document_size_mb: u64, ocr_timeout_seconds: u64) -> Self {
         Self {
             temp_dir,
             file_service,
             max_pdf_size: max_pdf_size_mb * 1024 * 1024,
             max_office_document_size: max_office_document_size_mb * 1024 * 1024,
+            ocr_timeout_seconds,
         }
     }
     
@@ -1081,19 +1106,17 @@ impl EnhancedOcrService {
         
         // Run ocrmypdf with progressive fallback strategies
         let ocrmypdf_result = tokio::time::timeout(
-            std::time::Duration::from_secs(300), // 5 minute timeout for OCR
+            std::time::Duration::from_secs(self.ocr_timeout_seconds),
             tokio::task::spawn_blocking({
                 let file_path = file_path.to_string();
                 let temp_ocr_path = temp_ocr_path.clone();
                 move || {
                     // Strategy 1: Standard OCR with cleaning
-                    let mut result = std::process::Command::new("ocrmypdf")
-                        .arg("--force-ocr")  // OCR even if text is detected
-                        .arg("-O2")          // Optimize level 2 (balanced quality/speed)
-                        .arg("--deskew")     // Correct skewed pages
-                        .arg("--clean")      // Clean up artifacts
-                        .arg("--language")
-                        .arg("eng")          // English language
+                    let mut cmd = std::process::Command::new("ocrmypdf");
+                    for arg in ocrmypdf_strategy1_args() {
+                        cmd.arg(arg);
+                    }
+                    let mut result = cmd
                         .arg(&file_path)
                         .arg(&temp_ocr_path)
                         .output();
@@ -1104,13 +1127,11 @@ impl EnhancedOcrService {
                     
                     // Strategy 2: If standard OCR fails, try with error recovery
                     eprintln!("Standard OCR failed, trying recovery mode...");
-                    result = std::process::Command::new("ocrmypdf")
-                        .arg("--force-ocr")
-                        .arg("--fix-metadata")  // Fix metadata issues
-                        .arg("--remove-background")  // Remove background noise
-                        .arg("-O1")          // Lower optimization for problematic PDFs
-                        .arg("--language")
-                        .arg("eng")
+                    let mut cmd = std::process::Command::new("ocrmypdf");
+                    for arg in ocrmypdf_strategy2_args() {
+                        cmd.arg(arg);
+                    }
+                    result = cmd
                         .arg(&file_path)
                         .arg(&temp_ocr_path)
                         .output();

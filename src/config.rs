@@ -43,6 +43,9 @@ pub struct Config {
     // S3 Configuration
     pub s3_enabled: bool,
     pub s3_config: Option<S3SourceConfig>,
+
+    // Public URL for generating shared links
+    pub public_url: Option<String>,
 }
 
 impl Config {
@@ -602,8 +605,13 @@ impl Config {
             } else {
                 None
             },
+            public_url: env::var("PUBLIC_URL").ok().map(|url| {
+                let url = url.trim_end_matches('/').to_string();
+                println!("✅ PUBLIC_URL: {} (loaded from env)", url);
+                url
+            }),
         };
-        
+
         println!("\n🔍 CONFIGURATION VALIDATION:");
         println!("{}", "=".repeat(50));
         

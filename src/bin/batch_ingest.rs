@@ -81,6 +81,7 @@ async fn main() -> Result<()> {
         file_service.clone(),
         config.max_pdf_size_mb,
         config.max_office_document_size_mb,
+        config.ocr_timeout_seconds,
     );
     
     let ingester = BatchIngester::new(db, queue_service, (*file_service).clone(), config);

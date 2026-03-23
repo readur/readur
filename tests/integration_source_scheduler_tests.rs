@@ -196,6 +196,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         s3_config: None,
             max_pdf_size_mb: 100,
             max_office_document_size_mb: 100,
+        public_url: None,
     };
 
     // Use smaller connection pool for tests to avoid exhaustion  

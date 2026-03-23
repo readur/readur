@@ -31,6 +31,9 @@ import PreviewTab from '../components/DocumentDetails/PreviewTab';
 import OcrTextTab from '../components/DocumentDetails/OcrTextTab';
 import DetailsTab from '../components/DocumentDetails/DetailsTab';
 import ActivityTab from '../components/DocumentDetails/ActivityTab';
+import CommentsTab from '../components/DocumentDetails/CommentsTab';
+import SharedLinkDialog from '../components/SharedLinks/SharedLinkDialog';
+import SharedLinksManager from '../components/SharedLinks/SharedLinksManager';
 
 const DocumentDetailsPage: React.FC = () => {
   const { t } = useTranslation();
@@ -67,6 +70,9 @@ const DocumentDetailsPage: React.FC = () => {
   // Delete
   const [deleting, setDeleting] = useState<boolean>(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
+
+  // Share dialog
+  const [showShareDialog, setShowShareDialog] = useState<boolean>(false);
 
   // Snackbar
   const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false);
@@ -333,6 +339,7 @@ const DocumentDetailsPage: React.FC = () => {
           onDelete={() => setDeleteConfirmOpen(true)}
           onRetryOcr={handleRetryOcr}
           onEditLabels={() => setShowLabelDialog(true)}
+          onShare={() => setShowShareDialog(true)}
           formatFileSize={formatFileSize}
           formatDate={formatDate}
           t={t}
@@ -356,6 +363,7 @@ const DocumentDetailsPage: React.FC = () => {
           >
             <Tab label={t('documentDetails.tabs.ocrText')} />
             <Tab label={t('documentDetails.tabs.preview')} />
+            <Tab label="Comments" />
           </Tabs>
         </Box>
 
@@ -407,6 +415,10 @@ const DocumentDetailsPage: React.FC = () => {
               onViewProcessedImage={handleViewProcessedImage}
               t={t}
             />
+          )}
+
+          {tabValue === 2 && id && (
+            <CommentsTab documentId={id} />
           )}
         </Box>
       </Container>
@@ -540,6 +552,15 @@ const DocumentDetailsPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Shared Link Dialog */}
+      {id && (
+        <SharedLinkDialog
+          open={showShareDialog}
+          onClose={() => setShowShareDialog(false)}
+          documentId={id}
+        />
+      )}
 
       {/* Snackbar */}
       <Snackbar

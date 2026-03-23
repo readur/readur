@@ -17,6 +17,7 @@ import {
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
   Edit as EditIcon,
+  Share as ShareIcon,
   Schedule as ScheduleIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
@@ -35,6 +36,7 @@ interface DocumentDetailsHeaderProps {
   onDelete: () => void;
   onRetryOcr: () => void;
   onEditLabels: () => void;
+  onShare?: () => void;
   formatFileSize: (bytes: number) => string;
   formatDate: (dateString: string) => string;
   t: (key: string, options?: any) => string;
@@ -50,6 +52,7 @@ const DocumentDetailsHeader: React.FC<DocumentDetailsHeaderProps> = ({
   onDelete,
   onRetryOcr,
   onEditLabels,
+  onShare,
   formatFileSize,
   formatDate,
   t,
@@ -196,6 +199,13 @@ const DocumentDetailsHeader: React.FC<DocumentDetailsHeaderProps> = ({
         </Stack>
 
         <Stack direction="row" spacing={0.5}>
+          {onShare && (
+            <Tooltip title="Share">
+              <IconButton onClick={onShare} size="small">
+                <ShareIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title={t('documentDetails.actions.download')}>
             <IconButton onClick={onDownload} size="small">
               <DownloadIcon fontSize="small" />

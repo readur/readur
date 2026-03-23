@@ -205,3 +205,5 @@ pub mod source;
 pub mod label;
 pub mod settings;
 pub mod search;
+pub mod shared_link;
+pub mod comment;

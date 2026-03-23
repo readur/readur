@@ -7,6 +7,8 @@ pub mod settings;
 pub mod source;
 pub mod source_error;
 pub mod responses;
+pub mod shared_link;
+pub mod comment;
 
 // Re-export commonly used types
 pub use user::*;

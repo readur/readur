@@ -19,6 +19,7 @@ import DocumentManagementPage from './pages/DocumentManagementPage';
 import LabelsPage from './pages/LabelsPage';
 import IgnoredFilesPage from './pages/IgnoredFilesPage';
 import DebugPage from './pages/DebugPage';
+import SharedDocumentPage from './pages/SharedDocumentPage';
 
 function App(): React.ReactElement {
   const { user, loading } = useAuth();
@@ -59,6 +60,7 @@ function App(): React.ReactElement {
       <Routes>
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
         <Route path="/auth/callback" element={<OidcCallback />} />
+        <Route path="/shared/:token" element={<SharedDocumentPage />} />
         <Route
           path="/*"
           element={

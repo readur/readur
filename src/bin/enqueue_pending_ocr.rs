@@ -48,6 +48,7 @@ async fn main() -> Result<()> {
         file_service,
         config.max_pdf_size_mb,
         config.max_office_document_size_mb,
+        config.ocr_timeout_seconds,
     );
     
     // Find documents with pending OCR status that aren't in the queue

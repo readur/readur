@@ -132,7 +132,7 @@ services:
 
   # Dufs WebDAV server for stress testing
   dufs_webdav:
-    image: sigoden/dufs:latest
+    image: sigoden/dufs:v0.45.0 # renovate: datasource=docker depName=sigoden/dufs
     container_name: readur_dufs_webdav
     command: >
       /data
