@@ -60,6 +60,7 @@ async fn create_test_app_state() -> Arc<AppState> {
         file_service.clone(),
         100,
         100,
+        300,
     ));
     
     let sync_progress_tracker = Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new());

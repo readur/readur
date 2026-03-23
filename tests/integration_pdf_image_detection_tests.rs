@@ -32,7 +32,7 @@ mod pdf_image_detection_tests {
 
     async fn create_ocr_service(temp_path: &str) -> EnhancedOcrService {
         let file_service = create_test_file_service(temp_path).await;
-        EnhancedOcrService::new(temp_path.to_string(), file_service, 100, 100)
+        EnhancedOcrService::new(temp_path.to_string(), file_service, 100, 100, 300)
     }
 
     /// Create a minimal text-only PDF (no embedded images)

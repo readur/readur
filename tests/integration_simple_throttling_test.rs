@@ -58,6 +58,7 @@ impl SimpleThrottleTest {
             file_service,
             100,
             100,
+            300,
         ));
         
         Ok(Self {
@@ -153,7 +154,7 @@ impl SimpleThrottleTest {
             let handle = tokio::spawn(async move {
                 let worker_name = format!("worker-{}", worker_id);
                 let file_service = create_test_file_service("/tmp").await;
-                let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service, 100, 100);
+                let ocr_service = EnhancedOcrService::new("/tmp".to_string(), file_service, 100, 100, 300);
                 let mut jobs_processed = 0;
                 
                 info!("Worker {} starting", worker_name);

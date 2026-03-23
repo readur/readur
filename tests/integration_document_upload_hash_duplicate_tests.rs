@@ -91,7 +91,7 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
     let file_service = Arc::new(FileService::with_storage(config.upload_path.clone(), storage_backend));
     
     let queue_service = std::sync::Arc::new(
-        readur::ocr::queue::OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service.clone(), 100, 100)
+        readur::ocr::queue::OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service.clone(), 100, 100, 300)
     );
     
     Ok(Arc::new(AppState {

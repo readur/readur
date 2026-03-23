@@ -98,7 +98,7 @@ mod pdf_word_count_integration_tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
         let settings = create_test_settings();
 
         // Create a PDF with normal spaced text
@@ -125,7 +125,7 @@ mod pdf_word_count_integration_tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
         let settings = create_test_settings();
 
         // Create a PDF with continuous text (no spaces)
@@ -154,7 +154,7 @@ mod pdf_word_count_integration_tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
         let settings = create_test_settings();
 
         // Create a PDF with mixed content (letters, numbers, punctuation)
@@ -178,7 +178,7 @@ mod pdf_word_count_integration_tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
         let settings = create_test_settings();
 
         // Create a PDF with only whitespace/empty content
@@ -209,7 +209,7 @@ mod pdf_word_count_integration_tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
         let settings = create_test_settings();
 
         // Create a PDF with only punctuation
@@ -239,7 +239,7 @@ mod pdf_word_count_integration_tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
         let settings = create_test_settings();
 
         // Use a real test PDF file if available
@@ -289,7 +289,7 @@ mod pdf_word_count_integration_tests {
         let temp_dir = create_temp_dir();
         let _temp_path = temp_dir.path().to_str().unwrap().to_string();
         let _file_service = create_test_file_service(&_temp_path).await;
-        let _service = EnhancedOcrService::new(_temp_path.clone(), _file_service, 100, 100);
+        let _service = EnhancedOcrService::new(_temp_path.clone(), _file_service, 100, 100, 300);
         let _settings = create_test_settings();
 
         // Create a small PDF file to test file operations
@@ -311,7 +311,7 @@ mod pdf_word_count_integration_tests {
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100);
+        let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
 
         // Regression test cases for the specific PDF issue
         let test_cases = vec![

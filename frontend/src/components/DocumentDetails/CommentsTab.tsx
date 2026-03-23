@@ -27,7 +27,7 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ documentId }) => {
   const [threads, setThreads] = useState<CommentThreadType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const pollTimer = useRef<ReturnType<typeof setInterval>>();
+  const pollTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const fetchComments = useCallback(async () => {
     try {
