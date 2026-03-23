@@ -1,6 +1,6 @@
 pub mod api;
 pub mod enhanced;
-pub mod enhanced_processing;
+pub mod image_ocr;
 pub mod error;
 pub mod health;
 pub mod queue;
@@ -128,6 +128,7 @@ impl OcrService {
             if !output.status.success() {
                 // Strategy 2: ocrmypdf sidecar (when pdftotext fails)
                 output = tokio::process::Command::new("ocrmypdf")
+                    .arg("--skip-text")  // Don't re-OCR — just extract existing text layer
                     .arg("--sidecar")    // Extract text to sidecar file
                     .arg(&temp_text_path)
                     .arg(file_path)

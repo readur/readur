@@ -1,4 +1,4 @@
-use crate::ocr::enhanced_processing::EnhancedOcrService;
+use crate::ocr::image_ocr::ImageOcrService;
 use crate::ocr::error::OcrError;
 use crate::AppState;
 use axum::{
@@ -45,7 +45,7 @@ pub struct OcrRequest {
 pub async fn health_check(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<OcrHealthResponse>, (StatusCode, Json<OcrErrorResponse>)> {
-    let service = EnhancedOcrService::new()
+    let service = ImageOcrService::new()
         .with_timeout(state.config.ocr_timeout_seconds);
     let diagnostics = service.get_diagnostics().await;
     
@@ -98,7 +98,7 @@ pub async fn perform_ocr(
     State(state): State<Arc<AppState>>,
     Json(request): Json<OcrRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<OcrErrorResponse>)> {
-    let service = EnhancedOcrService::new()
+    let service = ImageOcrService::new()
         .with_timeout(state.config.ocr_timeout_seconds);
     let lang = request.language.as_deref().unwrap_or("eng");
     let use_fallback = request.use_fallback.unwrap_or(true);

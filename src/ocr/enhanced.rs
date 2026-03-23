@@ -1182,7 +1182,8 @@ impl EnhancedOcrService {
                 // Extract text from the OCR'd PDF using ocrmypdf's sidecar option
                 let temp_text_path = format!("{}.txt", temp_ocr_path);
                 let extract_result = std::process::Command::new("ocrmypdf")
-                    .arg("--sidecar")  // Extract text to a sidecar file
+                    .arg("--skip-text") // Don't re-OCR — just extract existing text layer
+                    .arg("--sidecar")   // Extract text to a sidecar file
                     .arg(&temp_text_path)
                     .arg(&temp_ocr_path)
                     .arg("-")  // Output to stdout (dummy, required by ocrmypdf)
@@ -1283,6 +1284,7 @@ impl EnhancedOcrService {
 
         // Strategy 2: Use ocrmypdf --sidecar to extract existing OCR text layer (if PDF already has one)
         let ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
+            .arg("--skip-text") // Don't re-OCR — just extract existing text layer
             .arg("--sidecar")
             .arg(&temp_text_path)
             .arg(file_path)

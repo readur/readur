@@ -3,7 +3,7 @@ mod tests {
     use super::super::*;
     use crate::ocr::error::{OcrError, OcrDiagnostics, CpuFeatures};
     use crate::ocr::health::OcrHealthChecker;
-    use crate::ocr::enhanced_processing::EnhancedOcrService;
+    use crate::ocr::image_ocr::ImageOcrService;
     use std::env;
     use tempfile::TempDir;
     use std::fs;
@@ -95,7 +95,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_enhanced_ocr_timeout() {
-        let _service = EnhancedOcrService::new()
+        let _service = ImageOcrService::new()
             .with_timeout(1); // Very short timeout (1 second)
         
         // This should timeout quickly
@@ -104,7 +104,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_enhanced_ocr_image_validation() {
-        let _service = EnhancedOcrService::new();
+        let _service = ImageOcrService::new();
         
         // Test that the service can be created
         // Actual OCR tests would need test images
@@ -168,11 +168,10 @@ mod tests {
         assert_eq!(health_checker.get_language_display_name("unknown"), "unknown");
     }
 
-    /// Flags only available in ocrmypdf >= 16.0 that must NOT be used.
-    /// The Docker image ships ocrmypdf 14.x (from Debian/Ubuntu packages).
+    /// Flags that do not exist in ocrmypdf and must never be used.
     /// See: https://github.com/readur/readur/issues/604
-    const OCRMYPDF_UNSUPPORTED_FLAGS: &[&str] = &[
-        "--fix-metadata",
+    const OCRMYPDF_INVALID_FLAGS: &[&str] = &[
+        "--fix-metadata",           // never existed in any version
         "--continue-on-soft-render-error",
         "--no-update-metadata",
     ];
@@ -182,7 +181,7 @@ mod tests {
         let args = crate::ocr::enhanced::ocrmypdf_strategy1_args();
         for arg in &args {
             assert!(
-                !OCRMYPDF_UNSUPPORTED_FLAGS.contains(arg),
+                !OCRMYPDF_INVALID_FLAGS.contains(arg),
                 "ocrmypdf strategy 1 contains unsupported flag '{}' — not available in ocrmypdf 14.x (Docker image version)",
                 arg
             );
@@ -194,7 +193,7 @@ mod tests {
         let args = crate::ocr::enhanced::ocrmypdf_strategy2_args();
         for arg in &args {
             assert!(
-                !OCRMYPDF_UNSUPPORTED_FLAGS.contains(arg),
+                !OCRMYPDF_INVALID_FLAGS.contains(arg),
                 "ocrmypdf strategy 2 contains unsupported flag '{}' — not available in ocrmypdf 14.x (Docker image version)",
                 arg
             );

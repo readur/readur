@@ -9,7 +9,7 @@ use tokio::time::timeout;
 #[cfg(feature = "ocr")]
 use tesseract::{Tesseract, PageSegMode};
 
-pub struct EnhancedOcrService {
+pub struct ImageOcrService {
     health_checker: OcrHealthChecker,
     max_image_width: u32,
     max_image_height: u32,
@@ -17,7 +17,7 @@ pub struct EnhancedOcrService {
     min_confidence_threshold: f32,
 }
 
-impl EnhancedOcrService {
+impl ImageOcrService {
     pub fn new() -> Self {
         Self {
             health_checker: OcrHealthChecker::new(),

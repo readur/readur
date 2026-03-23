@@ -32,17 +32,26 @@ RUN cargo build --release
 # --- Runtime stage ---
 FROM debian:bookworm-slim
 
-# Install runtime dependencies
+# Install runtime dependencies:
+#   - tesseract-ocr + language packs for OCR engine
+#   - ghostscript + python3-pip for installing ocrmypdf from PyPI (latest)
+#   - poppler-utils for pdftotext
+#   - unpaper + pngquant for ocrmypdf optional image preprocessing
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-all \
     ca-certificates \
     poppler-utils \
-    ocrmypdf \
+    ghostscript \
+    unpaper \
+    pngquant \
+    python3 \
+    python3-pip \
     curl \
     # Legacy DOC file support (lightweight tools)
     antiword \
     catdoc \
+    && pip3 install --no-cache-dir --break-system-packages ocrmypdf \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

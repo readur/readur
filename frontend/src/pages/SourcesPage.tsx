@@ -819,17 +819,17 @@ const SourcesPage: React.FC = () => {
       statusColor = theme.palette.success.main;
       StatusIcon = CheckCircleIcon;
       statusText = t('sources.validation.healthy');
-      tooltipText = `t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') })`;
+      tooltipText = t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') });
     } else if (validationStatus === 'warning') {
       statusColor = theme.palette.warning.main;
       StatusIcon = WarningIcon;
       statusText = t('sources.validation.warning');
-      tooltipText = `t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') }) - Issues detected`;
+      tooltipText = `${t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') })} - ${t('sources.validation.issuesDetected', 'Issues detected')}`;
     } else if (validationStatus === 'critical') {
       statusColor = theme.palette.error.main;
       StatusIcon = CriticalIcon;
       statusText = t('sources.validation.critical');
-      tooltipText = `t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') }) - Critical issues`;
+      tooltipText = `${t('sources.validation.healthScore', { score: validationScore || t('sources.labels.notAvailable') })} - ${t('sources.validation.criticalIssues', 'Critical issues')}`;
     } else if (validationStatus === 'validating') {
       statusColor = theme.palette.info.main;
       StatusIcon = HealthIcon;
