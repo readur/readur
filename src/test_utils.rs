@@ -300,8 +300,9 @@ impl TestContext {
             300, // Default 300s OCR timeout for tests
         ));
 
-        let state = Arc::new(AppState { 
-            db, 
+        let max_body_size = config.max_file_size_mb as usize * 1024 * 1024;
+        let state = Arc::new(AppState {
+            db,
             config,
             file_service,
             webdav_scheduler: None,
@@ -323,7 +324,8 @@ impl TestContext {
             .nest("/api/ocr", crate::routes::ocr::router())
             .nest("/api/metrics", crate::routes::metrics::router())
             .nest("/metrics", crate::routes::prometheus_metrics::router())
-            .with_state(state.clone());
+            .with_state(state.clone())
+            .layer(axum::extract::DefaultBodyLimit::max(max_body_size));
         
         Self { 
             app, 
@@ -806,6 +808,11 @@ impl TestConfigBuilder {
     
     pub fn with_oidc_enabled(mut self, enabled: bool) -> Self {
         self.oidc_enabled = enabled;
+        self
+    }
+
+    pub fn with_max_file_size_mb(mut self, size_mb: u64) -> Self {
+        self.max_file_size_mb = size_mb;
         self
     }
     

@@ -10,6 +10,6 @@ CREATE TABLE IF NOT EXISTS document_comments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_document_comments_document_id ON document_comments(document_id);
-CREATE INDEX idx_document_comments_parent_id ON document_comments(parent_id);
-CREATE INDEX idx_document_comments_created_at ON document_comments(document_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_document_comments_document_id ON document_comments(document_id);
+CREATE INDEX IF NOT EXISTS idx_document_comments_parent_id ON document_comments(parent_id);
+CREATE INDEX IF NOT EXISTS idx_document_comments_created_at ON document_comments(document_id, created_at);
