@@ -131,167 +131,46 @@ OIDC_HOSTED_DOMAIN=company.com  # Restrict to company domain
 
 ### LDAP Authentication
 
-Connect to Active Directory or OpenLDAP servers.
-
-#### Basic LDAP Configuration
-
-```bash
-AUTH_METHOD=ldap
-LDAP_SERVER=ldap://ldap.company.com:389
-LDAP_BIND_DN=cn=readur,ou=services,dc=company,dc=com
-LDAP_BIND_PASSWORD=bind-password
-LDAP_BASE_DN=ou=users,dc=company,dc=com
-LDAP_USER_FILTER=(uid={username})
-LDAP_USER_ATTR_MAP={"email": "mail", "name": "cn"}
-LDAP_GROUP_SEARCH_BASE=ou=groups,dc=company,dc=com
-LDAP_GROUP_FILTER=(member={user_dn})
-LDAP_ADMIN_GROUP=cn=readur-admins,ou=groups,dc=company,dc=com
-```
-
-#### Active Directory Configuration
-
-```bash
-AUTH_METHOD=ldap
-LDAP_SERVER=ldaps://ad.company.com:636
-LDAP_BIND_DN=readur@company.com
-LDAP_BIND_PASSWORD=service-account-password
-LDAP_BASE_DN=DC=company,DC=com
-LDAP_USER_FILTER=(&(objectClass=user)(sAMAccountName={username}))
-LDAP_USER_ATTR_MAP={"email": "mail", "name": "displayName"}
-LDAP_GROUP_SEARCH_BASE=DC=company,DC=com
-LDAP_GROUP_FILTER=(&(objectClass=group)(member={user_dn}))
-LDAP_ADMIN_GROUP=CN=Readur Admins,OU=Groups,DC=company,DC=com
-LDAP_USE_TLS=true
-LDAP_TLS_VERIFY=true
-```
+> **Note:** LDAP authentication is not currently implemented. This section is reserved for a planned future feature. Use OIDC/OAuth2 to integrate with LDAP-backed identity providers (most IdPs like Keycloak and Azure AD can front LDAP directories).
 
 ### SAML2 Authentication
 
-For organizations using SAML identity providers.
-
-#### Configuration
-
-```bash
-AUTH_METHOD=saml2
-SAML2_IDP_METADATA_URL=https://idp.company.com/metadata
-SAML2_SP_ENTITY_ID=https://readur.company.com
-SAML2_SP_ACS_URL=https://readur.company.com/saml/acs
-SAML2_SP_X509_CERT=/etc/readur/saml/cert.pem
-SAML2_SP_PRIVATE_KEY=/etc/readur/saml/key.pem
-SAML2_ATTRIBUTE_MAPPING={"email": "EmailAddress", "name": "DisplayName"}
-SAML2_ADMIN_GROUP=readur-administrators
-```
+> **Note:** SAML2 authentication is not currently implemented. This section is reserved for a planned future feature. Use OIDC/OAuth2 instead, which is supported by all major identity providers.
 
 ## Multi-Factor Authentication
 
-### TOTP (Time-based One-Time Password)
-
-Enable 2FA using authenticator apps:
-
-```bash
-# Enable TOTP
-MFA_ENABLED=true
-MFA_METHOD=totp
-MFA_ISSUER=Readur
-MFA_ENFORCE_FOR_ADMINS=true
-MFA_GRACE_PERIOD_DAYS=7  # Days before enforcement
-```
-
-### WebAuthn/FIDO2
-
-Hardware security key support:
-
-```bash
-MFA_ENABLED=true
-MFA_METHOD=webauthn
-WEBAUTHN_RP_ID=readur.company.com
-WEBAUTHN_RP_NAME=Readur Document Management
-WEBAUTHN_REQUIRE_ATTESTATION=direct
-```
+> **Note:** Built-in MFA (TOTP, WebAuthn) is not currently implemented. To enforce MFA, configure it at your OIDC identity provider level — most providers (Keycloak, Auth0, Azure AD, Google Workspace) support MFA policies that will apply when users authenticate to Readur via SSO.
 
 ## Role-Based Access Control (RBAC)
 
-### Role Configuration
+### Roles
 
-Define roles and permissions:
+Readur has two built-in roles:
 
-```yaml
-# roles.yaml
-roles:
-  admin:
-    permissions:
-      - documents.*
-      - users.*
-      - settings.*
-      - system.*
-    
-  editor:
-    permissions:
-      - documents.create
-      - documents.read
-      - documents.update
-      - documents.delete.own
-      - ocr.*
-    
-  viewer:
-    permissions:
-      - documents.read
-      - search.*
-      
-  auditor:
-    permissions:
-      - documents.read
-      - audit.view
-      - reports.generate
-```
+| Role | Description |
+|------|------------|
+| **Admin** | Full access to all documents, users, settings, and system configuration. Can manage all shared links and moderate all comments. |
+| **User** | Access to own documents only. Can create shared links for own documents, comment on accessible documents, and manage own profile. |
 
-### Group Mapping
+New users created via local registration default to the **User** role. Admins can promote users via the user management API.
 
-Map external groups to Readur roles:
-
-```bash
-# OIDC group mapping
-OIDC_GROUP_ROLE_MAPPING='{
-  "readur-admins": "admin",
-  "readur-editors": "editor",
-  "readur-viewers": "viewer",
-  "compliance-team": "auditor"
-}'
-
-# LDAP group mapping
-LDAP_GROUP_ROLE_MAPPING='{
-  "CN=Readur Admins,OU=Groups,DC=company,DC=com": "admin",
-  "CN=Readur Users,OU=Groups,DC=company,DC=com": "editor"
-}'
-```
+When using OIDC, role assignment happens at user creation/login time based on your IdP configuration. You can configure an admin group claim to automatically assign the Admin role to members of a specific group in your identity provider.
 
 ## Session Management
 
-### Session Configuration
+Readur uses stateless JWT tokens for authentication rather than server-side sessions. Tokens are valid for 24 hours from issuance. There are no refresh tokens — users must re-authenticate after token expiry.
 
 ```bash
-# Session settings
-SESSION_COOKIE_NAME=readur_session
-SESSION_COOKIE_SECURE=true  # HTTPS only
-SESSION_COOKIE_HTTPONLY=true
-SESSION_COOKIE_SAMESITE=Lax
-SESSION_LIFETIME_HOURS=8
-SESSION_IDLE_TIMEOUT_MINUTES=30
-SESSION_REMEMBER_ME_DAYS=30
-SESSION_MAX_CONCURRENT=3  # Max sessions per user
+# JWT configuration
+JWT_SECRET=your-secure-random-secret-min-32-chars  # Required
 ```
 
-### Session Storage
-
+Generate a secure JWT secret:
 ```bash
-# Redis-backed sessions (recommended)
-SESSION_BACKEND=redis
-REDIS_SESSION_URL=redis://localhost:6379/1
-
-# Database sessions
-SESSION_BACKEND=database
-SESSION_CLEANUP_INTERVAL_HOURS=24
+openssl rand -hex 32
 ```
+
+Tokens are stored in the browser's `localStorage` and sent as `Authorization: Bearer <token>` headers on API requests.
 
 ## Security Headers
 
@@ -310,43 +189,22 @@ SECURITY_REFERRER_POLICY=strict-origin-when-cross-origin
 
 ## API Authentication
 
-### API Key Authentication
-
-For service-to-service communication:
+For programmatic access (scripts, integrations), authenticate using the same JWT flow as the web UI:
 
 ```bash
-# Enable API keys
-API_KEY_ENABLED=true
-API_KEY_HEADER=X-API-Key
-API_KEY_EXPIRY_DAYS=90
-```
-
-Generate API keys via the API:
-
-```bash
-# Create API key for service (requires admin authentication)
-curl -X POST http://localhost:8000/api/keys \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+# Obtain a token
+TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "backup-service",
-    "scope": ["documents.read"]
-  }'
+  -d '{"username": "admin", "password": "your-password"}' | jq -r '.token')
+
+# Use the token in subsequent requests
+curl http://localhost:8000/api/documents \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-### JWT Tokens
+Tokens expire after 24 hours. There is no refresh token mechanism — obtain a new token when needed.
 
-For programmatic access:
-
-```bash
-# JWT configuration
-JWT_ENABLED=true
-JWT_SECRET_KEY=your-jwt-secret
-JWT_ALGORITHM=HS256
-JWT_EXPIRY_MINUTES=60
-JWT_REFRESH_ENABLED=true
-JWT_REFRESH_EXPIRY_DAYS=7
-```
+> **Note:** Dedicated API key authentication (service-to-service with scoped keys) is not currently implemented. Use JWT tokens for all API access.
 
 ## Troubleshooting
 

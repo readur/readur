@@ -436,8 +436,9 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Create web-facing state with shared queue service
-    let web_state = AppState { 
-        db: web_db, 
+    let rate_limiters = readur::rate_limit::RateLimiters::new();
+    let web_state = AppState {
+        db: web_db,
         config: config.clone(),
         file_service: file_service.clone(),
         webdav_scheduler: None, // Will be set after creating scheduler
@@ -447,6 +448,7 @@ async fn main() -> anyhow::Result<()> {
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
         webdav_metrics_collector: webdav_metrics_collector.clone(),
+        rate_limiters: rate_limiters.clone(),
     };
     let web_state = Arc::new(web_state);
     
@@ -462,6 +464,7 @@ async fn main() -> anyhow::Result<()> {
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
         webdav_metrics_collector: webdav_metrics_collector.clone(),
+        rate_limiters: rate_limiters.clone(),
     };
     let background_state = Arc::new(background_state);
     
@@ -548,6 +551,7 @@ async fn main() -> anyhow::Result<()> {
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
         webdav_metrics_collector: webdav_metrics_collector.clone(),
+        rate_limiters: rate_limiters.clone(),
     };
     let web_state = Arc::new(updated_web_state);
     
@@ -631,7 +635,16 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", "=".repeat(60));
     
     info!("🚀 Readur server is now running and accepting connections");
-    
+
+    // Spawn periodic rate limiter cleanup (every 5 minutes)
+    let cleanup_limiters = rate_limiters.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+            cleanup_limiters.cleanup_all().await;
+        }
+    });
+
     axum::serve(listener, app).await?;
     
     Ok(())

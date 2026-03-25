@@ -1093,14 +1093,18 @@ export const sharedLinksPublicService = {
     return publicApi.post<{ valid: boolean }>(`/public/shared/${token}/verify`, { password })
   },
 
-  getDownloadUrl: (token: string, password?: string) => {
-    const params = password ? `?password=${encodeURIComponent(password)}` : ''
-    return `/api/public/shared/${token}/download${params}`
+  downloadDocument: async (token: string, password?: string) => {
+    const response = await publicApi.post(`/public/shared/${token}/download`, { password: password || null }, {
+      responseType: 'blob',
+    })
+    return response
   },
 
-  getViewUrl: (token: string, password?: string) => {
-    const params = password ? `?password=${encodeURIComponent(password)}` : ''
-    return `/api/public/shared/${token}/view${params}`
+  viewDocument: async (token: string, password?: string) => {
+    const response = await publicApi.post(`/public/shared/${token}/view`, { password: password || null }, {
+      responseType: 'blob',
+    })
+    return response
   },
 }
 

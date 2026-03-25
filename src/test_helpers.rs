@@ -379,6 +379,7 @@ pub async fn create_test_app_state_with_config(config: Config) -> Result<Arc<App
         webdav_metrics_collector: None,
         sync_progress_tracker,
         user_watch_service: None,
+        rate_limiters: crate::rate_limit::RateLimiters::new(),
     }))
 }
 
@@ -417,6 +418,7 @@ pub async fn create_test_app_state_with_options(options: TestAppStateOptions) ->
         oidc_client: None,
         sync_progress_tracker,
         user_watch_service,
+        rate_limiters: crate::rate_limit::RateLimiters::new(),
     }))
 }
 

@@ -42,6 +42,8 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service,
         webdav_metrics_collector: None,
+        rate_limiters: readur::rate_limit::RateLimiters::new(),
+        rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
     
     let app = Router::new()
@@ -296,6 +298,8 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service,
         webdav_metrics_collector: None,
+        rate_limiters: readur::rate_limit::RateLimiters::new(),
+        rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
     
     // Create user watch manager to test file path mapping
@@ -379,6 +383,8 @@ async fn test_per_user_watch_disabled() -> Result<()> {
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service: None, // Disabled
         webdav_metrics_collector: None,
+        rate_limiters: readur::rate_limit::RateLimiters::new(),
+        rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
     
     let app = Router::new()

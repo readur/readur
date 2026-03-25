@@ -1,14 +1,15 @@
 use axum::{
     extract::{Path, State},
-    http::{StatusCode, header::CONTENT_TYPE},
+    http::{HeaderMap, StatusCode, header::CONTENT_TYPE},
     response::{Json, Response},
     body::Body,
     routing::{get, post, delete},
     Router,
 };
 use serde::Deserialize;
+use std::net::IpAddr;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -18,6 +19,7 @@ use crate::{
         CreateSharedLinkRequest, SharedDocumentMetadata, SharedLinkPasswordRequest,
         SharedLinkResponse,
     },
+    models::UserRole,
     AppState,
 };
 
@@ -35,8 +37,8 @@ pub fn public_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/{token}", get(get_shared_document_metadata))
         .route("/{token}/verify", post(verify_shared_link_password))
-        .route("/{token}/download", get(download_shared_document))
-        .route("/{token}/view", get(view_shared_document))
+        .route("/{token}/download", post(download_shared_document))
+        .route("/{token}/view", post(view_shared_document))
 }
 
 fn generate_token() -> String {
@@ -45,6 +47,57 @@ fn generate_token() -> String {
     let bytes: [u8; 32] = rand::rng().random();
     // URL-safe base64 without padding
     base64ct::Base64UrlUnpadded::encode_string(&bytes)
+}
+
+/// Extract client IP from request headers, checking X-Forwarded-For first (for reverse proxies),
+/// then X-Real-Ip, falling back to a default.
+fn extract_client_ip(headers: &HeaderMap) -> IpAddr {
+    if let Some(forwarded) = headers.get("x-forwarded-for") {
+        if let Ok(val) = forwarded.to_str() {
+            // X-Forwarded-For can contain multiple IPs; first one is the client
+            if let Some(first_ip) = val.split(',').next() {
+                if let Ok(ip) = first_ip.trim().parse::<IpAddr>() {
+                    return ip;
+                }
+            }
+        }
+    }
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(val) = real_ip.to_str() {
+            if let Ok(ip) = val.trim().parse::<IpAddr>() {
+                return ip;
+            }
+        }
+    }
+    // Fallback — treat as localhost if we can't determine IP
+    IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+}
+
+/// Sanitize a filename for use in Content-Disposition headers.
+/// Strips characters that could enable header injection or path traversal.
+fn sanitize_filename(name: &str) -> String {
+    let sanitized: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ' ') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    // Truncate to 255 characters and trim whitespace
+    let truncated = if sanitized.len() > 255 {
+        &sanitized[..255]
+    } else {
+        &sanitized
+    };
+    let result = truncated.trim().to_string();
+    if result.is_empty() {
+        "download".to_string()
+    } else {
+        result
+    }
 }
 
 fn get_base_url(state: &AppState) -> String {
@@ -80,6 +133,12 @@ pub async fn create_shared_link(
     Json(payload): Json<CreateSharedLinkRequest>,
 ) -> Result<Json<SharedLinkResponse>, SharedLinkError> {
     let user_id = auth_user.user.id;
+
+    // Rate limit shared link creation per user
+    if let Err(retry_after) = state.rate_limiters.shared_link_creation.check(&user_id).await {
+        warn!("Rate limited shared link creation for user {}", user_id);
+        return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
+    }
 
     // Verify the user owns this document (or is admin)
     let document = state
@@ -131,14 +190,16 @@ pub async fn list_shared_links(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<Vec<SharedLinkResponse>>, SharedLinkError> {
-    let links = state
-        .db
-        .get_shared_links_by_user(auth_user.user.id)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch shared links: {}", e);
-            SharedLinkError::InternalError { message: "Failed to list shared links".into() }
-        })?;
+    // Admins can see all shared links; regular users see only their own
+    let links = if auth_user.user.role == UserRole::Admin {
+        state.db.get_all_shared_links().await
+    } else {
+        state.db.get_shared_links_by_user(auth_user.user.id).await
+    }
+    .map_err(|e| {
+        error!("Failed to fetch shared links: {}", e);
+        SharedLinkError::InternalError { message: "Failed to list shared links".into() }
+    })?;
 
     let base_url = get_base_url(&state);
     let responses: Vec<SharedLinkResponse> = links
@@ -165,14 +226,16 @@ pub async fn list_shared_links_for_document(
         })?
         .ok_or(SharedLinkError::DocumentNotFound)?;
 
-    let links = state
-        .db
-        .get_shared_links_by_document(document_id, auth_user.user.id)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch shared links: {}", e);
-            SharedLinkError::InternalError { message: "Failed to list shared links".into() }
-        })?;
+    // Admins see all links for the document; regular users see only their own
+    let links = if auth_user.user.role == UserRole::Admin {
+        state.db.get_all_shared_links_by_document(document_id).await
+    } else {
+        state.db.get_shared_links_by_document(document_id, auth_user.user.id).await
+    }
+    .map_err(|e| {
+        error!("Failed to fetch shared links: {}", e);
+        SharedLinkError::InternalError { message: "Failed to list shared links".into() }
+    })?;
 
     let base_url = get_base_url(&state);
     let responses: Vec<SharedLinkResponse> = links
@@ -188,14 +251,16 @@ pub async fn revoke_shared_link(
     auth_user: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, SharedLinkError> {
-    let revoked = state
-        .db
-        .revoke_shared_link(id, auth_user.user.id)
-        .await
-        .map_err(|e| {
-            error!("Failed to revoke shared link: {}", e);
-            SharedLinkError::InternalError { message: "Failed to revoke shared link".into() }
-        })?;
+    // Admins can revoke any link; regular users can only revoke their own
+    let revoked = if auth_user.user.role == UserRole::Admin {
+        state.db.admin_revoke_shared_link(id).await
+    } else {
+        state.db.revoke_shared_link(id, auth_user.user.id).await
+    }
+    .map_err(|e| {
+        error!("Failed to revoke shared link: {}", e);
+        SharedLinkError::InternalError { message: "Failed to revoke shared link".into() }
+    })?;
 
     if revoked {
         debug!("Revoked shared link {}", id);
@@ -209,8 +274,15 @@ pub async fn revoke_shared_link(
 
 pub async fn get_shared_document_metadata(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(token): Path<String>,
 ) -> Result<Json<SharedDocumentMetadata>, SharedLinkError> {
+    // Rate limit public access per IP
+    let client_ip = extract_client_ip(&headers);
+    if let Err(retry_after) = state.rate_limiters.shared_link_public.check(&client_ip).await {
+        return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
+    }
+
     let link = state
         .db
         .get_shared_link_by_token(&token)
@@ -223,18 +295,15 @@ pub async fn get_shared_document_metadata(
 
     validate_shared_link(&link)?;
 
-    // Fetch document without role-based filter (public access via token)
-    let document = sqlx::query_as::<_, crate::models::Document>(
-        &format!("SELECT {} FROM documents WHERE id = $1", "id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, ocr_retry_count, ocr_failure_reason, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_path, source_type, source_id, file_permissions, file_owner, file_group, source_metadata, has_ocr_text, ocr_progress_percent, ocr_current_page, ocr_total_pages")
-    )
-    .bind(link.document_id)
-    .fetch_optional(state.db.get_pool())
-    .await
-    .map_err(|e| {
-        error!("Failed to fetch document for shared link: {}", e);
-        SharedLinkError::InternalError { message: "Failed to access shared document".into() }
-    })?
-    .ok_or(SharedLinkError::DocumentNotFound)?;
+    let document = state
+        .db
+        .get_document_by_id_unfiltered(link.document_id)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch document for shared link: {}", e);
+            SharedLinkError::InternalError { message: "Failed to access shared document".into() }
+        })?
+        .ok_or(SharedLinkError::DocumentNotFound)?;
 
     Ok(Json(SharedDocumentMetadata {
         filename: document.filename.clone(),
@@ -246,17 +315,25 @@ pub async fn get_shared_document_metadata(
     }))
 }
 
-/// Optional password query param for download/view
+/// Password payload for download/view (POST body instead of query param to avoid logging secrets)
 #[derive(Debug, Deserialize)]
-pub struct PasswordQuery {
+pub struct PasswordPayload {
     pub password: Option<String>,
 }
 
 pub async fn verify_shared_link_password(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(token): Path<String>,
     Json(payload): Json<SharedLinkPasswordRequest>,
 ) -> Result<Json<serde_json::Value>, SharedLinkError> {
+    // Rate limit password verification attempts per IP
+    let client_ip = extract_client_ip(&headers);
+    if let Err(retry_after) = state.rate_limiters.shared_link_password.check(&client_ip).await {
+        warn!("Rate limited shared link password attempt from {}", client_ip);
+        return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
+    }
+
     let link = state
         .db
         .get_shared_link_by_token(&token)
@@ -285,9 +362,23 @@ pub async fn verify_shared_link_password(
 
 pub async fn download_shared_document(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(token): Path<String>,
-    axum::extract::Query(query): axum::extract::Query<PasswordQuery>,
+    Json(payload): Json<PasswordPayload>,
 ) -> Result<Response<Body>, SharedLinkError> {
+    // Rate limit public access per IP (general limit + password-specific limit if password provided)
+    let client_ip = extract_client_ip(&headers);
+    if let Err(retry_after) = state.rate_limiters.shared_link_public.check(&client_ip).await {
+        warn!("Rate limited shared link download from {}", client_ip);
+        return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
+    }
+    if payload.password.is_some() {
+        if let Err(retry_after) = state.rate_limiters.shared_link_password.check(&client_ip).await {
+            warn!("Rate limited shared link password attempt via download from {}", client_ip);
+            return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
+        }
+    }
+
     let link = state
         .db
         .get_shared_link_by_token(&token)
@@ -299,23 +390,20 @@ pub async fn download_shared_document(
         .ok_or(SharedLinkError::NotFound)?;
 
     validate_shared_link(&link)?;
-    verify_password_if_required(&link, query.password.as_deref())?;
+    verify_password_if_required(&link, payload.password.as_deref())?;
 
     // Increment view count
     let _ = state.db.increment_shared_link_view_count(link.id).await;
 
-    // Fetch document
-    let document = sqlx::query_as::<_, crate::models::Document>(
-        "SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, ocr_retry_count, ocr_failure_reason, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_path, source_type, source_id, file_permissions, file_owner, file_group, source_metadata, has_ocr_text, ocr_progress_percent, ocr_current_page, ocr_total_pages FROM documents WHERE id = $1"
-    )
-    .bind(link.document_id)
-    .fetch_optional(state.db.get_pool())
-    .await
-    .map_err(|e| {
-        error!("Failed to fetch document: {}", e);
-        SharedLinkError::InternalError { message: "Failed to access shared document".into() }
-    })?
-    .ok_or(SharedLinkError::DocumentNotFound)?;
+    let document = state
+        .db
+        .get_document_by_id_unfiltered(link.document_id)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch document: {}", e);
+            SharedLinkError::InternalError { message: "Failed to access shared document".into() }
+        })?
+        .ok_or(SharedLinkError::DocumentNotFound)?;
 
     let file_data = state
         .file_service
@@ -331,7 +419,7 @@ pub async fn download_shared_document(
         .header(CONTENT_TYPE, &document.mime_type)
         .header(
             "Content-Disposition",
-            format!("attachment; filename=\"{}\"", document.original_filename),
+            format!("attachment; filename=\"{}\"", sanitize_filename(&document.original_filename)),
         )
         .header("Content-Length", file_data.len().to_string())
         .body(Body::from(file_data))
@@ -345,9 +433,23 @@ pub async fn download_shared_document(
 
 pub async fn view_shared_document(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(token): Path<String>,
-    axum::extract::Query(query): axum::extract::Query<PasswordQuery>,
+    Json(payload): Json<PasswordPayload>,
 ) -> Result<Response<Body>, SharedLinkError> {
+    // Rate limit public access per IP (general limit + password-specific limit if password provided)
+    let client_ip = extract_client_ip(&headers);
+    if let Err(retry_after) = state.rate_limiters.shared_link_public.check(&client_ip).await {
+        warn!("Rate limited shared link view from {}", client_ip);
+        return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
+    }
+    if payload.password.is_some() {
+        if let Err(retry_after) = state.rate_limiters.shared_link_password.check(&client_ip).await {
+            warn!("Rate limited shared link password attempt via view from {}", client_ip);
+            return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
+        }
+    }
+
     let link = state
         .db
         .get_shared_link_by_token(&token)
@@ -359,23 +461,20 @@ pub async fn view_shared_document(
         .ok_or(SharedLinkError::NotFound)?;
 
     validate_shared_link(&link)?;
-    verify_password_if_required(&link, query.password.as_deref())?;
+    verify_password_if_required(&link, payload.password.as_deref())?;
 
     // Increment view count
     let _ = state.db.increment_shared_link_view_count(link.id).await;
 
-    // Fetch document
-    let document = sqlx::query_as::<_, crate::models::Document>(
-        "SELECT id, filename, original_filename, file_path, file_size, mime_type, content, ocr_text, ocr_confidence, ocr_word_count, ocr_processing_time_ms, ocr_status, ocr_error, ocr_completed_at, ocr_retry_count, ocr_failure_reason, tags, created_at, updated_at, user_id, file_hash, original_created_at, original_modified_at, source_path, source_type, source_id, file_permissions, file_owner, file_group, source_metadata, has_ocr_text, ocr_progress_percent, ocr_current_page, ocr_total_pages FROM documents WHERE id = $1"
-    )
-    .bind(link.document_id)
-    .fetch_optional(state.db.get_pool())
-    .await
-    .map_err(|e| {
-        error!("Failed to fetch document: {}", e);
-        SharedLinkError::InternalError { message: "Failed to access shared document".into() }
-    })?
-    .ok_or(SharedLinkError::DocumentNotFound)?;
+    let document = state
+        .db
+        .get_document_by_id_unfiltered(link.document_id)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch document: {}", e);
+            SharedLinkError::InternalError { message: "Failed to access shared document".into() }
+        })?
+        .ok_or(SharedLinkError::DocumentNotFound)?;
 
     let file_data = state
         .file_service
@@ -391,7 +490,7 @@ pub async fn view_shared_document(
         .header(CONTENT_TYPE, &document.mime_type)
         .header(
             "Content-Disposition",
-            format!("inline; filename=\"{}\"", document.original_filename),
+            format!("inline; filename=\"{}\"", sanitize_filename(&document.original_filename)),
         )
         .header("Content-Length", file_data.len().to_string())
         .body(Body::from(file_data))

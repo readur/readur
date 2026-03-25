@@ -15,6 +15,8 @@ This guide walks you through everything you need to know to effectively use Read
 - [OCR Processing](#ocr-processing)
 - [Search Features](#search-features)
 - [Labels and Organization](#labels-and-organization)
+- [Sharing Documents](#sharing-documents)
+- [Comments](#comments)
 - [User Management](#user-management)
 - [User Settings](#user-settings)
 - [Tips for Best Results](#tips-for-best-results)
@@ -171,6 +173,61 @@ Smart Collections are saved searches that automatically update as you add new do
 These collections become particularly powerful when combined with boolean search logic. A "High Priority Items" collection might search for documents with labels like "urgent" OR "critical" OR "immediate," automatically gathering important documents regardless of which specific urgency label was used.
 
 > 🏷️ **For comprehensive labeling strategies**, see the [Labels and Organization Guide](labels-and-organization.md)
+
+## Sharing Documents
+
+Readur lets you share documents with people who don't have a Readur account by creating shared links. Each shared link generates a unique, unguessable URL that provides access to a specific document.
+
+### Creating a Shared Link
+
+From any document's detail page, use the "Share" action to open the shared link dialog. You can configure:
+
+- **Password protection** — Require a password to access the document. The recipient will need to enter this password before they can view or download the file.
+- **Expiration date** — Set when the link should stop working. After this date, the link returns an "expired" message.
+- **Maximum views** — Limit how many times the document can be downloaded or viewed through this link. Once the limit is reached, the link becomes inactive.
+
+After creating the link, copy the generated URL and share it with your recipient via email, chat, or any other channel.
+
+### Managing Shared Links
+
+The shared links manager (accessible from the document detail page) shows all active links for a document with their current status:
+
+- **Active** — The link is working and accessible
+- **Expired** — The link passed its expiration date
+- **Revoked** — You manually disabled the link
+
+You can see view counts for each link and revoke any link at any time. Revoking a link immediately prevents further access — anyone who tries to use the link will see a "revoked" message.
+
+### Admin Capabilities
+
+Administrators can view and manage all shared links across all users, not just their own. This is useful for security audits or when you need to revoke a link created by another user.
+
+### Security Considerations
+
+- Shared link tokens are 256-bit cryptographically random values, making them practically impossible to guess
+- Passwords are stored using bcrypt hashing and never transmitted in plain text
+- Public endpoints are rate-limited to prevent brute-force password guessing
+- Shared links inherit no other permissions — recipients can only view or download the specific shared document
+
+## Comments
+
+You can leave comments on any document you have access to. Comments help teams collaborate by discussing document contents, flagging issues, or leaving notes for future reference.
+
+### Adding Comments
+
+Open a document's detail page and navigate to the Comments tab. Type your comment in the text field and submit. Comments support plain text up to 10,000 characters.
+
+### Replying to Comments
+
+Click the reply button on any comment to respond directly. Replies are shown threaded under the original comment. Readur supports one level of threading — you can reply to a comment, but not to a reply.
+
+### Editing and Deleting
+
+You can edit or delete your own comments at any time. Edited comments are marked with an "edited" indicator. Administrators can delete any comment for moderation purposes, but cannot edit other users' comments.
+
+### Visibility
+
+Comments are visible to anyone who has access to the document. If you're an admin, you can see comments on all documents. Regular users only see comments on their own documents.
 
 ## User Management
 

@@ -18,6 +18,8 @@ Readur provides a comprehensive REST API for integrating with external systems a
   - [Sources](#sources-endpoints)
   - [Labels](#labels-endpoints)
   - [Users](#user-endpoints)
+  - [Shared Links](#shared-link-endpoints)
+  - [Comments](#comment-endpoints)
   - [Notifications](#notification-endpoints)
   - [Metrics](#metrics-endpoints)
 - [WebSocket API](#websocket-api)
@@ -120,19 +122,14 @@ All API errors follow a consistent format:
 
 ## Rate Limiting
 
-API requests are rate limited per user:
+Rate limits are applied to specific endpoint categories:
 
-- **Default limit**: 100 requests per minute
-- **Burst limit**: 20 requests
-- **Upload endpoints**: 10 requests per minute
+- **Public shared link password verification**: 10 requests/minute per IP
+- **Public shared link access (download/view)**: 60 requests/minute per IP
+- **Comment creation**: 10 comments/minute per user
+- **Shared link creation**: 20 links/hour per user
 
-Rate limit headers are included in responses:
-
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1642248360
-```
+When rate limited, the API returns HTTP 429 with a JSON body containing `retry_after_secs` indicating how long to wait before retrying.
 
 ## Pagination
 
@@ -809,6 +806,195 @@ GET /api/metrics/ocr
   "daily_stats": [...]
 }
 ```
+
+## Shared Link Endpoints
+
+### Authenticated Endpoints (require `Authorization: Bearer <token>`)
+
+#### Create Shared Link
+
+```
+POST /api/shared-links
+```
+
+Request body:
+```json
+{
+  "document_id": "uuid",
+  "password": "optional-password",
+  "expires_at": "2025-12-31T23:59:59Z",
+  "max_views": 10
+}
+```
+
+All fields except `document_id` are optional. Returns the created shared link with its public URL.
+
+#### List Shared Links
+
+```
+GET /api/shared-links
+```
+
+Returns all shared links for the current user. Admins see all shared links across all users.
+
+#### List Shared Links for Document
+
+```
+GET /api/shared-links/document/{document_id}
+```
+
+Returns all shared links for a specific document (must have access to the document).
+
+#### Revoke Shared Link
+
+```
+DELETE /api/shared-links/{id}
+```
+
+Revokes a shared link. Users can revoke their own links; admins can revoke any link. Returns 204 No Content on success.
+
+### Public Endpoints (no authentication required)
+
+#### Get Shared Document Metadata
+
+```
+GET /api/public/shared/{token}
+```
+
+Returns document metadata (filename, size, type) and whether a password is required. Does not increment view count.
+
+#### Verify Password
+
+```
+POST /api/public/shared/{token}/verify
+```
+
+Request body:
+```json
+{
+  "password": "the-password"
+}
+```
+
+Returns `{ "valid": true }` if the password is correct. Rate limited to 10 attempts/minute per IP.
+
+#### Download Document
+
+```
+POST /api/public/shared/{token}/download
+```
+
+Request body:
+```json
+{
+  "password": "optional-if-required"
+}
+```
+
+Returns the document file as a binary download. Increments view count. Rate limited to 60 requests/minute per IP.
+
+#### View Document
+
+```
+POST /api/public/shared/{token}/view
+```
+
+Same as download but with `Content-Disposition: inline` for in-browser viewing.
+
+### Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `SHARED_LINK_NOT_FOUND` | 404 | Token does not match any link |
+| `SHARED_LINK_EXPIRED` | 410 | Link has passed its expiration date |
+| `SHARED_LINK_REVOKED` | 410 | Link was manually revoked |
+| `SHARED_LINK_MAX_VIEWS` | 410 | Link has reached its view limit |
+| `SHARED_LINK_PASSWORD_REQUIRED` | 401 | Password is required but not provided |
+| `SHARED_LINK_INVALID_PASSWORD` | 403 | Provided password is incorrect |
+| `SHARED_LINK_RATE_LIMITED` | 429 | Too many requests from this IP |
+
+---
+
+## Comment Endpoints
+
+All comment endpoints require authentication (`Authorization: Bearer <token>`) and verify the user has access to the specified document.
+
+#### List Comments
+
+```
+GET /api/comments/documents/{document_id}/comments?limit=50&offset=0
+```
+
+Returns top-level comments with reply counts and the first 3 replies inline. Maximum `limit` is 100.
+
+#### Create Comment
+
+```
+POST /api/comments/documents/{document_id}/comments
+```
+
+Request body:
+```json
+{
+  "content": "Your comment text",
+  "parent_id": "optional-uuid-for-replies"
+}
+```
+
+Content must be 1-10,000 characters. Replies can only be one level deep (you can reply to a comment, but not to a reply). Rate limited to 10 comments/minute per user. Returns 201 Created.
+
+#### Get Replies
+
+```
+GET /api/comments/documents/{document_id}/comments/{comment_id}/replies?limit=50&offset=0
+```
+
+Returns replies to a specific comment, ordered by creation date ascending. Maximum `limit` is 100.
+
+#### Update Comment
+
+```
+PUT /api/comments/documents/{document_id}/comments/{comment_id}
+```
+
+Request body:
+```json
+{
+  "content": "Updated comment text"
+}
+```
+
+Only the comment author can edit. Sets `is_edited` to true.
+
+#### Delete Comment
+
+```
+DELETE /api/comments/documents/{document_id}/comments/{comment_id}
+```
+
+The comment author or an admin can delete. Returns 204 No Content.
+
+#### Get Comment Count
+
+```
+GET /api/comments/documents/{document_id}/comments/count
+```
+
+Returns `{ "count": 42 }`.
+
+### Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `COMMENT_NOT_FOUND` | 404 | Comment does not exist |
+| `COMMENT_DOCUMENT_NOT_FOUND` | 404 | Document does not exist or user lacks access |
+| `COMMENT_PERMISSION_DENIED` | 403 | Cannot edit/delete another user's comment |
+| `COMMENT_CONTENT_EMPTY` | 400 | Comment text is empty |
+| `COMMENT_CONTENT_TOO_LONG` | 400 | Exceeds 10,000 character limit |
+| `COMMENT_NESTING_TOO_DEEP` | 400 | Replying to a reply (only one level allowed) |
+| `COMMENT_RATE_LIMITED` | 429 | Too many comments created recently |
+
+---
 
 ## WebSocket API
 

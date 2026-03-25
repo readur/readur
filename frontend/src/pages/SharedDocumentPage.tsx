@@ -56,6 +56,50 @@ const SharedDocumentPage: React.FC = () => {
   const [verifying, setVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [downloading, setDownloading] = useState(false);
+
+  const handleFileAction = async (action: 'download' | 'view') => {
+    if (!token) return;
+    setDownloading(true);
+    try {
+      const response = action === 'download'
+        ? await sharedLinksPublicService.downloadDocument(token, verifiedPassword)
+        : await sharedLinksPublicService.viewDocument(token, verifiedPassword);
+
+      const blob = new Blob([response.data]);
+      const contentDisposition = response.headers['content-disposition'] || '';
+      const filenameMatch = contentDisposition.match(/filename="?([^";\n]+)"?/);
+      const filename = filenameMatch?.[1] || metadata?.original_filename || 'download';
+
+      if (action === 'view') {
+        // Open in new tab
+        const contentType = response.headers['content-type'] || 'application/octet-stream';
+        const viewBlob = new Blob([response.data], { type: contentType });
+        const url = URL.createObjectURL(viewBlob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        // Trigger download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 410) {
+        setErrorMessage('This shared link has expired or reached its view limit.');
+        setState('error');
+      } else {
+        setErrorMessage('Failed to access the document. Please try again.');
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   useEffect(() => {
     if (!token) {
@@ -265,17 +309,17 @@ const SharedDocumentPage: React.FC = () => {
             variant="outlined"
             fullWidth
             startIcon={<ViewIcon />}
-            href={sharedLinksPublicService.getViewUrl(token, verifiedPassword)}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={() => handleFileAction('view')}
+            disabled={downloading}
           >
             View
           </Button>
           <Button
             variant="contained"
             fullWidth
-            startIcon={<DownloadIcon />}
-            href={sharedLinksPublicService.getDownloadUrl(token, verifiedPassword)}
+            startIcon={downloading ? <CircularProgress size={20} color="inherit" /> : <DownloadIcon />}
+            onClick={() => handleFileAction('download')}
+            disabled={downloading}
           >
             Download
           </Button>

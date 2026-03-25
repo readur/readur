@@ -312,6 +312,7 @@ impl TestContext {
             sync_progress_tracker: Arc::new(crate::services::sync_progress_tracker::SyncProgressTracker::new()),
             user_watch_service,
             webdav_metrics_collector: None,
+            rate_limiters: crate::rate_limit::RateLimiters::new(),
         });
         
         let app = Router::new()

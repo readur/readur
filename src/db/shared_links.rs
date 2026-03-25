@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use super::Database;
 use crate::models::shared_link::SharedLink;
+use crate::models::Document;
 
 impl Database {
     pub async fn create_shared_link(
@@ -99,6 +100,61 @@ impl Database {
         .await?;
 
         Ok(())
+    }
+
+    /// Fetch a document by ID without user-based access filtering.
+    /// Used by public shared link access routes where authorization is token-based.
+    pub async fn get_document_by_id_unfiltered(&self, document_id: Uuid) -> Result<Option<Document>> {
+        let document = sqlx::query_as::<_, Document>(
+            r#"SELECT * FROM documents WHERE id = $1"#,
+        )
+        .bind(document_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(document)
+    }
+
+    /// Get all shared links for a specific document across all users (admin-only use).
+    pub async fn get_all_shared_links_by_document(
+        &self,
+        document_id: Uuid,
+    ) -> Result<Vec<SharedLink>> {
+        let links = sqlx::query_as::<_, SharedLink>(
+            r#"SELECT * FROM shared_links
+               WHERE document_id = $1
+               ORDER BY created_at DESC"#,
+        )
+        .bind(document_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(links)
+    }
+
+    /// Get all shared links across all users (admin-only use).
+    pub async fn get_all_shared_links(&self) -> Result<Vec<SharedLink>> {
+        let links = sqlx::query_as::<_, SharedLink>(
+            r#"SELECT * FROM shared_links ORDER BY created_at DESC"#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(links)
+    }
+
+    /// Revoke any shared link by ID without checking ownership (admin-only use).
+    pub async fn admin_revoke_shared_link(&self, link_id: Uuid) -> Result<bool> {
+        let result = sqlx::query(
+            r#"UPDATE shared_links
+               SET is_revoked = TRUE, updated_at = NOW()
+               WHERE id = $1 AND is_revoked = FALSE"#,
+        )
+        .bind(link_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
     }
 
     /// Get the document ID for a shared link, used by public access routes.

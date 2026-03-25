@@ -40,19 +40,14 @@ OIDC_SCOPES: "openid profile email"
 
 ### Role-Based Access Control
 
-Readur implements three user roles with distinct permissions:
+Readur implements two user roles:
 
 | Role | Permissions |
 |------|------------|
-| Admin | Full system access, user management, configuration changes |
-| Editor | Document upload, edit, delete, OCR management |
-| Viewer | Read-only access to documents and search |
+| Admin | Full system access — all documents, user management, configuration, moderation of shared links and comments |
+| User | Standard access — own documents, own shared links, comments on accessible documents |
 
-Configure default role for new users:
-```yaml
-DEFAULT_USER_ROLE: "viewer"
-AUTO_CREATE_USERS: "false"
-```
+Admins can access all documents regardless of ownership, manage all users, and moderate content (e.g., revoke any shared link, delete any comment). Regular users can only access their own documents and the features associated with them.
 
 ### Session Management
 
@@ -64,6 +59,36 @@ SESSION_COOKIE_SECURE: "true"  # HTTPS only
 SESSION_COOKIE_HTTPONLY: "true"  # Prevent XSS
 SESSION_COOKIE_SAMESITE: "strict"  # CSRF protection
 ```
+
+## Shared Link Security
+
+Shared links allow documents to be accessed by unauthenticated users via a unique token URL. The following security measures are in place:
+
+### Token Generation
+
+Shared link tokens are 256-bit (32-byte) values generated using a cryptographically secure random number generator, then encoded as URL-safe base64. This makes tokens computationally infeasible to guess or enumerate.
+
+### Access Controls
+
+- **Password protection**: Optional bcrypt-hashed password required before viewing or downloading. Passwords are sent via POST body (never in URLs or query parameters) to prevent leakage in server logs, browser history, or referrer headers.
+- **Expiration**: Links can have an expiration timestamp after which they return HTTP 410 Gone.
+- **View limits**: Links can be limited to a maximum number of downloads/views.
+- **Revocation**: Link creators (and admins) can revoke links immediately, preventing further access.
+
+### Authorization Model
+
+- **Creating links**: Requires authentication. Users can only create links for documents they own. Admins can create links for any document.
+- **Viewing links**: Token-based (no authentication required). The token itself serves as the authorization credential, with optional password as a second factor.
+- **Managing links**: Users see and manage their own links. Admins see and can revoke all links across all users.
+- **Revoking links**: Link creators can revoke their own links. Admins can revoke any link.
+
+### Brute-Force Protection
+
+Password verification and document access endpoints are IP-rate-limited (10 password attempts per minute, 60 general accesses per minute per IP). Exceeding limits returns HTTP 429.
+
+### Content-Disposition Sanitization
+
+Filenames in download/view responses are sanitized to prevent HTTP header injection — only alphanumeric characters, dots, hyphens, underscores, and spaces are permitted.
 
 ## File Upload Security
 
@@ -84,7 +109,7 @@ Restrict allowed file types:
 ```yaml
 ALLOWED_FILE_TYPES: "pdf,png,jpg,jpeg,txt,doc,docx"
 BLOCK_EXECUTABLE_FILES: "true"
-SCAN_FOR_MALWARE: "true"  # Requires ClamAV integration
+SCAN_FOR_MALWARE: "false"  # Not currently implemented
 ```
 
 ### Upload Validation
@@ -147,14 +172,13 @@ CORS_MAX_AGE: 3600
 
 ### Rate Limiting
 
-Prevent abuse and DoS attacks:
+Readur includes built-in rate limiting to prevent abuse:
 
-```yaml
-RATE_LIMIT_ENABLED: "true"
-RATE_LIMIT_REQUESTS_PER_MINUTE: 100
-RATE_LIMIT_BURST_SIZE: 20
-RATE_LIMIT_EXCLUDE_PATHS: "/health,/metrics"
-```
+- **Public shared link endpoints**: 60 requests/minute per IP for general access, 10 requests/minute per IP for password verification (prevents brute-force attacks)
+- **Comment creation**: 10 comments/minute per user
+- **Shared link creation**: 20 links/hour per user
+
+Rate limits are enforced automatically using in-memory tracking. When a limit is exceeded, the API returns HTTP 429 (Too Many Requests) with a `retry_after_secs` field indicating when to retry.
 
 ## Secrets Management
 
@@ -198,16 +222,9 @@ kubectl create secret generic readur-secrets \
 kubectl rollout restart deployment/readur
 ```
 
-### Vault Integration
+### External Secret Management
 
-For production, use HashiCorp Vault or similar:
-
-```yaml
-VAULT_ENABLED: "true"
-VAULT_ADDR: "https://vault.internal:8200"
-VAULT_TOKEN: "s.xxxxxxxxxxxxxxxx"
-VAULT_PATH: "secret/data/readur"
-```
+For production, consider using an external secret manager (e.g., HashiCorp Vault, AWS Secrets Manager, or Kubernetes secrets) to inject environment variables at deployment time rather than storing them in `.env` files.
 
 ## Data Encryption
 
@@ -339,17 +356,7 @@ app.use(
 
 ### CSRF Protection
 
-Implement CSRF tokens:
-
-```rust
-// Generate CSRF token
-let csrf_token = generate_csrf_token(&session);
-
-// Validate on form submission
-if !validate_csrf_token(&request.csrf_token, &session) {
-    return Err(SecurityError::InvalidCSRFToken);
-}
-```
+Readur uses JWT bearer tokens in the `Authorization` header for API authentication, which is inherently resistant to CSRF attacks since browsers don't automatically include custom headers in cross-origin requests. No additional CSRF tokens are needed for the API. The public shared link endpoints are token-scoped and do not modify server state beyond view count incrementing.
 
 ### Directory Traversal Prevention
 

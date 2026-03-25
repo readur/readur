@@ -7,7 +7,7 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -21,6 +21,7 @@ use crate::{
 };
 
 const MAX_COMMENT_LENGTH: usize = 10_000;
+const MAX_PAGINATION_LIMIT: i64 = 100;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -71,9 +72,10 @@ pub async fn list_comments(
 ) -> Result<Json<Vec<CommentThread>>, CommentError> {
     verify_document_access(&state, document_id, auth_user.user.id, auth_user.user.role).await?;
 
+    let limit = pagination.limit.min(MAX_PAGINATION_LIMIT).max(1);
     let comments = state
         .db
-        .get_comments_by_document(document_id, pagination.limit, pagination.offset)
+        .get_comments_by_document(document_id, limit, pagination.offset)
         .await
         .map_err(|e| {
             error!("Failed to fetch comments: {}", e);
@@ -117,9 +119,25 @@ pub async fn list_replies(
 ) -> Result<Json<Vec<CommentWithAuthor>>, CommentError> {
     verify_document_access(&state, document_id, auth_user.user.id, auth_user.user.role).await?;
 
+    // Verify the parent comment belongs to this document
+    let parent = state
+        .db
+        .get_comment_by_id(comment_id)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch parent comment: {}", e);
+            CommentError::InternalError { message: "Failed to fetch comment".into() }
+        })?
+        .ok_or(CommentError::NotFound)?;
+
+    if parent.document_id != document_id {
+        return Err(CommentError::NotFound);
+    }
+
+    let limit = pagination.limit.min(MAX_PAGINATION_LIMIT).max(1);
     let replies = state
         .db
-        .get_replies(comment_id, pagination.limit, pagination.offset)
+        .get_replies(comment_id, limit, pagination.offset)
         .await
         .map_err(|e| {
             error!("Failed to fetch replies: {}", e);
@@ -135,6 +153,12 @@ pub async fn create_comment(
     Path(document_id): Path<Uuid>,
     Json(payload): Json<CreateCommentRequest>,
 ) -> Result<(StatusCode, Json<CommentWithAuthor>), CommentError> {
+    // Rate limit comment creation per user
+    if let Err(retry_after) = state.rate_limiters.comment_creation.check(&auth_user.user.id).await {
+        warn!("Rate limited comment creation for user {}", auth_user.user.id);
+        return Err(CommentError::RateLimited { retry_after_secs: retry_after });
+    }
+
     verify_document_access(&state, document_id, auth_user.user.id, auth_user.user.role).await?;
 
     let content = payload.content.trim();
@@ -214,6 +238,11 @@ pub async fn update_comment(
         })?
         .ok_or(CommentError::NotFound)?;
 
+    // Verify the comment belongs to the document in the URL path
+    if existing.document_id != document_id {
+        return Err(CommentError::NotFound);
+    }
+
     // Only the author can edit
     if existing.user_id != auth_user.user.id {
         return Err(CommentError::PermissionDenied {
@@ -273,6 +302,11 @@ pub async fn delete_comment(
             CommentError::InternalError { message: "Failed to fetch comment".into() }
         })?
         .ok_or(CommentError::NotFound)?;
+
+    // Verify the comment belongs to the document in the URL path
+    if existing.document_id != document_id {
+        return Err(CommentError::NotFound);
+    }
 
     // Owner or admin can delete
     if existing.user_id != auth_user.user.id && auth_user.user.role != UserRole::Admin {

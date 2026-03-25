@@ -17,6 +17,7 @@ pub mod seed;
 pub mod services;
 pub mod storage;
 pub mod swagger;
+pub mod rate_limit;
 pub mod utils;
 pub mod webdav_xml_parser;
 
@@ -47,6 +48,7 @@ pub struct AppState {
     pub sync_progress_tracker: std::sync::Arc<services::sync_progress_tracker::SyncProgressTracker>,
     pub user_watch_service: Option<std::sync::Arc<services::user_watch_service::UserWatchService>>,
     pub webdav_metrics_collector: Option<std::sync::Arc<services::webdav_metrics_integration::WebDAVMetricsCollector>>,
+    pub rate_limiters: rate_limit::RateLimiters,
 }
 
 /// Health check endpoint for monitoring

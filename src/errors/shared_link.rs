@@ -29,6 +29,9 @@ pub enum SharedLinkError {
     #[error("Document not found")]
     DocumentNotFound,
 
+    #[error("Rate limit exceeded")]
+    RateLimited { retry_after_secs: u64 },
+
     #[error("Internal error: {message}")]
     InternalError { message: String },
 }
@@ -41,6 +44,7 @@ impl AppError for SharedLinkError {
             SharedLinkError::PasswordRequired => StatusCode::UNAUTHORIZED,
             SharedLinkError::InvalidPassword => StatusCode::FORBIDDEN,
             SharedLinkError::PermissionDenied { .. } => StatusCode::FORBIDDEN,
+            SharedLinkError::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
             SharedLinkError::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -54,6 +58,7 @@ impl AppError for SharedLinkError {
             SharedLinkError::InvalidPassword => "The password you entered is incorrect".to_string(),
             SharedLinkError::MaxViewsReached => "This shared link has reached its maximum number of views".to_string(),
             SharedLinkError::PermissionDenied { reason } => format!("Permission denied: {}", reason),
+            SharedLinkError::RateLimited { retry_after_secs } => format!("Too many requests. Please try again in {} seconds.", retry_after_secs),
             SharedLinkError::DocumentNotFound => "The shared document is no longer available".to_string(),
             SharedLinkError::InternalError { .. } => "An internal error occurred".to_string(),
         }
@@ -68,6 +73,7 @@ impl AppError for SharedLinkError {
             SharedLinkError::InvalidPassword => "SHARED_LINK_INVALID_PASSWORD",
             SharedLinkError::MaxViewsReached => "SHARED_LINK_MAX_VIEWS",
             SharedLinkError::PermissionDenied { .. } => "SHARED_LINK_PERMISSION_DENIED",
+            SharedLinkError::RateLimited { .. } => "SHARED_LINK_RATE_LIMITED",
             SharedLinkError::DocumentNotFound => "SHARED_LINK_DOCUMENT_NOT_FOUND",
             SharedLinkError::InternalError { .. } => "SHARED_LINK_INTERNAL_ERROR",
         }
@@ -77,7 +83,8 @@ impl AppError for SharedLinkError {
         match self {
             SharedLinkError::PasswordRequired
             | SharedLinkError::InvalidPassword
-            | SharedLinkError::PermissionDenied { .. } => ErrorCategory::Auth,
+            | SharedLinkError::PermissionDenied { .. }
+            | SharedLinkError::RateLimited { .. } => ErrorCategory::Auth,
             SharedLinkError::InternalError { .. } => ErrorCategory::Database,
             _ => ErrorCategory::Network,
         }
@@ -86,7 +93,7 @@ impl AppError for SharedLinkError {
     fn error_severity(&self) -> ErrorSeverity {
         match self {
             SharedLinkError::InternalError { .. } => ErrorSeverity::Critical,
-            SharedLinkError::PermissionDenied { .. } => ErrorSeverity::Important,
+            SharedLinkError::PermissionDenied { .. } | SharedLinkError::RateLimited { .. } => ErrorSeverity::Important,
             _ => ErrorSeverity::Expected,
         }
     }
@@ -97,6 +104,7 @@ impl AppError for SharedLinkError {
             SharedLinkError::PasswordRequired => Some("Enter the password provided by the document owner".to_string()),
             SharedLinkError::InvalidPassword => Some("Check the password and try again".to_string()),
             SharedLinkError::MaxViewsReached => Some("Request a new shared link from the document owner".to_string()),
+            SharedLinkError::RateLimited { retry_after_secs } => Some(format!("Wait {} seconds before trying again", retry_after_secs)),
             _ => None,
         }
     }
