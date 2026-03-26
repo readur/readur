@@ -78,7 +78,6 @@ async fn create_test_app_state() -> Arc<AppState> {
         user_watch_service: None,
         webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
-        rate_limiters: readur::rate_limit::RateLimiters::new(),
     };
     
     // Wrap in Arc for sharing
@@ -101,7 +100,6 @@ async fn create_test_app_state() -> Arc<AppState> {
         sync_progress_tracker: state_arc.sync_progress_tracker.clone(),
         user_watch_service: None,
         webdav_metrics_collector: None,
-        rate_limiters: readur::rate_limit::RateLimiters::new(),
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     })
 }

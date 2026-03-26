@@ -116,7 +116,6 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         user_watch_service: None,
         webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
-        rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
 
     let app = Router::new()
