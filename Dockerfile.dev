@@ -1,5 +1,5 @@
 # Development Dockerfile with hot-reloading support for Rust backend
-FROM rust:1.94-bookworm
+FROM rust:1.95-bookworm
 
 # Install system dependencies for OCR and PDF processing
 RUN apt-get update && apt-get install -y \
