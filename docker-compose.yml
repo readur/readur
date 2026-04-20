@@ -91,7 +91,7 @@ services:
 
   # Optional: Nginx reverse proxy example
   nginx:
-    image: nginx:1.29-alpine # renovate: datasource=docker depName=nginx versioning=docker
+    image: nginx:1.30-alpine # renovate: datasource=docker depName=nginx versioning=docker
     ports:
       - "80:80"
       - "443:443"
