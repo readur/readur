@@ -17,3 +17,4 @@ pub mod webdav;
 pub mod webdav_scan_failures;
 pub mod shared_links;
 pub mod comments;
+pub mod api_keys;

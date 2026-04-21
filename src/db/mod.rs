@@ -17,6 +17,7 @@ pub mod constraint_validation;
 pub mod ocr_retry;
 pub mod shared_links;
 pub mod comments;
+pub mod api_keys;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DatabasePoolHealth {

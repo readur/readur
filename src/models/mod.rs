@@ -9,6 +9,7 @@ pub mod source_error;
 pub mod responses;
 pub mod shared_link;
 pub mod comment;
+pub mod api_key;
 
 // Re-export commonly used types
 pub use user::*;

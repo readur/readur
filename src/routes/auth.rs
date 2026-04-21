@@ -23,6 +23,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/config", get(get_auth_config))
         .route("/oidc/login", get(oidc_login))
         .route("/oidc/callback", get(oidc_callback))
+        .nest("/api-keys", crate::routes::api_keys::router())
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
