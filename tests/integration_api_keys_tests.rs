@@ -276,6 +276,29 @@ async fn rejects_when_max_keys_reached() {
 }
 
 #[tokio::test]
+async fn expired_keys_do_not_count_toward_cap() {
+    // Seed 20 keys and backdate their expirations so none are usable. The
+    // 21st creation should still succeed because expired keys don't count
+    // against the per-user active cap.
+    let ctx = Ctx::new().await;
+    let (jwt, uid) = user_jwt(&ctx).await;
+
+    let db = &ctx.ctx.state().db;
+    for i in 0..20 {
+        let fake_hash = format!("{:064x}", i as u128);
+        let past = chrono::Utc::now() - chrono::Duration::hours(1);
+        db.create_api_key(uid, &format!("expired-{i}"), &fake_hash, "readur_pat_X", Some(past))
+            .await
+            .expect("seed insert");
+    }
+
+    let (status, body) = ctx
+        .send("POST", "/api/auth/api-keys", Some(&jwt), Some(json!({"name": "fresh"})))
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "expected 201 got {status}: {body:?}");
+}
+
+#[tokio::test]
 async fn rate_limit_triggers_after_many_creations() {
     let ctx = Ctx::new().await;
     let (jwt, _) = user_jwt(&ctx).await;

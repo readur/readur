@@ -111,12 +111,16 @@ impl Database {
         Ok(())
     }
 
-    /// Count active (non-revoked) keys for a user. Used to enforce the max
-    /// keys-per-user cap at creation time.
+    /// Count active (non-revoked, non-expired) keys for a user. Used to
+    /// enforce the max keys-per-user cap at creation time. Expired keys are
+    /// excluded so a user with lapsed keys isn't stuck at the cap with zero
+    /// usable keys.
     pub async fn count_active_api_keys_for_user(&self, user_id: Uuid) -> Result<i64> {
         let count: (i64,) = sqlx::query_as(
             r#"SELECT COUNT(*) FROM api_keys
-               WHERE user_id = $1 AND revoked_at IS NULL"#,
+               WHERE user_id = $1
+                 AND revoked_at IS NULL
+                 AND (expires_at IS NULL OR expires_at > NOW())"#,
         )
         .bind(user_id)
         .fetch_one(&self.pool)

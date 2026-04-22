@@ -344,11 +344,13 @@ const ApiKeysManager: React.FC = () => {
       {/* One-time reveal dialog */}
       <Dialog
         open={!!revealedKey}
-        onClose={handleCloseReveal}
+        onClose={(_, reason) => {
+          // Require an explicit click on "I've saved it" — backdrop clicks
+          // must not dismiss this dialog, since that is the last chance to copy.
+          if (reason !== 'backdropClick') handleCloseReveal();
+        }}
         maxWidth="sm"
         fullWidth
-        // Require an explicit click on "I've saved it" — clicking the backdrop
-        // must not dismiss this dialog, since that is the last chance to copy.
         disableEscapeKeyDown
       >
         <DialogTitle>Your new API key</DialogTitle>
