@@ -92,6 +92,7 @@ const ApiKeysManager: React.FC = () => {
 
   const [revokeTarget, setRevokeTarget] = useState<ApiKey | null>(null);
   const [revoking, setRevoking] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const fetchKeys = useCallback(async () => {
     setLoading(true);
@@ -175,12 +176,15 @@ const ApiKeysManager: React.FC = () => {
   const handleRevoke = async () => {
     if (!revokeTarget) return;
     setRevoking(true);
+    setRevokeError(null);
     try {
       await apiKeysService.revoke(revokeTarget.id);
       setRevokeTarget(null);
       await fetchKeys();
     } catch (err) {
-      setError(extractErrorMessage(err, 'Failed to revoke API key.'));
+      // Surface the error inside the revoke dialog rather than on the page
+      // behind it, where a modal overlay would hide it from the user.
+      setRevokeError(extractErrorMessage(err, 'Failed to revoke API key.'));
     } finally {
       setRevoking(false);
     }
@@ -278,7 +282,10 @@ const ApiKeysManager: React.FC = () => {
                           size="small"
                           color="error"
                           disabled={!!key.revoked_at}
-                          onClick={() => setRevokeTarget(key)}
+                          onClick={() => {
+                            setRevokeError(null);
+                            setRevokeTarget(key);
+                          }}
                           aria-label="Revoke API key"
                         >
                           <DeleteIcon fontSize="small" />
@@ -409,7 +416,11 @@ const ApiKeysManager: React.FC = () => {
       {/* Revoke confirmation */}
       <Dialog
         open={!!revokeTarget}
-        onClose={() => !revoking && setRevokeTarget(null)}
+        onClose={() => {
+          if (revoking) return;
+          setRevokeTarget(null);
+          setRevokeError(null);
+        }}
         maxWidth="xs"
         fullWidth
       >
@@ -419,9 +430,20 @@ const ApiKeysManager: React.FC = () => {
             Revoke <strong>{revokeTarget?.name}</strong>? Any scripts or integrations using
             this key will immediately stop working. This cannot be undone.
           </DialogContentText>
+          {revokeError && (
+            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setRevokeError(null)}>
+              {revokeError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRevokeTarget(null)} disabled={revoking}>
+          <Button
+            onClick={() => {
+              setRevokeTarget(null);
+              setRevokeError(null);
+            }}
+            disabled={revoking}
+          >
             Cancel
           </Button>
           <Button
