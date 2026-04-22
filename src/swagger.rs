@@ -178,7 +178,7 @@ use crate::{
     modifiers(&SecurityAddon),
     info(
         title = "Readur API",
-        version = "2.8.0",
+        version = "2.9.0",
         description = "Document management and OCR processing API",
         contact(
             name = "Readur Team",
