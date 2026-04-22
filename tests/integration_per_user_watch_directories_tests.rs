@@ -66,7 +66,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .oneshot(
             Request::builder()
                 .method(Method::GET)
-                .uri(&format!("/api/users/{}/watch-directory", user_id))
+                .uri(&format!("/api/users/{}/watch/directory", user_id))
                 .header("Authorization", format!("Bearer {}", admin_token))
                 .body(Body::empty())?,
         )
@@ -92,7 +92,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .oneshot(
             Request::builder()
                 .method(Method::POST)
-                .uri(&format!("/api/users/{}/watch-directory", user_id))
+                .uri(&format!("/api/users/{}/watch/directory", user_id))
                 .header("Authorization", format!("Bearer {}", admin_token))
                 .header("Content-Type", "application/json")
                 .body(Body::from(serde_json::to_string(&create_req)?))?,
@@ -119,7 +119,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .oneshot(
             Request::builder()
                 .method(Method::GET)
-                .uri(&format!("/api/users/{}/watch-directory", user_id))
+                .uri(&format!("/api/users/{}/watch/directory", user_id))
                 .header("Authorization", format!("Bearer {}", admin_token))
                 .body(Body::empty())?,
         )
@@ -138,7 +138,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .oneshot(
             Request::builder()
                 .method(Method::GET)
-                .uri(&format!("/api/users/{}/watch-directory", user_id))
+                .uri(&format!("/api/users/{}/watch/directory", user_id))
                 .header("Authorization", format!("Bearer {}", user_token))
                 .body(Body::empty())?,
         )
@@ -152,7 +152,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .oneshot(
             Request::builder()
                 .method(Method::GET)
-                .uri(&format!("/api/users/{}/watch-directory", admin_id))
+                .uri(&format!("/api/users/{}/watch/directory", admin_id))
                 .header("Authorization", format!("Bearer {}", user_token))
                 .body(Body::empty())?,
         )
@@ -166,7 +166,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .oneshot(
             Request::builder()
                 .method(Method::DELETE)
-                .uri(&format!("/api/users/{}/watch-directory", user_id))
+                .uri(&format!("/api/users/{}/watch/directory", user_id))
                 .header("Authorization", format!("Bearer {}", admin_token))
                 .body(Body::empty())?,
         )
@@ -188,7 +188,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .oneshot(
             Request::builder()
                 .method(Method::DELETE)
-                .uri(&format!("/api/users/{}/watch-directory", user_id))
+                .uri(&format!("/api/users/{}/watch/directory", user_id))
                 .header("Authorization", format!("Bearer {}", user_token))
                 .body(Body::empty())?,
         )
@@ -403,7 +403,7 @@ async fn test_per_user_watch_disabled() -> Result<()> {
         .oneshot(
             Request::builder()
                 .method(Method::GET)
-                .uri(&format!("/api/users/{}/watch-directory", user_id))
+                .uri(&format!("/api/users/{}/watch/directory", user_id))
                 .header("Authorization", format!("Bearer {}", admin_token))
                 .body(Body::empty())?,
         )

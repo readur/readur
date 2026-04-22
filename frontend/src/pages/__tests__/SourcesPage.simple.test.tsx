@@ -1,20 +1,20 @@
 import { describe, it, expect } from 'vitest';
 
 describe('SourcesPage Test Connection Fix', () => {
-  it('Test connection should use unified /sources/test-connection endpoint for all source types', () => {
+  it('Test connection should use unified /sources/test/connection endpoint for all source types', () => {
     // This test documents the fix for the bug where WebDAV test connection
-    // was failing for existing sources because it was using /webdav/test-connection
+    // was failing for existing sources because it was using /webdav/test/connection
     // endpoint which validated watch_folders existence, but the frontend wasn't
     // sending the watch_folders that were already configured for the source.
-    
+
     // The fix ensures all source types (WebDAV, S3, Local Folder) use the same
-    // /sources/test-connection endpoint and include all necessary configuration
+    // /sources/test/connection endpoint and include all necessary configuration
     // including watch_folders and file_extensions.
     
-    const testConnectionEndpoint = '/sources/test-connection';
+    const testConnectionEndpoint = '/sources/test/connection';
     
     // All source types should use the same endpoint
-    expect(testConnectionEndpoint).toBe('/sources/test-connection');
+    expect(testConnectionEndpoint).toBe('/sources/test/connection');
     
     // WebDAV payload should include watch_folders
     const webdavPayload = {

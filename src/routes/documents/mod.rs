@@ -34,20 +34,20 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/ocr/stop", post(cancel_ocr))
         
         // OCR retry operations
-        .route("/ocr/retry-stats", get(crate::routes::documents_ocr_retry::get_ocr_retry_stats))
-        .route("/ocr/retry-recommendations", get(crate::routes::documents_ocr_retry::get_retry_recommendations))
-        .route("/ocr/bulk-retry", post(crate::routes::documents_ocr_retry::bulk_retry_ocr))
-        .route("/{id}/ocr/retry-history", get(crate::routes::documents_ocr_retry::get_document_retry_history))
+        .route("/ocr/retry/stats", get(crate::routes::documents_ocr_retry::get_ocr_retry_stats))
+        .route("/ocr/retry/recommendations", get(crate::routes::documents_ocr_retry::get_retry_recommendations))
+        .route("/ocr/retry/bulk", post(crate::routes::documents_ocr_retry::bulk_retry_ocr))
+        .route("/{id}/ocr/retry/history", get(crate::routes::documents_ocr_retry::get_document_retry_history))
         
         // Bulk operations
         .route("/bulk/delete", post(bulk_delete_documents))
-        .route("/cleanup/low-confidence", delete(delete_low_confidence_documents))
-        .route("/cleanup/failed-ocr", delete(delete_failed_ocr_documents))
+        .route("/cleanup/low/confidence", delete(delete_low_confidence_documents))
+        .route("/cleanup/failed/ocr", delete(delete_failed_ocr_documents))
         
         // Debug operations
         .route("/{id}/debug", get(get_document_debug_info))
         .route("/{id}/thumbnail", get(get_document_thumbnail))
-        .route("/{id}/processed", get(get_processed_image))
+        .route("/{id}/processed/image", get(get_processed_image))
         .route("/{id}/validate", get(validate_document_integrity))
         .route("/duplicates", get(get_user_duplicates))
         

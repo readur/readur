@@ -109,7 +109,7 @@ test.describe('OCR Retry Workflow', () => {
     if (await bulkRetryButton.isVisible()) {
       // Wait for bulk retry API call
       const bulkRetryPromise = page.waitForResponse(response => 
-        response.url().includes('/bulk-retry') || response.url().includes('/retry'),
+        response.url().includes('/retry/bulk') || response.url().includes('/retry'),
         { timeout: TIMEOUTS.long }
       );
       

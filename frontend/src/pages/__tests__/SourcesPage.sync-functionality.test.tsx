@@ -17,7 +17,7 @@ describe('SourcesPage Sync Functionality', () => {
       deepScan: {
         name: 'Deep Scan', 
         description: 'Complete rescan that resets ETag expectations. Use for troubleshooting sync issues.',
-        endpoint: '/sources/{id}/deep-scan',
+        endpoint: '/sources/{id}/scan/deep',
         method: 'POST',
         recommended: false,
         supportedSources: ['webdav'], // Currently only WebDAV
@@ -36,7 +36,7 @@ describe('SourcesPage Sync Functionality', () => {
     
     // Verify API endpoints
     expect(syncOptions.quickSync.endpoint).toBe('/sources/{id}/sync');
-    expect(syncOptions.deepScan.endpoint).toBe('/sources/{id}/deep-scan');
+    expect(syncOptions.deepScan.endpoint).toBe('/sources/{id}/scan/deep');
   });
 
   it('should show appropriate options based on source type', () => {

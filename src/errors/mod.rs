@@ -207,3 +207,4 @@ pub mod settings;
 pub mod search;
 pub mod shared_link;
 pub mod comment;
+pub mod api_key;

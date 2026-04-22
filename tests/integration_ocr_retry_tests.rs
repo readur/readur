@@ -104,7 +104,7 @@ impl OcrRetryTestHelper {
     
     async fn get_retry_stats(&self) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let response = self.client
-            .get(&format!("{}/api/documents/ocr/retry-stats", get_base_url()))
+            .get(&format!("{}/api/documents/ocr/retry/stats", get_base_url()))
             .header("Authorization", self.get_auth_header())
             .timeout(TIMEOUT)
             .send()
@@ -131,7 +131,7 @@ impl OcrRetryTestHelper {
     
     async fn get_retry_recommendations(&self) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let response = self.client
-            .get(&format!("{}/api/documents/ocr/retry-recommendations", get_base_url()))
+            .get(&format!("{}/api/documents/ocr/retry/recommendations", get_base_url()))
             .header("Authorization", self.get_auth_header())
             .timeout(TIMEOUT)
             .send()
@@ -167,7 +167,7 @@ impl OcrRetryTestHelper {
         }
         
         let response = self.client
-            .post(&format!("{}/api/documents/ocr/bulk-retry", get_base_url()))
+            .post(&format!("{}/api/documents/ocr/retry/bulk", get_base_url()))
             .header("Authorization", self.get_auth_header())
             .json(&request_body)
             .timeout(TIMEOUT)
@@ -195,7 +195,7 @@ impl OcrRetryTestHelper {
     
     async fn get_document_retry_history(&self, document_id: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let response = self.client
-            .get(&format!("{}/api/documents/{}/ocr/retry-history", get_base_url(), document_id))
+            .get(&format!("{}/api/documents/{}/ocr/retry/history", get_base_url(), document_id))
             .header("Authorization", self.get_auth_header())
             .timeout(TIMEOUT)
             .send()
@@ -450,7 +450,7 @@ async fn test_filtered_bulk_retry_preview() {
     });
     
     let response = helper.client
-        .post(&format!("{}/api/documents/ocr/bulk-retry", get_base_url()))
+        .post(&format!("{}/api/documents/ocr/retry/bulk", get_base_url()))
         .header("Authorization", helper.get_auth_header())
         .json(&request_body)
         .timeout(TIMEOUT)

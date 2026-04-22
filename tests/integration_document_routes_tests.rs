@@ -934,17 +934,17 @@ mod document_routes_deletion_tests {
         #[test]
         fn test_delete_failed_ocr_endpoint_path() {
             // Test that the endpoint path is correct
-            let endpoint_path = "/api/documents/delete-failed-ocr";
-            
+            let endpoint_path = "/api/documents/cleanup/failed/ocr";
+
             // This would be used in integration tests
-            assert!(endpoint_path.contains("delete-failed-ocr"));
+            assert!(endpoint_path.contains("cleanup/failed/ocr"));
             assert!(endpoint_path.starts_with("/api/documents/"));
         }
 
         #[test]
         fn test_delete_failed_ocr_http_methods() {
-            // The endpoint should only accept POST requests
-            // GET, PUT, DELETE should not be allowed
+            // The endpoint should only accept DELETE requests
+            // GET, PUT, POST should not be allowed
             
             // This would be tested in integration tests with actual HTTP requests
             let allowed_method = "POST";

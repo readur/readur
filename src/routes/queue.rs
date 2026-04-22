@@ -21,8 +21,8 @@ pub fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/stats", get(get_queue_stats))
-        .route("/requeue-failed", post(requeue_failed))
-        .route("/enqueue-pending", post(enqueue_pending_documents))
+        .route("/requeue/failed", post(requeue_failed))
+        .route("/enqueue/pending", post(enqueue_pending_documents))
         .route("/pause", post(pause_ocr_processing))
         .route("/resume", post(resume_ocr_processing))
         .route("/status", get(get_ocr_status))
@@ -196,7 +196,7 @@ async fn get_ocr_status(
 
 #[utoipa::path(
     post,
-    path = "/api/queue/enqueue-pending",
+    path = "/api/queue/enqueue/pending",
     tag = "queue",
     security(
         ("bearer_auth" = [])

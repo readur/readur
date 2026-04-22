@@ -25,17 +25,13 @@ use webdav_sync::perform_webdav_sync_with_tracking;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/test-connection", post(test_webdav_connection))
-        .route("/estimate-crawl", post(estimate_webdav_crawl))
-        .route("/sync-status", get(get_webdav_sync_status))
-        .route("/start-sync", post(start_webdav_sync))
-        .route("/cancel-sync", post(cancel_webdav_sync))
-        // Scan failure tracking endpoints
-        .route("/scan-failures", get(crate::routes::webdav_scan_failures::list_scan_failures))
-        .route("/scan-failures/retry-candidates", get(crate::routes::webdav_scan_failures::get_retry_candidates))
-        .route("/scan-failures/{id}", get(crate::routes::webdav_scan_failures::get_scan_failure))
-        .route("/scan-failures/{id}/retry", post(crate::routes::webdav_scan_failures::retry_scan_failure))
-        .route("/scan-failures/{id}/exclude", post(crate::routes::webdav_scan_failures::exclude_scan_failure))
+        .route("/test/connection", post(test_webdav_connection))
+        .route("/crawl/estimate", post(estimate_webdav_crawl))
+        .route("/sync/status", get(get_webdav_sync_status))
+        .route("/sync/start", post(start_webdav_sync))
+        .route("/sync/cancel", post(cancel_webdav_sync))
+        // Scan failure tracking endpoints are mounted at /api/webdav/scan/failures
+        // via webdav_scan_failures::router() in main.rs.
 }
 
 async fn get_user_webdav_config(state: &Arc<AppState>, user_id: uuid::Uuid) -> Result<WebDAVConfig, StatusCode> {
@@ -77,7 +73,7 @@ async fn get_user_webdav_config(state: &Arc<AppState>, user_id: uuid::Uuid) -> R
 
 #[utoipa::path(
     post,
-    path = "/api/webdav/test-connection",
+    path = "/api/webdav/test/connection",
     tag = "webdav",
     security(
         ("bearer_auth" = [])
@@ -142,7 +138,7 @@ async fn test_webdav_connection(
 
 #[utoipa::path(
     post,
-    path = "/api/webdav/estimate-crawl",
+    path = "/api/webdav/crawl/estimate",
     tag = "webdav",
     security(
         ("bearer_auth" = [])
@@ -221,7 +217,7 @@ async fn estimate_webdav_crawl(
 
 #[utoipa::path(
     get,
-    path = "/api/webdav/sync-status",
+    path = "/api/webdav/sync/status",
     tag = "webdav",
     security(
         ("bearer_auth" = [])
@@ -292,7 +288,7 @@ async fn get_webdav_sync_status(
 
 #[utoipa::path(
     post,
-    path = "/api/webdav/start-sync",
+    path = "/api/webdav/sync/start",
     tag = "webdav",
     security(
         ("bearer_auth" = [])
@@ -406,7 +402,7 @@ async fn start_webdav_sync(
 
 #[utoipa::path(
     post,
-    path = "/api/webdav/cancel-sync",
+    path = "/api/webdav/sync/cancel",
     tag = "webdav",
     security(
         ("bearer_auth" = [])

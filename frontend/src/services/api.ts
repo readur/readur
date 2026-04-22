@@ -349,7 +349,7 @@ export const documentService = {
   },
 
   getProcessedImage: (id: string) => {
-    return api.get(`/documents/${id}/processed-image`, {
+    return api.get(`/documents/${id}/processed/image`, {
       responseType: 'blob',
     })
   },
@@ -360,19 +360,19 @@ export const documentService = {
 
   // Advanced OCR retry functionality
   bulkRetryOcr: (request: BulkOcrRetryRequest) => {
-    return api.post<BulkOcrRetryResponse>('/documents/ocr/bulk-retry', request)
+    return api.post<BulkOcrRetryResponse>('/documents/ocr/retry/bulk', request)
   },
 
   getRetryStats: () => {
-    return api.get<OcrRetryStatsResponse>('/documents/ocr/retry-stats')
+    return api.get<OcrRetryStatsResponse>('/documents/ocr/retry/stats')
   },
 
   getRetryRecommendations: () => {
-    return api.get<OcrRetryRecommendationsResponse>('/documents/ocr/retry-recommendations')
+    return api.get<OcrRetryRecommendationsResponse>('/documents/ocr/retry/recommendations')
   },
 
   getDocumentRetryHistory: (id: string) => {
-    return api.get<DocumentRetryHistoryResponse>(`/documents/${id}/ocr/retry-history`)
+    return api.get<DocumentRetryHistoryResponse>(`/documents/${id}/ocr/retry/history`)
   },
 
   getFailedOcrDocuments: (limit = 50, offset = 0) => {
@@ -419,14 +419,18 @@ export const documentService = {
   },
 
   deleteLowConfidence: (maxConfidence: number, previewOnly: boolean = false) => {
-    return api.post('/documents/delete-low-confidence', {
-      max_confidence: maxConfidence,
-      preview_only: previewOnly
+    return api.delete('/documents/cleanup/low/confidence', {
+      data: {
+        max_confidence: maxConfidence,
+        preview_only: previewOnly
+      }
     })
   },
   deleteFailedOcr: (previewOnly: boolean = false) => {
-    return api.post('/documents/delete-failed-ocr', {
-      preview_only: previewOnly
+    return api.delete('/documents/cleanup/failed/ocr', {
+      data: {
+        preview_only: previewOnly
+      }
     })
   },
 
@@ -696,15 +700,15 @@ export interface UserWatchDirectoryOperationResponse {
 
 export const userWatchService = {
   getUserWatchDirectory: (userId: string) => {
-    return api.get<UserWatchDirectoryResponse>(`/users/${userId}/watch-directory`)
+    return api.get<UserWatchDirectoryResponse>(`/users/${userId}/watch/directory`)
   },
 
   createUserWatchDirectory: (userId: string) => {
-    return api.post<UserWatchDirectoryOperationResponse>(`/users/${userId}/watch-directory`)
+    return api.post<UserWatchDirectoryOperationResponse>(`/users/${userId}/watch/directory`)
   },
 
   deleteUserWatchDirectory: (userId: string) => {
-    return api.delete<UserWatchDirectoryOperationResponse>(`/users/${userId}/watch-directory`)
+    return api.delete<UserWatchDirectoryOperationResponse>(`/users/${userId}/watch/directory`)
   },
 }
 
@@ -888,7 +892,7 @@ export const sourceErrorService = {
 
   // Get retry candidates
   getRetryCandidates: () => {
-    return api.get<{ resources: string[], count: number }>('/source/errors/retry-candidates')
+    return api.get<{ resources: string[], count: number }>('/source/errors/retry/candidates')
   }
 }
 
@@ -1012,7 +1016,7 @@ export const sourcesService = {
   },
 
   triggerDeepScan: (sourceId: string) => {
-    return api.post(`/sources/${sourceId}/deep-scan`)
+    return api.post(`/sources/${sourceId}/scan/deep`)
   },
 
   stopSync: (sourceId: string) => {
@@ -1062,19 +1066,19 @@ export interface SharedDocumentMetadata {
 
 export const sharedLinksService = {
   create: (request: CreateSharedLinkRequest) => {
-    return api.post<SharedLinkData>('/shared-links', request)
+    return api.post<SharedLinkData>('/shared/links', request)
   },
 
   listAll: () => {
-    return api.get<SharedLinkData[]>('/shared-links')
+    return api.get<SharedLinkData[]>('/shared/links')
   },
 
   listByDocument: (documentId: string) => {
-    return api.get<SharedLinkData[]>(`/shared-links/document/${documentId}`)
+    return api.get<SharedLinkData[]>(`/shared/links/document/${documentId}`)
   },
 
   revoke: (linkId: string) => {
-    return api.delete(`/shared-links/${linkId}`)
+    return api.delete(`/shared/links/${linkId}`)
   },
 }
 
@@ -1178,5 +1182,45 @@ export const commentsService = {
 
   getCount: (documentId: string) => {
     return api.get<{ count: number }>(`/comments/documents/${documentId}/comments/count`)
+  },
+}
+
+// ─── API Keys Service ────────────────────────────────────────────────────
+
+export interface ApiKey {
+  id: string
+  user_id: string
+  name: string
+  key_prefix: string
+  expires_at: string | null
+  last_used_at: string | null
+  revoked_at: string | null
+  is_expired: boolean
+  created_at: string
+}
+
+export interface CreateApiKeyRequest {
+  name: string
+  expires_in_days?: number | null
+}
+
+export interface CreateApiKeyResponse {
+  api_key: ApiKey
+  // Full plaintext token — returned ONLY from the create endpoint and must be
+  // captured by the user immediately. The server has no way to recover it.
+  plaintext: string
+}
+
+export const apiKeysService = {
+  create: (request: CreateApiKeyRequest) => {
+    return api.post<CreateApiKeyResponse>('/auth/keys', request)
+  },
+
+  list: (all = false) => {
+    return api.get<ApiKey[]>('/auth/keys', { params: all ? { all: true } : {} })
+  },
+
+  revoke: (id: string) => {
+    return api.delete(`/auth/keys/${id}`)
   },
 }

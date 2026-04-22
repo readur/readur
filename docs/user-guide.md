@@ -19,6 +19,7 @@ This guide walks you through everything you need to know to effectively use Read
 - [Comments](#comments)
 - [User Management](#user-management)
 - [User Settings](#user-settings)
+- [API Keys](#api-keys)
 - [Tips for Best Results](#tips-for-best-results)
 
 ## Getting Started
@@ -277,6 +278,50 @@ Image preprocessing options help with documents that aren't perfectly scanned. E
 Search settings affect how results appear and behave. Adjust the number of results per page based on your screen size and browsing preferences. The default sort order determines how search results are organized - by relevance, date, or other criteria that match how you typically look for documents.
 
 Snippet length controls how much text appears in search previews, while the fuzzy search threshold determines how tolerant the system is of typos and OCR errors. Higher thresholds find more matches but might include less relevant results, while lower thresholds are more precise but might miss documents with text recognition issues.
+
+## API Keys
+
+If you want to call Readur from a script, CLI, or automation without logging in each time, create a **personal API key**. Each key is a long-lived token that you send in the `Authorization: Bearer` header the same way the web UI sends your session token.
+
+### Creating a key
+
+1. Open **Settings → API Keys** and click **Create API Key**.
+2. Give the key a name that reminds you what it's for (e.g. `backup-script`, `home-assistant`, `ci-uploader`).
+3. Pick an expiration — 90 days is the default and a sensible choice. Shorter is safer; the maximum is 1 year. You can pick "Never" but it's not recommended.
+4. Click **Create**. The full key is displayed **exactly once** in a dialog with a copy button — there is no way to retrieve it again later.
+
+Paste the key into your password manager or secret store immediately. If you lose it, just revoke it and create a new one.
+
+### Using a key
+
+Send it in the `Authorization` header, exactly like a login token:
+
+```bash
+curl https://readur.example.com/api/documents \
+  -H "Authorization: Bearer readur_pat_YOUR_KEY_HERE"
+```
+
+The key inherits your account's permissions — anything you can do in the UI, the key can do from a script.
+
+### Managing your keys
+
+Back on the **API Keys** tab you'll see each key's name, the first few characters of the token, when it was last used, and when it expires. Click the trash icon to revoke a key immediately; any script still using it will start getting 401 responses on the next request.
+
+### Tips
+
+- **One key per integration.** If the CI key leaks, you can revoke it without breaking your backup script.
+- **Don't commit keys to git.** The `readur_pat_` prefix is deliberately recognizable to secret scanners (like GitHub's) so a commit that includes a key will typically get flagged — but it's easier to just not put it there.
+- **Rotate on suspicion.** If a laptop is lost or a contractor leaves, revoke the relevant keys in Settings and reissue new ones.
+- **Watch "Last used".** A key that hasn't been used in months is safer to revoke than to leave lying around.
+- **Your admins can revoke keys too.** If an administrator suspects your account is compromised they can kill all your keys immediately — expect this during any incident response.
+
+### Limits
+
+- You can have **up to 20 active keys** at once. Revoke old ones first if you hit the cap.
+- You can create **up to 10 keys per hour**. This limit only matters if you're scripting key creation.
+- **Maximum lifetime: 365 days.** Longer than that isn't supported.
+
+For the full API reference, see the [API Reference](api-reference.md#api-key-endpoints). For the security rationale, see the [Security Guide](security-guide.md#api-key-security).
 
 ## Tips for Best Results
 

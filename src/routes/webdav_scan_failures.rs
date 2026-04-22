@@ -50,7 +50,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}", get(get_scan_failure))
         .route("/{id}/retry", post(retry_scan_failure))
         .route("/{id}/exclude", post(exclude_scan_failure))
-        .route("/retry-candidates", get(get_retry_candidates))
+        .route("/retry/candidates", get(get_retry_candidates))
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -85,10 +85,10 @@ pub struct ScanFailuresListResponse {
     pub stats: ScanFailureStatsResponse,
 }
 
-/// GET /api/webdav/scan-failures - List all scan failures for the authenticated user
+/// GET /api/webdav/scan/failures - List all scan failures for the authenticated user
 #[utoipa::path(
     get,
-    path = "/api/webdav/scan-failures",
+    path = "/api/webdav/scan/failures",
     responses(
         (status = 200, description = "List of scan failures", body = ScanFailuresListResponse),
         (status = 401, description = "Unauthorized"),
@@ -189,10 +189,10 @@ pub async fn list_scan_failures(
     }))
 }
 
-/// GET /api/webdav/scan-failures/{id} - Get detailed information about a specific scan failure
+/// GET /api/webdav/scan/failures/{id} - Get detailed information about a specific scan failure
 #[utoipa::path(
     get,
-    path = "/api/webdav/scan-failures/{id}",
+    path = "/api/webdav/scan/failures/{id}",
     params(
         ("id" = Uuid, Path, description = "Scan failure ID")
     ),
@@ -265,10 +265,10 @@ pub async fn get_scan_failure(
     }
 }
 
-/// POST /api/webdav/scan-failures/{id}/retry - Reset and retry a failed scan
+/// POST /api/webdav/scan/failures/{id}/retry - Reset and retry a failed scan
 #[utoipa::path(
     post,
-    path = "/api/webdav/scan-failures/{id}/retry",
+    path = "/api/webdav/scan/failures/{id}/retry",
     params(
         ("id" = Uuid, Path, description = "Scan failure ID")
     ),
@@ -327,10 +327,10 @@ pub async fn retry_scan_failure(
     }
 }
 
-/// POST /api/webdav/scan-failures/{id}/exclude - Mark a directory as permanently excluded
+/// POST /api/webdav/scan/failures/{id}/exclude - Mark a directory as permanently excluded
 #[utoipa::path(
     post,
-    path = "/api/webdav/scan-failures/{id}/exclude",
+    path = "/api/webdav/scan/failures/{id}/exclude",
     params(
         ("id" = Uuid, Path, description = "Scan failure ID")
     ),
@@ -388,10 +388,10 @@ pub async fn exclude_scan_failure(
     }
 }
 
-/// GET /api/webdav/scan-failures/retry-candidates - Get directories ready for retry
+/// GET /api/webdav/scan/failures/retry/candidates - Get directories ready for retry
 #[utoipa::path(
     get,
-    path = "/api/webdav/scan-failures/retry-candidates",
+    path = "/api/webdav/scan/failures/retry/candidates",
     responses(
         (status = 200, description = "List of directories ready for retry", body = Vec<String>),
         (status = 401, description = "Unauthorized"),

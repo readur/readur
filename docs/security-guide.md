@@ -90,6 +90,39 @@ Password verification and document access endpoints are IP-rate-limited (10 pass
 
 Filenames in download/view responses are sanitized to prevent HTTP header injection — only alphanumeric characters, dots, hyphens, underscores, and spaces are permitted.
 
+## API Key Security
+
+Personal API keys (see [API Key Authentication](api-reference.md#api-key-authentication)) grant programmatic access at the permission level of the issuing user. Because they are long-lived compared to JWTs, they require corresponding care.
+
+### How Readur protects keys
+
+- **Entropy**: 256 bits (32 bytes) of OS randomness per key, encoded as URL-safe base64 with a fixed `readur_pat_` prefix.
+- **At-rest storage**: Only the SHA-256 hash of the full key is persisted. The plaintext is never written to disk or logs and is returned **exactly once** — from the `POST /api/auth/keys` response. The `key_prefix` column holds only the first 12 characters so the UI can identify a key without revealing it.
+- **Hashing choice**: SHA-256 (not bcrypt/argon2) is intentional. Those slow password hashers exist to compensate for low-entropy human-chosen passwords; brute-forcing a 256-bit random token is already infeasible and each login request would otherwise pay an unnecessary CPU cost.
+- **Lookup**: Indexed equality on a fixed-size hash — constant-time at the database layer, with no user-supplied value compared directly to a secret.
+- **Rotation/revocation**: Revoke via the Settings UI or `DELETE /api/auth/keys/{id}`. Revocation is effective on the next request. Revoked rows are retained (soft-delete via `revoked_at`) so the `last_used_at` audit trail survives.
+- **Role changes**: Each authenticated request re-reads the owning user's role. Demoting or disabling the user takes effect immediately on all of their keys.
+- **Expiration**: Optional, capped at 365 days. The UI defaults to 90.
+- **Creation rate limit**: 10 keys/hour per user, enforced server-side.
+- **Per-user cap**: Maximum 20 active keys per user.
+- **Secret-scanning**: The `readur_pat_` prefix is designed to be picked up by GitHub Secret Scanning, GitGuardian, and similar tools if a key is accidentally committed.
+
+### What you must do
+
+- **Treat keys like passwords.** A leaked key is equivalent to sharing the owning user's login.
+- **Transport over TLS only.** The server will not itself reject a plaintext HTTP request with a key, but any upstream proxy (nginx, traefik) should redirect to HTTPS — see the [TLS Configuration](#tls-configuration) section.
+- **Store keys in a secret manager** (HashiCorp Vault, AWS Secrets Manager, 1Password, etc.) or your CI provider's encrypted-env mechanism. Don't commit them to config files.
+- **Give each integration its own named key.** One key per script or service makes auditing (`last_used_at`) and rotation low-risk.
+- **Prefer short expirations.** 30–90 days is a reasonable default; set a calendar reminder to rotate.
+- **Rotate on any suspicion of compromise.** Create a new key, deploy it, then revoke the old one. Revocation takes effect on the next request.
+- **Don't run automated jobs as admin accounts.** Create a dedicated non-admin user for integrations that don't need elevated permissions.
+
+### For administrators
+
+- Admins can list every user's keys via `GET /api/auth/keys?all=true` and revoke any key via `DELETE /api/auth/keys/{id}`. Use this during an incident: locate keys belonging to the compromised account, revoke them, then have the user re-issue.
+- Monitor `last_used_at` to find stale keys that should be revoked. Consider a scheduled audit of keys unused for >90 days.
+- Logs emitted on successful API key authentication include only `api_key_id`, `user_id`, and `key_prefix` — never the hash or plaintext.
+
 ## File Upload Security
 
 ### Size Limits

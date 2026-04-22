@@ -25,7 +25,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/", get(get_notifications))
         .route("/summary", get(get_notification_summary))
         .route("/{id}/read", post(mark_notification_read))
-        .route("/read-all", post(mark_all_notifications_read))
+        .route("/read/all", post(mark_all_notifications_read))
         .route("/{id}", delete(delete_notification))
 }
 
@@ -122,7 +122,7 @@ async fn mark_notification_read(
 
 #[utoipa::path(
     post,
-    path = "/api/notifications/read-all",
+    path = "/api/notifications/read/all",
     tag = "notifications",
     security(
         ("bearer_auth" = [])

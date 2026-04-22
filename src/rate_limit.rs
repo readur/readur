@@ -74,6 +74,8 @@ pub struct RateLimiters {
     pub comment_creation: RateLimiter<Uuid>,
     /// User-based limiter for shared link creation (20/hour per user)
     pub shared_link_creation: RateLimiter<Uuid>,
+    /// User-based limiter for API key creation (10/hour per user)
+    pub api_key_creation: RateLimiter<Uuid>,
 }
 
 impl RateLimiters {
@@ -83,6 +85,7 @@ impl RateLimiters {
             shared_link_public: RateLimiter::new(60, Duration::from_secs(60)),
             comment_creation: RateLimiter::new(10, Duration::from_secs(60)),
             shared_link_creation: RateLimiter::new(20, Duration::from_secs(3600)),
+            api_key_creation: RateLimiter::new(10, Duration::from_secs(3600)),
         }
     }
 
@@ -92,6 +95,7 @@ impl RateLimiters {
         self.shared_link_public.cleanup().await;
         self.comment_creation.cleanup().await;
         self.shared_link_creation.cleanup().await;
+        self.api_key_creation.cleanup().await;
     }
 }
 

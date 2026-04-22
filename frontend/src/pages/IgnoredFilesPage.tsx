@@ -133,7 +133,7 @@ const IgnoredFilesPage: React.FC = () => {
         params.append('source_identifier', sourceIdParam);
       }
 
-      const response = await fetch(`/api/ignored-files?${params}`, {
+      const response = await fetch(`/api/ignored/files?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -160,7 +160,7 @@ const IgnoredFilesPage: React.FC = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('/api/ignored-files/stats', {
+      const response = await fetch('/api/ignored/files/stats', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -248,7 +248,7 @@ const IgnoredFilesPage: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch('/api/ignored-files/bulk-delete', {
+      const response = await fetch('/api/ignored/files/bulk/delete', {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -291,7 +291,7 @@ const IgnoredFilesPage: React.FC = () => {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`/api/ignored-files/${fileId}`, {
+      const response = await fetch(`/api/ignored/files/${fileId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

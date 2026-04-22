@@ -19,6 +19,7 @@ Readur provides a comprehensive REST API for integrating with external systems a
   - [Labels](#labels-endpoints)
   - [Users](#user-endpoints)
   - [Shared Links](#shared-link-endpoints)
+  - [API Keys](#api-key-endpoints)
   - [Comments](#comment-endpoints)
   - [Notifications](#notification-endpoints)
   - [Metrics](#metrics-endpoints)
@@ -88,6 +89,48 @@ GET /api/auth/oidc/login
 
 This will redirect to your configured OIDC provider. After successful authentication, the callback URL will receive the token.
 
+### API Key Authentication
+
+For scripts, CLIs, and long-running integrations that need to authenticate without an interactive login, Readur supports **personal API keys**. A key is sent in the same header as a JWT:
+
+```
+Authorization: Bearer readur_pat_<token>
+```
+
+Keys are prefixed with `readur_pat_` so they're easy to recognize in code and are pickable by secret-scanning tools. Each key carries the full permissions of the user who created it — treat them like passwords.
+
+**Key properties:**
+
+- Generated with 256 bits of OS randomness
+- Stored server-side only as a SHA-256 hash; the plaintext is shown **exactly once** at creation time and cannot be retrieved later
+- Each request re-reads the owning user's role, so promoting or demoting the owner takes effect immediately on the next request
+- Optional expiration of up to 365 days (90 days is the UI default)
+- Revocable at any time; revocation is effective on the next request
+
+**Create and use a key:**
+
+```bash
+# 1. Create a key (authenticated with your JWT)
+curl -X POST https://readur.example.com/api/auth/keys \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "backup-script", "expires_in_days": 90}'
+# → { "api_key": { ... }, "plaintext": "readur_pat_XXXXXX..." }
+#   Save the plaintext immediately. It will not be shown again.
+
+# 2. Use it to call any authenticated endpoint
+curl https://readur.example.com/api/documents \
+  -H "Authorization: Bearer readur_pat_XXXXXX..."
+```
+
+**Limits:**
+
+- Maximum 20 active (non-revoked) keys per user
+- Creation is rate-limited to 10 keys/hour per user
+- Maximum expiration: 365 days
+
+See the [Security Guide](security-guide.md#api-key-security) for recommended handling practices.
+
 ## Error Handling
 
 All API errors follow a consistent format:
@@ -128,6 +171,7 @@ Rate limits are applied to specific endpoint categories:
 - **Public shared link access (download/view)**: 60 requests/minute per IP
 - **Comment creation**: 10 comments/minute per user
 - **Shared link creation**: 20 links/hour per user
+- **API key creation**: 10 keys/hour per user
 
 When rate limited, the API returns HTTP 429 with a JSON body containing `retry_after_secs` indicating how long to wait before retrying.
 
@@ -764,7 +808,7 @@ PUT /api/notifications/{id}/read
 #### Mark All as Read
 
 ```http
-PUT /api/notifications/read-all
+PUT /api/notifications/read/all
 ```
 
 ### Metrics Endpoints
@@ -814,7 +858,7 @@ GET /api/metrics/ocr
 #### Create Shared Link
 
 ```
-POST /api/shared-links
+POST /api/shared/links
 ```
 
 Request body:
@@ -832,7 +876,7 @@ All fields except `document_id` are optional. Returns the created shared link wi
 #### List Shared Links
 
 ```
-GET /api/shared-links
+GET /api/shared/links
 ```
 
 Returns all shared links for the current user. Admins see all shared links across all users.
@@ -840,7 +884,7 @@ Returns all shared links for the current user. Admins see all shared links acros
 #### List Shared Links for Document
 
 ```
-GET /api/shared-links/document/{document_id}
+GET /api/shared/links/document/{document_id}
 ```
 
 Returns all shared links for a specific document (must have access to the document).
@@ -848,7 +892,7 @@ Returns all shared links for a specific document (must have access to the docume
 #### Revoke Shared Link
 
 ```
-DELETE /api/shared-links/{id}
+DELETE /api/shared/links/{id}
 ```
 
 Revokes a shared link. Users can revoke their own links; admins can revoke any link. Returns 204 No Content on success.
@@ -912,6 +956,112 @@ Same as download but with `Content-Disposition: inline` for in-browser viewing.
 | `SHARED_LINK_PASSWORD_REQUIRED` | 401 | Password is required but not provided |
 | `SHARED_LINK_INVALID_PASSWORD` | 403 | Provided password is incorrect |
 | `SHARED_LINK_RATE_LIMITED` | 429 | Too many requests from this IP |
+
+---
+
+## API Key Endpoints
+
+Personal API keys let users authenticate scripts and integrations without interactive login. See [API Key Authentication](#api-key-authentication) for an overview. All endpoints require a standard authenticated session (either a JWT or another valid API key).
+
+#### Create API Key
+
+```http
+POST /api/auth/keys
+Authorization: Bearer <jwt-or-api-key>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "name": "backup-script",
+  "expires_in_days": 90
+}
+```
+
+| Field             | Type           | Required | Notes                                          |
+|-------------------|----------------|----------|------------------------------------------------|
+| `name`            | string         | yes      | 1–100 characters. A label to identify the key. |
+| `expires_in_days` | integer \| null | no       | 1–365. Omit or set `null` for no expiration.   |
+
+**Response:** `200 OK`
+```json
+{
+  "api_key": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "backup-script",
+    "key_prefix": "readur_pat_X",
+    "expires_at": "2026-07-20T00:00:00Z",
+    "last_used_at": null,
+    "revoked_at": null,
+    "is_expired": false,
+    "created_at": "2026-04-21T12:34:56Z"
+  },
+  "plaintext": "readur_pat_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+}
+```
+
+> ⚠️ **`plaintext` is returned exactly once.** The server has no way to recover it — if you lose it, revoke the key and create a new one.
+
+**Error Responses:**
+- `400 Bad Request` — name missing/too long, or `expires_in_days` outside 1–365
+- `409 Conflict` — already at the 20-active-keys-per-user cap
+- `429 Too Many Requests` — created more than 10 keys in the last hour
+
+#### List API Keys
+
+```http
+GET /api/auth/keys
+Authorization: Bearer <jwt-or-api-key>
+```
+
+Returns the caller's keys. Admins may pass `?all=true` to list every user's keys for incident response.
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "a1b2c3d4-...",
+    "user_id": "550e8400-...",
+    "name": "backup-script",
+    "key_prefix": "readur_pat_X",
+    "expires_at": "2026-07-20T00:00:00Z",
+    "last_used_at": "2026-04-21T13:00:00Z",
+    "revoked_at": null,
+    "is_expired": false,
+    "created_at": "2026-04-21T12:34:56Z"
+  }
+]
+```
+
+Neither the plaintext nor the stored hash ever appears in this response.
+
+#### Revoke API Key
+
+```http
+DELETE /api/auth/keys/{id}
+Authorization: Bearer <jwt-or-api-key>
+```
+
+Revocation is immediate — the key fails authentication on the next request. Regular users may only revoke their own keys; admins may revoke any key.
+
+**Response:** `204 No Content`
+
+**Error Responses:**
+- `404 Not Found` — key does not exist, was already revoked, or belongs to another user (non-admins cannot distinguish these cases by design)
+
+### Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `API_KEY_NOT_FOUND` | 404 | Key does not exist or caller cannot see it |
+| `API_KEY_INVALID_REQUEST` | 400 | Name or `expires_in_days` is invalid |
+| `API_KEY_MAX_REACHED` | 409 | User already has 20 active keys |
+| `API_KEY_PERMISSION_DENIED` | 403 | Caller cannot perform this action |
+| `API_KEY_RATE_LIMITED` | 429 | Exceeded 10 creations/hour |
+
+Authentication failures for API keys (invalid, expired, revoked, or malformed) return `401 Unauthorized` from the auth middleware, intentionally without distinguishing which case occurred.
 
 ---
 

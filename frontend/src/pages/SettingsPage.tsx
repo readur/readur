@@ -48,6 +48,7 @@ import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
 import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
 import LanguageSelector from '../components/LanguageSelector';
+import ApiKeysManager from '../components/ApiKeys/ApiKeysManager';
 import { usePWA } from '../hooks/usePWA';
 import { useTranslation } from 'react-i18next';
 
@@ -874,6 +875,7 @@ const SettingsPage: React.FC = () => {
           <Tab label={t('settings.tabs.ocrSettings')} />
           <Tab label={t('settings.tabs.userManagement')} />
           <Tab label={t('settings.tabs.serverConfiguration')} />
+          <Tab label="API Keys" />
         </Tabs>
 
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
@@ -1801,6 +1803,12 @@ const SettingsPage: React.FC = () => {
                   {t('settings.serverConfiguration.loadFailed')}
                 </Alert>
               )}
+            </Box>
+          )}
+
+          {tabValue === 4 && (
+            <Box>
+              <ApiKeysManager />
             </Box>
           )}
         </Box>

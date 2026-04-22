@@ -182,7 +182,7 @@ pub async fn get_document_thumbnail(
 /// Get processed image for a document (if available)
 #[utoipa::path(
     get,
-    path = "/api/documents/{id}/processed-image",
+    path = "/api/documents/{id}/processed/image",
     tag = "documents",
     security(
         ("bearer_auth" = [])

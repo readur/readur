@@ -463,7 +463,7 @@ impl FileProcessingTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .get(&format!("{}/api/documents/{}/processed-image", get_base_url(), document_id))
+            .get(&format!("{}/api/documents/{}/processed/image", get_base_url(), document_id))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await?;
