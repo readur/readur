@@ -59,7 +59,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(list_users).post(create_user))
         .route("/{id}", get(get_user).put(update_user).delete(delete_user))
-        .route("/{id}/watch-directory", get(get_user_watch_directory).post(create_user_watch_directory).delete(delete_user_watch_directory))
+        .route("/{id}/watch/directory", get(get_user_watch_directory).post(create_user_watch_directory).delete(delete_user_watch_directory))
 }
 
 #[utoipa::path(
@@ -261,7 +261,7 @@ async fn delete_user(
 
 #[utoipa::path(
     get,
-    path = "/api/users/{id}/watch-directory",
+    path = "/api/users/{id}/watch/directory",
     tag = "users",
     security(
         ("bearer_auth" = [])
@@ -330,7 +330,7 @@ async fn get_user_watch_directory(
 
 #[utoipa::path(
     post,
-    path = "/api/users/{id}/watch-directory",
+    path = "/api/users/{id}/watch/directory",
     tag = "users",
     security(
         ("bearer_auth" = [])
@@ -412,7 +412,7 @@ async fn create_user_watch_directory(
 
 #[utoipa::path(
     delete,
-    path = "/api/users/{id}/watch-directory",
+    path = "/api/users/{id}/watch/directory",
     tag = "users",
     security(
         ("bearer_auth" = [])

@@ -110,8 +110,8 @@ pub async fn bulk_delete_documents(
 
 /// Delete documents with low OCR confidence
 #[utoipa::path(
-    post,
-    path = "/api/documents/delete-low-confidence",
+    delete,
+    path = "/api/documents/cleanup/low/confidence",
     tag = "documents",
     security(
         ("bearer_auth" = [])
@@ -228,8 +228,8 @@ pub async fn delete_low_confidence_documents(
 
 /// Delete documents with failed OCR
 #[utoipa::path(
-    post,
-    path = "/api/documents/delete-failed-ocr",
+    delete,
+    path = "/api/documents/cleanup/failed/ocr",
     tag = "documents",
     security(
         ("bearer_auth" = [])

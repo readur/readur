@@ -130,7 +130,7 @@ pub async fn test_connection(
 /// Test connection with a configuration (before creating source)
 #[utoipa::path(
     post,
-    path = "/api/sources/test-connection",
+    path = "/api/sources/test/connection",
     tag = "sources",
     security(
         ("bearer_auth" = [])

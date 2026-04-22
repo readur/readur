@@ -635,7 +635,7 @@ const SourcesPage: React.FC = () => {
     try {
       let response;
       if (formData.source_type === 'webdav') {
-        response = await api.post('/sources/test-connection', {
+        response = await api.post('/sources/test/connection', {
           source_type: 'webdav',
           config: {
             server_url: formData.server_url,
@@ -647,7 +647,7 @@ const SourcesPage: React.FC = () => {
           }
         });
       } else if (formData.source_type === 'local_folder') {
-        response = await api.post('/sources/test-connection', {
+        response = await api.post('/sources/test/connection', {
           source_type: 'local_folder',
           config: {
             watch_folders: formData.watch_folders,
@@ -657,7 +657,7 @@ const SourcesPage: React.FC = () => {
           }
         });
       } else if (formData.source_type === 's3') {
-        response = await api.post('/sources/test-connection', {
+        response = await api.post('/sources/test/connection', {
           source_type: 's3',
           config: {
             bucket_name: formData.bucket_name,

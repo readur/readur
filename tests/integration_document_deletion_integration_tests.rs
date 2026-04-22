@@ -269,7 +269,7 @@ impl DocumentDeletionTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .delete(&format!("{}/api/documents/cleanup/failed-ocr", get_base_url()))
+            .delete(&format!("{}/api/documents/cleanup/failed/ocr", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .json(&serde_json::json!({
                 "preview_only": preview_only
@@ -308,7 +308,7 @@ impl DocumentDeletionTestClient {
         let token = self.token.as_ref().ok_or("Not authenticated")?;
         
         let response = self.client
-            .delete(&format!("{}/api/documents/cleanup/low-confidence", get_base_url()))
+            .delete(&format!("{}/api/documents/cleanup/low/confidence", get_base_url()))
             .header("Authorization", format!("Bearer {}", token))
             .json(&serde_json::json!({
                 "max_confidence": threshold,
@@ -885,7 +885,7 @@ async fn test_delete_endpoints_error_handling() {
     
     // Test unauthenticated request with wrong method (POST instead of DELETE)
     let failed_response = client.client
-        .post(&format!("{}/api/documents/cleanup/failed-ocr", get_base_url()))
+        .post(&format!("{}/api/documents/cleanup/failed/ocr", get_base_url()))
         .json(&serde_json::json!({"preview_only": true}))
         .timeout(TIMEOUT)
         .send()
@@ -896,7 +896,7 @@ async fn test_delete_endpoints_error_handling() {
     
     // Test unauthenticated request with correct method (DELETE)
     let unauth_response = client.client
-        .delete(&format!("{}/api/documents/cleanup/failed-ocr", get_base_url()))
+        .delete(&format!("{}/api/documents/cleanup/failed/ocr", get_base_url()))
         .json(&serde_json::json!({"preview_only": true}))
         .timeout(TIMEOUT)
         .send()
@@ -907,7 +907,7 @@ async fn test_delete_endpoints_error_handling() {
     
     // Test invalid JSON
     let invalid_json_response = client.client
-        .delete(&format!("{}/api/documents/cleanup/failed-ocr", get_base_url()))
+        .delete(&format!("{}/api/documents/cleanup/failed/ocr", get_base_url()))
         .header("content-type", "application/json")
         .body("invalid json")
         .timeout(TIMEOUT)

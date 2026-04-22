@@ -480,7 +480,7 @@ async fn test_failed_ocr_endpoint_authorization() {
     
     // Try to access failed OCR endpoint without authentication
     let response = client.client
-        .get(&format!("{}/api/documents/failed-ocr", get_base_url()))
+        .get(&format!("{}/api/documents/failed/ocr", get_base_url()))
         .timeout(TIMEOUT)
         .send()
         .await

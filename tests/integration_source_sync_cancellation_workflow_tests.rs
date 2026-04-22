@@ -200,7 +200,7 @@ fn create_test_app(state: Arc<AppState>) -> Router {
         .route("/api/health", get(readur::health_check))
         .nest("/api/auth", readur::routes::auth::router())
         .nest("/api/documents", readur::routes::documents::router())
-        .nest("/api/ignored-files", readur::routes::ignored_files::ignored_files_routes())
+        .nest("/api/ignored/files", readur::routes::ignored_files::ignored_files_routes())
         .nest("/api/labels", readur::routes::labels::router())
         .nest("/api/metrics", readur::routes::metrics::router())
         .nest("/metrics", readur::routes::prometheus_metrics::router())

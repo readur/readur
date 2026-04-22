@@ -24,7 +24,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(list_source_failures))
         .route("/stats", get(get_failure_stats))
-        .route("/retry-candidates", get(get_retry_candidates))
+        .route("/retry/candidates", get(get_retry_candidates))
         .route("/{failure_id}", get(get_source_failure))
         .route("/{failure_id}/retry", post(retry_source_failure))
         .route("/{failure_id}/exclude", post(exclude_source_failure))
@@ -127,7 +127,7 @@ async fn get_failure_stats(
 
 #[utoipa::path(
     get,
-    path = "/api/source/errors/retry-candidates",
+    path = "/api/source/errors/retry/candidates",
     tag = "source-errors",
     security(
         ("bearer_auth" = [])

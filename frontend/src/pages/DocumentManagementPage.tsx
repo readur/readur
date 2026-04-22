@@ -578,7 +578,7 @@ const DocumentManagementPage: React.FC = () => {
         params.append('source_type', ignoredFilesSourceTypeFilter);
       }
       
-      const response = await api.get(`/ignored-files?${params}`);
+      const response = await api.get(`/ignored/files?${params}`);
       
       if (response?.data) {
         setIgnoredFiles(response.data.ignored_files || []);
@@ -616,7 +616,7 @@ const DocumentManagementPage: React.FC = () => {
   
   const fetchIgnoredFilesStats = async () => {
     try {
-      const response = await api.get('/ignored-files/stats');
+      const response = await api.get('/ignored/files/stats');
       if (response?.data) {
         setIgnoredFilesStats(response.data);
       }
@@ -648,7 +648,7 @@ const DocumentManagementPage: React.FC = () => {
     
     setDeletingIgnoredFiles(true);
     try {
-      const response = await api.delete('/ignored-files/bulk-delete', {
+      const response = await api.delete('/ignored/files/bulk/delete', {
         data: {
           ignored_file_ids: Array.from(selectedIgnoredFiles)
         }
@@ -676,7 +676,7 @@ const DocumentManagementPage: React.FC = () => {
   
   const handleDeleteSingleIgnoredFile = async (fileId: string) => {
     try {
-      const response = await api.delete(`/ignored-files/${fileId}`);
+      const response = await api.delete(`/ignored/files/${fileId}`);
       setSnackbar({
         open: true,
         message: response.data.message || t('documentManagement.ignoredFiles.fileRemovedSuccess'),

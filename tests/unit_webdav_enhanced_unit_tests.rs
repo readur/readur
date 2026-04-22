@@ -577,7 +577,7 @@ fn test_notification_creation_for_webdav() {
         notification_type: "info".to_string(),
         title: "WebDAV Sync Started".to_string(),
         message: "Synchronizing files from Nextcloud server".to_string(),
-        action_url: Some("/sync-status".to_string()),
+        action_url: Some("/sync/status".to_string()),
         metadata: Some(serde_json::json!({
             "sync_type": "webdav",
             "folders": ["/Documents", "/Photos"],

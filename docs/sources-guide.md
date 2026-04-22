@@ -180,16 +180,16 @@ USER_WATCH_BASE_DIR=/data/user_watches
 **API Management:**
 ```http
 # Get user watch directory info
-GET /api/users/{userId}/watch-directory
+GET /api/users/{userId}/watch/directory
 
 # Create/ensure watch directory exists
-POST /api/users/{userId}/watch-directory
+POST /api/users/{userId}/watch/directory
 {
   "ensure_created": true
 }
 
 # Delete user watch directory
-DELETE /api/users/{userId}/watch-directory
+DELETE /api/users/{userId}/watch/directory
 ```
 
 **Use Cases:**

@@ -183,7 +183,7 @@ pub async fn stop_sync(
 /// Trigger a deep scan for a source
 #[utoipa::path(
     post,
-    path = "/api/sources/{id}/deep-scan",
+    path = "/api/sources/{id}/scan/deep",
     tag = "sources",
     security(
         ("bearer_auth" = [])

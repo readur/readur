@@ -298,7 +298,7 @@ Place any of these file types in your watch directory:
 
 Retrieve information about a user's watch directory.
 
-**Endpoint**: `GET /api/users/{user_id}/watch-directory`
+**Endpoint**: `GET /api/users/{user_id}/watch/directory`
 
 **Headers**:
 ```http
@@ -326,7 +326,7 @@ Authorization: Bearer {jwt_token}
 
 Create or ensure a user's watch directory exists.
 
-**Endpoint**: `POST /api/users/{user_id}/watch-directory`
+**Endpoint**: `POST /api/users/{user_id}/watch/directory`
 
 **Headers**:
 ```http
@@ -360,7 +360,7 @@ Content-Type: application/json
 
 Remove a user's watch directory and its contents.
 
-**Endpoint**: `DELETE /api/users/{user_id}/watch-directory`
+**Endpoint**: `DELETE /api/users/{user_id}/watch/directory`
 
 **Headers**:
 ```http
@@ -403,7 +403,7 @@ headers = {
 
 # Get watch directory info
 response = requests.get(
-    f"{base_url}/users/{user_id}/watch-directory",
+    f"{base_url}/users/{user_id}/watch/directory",
     headers=headers
 )
 info = response.json()
@@ -412,7 +412,7 @@ print(f"Exists: {info['exists']}")
 
 # Create watch directory
 response = requests.post(
-    f"{base_url}/users/{user_id}/watch-directory",
+    f"{base_url}/users/{user_id}/watch/directory",
     headers=headers,
     json={"ensure_created": True}
 )
@@ -457,17 +457,17 @@ const createWatchDirectory = async (userId: string) => {
 
 ```bash
 # Get watch directory information
-curl -X GET "https://readur.example.com/api/users/${USER_ID}/watch-directory" \
+curl -X GET "https://readur.example.com/api/users/${USER_ID}/watch/directory" \
   -H "Authorization: Bearer ${TOKEN}"
 
 # Create watch directory
-curl -X POST "https://readur.example.com/api/users/${USER_ID}/watch-directory" \
+curl -X POST "https://readur.example.com/api/users/${USER_ID}/watch/directory" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"ensure_created": true}'
 
 # Delete watch directory (admin only)
-curl -X DELETE "https://readur.example.com/api/users/${USER_ID}/watch-directory" \
+curl -X DELETE "https://readur.example.com/api/users/${USER_ID}/watch/directory" \
   -H "Authorization: Bearer ${TOKEN}"
 ```
 
@@ -691,7 +691,7 @@ The system enforces strict username validation to prevent security issues:
 ```bash
 # Check if user watch is enabled
 curl -H "Authorization: Bearer $TOKEN" \
-  https://readur.example.com/api/users/$USER_ID/watch-directory
+  https://readur.example.com/api/users/$USER_ID/watch/directory
 
 # List all user directories
 ls -la /data/user_watch/
@@ -818,7 +818,7 @@ foreach ($username in $users) {
         
         $result = Invoke-RestMethod `
             -Method Post `
-            -Uri "$baseUrl/users/$($user.id)/watch-directory" `
+            -Uri "$baseUrl/users/$($user.id)/watch/directory" `
             -Headers @{
                 Authorization="Bearer $adminToken"
                 "Content-Type"="application/json"

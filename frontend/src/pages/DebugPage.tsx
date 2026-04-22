@@ -1022,7 +1022,7 @@ const DebugPage: React.FC = () => {
                       <Typography variant="subtitle1" gutterBottom>Processed Image (OCR Input)</Typography>
                       <Box 
                         component="img"
-                        src={`/api/documents/${debugInfo.document_id}/processed-image`}
+                        src={`/api/documents/${debugInfo.document_id}/processed/image`}
                         alt="Processed image for OCR"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';

@@ -224,7 +224,7 @@ async fn test_webdav_test_connection_endpoint() {
 
     let request = Request::builder()
         .method("POST")
-        .uri("/api/webdav/test-connection")
+        .uri("/api/webdav/test/connection")
         .header("Authorization", token)
         .header("Content-Type", "application/json")
         .body(Body::from(test_connection_request.to_string()))
@@ -273,7 +273,7 @@ async fn test_webdav_estimate_crawl_endpoint() {
 
     let request = Request::builder()
         .method("POST")
-        .uri("/api/webdav/estimate-crawl")
+        .uri("/api/webdav/crawl/estimate")
         .header("Authorization", token)
         .header("Content-Type", "application/json")
         .body(Body::from(crawl_request.to_string()))
@@ -317,7 +317,7 @@ async fn test_webdav_sync_status_endpoint() {
 
     let request = Request::builder()
         .method("GET")
-        .uri("/api/webdav/sync-status")
+        .uri("/api/webdav/sync/status")
         .header("Authorization", token)
         .body(Body::empty())
         .unwrap();
@@ -344,7 +344,7 @@ async fn test_webdav_start_sync_endpoint() {
 
     let request = Request::builder()
         .method("POST")
-        .uri("/api/webdav/start-sync")
+        .uri("/api/webdav/sync/start")
         .header("Authorization", token)
         .body(Body::empty())
         .unwrap();
@@ -442,10 +442,10 @@ async fn test_notifications_endpoints() {
     let response = app.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    // Test POST /api/notifications/read-all
+    // Test POST /api/notifications/read/all
     let request = Request::builder()
         .method("POST")
-        .uri("/api/notifications/read-all")
+        .uri("/api/notifications/read/all")
         .header("Authorization", token.clone())
         .body(Body::empty())
         .unwrap();
@@ -529,7 +529,7 @@ async fn test_notification_database_operations() {
         notification_type: "info".to_string(),
         title: "WebDAV Sync Started".to_string(),
         message: "Synchronization with WebDAV server has begun".to_string(),
-        action_url: Some("/sync-status".to_string()),
+        action_url: Some("/sync/status".to_string()),
         metadata: Some(json!({
             "sync_id": "sync_123",
             "folders": ["/Documents", "/Photos"]

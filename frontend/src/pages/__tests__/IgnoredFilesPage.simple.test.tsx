@@ -65,7 +65,7 @@ describe('IgnoredFilesPage (simplified)', () => {
   });
 
   test('API endpoint construction', () => {
-    const baseUrl = '/api/ignored-files';
+    const baseUrl = '/api/ignored/files';
     const params = new URLSearchParams();
     params.append('limit', '25');
     params.append('offset', '0');

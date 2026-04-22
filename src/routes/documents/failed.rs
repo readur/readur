@@ -217,7 +217,7 @@ pub async fn get_failed_documents(
 /// Get failed OCR documents with detailed information
 #[utoipa::path(
     get,
-    path = "/api/documents/failed-ocr",
+    path = "/api/documents/failed/ocr",
     tag = "documents",
     security(
         ("bearer_auth" = [])

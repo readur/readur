@@ -70,12 +70,12 @@ pub fn ignored_files_routes() -> Router<Arc<AppState>> {
         .route("/stats", get(get_ignored_files_stats))
         .route("/{id}", get(get_ignored_file))
         .route("/{id}", delete(delete_ignored_file))
-        .route("/bulk-delete", delete(bulk_delete_ignored_files))
+        .route("/bulk/delete", delete(bulk_delete_ignored_files))
 }
 
 #[utoipa::path(
     get,
-    path = "/api/ignored-files",
+    path = "/api/ignored/files",
     tag = "ignored_files",
     security(
         ("bearer_auth" = [])
@@ -124,7 +124,7 @@ pub async fn list_ignored_files(
 
 #[utoipa::path(
     get,
-    path = "/api/ignored-files/{id}",
+    path = "/api/ignored/files/{id}",
     tag = "ignored_files",
     security(
         ("bearer_auth" = [])
@@ -161,7 +161,7 @@ pub async fn get_ignored_file(
 
 #[utoipa::path(
     delete,
-    path = "/api/ignored-files/{id}",
+    path = "/api/ignored/files/{id}",
     tag = "ignored_files",
     security(
         ("bearer_auth" = [])
@@ -205,7 +205,7 @@ pub async fn delete_ignored_file(
 
 #[utoipa::path(
     delete,
-    path = "/api/ignored-files/bulk-delete",
+    path = "/api/ignored/files/bulk/delete",
     tag = "ignored_files",
     security(
         ("bearer_auth" = [])
@@ -259,7 +259,7 @@ pub async fn bulk_delete_ignored_files(
 
 #[utoipa::path(
     get,
-    path = "/api/ignored-files/stats",
+    path = "/api/ignored/files/stats",
     tag = "ignored_files",
     security(
         ("bearer_auth" = [])

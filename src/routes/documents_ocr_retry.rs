@@ -84,7 +84,7 @@ pub struct OcrRetryDocumentInfo {
 /// Bulk retry OCR for multiple documents based on selection criteria
 #[utoipa::path(
     post,
-    path = "/api/documents/ocr/bulk-retry",
+    path = "/api/documents/ocr/retry/bulk",
     tag = "documents",
     security(
         ("bearer_auth" = [])
@@ -289,7 +289,7 @@ pub async fn bulk_retry_ocr(
 /// Get retry history for a specific document
 #[utoipa::path(
     get,
-    path = "/api/documents/{id}/ocr/retry-history",
+    path = "/api/documents/{id}/ocr/retry/history",
     tag = "documents",
     security(
         ("bearer_auth" = [])
@@ -355,7 +355,7 @@ pub async fn get_document_retry_history(
 /// Get OCR retry statistics
 #[utoipa::path(
     get,
-    path = "/api/documents/ocr/retry-stats",
+    path = "/api/documents/ocr/retry/stats",
     tag = "documents",
     security(
         ("bearer_auth" = [])
@@ -463,7 +463,7 @@ pub async fn get_ocr_retry_stats(
 /// Get intelligent retry recommendations based on failure patterns
 #[utoipa::path(
     get,
-    path = "/api/documents/ocr/retry-recommendations",
+    path = "/api/documents/ocr/retry/recommendations",
     tag = "documents",
     security(
         ("bearer_auth" = [])

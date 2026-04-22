@@ -129,7 +129,7 @@ impl OcrRetryRegressionTestHelper {
         });
 
         let response = self.client
-            .post(&format!("{}/api/documents/ocr/bulk-retry", get_base_url()))
+            .post(&format!("{}/api/documents/ocr/retry/bulk", get_base_url()))
             .header("Authorization", format!("Bearer {}", self.token))
             .json(&request_body)
             .timeout(TIMEOUT)
@@ -153,7 +153,7 @@ impl OcrRetryRegressionTestHelper {
         });
 
         let response = self.client
-            .post(&format!("{}/api/documents/ocr/bulk-retry", get_base_url()))
+            .post(&format!("{}/api/documents/ocr/retry/bulk", get_base_url()))
             .header("Authorization", format!("Bearer {}", self.token))
             .json(&request_body)
             .timeout(TIMEOUT)

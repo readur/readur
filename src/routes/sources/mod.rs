@@ -27,11 +27,11 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/sync/stop", post(stop_sync))
         .route("/{id}/sync/progress/ws", get(sync_progress_websocket))
         .route("/{id}/sync/status", get(get_sync_status))
-        .route("/{id}/deep-scan", post(trigger_deep_scan))
+        .route("/{id}/scan/deep", post(trigger_deep_scan))
         
         // Validation operations
         .route("/{id}/validate", post(validate_source))
-        .route("/test-connection", post(test_connection_with_config))
+        .route("/test/connection", post(test_connection_with_config))
         
         // Estimation operations
         .route("/{id}/estimate", get(estimate_crawl))

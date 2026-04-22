@@ -56,7 +56,7 @@ pub struct ListQuery {
     pub all: bool,
 }
 
-/// POST /api/auth/api-keys — create a new API key and return the plaintext
+/// POST /api/auth/keys — create a new API key and return the plaintext
 /// exactly once. The caller must save it immediately; the server never exposes
 /// it again.
 pub async fn create_api_key(
@@ -133,7 +133,7 @@ pub async fn create_api_key(
     }))
 }
 
-/// GET /api/auth/api-keys — list the caller's keys. Admins may pass `?all=true`
+/// GET /api/auth/keys — list the caller's keys. Admins may pass `?all=true`
 /// to see every user's keys for incident response.
 pub async fn list_api_keys(
     State(state): State<Arc<AppState>>,
@@ -155,7 +155,7 @@ pub async fn list_api_keys(
     Ok(Json(keys.into_iter().map(ApiKeyResponse::from).collect()))
 }
 
-/// DELETE /api/auth/api-keys/:id — revoke a key. Regular users may only revoke
+/// DELETE /api/auth/keys/:id — revoke a key. Regular users may only revoke
 /// their own keys; admins may revoke anyone's.
 pub async fn revoke_api_key(
     State(state): State<Arc<AppState>>,

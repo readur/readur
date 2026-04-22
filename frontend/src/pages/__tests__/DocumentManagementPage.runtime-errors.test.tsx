@@ -523,7 +523,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
     test('should render ignored files tab without errors', async () => {
       // Setup mock responses using our already defined mocks
       mockApi.get.mockImplementation((url) => {
-        if (url.includes('/ignored-files/stats')) {
+        if (url.includes('/ignored/files/stats')) {
           return Promise.resolve({
             data: {
               total_ignored_files: 5,
@@ -532,7 +532,7 @@ describe('DocumentManagementPage - Runtime Error Prevention', () => {
             }
           });
         }
-        if (url.includes('/ignored-files')) {
+        if (url.includes('/ignored/files')) {
           return Promise.resolve({
             data: {
               ignored_files: [],

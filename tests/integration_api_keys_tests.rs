@@ -76,7 +76,7 @@ async fn create_key(ctx: &Ctx, jwt: &str, name: &str, expires_in_days: Option<u3
         Some(d) => json!({ "name": name, "expires_in_days": d }),
         None => json!({ "name": name }),
     };
-    let (status, body) = ctx.send("POST", "/api/auth/api-keys", Some(jwt), Some(body)).await;
+    let (status, body) = ctx.send("POST", "/api/auth/keys", Some(jwt), Some(body)).await;
     assert_eq!(status, StatusCode::OK, "create failed: {body:?}");
     body
 }
@@ -117,7 +117,7 @@ async fn create_returns_plaintext_once_and_list_omits_it() {
     assert!(plaintext.len() >= 50);
 
     // List must not contain the plaintext anywhere.
-    let (status, listed) = ctx.send("GET", "/api/auth/api-keys", Some(&jwt), None).await;
+    let (status, listed) = ctx.send("GET", "/api/auth/keys", Some(&jwt), None).await;
     assert_eq!(status, StatusCode::OK);
     let serialized = serde_json::to_string(&listed).unwrap();
     assert!(!serialized.contains(plaintext), "plaintext leaked into list response");
@@ -154,7 +154,7 @@ async fn revoked_key_is_rejected() {
     let key_id = created["api_key"]["id"].as_str().unwrap().to_string();
 
     // Revoke using JWT auth (the management UI path).
-    let (status, _) = ctx.send("DELETE", &format!("/api/auth/api-keys/{}", key_id), Some(&jwt), None).await;
+    let (status, _) = ctx.send("DELETE", &format!("/api/auth/keys/{}", key_id), Some(&jwt), None).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     // The plaintext no longer authenticates.
@@ -185,7 +185,7 @@ async fn non_owner_cannot_revoke_someone_elses_key() {
     let key_id = alice_key["api_key"]["id"].as_str().unwrap().to_string();
 
     // Bob tries to revoke Alice's key — should return 404 (we don't leak existence).
-    let (status, _) = ctx.send("DELETE", &format!("/api/auth/api-keys/{}", key_id), Some(&bob_jwt), None).await;
+    let (status, _) = ctx.send("DELETE", &format!("/api/auth/keys/{}", key_id), Some(&bob_jwt), None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     // Alice's key still works.
@@ -206,7 +206,7 @@ async fn admin_can_revoke_any_key_and_list_all_keys() {
 
     // Admin revokes the user's key.
     let (status, _) = ctx
-        .send("DELETE", &format!("/api/auth/api-keys/{}", user_key_id), Some(&admin_jwt_str), None)
+        .send("DELETE", &format!("/api/auth/keys/{}", user_key_id), Some(&admin_jwt_str), None)
         .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
@@ -215,7 +215,7 @@ async fn admin_can_revoke_any_key_and_list_all_keys() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 
     // Admin ?all=true returns the revoked key too.
-    let (status, listed) = ctx.send("GET", "/api/auth/api-keys?all=true", Some(&admin_jwt_str), None).await;
+    let (status, listed) = ctx.send("GET", "/api/auth/keys?all=true", Some(&admin_jwt_str), None).await;
     assert_eq!(status, StatusCode::OK);
     let arr = listed.as_array().unwrap();
     assert!(arr.iter().any(|k| k["id"].as_str() == Some(&user_key_id)));
@@ -231,7 +231,7 @@ async fn demotion_takes_effect_immediately_for_existing_key() {
         ["plaintext"].as_str().unwrap().to_string();
 
     // Listing all API keys as admin using the API key itself should work (admin).
-    let (status, _) = ctx.send("GET", "/api/auth/api-keys?all=true", Some(&plaintext), None).await;
+    let (status, _) = ctx.send("GET", "/api/auth/keys?all=true", Some(&plaintext), None).await;
     assert_eq!(status, StatusCode::OK);
 
     // Demote the admin directly in the DB — simulates role change via user management.
@@ -245,7 +245,7 @@ async fn demotion_takes_effect_immediately_for_existing_key() {
     // treated as `?all=false` per the handler contract, so it returns only
     // that user's own keys rather than 403'ing — which is still strictly
     // narrower than the admin view and proves the role re-check happened.
-    let (status, listed) = ctx.send("GET", "/api/auth/api-keys?all=true", Some(&plaintext), None).await;
+    let (status, listed) = ctx.send("GET", "/api/auth/keys?all=true", Some(&plaintext), None).await;
     assert_eq!(status, StatusCode::OK);
     // Should see only the demoted user's own key (the one we created).
     let arr = listed.as_array().unwrap();
@@ -270,7 +270,7 @@ async fn rejects_when_max_keys_reached() {
     }
 
     let (status, body) = ctx
-        .send("POST", "/api/auth/api-keys", Some(&jwt), Some(json!({"name": "too-many"})))
+        .send("POST", "/api/auth/keys", Some(&jwt), Some(json!({"name": "too-many"})))
         .await;
     assert_eq!(status, StatusCode::CONFLICT, "expected 409 got {status}: {body:?}");
 }
@@ -293,9 +293,9 @@ async fn expired_keys_do_not_count_toward_cap() {
     }
 
     let (status, body) = ctx
-        .send("POST", "/api/auth/api-keys", Some(&jwt), Some(json!({"name": "fresh"})))
+        .send("POST", "/api/auth/keys", Some(&jwt), Some(json!({"name": "fresh"})))
         .await;
-    assert_eq!(status, StatusCode::CREATED, "expected 201 got {status}: {body:?}");
+    assert_eq!(status, StatusCode::OK, "expected 200 got {status}: {body:?}");
 }
 
 #[tokio::test]
@@ -307,7 +307,7 @@ async fn rate_limit_triggers_after_many_creations() {
     let mut saw_429 = false;
     for i in 0..11 {
         let (status, _) = ctx
-            .send("POST", "/api/auth/api-keys", Some(&jwt), Some(json!({ "name": format!("k{}", i) })))
+            .send("POST", "/api/auth/keys", Some(&jwt), Some(json!({ "name": format!("k{}", i) })))
             .await;
         if status == StatusCode::TOO_MANY_REQUESTS {
             saw_429 = true;
@@ -323,17 +323,17 @@ async fn rejects_zero_or_oversized_expires_in_days() {
     let (jwt, _) = user_jwt(&ctx).await;
 
     let (status, _) = ctx
-        .send("POST", "/api/auth/api-keys", Some(&jwt), Some(json!({"name": "zero", "expires_in_days": 0})))
+        .send("POST", "/api/auth/keys", Some(&jwt), Some(json!({"name": "zero", "expires_in_days": 0})))
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
     let (status, _) = ctx
-        .send("POST", "/api/auth/api-keys", Some(&jwt), Some(json!({"name": "too-long", "expires_in_days": 9999})))
+        .send("POST", "/api/auth/keys", Some(&jwt), Some(json!({"name": "too-long", "expires_in_days": 9999})))
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
     let (status, _) = ctx
-        .send("POST", "/api/auth/api-keys", Some(&jwt), Some(json!({"name": ""})))
+        .send("POST", "/api/auth/keys", Some(&jwt), Some(json!({"name": ""})))
         .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }

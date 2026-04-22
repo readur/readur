@@ -97,10 +97,10 @@ Personal API keys (see [API Key Authentication](api-reference.md#api-key-authent
 ### How Readur protects keys
 
 - **Entropy**: 256 bits (32 bytes) of OS randomness per key, encoded as URL-safe base64 with a fixed `readur_pat_` prefix.
-- **At-rest storage**: Only the SHA-256 hash of the full key is persisted. The plaintext is never written to disk or logs and is returned **exactly once** — from the `POST /api/auth/api-keys` response. The `key_prefix` column holds only the first 12 characters so the UI can identify a key without revealing it.
+- **At-rest storage**: Only the SHA-256 hash of the full key is persisted. The plaintext is never written to disk or logs and is returned **exactly once** — from the `POST /api/auth/keys` response. The `key_prefix` column holds only the first 12 characters so the UI can identify a key without revealing it.
 - **Hashing choice**: SHA-256 (not bcrypt/argon2) is intentional. Those slow password hashers exist to compensate for low-entropy human-chosen passwords; brute-forcing a 256-bit random token is already infeasible and each login request would otherwise pay an unnecessary CPU cost.
 - **Lookup**: Indexed equality on a fixed-size hash — constant-time at the database layer, with no user-supplied value compared directly to a secret.
-- **Rotation/revocation**: Revoke via the Settings UI or `DELETE /api/auth/api-keys/{id}`. Revocation is effective on the next request. Revoked rows are retained (soft-delete via `revoked_at`) so the `last_used_at` audit trail survives.
+- **Rotation/revocation**: Revoke via the Settings UI or `DELETE /api/auth/keys/{id}`. Revocation is effective on the next request. Revoked rows are retained (soft-delete via `revoked_at`) so the `last_used_at` audit trail survives.
 - **Role changes**: Each authenticated request re-reads the owning user's role. Demoting or disabling the user takes effect immediately on all of their keys.
 - **Expiration**: Optional, capped at 365 days. The UI defaults to 90.
 - **Creation rate limit**: 10 keys/hour per user, enforced server-side.
@@ -119,7 +119,7 @@ Personal API keys (see [API Key Authentication](api-reference.md#api-key-authent
 
 ### For administrators
 
-- Admins can list every user's keys via `GET /api/auth/api-keys?all=true` and revoke any key via `DELETE /api/auth/api-keys/{id}`. Use this during an incident: locate keys belonging to the compromised account, revoke them, then have the user re-issue.
+- Admins can list every user's keys via `GET /api/auth/keys?all=true` and revoke any key via `DELETE /api/auth/keys/{id}`. Use this during an incident: locate keys belonging to the compromised account, revoke them, then have the user re-issue.
 - Monitor `last_used_at` to find stale keys that should be revoked. Consider a scheduled audit of keys unused for >90 days.
 - Logs emitted on successful API key authentication include only `api_key_id`, `user_id`, and `key_prefix` — never the hash or plaintext.
 

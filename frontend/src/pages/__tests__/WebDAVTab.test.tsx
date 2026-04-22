@@ -453,9 +453,9 @@ describe('WebDAV API Integration', () => {
       server_type: 'nextcloud',
     };
 
-    const response = await api.post('/webdav/test-connection', testConfig);
+    const response = await api.post('/webdav/test/connection', testConfig);
     
-    expect(mockedApi.post).toHaveBeenCalledWith('/webdav/test-connection', testConfig);
+    expect(mockedApi.post).toHaveBeenCalledWith('/webdav/test/connection', testConfig);
     expect(response.data).toEqual(mockConnectionResult);
   });
 
@@ -466,9 +466,9 @@ describe('WebDAV API Integration', () => {
       folders: ['/Documents', '/Photos'],
     };
 
-    const response = await api.post('/webdav/estimate-crawl', crawlRequest);
+    const response = await api.post('/webdav/crawl/estimate', crawlRequest);
     
-    expect(mockedApi.post).toHaveBeenCalledWith('/webdav/estimate-crawl', crawlRequest);
+    expect(mockedApi.post).toHaveBeenCalledWith('/webdav/crawl/estimate', crawlRequest);
     expect(response.data).toEqual(mockCrawlEstimate);
   });
 
@@ -484,7 +484,7 @@ describe('WebDAV API Integration', () => {
     };
 
     try {
-      await api.post('/webdav/test-connection', testConfig);
+      await api.post('/webdav/test/connection', testConfig);
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toBe(errorMessage);

@@ -111,7 +111,7 @@ Keys are prefixed with `readur_pat_` so they're easy to recognize in code and ar
 
 ```bash
 # 1. Create a key (authenticated with your JWT)
-curl -X POST https://readur.example.com/api/auth/api-keys \
+curl -X POST https://readur.example.com/api/auth/keys \
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
   -d '{"name": "backup-script", "expires_in_days": 90}'
@@ -808,7 +808,7 @@ PUT /api/notifications/{id}/read
 #### Mark All as Read
 
 ```http
-PUT /api/notifications/read-all
+PUT /api/notifications/read/all
 ```
 
 ### Metrics Endpoints
@@ -858,7 +858,7 @@ GET /api/metrics/ocr
 #### Create Shared Link
 
 ```
-POST /api/shared-links
+POST /api/shared/links
 ```
 
 Request body:
@@ -876,7 +876,7 @@ All fields except `document_id` are optional. Returns the created shared link wi
 #### List Shared Links
 
 ```
-GET /api/shared-links
+GET /api/shared/links
 ```
 
 Returns all shared links for the current user. Admins see all shared links across all users.
@@ -884,7 +884,7 @@ Returns all shared links for the current user. Admins see all shared links acros
 #### List Shared Links for Document
 
 ```
-GET /api/shared-links/document/{document_id}
+GET /api/shared/links/document/{document_id}
 ```
 
 Returns all shared links for a specific document (must have access to the document).
@@ -892,7 +892,7 @@ Returns all shared links for a specific document (must have access to the docume
 #### Revoke Shared Link
 
 ```
-DELETE /api/shared-links/{id}
+DELETE /api/shared/links/{id}
 ```
 
 Revokes a shared link. Users can revoke their own links; admins can revoke any link. Returns 204 No Content on success.
@@ -966,7 +966,7 @@ Personal API keys let users authenticate scripts and integrations without intera
 #### Create API Key
 
 ```http
-POST /api/auth/api-keys
+POST /api/auth/keys
 Authorization: Bearer <jwt-or-api-key>
 Content-Type: application/json
 ```
@@ -1012,7 +1012,7 @@ Content-Type: application/json
 #### List API Keys
 
 ```http
-GET /api/auth/api-keys
+GET /api/auth/keys
 Authorization: Bearer <jwt-or-api-key>
 ```
 
@@ -1040,7 +1040,7 @@ Neither the plaintext nor the stored hash ever appears in this response.
 #### Revoke API Key
 
 ```http
-DELETE /api/auth/api-keys/{id}
+DELETE /api/auth/keys/{id}
 Authorization: Bearer <jwt-or-api-key>
 ```
 
