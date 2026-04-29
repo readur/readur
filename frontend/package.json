@@ -39,7 +39,7 @@
     "react-hook-form": "^7.43.0",
     "react-i18next": "^16.0.0",
     "react-router-dom": "^7.0.0",
-    "uuid": "^13.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",
