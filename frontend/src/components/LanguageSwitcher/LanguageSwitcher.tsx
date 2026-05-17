@@ -11,7 +11,7 @@ import {
 import {
   Language as LanguageIcon,
   Check as CheckIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTranslation } from 'react-i18next';
 import { supportedLanguages, SupportedLanguage } from '../../i18n/types';
 
@@ -78,7 +78,6 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({
             background: theme.palette.mode === 'light'
               ? 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.90) 100%)'
               : 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(18,18,18,0.90) 100%)',
-            backdropFilter: 'blur(20px)',
             border: theme.palette.mode === 'light'
               ? '1px solid rgba(226,232,240,0.5)'
               : '1px solid rgba(255,255,255,0.1)',

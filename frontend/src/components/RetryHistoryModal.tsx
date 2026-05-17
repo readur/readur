@@ -26,7 +26,7 @@ import {
   Refresh as RefreshIcon,
   Schedule as ScheduleIcon,
   PriorityHigh as PriorityIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { documentService, DocumentRetryHistoryItem } from '../services/api';
 import { format, formatDistanceToNow } from 'date-fns';
 

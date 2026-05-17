@@ -29,7 +29,7 @@ import {
   WrapText as WrapIcon,
   Search as SearchIcon,
   Settings as SettingsIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 
 interface HighlightRange {
   start: number;

@@ -42,9 +42,10 @@ import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
   Visibility as PreviewIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
+import { PageHeader } from '../design/components';
 
 interface DebugStep {
   step: number;
@@ -718,16 +719,17 @@ const DebugPage: React.FC = () => {
   );
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          <BugReportIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          {t('debug.title')}
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {t('debug.subtitle')}
-        </Typography>
-      </Box>
+    <Container maxWidth="xl" disableGutters>
+      <PageHeader
+        kicker={t('navigation.sections.system')}
+        title={
+          <>
+            <BugReportIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'var(--accent-60)' }} />
+            {t('debug.title')}
+          </>
+        }
+        subtitle={t('debug.subtitle')}
+      />
 
       <Card sx={{ mb: 4 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, XMarkIcon } from '../../design/icons'
 import { LanguageInfo, ocrService } from '../../services/api'
 import { useTheme } from '@mui/material/styles'
 import { Box, Typography, Chip, Button, Paper, Divider, Popper, ClickAwayListener, CircularProgress, Alert } from '@mui/material'

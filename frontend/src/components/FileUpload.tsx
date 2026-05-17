@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { DocumentArrowUpIcon } from '@heroicons/react/24/outline'
+import { DocumentArrowUpIcon } from '../design/icons'
 import { Document, documentService } from '../services/api'
 import { useNotifications } from '../contexts/NotificationContext'
 import LanguageSelector from './LanguageSelector'

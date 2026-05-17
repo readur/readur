@@ -18,7 +18,7 @@ import {
   Check as CheckIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTranslation } from 'react-i18next';
 import { sharedLinksService, type CreateSharedLinkRequest, type SharedLinkData } from '../../services/api';
 import axios from 'axios';

@@ -11,7 +11,7 @@ import {
   Reply as ReplyIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { type CommentWithAuthor } from '../../services/api';
 import CommentForm from './CommentForm';
 

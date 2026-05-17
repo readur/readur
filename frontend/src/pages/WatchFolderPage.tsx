@@ -34,12 +34,13 @@ import {
   PersonOutline as PersonIcon,
   CreateNewFolder as CreateFolderIcon,
   AdminPanelSettings as AdminIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { useTheme } from '@mui/material/styles';
 import { queueService, QueueStats, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
 import { useTranslation } from 'react-i18next';
+import { PageHeader } from '../design/components';
 
 interface WatchConfig {
   watchFolder: string;
@@ -203,46 +204,39 @@ const WatchFolderPage: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" sx={{
-          fontWeight: 600,
-          background: theme.palette.mode === 'light'
-            ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
-            : 'linear-gradient(135deg, #f8fafc 0%, #a855f7 100%)',
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-        }}>
-          {t('watchFolder.title')}
-        </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={() => {
-            fetchQueueStats();
-            if (user && perUserWatchEnabled) {
-              fetchUserWatchDirectory();
-            }
-          }}
-          disabled={loading || userWatchLoading}
-          sx={{ mr: 2 }}
-        >
-          {t('watchFolder.refreshAll')}
-        </Button>
-
-        {queueStats && queueStats.failed_count > 0 && (
-          <Button
-            variant="contained"
-            color="warning"
-            startIcon={requeuingFailed ? <CircularProgress size={16} /> : <RefreshIcon />}
-            onClick={requeueFailedJobs}
-            disabled={requeuingFailed || loading}
-          >
-            {requeuingFailed ? t('watchFolder.requeuing') : t('watchFolder.retryFailedJobs', { count: queueStats.failed_count })}
-          </Button>
-        )}
-      </Box>
+    <Container maxWidth="xl" disableGutters>
+      <PageHeader
+        kicker={t('navigation.sections.ingest')}
+        title={t('watchFolder.title')}
+        actions={
+          <>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={() => {
+                fetchQueueStats();
+                if (user && perUserWatchEnabled) {
+                  fetchUserWatchDirectory();
+                }
+              }}
+              disabled={loading || userWatchLoading}
+            >
+              {t('watchFolder.refreshAll')}
+            </Button>
+            {queueStats && queueStats.failed_count > 0 && (
+              <Button
+                variant="contained"
+                color="warning"
+                startIcon={requeuingFailed ? <CircularProgress size={16} /> : <RefreshIcon />}
+                onClick={requeueFailedJobs}
+                disabled={requeuingFailed || loading}
+              >
+                {requeuingFailed ? t('watchFolder.requeuing') : t('watchFolder.retryFailedJobs', { count: queueStats.failed_count })}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>

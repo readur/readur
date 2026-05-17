@@ -86,7 +86,14 @@
     "sources": "Sources",
     "watchFolder": "Watch Folder",
     "documentManagement": "Document Management",
-    "ignoredFiles": "Ignored Files"
+    "ignoredFiles": "Ignored Files",
+    "settings": "Settings",
+    "debug": "Debug",
+    "sections": {
+      "library": "Library",
+      "ingest": "Ingest",
+      "system": "System"
+    }
   },
   "dashboard": {
     "greeting": "Here's what's happening with your documents today.",

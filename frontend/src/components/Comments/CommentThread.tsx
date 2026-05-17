@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Button, Collapse, Typography } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
+import { ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '../../design/icons';
 import { type CommentThread as CommentThreadType } from '../../services/api';
 import { commentsService } from '../../services/api';
 import CommentItem from './CommentItem';

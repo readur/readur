@@ -26,7 +26,7 @@ import {
   Extension as ExtensionIcon,
   Close as CloseIcon,
   TrendingUp as TrendingIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 
 interface SearchExample {
   query: string;

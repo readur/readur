@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import {
   PhotoFilter as ProcessedImageIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import DocumentViewer from '../DocumentViewer';
 import { type Document } from '../../services/api';

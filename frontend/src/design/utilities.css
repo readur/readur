@@ -1,0 +1,95 @@
+/* ============================================================
+   READUR DESIGN UTILITIES
+   Helper classes drawn from tmp/preview/*.html specimens.
+   Use these directly in JSX (className="rd-label") or compose
+   into styled components via the tokens in global.css.
+   ============================================================ */
+
+/* ---------- Typography labels ---------- */
+.rd-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+  line-height: 1.2;
+}
+
+.rd-kicker {
+  font-family: var(--font-sans);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--accent-60);
+  line-height: 1;
+}
+
+/* ---------- Metadata text (tabular mono) ---------- */
+.rd-meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--fg-3);
+  font-feature-settings: "tnum";
+}
+
+.rd-tnum {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
+}
+
+/* ---------- Display & headings ---------- */
+.rd-display-xl {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: var(--fs-display-xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-display);
+  color: var(--fg-0);
+}
+
+.rd-display-lg {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: var(--fs-display-lg);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-display);
+  color: var(--fg-0);
+}
+
+.rd-display-md {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--fs-display-md);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-display);
+  color: var(--fg-0);
+}
+
+/* Gradient text emphasis (for editorial headers — used sparingly) */
+.rd-grad-text {
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---------- Hairline separator ---------- */
+.rd-rule {
+  border: 0;
+  border-top: 1px solid var(--line-1);
+  margin: var(--s-4) 0;
+}
+
+/* ---------- Focus rings (accessibility) ---------- */
+.rd-focusable:focus-visible {
+  outline: 2px solid var(--accent-50);
+  outline-offset: 2px;
+}

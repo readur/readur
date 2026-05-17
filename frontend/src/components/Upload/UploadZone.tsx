@@ -26,7 +26,7 @@ import {
   Error as ErrorIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useDropzone, FileRejection, DropzoneOptions } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
