@@ -62,11 +62,26 @@ const make = (Lu: React.FC<LucideProps>, displayName: string): IconComponent => 
         ...(sxOther as CSSProperties | undefined),
         ...style,
       };
-      // `color` prop is MUI's semantic ("primary", "error", etc.) or a CSS color.
-      // For Lucide we just let `currentColor` from CSS take over unless an
-      // explicit CSS color was passed.
+      // MUI accepts both semantic palette tokens ("primary", "error", "inherit"…)
+      // — which we ignore and fall back to `currentColor` so CSS controls colour
+      // — and arbitrary CSS colour strings (`#hex`, `rgb()`, `hsl()`, named
+      // colours, `var(--...)`). Anything that isn't a known MUI token is treated
+      // as a real CSS colour and passed through verbatim.
+      const muiSemanticTokens = new Set([
+        'primary',
+        'secondary',
+        'error',
+        'warning',
+        'info',
+        'success',
+        'inherit',
+        'action',
+        'disabled',
+      ]);
       const colorProp =
-        color && typeof color === 'string' && color.startsWith('#') ? color : 'currentColor';
+        color && typeof color === 'string' && !muiSemanticTokens.has(color)
+          ? color
+          : 'currentColor';
       const restProps = rest as LucideProps & { 'data-testid'?: string };
       return (
         <Lu
@@ -165,7 +180,7 @@ export const Label = make(L.Tag, 'Label');
 export const Language = make(L.Globe, 'Language');
 export const Lightbulb = make(L.Lightbulb, 'Lightbulb');
 export const LinkOff = make(L.Unlink, 'LinkOff');
-export const LocalHospital = make(L.CrossIcon ?? L.Plus, 'LocalHospital');
+export const LocalHospital = make(L.Cross, 'LocalHospital');
 export const LocationOn = make(L.MapPin, 'LocationOn');
 export const Lock = make(L.Lock, 'Lock');
 export const Logout = make(L.LogOut, 'Logout');

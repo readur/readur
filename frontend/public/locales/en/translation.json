@@ -127,7 +127,13 @@
       "title": "Recent Documents",
       "viewAll": "View All",
       "noDocuments": "No documents yet",
-      "uploadFirst": "Upload your first document to get started"
+      "uploadFirst": "Upload your first document to get started",
+      "columns": {
+        "document": "Document",
+        "size": "Size",
+        "added": "Added",
+        "status": "Status"
+      }
     },
     "quickActions": {
       "title": "Quick Actions",

@@ -75,6 +75,27 @@ const getStatus = (doc: Document): { variant: 'ok' | 'warn' | 'neutral'; label: 
   return { variant: 'neutral', label: 'Stored' };
 };
 
+const thBase = {
+  textAlign: 'left',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 600,
+  fontSize: 10,
+  letterSpacing: 'var(--tracking-caps)',
+  textTransform: 'uppercase',
+  color: 'var(--fg-3)',
+  padding: '12px 20px',
+  borderBottom: '1px solid var(--line-1)',
+  background: 'var(--bg-2)',
+} as const;
+
+const tdBase = {
+  padding: '13px 20px',
+  borderBottom: '1px solid var(--line-1)',
+  color: 'var(--fg-1)',
+  verticalAlign: 'middle',
+  transition: 'background var(--dur-fast) var(--ease-out)',
+} as const;
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -285,31 +306,17 @@ const Dashboard: React.FC = () => {
             >
               <thead>
                 <tr>
-                  <Box
-                    component="th"
-                    sx={{
-                      textAlign: 'left',
-                      fontFamily: 'var(--font-sans)',
-                      fontWeight: 600,
-                      fontSize: 10,
-                      letterSpacing: 'var(--tracking-caps)',
-                      textTransform: 'uppercase',
-                      color: 'var(--fg-3)',
-                      padding: '12px 20px',
-                      borderBottom: '1px solid var(--line-1)',
-                      background: 'var(--bg-2)',
-                    }}
-                  >
-                    Document
+                  <Box component="th" sx={thBase}>
+                    {t('dashboard.recentDocuments.columns.document')}
                   </Box>
                   <Box component="th" sx={thBase}>
-                    Size
+                    {t('dashboard.recentDocuments.columns.size')}
                   </Box>
                   <Box component="th" sx={thBase}>
-                    Added
+                    {t('dashboard.recentDocuments.columns.added')}
                   </Box>
                   <Box component="th" sx={thBase}>
-                    Status
+                    {t('dashboard.recentDocuments.columns.status')}
                   </Box>
                   <Box component="th" sx={{ ...thBase, textAlign: 'right' }}>
                     {' '}
@@ -369,7 +376,7 @@ const Dashboard: React.FC = () => {
                           sx={{ display: 'inline-flex', gap: 0.5 }}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <Tooltip title="View">
+                          <Tooltip title={t('common.actions.view')}>
                             <IconButton
                               size="small"
                               onClick={() => navigate(`/documents/${doc.id}`)}
@@ -377,7 +384,7 @@ const Dashboard: React.FC = () => {
                               <ViewIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Download">
+                          <Tooltip title={t('common.actions.download')}>
                             <IconButton
                               size="small"
                               onClick={async () => {
@@ -407,26 +414,5 @@ const Dashboard: React.FC = () => {
     </Box>
   );
 };
-
-const thBase = {
-  textAlign: 'left',
-  fontFamily: 'var(--font-sans)',
-  fontWeight: 600,
-  fontSize: 10,
-  letterSpacing: 'var(--tracking-caps)',
-  textTransform: 'uppercase',
-  color: 'var(--fg-3)',
-  padding: '12px 20px',
-  borderBottom: '1px solid var(--line-1)',
-  background: 'var(--bg-2)',
-} as const;
-
-const tdBase = {
-  padding: '13px 20px',
-  borderBottom: '1px solid var(--line-1)',
-  color: 'var(--fg-1)',
-  verticalAlign: 'middle',
-  transition: 'background var(--dur-fast) var(--ease-out)',
-} as const;
 
 export default Dashboard;

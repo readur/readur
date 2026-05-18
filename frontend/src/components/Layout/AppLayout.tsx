@@ -97,6 +97,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [notificationAnchorEl, setNotificationAnchorEl] = useState<null | HTMLElement>(null);
+  const [logoError, setLogoError] = useState<boolean>(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -105,7 +106,22 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   const sections = getNavigationSections();
   const allItems = sections.flatMap((s) => s.items);
-  const activeItem = allItems.find((item) => item.path === location.pathname);
+  // Match the current location to a nav item using longest-prefix wins so
+  // detail routes (`/documents/:id`, `/settings/api-keys`) still resolve to
+  // their parent section. `/documents/management` matches the management
+  // nav item over the generic `/documents` because its prefix is longer.
+  const activeItem =
+    allItems.find((item) => item.path === location.pathname) ??
+    allItems
+      .filter(
+        (item) =>
+          location.pathname === item.path ||
+          location.pathname.startsWith(item.path + '/'),
+      )
+      .sort((a, b) => b.path.length - a.path.length)[0];
+  // Used in the sidebar to highlight the active item (must follow the same
+  // resolution rules so the sidebar agrees with the breadcrumb).
+  const activeItemPath = activeItem?.path;
 
   const handleDrawerToggle = (): void => setMobileOpen(!mobileOpen);
   const handleProfileMenuOpen = (e: React.MouseEvent<HTMLElement>): void => setAnchorEl(e.currentTarget);
@@ -154,20 +170,31 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             flexShrink: 0,
           }}
         >
-          <Box
-            component="img"
-            src="/readur-32.png"
-            srcSet="/readur-32.png 1x, /readur-64.png 2x"
-            alt={t('common.appName')}
-            sx={{ width: 24, height: 24, objectFit: 'contain' }}
-            onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-              e.currentTarget.style.display = 'none';
-              const parent = e.currentTarget.parentElement;
-              if (parent) {
-                parent.innerHTML = '<span style="color:#fff;font-weight:800;font-size:16px;letter-spacing:-.04em;">R</span>';
-              }
-            }}
-          />
+          {logoError ? (
+            <Box
+              component="span"
+              aria-label={t('common.appName')}
+              sx={{
+                color: '#fff',
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 800,
+                fontSize: 16,
+                letterSpacing: '-0.04em',
+                lineHeight: 1,
+              }}
+            >
+              R
+            </Box>
+          ) : (
+            <Box
+              component="img"
+              src="/readur-32.png"
+              srcSet="/readur-32.png 1x, /readur-64.png 2x"
+              alt={t('common.appName')}
+              sx={{ width: 24, height: 24, objectFit: 'contain' }}
+              onError={() => setLogoError(true)}
+            />
+          )}
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <Box
@@ -219,7 +246,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             </Box>
             {section.items.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              const isActive = activeItemPath === item.path;
               return (
                 <Box
                   key={item.textKey}
