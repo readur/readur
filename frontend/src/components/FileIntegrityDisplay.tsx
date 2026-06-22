@@ -18,7 +18,7 @@ import {
   Warning as WarningIcon,
   Error as ErrorIcon,
   Info as InfoIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 

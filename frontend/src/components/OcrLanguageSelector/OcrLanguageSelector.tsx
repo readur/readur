@@ -11,7 +11,7 @@ import {
   Alert,
   SelectChangeEvent,
 } from '@mui/material';
-import { Language as LanguageIcon } from '@mui/icons-material';
+import { Language as LanguageIcon } from '../../design/icons';
 import { useTranslation } from 'react-i18next';
 import { ocrService, LanguageInfo } from '../../services/api';
 

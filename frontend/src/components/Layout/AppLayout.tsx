@@ -5,20 +5,14 @@ import {
   CssBaseline,
   Drawer,
   IconButton,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
   Toolbar,
-  Typography,
-  Avatar,
   Menu,
   MenuItem,
   Divider,
   useTheme as useMuiTheme,
   useMediaQuery,
   Badge,
+  Avatar,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -38,7 +32,7 @@ import {
   Api as ApiIcon,
   ManageAccounts as ManageIcon,
   BugReport as BugReportIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
@@ -50,7 +44,7 @@ import BottomNavigation from './BottomNavigation';
 import { usePWA } from '../../hooks/usePWA';
 import { useTranslation } from 'react-i18next';
 
-const drawerWidth = 280;
+const drawerWidth = 248;
 
 interface NavigationItem {
   textKey: string;
@@ -58,26 +52,43 @@ interface NavigationItem {
   path: string;
 }
 
+interface NavigationSection {
+  labelKey: string;
+  items: NavigationItem[];
+}
+
+const getNavigationSections = (): NavigationSection[] => [
+  {
+    labelKey: 'navigation.sections.library',
+    items: [
+      { textKey: 'navigation.dashboard', icon: DashboardIcon, path: '/dashboard' },
+      { textKey: 'navigation.documents', icon: DocumentIcon, path: '/documents' },
+      { textKey: 'navigation.search', icon: SearchIcon, path: '/search' },
+      { textKey: 'navigation.labels', icon: LabelIcon, path: '/labels' },
+    ],
+  },
+  {
+    labelKey: 'navigation.sections.ingest',
+    items: [
+      { textKey: 'navigation.upload', icon: UploadIcon, path: '/upload' },
+      { textKey: 'navigation.sources', icon: StorageIcon, path: '/sources' },
+      { textKey: 'navigation.watchFolder', icon: FolderIcon, path: '/watch' },
+      { textKey: 'navigation.ignoredFiles', icon: BlockIcon, path: '/ignored-files' },
+    ],
+  },
+  {
+    labelKey: 'navigation.sections.system',
+    items: [
+      { textKey: 'navigation.documentManagement', icon: ManageIcon, path: '/documents/management' },
+      { textKey: 'navigation.settings', icon: SettingsIcon, path: '/settings' },
+      { textKey: 'navigation.debug', icon: BugReportIcon, path: '/debug' },
+    ],
+  },
+];
+
 interface AppLayoutProps {
   children: React.ReactNode;
 }
-
-interface User {
-  username?: string;
-  email?: string;
-}
-
-const getNavigationItems = (t: (key: string) => string): NavigationItem[] => [
-  { textKey: 'navigation.dashboard', icon: DashboardIcon, path: '/dashboard' },
-  { textKey: 'navigation.upload', icon: UploadIcon, path: '/upload' },
-  { textKey: 'navigation.documents', icon: DocumentIcon, path: '/documents' },
-  { textKey: 'navigation.search', icon: SearchIcon, path: '/search' },
-  { textKey: 'navigation.labels', icon: LabelIcon, path: '/labels' },
-  { textKey: 'navigation.sources', icon: StorageIcon, path: '/sources' },
-  { textKey: 'navigation.watchFolder', icon: FolderIcon, path: '/watch' },
-  { textKey: 'navigation.documentManagement', icon: ManageIcon, path: '/documents/management' },
-  { textKey: 'navigation.ignoredFiles', icon: BlockIcon, path: '/ignored-files' },
-];
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const theme = useMuiTheme();
@@ -86,547 +97,401 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [notificationAnchorEl, setNotificationAnchorEl] = useState<null | HTMLElement>(null);
+  const [logoError, setLogoError] = useState<boolean>(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const { t } = useTranslation();
 
-  const navigationItems = getNavigationItems(t);
+  const sections = getNavigationSections();
+  const allItems = sections.flatMap((s) => s.items);
+  // Match the current location to a nav item using longest-prefix wins so
+  // detail routes (`/documents/:id`, `/settings/api-keys`) still resolve to
+  // their parent section. `/documents/management` matches the management
+  // nav item over the generic `/documents` because its prefix is longer.
+  const activeItem =
+    allItems.find((item) => item.path === location.pathname) ??
+    allItems
+      .filter(
+        (item) =>
+          location.pathname === item.path ||
+          location.pathname.startsWith(item.path + '/'),
+      )
+      .sort((a, b) => b.path.length - a.path.length)[0];
+  // Used in the sidebar to highlight the active item (must follow the same
+  // resolution rules so the sidebar agrees with the breadcrumb).
+  const activeItemPath = activeItem?.path;
 
-  const handleDrawerToggle = (): void => {
-    setMobileOpen(!mobileOpen);
-  };
-
-  const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>): void => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleProfileMenuClose = (): void => {
-    setAnchorEl(null);
-  };
-
+  const handleDrawerToggle = (): void => setMobileOpen(!mobileOpen);
+  const handleProfileMenuOpen = (e: React.MouseEvent<HTMLElement>): void => setAnchorEl(e.currentTarget);
+  const handleProfileMenuClose = (): void => setAnchorEl(null);
   const handleLogout = (): void => {
     logout();
     handleProfileMenuClose();
     navigate('/login');
   };
-
-  const handleNotificationClick = (event: React.MouseEvent<HTMLElement>): void => {
-    setNotificationAnchorEl(notificationAnchorEl ? null : event.currentTarget);
+  const handleNotificationClick = (e: React.MouseEvent<HTMLElement>): void => {
+    setNotificationAnchorEl(notificationAnchorEl ? null : e.currentTarget);
   };
-
-  const handleNotificationClose = (): void => {
-    setNotificationAnchorEl(null);
-  };
+  const handleNotificationClose = (): void => setNotificationAnchorEl(null);
 
   const drawer = (
-    <Box sx={{ 
-      height: '100%', 
-      display: 'flex', 
-      flexDirection: 'column',
-      background: theme.palette.mode === 'light' 
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)'
-        : 'linear-gradient(180deg, rgba(30,30,30,0.95) 0%, rgba(18,18,18,0.95) 100%)',
-      backdropFilter: 'blur(20px)',
-      borderRight: theme.palette.mode === 'light' 
-        ? '1px solid rgba(226,232,240,0.5)'
-        : '1px solid rgba(255,255,255,0.1)',
-    }}>
-      {/* Logo Section */}
-      <Box sx={{ 
-        p: 3, 
-        borderBottom: theme.palette.mode === 'light' 
-          ? '1px solid rgba(226,232,240,0.3)'
-          : '1px solid rgba(255,255,255,0.1)',
-        background: theme.palette.mode === 'light'
-          ? 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(139,92,246,0.05) 100%)'
-          : 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)',
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+    <Box
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'var(--bg-1)',
+        borderRight: '1px solid var(--line-1)',
+      }}
+    >
+      {/* Brand block */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--s-3)',
+          padding: '20px 22px 18px',
+          borderBottom: '1px solid var(--line-1)',
+        }}
+      >
+        <Box
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: 'var(--r-2)',
+            background: 'var(--accent-grad)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: 'var(--shadow-sm)',
+            overflow: 'hidden',
+            flexShrink: 0,
+          }}
+        >
+          {logoError ? (
+            <Box
+              component="span"
+              aria-label={t('common.appName')}
+              sx={{
+                color: '#fff',
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 800,
+                fontSize: 16,
+                letterSpacing: '-0.04em',
+                lineHeight: 1,
+              }}
+            >
+              R
+            </Box>
+          ) : (
+            <Box
+              component="img"
+              src="/readur-32.png"
+              srcSet="/readur-32.png 1x, /readur-64.png 2x"
+              alt={t('common.appName')}
+              sx={{ width: 24, height: 24, objectFit: 'contain' }}
+              onError={() => setLogoError(true)}
+            />
+          )}
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
           <Box
             sx={{
-              width: 44,
-              height: 44,
-              borderRadius: 3,
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
+              fontFamily: 'var(--font-sans)',
               fontWeight: 800,
-              fontSize: '1.3rem',
-              boxShadow: '0 8px 32px rgba(99,102,241,0.3)',
-              position: 'relative',
-              '&::before': {
-                content: '""',
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                borderRadius: 3,
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.1) 100%)',
-                backdropFilter: 'blur(10px)',
-              },
+              fontSize: 18,
+              lineHeight: 1,
+              color: 'var(--fg-0)',
+              letterSpacing: '-0.025em',
             }}
           >
-            <Box sx={{ position: 'relative', zIndex: 1 }}>
-              <img 
-                src="/readur-32.png" 
-                srcSet="/readur-32.png 1x, /readur-64.png 2x"
-                alt="Readur Logo" 
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  objectFit: 'contain',
-                }}
-                onError={(e) => {
-                  // Fallback to "R" if image fails to load
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.parentElement!.innerHTML = 'R';
-                }}
-              />
-            </Box>
+            {t('common.appName')}
           </Box>
-          <Box>
-            <Typography variant="h6" sx={{
-              fontWeight: 800,
-              color: 'text.primary',
-              background: theme.palette.mode === 'light'
-                ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
-                : 'linear-gradient(135deg, #f8fafc 0%, #a855f7 100%)',
-              backgroundClip: 'text',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              letterSpacing: '-0.025em',
-            }}>
-              {t('common.appName')}
-            </Typography>
-            <Typography variant="caption" sx={{
-              color: 'text.secondary',
-              fontWeight: 500,
-              letterSpacing: '0.05em',
+          <Box
+            sx={{
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 600,
+              fontSize: 9,
+              color: 'var(--accent-60)',
+              letterSpacing: '0.1em',
+              marginTop: '4px',
               textTransform: 'uppercase',
-              fontSize: '0.7rem',
-            }}>
-              {t('common.appTagline')}
-            </Typography>
+            }}
+          >
+            v2.9
           </Box>
         </Box>
       </Box>
 
-      {/* Navigation */}
-      <List sx={{ 
-        flex: 1, 
-        px: 3, 
-        py: 2,
-        overflowY: 'auto',
-        // Custom scrollbar styling
-        '&::-webkit-scrollbar': {
-          width: '8px',
-          borderRadius: '4px',
-        },
-        '&::-webkit-scrollbar-track': {
-          background: theme.palette.mode === 'light' 
-            ? 'rgba(226,232,240,0.3)' 
-            : 'rgba(255,255,255,0.1)',
-          borderRadius: '4px',
-          margin: '8px 0',
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: theme.palette.mode === 'light'
-            ? 'linear-gradient(135deg, rgba(99,102,241,0.6) 0%, rgba(139,92,246,0.6) 100%)'
-            : 'linear-gradient(135deg, rgba(99,102,241,0.8) 0%, rgba(139,92,246,0.8) 100%)',
-          borderRadius: '4px',
-          border: theme.palette.mode === 'light' 
-            ? '1px solid rgba(255,255,255,0.3)'
-            : '1px solid rgba(255,255,255,0.1)',
-          transition: 'all 0.2s ease-in-out',
-          '&:hover': {
-            background: theme.palette.mode === 'light'
-              ? 'linear-gradient(135deg, rgba(99,102,241,0.8) 0%, rgba(139,92,246,0.8) 100%)'
-              : 'linear-gradient(135deg, rgba(99,102,241,1) 0%, rgba(139,92,246,1) 100%)',
-            transform: 'scale(1.1)',
-          },
-        },
-        '&::-webkit-scrollbar-thumb:active': {
-          background: theme.palette.mode === 'light'
-            ? 'linear-gradient(135deg, rgba(99,102,241,0.9) 0%, rgba(139,92,246,0.9) 100%)'
-            : 'linear-gradient(135deg, rgba(99,102,241,1) 0%, rgba(139,92,246,1) 100%)',
-        },
-        // Firefox scrollbar styling
-        scrollbarWidth: 'thin',
-        scrollbarColor: theme.palette.mode === 'light'
-          ? 'rgba(99,102,241,0.6) rgba(226,232,240,0.3)'
-          : 'rgba(99,102,241,0.8) rgba(255,255,255,0.1)',
-      }}>
-        {navigationItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          const Icon = item.icon;
-          
-          return (
-            <ListItem key={item.textKey} sx={{ px: 0, mb: 1 }}>
-              <ListItemButton
-                onClick={() => navigate(item.path)}
-                sx={{
-                  borderRadius: 3,
-                  minHeight: 52,
-                  px: 2.5,
-                  py: 1.5,
-                  background: isActive 
-                    ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' 
-                    : 'transparent',
-                  color: isActive ? 'white' : 'text.primary',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    backgroundColor: isActive ? 'transparent' : 'rgba(99,102,241,0.08)',
-                    transform: isActive ? 'none' : 'translateX(4px)',
-                    '&::before': isActive ? {} : {
-                      content: '""',
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: '3px',
-                      background: 'linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%)',
-                      borderRadius: '0 2px 2px 0',
-                    },
-                  },
-                  '&::after': isActive ? {
-                    content: '""',
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
-                    backdropFilter: 'blur(10px)',
-                  } : {},
-                  '& .MuiListItemIcon-root': {
-                    color: isActive ? 'white' : 'text.secondary',
-                    minWidth: 36,
-                    position: 'relative',
-                    zIndex: 1,
-                  },
-                  '& .MuiListItemText-root': {
-                    position: 'relative',
-                    zIndex: 1,
-                  },
-                  ...(isActive && {
-                    boxShadow: '0 8px 32px rgba(99,102,241,0.3)',
-                  }),
-                }}
-              >
-                <ListItemIcon>
-                  <Icon sx={{ fontSize: '1.25rem' }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary={t(item.textKey)}
-                  primaryTypographyProps={{
-                    fontSize: '0.9rem',
-                    fontWeight: isActive ? 600 : 500,
-                    letterSpacing: '0.025em',
+      {/* Navigation sections */}
+      <Box
+        sx={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '14px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--s-1)',
+        }}
+      >
+        {sections.map((section) => (
+          <React.Fragment key={section.labelKey}>
+            <Box
+              className="rd-label"
+              sx={{ padding: '12px 12px 6px' }}
+            >
+              {t(section.labelKey, section.labelKey.split('.').pop())}
+            </Box>
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeItemPath === item.path;
+              return (
+                <Box
+                  key={item.textKey}
+                  onClick={() => {
+                    navigate(item.path);
+                    if (isMobile) setMobileOpen(false);
                   }}
-                />
-              </ListItemButton>
-            </ListItem>
-          );
-        })}
-      </List>
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--s-3)',
+                    padding: '9px 12px',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 13.5,
+                    fontWeight: isActive ? 600 : 500,
+                    color: isActive ? 'var(--accent-70)' : 'var(--fg-1)',
+                    background: isActive ? 'var(--accent-05)' : 'transparent',
+                    borderRadius: 'var(--r-2)',
+                    cursor: 'pointer',
+                    lineHeight: 1,
+                    transition: 'background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)',
+                    '&:hover': {
+                      background: isActive ? 'var(--accent-05)' : 'var(--bg-2)',
+                      color: isActive ? 'var(--accent-70)' : 'var(--fg-0)',
+                    },
+                    '& svg': {
+                      color: isActive ? 'var(--accent-60)' : 'var(--fg-2)',
+                      fontSize: 18,
+                    },
+                  }}
+                >
+                  <Icon />
+                  <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {t(item.textKey)}
+                  </Box>
+                </Box>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </Box>
 
-      {/* User Info */}
-      <Box sx={{ 
-        p: 3, 
-        borderTop: theme.palette.mode === 'light'
-          ? '1px solid rgba(226,232,240,0.3)'
-          : '1px solid rgba(255,255,255,0.1)',
-        background: theme.palette.mode === 'light'
-          ? 'linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(139,92,246,0.03) 100%)'
-          : 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.08) 100%)',
-      }}>
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 2.5,
-          p: 2,
-          borderRadius: 3,
-          background: theme.palette.mode === 'light'
-            ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
-            : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
-          backdropFilter: 'blur(10px)',
-          border: theme.palette.mode === 'light'
-            ? '1px solid rgba(255,255,255,0.3)'
-            : '1px solid rgba(255,255,255,0.1)',
-          boxShadow: theme.palette.mode === 'light'
-            ? '0 4px 16px rgba(0,0,0,0.04)'
-            : '0 4px 16px rgba(0,0,0,0.2)',
-        }}>
-          <Avatar
+      {/* User footer */}
+      <Box
+        sx={{
+          padding: '14px 16px',
+          borderTop: '1px solid var(--line-1)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--s-3)',
+        }}
+      >
+        <Avatar
+          sx={{
+            width: 28,
+            height: 28,
+            background: 'var(--accent-grad)',
+            fontFamily: 'var(--font-sans)',
+            fontWeight: 700,
+            fontSize: 12,
+          }}
+        >
+          {user?.username?.charAt(0).toUpperCase()}
+        </Avatar>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Box
             sx={{
-              width: 42,
-              height: 42,
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              fontSize: '1rem',
+              fontFamily: 'var(--font-sans)',
               fontWeight: 600,
-              boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
+              fontSize: 12,
+              color: 'var(--fg-0)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
-            {user?.username?.charAt(0).toUpperCase()}
-          </Avatar>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" sx={{ 
-              fontWeight: 600, 
-              color: 'text.primary',
-              letterSpacing: '0.025em',
-            }}>
-              {user?.username}
-            </Typography>
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                color: 'text.secondary',
-                display: 'block',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontSize: '0.75rem',
-                fontWeight: 500,
-              }}
-            >
-              {user?.email}
-            </Typography>
+            {user?.username}
+          </Box>
+          <Box
+            sx={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--fg-3)',
+              marginTop: '2px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {user?.email}
           </Box>
         </Box>
       </Box>
     </Box>
   );
 
+  // Icon button shared style — replaces the old gradient/glass chips
+  const iconBtnSx = {
+    width: 34,
+    height: 34,
+    border: '1px solid transparent',
+    borderRadius: 'var(--r-2)',
+    color: 'var(--fg-2)',
+    background: 'transparent',
+    transition: 'background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)',
+    '&:hover': {
+      background: 'var(--bg-2)',
+      color: 'var(--fg-0)',
+    },
+  } as const;
+
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
-      
-      {/* App Bar */}
+
+      {/* Topbar */}
       <AppBar
         position="fixed"
+        elevation={0}
         sx={{
           width: { md: `calc(100% - ${drawerWidth}px)` },
           ml: { md: `${drawerWidth}px` },
-          background: theme.palette.mode === 'light'
-            ? 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.90) 100%)'
-            : 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(18,18,18,0.90) 100%)',
-          backdropFilter: 'blur(20px)',
-          borderBottom: theme.palette.mode === 'light'
-            ? '1px solid rgba(226,232,240,0.5)'
-            : '1px solid rgba(255,255,255,0.1)',
-          boxShadow: theme.palette.mode === 'light'
-            ? '0 4px 32px rgba(0,0,0,0.04)'
-            : '0 4px 32px rgba(0,0,0,0.2)',
+          background: 'var(--bg-1)',
+          color: 'var(--fg-0)',
+          borderBottom: '1px solid var(--line-1)',
+          backgroundImage: 'none',
+          boxShadow: 'none',
         }}
       >
-        <Toolbar>
+        <Toolbar sx={{ minHeight: '56px !important', gap: 'var(--s-3)' }}>
           <IconButton
-            color="inherit"
-            aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { md: 'none' } }}
+            sx={{ ...iconBtnSx, display: { md: 'none' } }}
+            aria-label="open navigation"
           >
             <MenuIcon />
           </IconButton>
-          
-          <Typography variant="h6" noWrap component="div" sx={{
-            fontWeight: 700,
-            mr: 1,
-            fontSize: '1.1rem',
-            display: isPWA ? 'none' : 'block',
-            background: theme.palette.mode === 'light'
-              ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
-              : 'linear-gradient(135deg, #f8fafc 0%, #a855f7 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            letterSpacing: '-0.025em',
-          }}>
-            {navigationItems.find(item => item.path === location.pathname)?.textKey
-              ? t(navigationItems.find(item => item.path === location.pathname)!.textKey)
-              : t('navigation.dashboard')}
-          </Typography>
 
-          {/* Global Search Bar */}
-          <Box sx={{
-            flexGrow: 2,
-            display: 'flex',
-            justifyContent: 'center',
-            mx: { xs: 0.5, md: 1 },
-            flex: '1 1 auto',
-            minWidth: { xs: 0, md: 'auto' },
-            overflow: 'hidden',
-          }}>
+          {/* Breadcrumb */}
+          {!isPWA && (
+            <Box
+              sx={{
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 600,
+                fontSize: 11,
+                color: 'var(--fg-3)',
+                letterSpacing: 'var(--tracking-caps)',
+                textTransform: 'uppercase',
+                display: { xs: 'none', sm: 'flex' },
+                alignItems: 'center',
+                gap: 'var(--s-2)',
+                flexShrink: 0,
+              }}
+            >
+              <span>{t('common.appName')}</span>
+              <span style={{ color: 'var(--fg-4)' }}>/</span>
+              <span style={{ color: 'var(--fg-0)' }}>
+                {activeItem ? t(activeItem.textKey) : t('navigation.dashboard')}
+              </span>
+            </Box>
+          )}
+
+          {/* Global search */}
+          <Box
+            sx={{
+              flex: '1 1 auto',
+              display: 'flex',
+              justifyContent: 'center',
+              minWidth: 0,
+              maxWidth: 520,
+              marginLeft: { xs: 0, sm: 'var(--s-6)' },
+            }}
+          >
             <GlobalSearchBar />
           </Box>
 
-          {/* Notifications */}
-          <IconButton
-            onClick={handleNotificationClick}
-            sx={{
-              mr: { xs: 1, md: 2 },
-              display: isPWA ? 'none' : 'flex',
-              color: 'text.secondary',
-              background: theme.palette.mode === 'light'
-                ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
-                : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
-              backdropFilter: 'blur(10px)',
-              border: theme.palette.mode === 'light'
-                ? '1px solid rgba(255,255,255,0.3)'
-                : '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 2.5,
-              width: 44,
-              height: 44,
-              transition: 'all 0.2s ease-in-out',
-              '&:hover': {
-                background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 8px 24px rgba(99,102,241,0.15)',
-              },
-            }}
-          >
-            <Badge
-              badgeContent={unreadCount}
-              sx={{
-                '& .MuiBadge-badge': {
-                  background: 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)',
-                  color: 'white',
-                  fontWeight: 600,
-                  fontSize: '0.7rem',
-                },
-              }}
+          {/* Right-side actions */}
+          <Box sx={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--s-1)' }}>
+            <IconButton
+              onClick={handleNotificationClick}
+              sx={{ ...iconBtnSx, display: isPWA ? 'none' : 'inline-flex' }}
+              aria-label="notifications"
             >
-              <NotificationsIcon sx={{ fontSize: '1.25rem' }} />
-            </Badge>
-          </IconButton>
+              <Badge
+                badgeContent={unreadCount}
+                color="error"
+                sx={{
+                  '& .MuiBadge-badge': {
+                    fontWeight: 600,
+                    fontSize: '0.7rem',
+                  },
+                }}
+              >
+                <NotificationsIcon sx={{ fontSize: 18 }} />
+              </Badge>
+            </IconButton>
 
-          {/* Language Switcher */}
-          <Box sx={{
-            mr: { xs: 1, md: 2 },
-            display: isPWA ? 'none' : { xs: 'none', sm: 'block' },
-            background: theme.palette.mode === 'light'
-              ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
-              : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
-            backdropFilter: 'blur(10px)',
-            border: theme.palette.mode === 'light'
-              ? '1px solid rgba(255,255,255,0.3)'
-              : '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 2.5,
-            transition: 'all 0.2s ease-in-out',
-            '&:hover': {
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)',
-              transform: 'translateY(-2px)',
-              boxShadow: '0 8px 24px rgba(99,102,241,0.15)',
-            },
-          }}>
-            <LanguageSwitcher size="medium" color="inherit" />
+            <Box sx={{ display: isPWA ? 'none' : { xs: 'none', sm: 'flex' } }}>
+              <LanguageSwitcher size="small" color="inherit" />
+            </Box>
+
+            <Box sx={{ display: 'flex' }}>
+              <ThemeToggle size="small" color="inherit" />
+            </Box>
+
+            <IconButton onClick={handleProfileMenuOpen} sx={iconBtnSx} aria-label="profile menu">
+              <AccountIcon sx={{ fontSize: 18 }} />
+            </IconButton>
           </Box>
 
-          {/* Theme Toggle */}
-          <Box sx={{
-            mr: { xs: 1, md: 2 },
-            background: theme.palette.mode === 'light'
-              ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
-              : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
-            backdropFilter: 'blur(10px)',
-            border: theme.palette.mode === 'light'
-              ? '1px solid rgba(255,255,255,0.3)'
-              : '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 2.5,
-            transition: 'all 0.2s ease-in-out',
-            '&:hover': {
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)',
-              transform: 'translateY(-2px)',
-              boxShadow: '0 8px 24px rgba(99,102,241,0.15)',
-            },
-          }}>
-            <ThemeToggle size="medium" color="inherit" />
-          </Box>
-
-          {/* Profile Menu */}
-          <IconButton
-            onClick={handleProfileMenuOpen}
-            sx={{ 
-              color: 'text.secondary',
-              background: theme.palette.mode === 'light'
-                ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
-                : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
-              backdropFilter: 'blur(10px)',
-              border: theme.palette.mode === 'light'
-                ? '1px solid rgba(255,255,255,0.3)'
-                : '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 2.5,
-              width: 44,
-              height: 44,
-              transition: 'all 0.2s ease-in-out',
-              '&:hover': {
-                background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 8px 24px rgba(99,102,241,0.15)',
-              },
-            }}
-          >
-            <AccountIcon sx={{ fontSize: '1.25rem' }} />
-          </IconButton>
-          
           <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
             onClose={handleProfileMenuClose}
             onClick={handleProfileMenuClose}
-            PaperProps={{
-              elevation: 0,
-              sx: {
-                overflow: 'visible',
-                filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-                mt: 1.5,
-                '& .MuiAvatar-root': {
-                  width: 32,
-                  height: 32,
-                  ml: -0.5,
-                  mr: 1,
-                },
-                '&:before': {
-                  content: '""',
-                  display: 'block',
-                  position: 'absolute',
-                  top: 0,
-                  right: 14,
-                  width: 10,
-                  height: 10,
-                  bgcolor: 'background.paper',
-                  transform: 'translateY(-50%) rotate(45deg)',
-                  zIndex: 0,
-                },
-              },
-            }}
             transformOrigin={{ horizontal: 'right', vertical: 'top' }}
             anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            slotProps={{
+              paper: {
+                sx: { mt: 1, minWidth: 200 },
+              },
+            }}
           >
             <MenuItem onClick={() => navigate('/profile')}>
-              <Avatar /> {t('auth.profile')}
+              <AccountIcon fontSize="small" sx={{ mr: 2, color: 'var(--fg-2)' }} />
+              {t('auth.profile')}
             </MenuItem>
             <MenuItem onClick={() => navigate('/settings')}>
-              <SettingsIcon sx={{ mr: 2 }} /> {t('settings.title')}
+              <SettingsIcon fontSize="small" sx={{ mr: 2, color: 'var(--fg-2)' }} />
+              {t('settings.title')}
             </MenuItem>
             <MenuItem onClick={() => navigate('/debug')}>
-              <BugReportIcon sx={{ mr: 2 }} /> {t('settings.debug')}
+              <BugReportIcon fontSize="small" sx={{ mr: 2, color: 'var(--fg-2)' }} />
+              {t('settings.debug')}
             </MenuItem>
             <Divider />
             <MenuItem onClick={() => window.open('/swagger-ui', '_blank')}>
-              <ApiIcon sx={{ mr: 2 }} /> {t('settings.apiDocumentation')}
+              <ApiIcon fontSize="small" sx={{ mr: 2, color: 'var(--fg-2)' }} />
+              {t('settings.apiDocumentation')}
             </MenuItem>
             <Divider />
             <MenuItem onClick={handleLogout}>
-              <LogoutIcon sx={{ mr: 2 }} /> {t('auth.logout')}
+              <LogoutIcon fontSize="small" sx={{ mr: 2, color: 'var(--fg-2)' }} />
+              {t('auth.logout')}
             </MenuItem>
           </Menu>
         </Toolbar>
@@ -641,9 +506,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
-          }}
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: 'block', md: 'none' },
             '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
@@ -663,33 +526,36 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         </Drawer>
       </Box>
 
-      {/* Main Content */}
+      {/* Main content */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           width: { md: `calc(100% - ${drawerWidth}px)` },
           minHeight: '100vh',
-          backgroundColor: 'background.default',
+          background: 'var(--bg-0)',
         }}
       >
-        <Toolbar />
-        <Box sx={{
-          p: 3,
-          // Add bottom padding when bottom nav is visible (PWA mode on mobile)
-          pb: isPWA && isMobile ? 'calc(64px + 24px + 8px + env(safe-area-inset-bottom, 0px))' : 3,
-        }}>
+        <Toolbar sx={{ minHeight: '56px !important' }} />
+        <Box
+          sx={{
+            padding: 'var(--s-6) var(--s-8)',
+            paddingBottom: isPWA && isMobile
+              ? 'calc(64px + var(--s-6) + 8px + env(safe-area-inset-bottom, 0px))'
+              : 'var(--s-12)',
+          }}
+        >
           {children}
         </Box>
       </Box>
 
-      {/* Notification Panel */}
+      {/* Notification panel */}
       <NotificationPanel
         anchorEl={notificationAnchorEl}
         onClose={handleNotificationClose}
       />
 
-      {/* Bottom Navigation (PWA only) */}
+      {/* Bottom navigation (PWA only) */}
       <BottomNavigation />
     </Box>
   );

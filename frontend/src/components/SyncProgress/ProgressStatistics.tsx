@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, LinearProgress, Chip, useTheme, alpha } from '@mui/material';
-import { Warning as WarningIcon, Error as ErrorIcon, Timer as TimerIcon } from '@mui/icons-material';
+import { Warning as WarningIcon, Error as ErrorIcon, Timer as TimerIcon } from '../../design/icons';
 import { SyncProgressInfo } from '../../services/api';
 
 interface ProgressStatisticsProps {

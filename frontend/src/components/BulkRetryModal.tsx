@@ -31,7 +31,7 @@ import {
   Schedule as ScheduleIcon,
   Assessment as AssessmentIcon,
   Refresh as RefreshIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { documentService, BulkOcrRetryRequest, OcrRetryFilter, BulkOcrRetryResponse, ErrorHelper, ErrorCodes } from '../services/api';
 
 interface BulkRetryModalProps {

@@ -32,7 +32,7 @@ import {
   Code as CodeIcon,
   Lightbulb as TipIcon,
   PlayArrow as PlayIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 
 interface SearchExample {
   query: string;

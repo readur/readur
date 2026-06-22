@@ -2,11 +2,17 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { createTheme, Theme, ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { PaletteMode } from '@mui/material';
 import { modernTokens } from '../theme';
+import { fontStack, gradients, radii, shadows as designShadows } from '../design/tokens';
 
 interface ThemeContextType {
   mode: PaletteMode;
   toggleTheme: () => void;
   modernTokens: typeof modernTokens;
+  /**
+   * Legacy glass-effect helper. Returns an empty style object in the new
+   * design system (we use solid surfaces with hairline borders instead).
+   * Kept here so existing call-sites compile until they're swept in Phase 7.
+   */
   glassEffect: (alphaValue?: number) => object;
 }
 
@@ -24,19 +30,8 @@ interface ThemeProviderProps {
   children: ReactNode;
 }
 
-// Glassmorphism effect that adapts to theme mode
-const createGlassEffect = (mode: PaletteMode) => (alphaValue: number = 0.1) => ({
-  background: mode === 'light' 
-    ? `rgba(255, 255, 255, ${alphaValue})` 
-    : `rgba(30, 30, 30, ${alphaValue})`,
-  backdropFilter: 'blur(10px)',
-  border: mode === 'light' 
-    ? '1px solid rgba(255, 255, 255, 0.2)' 
-    : '1px solid rgba(255, 255, 255, 0.1)',
-  boxShadow: mode === 'light' 
-    ? modernTokens.shadows.glass 
-    : '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-});
+// No-op stand-in for the old glass effect — see Phase 7 cleanup.
+const createGlassEffect = (_mode: PaletteMode) => (_alphaValue: number = 0.1) => ({});
 
 const createAppTheme = (mode: PaletteMode): Theme => {
   return createTheme({
@@ -140,73 +135,82 @@ const createAppTheme = (mode: PaletteMode): Theme => {
         800: mode === 'light' ? '#1e40af' : '#93c5fd',
         900: mode === 'light' ? '#1e3a8a' : '#dbeafe',
       },
-      divider: mode === 'light' ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)',
+      divider: mode === 'light' ? modernTokens.colors.neutral[200] : modernTokens.colors.neutral[800],
     },
     typography: {
-      fontFamily: [
-        '-apple-system',
-        'BlinkMacSystemFont',
-        '"Segoe UI"',
-        'Roboto',
-        '"Helvetica Neue"',
-        'Arial',
-        'sans-serif',
-      ].join(','),
-      h4: {
-        fontWeight: 600,
-      },
-      h5: {
-        fontWeight: 600,
-      },
-      h6: {
-        fontWeight: 600,
-      },
+      fontFamily: fontStack.sans,
+      h1: { fontSize: '2.25rem', fontWeight: 800, lineHeight: 1.2, letterSpacing: '-0.025em' },
+      h2: { fontSize: '1.875rem', fontWeight: 700, lineHeight: 1.2, letterSpacing: '-0.02em' },
+      h3: { fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.2, letterSpacing: '-0.015em' },
+      h4: { fontSize: '1.25rem', fontWeight: 600, lineHeight: 1.4 },
+      h5: { fontSize: '1.125rem', fontWeight: 600, lineHeight: 1.5 },
+      h6: { fontSize: '1rem', fontWeight: 600, lineHeight: 1.5 },
+      body1: { fontSize: '0.9375rem', fontWeight: 400, lineHeight: 1.55 },
+      body2: { fontSize: '0.875rem', fontWeight: 400, lineHeight: 1.5 },
+      caption: { fontSize: '0.75rem', fontWeight: 400, lineHeight: 1.5 },
     },
+    shape: { borderRadius: radii.lg },
     components: {
       MuiButton: {
         styleOverrides: {
           root: {
             textTransform: 'none',
-            borderRadius: 8,
+            borderRadius: radii.md,
+            fontWeight: 500,
+            boxShadow: 'none',
+            '&:hover': { boxShadow: designShadows.sm },
+          },
+          contained: {
+            background: gradients.accent,
+            color: '#FFFFFF',
+            '&:hover': { background: gradients.accentHover },
           },
         },
       },
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 12,
-            boxShadow: mode === 'light' 
-              ? '0 2px 8px rgba(0,0,0,0.1)' 
-              : '0 2px 8px rgba(0,0,0,0.3)',
-            backgroundColor: mode === 'light' ? '#ffffff' : '#1e1e1e',
+            borderRadius: radii.xl,
+            border: mode === 'light'
+              ? `1px solid ${modernTokens.colors.neutral[200]}`
+              : `1px solid ${modernTokens.colors.neutral[800]}`,
+            boxShadow: designShadows.xs,
+            backgroundColor: mode === 'light' ? '#FFFFFF' : modernTokens.colors.neutral[900],
+            backgroundImage: 'none',
           },
         },
       },
       MuiPaper: {
         styleOverrides: {
           root: {
-            borderRadius: 8,
-            backgroundColor: mode === 'light' ? '#ffffff' : '#1e1e1e',
+            borderRadius: radii.lg,
+            backgroundColor: mode === 'light' ? '#FFFFFF' : modernTokens.colors.neutral[900],
+            backgroundImage: 'none',
+            boxShadow: designShadows.xs,
           },
         },
       },
       MuiAppBar: {
         styleOverrides: {
           root: {
-            backgroundColor: mode === 'light' 
-              ? 'rgba(255, 255, 255, 0.95)' 
-              : 'rgba(30, 30, 30, 0.95)',
-            backdropFilter: 'blur(20px)',
+            backgroundColor: mode === 'light' ? '#FFFFFF' : modernTokens.colors.neutral[900],
+            color: mode === 'light' ? modernTokens.colors.neutral[900] : modernTokens.colors.neutral[50],
+            backgroundImage: 'none',
+            borderBottom: mode === 'light'
+              ? `1px solid ${modernTokens.colors.neutral[200]}`
+              : `1px solid ${modernTokens.colors.neutral[800]}`,
+            boxShadow: 'none',
           },
         },
       },
       MuiDrawer: {
         styleOverrides: {
           paper: {
-            backgroundColor: mode === 'light' ? '#ffffff' : '#1e1e1e',
-            borderRight: mode === 'light' 
-              ? '1px solid rgba(0, 0, 0, 0.12)' 
-              : '1px solid rgba(255, 255, 255, 0.12)',
+            backgroundColor: mode === 'light' ? '#FFFFFF' : modernTokens.colors.neutral[900],
+            backgroundImage: 'none',
+            borderRight: mode === 'light'
+              ? `1px solid ${modernTokens.colors.neutral[200]}`
+              : `1px solid ${modernTokens.colors.neutral[800]}`,
           },
         },
       },
@@ -214,13 +218,110 @@ const createAppTheme = (mode: PaletteMode): Theme => {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
+              borderRadius: radii.md,
               '& fieldset': {
-                borderColor: mode === 'light' ? 'rgba(0, 0, 0, 0.23)' : 'rgba(255, 255, 255, 0.23)',
+                borderColor: mode === 'light'
+                  ? modernTokens.colors.neutral[300]
+                  : modernTokens.colors.neutral[700],
               },
               '&:hover fieldset': {
-                borderColor: mode === 'light' ? 'rgba(0, 0, 0, 0.87)' : 'rgba(255, 255, 255, 0.87)',
+                borderColor: mode === 'light'
+                  ? modernTokens.colors.neutral[500]
+                  : modernTokens.colors.neutral[500],
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: modernTokens.colors.primary[500],
+                borderWidth: 1,
               },
             },
+          },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: { borderRadius: radii.sm, fontWeight: 500 },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            fontWeight: 500,
+            fontSize: '0.8125rem',
+            minHeight: 44,
+            '&.Mui-selected': { fontWeight: 600 },
+          },
+        },
+      },
+      MuiTableHead: {
+        styleOverrides: {
+          root: {
+            '& .MuiTableCell-head': {
+              fontFamily: fontStack.sans,
+              fontWeight: 600,
+              fontSize: 10,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: mode === 'light' ? modernTokens.colors.neutral[500] : modernTokens.colors.neutral[400],
+              backgroundColor: mode === 'light' ? modernTokens.colors.neutral[100] : modernTokens.colors.neutral[800],
+              borderBottom: mode === 'light'
+                ? `1px solid ${modernTokens.colors.neutral[200]}`
+                : `1px solid ${modernTokens.colors.neutral[700]}`,
+            },
+          },
+        },
+      },
+      MuiTableRow: {
+        styleOverrides: {
+          root: {
+            '&:hover': {
+              backgroundColor: mode === 'light'
+                ? modernTokens.colors.primary[50]
+                : 'rgba(99, 102, 241, 0.08)',
+            },
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          root: {
+            borderBottom: mode === 'light'
+              ? `1px solid ${modernTokens.colors.neutral[200]}`
+              : `1px solid ${modernTokens.colors.neutral[800]}`,
+            fontSize: 13,
+          },
+        },
+      },
+      MuiAccordion: {
+        styleOverrides: {
+          root: {
+            boxShadow: 'none',
+            border: mode === 'light'
+              ? `1px solid ${modernTokens.colors.neutral[200]}`
+              : `1px solid ${modernTokens.colors.neutral[800]}`,
+            borderRadius: radii.md,
+            backgroundImage: 'none',
+            '&:before': { display: 'none' },
+            '&.Mui-expanded': { margin: 0 },
+          },
+        },
+      },
+      MuiMenu: {
+        styleOverrides: {
+          paper: {
+            borderRadius: radii.md,
+            border: mode === 'light'
+              ? `1px solid ${modernTokens.colors.neutral[200]}`
+              : `1px solid ${modernTokens.colors.neutral[800]}`,
+            boxShadow: designShadows.lg,
+          },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: {
+            borderRadius: radii.xl,
+            boxShadow: designShadows.xl,
           },
         },
       },
@@ -246,6 +347,12 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   const theme = createAppTheme(mode);
   const glassEffect = createGlassEffect(mode);
+
+  // Sync `<html class="dark">` so CSS custom properties in
+  // design/global.css flip alongside the MUI palette.
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+  }, [mode]);
 
   // Listen for system theme changes
   useEffect(() => {

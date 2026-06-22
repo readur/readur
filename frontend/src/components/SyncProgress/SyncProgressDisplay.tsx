@@ -21,7 +21,7 @@ import {
   Storage as StorageIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { SyncProgressInfo } from '../../services/api';
 import { useSyncProgress } from '../../hooks/useSyncProgress';
 import { ConnectionStatus } from '../../services/syncProgress';

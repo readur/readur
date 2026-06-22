@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, TextField, Button, CircularProgress } from '@mui/material';
-import { Send as SendIcon } from '@mui/icons-material';
+import { Send as SendIcon } from '../../design/icons';
 
 interface CommentFormProps {
   onSubmit: (content: string) => Promise<void>;

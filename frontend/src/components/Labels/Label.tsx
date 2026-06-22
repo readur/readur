@@ -15,7 +15,7 @@ import {
   Label as LabelIcon,
   BugReport as BugIcon,
   Build as BuildIcon
-} from '@mui/icons-material';
+} from '../../design/icons';
 
 export interface LabelData {
   id: string;

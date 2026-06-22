@@ -22,7 +22,7 @@ import {
   Close as CloseIcon,
   Delete as DeleteIcon,
   DoneAll as DoneAllIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { NotificationType } from '../../types/notification';
@@ -72,7 +72,6 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ anchorEl, onClose
         background: theme.palette.mode === 'light'
           ? 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)'
           : 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.95) 100%)',
-        backdropFilter: 'blur(20px)',
         border: theme.palette.mode === 'light'
           ? '1px solid rgba(0,0,0,0.05)'
           : '1px solid rgba(255,255,255,0.05)',

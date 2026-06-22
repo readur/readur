@@ -20,7 +20,7 @@ import {
   Lock as LockIcon,
   VisibilityOff as VisibilityOffIcon,
   InsertDriveFile as FileIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { sharedLinksPublicService, type SharedDocumentMetadata } from '../services/api';
 import axios from 'axios';
 
