@@ -74,6 +74,7 @@ ALLOWED_FILE_TYPES=pdf,png,jpg,jpeg,tiff,bmp,gif,txt,rtf,doc,docx
 
 ```bash
 # Enable S3 backend
+# STORAGE_BACKEND=s3 is equivalent to S3_ENABLED=true; you only need one
 STORAGE_BACKEND=s3
 S3_ENABLED=true
 
@@ -84,8 +85,11 @@ S3_ACCESS_KEY_ID=your_access_key
 S3_SECRET_ACCESS_KEY=your_secret_key
 
 # Or S3-compatible (MinIO, Wasabi, etc.)
-S3_ENDPOINT=https://s3.example.com
-S3_PATH_STYLE=true  # For MinIO
+# S3_ENDPOINT_URL alias: S3_ENDPOINT
+S3_ENDPOINT_URL=https://s3.example.com
+# S3_FORCE_PATH_STYLE alias: S3_PATH_STYLE. true=path-style, false=virtual-hosted,
+# unset=auto-detect (path-style probed first when a custom endpoint is set)
+S3_FORCE_PATH_STYLE=true  # For MinIO
 ```
 
 ## OCR Configuration

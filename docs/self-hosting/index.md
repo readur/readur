@@ -132,7 +132,7 @@ DATABASE_URL=postgresql://user:pass@localhost/readur
 POSTGRES_PASSWORD=<secure-password>
 
 # Document storage location
-STORAGE_BACKEND=s3  # or 'local'
+STORAGE_BACKEND=s3  # or 'local'; 's3' is equivalent to S3_ENABLED=true
 S3_BUCKET=readur-documents
 S3_ACCESS_KEY_ID=<your-key>
 S3_SECRET_ACCESS_KEY=<your-secret>
@@ -163,7 +163,7 @@ S3 storage provides unlimited scalability and built-in redundancy, making it ide
 
 ```bash
 STORAGE_BACKEND=s3
-S3_ENDPOINT=https://s3.amazonaws.com
+S3_ENDPOINT_URL=https://s3.amazonaws.com
 S3_BUCKET=my-readur-bucket
 S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY

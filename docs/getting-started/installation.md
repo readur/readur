@@ -65,7 +65,7 @@ UPLOAD_PATH=./data/uploads
 WATCH_FOLDER=./data/watch
 
 # Optional: S3 Storage (instead of local)
-# STORAGE_BACKEND=s3
+# STORAGE_BACKEND=s3  # equivalent to S3_ENABLED=true
 # S3_BUCKET=readur-documents
 # S3_REGION=us-east-1
 # AWS_ACCESS_KEY_ID=your_key
