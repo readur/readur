@@ -151,6 +151,7 @@ const SourcesPage: React.FC = () => {
     access_key_id: '',
     secret_access_key: '',
     endpoint_url: '',
+    force_path_style: 'auto' as 'auto' | 'path' | 'vhost',
     prefix: '',
     // Common fields
     watch_folders: ['/Documents'],
@@ -463,6 +464,7 @@ const SourcesPage: React.FC = () => {
       access_key_id: '',
       secret_access_key: '',
       endpoint_url: '',
+      force_path_style: 'auto',
       prefix: '',
       // Common fields
       watch_folders: ['/Documents'],
@@ -497,6 +499,8 @@ const SourcesPage: React.FC = () => {
       access_key_id: config.access_key_id || '',
       secret_access_key: config.secret_access_key || '',
       endpoint_url: config.endpoint_url || '',
+      force_path_style: config.force_path_style === true ? 'path'
+        : config.force_path_style === false ? 'vhost' : 'auto',
       prefix: config.prefix || '',
       // Common fields
       watch_folders: config.watch_folders || ['/Documents'],
@@ -542,6 +546,8 @@ const SourcesPage: React.FC = () => {
           access_key_id: formData.access_key_id,
           secret_access_key: formData.secret_access_key,
           endpoint_url: formData.endpoint_url,
+          force_path_style: formData.force_path_style === 'path' ? true
+            : formData.force_path_style === 'vhost' ? false : null,
           prefix: formData.prefix,
           watch_folders: formData.watch_folders,
           file_extensions: formData.file_extensions,
@@ -665,6 +671,8 @@ const SourcesPage: React.FC = () => {
             access_key_id: formData.access_key_id,
             secret_access_key: formData.secret_access_key,
             endpoint_url: formData.endpoint_url,
+            force_path_style: formData.force_path_style === 'path' ? true
+              : formData.force_path_style === 'vhost' ? false : null,
             prefix: formData.prefix,
           }
         });
@@ -2346,6 +2354,21 @@ const SourcesPage: React.FC = () => {
                     helperText="Leave empty for AWS S3, or provide custom endpoint for MinIO/other S3-compatible storage"
                     sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                   />
+
+                  <TextField
+                    select
+                    fullWidth
+                    margin="normal"
+                    label="Addressing Style"
+                    value={formData.force_path_style}
+                    onChange={(e) => setFormData({ ...formData, force_path_style: e.target.value as 'auto' | 'path' | 'vhost' })}
+                    helperText="MinIO, RustFS and most self-hosted S3 services require path-style. Auto-detect probes both."
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                  >
+                    <MenuItem value="auto">Auto-detect</MenuItem>
+                    <MenuItem value="path">Path-style (endpoint/bucket/key)</MenuItem>
+                    <MenuItem value="vhost">Virtual-hosted (bucket.endpoint/key)</MenuItem>
+                  </TextField>
 
                   <TextField
                     fullWidth
