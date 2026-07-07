@@ -101,14 +101,13 @@ impl S3Service {
             let mut detected = false;
             for &style in &styles {
                 let candidate = if style == styles[0] { client.clone() } else { build_client(style) };
-                match candidate
+                let probe = candidate
                     .list_objects_v2()
                     .bucket(&config.bucket_name)
                     .max_keys(1)
-                    .send()
-                    .await
-                {
-                    Ok(_) => {
+                    .send();
+                match tokio::time::timeout(std::time::Duration::from_secs(3), probe).await {
+                    Ok(Ok(_)) => {
                         info!(
                             "Auto-detected S3 addressing style: {}",
                             if style { "path-style" } else { "virtual-hosted" }
@@ -117,8 +116,14 @@ impl S3Service {
                         detected = true;
                         break;
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         debug!("S3 addressing probe (path_style={}) failed: {}", style, e);
+                    }
+                    Err(_) => {
+                        debug!(
+                            "S3 addressing probe (path_style={}) timed out after 3s",
+                            style
+                        );
                     }
                 }
             }

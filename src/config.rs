@@ -583,6 +583,10 @@ impl Config {
                     } else {
                         println!("✅ STORAGE_BACKEND: s3 (loaded from env, enables S3 storage)");
                     }
+                } else if env::var("S3_ENABLED").is_ok() {
+                    // Explicitly set but not "true" (e.g. S3_ENABLED=false) - distinct
+                    // from the var simply being unset.
+                    println!("✅ S3_ENABLED: false (loaded from env)");
                 } else {
                     println!("⚠️  S3_ENABLED: false (using default - env var not set)");
                 }

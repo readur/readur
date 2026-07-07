@@ -57,7 +57,6 @@ This document provides a comprehensive reference for all configuration options a
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `STORAGE_TYPE` | String | `local` | Storage backend (local, s3, azure) | No |
 | `LOCAL_STORAGE_PATH` | String | `./uploads` | Local storage directory | No |
 | `TEMP_STORAGE_PATH` | String | `./uploads/temp` | Temporary files directory | No |
 | `THUMBNAIL_PATH` | String | `./uploads/thumbnails` | Thumbnail storage directory | No |
@@ -74,7 +73,7 @@ This document provides a comprehensive reference for all configuration options a
 | `S3_SECRET_ACCESS_KEY` | String | - | AWS Secret Access Key | If S3 enabled |
 | `S3_REGION` | String | `us-east-1` | AWS region | No |
 | `S3_ENDPOINT_URL` | String | - | Custom S3 endpoint for S3-compatible services (MinIO, RustFS, etc.). Alias: `S3_ENDPOINT` | No |
-| `S3_FORCE_PATH_STYLE` | Boolean | auto | `true` forces path-style addressing, `false` forces virtual-hosted. Unset = auto-detect (path-style probed first when a custom endpoint is set). Alias: `S3_PATH_STYLE` | No |
+| `S3_FORCE_PATH_STYLE` | Boolean | auto | `true` forces path-style addressing, `false` forces virtual-hosted. Unset = auto-detect (path-style probed first when a custom endpoint is set; without a custom endpoint, the AWS default of virtual-hosted style is used and no probing occurs). Alias: `S3_PATH_STYLE` | No |
 | `S3_PREFIX` | String | - | S3 key prefix | No |
 | `S3_USE_SSL` | Boolean | `true` | Use HTTPS for S3 | No |
 | `S3_VERIFY_SSL` | Boolean | `true` | Verify SSL certificates | No |

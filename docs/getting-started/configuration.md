@@ -88,7 +88,9 @@ S3_SECRET_ACCESS_KEY=your_secret_key
 # S3_ENDPOINT_URL alias: S3_ENDPOINT
 S3_ENDPOINT_URL=https://s3.example.com
 # S3_FORCE_PATH_STYLE alias: S3_PATH_STYLE. true=path-style, false=virtual-hosted,
-# unset=auto-detect (path-style probed first when a custom endpoint is set)
+# unset=auto-detect (path-style probed first when a custom endpoint is set;
+# without a custom endpoint, the AWS default of virtual-hosted style is used
+# and no probing occurs)
 S3_FORCE_PATH_STYLE=true  # For MinIO
 ```
 

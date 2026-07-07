@@ -14,6 +14,8 @@ async fn test_extract_text_handles_s3_prefixed_path() {
         .unwrap();
 
     let temp_dir = tempfile::tempdir().unwrap();
+    // FileService::new is deprecated in favor of newer constructors, but the
+    // deprecated path is exactly the legacy (local-only) behavior under test here.
     #[allow(deprecated)]
     let file_service = FileService::new(upload_dir.path().to_string_lossy().to_string());
     let ocr = EnhancedOcrService::new(
@@ -48,6 +50,8 @@ async fn test_thumbnail_for_s3_prefixed_path() {
     let img = image::RgbImage::new(4, 4);
     img.save(docs_dir.join("pic.png")).unwrap();
 
+    // FileService::new is deprecated in favor of newer constructors, but the
+    // deprecated path is exactly the legacy (local-only) behavior under test here.
     #[allow(deprecated)]
     let file_service = readur::services::file_service::FileService::new(
         upload_dir.path().to_string_lossy().to_string(),
