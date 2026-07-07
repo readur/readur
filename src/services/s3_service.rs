@@ -71,27 +71,88 @@ impl S3Service {
             config.region.clone()
         };
 
-        let mut s3_config_builder = aws_sdk_s3::config::Builder::new()
-            .region(AwsRegion::new(region))
-            .credentials_provider(credentials)
-            .behavior_version_latest();
+        let build_client = |force_path_style: bool| {
+            let mut builder = aws_sdk_s3::config::Builder::new()
+                .region(AwsRegion::new(region.clone()))
+                .credentials_provider(credentials.clone())
+                .behavior_version_latest()
+                .force_path_style(force_path_style);
+            if let Some(endpoint_url) = &config.endpoint_url {
+                if !endpoint_url.is_empty() {
+                    builder = builder.endpoint_url(endpoint_url);
+                }
+            }
+            Client::from_conf(builder.build())
+        };
 
-        // Set custom endpoint if provided (for S3-compatible services)
         if let Some(endpoint_url) = &config.endpoint_url {
             if !endpoint_url.is_empty() {
-                s3_config_builder = s3_config_builder.endpoint_url(endpoint_url);
                 info!("Using custom S3 endpoint: {}", endpoint_url);
             }
         }
 
-        let s3_config = s3_config_builder.build();
-        let client = Client::from_conf(s3_config);
+        let styles = Self::addressing_styles_to_try(&config);
+        let mut client = build_client(styles[0]);
 
-        Ok(Self { 
+        // Auto-detect: probe each candidate style with a cheap request and keep
+        // the first that works. Probe failure must NOT fail construction —
+        // connection errors surface later via initialize()/test_connection().
+        if styles.len() > 1 && !config.bucket_name.is_empty() {
+            let mut detected = false;
+            for &style in &styles {
+                let candidate = if style == styles[0] { client.clone() } else { build_client(style) };
+                match candidate
+                    .list_objects_v2()
+                    .bucket(&config.bucket_name)
+                    .max_keys(1)
+                    .send()
+                    .await
+                {
+                    Ok(_) => {
+                        info!(
+                            "Auto-detected S3 addressing style: {}",
+                            if style { "path-style" } else { "virtual-hosted" }
+                        );
+                        client = candidate;
+                        detected = true;
+                        break;
+                    }
+                    Err(e) => {
+                        debug!("S3 addressing probe (path_style={}) failed: {}", style, e);
+                    }
+                }
+            }
+            if !detected {
+                warn!(
+                    "Could not auto-detect S3 addressing style for bucket '{}'; \
+                     defaulting to path-style. Set S3_FORCE_PATH_STYLE=true|false to override.",
+                    config.bucket_name
+                );
+            }
+        }
+
+        Ok(Self {
             #[cfg(feature = "s3")]
-            client, 
-            config 
+            client,
+            config
         })
+        }
+    }
+
+    /// Which S3 addressing styles to try, in priority order.
+    /// true = path-style (http://endpoint/bucket/key), false = virtual-hosted.
+    fn addressing_styles_to_try(config: &S3SourceConfig) -> Vec<bool> {
+        let has_custom_endpoint = config
+            .endpoint_url
+            .as_deref()
+            .map_or(false, |u| !u.is_empty());
+        match config.force_path_style {
+            Some(style) => vec![style],
+            // Custom endpoints are S3-compatible services (MinIO, RustFS, ...)
+            // which almost always require path-style; probe it first.
+            None if has_custom_endpoint => vec![true, false],
+            // AWS proper: keep the SDK's virtual-hosted default, no probing.
+            None => vec![false],
         }
     }
 
@@ -1010,5 +1071,48 @@ mod tests {
         assert_eq!(S3Service::get_mime_type("jpg"), "image/jpeg");
         assert_eq!(S3Service::get_mime_type("txt"), "text/plain");
         assert_eq!(S3Service::get_mime_type("unknown"), "application/octet-stream");
+    }
+
+    fn base_config() -> S3SourceConfig {
+        S3SourceConfig {
+            bucket_name: "b".to_string(),
+            region: "us-east-1".to_string(),
+            access_key_id: "k".to_string(),
+            secret_access_key: "s".to_string(),
+            endpoint_url: None,
+            force_path_style: None,
+            prefix: None,
+            watch_folders: vec![],
+            file_extensions: vec![],
+            auto_sync: false,
+            sync_interval_minutes: 0,
+        }
+    }
+
+    #[test]
+    fn addressing_style_explicit_wins() {
+        let mut cfg = base_config();
+        cfg.force_path_style = Some(true);
+        assert_eq!(S3Service::addressing_styles_to_try(&cfg), vec![true]);
+        cfg.force_path_style = Some(false);
+        cfg.endpoint_url = Some("http://minio:9000".to_string());
+        assert_eq!(S3Service::addressing_styles_to_try(&cfg), vec![false]);
+    }
+
+    #[test]
+    fn addressing_style_auto_detects_with_custom_endpoint() {
+        let mut cfg = base_config();
+        cfg.endpoint_url = Some("http://minio:9000".to_string());
+        // path-style first: S3-compatible services almost always need it
+        assert_eq!(S3Service::addressing_styles_to_try(&cfg), vec![true, false]);
+    }
+
+    #[test]
+    fn addressing_style_aws_default_without_endpoint() {
+        let cfg = base_config();
+        assert_eq!(S3Service::addressing_styles_to_try(&cfg), vec![false]);
+        let mut cfg2 = base_config();
+        cfg2.endpoint_url = Some("".to_string()); // empty = unset
+        assert_eq!(S3Service::addressing_styles_to_try(&cfg2), vec![false]);
     }
 }
