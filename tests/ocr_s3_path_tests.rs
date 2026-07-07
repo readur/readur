@@ -36,3 +36,26 @@ async fn test_extract_text_handles_s3_prefixed_path() {
     let mut entries = tokio::fs::read_dir(temp_dir.path()).await.unwrap();
     assert!(entries.next_entry().await.unwrap().is_none(), "temp download not cleaned up");
 }
+
+#[cfg(feature = "ocr")]
+#[tokio::test]
+async fn test_thumbnail_for_s3_prefixed_path() {
+    let upload_dir = tempfile::tempdir().unwrap();
+    let docs_dir = upload_dir.path().join("documents");
+    tokio::fs::create_dir_all(&docs_dir).await.unwrap();
+
+    // Tiny valid PNG generated with the image crate (already a dependency)
+    let img = image::RgbImage::new(4, 4);
+    img.save(docs_dir.join("pic.png")).unwrap();
+
+    #[allow(deprecated)]
+    let file_service = readur::services::file_service::FileService::new(
+        upload_dir.path().to_string_lossy().to_string(),
+    );
+
+    let thumb = file_service
+        .get_or_generate_thumbnail("s3://documents/pic.png", "pic.png")
+        .await
+        .expect("thumbnail generation should work for s3:// paths");
+    assert!(!thumb.is_empty());
+}
