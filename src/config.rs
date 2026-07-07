@@ -3,6 +3,18 @@ use std::env;
 
 use crate::models::S3SourceConfig;
 
+/// S3 storage is enabled by S3_ENABLED=true or the documented STORAGE_BACKEND=s3.
+fn s3_storage_enabled(s3_enabled: Option<&str>, storage_backend: Option<&str>) -> bool {
+    s3_enabled.map(|v| v.trim().eq_ignore_ascii_case("true")).unwrap_or(false)
+        || storage_backend.map(|v| v.trim().eq_ignore_ascii_case("s3")).unwrap_or(false)
+}
+
+/// S3_FORCE_PATH_STYLE with documented legacy alias S3_PATH_STYLE.
+/// None (unset) means auto-detect.
+fn parse_force_path_style(primary: Option<&str>, legacy: Option<&str>) -> Option<bool> {
+    primary.or(legacy).map(|v| v.trim().eq_ignore_ascii_case("true"))
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub database_url: String,
@@ -126,6 +138,13 @@ impl Config {
             }
         };
         
+        // S3 storage can be enabled via S3_ENABLED=true or the documented
+        // STORAGE_BACKEND=s3 alias; computed once and reused below.
+        let s3_storage_on = s3_storage_enabled(
+            env::var("S3_ENABLED").ok().as_deref(),
+            env::var("STORAGE_BACKEND").ok().as_deref(),
+        );
+
         let config = Config {
             database_url,
             server_address: {
@@ -554,26 +573,36 @@ impl Config {
             },
 
             // S3 Configuration
-            s3_enabled: match env::var("S3_ENABLED") {
-                Ok(val) => {
-                    let enabled = val.to_lowercase() == "true";
-                    println!("✅ S3_ENABLED: {} (loaded from env)", enabled);
-                    enabled
-                }
-                Err(_) => {
+            //
+            // S3 storage can be enabled via S3_ENABLED=true or the documented
+            // STORAGE_BACKEND=s3 alias.
+            s3_enabled: {
+                if s3_storage_on {
+                    if env::var("S3_ENABLED").ok().as_deref().map(|v| v.trim().eq_ignore_ascii_case("true")).unwrap_or(false) {
+                        println!("✅ S3_ENABLED: true (loaded from env)");
+                    } else {
+                        println!("✅ STORAGE_BACKEND: s3 (loaded from env, enables S3 storage)");
+                    }
+                } else {
                     println!("⚠️  S3_ENABLED: false (using default - env var not set)");
-                    false
                 }
+                s3_storage_on
             },
-            s3_config: if env::var("S3_ENABLED").unwrap_or_default().to_lowercase() == "true" {
+            s3_config: if s3_storage_on {
                 // Only load S3 config if S3 is enabled
                 let bucket_name = env::var("S3_BUCKET_NAME").unwrap_or_default();
                 let region = env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string());
                 let access_key_id = env::var("S3_ACCESS_KEY_ID").unwrap_or_default();
                 let secret_access_key = env::var("S3_SECRET_ACCESS_KEY").unwrap_or_default();
-                let endpoint_url = env::var("S3_ENDPOINT_URL").ok();
+                // S3_ENDPOINT is the documented var name; S3_ENDPOINT_URL is kept for
+                // backward compatibility and takes precedence if both are set.
+                let endpoint_url = env::var("S3_ENDPOINT_URL").ok().or_else(|| env::var("S3_ENDPOINT").ok());
                 let prefix = env::var("S3_PREFIX").ok();
-                
+                let force_path_style = parse_force_path_style(
+                    env::var("S3_FORCE_PATH_STYLE").ok().as_deref(),
+                    env::var("S3_PATH_STYLE").ok().as_deref(),
+                );
+
                 if !bucket_name.is_empty() && !access_key_id.is_empty() && !secret_access_key.is_empty() {
                     println!("✅ S3_BUCKET_NAME: {} (loaded from env)", bucket_name);
                     println!("✅ S3_REGION: {} (loaded from env)", region);
@@ -585,6 +614,9 @@ impl Config {
                     if let Some(ref pref) = prefix {
                         println!("✅ S3_PREFIX: {} (loaded from env)", pref);
                     }
+                    if let Some(force_path_style_value) = force_path_style {
+                        println!("✅ S3_FORCE_PATH_STYLE: {} (loaded from env)", force_path_style_value);
+                    }
 
                     Some(S3SourceConfig {
                         bucket_name,
@@ -592,6 +624,7 @@ impl Config {
                         access_key_id,
                         secret_access_key,
                         endpoint_url,
+                        force_path_style,
                         prefix,
                         watch_folders: vec![], // Will be configured separately for sources
                         file_extensions: vec![], // Will be configured separately for sources
@@ -887,5 +920,37 @@ impl Config {
         
         println!("✅ Directory path validation passed - no conflicts detected");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod s3_env_tests {
+    use super::*;
+
+    #[test]
+    fn s3_enabled_by_s3_enabled_var() {
+        assert!(s3_storage_enabled(Some("true"), None));
+        assert!(s3_storage_enabled(Some("TRUE"), None));
+        assert!(!s3_storage_enabled(Some("false"), None));
+        assert!(!s3_storage_enabled(None, None));
+    }
+
+    #[test]
+    fn s3_enabled_by_storage_backend_alias() {
+        assert!(s3_storage_enabled(None, Some("s3")));
+        assert!(s3_storage_enabled(None, Some("S3")));
+        assert!(!s3_storage_enabled(None, Some("local")));
+    }
+
+    #[test]
+    fn force_path_style_parsing() {
+        assert_eq!(parse_force_path_style(Some("true"), None), Some(true));
+        assert_eq!(parse_force_path_style(Some("false"), None), Some(false));
+        // legacy documented alias S3_PATH_STYLE
+        assert_eq!(parse_force_path_style(None, Some("true")), Some(true));
+        // primary wins over legacy
+        assert_eq!(parse_force_path_style(Some("false"), Some("true")), Some(false));
+        // unset -> auto-detect
+        assert_eq!(parse_force_path_style(None, None), None);
     }
 }

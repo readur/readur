@@ -988,6 +988,7 @@ mod tests {
             access_key_id: "test-key".to_string(),
             secret_access_key: "test-secret".to_string(),
             endpoint_url: None,
+            force_path_style: None,
             prefix: None,
             watch_folders: vec!["documents/".to_string()],
             file_extensions: vec!["pdf".to_string(), "txt".to_string()],
