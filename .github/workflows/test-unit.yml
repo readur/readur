@@ -46,8 +46,10 @@ jobs:
             python3-pip \
             antiword \
             catdoc
-          # Install latest ocrmypdf from PyPI instead of stale apt version
-          pip3 install --no-cache-dir ocrmypdf
+          # Install pinned ocrmypdf from PyPI instead of stale apt version.
+          # Pinned so upstream releases can't break unrelated PRs (e.g. 17.8.0
+          # moved --help/--version to stderr); Renovate bumps this pin.
+          pip3 install --no-cache-dir 'ocrmypdf==17.8.0'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
