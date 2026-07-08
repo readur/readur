@@ -26,12 +26,20 @@ mod tests {
     // Helpers
     // -----------------------------------------------------------------------
 
+    /// Combine stdout and stderr: ocrmypdf >= 17.8.0 prints --version and
+    /// --help to stderr, older versions print them to stdout.
+    fn combined_output(output: &std::process::Output) -> String {
+        let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+        text.push_str(&String::from_utf8_lossy(&output.stderr));
+        text
+    }
+
     fn ocrmypdf_version() -> String {
         Command::new("ocrmypdf")
             .arg("--version")
             .output()
             .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|o| combined_output(&o))
             .unwrap_or_else(|| "unknown".to_string())
             .trim()
             .to_string()
@@ -278,7 +286,8 @@ startxref
             .arg("--help")
             .output()
             .expect("Failed to run ocrmypdf --help");
-        let help_text = String::from_utf8_lossy(&help.stdout);
+        // ocrmypdf >= 17.8.0 prints help to stderr, older versions to stdout
+        let help_text = combined_output(&help);
 
         for (name, args) in [
             ("Strategy 1", ocrmypdf_strategy1_args()),

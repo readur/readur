@@ -379,7 +379,7 @@ Common environment variables used by CLI tools:
 | `S3_ACCESS_KEY_ID` | AWS/S3 access key ID | `AKIA...` |
 | `S3_SECRET_ACCESS_KEY` | AWS/S3 secret access key | `...` |
 | `S3_REGION` | AWS region | `us-east-1` |
-| `S3_ENDPOINT` | Custom S3 endpoint | `https://minio.company.com` |
+| `S3_ENDPOINT_URL` | Custom S3 endpoint (alias: `S3_ENDPOINT`) | `https://minio.company.com` |
 | `RUST_LOG` | Logging level | `debug`, `info`, `warn`, `error` |
 | `RUST_BACKTRACE` | Error backtraces | `1` or `full` |
 

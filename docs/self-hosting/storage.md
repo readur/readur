@@ -57,14 +57,14 @@ Recommended for production deployments requiring scalability.
 
 ```bash
 # In .env file
-STORAGE_BACKEND=s3
-S3_BUCKET=readur-documents
+STORAGE_BACKEND=s3  # equivalent to S3_ENABLED=true
+S3_BUCKET_NAME=readur-documents
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 
 # Optional settings
-S3_ENDPOINT=  # Leave empty for AWS
+S3_ENDPOINT_URL=  # Leave empty for AWS
 S3_USE_SSL=true
 S3_VERIFY_SSL=true
 S3_SIGNATURE_VERSION=s3v4
@@ -76,8 +76,8 @@ For self-hosted S3-compatible storage:
 
 ```bash
 STORAGE_BACKEND=s3
-S3_BUCKET=readur
-S3_ENDPOINT=https://minio.company.com:9000
+S3_BUCKET_NAME=readur
+S3_ENDPOINT_URL=https://minio.company.com:9000
 S3_ACCESS_KEY_ID=minioadmin
 S3_SECRET_ACCESS_KEY=minioadmin123
 S3_USE_SSL=true

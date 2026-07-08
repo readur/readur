@@ -65,11 +65,11 @@ UPLOAD_PATH=./data/uploads
 WATCH_FOLDER=./data/watch
 
 # Optional: S3 Storage (instead of local)
-# STORAGE_BACKEND=s3
-# S3_BUCKET=readur-documents
+# STORAGE_BACKEND=s3  # equivalent to S3_ENABLED=true
+# S3_BUCKET_NAME=readur-documents
 # S3_REGION=us-east-1
-# AWS_ACCESS_KEY_ID=your_key
-# AWS_SECRET_ACCESS_KEY=your_secret
+# S3_ACCESS_KEY_ID=your_key
+# S3_SECRET_ACCESS_KEY=your_secret
 ```
 
 #### 3. Create Required Directories
