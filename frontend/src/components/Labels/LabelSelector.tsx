@@ -15,7 +15,7 @@ import {
   DialogActions,
   Button,
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon } from '../../design/icons';
 import { useTranslation } from 'react-i18next';
 import Label, { type LabelData } from './Label';
 import LabelCreateDialog from './LabelCreateDialog';

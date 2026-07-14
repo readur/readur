@@ -21,7 +21,7 @@ import {
   Schedule as ScheduleIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { type Document } from '../../services/api';
 import { type LabelData } from '../Labels/Label';

@@ -11,7 +11,7 @@ import {
   Alert,
   Divider,
 } from '@mui/material';
-import { Refresh as RefreshIcon, Language as LanguageIcon } from '@mui/icons-material';
+import { Refresh as RefreshIcon, Language as LanguageIcon } from '../../design/icons';
 import OcrLanguageSelector from '../OcrLanguageSelector';
 import LanguageSelector from '../LanguageSelector';
 import { ocrService, ErrorHelper, ErrorCodes, LanguageInfo } from '../../services/api';

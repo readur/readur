@@ -26,7 +26,7 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon,
   OpenInNew as ExternalLinkIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 
 import { SourceScanFailure, SourceErrorType } from '../../services/api';
 import { modernTokens } from '../../theme';

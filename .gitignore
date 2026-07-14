@@ -19,4 +19,5 @@ test-results/
 uploads/
 
 # Misc.
+tmp/
 .claude/settings.local.json

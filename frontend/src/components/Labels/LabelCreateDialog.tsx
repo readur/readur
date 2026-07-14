@@ -31,7 +31,7 @@ import {
   Folder as FolderIcon,
   Assignment as AssignmentIcon,
   Schedule as ScheduleIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTranslation } from 'react-i18next';
 import Label, { type LabelData } from './Label';
 

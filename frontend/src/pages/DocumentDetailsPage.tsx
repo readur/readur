@@ -19,7 +19,7 @@ import {
 import {
   ArrowBack as BackIcon,
   Delete as DeleteIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { documentService, OcrResponse, type Document } from '../services/api';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { type LabelData } from '../components/Labels/Label';
