@@ -34,7 +34,7 @@ import {
   Delete as DeleteIcon,
   Key as KeyIcon,
   Warning as WarningIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import axios from 'axios';
 import { apiKeysService, type ApiKey } from '../../services/api';
 

@@ -14,7 +14,7 @@ import {
 import {
   Search as SearchIcon,
   Close as CloseIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { type OcrResponse } from '../../services/api';
 

@@ -28,18 +28,18 @@ function App(): React.ReactElement {
     return (
       <ThemeProvider>
         <CssBaseline />
-        <div style={{ 
-          minHeight: '100vh', 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          background: 'var(--bg-0)',
         }}>
           <div style={{
-            width: '40px',
-            height: '40px',
-            border: '4px solid rgba(255, 255, 255, 0.3)',
-            borderTop: '4px solid white',
+            width: '32px',
+            height: '32px',
+            border: '3px solid var(--bg-3)',
+            borderTop: '3px solid var(--accent-60)',
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',
           }} />

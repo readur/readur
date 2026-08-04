@@ -13,7 +13,7 @@ import {
   Error as ErrorIcon,
   Refresh as RetryIcon,
   History as HistoryIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { type Document, type OcrResponse } from '../../services/api';
 

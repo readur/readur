@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Box, CircularProgress, Typography, Alert, Container } from '@mui/material';
+import { Box, CircularProgress, Typography, Alert } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { api, ErrorHelper, ErrorCodes } from '../../services/api';
+import { Panel } from '../../design/components';
 
 const OidcCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -15,10 +16,10 @@ const OidcCallback: React.FC = () => {
     const handleCallback = async () => {
       try {
         const token = searchParams.get('token');
-        const error = searchParams.get('error');
+        const errorParam = searchParams.get('error');
 
-        if (error) {
-          setError(`Authentication failed: ${error}`);
+        if (errorParam) {
+          setError(`Authentication failed: ${errorParam}`);
           setProcessing(false);
           return;
         }
@@ -29,18 +30,13 @@ const OidcCallback: React.FC = () => {
           return;
         }
 
-        // Store the token and set up API authorization
         localStorage.setItem('token', token);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
-        // Redirect to dashboard - the page will reload and AuthContext will pick up the token
         window.location.href = '/dashboard';
       } catch (err: any) {
         console.error('OIDC callback error:', err);
-
         const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
 
-        // Handle specific OIDC callback errors
         if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_OIDC_AUTH_FAILED)) {
           setError('OIDC authentication failed. Please try logging in again or contact your administrator.');
         } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_AUTH_PROVIDER_NOT_CONFIGURED)) {
@@ -49,8 +45,10 @@ const OidcCallback: React.FC = () => {
           setError('Authentication failed. Your OIDC credentials may be invalid or expired.');
         } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
           setError('Your account has been disabled. Please contact an administrator for assistance.');
-        } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) ||
-                   ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
+        } else if (
+          ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) ||
+          ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)
+        ) {
           setError('Authentication session expired. Please try logging in again.');
         } else if (errorInfo.category === 'network') {
           setError('Network error during authentication. Please check your connection and try again.');
@@ -67,72 +65,77 @@ const OidcCallback: React.FC = () => {
     handleCallback();
   }, [searchParams, navigate, login]);
 
-  const handleReturnToLogin = () => {
-    navigate('/login');
-  };
+  const handleReturnToLogin = () => navigate('/login');
 
   return (
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'var(--bg-0)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        p: 2,
+        padding: 'var(--s-4)',
       }}
     >
-      <Container maxWidth="sm">
-        <Box
-          sx={{
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            borderRadius: 4,
-            p: 4,
-            textAlign: 'center',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          }}
-        >
+      <Box sx={{ width: '100%', maxWidth: 420 }}>
+        <Panel>
           {processing ? (
-            <>
-              <CircularProgress size={60} sx={{ mb: 3, color: 'primary.main' }} />
-              <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
-                Completing Authentication
-              </Typography>
-              <Typography variant="body1" color="text.secondary">
-                Please wait while we process your authentication...
-              </Typography>
-            </>
-          ) : (
-            <>
-              <Alert 
-                severity="error" 
-                sx={{ mb: 3, textAlign: 'left' }}
-                action={
-                  <Box
-                    component="button"
-                    onClick={handleReturnToLogin}
-                    sx={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'primary.main',
-                      cursor: 'pointer',
-                      textDecoration: 'underline',
-                      fontSize: '0.875rem',
-                    }}
-                  >
-                    Return to Login
-                  </Box>
-                }
+            <Box sx={{ textAlign: 'center', py: 'var(--s-4)' }}>
+              <CircularProgress size={32} sx={{ mb: 'var(--s-4)', color: 'var(--accent-60)' }} />
+              <Typography
+                sx={{
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 700,
+                  fontSize: 'var(--fs-h2)',
+                  color: 'var(--fg-0)',
+                  letterSpacing: '-0.01em',
+                  mb: 'var(--s-2)',
+                }}
               >
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Authentication Error
-                </Typography>
-                {error}
-              </Alert>
-            </>
+                Completing authentication
+              </Typography>
+              <Typography
+                sx={{
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--fs-body)',
+                  color: 'var(--fg-2)',
+                  lineHeight: 'var(--lh-body)',
+                }}
+              >
+                Please wait while we process your sign-in.
+              </Typography>
+            </Box>
+          ) : (
+            <Alert
+              severity="error"
+              sx={{ textAlign: 'left' }}
+              action={
+                <Box
+                  component="button"
+                  onClick={handleReturnToLogin}
+                  sx={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-60)',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    fontSize: '0.875rem',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  Return to sign in
+                </Box>
+              }
+            >
+              <Typography sx={{ mb: 'var(--s-1)', fontWeight: 600 }}>
+                Authentication error
+              </Typography>
+              {error}
+            </Alert>
           )}
-        </Box>
-      </Container>
+        </Panel>
+      </Box>
     </Box>
   );
 };

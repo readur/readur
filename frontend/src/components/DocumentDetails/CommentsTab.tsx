@@ -6,7 +6,7 @@ import {
   Alert,
   Divider,
 } from '@mui/material';
-import { ChatBubbleOutline as CommentIcon } from '@mui/icons-material';
+import { ChatBubbleOutline as CommentIcon } from '../../design/icons';
 import {
   commentsService,
   type CommentThread as CommentThreadType,

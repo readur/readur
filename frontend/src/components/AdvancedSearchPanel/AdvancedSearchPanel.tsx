@@ -49,7 +49,7 @@ import {
   RestoreFromTrash as ResetIcon,
   BookmarkBorder as SaveIcon,
   Lightbulb as TipIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 
 type SearchMode = 'simple' | 'phrase' | 'fuzzy' | 'boolean';
 

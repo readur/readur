@@ -1,6 +1,6 @@
 import React from 'react';
 import { Chip, IconButton, Tooltip } from '@mui/material';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { Refresh as RefreshIcon } from '../../design/icons';
 import { ConnectionStatus } from '../../services/syncProgress';
 
 interface ConnectionStatusIndicatorProps {

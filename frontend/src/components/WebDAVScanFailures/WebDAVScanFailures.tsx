@@ -33,7 +33,7 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon,
   CheckCircle as CheckCircleIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { alpha } from '@mui/material/styles';
 
 import { webdavService, WebDAVScanFailure, WebDAVScanFailureSeverity, WebDAVScanFailureType } from '../../services/api';

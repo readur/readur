@@ -1,6 +1,6 @@
 import React from 'react';
 import { IconButton, Tooltip, Box } from '@mui/material';
-import { Brightness4, Brightness7 } from '@mui/icons-material';
+import { Brightness4, Brightness7 } from '../../design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface ThemeToggleProps {

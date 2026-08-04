@@ -36,7 +36,7 @@ import {
   Cloud as CloudIcon,
   Folder as FolderIcon,
   Language as WebDAVIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { alpha } from '@mui/material/styles';
 
 import { sourceErrorService, SourceScanFailure, SourceErrorSeverity, SourceErrorType, SourceType } from '../../services/api';

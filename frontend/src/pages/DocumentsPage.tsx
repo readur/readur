@@ -60,13 +60,14 @@ import {
   Close as CloseIcon,
   Refresh as RefreshIcon,
   History as HistoryIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { documentService } from '../services/api';
 import DocumentThumbnail from '../components/DocumentThumbnail';
 import Label, { type LabelData } from '../components/Labels/Label';
 import LabelSelector from '../components/Labels/LabelSelector';
 import { useApi } from '../hooks/useApi';
 import { RetryHistoryModal } from '../components/RetryHistoryModal';
+import { PageHeader } from '../design/components';
 
 interface Document {
   id: string;
@@ -509,26 +510,12 @@ const DocumentsPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography 
-          variant="h4" 
-          sx={{ 
-            fontWeight: 800,
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            color: 'transparent',
-            mb: 1,
-          }}
-        >
-          {t('documents.title')}
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {t('documents.subtitle')}
-        </Typography>
-      </Box>
+    <Box>
+      <PageHeader
+        kicker={t('navigation.sections.library')}
+        title={t('documents.title')}
+        subtitle={t('documents.subtitle')}
+      />
 
       {/* Toolbar */}
       <Box sx={{ 

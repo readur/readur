@@ -30,7 +30,7 @@ import {
   Folder as FolderIcon,
   Search as SearchIcon,
   Clear as ClearIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { documentService, FacetItem } from '../../services/api';
 
 interface MimeTypeFacetFilterProps {

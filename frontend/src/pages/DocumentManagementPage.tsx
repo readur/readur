@@ -55,10 +55,11 @@ import {
   Warning as WarningIcon,
   Block as BlockIcon,
   History as HistoryIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { format } from 'date-fns';
 import { api, documentService, queueService, BulkOcrRetryResponse, ErrorHelper, ErrorCodes } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
+import { PageHeader } from '../design/components';
 import FailedDocumentViewer from '../components/FailedDocumentViewer';
 import MetadataDisplay from '../components/MetadataDisplay';
 import { BulkRetryModal } from '../components/BulkRetryModal';
@@ -860,39 +861,33 @@ const DocumentManagementPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          {t('documentManagement.title')}
-        </Typography>
-        <Box display="flex" gap={2}>
-          <Button
-            variant="contained"
-            color="primary"
-            size="large"
-            startIcon={retryingAll ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
-            onClick={() => setConfirmRetryAllOpen(true)}
-            disabled={retryingAll}
-            sx={{ 
-              minWidth: 200,
-              boxShadow: 3,
-              '&:hover': {
-                boxShadow: 6,
-              }
-            }}
-          >
-            {retryingAll ? t('documentManagement.retrying') : t('documentManagement.retryAll')}
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={refreshCurrentTab}
-            disabled={loading || duplicatesLoading || retryingAll}
-          >
-            {t('common.actions.refresh')}
-          </Button>
-        </Box>
-      </Box>
+    <Box>
+      <PageHeader
+        kicker={t('navigation.sections.system')}
+        title={t('documentManagement.title')}
+        actions={
+          <>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={refreshCurrentTab}
+              disabled={loading || duplicatesLoading || retryingAll}
+            >
+              {t('common.actions.refresh')}
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={retryingAll ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
+              onClick={() => setConfirmRetryAllOpen(true)}
+              disabled={retryingAll}
+              sx={{ minWidth: 200 }}
+            >
+              {retryingAll ? t('documentManagement.retrying') : t('documentManagement.retryAll')}
+            </Button>
+          </>
+        }
+      />
 
       <Paper sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
         <Tabs 
@@ -1440,7 +1435,6 @@ const DocumentManagementPage: React.FC = () => {
                                   background: theme.palette.mode === 'light' 
                                     ? 'rgba(248, 250, 252, 0.8)' 
                                     : 'rgba(30, 30, 30, 0.8)',
-                                  backdropFilter: 'blur(10px)',
                                   borderRadius: 2,
                                   border: `1px solid ${theme.palette.divider}`,
                                 }}
@@ -1469,7 +1463,6 @@ const DocumentManagementPage: React.FC = () => {
                                           background: theme.palette.mode === 'light'
                                             ? 'rgba(255, 255, 255, 0.9)'
                                             : 'rgba(40, 40, 40, 0.9)',
-                                          backdropFilter: 'blur(5px)',
                                           border: `1px solid ${theme.palette.divider}`,
                                           transition: 'all 0.2s ease',
                                           '&:hover': {

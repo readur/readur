@@ -16,7 +16,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Refresh as RefreshIcon,
   Block as BlockIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 
 import { SourceScanFailureStats } from '../../services/api';
 import { modernTokens } from '../../theme';

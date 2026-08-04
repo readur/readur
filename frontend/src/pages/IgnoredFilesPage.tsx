@@ -46,11 +46,12 @@ import {
   CalendarToday as DateIcon,
   ArrowBack as ArrowBackIcon,
   RestoreFromTrash as RestoreFromTrashIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { PageHeader } from '../design/components';
 
 interface IgnoredFile {
   id: string;
@@ -400,21 +401,28 @@ const IgnoredFilesPage: React.FC = () => {
         </Breadcrumbs>
       </Box>
 
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
-        <BlockIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-        {t('ignoredFiles.title')}
-        {(sourceTypeParam || sourceNameParam || sourceIdParam) && (
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<ArrowBackIcon />}
-            onClick={clearFilters}
-            sx={{ ml: 2, textTransform: 'none' }}
-          >
-            {t('common.actions.viewDetails')}
-          </Button>
-        )}
-      </Typography>
+      <PageHeader
+        kicker={t('navigation.sections.ingest')}
+        title={
+          <>
+            <BlockIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'var(--accent-60)' }} />
+            {t('ignoredFiles.title')}
+          </>
+        }
+        actions={
+          (sourceTypeParam || sourceNameParam || sourceIdParam) ? (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ArrowBackIcon />}
+              onClick={clearFilters}
+              sx={{ textTransform: 'none' }}
+            >
+              {t('common.actions.viewDetails')}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
         {t('ignoredFiles.subtitle')}

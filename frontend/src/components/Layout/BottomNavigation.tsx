@@ -3,14 +3,13 @@ import {
   BottomNavigation as MuiBottomNavigation,
   BottomNavigationAction,
   Paper,
-  useTheme,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
   CloudUpload as UploadIcon,
   Label as LabelIcon,
   Settings as SettingsIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePWA } from '../../hooks/usePWA';
@@ -18,16 +17,11 @@ import { usePWA } from '../../hooks/usePWA';
 const BottomNavigation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const theme = useTheme();
   const { t } = useTranslation();
   const isPWA = usePWA();
 
-  // Don't render if not in PWA mode
-  if (!isPWA) {
-    return null;
-  }
+  if (!isPWA) return null;
 
-  // Map paths to nav values
   const getNavValue = (pathname: string): string => {
     if (pathname === '/dashboard') return 'dashboard';
     if (pathname === '/upload') return 'upload';
@@ -37,24 +31,19 @@ const BottomNavigation: React.FC = () => {
   };
 
   const handleNavigation = (_event: React.SyntheticEvent, newValue: string) => {
-    switch (newValue) {
-      case 'dashboard':
-        navigate('/dashboard');
-        break;
-      case 'upload':
-        navigate('/upload');
-        break;
-      case 'labels':
-        navigate('/labels');
-        break;
-      case 'settings':
-        navigate('/settings');
-        break;
-    }
+    const map: Record<string, string> = {
+      dashboard: '/dashboard',
+      upload: '/upload',
+      labels: '/labels',
+      settings: '/settings',
+    };
+    const target = map[newValue];
+    if (target) navigate(target);
   };
 
   return (
     <Paper
+      elevation={0}
       sx={{
         position: 'fixed',
         bottom: 0,
@@ -62,59 +51,46 @@ const BottomNavigation: React.FC = () => {
         right: 0,
         zIndex: 1100,
         display: { xs: 'block', md: 'none' },
-        background: theme.palette.mode === 'light'
-          ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)'
-          : 'linear-gradient(180deg, rgba(30,30,30,0.98) 0%, rgba(18,18,18,0.98) 100%)',
-        backdropFilter: 'blur(20px)',
-        borderTop: theme.palette.mode === 'light'
-          ? '1px solid rgba(226,232,240,0.5)'
-          : '1px solid rgba(255,255,255,0.1)',
-        boxShadow: theme.palette.mode === 'light'
-          ? '0 -4px 32px rgba(0,0,0,0.08)'
-          : '0 -4px 32px rgba(0,0,0,0.3)',
-        // iOS safe area support - add 8px fixed padding for extra space
+        background: 'var(--bg-1)',
+        borderTop: '1px solid var(--line-1)',
+        borderRadius: 0,
+        boxShadow: 'none',
         paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
       }}
-      elevation={0}
     >
       <MuiBottomNavigation
         value={getNavValue(location.pathname)}
         onChange={handleNavigation}
         sx={{
           background: 'transparent',
-          height: '64px',
+          height: 64,
           '& .MuiBottomNavigationAction-root': {
-            color: 'text.secondary',
+            color: 'var(--fg-3)',
             minWidth: 'auto',
             padding: '8px 12px',
-            gap: '4px',
-            transition: 'all 0.2s ease-in-out',
+            transition: 'color var(--dur-fast) var(--ease-out)',
             '& .MuiBottomNavigationAction-label': {
-              fontSize: '0.75rem',
+              fontFamily: 'var(--font-sans)',
+              fontSize: '0.7rem',
               fontWeight: 500,
               letterSpacing: '0.025em',
-              marginTop: '4px',
-              transition: 'all 0.2s ease-in-out',
-              '&.Mui-selected': {
-                fontSize: '0.75rem',
-              },
+              marginTop: 4,
             },
             '& .MuiSvgIcon-root': {
-              fontSize: '1.5rem',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              fontSize: '1.25rem',
             },
             '&.Mui-selected': {
-              color: '#6366f1',
-              '& .MuiSvgIcon-root': {
-                transform: 'scale(1.1)',
-                filter: 'drop-shadow(0 2px 8px rgba(99,102,241,0.3))',
+              color: 'var(--accent-70)',
+              '& .MuiBottomNavigationAction-label': {
+                fontWeight: 600,
+                color: 'var(--accent-70)',
+                fontSize: '0.7rem',
               },
             },
-            // iOS-style touch feedback
             '@media (pointer: coarse)': {
-              minHeight: '56px',
+              minHeight: 56,
               '&:active': {
-                transform: 'scale(0.95)',
+                background: 'var(--bg-2)',
               },
             },
           },
@@ -124,65 +100,21 @@ const BottomNavigation: React.FC = () => {
           label={t('navigation.dashboard')}
           value="dashboard"
           icon={<DashboardIcon />}
-          sx={{
-            '&.Mui-selected': {
-              '& .MuiBottomNavigationAction-label': {
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontWeight: 600,
-              },
-            },
-          }}
         />
         <BottomNavigationAction
           label={t('navigation.upload')}
           value="upload"
           icon={<UploadIcon />}
-          sx={{
-            '&.Mui-selected': {
-              '& .MuiBottomNavigationAction-label': {
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontWeight: 600,
-              },
-            },
-          }}
         />
         <BottomNavigationAction
           label={t('navigation.labels')}
           value="labels"
           icon={<LabelIcon />}
-          sx={{
-            '&.Mui-selected': {
-              '& .MuiBottomNavigationAction-label': {
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontWeight: 600,
-              },
-            },
-          }}
         />
         <BottomNavigationAction
           label={t('settings.title')}
           value="settings"
           icon={<SettingsIcon />}
-          sx={{
-            '&.Mui-selected': {
-              '& .MuiBottomNavigationAction-label': {
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontWeight: 600,
-              },
-            },
-          }}
         />
       </MuiBottomNavigation>
     </Paper>

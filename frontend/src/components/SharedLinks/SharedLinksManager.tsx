@@ -26,7 +26,7 @@ import {
   ContentCopy as CopyIcon,
   Check as CheckIcon,
   LinkOff as LinkOffIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useTranslation } from 'react-i18next';
 import { sharedLinksService, type SharedLinkData } from '../../services/api';
 import axios from 'axios';

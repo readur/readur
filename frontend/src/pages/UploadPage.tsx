@@ -1,31 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Box,
-  Typography,
-  Container,
-  Card,
-  CardContent,
-  List,
-  ListItem,
-} from '@mui/material';
+import { Box } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
-import {
-  CloudUpload as UploadIcon,
-  AutoAwesome as AutoIcon,
-  Search as SearchIcon,
-  Security as SecurityIcon,
-  Speed as SpeedIcon,
-  Language as LanguageIcon,
-} from '@mui/icons-material';
 import UploadZone from '../components/Upload/UploadZone';
-import { useNavigate } from 'react-router-dom';
-
-interface Feature {
-  icon: React.ComponentType<any>;
-  title: string;
-  description: string;
-}
+import { PageHeader, Panel, PanelHead } from '../design/components';
 
 interface UploadedDocument {
   id: string;
@@ -38,94 +16,76 @@ interface UploadedDocument {
 
 const UploadPage: React.FC = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-
-  const features: Feature[] = [
-    {
-      icon: AutoIcon,
-      title: t('upload.features.aiOcr.title'),
-      description: t('upload.features.aiOcr.description'),
-    },
-    {
-      icon: SearchIcon,
-      title: t('upload.features.fullTextSearch.title'),
-      description: t('upload.features.fullTextSearch.description'),
-    },
-    {
-      icon: SpeedIcon,
-      title: t('upload.features.lightningFast.title'),
-      description: t('upload.features.lightningFast.description'),
-    },
-    {
-      icon: SecurityIcon,
-      title: t('upload.features.secure.title'),
-      description: t('upload.features.secure.description'),
-    },
-    {
-      icon: LanguageIcon,
-      title: t('upload.features.multiLanguage.title'),
-      description: t('upload.features.multiLanguage.description'),
-    },
-  ];
 
   const handleUploadComplete = (document: UploadedDocument): void => {
-    // Optionally navigate to the document or show a success message
     console.log('Upload completed:', document);
   };
 
-  return (
-    <Container maxWidth="lg">
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-          {t('upload.title')}
-        </Typography>
-        <Typography variant="h6" color="text.secondary">
-          {t('upload.subtitle')}
-        </Typography>
-      </Box>
+  const tips: string[] = [
+    t('upload.tips.highRes'),
+    t('upload.tips.pdfText'),
+    t('upload.tips.clarity'),
+    t('upload.tips.maxSize'),
+  ];
 
-      <Grid container spacing={4}>
-        {/* Upload Zone */}
+  return (
+    <Box>
+      <PageHeader
+        kicker={t('navigation.sections.ingest')}
+        title={t('upload.title')}
+        subtitle={t('upload.subtitle')}
+      />
+
+      <Grid container spacing={3}>
         <Grid item xs={12} lg={8}>
           <UploadZone onUploadComplete={handleUploadComplete} />
         </Grid>
-
-        {/* Features Sidebar */}
         <Grid item xs={12} lg={4}>
-
-          {/* Tips Card */}
-          <Card elevation={0} sx={{ mt: 3 }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                {t('upload.tips.title')}
-              </Typography>
-              <List dense sx={{ p: 0 }}>
-                <ListItem sx={{ px: 0 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('upload.tips.highRes')}
-                  </Typography>
-                </ListItem>
-                <ListItem sx={{ px: 0 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('upload.tips.pdfText')}
-                  </Typography>
-                </ListItem>
-                <ListItem sx={{ px: 0 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('upload.tips.clarity')}
-                  </Typography>
-                </ListItem>
-                <ListItem sx={{ px: 0 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('upload.tips.maxSize')}
-                  </Typography>
-                </ListItem>
-              </List>
-            </CardContent>
-          </Card>
+          <Panel flush>
+            <PanelHead title={t('upload.tips.title')} subtitle="Best practices" />
+            <Box
+              component="ul"
+              sx={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 'var(--s-4) var(--s-5)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--s-3)',
+              }}
+            >
+              {tips.map((tip, i) => (
+                <Box
+                  key={i}
+                  component="li"
+                  sx={{
+                    display: 'flex',
+                    gap: 'var(--s-3)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 'var(--fs-body)',
+                    lineHeight: 'var(--lh-body)',
+                    color: 'var(--fg-2)',
+                  }}
+                >
+                  <Box
+                    aria-hidden
+                    sx={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: 'var(--accent-50)',
+                      marginTop: 8,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Box sx={{ minWidth: 0 }}>{tip}</Box>
+                </Box>
+              ))}
+            </Box>
+          </Panel>
         </Grid>
       </Grid>
-    </Container>
+    </Box>
   );
 };
 

@@ -1,0 +1,201 @@
+/* ============================================================
+   READUR DESIGN SYSTEM — Studio v3
+   Foundational tokens: colors, type, spacing, radii, shadows.
+   Light + dark, equally polished.
+   Ported from tmp/colors_and_type.css.
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* ---------- NEUTRAL (light) — cool greys, neutral-50 page ---------- */
+  --bg-0:  #FAFAFA;   /* page (neutral-50) */
+  --bg-1:  #FFFFFF;   /* card / panel surface */
+  --bg-2:  #F5F5F5;   /* hover / inset (neutral-100) */
+  --bg-3:  #E5E5E5;   /* divider fill (neutral-200) */
+
+  --line-1: #E5E5E5;  /* neutral-200, hairline */
+  --line-2: #D4D4D4;  /* neutral-300, stronger rule */
+  --line-3: #A3A3A3;  /* neutral-400, input border */
+
+  --fg-0:  #171717;   /* neutral-900 — primary ink */
+  --fg-1:  #262626;   /* neutral-800 — body */
+  --fg-2:  #525252;   /* neutral-600 — secondary */
+  --fg-3:  #737373;   /* neutral-500 — tertiary, metadata */
+  --fg-4:  #A3A3A3;   /* neutral-400 — disabled, placeholder */
+
+  /* ---------- PRIMARY — indigo ---------- */
+  --accent-05: #F0F4FF;
+  --accent-10: #E0EAFF;
+  --accent-20: #C7D7FE;
+  --accent-40: #8B93F8;
+  --accent-50: #6366F1;
+  --accent-60: #4F46E5;
+  --accent-70: #4338CA;
+  --accent-80: #3730A3;
+  --accent-fg: #FFFFFF;
+
+  --accent-grad: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  --accent-grad-hover: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%);
+
+  /* ---------- SECONDARY — fuchsia ---------- */
+  --sec-05: #FDF4FF;
+  --sec-10: #FAE8FF;
+  --sec-50: #D946EF;
+  --sec-60: #C026D3;
+  --sec-70: #A21CAF;
+
+  /* ---------- STATUS ---------- */
+  --ok-05:   #F0FDF4;
+  --ok-50:   #22C55E;
+  --ok-60:   #16A34A;
+  --ok-70:   #15803D;
+
+  --warn-05: #FFFBEB;
+  --warn-50: #F59E0B;
+  --warn-60: #D97706;
+  --warn-70: #B45309;
+
+  --err-05:  #FEF2F2;
+  --err-50:  #EF4444;
+  --err-60:  #DC2626;
+  --err-70:  #B91C1C;
+
+  --info-05: #EFF6FF;
+  --info-50: #3B82F6;
+  --info-60: #2563EB;
+  --info-70: #1D4ED8;
+
+  /* ---------- TYPE ---------- */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Menlo", Consolas, monospace;
+
+  --fs-display-xl: 56px;
+  --fs-display-lg: 44px;
+  --fs-display-md: 36px;
+  --fs-h1: 28px;
+  --fs-h2: 22px;
+  --fs-h3: 18px;
+  --fs-body: 14.5px;
+  --fs-small: 13px;
+  --fs-meta: 12px;
+  --fs-micro: 11px;
+
+  --lh-tight: 1.1;
+  --lh-snug:  1.25;
+  --lh-body:  1.55;
+
+  --tracking-caps:    0.06em;
+  --tracking-display: -0.02em;
+  --tracking-body:    0;
+
+  /* ---------- SPACING (4px base) ---------- */
+  --s-0: 0;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+  --s-20: 80px;
+  --s-24: 96px;
+
+  /* ---------- RADII ---------- */
+  --r-0: 0;
+  --r-1: 6px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-4: 16px;
+  --r-5: 20px;
+  --r-full: 999px;
+
+  /* ---------- SHADOWS ---------- */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
+  --shadow-glow: 0 0 0 4px rgb(99 102 241 / 0.15);
+  --shadow-lift: var(--shadow-xl);
+
+  /* ---------- MOTION ---------- */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
+}
+
+/* ============================================================
+   DARK MODE
+   Activated by `.dark` class on <html> (ThemeContext toggles).
+   ============================================================ */
+html.dark,
+.dark {
+  --bg-0:  #0A0A0A;
+  --bg-1:  #171717;
+  --bg-2:  #262626;
+  --bg-3:  #404040;
+
+  --line-1: #262626;
+  --line-2: #404040;
+  --line-3: #525252;
+
+  --fg-0:  #FAFAFA;
+  --fg-1:  #E5E5E5;
+  --fg-2:  #A3A3A3;
+  --fg-3:  #737373;
+  --fg-4:  #525252;
+
+  --accent-05: #1E1B4B;
+  --accent-10: #2A2470;
+  --accent-20: #3730A3;
+  --accent-40: #818CF8;
+  --accent-50: #8B93F8;
+  --accent-60: #A5B8FC;
+  --accent-70: #C7D7FE;
+  --accent-80: #E0EAFF;
+  --accent-fg: #0A0A0A;
+  --accent-grad: linear-gradient(135deg, #818CF8 0%, #6366F1 100%);
+  --accent-grad-hover: linear-gradient(135deg, #A5B8FC 0%, #818CF8 100%);
+
+  --sec-05: #2E1038;
+  --sec-10: #4A1761;
+  --sec-50: #E879F9;
+  --sec-60: #D946EF;
+  --sec-70: #F5D0FE;
+
+  --ok-05:  #052E16; --ok-50:  #4ADE80; --ok-60:  #22C55E; --ok-70:  #86EFAC;
+  --warn-05:#451A03; --warn-50:#FBBF24; --warn-60:#F59E0B; --warn-70:#FCD34D;
+  --err-05: #450A0A; --err-50: #F87171; --err-60: #EF4444; --err-70: #FCA5A5;
+  --info-05:#172554; --info-50:#60A5FA; --info-60:#3B82F6; --info-70:#93C5FD;
+
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.6), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+  --shadow-glow: 0 0 0 4px rgb(139 147 248 / 0.2);
+  --shadow-lift: var(--shadow-xl);
+}
+
+/* ============================================================
+   GLOBAL DEFAULTS — body inherits design tokens
+   ============================================================ */
+html, body {
+  font-family: var(--font-sans);
+  background: var(--bg-0);
+  color: var(--fg-1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Lucide icons default to 1.5px stroke and currentColor */
+svg.lucide,
+svg[data-lucide] {
+  stroke-width: 1.5;
+}

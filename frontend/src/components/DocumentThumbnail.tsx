@@ -5,7 +5,7 @@ import {
   Image as ImageIcon,
   Description as DocIcon,
   TextSnippet as TextIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { documentService } from '../services/api';
 
 interface DocumentThumbnailProps {

@@ -26,7 +26,7 @@ import {
   Business as BusinessIcon,
   FileCopy as DocumentIcon,
   ContentCopy as CopyIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { modernTokens } from '../theme';
 
 // Define border radius values since they might not be in modernTokens

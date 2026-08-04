@@ -35,7 +35,7 @@ import {
   Timer as TimerIcon,
   Info as InfoIcon,
   Warning as WarningIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { alpha } from '@mui/material/styles';
 
 import { WebDAVScanFailure } from '../../services/api';

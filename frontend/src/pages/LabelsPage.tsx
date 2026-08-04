@@ -28,9 +28,10 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   FilterList as FilterIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { useNavigate } from 'react-router-dom';
 import Label, { type LabelData } from '../components/Labels/Label';
+import { PageHeader } from '../design/components';
 import LabelCreateDialog from '../components/Labels/LabelCreateDialog';
 import { useApi } from '../hooks/useApi';
 import { ErrorHelper, ErrorCodes } from '../services/api';
@@ -210,19 +211,19 @@ const LabelsPage: React.FC = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4" component="h1">
-          {t('labels.title')}
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setCreateDialogOpen(true)}
-        >
-          {t('labels.actions.createLabel')}
-        </Button>
-      </Box>
+      <PageHeader
+        kicker={t('navigation.sections.library')}
+        title={t('labels.title')}
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setCreateDialogOpen(true)}
+          >
+            {t('labels.actions.createLabel')}
+          </Button>
+        }
+      />
 
       {/* Error Alert */}
       {error && (

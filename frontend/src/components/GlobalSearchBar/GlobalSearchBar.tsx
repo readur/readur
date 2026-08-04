@@ -31,7 +31,7 @@ import {
   TextSnippet as TextIcon,
   TrendingUp as TrendingIcon,
   AccessTime as TimeIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { documentService, SearchRequest, EnhancedDocument, SearchResponse } from '../../services/api';
@@ -377,7 +377,6 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                 background: theme.palette.mode === 'light'
                   ? 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.90) 100%)'
                   : 'linear-gradient(135deg, rgba(50,50,50,0.95) 0%, rgba(30,30,30,0.90) 100%)',
-                backdropFilter: 'blur(20px)',
                 border: theme.palette.mode === 'light'
                   ? '1px solid rgba(226,232,240,0.5)'
                   : '1px solid rgba(255,255,255,0.1)',
@@ -458,7 +457,6 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                   background: theme.palette.mode === 'light'
                     ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.95) 100%)'
                     : 'linear-gradient(180deg, rgba(40,40,40,0.98) 0%, rgba(25,25,25,0.95) 100%)',
-                  backdropFilter: 'blur(24px)',
                   border: theme.palette.mode === 'light'
                     ? '1px solid rgba(226,232,240,0.6)'
                     : '1px solid rgba(255,255,255,0.1)',
@@ -567,10 +565,9 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                                 fontWeight: 500,
                                 border: '1px solid rgba(99,102,241,0.3)',
                                 background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)',
-                                backdropFilter: 'blur(10px)',
                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                 '&:hover': {
-                                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                                  background: 'var(--accent-grad)',
                                   color: 'white',
                                   transform: 'translateY(-2px)',
                                   boxShadow: '0 8px 24px rgba(99,102,241,0.2)',
@@ -605,7 +602,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                           px: 1.5,
                           py: 0.5,
                           borderRadius: 2,
-                          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                          background: 'var(--accent-grad)',
                           color: 'white',
                         }}>
                           <Typography variant="caption" sx={{
@@ -744,7 +741,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                             cursor: 'pointer',
                             transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                             '&:hover': {
-                              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                              background: 'var(--accent-grad)',
                               transform: 'translateY(-2px)',
                               boxShadow: '0 8px 24px rgba(99,102,241,0.2)',
                               '& .view-all-text': {
@@ -879,10 +876,9 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ sx, ...props }) => {
                             fontWeight: 500,
                             border: '1px solid rgba(99,102,241,0.3)',
                             background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)',
-                            backdropFilter: 'blur(10px)',
                             transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                             '&:hover': {
-                              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                              background: 'var(--accent-grad)',
                               color: 'white',
                               transform: 'translateY(-2px)',
                               boxShadow: '0 8px 24px rgba(99,102,241,0.2)',

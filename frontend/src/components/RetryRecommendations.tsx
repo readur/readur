@@ -18,7 +18,7 @@ import {
   Refresh as RefreshIcon,
   TrendingUp as TrendingUpIcon,
   Info as InfoIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { documentService, OcrRetryRecommendation, BulkOcrRetryResponse } from '../services/api';
 
 interface RetryRecommendationsProps {

@@ -15,7 +15,7 @@ import {
   Group as GroupIcon,
   Storage as StorageIcon,
   Info as InfoIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 
 interface MetadataDisplayProps {
   metadata: any;

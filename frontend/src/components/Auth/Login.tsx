@@ -1,34 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   TextField,
   Button,
   Typography,
-  Container,
   Alert,
   InputAdornment,
   IconButton,
-  Fade,
-  Grow,
   CircularProgress,
 } from '@mui/material';
 import {
   Visibility,
   VisibilityOff,
-  Email as EmailIcon,
+  Person as PersonIcon,
   Lock as LockIcon,
-  CloudUpload as LogoIcon,
   Security as SecurityIcon,
-} from '@mui/icons-material';
+} from '../../design/icons';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { api, ErrorHelper, ErrorCodes } from '../../services/api';
 import { useTranslation } from 'react-i18next';
+import { Panel } from '../../design/components';
 
 interface LoginFormData {
   username: string;
@@ -49,31 +42,24 @@ const Login: React.FC = () => {
   const [oidcLoading, setOidcLoading] = useState<boolean>(false);
   const { login } = useAuth();
   const navigate = useNavigate();
-  const { mode } = useTheme();
-  const theme = useMuiTheme();
   const { t } = useTranslation();
 
-  // Fetch authentication configuration from backend
   useEffect(() => {
     const fetchAuthConfig = async () => {
       try {
         const response = await fetch('/api/auth/config');
         if (response.ok) {
-          const config = await response.json();
-          setAuthConfig(config);
+          setAuthConfig(await response.json());
         } else {
-          // Default to allowing both if config fetch fails
           setAuthConfig({ allow_local_auth: true, oidc_enabled: true });
         }
       } catch (err) {
         console.error('Failed to fetch auth config:', err);
-        // Default to allowing both if config fetch fails
         setAuthConfig({ allow_local_auth: true, oidc_enabled: true });
       } finally {
         setConfigLoading(false);
       }
     };
-
     fetchAuthConfig();
   }, []);
 
@@ -91,18 +77,17 @@ const Login: React.FC = () => {
       navigate('/dashboard');
     } catch (err) {
       console.error('Login failed:', err);
-      
       const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
-      
-      // Handle specific login errors
       if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_INVALID_CREDENTIALS)) {
         setError(t('auth.errors.invalidCredentials'));
       } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
         setError(t('auth.errors.accountDisabled'));
       } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_NOT_FOUND)) {
         setError(t('auth.errors.userNotFound'));
-      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) ||
-                 ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
+      } else if (
+        ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) ||
+        ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)
+      ) {
         setError(t('auth.errors.sessionExpired'));
       } else if (errorInfo.category === 'network') {
         setError(t('auth.errors.networkError'));
@@ -116,22 +101,16 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleClickShowPassword = (): void => {
-    setShowPassword(!showPassword);
-  };
+  const handleClickShowPassword = (): void => setShowPassword(!showPassword);
 
   const handleOidcLogin = async (): Promise<void> => {
     try {
       setError('');
       setOidcLoading(true);
-      // Redirect to OIDC login endpoint
       window.location.href = '/api/auth/oidc/login';
     } catch (err) {
       console.error('OIDC login failed:', err);
-      
       const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
-      
-      // Handle specific OIDC errors
       if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_OIDC_AUTH_FAILED)) {
         setError(t('auth.errors.oidcAuthFailed'));
       } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_AUTH_PROVIDER_NOT_CONFIGURED)) {
@@ -149,282 +128,235 @@ const Login: React.FC = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        background: mode === 'light' 
-          ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-          : 'linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%)',
+        background: 'var(--bg-0)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        p: 2,
+        padding: 'var(--s-4)',
       }}
     >
-      <Container maxWidth="sm">
-        <Fade in={true} timeout={800}>
-          <Box>
-            {/* Logo and Header */}
-            <Box sx={{ textAlign: 'center', mb: 4 }}>
-              <Grow in={true} timeout={1000}>
-                <Box
-                  sx={{
-                    width: 80,
-                    height: 80,
-                    borderRadius: 3,
-                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: '2rem',
-                    fontWeight: 'bold',
-                    mx: 'auto',
-                    mb: 3,
-                    boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04)',
-                  }}
-                >
-                  <LogoIcon fontSize="large" />
-                </Box>
-              </Grow>
-              <Typography
-                variant="h3"
-                sx={{
-                  color: 'white',
-                  fontWeight: 700,
-                  mb: 1,
-                  textShadow: mode === 'light' 
-                    ? '0 4px 6px rgba(0, 0, 0, 0.1)'
-                    : '0 4px 12px rgba(0, 0, 0, 0.5)',
-                }}
-              >
-                {t('common.welcome', { appName: t('common.appName') })}
-              </Typography>
-              <Typography
-                variant="h6"
-                sx={{
-                  color: mode === 'light'
-                    ? 'rgba(255, 255, 255, 0.8)'
-                    : 'rgba(255, 255, 255, 0.9)',
-                  fontWeight: 400,
-                }}
-              >
-                {t('auth.intelligentDocumentPlatform')}
-              </Typography>
+      <Box sx={{ width: '100%', maxWidth: 420 }}>
+        {/* Brand + headline */}
+        <Box sx={{ textAlign: 'left', mb: 'var(--s-6)' }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--s-3)',
+              mb: 'var(--s-5)',
+            }}
+          >
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 'var(--r-2)',
+                background: 'var(--accent-grad)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: 'var(--shadow-sm)',
+                overflow: 'hidden',
+              }}
+            >
+              <Box
+                component="img"
+                src="/readur-32.png"
+                srcSet="/readur-32.png 1x, /readur-64.png 2x"
+                alt={t('common.appName')}
+                sx={{ width: 26, height: 26, objectFit: 'contain' }}
+              />
             </Box>
-
-            {/* Loading state while fetching config */}
-            {configLoading && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                <CircularProgress sx={{ color: 'white' }} />
-              </Box>
-            )}
-
-            {/* Login Card */}
-            {!configLoading && authConfig && (
-              <Grow in={true} timeout={1200}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    borderRadius: 4,
-                    backdropFilter: 'blur(20px)',
-                    backgroundColor: mode === 'light'
-                      ? 'rgba(255, 255, 255, 0.95)'
-                      : 'rgba(30, 30, 30, 0.95)',
-                    border: mode === 'light'
-                      ? '1px solid rgba(255, 255, 255, 0.2)'
-                    : '1px solid rgba(255, 255, 255, 0.1)',
-                  boxShadow: mode === 'light'
-                    ? '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-                    : '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
-                }}
-              >
-                <CardContent sx={{ p: 4 }}>
-                  <Typography
-                    variant="h5"
-                    sx={{
-                      textAlign: 'center',
-                      mb: 3,
-                      fontWeight: 600,
-                      color: 'text.primary',
-                    }}
-                  >
-                    {t('auth.signInToAccount')}
-                  </Typography>
-
-                  {error && (
-                    <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
-                      {error}
-                    </Alert>
-                  )}
-
-                  <Box component="form" onSubmit={handleSubmit(onSubmit)}>
-                    {authConfig.allow_local_auth && (
-                      <>
-                        <TextField
-                          fullWidth
-                          label={t('auth.username')}
-                          margin="normal"
-                          {...register('username', {
-                            required: t('auth.usernameRequired'),
-                          })}
-                          error={!!errors.username}
-                          helperText={errors.username?.message}
-                          InputProps={{
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                <EmailIcon sx={{ color: 'text.secondary' }} />
-                              </InputAdornment>
-                            ),
-                          }}
-                          sx={{ mb: 2 }}
-                        />
-
-                        <TextField
-                          fullWidth
-                          label={t('auth.password')}
-                          type={showPassword ? 'text' : 'password'}
-                          margin="normal"
-                          {...register('password', {
-                            required: t('auth.passwordRequired'),
-                          })}
-                          error={!!errors.password}
-                          helperText={errors.password?.message}
-                          InputProps={{
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                <LockIcon sx={{ color: 'text.secondary' }} />
-                              </InputAdornment>
-                            ),
-                            endAdornment: (
-                              <InputAdornment position="end">
-                                <IconButton
-                                  onClick={handleClickShowPassword}
-                                  edge="end"
-                                  sx={{ color: 'text.secondary' }}
-                                >
-                                  {showPassword ? <VisibilityOff /> : <Visibility />}
-                                </IconButton>
-                              </InputAdornment>
-                            ),
-                          }}
-                          sx={{ mb: 3 }}
-                        />
-
-                        <Button
-                          type="submit"
-                          fullWidth
-                          variant="contained"
-                          size="large"
-                          disabled={loading || oidcLoading}
-                          sx={{
-                            py: 1.5,
-                            mb: 2,
-                            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                            borderRadius: 2,
-                            fontSize: '1rem',
-                            fontWeight: 600,
-                            textTransform: 'none',
-                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                            '&:hover': {
-                              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                            },
-                            '&:disabled': {
-                              background: 'rgba(0, 0, 0, 0.12)',
-                            },
-                          }}
-                        >
-                          {loading ? t('auth.signingIn') : t('auth.signIn')}
-                        </Button>
-
-                        {authConfig.oidc_enabled && (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              my: 2,
-                              '&::before': {
-                                content: '""',
-                                flex: 1,
-                                height: '1px',
-                                backgroundColor: 'divider',
-                              },
-                              '&::after': {
-                                content: '""',
-                                flex: 1,
-                                height: '1px',
-                                backgroundColor: 'divider',
-                              },
-                            }}
-                          >
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                px: 2,
-                                color: 'text.secondary',
-                              }}
-                            >
-                              {t('common.or')}
-                            </Typography>
-                          </Box>
-                        )}
-                      </>
-                    )}
-
-                    {authConfig.oidc_enabled && (
-                      <Button
-                        fullWidth
-                        variant="outlined"
-                        size="large"
-                        disabled={loading || oidcLoading}
-                        onClick={handleOidcLogin}
-                        startIcon={<SecurityIcon />}
-                        sx={{
-                          py: 1.5,
-                          mb: 2,
-                          borderRadius: 2,
-                          fontSize: '1rem',
-                          fontWeight: 600,
-                          textTransform: 'none',
-                          borderColor: 'primary.main',
-                          color: 'primary.main',
-                          '&:hover': {
-                            backgroundColor: 'primary.main',
-                            color: 'white',
-                            borderColor: 'primary.main',
-                          },
-                          '&:disabled': {
-                            borderColor: 'rgba(0, 0, 0, 0.12)',
-                            color: 'rgba(0, 0, 0, 0.26)',
-                          },
-                        }}
-                      >
-                        {oidcLoading ? t('auth.redirecting') : t('auth.signInWithOIDC')}
-                      </Button>
-                    )}
-
-                    <Box sx={{ textAlign: 'center', mt: 2 }}>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grow>
-            )}
-
-            {/* Footer */}
-            <Box sx={{ textAlign: 'center', mt: 4 }}>
-              <Typography
-                variant="body2"
+            <Box>
+              <Box
                 sx={{
-                  color: mode === 'light'
-                    ? 'rgba(255, 255, 255, 0.7)'
-                    : 'rgba(255, 255, 255, 0.8)',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 800,
+                  fontSize: 18,
+                  lineHeight: 1,
+                  color: 'var(--fg-0)',
+                  letterSpacing: '-0.025em',
                 }}
               >
-                {t('common.copyright')}
-              </Typography>
+                {t('common.appName')}
+              </Box>
+              <Box
+                sx={{
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 600,
+                  fontSize: 10,
+                  color: 'var(--accent-60)',
+                  letterSpacing: '0.1em',
+                  marginTop: '4px',
+                  textTransform: 'uppercase',
+                }}
+              >
+                v2.9 · sign in
+              </Box>
             </Box>
           </Box>
-        </Fade>
-      </Container>
+          <Typography
+            sx={{
+              fontFamily: 'var(--font-sans)',
+              fontWeight: 800,
+              fontSize: 'var(--fs-display-md)',
+              lineHeight: 'var(--lh-tight)',
+              letterSpacing: 'var(--tracking-display)',
+              color: 'var(--fg-0)',
+              margin: 0,
+            }}
+          >
+            {t('auth.signInToAccount')}
+          </Typography>
+        </Box>
+
+        {configLoading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 'var(--s-6)' }}>
+            <CircularProgress size={28} sx={{ color: 'var(--accent-60)' }} />
+          </Box>
+        )}
+
+        {!configLoading && authConfig && (
+          <Panel>
+            {error && (
+              <Alert severity="error" sx={{ mb: 'var(--s-4)', borderRadius: 'var(--r-2)' }}>
+                {error}
+              </Alert>
+            )}
+
+            <Box component="form" onSubmit={handleSubmit(onSubmit)}>
+              {authConfig.allow_local_auth && (
+                <>
+                  <TextField
+                    fullWidth
+                    label={t('auth.username')}
+                    margin="normal"
+                    {...register('username', { required: t('auth.usernameRequired') })}
+                    error={!!errors.username}
+                    helperText={errors.username?.message}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <PersonIcon sx={{ color: 'var(--fg-3)', fontSize: 18 }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{ mb: 'var(--s-3)' }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    label={t('auth.password')}
+                    type={showPassword ? 'text' : 'password'}
+                    margin="normal"
+                    {...register('password', { required: t('auth.passwordRequired') })}
+                    error={!!errors.password}
+                    helperText={errors.password?.message}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <LockIcon sx={{ color: 'var(--fg-3)', fontSize: 18 }} />
+                        </InputAdornment>
+                      ),
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={handleClickShowPassword}
+                            edge="end"
+                            sx={{ color: 'var(--fg-3)' }}
+                            aria-label="toggle password visibility"
+                          >
+                            {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{ mb: 'var(--s-5)' }}
+                  />
+
+                  <Button
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    size="large"
+                    disabled={loading || oidcLoading}
+                    sx={{
+                      py: 1.25,
+                      fontWeight: 600,
+                      fontSize: '0.95rem',
+                    }}
+                  >
+                    {loading ? t('auth.signingIn') : t('auth.signIn')}
+                  </Button>
+
+                  {authConfig.oidc_enabled && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        my: 'var(--s-5)',
+                        gap: 'var(--s-3)',
+                        '&::before, &::after': {
+                          content: '""',
+                          flex: 1,
+                          height: '1px',
+                          backgroundColor: 'var(--line-1)',
+                        },
+                      }}
+                    >
+                      <Box
+                        component="span"
+                        className="rd-label"
+                        sx={{ flexShrink: 0 }}
+                      >
+                        {t('common.or')}
+                      </Box>
+                    </Box>
+                  )}
+                </>
+              )}
+
+              {authConfig.oidc_enabled && (
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="large"
+                  disabled={loading || oidcLoading}
+                  onClick={handleOidcLogin}
+                  startIcon={<SecurityIcon />}
+                  sx={{
+                    py: 1.25,
+                    fontWeight: 600,
+                    fontSize: '0.95rem',
+                    borderColor: 'var(--line-2)',
+                    color: 'var(--fg-0)',
+                    '&:hover': {
+                      background: 'var(--bg-2)',
+                      borderColor: 'var(--accent-50)',
+                    },
+                  }}
+                >
+                  {oidcLoading ? t('auth.redirecting') : t('auth.signInWithOIDC')}
+                </Button>
+              )}
+            </Box>
+          </Panel>
+        )}
+
+        <Box sx={{ textAlign: 'center', mt: 'var(--s-6)' }}>
+          <Typography
+            sx={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 'var(--fs-micro)',
+              color: 'var(--fg-3)',
+              letterSpacing: 'var(--tracking-caps)',
+              textTransform: 'uppercase',
+            }}
+          >
+            {t('common.copyright')}
+          </Typography>
+        </Box>
+      </Box>
     </Box>
   );
 };

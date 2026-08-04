@@ -61,13 +61,14 @@ import {
   AccessTime as TimeIcon,
   TrendingUp as TrendingIcon,
   TextFormat as TextFormatIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { documentService, SearchRequest, api } from '../services/api';
 import SearchGuidance from '../components/SearchGuidance';
 import EnhancedSearchGuide from '../components/EnhancedSearchGuide';
 import MimeTypeFacetFilter from '../components/MimeTypeFacetFilter';
 import EnhancedSnippetViewer from '../components/EnhancedSnippetViewer';
 import AdvancedSearchPanel from '../components/AdvancedSearchPanel';
+import { PageHeader } from '../design/components';
 
 interface Document {
   id: string;
@@ -551,33 +552,24 @@ const SearchPage: React.FC = () => {
 
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header with Prominent Search */}
-      <Box sx={{ mb: 4 }}>
-        <Typography 
-          variant="h4" 
-          sx={{ 
-            fontWeight: 800,
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            color: 'transparent',
-            mb: 2,
-          }}
-        >
-          {t('search.title')}
-        </Typography>
-        
-        {/* Enhanced Search Bar */}
-        <Paper 
-          elevation={3}
+    <Box>
+      <PageHeader
+        kicker="FULL-TEXT · POSTGRESQL TSVECTOR"
+        title={t('search.title')}
+        subtitle={t('search.subtitle', 'Search across OCR text, filenames, labels, and metadata.')}
+      />
+
+      {/* Enhanced Search Bar */}
+      <Box sx={{ mb: 'var(--s-6)' }}>
+        <Paper
+          elevation={0}
           className="search-input-responsive"
           sx={{
             p: 2,
-            mb: 3,
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%)',
-            border: '1px solid',
-            borderColor: 'primary.light',
+            mb: 2,
+            background: 'var(--bg-1)',
+            border: '1px solid var(--line-1)',
+            borderRadius: 'var(--r-3)',
           }}
         >
           <Box sx={{ position: 'relative' }}>

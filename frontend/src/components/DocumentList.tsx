@@ -3,7 +3,7 @@ import {
   DocumentIcon,
   PhotoIcon,
   ArrowDownTrayIcon,
-} from '@heroicons/react/24/outline'
+} from '../design/icons'
 import { Document, documentService } from '../services/api'
 
 interface DocumentListProps {

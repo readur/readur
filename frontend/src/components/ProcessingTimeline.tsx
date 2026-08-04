@@ -28,7 +28,7 @@ import {
   ExpandMore as ExpandIcon,
   Schedule as ScheduleIcon,
   Person as PersonIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { documentService } from '../services/api';

@@ -86,7 +86,14 @@
     "sources": "Sources",
     "watchFolder": "Watch Folder",
     "documentManagement": "Document Management",
-    "ignoredFiles": "Ignored Files"
+    "ignoredFiles": "Ignored Files",
+    "settings": "Settings",
+    "debug": "Debug",
+    "sections": {
+      "library": "Library",
+      "ingest": "Ingest",
+      "system": "System"
+    }
   },
   "dashboard": {
     "greeting": "Here's what's happening with your documents today.",
@@ -120,7 +127,13 @@
       "title": "Recent Documents",
       "viewAll": "View All",
       "noDocuments": "No documents yet",
-      "uploadFirst": "Upload your first document to get started"
+      "uploadFirst": "Upload your first document to get started",
+      "columns": {
+        "document": "Document",
+        "size": "Size",
+        "added": "Added",
+        "status": "Status"
+      }
     },
     "quickActions": {
       "title": "Quick Actions",

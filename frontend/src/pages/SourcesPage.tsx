@@ -74,13 +74,14 @@ import {
   HealthAndSafety as HealthIcon,
   Warning as WarningIcon,
   Error as CriticalIcon,
-} from '@mui/icons-material';
+} from '../design/icons';
 import { useNavigate } from 'react-router-dom';
 import api, { queueService, sourcesService, ErrorHelper, ErrorCodes } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import SyncProgressDisplay from '../components/SyncProgress';
+import { PageHeader } from '../design/components';
 
 interface Source {
   id: string;
@@ -1368,49 +1369,27 @@ const SourcesPage: React.FC = () => {
   );
 
   return (
-    <Container maxWidth="xl" sx={{ py: 6 }}>
-      {/* Header */}
-      <Box sx={{ mb: 6 }}>
-        <Typography 
-          variant="h3" 
-          component="h1" 
-          fontWeight="bold"
-          sx={{
-            background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            color: 'transparent',
-            mb: 2,
-          }}
-        >
-          Document Sources
-        </Typography>
-        <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
-          Connect and manage your document sources with intelligent syncing
-        </Typography>
-        
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={<AddIcon />}
-            onClick={handleCreateSource}
-            data-testid="add-source"
-            sx={{
-              borderRadius: 3,
-              px: 4,
-              py: 1.5,
-              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-              boxShadow: `0 8px 32px ${alpha(theme.palette.primary.main, 0.3)}`,
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: `0 12px 40px ${alpha(theme.palette.primary.main, 0.4)}`,
-              },
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-          >
-            Add Source
-          </Button>
+    <Box>
+      <PageHeader
+        kicker={t('navigation.sections.ingest')}
+        title="Document sources"
+        subtitle="Connected storage locations Readur watches and syncs — non-destructive."
+        actions={
+          <>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreateSource}
+              data-testid="add-source"
+            >
+              Add source
+            </Button>
+          </>
+        }
+      />
+
+      <Box>
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 'var(--s-5)' }}>
           
           <Button
             variant="outlined"
@@ -2765,7 +2744,7 @@ const SourcesPage: React.FC = () => {
           to { transform: rotate(360deg); }
         }
       `}</style>
-    </Container>
+    </Box>
   );
 };
 

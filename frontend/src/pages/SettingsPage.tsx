@@ -42,11 +42,12 @@ import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon,
          Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon,
          Pause as PauseIcon, Stop as StopIcon, CheckCircle as CheckCircleIcon,
          Error as ErrorIcon, Visibility as VisibilityIcon, CreateNewFolder as CreateNewFolderIcon,
-         RemoveCircle as RemoveCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
+         RemoveCircle as RemoveCircleIcon, Warning as WarningIcon } from '../design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
 import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
+import { PageHeader } from '../design/components';
 import LanguageSelector from '../components/LanguageSelector';
 import ApiKeysManager from '../components/ApiKeys/ApiKeysManager';
 import { usePWA } from '../hooks/usePWA';
@@ -851,9 +852,12 @@ const SettingsPage: React.FC = () => {
         px: isPWA ? { xs: 1, sm: 2, md: 3 } : undefined,
       }}
     >
-      <Typography variant="h4" sx={{ mb: 4, px: isPWA ? { xs: 1, sm: 0 } : 0 }}>
-        {t('settings.title')}
-      </Typography>
+      <Box sx={{ px: isPWA ? { xs: 1, sm: 0 } : 0 }}>
+        <PageHeader
+          kicker={t('navigation.sections.system')}
+          title={t('settings.title')}
+        />
+      </Box>
 
       <Paper sx={{ width: '100%' }}>
         <Tabs

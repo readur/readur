@@ -4,7 +4,7 @@ import {
   ClockIcon,
   DocumentTextIcon,
   ExclamationCircleIcon,
-} from '@heroicons/react/24/outline'
+} from '../design/icons'
 import { Document } from '../services/api'
 
 interface OcrAnalyticsProps {

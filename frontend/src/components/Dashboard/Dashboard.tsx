@@ -1,45 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  LinearProgress,
-  Chip,
-  Avatar,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
-  Fab,
-  Paper,
-  useTheme,
-  alpha,
-} from '@mui/material';
+import { Box, Button, IconButton, Tooltip } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import {
   CloudUpload as UploadIcon,
   Article as DocumentIcon,
-  Search as SearchIcon,
-  TrendingUp as TrendingUpIcon,
-  CloudDone as StorageIcon,
-  AutoAwesome as OcrIcon,
-  FindInPage as SearchableIcon,
-  Add as AddIcon,
-  GetApp as DownloadIcon,
-  Visibility as ViewIcon,
-  Delete as DeleteIcon,
-  InsertDriveFile as FileIcon,
   PictureAsPdf as PdfIcon,
   Image as ImageIcon,
   TextSnippet as TextIcon,
-} from '@mui/icons-material';
+  InsertDriveFile as FileIcon,
+  Visibility as ViewIcon,
+  GetApp as DownloadIcon,
+} from '../../design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import api, { documentService } from '../../services/api';
 import { useTranslation } from 'react-i18next';
+import {
+  PageHeader,
+  Panel,
+  PanelHead,
+  StatCard,
+  Pill,
+  MetaText,
+  EmptyState,
+} from '../../design/components';
 
 interface Document {
   id: string;
@@ -59,471 +43,60 @@ interface DashboardStats {
   searchablePages: number;
 }
 
-interface StatsCardProps {
-  title: string;
-  value: string | number;
-  subtitle: string;
-  icon: React.ComponentType<any>;
-  color: string;
-  trend?: string;
-}
-
-interface RecentDocumentsProps {
-  documents: Document[];
-}
-
-interface QuickAction {
-  title: string;
-  description: string;
-  icon: React.ComponentType<any>;
-  color: string;
-  path: string;
-}
-
-// Stats Card Component
-const StatsCard: React.FC<StatsCardProps> = ({ title, value, subtitle, icon: Icon, color, trend }) => {
-  const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
-  
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        background: isDarkMode 
-          ? `linear-gradient(135deg, ${alpha(color, 0.15)} 0%, ${alpha(color, 0.08)} 100%)`
-          : `linear-gradient(135deg, ${color} 0%, ${alpha(color, 0.85)} 100%)`,
-        color: isDarkMode ? theme.palette.text.primary : 'white',
-        position: 'relative',
-        overflow: 'hidden',
-        borderRadius: 3,
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        cursor: 'pointer',
-        border: isDarkMode 
-          ? `1px solid ${alpha(color, 0.3)}`
-          : '1px solid rgba(255,255,255,0.1)',
-        backdropFilter: 'blur(20px)',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: `0 20px 40px ${alpha(color, 0.3)}`,
-        },
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: '120px',
-          height: '120px',
-          background: isDarkMode
-            ? `linear-gradient(135deg, ${alpha(color, 0.15)} 0%, ${alpha(color, 0.05)} 100%)`
-            : 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%)',
-          borderRadius: '50%',
-          transform: 'translate(40px, -40px)',
-        },
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: isDarkMode
-            ? `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, ${alpha(color, 0.03)} 100%)`
-            : 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
-          backdropFilter: 'blur(10px)',
-        },
-      }}
-    >
-      <CardContent sx={{ position: 'relative', zIndex: 1, p: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="h3" sx={{ 
-              fontWeight: 800, 
-              mb: 1.5,
-              letterSpacing: '-0.025em',
-              fontSize: { xs: '1.75rem', sm: '2.125rem' },
-            }}>
-              {value}
-            </Typography>
-            <Typography variant="h6" sx={{ 
-              opacity: 0.85, 
-              mb: 0.5,
-              fontWeight: 600,
-              letterSpacing: '0.025em',
-            }}>
-              {title}
-            </Typography>
-            <Typography variant="body2" sx={{ 
-              opacity: 0.75,
-              fontWeight: 500,
-              fontSize: '0.875rem',
-            }}>
-              {subtitle}
-            </Typography>
-            {trend && (
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1.5 }}>
-                <Box sx={{
-                  p: 0.5,
-                  borderRadius: 1,
-                  background: 'rgba(255,255,255,0.2)',
-                  backdropFilter: 'blur(10px)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  mr: 1,
-                }}>
-                  <TrendingUpIcon sx={{ fontSize: 14 }} />
-                </Box>
-                <Typography variant="caption" sx={{ 
-                  opacity: 0.8,
-                  fontWeight: 600,
-                  fontSize: '0.75rem',
-                  letterSpacing: '0.025em',
-                }}>
-                  {trend}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-          <Box sx={{
-            width: 64,
-            height: 64,
-            borderRadius: 3,
-            background: isDarkMode
-              ? `linear-gradient(135deg, ${alpha(color, 0.25)} 0%, ${alpha(color, 0.15)} 100%)`
-              : 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-            backdropFilter: 'blur(20px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: isDarkMode
-              ? `1px solid ${alpha(color, 0.4)}`
-              : '1px solid rgba(255,255,255,0.2)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-          }}>
-            <Icon sx={{ 
-              fontSize: 32,
-              color: isDarkMode ? color : 'inherit',
-              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
-            }} />
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
-  );
+const formatBytes = (bytes: number): string => {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
-// Recent Documents Component
-const RecentDocuments: React.FC<RecentDocumentsProps> = ({ documents = [] }) => {
-  const navigate = useNavigate();
-  const theme = useTheme();
-  const { t } = useTranslation();
-
-  // Ensure documents is always an array
-  const safeDocuments = Array.isArray(documents) ? documents : [];
-
-  const getFileIcon = (mimeType?: string): React.ComponentType<any> => {
-    if (mimeType?.includes('pdf')) return PdfIcon;
-    if (mimeType?.includes('image')) return ImageIcon;
-    if (mimeType?.includes('text')) return TextIcon;
-    return FileIcon;
-  };
-
-  const formatFileSize = (bytes?: number): string => {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  const formatDate = (dateString?: string): string => {
-    if (!dateString) return 'Unknown';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  return (
-    <Card elevation={0} sx={{
-      background: theme.palette.mode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)'
-        : 'linear-gradient(180deg, rgba(40,40,40,0.95) 0%, rgba(25,25,25,0.95) 100%)',
-      backdropFilter: 'blur(20px)',
-      border: theme.palette.mode === 'light'
-        ? '1px solid rgba(226,232,240,0.5)'
-        : '1px solid rgba(255,255,255,0.1)',
-      borderRadius: 3,
-    }}>
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-          <Typography variant="h6" sx={{
-            fontWeight: 700,
-            letterSpacing: '-0.025em',
-            background: theme.palette.mode === 'light'
-              ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
-              : 'linear-gradient(135deg, #f8fafc 0%, #a855f7 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}>
-            {t('dashboard.recentDocuments.title')}
-          </Typography>
-          <Chip
-            label={t('dashboard.recentDocuments.viewAll')}
-            onClick={() => navigate('/documents')}
-            sx={{ 
-              cursor: 'pointer',
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)',
-              border: '1px solid rgba(99,102,241,0.3)',
-              fontWeight: 600,
-              transition: 'all 0.2s ease-in-out',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                color: 'white',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 8px 24px rgba(99,102,241,0.2)',
-              },
-            }}
-          />
-        </Box>
-        
-        {safeDocuments.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Box sx={{
-              width: 64,
-              height: 64,
-              borderRadius: 3,
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mx: 'auto',
-              mb: 2,
-            }}>
-              <DocumentIcon sx={{ fontSize: 32, color: '#6366f1' }} />
-            </Box>
-            <Typography variant="body1" sx={{
-              color: 'text.secondary',
-              fontWeight: 500,
-              mb: 1,
-            }}>
-              {t('dashboard.recentDocuments.noDocuments')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {t('dashboard.recentDocuments.uploadFirst')}
-            </Typography>
-          </Box>
-        ) : (
-          <List sx={{ p: 0 }}>
-            {safeDocuments.slice(0, 5).map((doc, index) => {
-              const FileIconComponent = getFileIcon(doc.mime_type);
-              
-              return (
-                <ListItem
-                  key={doc.id || index}
-                  sx={{
-                    px: 0,
-                    py: 1.5,
-                    borderBottom: index < Math.min(safeDocuments.length, 5) - 1 ? 1 : 0,
-                    borderColor: 'divider',
-                  }}
-                >
-                  <ListItemAvatar>
-                    <Avatar
-                      sx={{
-                        bgcolor: 'primary.main',
-                        color: 'primary.contrastText',
-                      }}
-                    >
-                      <FileIconComponent />
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    sx={{ 
-                      pr: 8, // Add padding-right to prevent overlap with secondary action
-                    }}
-                    primary={
-                      <Typography
-                        variant="subtitle2"
-                        sx={{
-                          fontWeight: 500,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          maxWidth: '100%',
-                        }}
-                      >
-                        {doc.original_filename || doc.filename || 'Unknown Document'}
-                      </Typography>
-                    }
-                    secondary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatFileSize(doc.file_size)}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          •
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatDate(doc.created_at)}
-                        </Typography>
-                      </Box>
-                    }
-                  />
-                  <ListItemSecondaryAction>
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <IconButton size="small" onClick={() => navigate(`/documents/${doc.id}`)}>
-                        <ViewIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton 
-                        size="small" 
-                        onClick={async () => {
-                          try {
-                            await documentService.downloadFile(doc.id, doc.original_filename || doc.filename);
-                          } catch (error) {
-                            console.error('Download failed:', error);
-                          }
-                        }}
-                      >
-                        <DownloadIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              );
-            })}
-          </List>
-        )}
-      </CardContent>
-    </Card>
-  );
+const formatDate = (dateString?: string): string => {
+  if (!dateString) return '—';
+  const d = new Date(dateString);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
-// Quick Actions Component
-const QuickActions: React.FC = () => {
-  const navigate = useNavigate();
-  const theme = useTheme();
-  const { t } = useTranslation();
-
-  const actions: QuickAction[] = [
-    {
-      title: t('dashboard.quickActions.upload.title'),
-      description: t('dashboard.quickActions.upload.description'),
-      icon: UploadIcon,
-      color: '#6366f1',
-      path: '/upload',
-    },
-    {
-      title: t('dashboard.quickActions.search.title'),
-      description: t('dashboard.quickActions.search.description'),
-      icon: SearchIcon,
-      color: '#10b981',
-      path: '/search',
-    },
-    {
-      title: t('dashboard.quickActions.browse.title'),
-      description: t('dashboard.quickActions.browse.description'),
-      icon: SearchableIcon,
-      color: '#f59e0b',
-      path: '/documents',
-    },
-  ];
-
-  return (
-    <Card elevation={0} sx={{
-      background: theme.palette.mode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)'
-        : 'linear-gradient(180deg, rgba(40,40,40,0.95) 0%, rgba(25,25,25,0.95) 100%)',
-      backdropFilter: 'blur(20px)',
-      border: theme.palette.mode === 'light'
-        ? '1px solid rgba(226,232,240,0.5)'
-        : '1px solid rgba(255,255,255,0.1)',
-      borderRadius: 3,
-    }}>
-      <CardContent sx={{ p: 3 }}>
-        <Typography variant="h6" sx={{
-          fontWeight: 700,
-          letterSpacing: '-0.025em',
-          background: theme.palette.mode === 'light'
-            ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
-            : 'linear-gradient(135deg, #f8fafc 0%, #a855f7 100%)',
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          mb: 3,
-        }}>
-          {t('dashboard.quickActions.title')}
-        </Typography>
-        <Grid container spacing={2}>
-          {actions.map((action) => (
-            <Grid item xs={12} key={action.title}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2.5,
-                  cursor: 'pointer',
-                  border: theme.palette.mode === 'light'
-                    ? '1px solid rgba(226,232,240,0.5)'
-                    : '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 3,
-                  background: theme.palette.mode === 'light'
-                    ? 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.6) 100%)'
-                    : 'linear-gradient(135deg, rgba(50,50,50,0.8) 0%, rgba(30,30,30,0.6) 100%)',
-                  backdropFilter: 'blur(10px)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  '&:hover': {
-                    borderColor: action.color,
-                    background: `linear-gradient(135deg, ${alpha(action.color, 0.08)} 0%, ${alpha(action.color, 0.04)} 100%)`,
-                    transform: 'translateY(-4px)',
-                    boxShadow: `0 12px 32px ${alpha(action.color, 0.15)}`,
-                  },
-                }}
-                onClick={() => navigate(action.path)}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
-                  <Box sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 3,
-                    background: `linear-gradient(135deg, ${action.color} 0%, ${alpha(action.color, 0.8)} 100%)`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    boxShadow: `0 8px 24px ${alpha(action.color, 0.3)}`,
-                  }}>
-                    <action.icon sx={{ fontSize: 24 }} />
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="subtitle2" sx={{ 
-                      fontWeight: 700,
-                      letterSpacing: '0.025em',
-                      mb: 0.5,
-                    }}>
-                      {action.title}
-                    </Typography>
-                    <Typography variant="body2" sx={{
-                      color: 'text.secondary',
-                      fontWeight: 500,
-                      fontSize: '0.875rem',
-                    }}>
-                      {action.description}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Paper>
-            </Grid>
-          ))}
-        </Grid>
-      </CardContent>
-    </Card>
-  );
+const getFileIcon = (mimeType?: string): React.ComponentType<any> => {
+  if (mimeType?.includes('pdf')) return PdfIcon;
+  if (mimeType?.includes('image')) return ImageIcon;
+  if (mimeType?.includes('text')) return TextIcon;
+  return FileIcon;
 };
+
+const getStatus = (doc: Document): { variant: 'ok' | 'warn' | 'neutral'; label: string } => {
+  if (doc.has_ocr_text || doc.ocr_text) return { variant: 'ok', label: 'Indexed' };
+  if (doc.mime_type?.includes('image') || doc.mime_type?.includes('pdf')) {
+    return { variant: 'warn', label: 'Reading' };
+  }
+  return { variant: 'neutral', label: 'Stored' };
+};
+
+const thBase = {
+  textAlign: 'left',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 600,
+  fontSize: 10,
+  letterSpacing: 'var(--tracking-caps)',
+  textTransform: 'uppercase',
+  color: 'var(--fg-3)',
+  padding: '12px 20px',
+  borderBottom: '1px solid var(--line-1)',
+  background: 'var(--bg-2)',
+} as const;
+
+const tdBase = {
+  padding: '13px 20px',
+  borderBottom: '1px solid var(--line-1)',
+  color: 'var(--fg-1)',
+  verticalAlign: 'middle',
+  transition: 'background var(--dur-fast) var(--ease-out)',
+} as const;
 
 const Dashboard: React.FC = () => {
-  const theme = useTheme();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -535,47 +108,31 @@ const Dashboard: React.FC = () => {
     searchablePages: 0,
   });
   const [loading, setLoading] = useState<boolean>(true);
-  const [metrics, setMetrics] = useState<any>(null);
 
   useEffect(() => {
     const fetchDashboardData = async (): Promise<void> => {
       try {
-        // Fetch documents with better error handling
         let docs: Document[] = [];
         try {
-          const docsResponse = await api.get('/documents', {
-            params: {
-              limit: 10,
-              offset: 0,
-            }
-          });
-          // Handle both direct array response and paginated response
+          const docsResponse = await api.get('/documents', { params: { limit: 10, offset: 0 } });
           if (Array.isArray(docsResponse.data)) {
             docs = docsResponse.data;
           } else if (docsResponse.data?.documents) {
             docs = docsResponse.data.documents;
-          } else {
-            docs = [];
           }
         } catch (docError) {
           console.error('Failed to fetch documents:', docError);
-          // Continue with empty documents array
         }
-        
         setDocuments(docs);
-        
-        // Fetch metrics with better error handling
+
         let metricsData: any = null;
         try {
           const metricsResponse = await api.get<any>('/metrics');
           metricsData = metricsResponse.data;
-          setMetrics(metricsData);
         } catch (metricsError) {
           console.error('Failed to fetch metrics:', metricsError);
-          // Continue with null metrics - will fall back to client calculation
         }
-        
-        // Use backend metrics if available, otherwise fall back to client calculation
+
         if (metricsData?.documents) {
           setStats({
             totalDocuments: metricsData.documents.total_documents || 0,
@@ -584,10 +141,8 @@ const Dashboard: React.FC = () => {
             searchablePages: metricsData.documents.documents_with_ocr || 0,
           });
         } else {
-          // Fallback to client-side calculation
           const totalSize = docs.reduce((sum, doc) => sum + (doc.file_size || 0), 0);
-          const ocrProcessed = docs.filter(doc => doc.has_ocr_text || doc.ocr_text).length;
-          
+          const ocrProcessed = docs.filter((doc) => doc.has_ocr_text || doc.ocr_text).length;
           setStats({
             totalDocuments: docs.length,
             totalSize,
@@ -597,14 +152,6 @@ const Dashboard: React.FC = () => {
         }
       } catch (error) {
         console.error('Unexpected error in dashboard data fetch:', error);
-        // Set default empty state
-        setDocuments([]);
-        setStats({
-          totalDocuments: 0,
-          totalSize: 0,
-          ocrProcessed: 0,
-          searchablePages: 0,
-        });
       } finally {
         setLoading(false);
       }
@@ -613,144 +160,257 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, []);
 
-  const formatBytes = (bytes: number): string => {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
+  const ocrPct =
+    stats.totalDocuments > 0 ? Math.round((stats.ocrProcessed / stats.totalDocuments) * 100) : 0;
+
+  const recentDocs = documents.slice(0, 5);
 
   return (
     <Box>
-      {/* Welcome Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{
-          fontWeight: 800,
-          mb: 1,
-          letterSpacing: '-0.025em',
-          background: theme.palette.mode === 'light'
-            ? 'linear-gradient(135deg, #1e293b 0%, #6366f1 100%)'
-            : 'linear-gradient(135deg, #f8fafc 0%, #a855f7 100%)',
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-        }}>
-          {t('common.welcomeBack', { username: user?.username })}
-        </Typography>
-        <Typography variant="h6" sx={{
-          color: 'text.secondary',
-          fontWeight: 500,
-          letterSpacing: '0.025em',
-        }}>
-          {t('dashboard.greeting')}
-        </Typography>
-      </Box>
+      <PageHeader
+        kicker={
+          user?.username
+            ? `${t('common.welcomeBack', { username: user.username })}`
+            : t('navigation.dashboard')
+        }
+        title={
+          <>
+            {t('navigation.dashboard')} —{' '}
+            <Box component="span" sx={{ color: 'var(--accent-60)', fontWeight: 800 }}>
+              {loading ? '…' : stats.totalDocuments.toLocaleString()}
+            </Box>{' '}
+            documents
+          </>
+        }
+        subtitle={
+          loading
+            ? t('dashboard.greeting')
+            : `${formatBytes(stats.totalSize)} indexed across the library. ${stats.ocrProcessed} of ${stats.totalDocuments} processed with OCR.`
+        }
+        actions={
+          <Button variant="contained" startIcon={<UploadIcon />} onClick={() => navigate('/upload')}>
+            {t('navigation.upload')}
+          </Button>
+        }
+      />
 
-      {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      {/* Stat strip */}
+      <Grid container spacing={2} sx={{ mb: 'var(--s-8)' }}>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatsCard
-            title={t('dashboard.stats.totalDocuments.title')}
-            value={loading ? '...' : stats.totalDocuments}
-            subtitle={t('dashboard.stats.totalDocuments.subtitle')}
-            icon={DocumentIcon}
-            color="#6366f1"
-            trend={stats.totalDocuments > 0
-              ? t('dashboard.stats.totalDocuments.trend', { count: stats.totalDocuments })
-              : t('dashboard.stats.totalDocuments.trendEmpty')}
+          <StatCard
+            label={t('dashboard.stats.totalDocuments.title')}
+            value={loading ? '—' : stats.totalDocuments.toLocaleString()}
+            delta={
+              loading
+                ? undefined
+                : stats.totalDocuments > 0
+                  ? t('dashboard.stats.totalDocuments.trend', { count: stats.totalDocuments })
+                  : t('dashboard.stats.totalDocuments.trendEmpty')
+            }
+            trend={stats.totalDocuments > 0 ? 'neutral' : 'neutral'}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatsCard
-            title={t('dashboard.stats.storageUsed.title')}
-            value={loading ? '...' : formatBytes(stats.totalSize)}
-            subtitle={t('dashboard.stats.storageUsed.subtitle')}
-            icon={StorageIcon}
-            color="#10b981"
-            trend={stats.totalSize > 0
-              ? t('dashboard.stats.storageUsed.trend', { size: formatBytes(stats.totalSize) })
-              : t('dashboard.stats.storageUsed.trendEmpty')}
+          <StatCard
+            label={t('dashboard.stats.storageUsed.title')}
+            value={loading ? '—' : formatBytes(stats.totalSize).split(' ')[0]}
+            unit={loading ? undefined : formatBytes(stats.totalSize).split(' ')[1]}
+            delta={
+              loading
+                ? undefined
+                : stats.totalSize > 0
+                  ? t('dashboard.stats.storageUsed.trend', { size: formatBytes(stats.totalSize) })
+                  : t('dashboard.stats.storageUsed.trendEmpty')
+            }
+            trend="neutral"
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatsCard
-            title={t('dashboard.stats.ocrProcessed.title')}
-            value={loading ? '...' : stats.ocrProcessed}
-            subtitle={t('dashboard.stats.ocrProcessed.subtitle')}
-            icon={OcrIcon}
-            color="#f59e0b"
-            trend={stats.totalDocuments > 0
-              ? t('dashboard.stats.ocrProcessed.trend', {
-                  percentage: Math.round((stats.ocrProcessed / stats.totalDocuments) * 100)
-                })
-              : t('dashboard.stats.ocrProcessed.trendEmpty')}
+          <StatCard
+            label={t('dashboard.stats.ocrProcessed.title')}
+            value={loading ? '—' : stats.ocrProcessed.toLocaleString()}
+            delta={
+              loading
+                ? undefined
+                : stats.totalDocuments > 0
+                  ? t('dashboard.stats.ocrProcessed.trend', { percentage: ocrPct })
+                  : t('dashboard.stats.ocrProcessed.trendEmpty')
+            }
+            trend={ocrPct >= 80 ? 'up' : 'neutral'}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatsCard
-            title={t('dashboard.stats.searchable.title')}
-            value={loading ? '...' : stats.searchablePages}
-            subtitle={t('dashboard.stats.searchable.subtitle')}
-            icon={SearchableIcon}
-            color="#8b5cf6"
-            trend={stats.searchablePages > 0
-              ? t('dashboard.stats.searchable.trend', { count: stats.searchablePages })
-              : t('dashboard.stats.searchable.trendEmpty')}
+          <StatCard
+            label={t('dashboard.stats.searchable.title')}
+            value={loading ? '—' : stats.searchablePages.toLocaleString()}
+            delta={
+              loading
+                ? undefined
+                : stats.searchablePages > 0
+                  ? t('dashboard.stats.searchable.trend', { count: stats.searchablePages })
+                  : t('dashboard.stats.searchable.trendEmpty')
+            }
+            trend="neutral"
           />
         </Grid>
       </Grid>
 
-      {/* Main Content */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} lg={8}>
-          <RecentDocuments documents={documents} />
-        </Grid>
-        <Grid item xs={12} lg={4}>
-          <QuickActions />
-        </Grid>
-      </Grid>
-
-      {/* Floating Action Button */}
-      <Fab
-        color="primary"
-        sx={{
-          position: 'fixed',
-          bottom: 32,
-          right: 32,
-          width: 64,
-          height: 64,
-          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-          border: '1px solid rgba(255,255,255,0.2)',
-          backdropFilter: 'blur(20px)',
-          boxShadow: '0 16px 40px rgba(99,102,241,0.3)',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          '&:hover': {
-            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-            transform: 'translateY(-4px) scale(1.05)',
-            boxShadow: '0 20px 50px rgba(99,102,241,0.4)',
-          },
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.1) 100%)',
-            backdropFilter: 'blur(10px)',
-          },
-        }}
-        onClick={() => navigate('/upload')}
-      >
-        <AddIcon sx={{ 
-          fontSize: 28,
-          position: 'relative',
-          zIndex: 1,
-          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
-        }} />
-      </Fab>
+      {/* Recently added */}
+      <Panel flush>
+        <PanelHead
+          title={t('dashboard.recentDocuments.title')}
+          subtitle={`Last ${recentDocs.length} files`}
+          action={
+            <Box
+              component="button"
+              onClick={() => navigate('/documents')}
+              sx={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 500,
+                fontSize: 12,
+                color: 'var(--accent-60)',
+                '&:hover': { color: 'var(--accent-70)' },
+              }}
+            >
+              {t('dashboard.recentDocuments.viewAll')} →
+            </Box>
+          }
+        />
+        {recentDocs.length === 0 ? (
+          <Box sx={{ p: 'var(--s-6)' }}>
+            <EmptyState
+              icon={<DocumentIcon sx={{ fontSize: 32 }} />}
+              title={t('dashboard.recentDocuments.noDocuments')}
+              description={t('dashboard.recentDocuments.uploadFirst')}
+              action={
+                <Button variant="contained" onClick={() => navigate('/upload')}>
+                  {t('navigation.upload')}
+                </Button>
+              }
+            />
+          </Box>
+        ) : (
+          <Box sx={{ overflowX: 'auto' }}>
+            <Box
+              component="table"
+              sx={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontFamily: 'var(--font-sans)',
+                fontSize: 13,
+                lineHeight: 1.3,
+              }}
+            >
+              <thead>
+                <tr>
+                  <Box component="th" sx={thBase}>
+                    {t('dashboard.recentDocuments.columns.document')}
+                  </Box>
+                  <Box component="th" sx={thBase}>
+                    {t('dashboard.recentDocuments.columns.size')}
+                  </Box>
+                  <Box component="th" sx={thBase}>
+                    {t('dashboard.recentDocuments.columns.added')}
+                  </Box>
+                  <Box component="th" sx={thBase}>
+                    {t('dashboard.recentDocuments.columns.status')}
+                  </Box>
+                  <Box component="th" sx={{ ...thBase, textAlign: 'right' }}>
+                    {' '}
+                  </Box>
+                </tr>
+              </thead>
+              <tbody>
+                {recentDocs.map((doc) => {
+                  const Icon = getFileIcon(doc.mime_type);
+                  const status = getStatus(doc);
+                  const name = doc.original_filename || doc.filename || 'Unknown document';
+                  return (
+                    <Box
+                      component="tr"
+                      key={doc.id}
+                      sx={{
+                        cursor: 'pointer',
+                        '&:hover td': { background: 'var(--accent-05)' },
+                      }}
+                      onClick={() => navigate(`/documents/${doc.id}`)}
+                    >
+                      <Box
+                        component="td"
+                        sx={{
+                          ...tdBase,
+                          color: 'var(--fg-0)',
+                          fontWeight: 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--s-3)',
+                          minWidth: 0,
+                        }}
+                      >
+                        <Icon sx={{ color: 'var(--accent-50)', fontSize: 18, flexShrink: 0 }} />
+                        <Box
+                          sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0,
+                          }}
+                        >
+                          {name}
+                        </Box>
+                      </Box>
+                      <Box component="td" sx={tdBase}>
+                        <MetaText>{formatBytes(doc.file_size || 0)}</MetaText>
+                      </Box>
+                      <Box component="td" sx={tdBase}>
+                        <MetaText>{formatDate(doc.created_at)}</MetaText>
+                      </Box>
+                      <Box component="td" sx={tdBase}>
+                        <Pill variant={status.variant}>{status.label}</Pill>
+                      </Box>
+                      <Box component="td" sx={{ ...tdBase, textAlign: 'right' }}>
+                        <Box
+                          sx={{ display: 'inline-flex', gap: 0.5 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Tooltip title={t('common.actions.view')}>
+                            <IconButton
+                              size="small"
+                              onClick={() => navigate(`/documents/${doc.id}`)}
+                            >
+                              <ViewIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={t('common.actions.download')}>
+                            <IconButton
+                              size="small"
+                              onClick={async () => {
+                                try {
+                                  await documentService.downloadFile(
+                                    doc.id,
+                                    doc.original_filename || doc.filename,
+                                  );
+                                } catch (error) {
+                                  console.error('Download failed:', error);
+                                }
+                              }}
+                            >
+                              <DownloadIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </tbody>
+            </Box>
+          </Box>
+        )}
+      </Panel>
     </Box>
   );
 };
