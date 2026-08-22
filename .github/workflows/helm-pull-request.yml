@@ -12,10 +12,10 @@ jobs:
     permissions: write-all
     runs-on: ubuntu-latest
     container:
-      image: alpine/helm:4.2.3
+      image: alpine/helm:4.2.4
     steps:
       - name: checkout pr head
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
@@ -31,7 +31,7 @@ jobs:
         run: helm template readur charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true --set postgresql.enabled=false > charts/readur/build/manifest.yaml
 
       - name: checkout main
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           ref: main
@@ -46,7 +46,7 @@ jobs:
         run: helm template readur main/charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true --set postgresql.enabled=false > main/charts/readur/build/manifest.yaml
 
       - name: create diff comment
-        uses: int128/diff-action@v2
+        uses: int128/diff-action@782fb3df392fd583a5f9745afd19ade5f6529dd6 # v2.34.0
         with:
           base: main/charts/readur/build
           head: charts/readur/build
