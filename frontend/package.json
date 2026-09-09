@@ -48,7 +48,7 @@
     "@testing-library/user-event": "^14.6.7",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.5.5",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.28",
