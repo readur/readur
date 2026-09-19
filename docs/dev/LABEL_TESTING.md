@@ -21,7 +21,7 @@ The label system includes comprehensive unit tests, integration tests, and end-t
 
 ### Backend Tests (Rust)
 
-#### Unit Tests (`src/tests/labels_tests.rs`)
+#### Unit Tests (`tests/integration_labels_tests.rs`)
 ```rust
 // Test database operations
 test_create_label_success()
@@ -38,7 +38,7 @@ test_cannot_delete_system_label()
 test_label_color_validation()
 ```
 
-#### Integration Tests (`tests/labels_integration_tests.rs`)
+#### Integration Tests (`tests/integration_labels_integration_tests.rs`)
 ```rust
 // Test complete API workflows
 test_label_crud_operations()
