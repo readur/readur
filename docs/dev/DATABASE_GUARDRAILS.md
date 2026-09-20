@@ -40,7 +40,7 @@ let success = transaction_manager.update_ocr_with_validation(
 - **Timeout Support**: Prevents indefinite blocking
 - **Resource Protection**: Guards shared resources during concurrent access
 
-### 2. Database Constraints (`migrations/20240615000001_add_database_guardrails.sql`)
+### 2. Database Constraints (`migrations/20250620100013_add_database_guardrails.sql`)
 
 #### Data Integrity Constraints
 ```sql
@@ -94,7 +94,7 @@ CREATE TRIGGER trigger_cleanup_completed_ocr_queue
 - Prevents orphaned queue entries
 - Maintains queue consistency
 
-### 4. Monitoring and Alerting (`src/db_monitoring.rs`)
+### 4. Monitoring and Alerting (`src/monitoring/db_monitoring.rs`)
 
 #### Real-Time Health Monitoring
 - **OCR Processing Health**: Tracks stuck jobs, failure rates, confidence levels
@@ -161,7 +161,7 @@ transaction_manager.update_ocr_with_validation(
 ```
 
 #### Update OCR Queue Service
-Replace direct database updates in `src/ocr_queue.rs:266-285` with transaction-safe operations.
+Replace direct database updates in `src/ocr/queue.rs:266-285` with transaction-safe operations.
 
 ### 2. Configuration Updates
 

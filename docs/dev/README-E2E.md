@@ -131,7 +131,7 @@ The workflow:
 ### Configuration
 
 - `playwright.config.ts` - Playwright configuration
-- `.github/workflows/e2e-tests.yml` - GitHub Actions workflow
+- `.github/workflows/test-e2e.yml` - GitHub Actions workflow
 
 ## Test Data
 
