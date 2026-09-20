@@ -33,7 +33,7 @@ cargo test
 cargo test --lib
 
 # Run only integration tests (requires running infrastructure)
-cargo test --test integration_tests
+cargo test --test integration_integration_tests
 
 # Run with detailed output
 RUST_BACKTRACE=1 cargo test -- --nocapture
@@ -120,7 +120,7 @@ cargo test test_name -- --nocapture
 cargo test -- --test-threads=1
 ```
 
-### Integration Tests (`tests/integration_tests.rs`)
+### Integration Tests (`tests/integration_integration_tests.rs`)
 
 Integration tests run against the complete system and require:
 - ✅ Running PostgreSQL database
@@ -131,12 +131,12 @@ Integration tests run against the complete system and require:
 
 ```bash
 # Complete user workflow tests
-cargo test --test integration_tests
+cargo test --test integration_integration_tests
 
 # Specific integration tests
-cargo test --test integration_tests test_complete_ocr_workflow
-cargo test --test integration_tests test_document_list_structure
-cargo test --test integration_tests test_ocr_error_handling
+cargo test --test integration_integration_tests test_complete_ocr_workflow
+cargo test --test integration_integration_tests test_document_list_structure
+cargo test --test integration_integration_tests test_ocr_error_handling
 ```
 
 **Integration Test Features:**
@@ -353,7 +353,7 @@ Common unit test issues:
 
 ```bash
 # Run with full debugging
-RUST_BACKTRACE=full cargo test --test integration_tests -- --nocapture
+RUST_BACKTRACE=full cargo test --test integration_integration_tests -- --nocapture
 
 # Test server health first
 curl http://localhost:8000/api/health
@@ -366,7 +366,7 @@ curl http://localhost:8000/api/health
    # Start the server first
    cargo run
    # Then run tests in another terminal
-   cargo test --test integration_tests
+   cargo test --test integration_integration_tests
    ```
 
 2. **"Registration failed" errors**
@@ -527,7 +527,7 @@ jobs:
         done'
     
     - name: Run Integration Tests  
-      run: cargo test --test integration_tests
+      run: cargo test --test integration_integration_tests
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost/readur_test
         JWT_SECRET: test-secret-key
@@ -574,7 +574,7 @@ docker-compose up -d
 timeout 60s bash -c 'until curl -s http://localhost:8000/api/health | grep -q "ok"; do sleep 2; done'
 
 # 4. Integration tests
-cargo test --test integration_tests
+cargo test --test integration_integration_tests
 
 # 5. Frontend tests
 cd frontend && npm test -- --run
@@ -594,7 +594,7 @@ cd frontend && npm test -- --run
    }
    ```
 
-**Integration Tests:** Add full workflow tests that exercise the complete API endpoint in `tests/integration_tests.rs`.
+**Integration Tests:** Add full workflow tests that exercise the complete API endpoint in `tests/integration_integration_tests.rs`.
    ```rust
    #[tokio::test]
    async fn test_new_endpoint_workflow() {
