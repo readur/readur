@@ -21,7 +21,7 @@ The label system includes comprehensive unit tests, integration tests, and end-t
 
 ### Backend Tests (Rust)
 
-#### Unit Tests (`src/tests/labels_tests.rs`)
+#### Unit Tests (`tests/integration_labels_tests.rs`)
 ```rust
 // Test database operations
 test_create_label_success()
@@ -38,7 +38,7 @@ test_cannot_delete_system_label()
 test_label_color_validation()
 ```
 
-#### Integration Tests (`tests/labels_integration_tests.rs`)
+#### Integration Tests (`tests/integration_labels_integration_tests.rs`)
 ```rust
 // Test complete API workflows
 test_label_crud_operations()
@@ -90,10 +90,10 @@ test_label_permissions()
 #### Backend Tests
 ```bash
 # Unit tests only
-cargo test labels_tests --lib
+cargo test --test integration_labels_tests
 
 # Integration tests only
-cargo test labels_integration_tests --test labels_integration_tests
+cargo test --test integration_labels_integration_tests
 
 # All backend tests
 cargo test
@@ -240,7 +240,7 @@ testColorContrast(bgColor: string, textColor: string): number
 ### Pre-commit Hooks
 ```bash
 # Run quick tests before commit
-cargo test labels_tests --lib
+cargo test --test integration_labels_tests
 cd frontend && npm run test:quick
 ```
 
@@ -292,7 +292,7 @@ test('should render 100 labels quickly', () => {
 ### Backend Debugging
 ```bash
 # Run with debug output
-RUST_LOG=debug cargo test labels_tests
+RUST_LOG=debug cargo test --test integration_labels_tests
 
 # Run specific test
 cargo test test_create_label_success -- --nocapture
@@ -369,7 +369,7 @@ Before merging label system changes:
    ```bash
    # Make changes to label system
    # Run quick tests
-   cargo test labels_tests --lib
+   cargo test --test integration_labels_tests
    cd frontend && npm run test -- --run components/Labels/
    
    # Run full test suite before committing

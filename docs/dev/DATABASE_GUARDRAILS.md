@@ -211,14 +211,14 @@ async fn database_health(monitor: Extension<Arc<DatabaseMonitor>>) -> Json<Datab
 ## 🧪 Testing Strategy
 
 ### Integration Tests
-The corruption issue can be reliably reproduced using the tests in `tests/ocr_corruption_tests.rs`:
+The corruption issue can be reliably reproduced using the tests in `tests/integration_ocr_corruption_tests.rs`:
 
 ```bash
 # Test concurrent processing (reproduces corruption)
-cargo test test_high_volume_concurrent_ocr --test ocr_corruption_tests
+cargo test test_high_volume_concurrent_ocr --test integration_ocr_corruption_tests
 
 # Test sequential processing (should pass)
-cargo test test_rapid_sequential_uploads --test ocr_corruption_tests
+cargo test test_rapid_sequential_uploads --test integration_ocr_corruption_tests
 ```
 
 ### Load Testing
