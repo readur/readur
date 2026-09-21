@@ -37,7 +37,7 @@
     "react-dom": "^19.3.0",
     "react-dropzone": "^15.0.0",
     "react-hook-form": "^7.88.0",
-    "react-i18next": "^16.6.6",
+    "react-i18next": "^17.0.15",
     "react-router-dom": "^7.18.4",
     "uuid": "^13.0.2"
   },
