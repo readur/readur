@@ -148,8 +148,8 @@ export class E2ETestAuthHelper {
   }
 
   private generateUniqueId(): string {
-    const random = Math.random().toString(36).substring(2, 8);
-    const pid = typeof process !== 'undefined' ? process.pid : Math.floor(Math.random() * 10000);
+    const random = crypto.randomUUID().replace(/-/g, '').substring(0, 8);
+    const pid = typeof process !== 'undefined' ? process.pid : crypto.getRandomValues(new Uint16Array(1))[0];
     return `${Date.now()}_${pid}_${random}`;
   }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { previewObjectUrl } from './previewUrl';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button, TextField } from '../../../ui';
@@ -16,10 +17,7 @@ export function UploadPanel({ session: s, onShowResults }: { session: DebugSessi
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const failed = s.processingStatus.toLowerCase().includes('failed');
-  const previewUrl = useMemo(
-    () => (s.selectedFile?.type.startsWith('image/') && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(s.selectedFile) : null),
-    [s.selectedFile],
-  );
+  const previewUrl = useMemo(() => previewObjectUrl(s.selectedFile), [s.selectedFile]);
   useEffect(() => () => {
     if (previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);

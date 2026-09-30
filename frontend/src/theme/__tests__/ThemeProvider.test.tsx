@@ -124,7 +124,7 @@ describe('ThemeModeProvider', () => {
 
   describe('pre-paint script in index.html', () => {
     const html = readFileSync(resolve(__dirname, '../../../index.html'), 'utf8');
-    const inline = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
+    const inline = /<script>([\s\S]*?)<\/script\s*>/i.exec(html)?.[1] ?? '';
     const run = () => new Function(inline)();
 
     it('runs before the app bundle', () => {

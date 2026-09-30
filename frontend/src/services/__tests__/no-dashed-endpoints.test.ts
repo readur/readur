@@ -40,7 +40,7 @@ const API_ROOT_SEGMENTS = [
 ];
 const segmentAlt = API_ROOT_SEGMENTS.join('|');
 const PATH_LITERAL = new RegExp(
-  `['"\`](\\/(?:api\\/)?(?:${segmentAlt})(?:\\/[a-zA-Z0-9_\${}/\\-:.?&=]*)?)['"\`]`,
+  `['"\`](\\/(?:api\\/)?(?:${segmentAlt})(?:\\/[a-zA-Z0-9_${'$'}{}/\\-:.?&=]*)?)['"\`]`,
   'g',
 );
 
