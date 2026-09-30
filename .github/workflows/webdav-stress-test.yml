@@ -68,7 +68,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=512m
+          --tmpfs /var/lib/postgresql:rw,noexec,nosuid,size=512m
 
     steps:
       - name: Free disk space
