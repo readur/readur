@@ -19,6 +19,7 @@ use crate::{
 };
 use crate::services::webdav::WebDAVConfig;
 use crate::services::webdav::WebDAVService;
+use crate::utils::outbound::{categorize_connection_error, validate_outbound_url};
 
 pub mod webdav_sync;
 use webdav_sync::perform_webdav_sync_with_tracking;
@@ -87,51 +88,35 @@ async fn get_user_webdav_config(state: &Arc<AppState>, user_id: uuid::Uuid) -> R
     )
 )]
 async fn test_webdav_connection(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(test_config): Json<WebDAVTestConnection>,
 ) -> Result<Json<WebDAVConnectionResult>, StatusCode> {
-    info!("Testing WebDAV connection to: {} for user: {}", 
-        test_config.server_url, auth_user.user.username);
+    info!("Testing WebDAV connection for user: {}", auth_user.user.username);
 
-    // Create WebDAV config from test data
-    let webdav_config = WebDAVConfig {
-        server_url: test_config.server_url.clone(),
-        username: test_config.username.clone(),
-        password: test_config.password.clone(),
-        watch_folders: Vec::new(),
-        file_extensions: Vec::new(),
-        timeout_seconds: 300, // 5 minutes timeout for crawl estimation
-        server_type: test_config.server_type.clone(),
+    let failed = |message: &str| {
+        Json(WebDAVConnectionResult {
+            success: false,
+            message: message.to_string(),
+            server_version: None,
+            server_type: None,
+        })
     };
 
-    // Create WebDAV service and test connection
-    match WebDAVService::new(webdav_config) {
-        Ok(webdav_service) => {
-            match WebDAVService::test_connection_with_config(&test_config).await {
-                Ok(result) => {
-                    info!("WebDAV connection test completed: {}", result.message);
-                    Ok(Json(result))
-                }
-                Err(e) => {
-                    error!("WebDAV connection test failed: {}", e);
-                    Ok(Json(WebDAVConnectionResult {
-                        success: false,
-                        message: format!("Connection test failed: {}", e),
-                        server_version: None,
-                        server_type: None,
-                    }))
-                }
-            }
+    let server_url = WebDAVConfig::normalize_server_url(&test_config.server_url);
+    if let Err(e) = validate_outbound_url(&server_url).await {
+        return Ok(failed(&e.to_string()));
+    }
+
+    match WebDAVService::test_connection_with_config(&test_config).await {
+        Ok(result) if result.success => Ok(Json(result)),
+        Ok(result) => {
+            warn!("WebDAV connection test failed: {}", result.message);
+            Ok(failed(categorize_connection_error(&result.message)))
         }
         Err(e) => {
-            error!("Failed to create WebDAV service: {}", e);
-            Ok(Json(WebDAVConnectionResult {
-                success: false,
-                message: format!("Service creation failed: {}", e),
-                server_version: None,
-                server_type: None,
-            }))
+            warn!("WebDAV connection test failed: {}", e);
+            Ok(failed(categorize_connection_error(&e.to_string())))
         }
     }
 }
@@ -180,6 +165,17 @@ async fn estimate_webdav_crawl(
             }));
         }
     };
+
+    if let Err(e) = validate_outbound_url(&WebDAVConfig::normalize_server_url(&webdav_config.server_url)).await {
+        warn!("WebDAV crawl estimate refused for user {}: {}", auth_user.user.id, e);
+        return Ok(Json(WebDAVCrawlEstimate {
+            folders: vec![],
+            total_files: 0,
+            total_supported_files: 0,
+            total_estimated_time_hours: 0.0,
+            total_size_mb: 0.0,
+        }));
+    }
 
     // Create WebDAV service and estimate crawl
     match WebDAVService::new(webdav_config) {

@@ -8,9 +8,10 @@ use axum::{
 use std::sync::Arc;
 
 use crate::{
-    auth::AuthUser,
+    auth::{AdminUser, AuthUser},
     errors::settings::SettingsError,
-    models::{SettingsResponse, UpdateSettings, UserRole},
+    models::{SettingsResponse, UpdateSettings},
+    utils::outbound::validate_outbound_url_for_config,
     AppState,
 };
 use serde::Serialize;
@@ -96,7 +97,7 @@ async fn get_settings(
                 webdav_enabled: default.webdav_enabled,
                 webdav_server_url: default.webdav_server_url,
                 webdav_username: default.webdav_username,
-                webdav_password: default.webdav_password,
+                has_webdav_password: false,
                 webdav_watch_folders: default.webdav_watch_folders,
                 webdav_file_extensions: default.webdav_file_extensions,
                 webdav_auto_sync: default.webdav_auto_sync,
@@ -129,8 +130,22 @@ async fn get_settings(
 async fn update_settings(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
-    Json(update_data): Json<UpdateSettings>,
+    Json(mut update_data): Json<UpdateSettings>,
 ) -> Result<Json<SettingsResponse>, StatusCode> {
+    // The stored password is never sent to clients, so an empty value means
+    // "unchanged". An explicit null still clears it.
+    if matches!(&update_data.webdav_password, Some(Some(p)) if p.is_empty()) {
+        update_data.webdav_password = None;
+    }
+    if let Some(Some(url)) = &update_data.webdav_server_url {
+        if !url.trim().is_empty() {
+            let normalized = crate::services::webdav::WebDAVConfig::normalize_server_url(url);
+            if validate_outbound_url_for_config(&normalized).await.is_err() {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+    }
+
     let settings = state
         .db
         .create_or_update_settings(auth_user.user.id, &update_data)
@@ -178,14 +193,9 @@ struct ServerConfiguration {
     )
 )]
 async fn get_server_configuration(
-    auth_user: AuthUser,
+    auth_user: AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ServerConfiguration>, StatusCode> {
-    // Only allow admin users to view server configuration
-    if auth_user.user.role != UserRole::Admin {
-        return Err(StatusCode::FORBIDDEN);
-    }
-
     let config = &state.config;
 
     // Get user settings from database, fallback to defaults

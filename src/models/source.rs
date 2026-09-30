@@ -73,7 +73,7 @@ impl TryFrom<String> for SourceStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Source {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -136,7 +136,7 @@ pub struct SourceResponse {
     pub validation_issues: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct CreateSource {
     pub name: String,
     pub source_type: SourceType,
@@ -144,7 +144,7 @@ pub struct CreateSource {
     pub config: serde_json::Value,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct UpdateSource {
     pub name: Option<String>,
     pub enabled: Option<bool>,
@@ -158,7 +158,7 @@ pub struct SourceWithStats {
     pub sync_progress: Option<f32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
 pub struct WebDAVSourceConfig {
     pub server_url: String,
     pub username: String,
@@ -180,7 +180,7 @@ pub struct LocalFolderSourceConfig {
     pub follow_symlinks: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
 pub struct S3SourceConfig {
     pub bucket_name: String,
     pub region: String,
@@ -217,7 +217,7 @@ pub struct WebDAVCrawlEstimate {
     pub total_size_mb: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct WebDAVTestConnection {
     pub server_url: String,
     pub username: String,
@@ -558,7 +558,7 @@ impl From<Source> for SourceResponse {
             name: source.name,
             source_type: source.source_type,
             enabled: source.enabled,
-            config: source.config,
+            config: redact_source_config(source.source_type, source.config),
             status: source.status,
             last_sync_at: source.last_sync_at,
             last_error: source.last_error,
@@ -577,5 +577,206 @@ impl From<Source> for SourceResponse {
             validation_score: source.validation_score,
             validation_issues: source.validation_issues,
         }
+    }
+}
+
+/// Secret fields of a source configuration, paired with the boolean flag that
+/// replaces each one in API responses.
+fn secret_config_fields(source_type: SourceType) -> &'static [(&'static str, &'static str)] {
+    match source_type {
+        SourceType::WebDAV => &[("password", "has_password")],
+        SourceType::S3 => &[("secret_access_key", "has_secret_access_key")],
+        SourceType::LocalFolder => &[],
+    }
+}
+
+/// Remove stored credentials from a source configuration before it leaves the
+/// server, recording only whether each one is set.
+pub fn redact_source_config(source_type: SourceType, mut config: serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = config.as_object_mut() {
+        for (field, flag) in secret_config_fields(source_type) {
+            let present = obj
+                .remove(*field)
+                .map(|v| v.as_str().map_or(!v.is_null(), |s| !s.is_empty()))
+                .unwrap_or(false);
+            obj.insert((*flag).to_string(), serde_json::Value::Bool(present));
+        }
+    }
+    config
+}
+
+/// Prepare an incoming configuration for storage: carry over stored
+/// credentials the client omitted or sent empty, and drop the response-only
+/// flags. Clients never receive stored secrets, so an omitted secret means
+/// "unchanged".
+pub fn merge_stored_secrets(
+    source_type: SourceType,
+    stored: &serde_json::Value,
+    mut incoming: serde_json::Value,
+) -> serde_json::Value {
+    if let Some(obj) = incoming.as_object_mut() {
+        for (field, flag) in secret_config_fields(source_type) {
+            obj.remove(*flag);
+            let provided = obj.get(*field).and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty());
+            if !provided {
+                match stored.get(*field) {
+                    Some(v) => {
+                        obj.insert((*field).to_string(), v.clone());
+                    }
+                    None => {
+                        obj.remove(*field);
+                    }
+                }
+            }
+        }
+    }
+    incoming
+}
+
+/// Copy of `config` with every known secret field masked, for Debug output.
+fn masked_config(config: &serde_json::Value) -> serde_json::Value {
+    let mut config = config.clone();
+    if let Some(obj) = config.as_object_mut() {
+        for source_type in [SourceType::WebDAV, SourceType::S3] {
+            for (field, _) in secret_config_fields(source_type) {
+                if obj.contains_key(*field) {
+                    obj.insert((*field).to_string(), serde_json::Value::String("***".into()));
+                }
+            }
+        }
+    }
+    config
+}
+
+impl std::fmt::Debug for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Source")
+            .field("id", &self.id)
+            .field("user_id", &self.user_id)
+            .field("name", &self.name)
+            .field("source_type", &self.source_type)
+            .field("enabled", &self.enabled)
+            .field("config", &masked_config(&self.config))
+            .field("status", &self.status)
+            .field("last_sync_at", &self.last_sync_at)
+            .field("last_error", &self.last_error)
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for CreateSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CreateSource")
+            .field("name", &self.name)
+            .field("source_type", &self.source_type)
+            .field("enabled", &self.enabled)
+            .field("config", &masked_config(&self.config))
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for UpdateSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UpdateSource")
+            .field("name", &self.name)
+            .field("enabled", &self.enabled)
+            .field("config", &self.config.as_ref().map(masked_config))
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for WebDAVSourceConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebDAVSourceConfig")
+            .field("server_url", &self.server_url)
+            .field("username", &self.username)
+            .field("password", &"***")
+            .field("watch_folders", &self.watch_folders)
+            .field("file_extensions", &self.file_extensions)
+            .field("auto_sync", &self.auto_sync)
+            .field("sync_interval_minutes", &self.sync_interval_minutes)
+            .field("server_type", &self.server_type)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for S3SourceConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("S3SourceConfig")
+            .field("bucket_name", &self.bucket_name)
+            .field("region", &self.region)
+            .field("access_key_id", &self.access_key_id)
+            .field("secret_access_key", &"***")
+            .field("endpoint_url", &self.endpoint_url)
+            .field("force_path_style", &self.force_path_style)
+            .field("prefix", &self.prefix)
+            .field("watch_folders", &self.watch_folders)
+            .field("file_extensions", &self.file_extensions)
+            .field("auto_sync", &self.auto_sync)
+            .field("sync_interval_minutes", &self.sync_interval_minutes)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for WebDAVTestConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebDAVTestConnection")
+            .field("server_url", &self.server_url)
+            .field("username", &self.username)
+            .field("password", &"***")
+            .field("server_type", &self.server_type)
+            .finish()
+    }
+}
+
+#[cfg(test)]
+mod secret_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn redacts_webdav_password_and_s3_secret() {
+        let webdav = redact_source_config(SourceType::WebDAV, json!({"server_url": "https://x", "password": "p"}));
+        assert!(webdav.get("password").is_none());
+        assert_eq!(webdav["has_password"], json!(true));
+
+        let s3 = redact_source_config(SourceType::S3, json!({"bucket_name": "b", "secret_access_key": ""}));
+        assert!(s3.get("secret_access_key").is_none());
+        assert_eq!(s3["has_secret_access_key"], json!(false));
+    }
+
+    #[test]
+    fn merge_keeps_stored_secret_when_omitted_or_empty() {
+        let stored = json!({"password": "old"});
+        let omitted = merge_stored_secrets(SourceType::WebDAV, &stored, json!({"username": "u", "has_password": true}));
+        assert_eq!(omitted["password"], json!("old"));
+        assert!(omitted.get("has_password").is_none());
+
+        let empty = merge_stored_secrets(SourceType::WebDAV, &stored, json!({"password": ""}));
+        assert_eq!(empty["password"], json!("old"));
+
+        let replaced = merge_stored_secrets(SourceType::WebDAV, &stored, json!({"password": "new"}));
+        assert_eq!(replaced["password"], json!("new"));
+    }
+
+    #[test]
+    fn debug_output_hides_secrets() {
+        let cfg = S3SourceConfig {
+            bucket_name: "b".into(),
+            region: "r".into(),
+            access_key_id: "AKIA".into(),
+            secret_access_key: "topsecret".into(),
+            endpoint_url: None,
+            force_path_style: None,
+            prefix: None,
+            watch_folders: vec![],
+            file_extensions: vec![],
+            auto_sync: false,
+            sync_interval_minutes: 5,
+        };
+        assert!(!format!("{:?}", cfg).contains("topsecret"));
+
+        let update = UpdateSource { name: None, enabled: None, config: Some(json!({"password": "hunter2"})) };
+        assert!(!format!("{:?}", update).contains("hunter2"));
     }
 }

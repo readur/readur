@@ -6,8 +6,11 @@ use axum::{
 use std::sync::Arc;
 use uuid::Uuid;
 
+use tracing::warn;
+
 use crate::{
     auth::AuthUser,
+    utils::outbound::{categorize_connection_error, validate_outbound_url},
     AppState,
 };
 
@@ -86,6 +89,11 @@ pub async fn estimate_crawl_with_config(
 async fn estimate_webdav_crawl_internal(
     config: &crate::models::WebDAVSourceConfig,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    let server_url = crate::services::webdav::WebDAVConfig::normalize_server_url(&config.server_url);
+    if let Err(e) = validate_outbound_url(&server_url).await {
+        return Ok(Json(empty_estimate(&e.to_string())));
+    }
+
     // Create WebDAV service config
     let webdav_config = crate::services::webdav::WebDAVConfig {
         server_url: config.server_url.clone(),
@@ -102,23 +110,23 @@ async fn estimate_webdav_crawl_internal(
         Ok(webdav_service) => {
             match webdav_service.estimate_crawl().await {
                 Ok(estimate) => Ok(Json(serde_json::to_value(estimate).unwrap())),
-                Err(e) => Ok(Json(serde_json::json!({
-                    "error": format!("Crawl estimation failed: {}", e),
-                    "folders": [],
-                    "total_files": 0,
-                    "total_supported_files": 0,
-                    "total_estimated_time_hours": 0.0,
-                    "total_size_mb": 0.0,
-                }))),
+                Err(e) => {
+                    warn!("WebDAV crawl estimation failed: {}", e);
+                    Ok(Json(empty_estimate(categorize_connection_error(&e.to_string()))))
+                }
             }
         }
-        Err(e) => Ok(Json(serde_json::json!({
-            "error": format!("Failed to create WebDAV service: {}", e),
-            "folders": [],
-            "total_files": 0,
-            "total_supported_files": 0,
-            "total_estimated_time_hours": 0.0,
-            "total_size_mb": 0.0,
-        }))),
+        Err(e) => Ok(Json(empty_estimate(&format!("Invalid WebDAV configuration: {}", e)))),
     }
+}
+
+fn empty_estimate(error: &str) -> serde_json::Value {
+    serde_json::json!({
+        "error": error,
+        "folders": [],
+        "total_files": 0,
+        "total_supported_files": 0,
+        "total_estimated_time_hours": 0.0,
+        "total_size_mb": 0.0,
+    })
 }

@@ -4,7 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Settings {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -116,7 +116,8 @@ pub struct SettingsResponse {
     pub webdav_enabled: bool,
     pub webdav_server_url: Option<String>,
     pub webdav_username: Option<String>,
-    pub webdav_password: Option<String>,
+    /// Whether a WebDAV password is stored. The password itself is never returned.
+    pub has_webdav_password: bool,
     pub webdav_watch_folders: Vec<String>,
     pub webdav_file_extensions: Vec<String>,
     pub webdav_auto_sync: bool,
@@ -126,7 +127,7 @@ pub struct SettingsResponse {
     pub office_extraction_enable_detailed_logging: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct UpdateSettings {
     pub ocr_language: Option<String>,
     pub preferred_languages: Option<Vec<String>>,
@@ -185,6 +186,32 @@ pub struct UpdateSettings {
     pub office_extraction_enable_detailed_logging: Option<bool>,
 }
 
+impl std::fmt::Debug for Settings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Settings")
+            .field("id", &self.id)
+            .field("user_id", &self.user_id)
+            .field("ocr_language", &self.ocr_language)
+            .field("webdav_enabled", &self.webdav_enabled)
+            .field("webdav_server_url", &self.webdav_server_url)
+            .field("webdav_username", &self.webdav_username)
+            .field("webdav_password", &self.webdav_password.as_ref().map(|_| "***"))
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for UpdateSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UpdateSettings")
+            .field("ocr_language", &self.ocr_language)
+            .field("webdav_enabled", &self.webdav_enabled)
+            .field("webdav_server_url", &self.webdav_server_url)
+            .field("webdav_username", &self.webdav_username)
+            .field("webdav_password", &self.webdav_password.as_ref().map(|p| p.as_ref().map(|_| "***")))
+            .finish_non_exhaustive()
+    }
+}
+
 impl From<Settings> for SettingsResponse {
     fn from(settings: Settings) -> Self {
         Self {
@@ -235,7 +262,7 @@ impl From<Settings> for SettingsResponse {
             webdav_enabled: settings.webdav_enabled,
             webdav_server_url: settings.webdav_server_url,
             webdav_username: settings.webdav_username,
-            webdav_password: settings.webdav_password,
+            has_webdav_password: settings.webdav_password.as_deref().is_some_and(|p| !p.is_empty()),
             webdav_watch_folders: settings.webdav_watch_folders,
             webdav_file_extensions: settings.webdav_file_extensions,
             webdav_auto_sync: settings.webdav_auto_sync,
