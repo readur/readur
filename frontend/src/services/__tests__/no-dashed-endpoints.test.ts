@@ -21,9 +21,9 @@ const FILES_TO_SCAN = [
   ...readdirSync(join(REPO_ROOT, 'frontend/src/services/api'))
     .filter((name) => name.endsWith('.ts'))
     .map((name) => `frontend/src/services/api/${name}`),
-  'frontend/src/pages/DocumentManagementPage.tsx',
-  'frontend/src/pages/IgnoredFilesPage.tsx',
-  'frontend/src/pages/SourcesPage.tsx',
+  'frontend/src/features/intake/upload/useUploadQueue.ts',
+  'frontend/src/features/intake/upload/useUploadOptions.ts',
+  'frontend/src/features/intake/attention/DuplicatesPanel.tsx',
   'frontend/src/features/settings/debug/useDebugSession.ts',
   'frontend/src/features/settings/debug/DebugPanels.tsx',
   'frontend/src/features/settings/debug/Diagnostics.tsx',
