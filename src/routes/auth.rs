@@ -40,7 +40,7 @@ struct AuthConfig {
     post,
     path = "/api/auth/register",
     tag = "auth",
-    request_body = CreateUser,
+    request_body(content = CreateUser, description = "New account details. Any `role` is ignored: public registration always creates a standard user."),
     responses(
         (status = 200, description = "User registered successfully", body = UserResponse),
         (status = 400, description = "Bad request - username/email already exists or invalid data"),
@@ -49,7 +49,7 @@ struct AuthConfig {
 )]
 async fn register(
     State(state): State<Arc<AppState>>,
-    Json(user_data): Json<CreateUser>,
+    Json(mut user_data): Json<CreateUser>,
 ) -> Response {
     // Check if local authentication is enabled
     if !state.config.allow_local_auth.unwrap_or(true) {
@@ -62,6 +62,10 @@ async fn register(
             }))
         ).into_response();
     }
+
+    // Public registration always creates a standard user; any role in the
+    // request body is ignored. Admins create other admins via POST /api/users.
+    user_data.role = Some(UserRole::User);
 
     match state.db.create_user(user_data).await {
         Ok(user) => {

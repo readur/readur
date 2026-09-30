@@ -132,6 +132,8 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           JWT_SECRET: test-secret-key
+          # Seeded admin; tests create further admins through it (public registration only creates standard users)
+          ADMIN_PASSWORD: test-admin-password
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch
@@ -241,6 +243,7 @@ jobs:
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           API_URL: http://localhost:8000
           JWT_SECRET: test-secret-key
+          ADMIN_PASSWORD: test-admin-password
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch

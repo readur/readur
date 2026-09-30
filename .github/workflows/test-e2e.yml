@@ -93,6 +93,8 @@ jobs:
         env:
           DATABASE_URL: postgres://readur:readur@localhost:5432/readur
           JWT_SECRET: test-secret-key
+          # Seeded admin; the E2E suite creates test admins through it (public registration only creates standard users)
+          ADMIN_PASSWORD: test-admin-password
           PORT: 8000
           FRONTEND_PATH: ./frontend/dist
           UPLOAD_PATH: ./uploads
@@ -124,6 +126,8 @@ jobs:
         env:
           VITE_API_URL: http://localhost:8000
           PLAYWRIGHT_BASE_URL: http://localhost:8000
+          E2E_ADMIN_USERNAME: admin
+          E2E_ADMIN_PASSWORD: test-admin-password
 
       - name: Upload Playwright Test Results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

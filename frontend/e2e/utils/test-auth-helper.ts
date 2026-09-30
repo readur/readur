@@ -28,9 +28,10 @@ export const E2E_TIMEOUTS = {
 } as const;
 
 /**
- * Optional pre-provisioned admin (for example the one printed in the server log on
- * first boot). When both are set, `createAdminUser()` signs in as that account
- * instead of registering a fresh admin.
+ * The server's seeded admin (for example the one printed in the server log on
+ * first boot, or the one set with ADMIN_PASSWORD). Public registration only
+ * creates standard users, so `createAdminUser()` signs in as this account and
+ * creates each test admin through `POST /api/users`.
  *
  *   E2E_ADMIN_USERNAME=admin E2E_ADMIN_PASSWORD=... npx playwright test
  */
@@ -63,22 +64,26 @@ export class E2ETestAuthHelper {
 
   async createAdminUser(): Promise<E2ETestUser> {
     const envAdmin = envAdminCredentials();
-    if (envAdmin) {
-      const token = await this.loginUserAPI(envAdmin);
-      const me = await this.page.request.get('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
-      if (!me.ok()) throw new Error(`Could not read the configured admin: ${me.status()}`);
-      return { credentials: envAdmin, userResponse: await me.json(), token };
+    if (!envAdmin) {
+      throw new Error('Set E2E_ADMIN_USERNAME and E2E_ADMIN_PASSWORD to the server admin to create test admins.');
     }
+    const token = await this.loginUserAPI(envAdmin);
     const id = this.generateUniqueId();
-    return this.register(
-      { username: `e2e_admin_${id}`, email: `e2e_admin_${id}@test.com`, password: ADMIN_PASSWORD },
-      'admin',
-    );
+    const credentials = { username: `e2e_admin_${id}`, email: `e2e_admin_${id}@test.com`, password: ADMIN_PASSWORD };
+    const response = await this.page.request.post('/api/users', {
+      data: { ...credentials, role: 'admin' },
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: E2E_TIMEOUTS.userCreation,
+    });
+    if (!response.ok()) {
+      throw new Error(`Failed to create test admin. Status: ${response.status()}, Body: ${await response.text()}`);
+    }
+    return { credentials, userResponse: await response.json() };
   }
 
-  private async register(credentials: TestCredentials, role?: 'admin'): Promise<E2ETestUser> {
+  private async register(credentials: TestCredentials): Promise<E2ETestUser> {
     const response = await this.page.request.post('/api/auth/register', {
-      data: { ...credentials, ...(role ? { role } : {}) },
+      data: credentials,
       timeout: E2E_TIMEOUTS.userCreation,
     });
     if (!response.ok()) {

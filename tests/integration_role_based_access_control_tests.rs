@@ -101,11 +101,7 @@ impl RBACTestClient {
                 role: Some(role),
             };
             
-            let register_response = self.client
-                .post(&format!("{}/api/auth/register", get_base_url()))
-                .json(&user_data)
-                .send()
-                .await?;
+            let register_response = readur::test_utils::register_user_on_server(&self.client, &get_base_url(), &user_data).await?;
             
             if register_response.status().is_success() {
                 // Registration successful, now login

@@ -509,4 +509,76 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
     }
+    #[tokio::test]
+    async fn test_public_registration_ignores_requested_admin_role() {
+        let ctx = TestContext::new().await;
+        let suffix = uuid::Uuid::new_v4().simple();
+        let username = format!("selfreg_{}", suffix);
+        let register_data = json!({
+            "username": username,
+            "email": format!("selfreg_{}@example.com", suffix),
+            "password": "password123",
+            "role": "admin"
+        });
+
+        let response = ctx.app.clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/register")
+                    .header("Content-Type", "application/json")
+                    .body(axum::body::Body::from(serde_json::to_vec(&register_data).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["username"], username.as_str());
+        assert_eq!(body["role"], "user");
+
+        let stored = ctx.state.db.get_user_by_username(&username).await.unwrap().unwrap();
+        assert_eq!(stored.role, UserRole::User);
+    }
+
+    #[tokio::test]
+    async fn test_admin_can_create_admin_via_users_endpoint() {
+        let ctx = TestContext::new().await;
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let admin = auth_helper.create_admin_user().await;
+        assert_eq!(admin.user_response.role, UserRole::Admin);
+        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+
+        let suffix = uuid::Uuid::new_v4().simple();
+        let username = format!("newadmin_{}", suffix);
+        let new_admin = json!({
+            "username": username,
+            "email": format!("newadmin_{}@example.com", suffix),
+            "password": "password123",
+            "role": "admin"
+        });
+
+        let response = ctx.app.clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/users")
+                    .header("Authorization", format!("Bearer {}", token))
+                    .header("Content-Type", "application/json")
+                    .body(axum::body::Body::from(serde_json::to_vec(&new_admin).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["role"], "admin");
+
+        let stored = ctx.state.db.get_user_by_username(&username).await.unwrap().unwrap();
+        assert_eq!(stored.role, UserRole::Admin);
+    }
 }

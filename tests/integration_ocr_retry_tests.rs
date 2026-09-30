@@ -64,12 +64,7 @@ impl OcrRetryTestHelper {
             role: Some(UserRole::Admin),
         };
         
-        let register_response = client
-            .post(&format!("{}/api/auth/register", get_base_url()))
-            .json(&user_data)
-            .timeout(TIMEOUT)
-            .send()
-            .await?;
+        let register_response = readur::test_utils::register_user_on_server(&client, &get_base_url(), &user_data).await?;
         
         if !register_response.status().is_success() {
             return Err(format!("Registration failed: {}", register_response.text().await?).into());

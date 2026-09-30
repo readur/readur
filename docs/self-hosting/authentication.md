@@ -28,12 +28,13 @@ SESSION_LIFETIME_HOURS=24
 Create and manage users via the API:
 
 ```bash
-# Create admin user via API
-curl -X POST http://localhost:8000/api/auth/register \
+# Create another admin user via API (requires an admin token)
+curl -X POST http://localhost:8000/api/users \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "admin",
-    "email": "admin@company.com",
+    "username": "admin2",
+    "email": "admin2@company.com",
     "password": "SecurePass123!",
     "role": "admin"
   }'
@@ -51,6 +52,8 @@ curl -X POST http://localhost:8000/api/users \
 
 # Users can also self-register if enabled:
 # Set ENABLE_REGISTRATION=true in environment
+# Self-registration (POST /api/auth/register) always creates a standard
+# user; any "role" in the request body is ignored.
 ```
 
 ### OIDC/OAuth2 (Recommended)

@@ -36,6 +36,8 @@ services:
       
       # Security
       JWT_SECRET: test-jwt-secret-key
+      # Seeded admin; tests create further admins through it
+      ADMIN_PASSWORD: test-admin-password
       
       # File paths (using temporary directories)
       UPLOAD_PATH: /tmp/test_uploads
