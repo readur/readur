@@ -22,7 +22,8 @@ These MUST be changed from defaults in production:
 JWT_SECRET=$(openssl rand -base64 32)
 DB_PASSWORD=$(openssl rand -base64 32)
 
-# JWT_SECRET is required: the server refuses to start if it is unset,
+# JWT_SECRET is optional (when unset, a key is generated and stored in the
+# database). When set, the server refuses to start if it is
 # shorter than 32 bytes, or a published example value
 
 # Set admin password

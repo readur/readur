@@ -23,7 +23,8 @@ cd readur
 ### Step 2: Start Services
 
 ```bash
-# JWT_SECRET is required (at least 32 bytes); the server will not start without it
+# Optional: set your own JWT_SECRET (at least 32 bytes). When unset, a key is
+# generated on first start and stored in the database.
 echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
 
 # Start with default configuration

@@ -64,7 +64,7 @@ services:
     image: ghcr.io/readur/readur:latest
     environment:
       DATABASE_URL: postgresql://readur:readur@postgres/readur
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to a random 32+ byte value}
+      JWT_SECRET: ${JWT_SECRET:-}   # optional; generated and stored in the database when empty
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8000
       UPLOAD_PATH: /app/uploads
@@ -100,7 +100,7 @@ Create your environment file:
 **For Option A (Official Container):**
 
 ```bash
-# Create .env file with your secrets (JWT_SECRET is required, min 32 bytes)
+# Create .env file with your secrets (JWT_SECRET is optional; min 32 bytes when set)
 cat > .env << EOF
 JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_PASSWORD=YourSecurePassword123!
@@ -287,7 +287,7 @@ For production deployments, implement these security measures:
 
 1. **Enable HTTPS**: Set up a reverse proxy with TLS certificates. See [Reverse Proxy Setup](../REVERSE_PROXY.md)
 
-2. **Use strong secrets**: `JWT_SECRET` must be at least 32 bytes (the server enforces this); use a random value:
+2. **Use strong secrets**: `JWT_SECRET` is optional (without it a key is generated and stored in the database; rotate it with `readur rotate-jwt-secret`). If you set it, it must be at least 32 bytes (the server enforces this); use a random value:
    ```bash
    openssl rand -hex 32
    ```

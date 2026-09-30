@@ -28,7 +28,7 @@ All application settings can be configured via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql://readur:readur@localhost/readur` | PostgreSQL connection string |
-| `JWT_SECRET` | _(none, required)_ | Secret used to sign JWT tokens. Must be at least 32 bytes and must not be a published example value; the server refuses to start otherwise. Generate with `openssl rand -hex 32` |
+| `JWT_SECRET` | _(generated, stored in the database)_ | Secret used to sign JWT tokens. Optional: when unset, a key is generated on first start and stored in the database (`readur rotate-jwt-secret` replaces it). When set, it takes precedence, must be at least 32 bytes and must not be a published example value. Generate with `openssl rand -hex 32` |
 | `SERVER_ADDRESS` | `0.0.0.0:8000` | Server bind address and port |
 
 ### Security and Access Control
@@ -263,7 +263,7 @@ For a minimal production deployment, configure these essential variables:
 
 ```bash
 # Security (REQUIRED)
-JWT_SECRET=<output of: openssl rand -hex 32>   # min 32 bytes; server will not start without it
+JWT_SECRET=<output of: openssl rand -hex 32>   # optional; min 32 bytes when set
 DATABASE_URL=postgresql://user:password@host:port/database
 
 # File Storage

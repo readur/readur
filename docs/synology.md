@@ -40,9 +40,11 @@ services:
       # POSTGRES_USER: readur
       # POSTGRES_PASSWORD: readur
 
-      # Security - required, at least 32 bytes. Put JWT_SECRET=<output of: openssl rand -hex 32>
-      # in a .env file next to this compose file. The server will not start without it.
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to a random 32+ byte value}
+      # Security - optional. When empty, a signing key is generated on first start
+      # and stored in the database. To manage it yourself, add a line with
+      # JWT_SECRET=<output of: openssl rand -hex 32>
+      # to a .env file next to this file.
+      JWT_SECRET: ${JWT_SECRET:-}
 
       # File paths
       UPLOAD_PATH: /app/uploads

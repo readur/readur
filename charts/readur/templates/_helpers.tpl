@@ -1,4 +1,4 @@
-{{/* Name of the Secret holding JWT_SECRET and ADMIN_PASSWORD. */}}
+{{/* Name of the Secret holding ADMIN_PASSWORD and, optionally, JWT_SECRET. */}}
 {{- define "readur.authSecretName" -}}
 {{- if .Values.auth.existingSecret -}}
 {{- .Values.auth.existingSecret -}}

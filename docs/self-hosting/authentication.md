@@ -162,7 +162,7 @@ Readur uses JWT tokens for authentication. Tokens are valid for `JWT_TTL_HOURS` 
 
 ```bash
 # JWT configuration
-JWT_SECRET=<output of: openssl rand -hex 32>  # Required, min 32 bytes
+JWT_SECRET=<output of: openssl rand -hex 32>  # Optional, min 32 bytes when set
 JWT_TTL_HOURS=12                              # Optional
 ```
 

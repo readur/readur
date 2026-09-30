@@ -83,8 +83,9 @@ Ready to try Readur? Here's the fastest way to get it running:
 git clone https://github.com/readur/readur.git
 cd readur
 
-# Set the required JWT secret (at least 32 bytes)
-echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+# Optional: set your own JWT secret (at least 32 bytes). When unset, a key is
+# generated on first start and stored in the database.
+# echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
 
 # Start all services
 docker-compose up -d

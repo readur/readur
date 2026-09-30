@@ -35,8 +35,9 @@ You can check our our docs at [docs.readur.app](https://docs.readur.app).
 git clone https://github.com/perfectra1n/readur
 cd readur
 
-# JWT_SECRET is required (at least 32 bytes); the server will not start without it
-echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+# Optional: JWT_SECRET signs session tokens. When unset, a key is generated on
+# first start and stored in the database. To manage it yourself:
+# echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
 
 # Start all services
 docker compose up --build -d

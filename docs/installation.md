@@ -21,8 +21,9 @@ The fastest way to get Readur running:
 git clone https://github.com/perfectra1n/readur
 cd readur
 
-# JWT_SECRET is required (at least 32 bytes); the server will not start without it
-echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+# Optional: JWT_SECRET signs session tokens. When unset, a key is generated on
+# first start and stored in the database. To manage it yourself:
+# echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
 
 # Start all services
 docker compose up --build -d
@@ -144,7 +145,7 @@ WATCH_FOLDER=./watch
 ALLOWED_FILE_TYPES=pdf,png,jpg,jpeg,gif,bmp,tiff,txt,rtf,doc,docx
 ```
 
-> **Note**: `JWT_SECRET` is required. The server refuses to start if it is unset, shorter than 32 bytes, or a published example value. Generate one with `openssl rand -hex 32`.
+> **Note**: `JWT_SECRET` is optional. When it is unset, Readur generates a signing key on first start and stores it in the database; `readur rotate-jwt-secret` replaces it. If you set `JWT_SECRET`, it must be at least 32 bytes and not a published example value (generate one with `openssl rand -hex 32`), and it takes precedence over the stored key.
 
 > **Note**: If `DATABASE_URL` is set, it takes priority over individual PostgreSQL variables. This is useful for different deployment scenarios where some platforms provide a single connection string while others provide individual components.
 

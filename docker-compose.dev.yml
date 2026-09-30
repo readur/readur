@@ -31,10 +31,9 @@ services:
       SERVER_PORT: 8000
 
       # Security
-      # Development only: the default secret is a published value, which the
-      # server accepts only with READUR_INSECURE_DEV_MODE. Never use in production.
-      JWT_SECRET: ${JWT_SECRET:-readur-local-development-only-jwt-secret-0123456789}
-      READUR_INSECURE_DEV_MODE: "true"
+      # Optional: when empty, a signing key is generated and stored in the
+      # database on first start.
+      JWT_SECRET: ${JWT_SECRET:-}
 
       # File paths
       UPLOAD_PATH: /app/uploads

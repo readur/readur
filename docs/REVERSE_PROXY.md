@@ -55,7 +55,7 @@ docker run -d \
   readur:latest
 ```
 
-`JWT_SECRET` is required and must be at least 32 bytes. Store the generated value (for example in a `.env` file) so it stays the same across restarts; changing it signs out all users.
+`JWT_SECRET` is optional; when it is unset, a key is generated on first start and stored in the database. If you set it, it must be at least 32 bytes; store the value (for example in a `.env` file) so it stays the same across restarts, since changing it signs out all users.
 
 ### Docker Compose with Custom Ports
 

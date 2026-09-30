@@ -34,11 +34,13 @@ controllers:
           pullPolicy: IfNotPresent
 
         env:
+          # Optional: without it Readur keeps a generated key in its database.
           JWT_SECRET:
             valueFrom:
               secretKeyRef:
                 name: {{ include "readur.authSecretName" . }}
                 key: JWT_SECRET
+                optional: true
           # Only used when the admin account is first created.
           ADMIN_PASSWORD:
             valueFrom:

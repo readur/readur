@@ -528,9 +528,9 @@ secrets:
 
 **Important:** Readur is a single-instance application. Always set replicas to 1.
 
-**Helm chart:** The chart in `charts/readur` creates a Secret named `<release>-auth` with a random 64-character `JWT_SECRET` and a random initial `ADMIN_PASSWORD`. Existing values are kept on upgrade. To provide your own, set `auth.jwtSecret` and/or `auth.adminPassword`, or set `auth.existingSecret` to the name of a Secret that contains `JWT_SECRET` (at least 32 bytes) and optionally `ADMIN_PASSWORD`.
+**Helm chart:** The chart in `charts/readur` creates a Secret named `<release>-auth` with a random initial `ADMIN_PASSWORD`, kept on upgrade. `JWT_SECRET` is optional: without it Readur generates a signing key and stores it in its database. To provide your own values, set `auth.jwtSecret` and/or `auth.adminPassword`, or set `auth.existingSecret` to the name of a Secret that may contain `JWT_SECRET` (at least 32 bytes) and `ADMIN_PASSWORD`.
 
-**GitOps / `helm template`:** keeping generated values across upgrades relies on Helm's `lookup` function, which only works when Helm talks to the cluster (`helm install` / `helm upgrade`). Renderers that do not, such as `helm template` and Argo CD, cannot see the existing Secret and would generate new random values on every render, signing out all users and changing the admin password. With these tools, set `auth.existingSecret` to a Secret you manage (for example with Sealed Secrets or External Secrets), or set both `auth.jwtSecret` and `auth.adminPassword` explicitly.
+**GitOps / `helm template`:** keeping generated values across upgrades relies on Helm's `lookup` function, which only works when Helm talks to the cluster (`helm install` / `helm upgrade`). Renderers that do not, such as `helm template` and Argo CD, cannot see the existing Secret and would generate a new admin password on every render. With these tools, set `auth.existingSecret` to a Secret you manage (for example with Sealed Secrets or External Secrets), or set `auth.adminPassword` explicitly.
 
 Read the generated admin password with:
 
@@ -538,7 +538,7 @@ Read the generated admin password with:
 kubectl get secret <release>-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
 ```
 
-For manually written manifests like the one below, `JWT_SECRET` must be provided; the server does not start without it.
+For manually written manifests like the one below, `JWT_SECRET` is optional; without it the server generates a signing key and stores it in the database.
 
 ```yaml
 apiVersion: apps/v1
@@ -581,7 +581,7 @@ spec:
 
 ### Production Checklist
 
-- [ ] Set `JWT_SECRET` to a random value of at least 32 bytes (e.g. `openssl rand -hex 32`); the server will not start without it
+- [ ] Either leave `JWT_SECRET` unset (a key is generated and stored in the database; rotate with `readur rotate-jwt-secret`) or set it to a random value of at least 32 bytes (e.g. `openssl rand -hex 32`)
 - [ ] Change the initial admin password and delete the generated `initial-admin-password` file (if `ADMIN_PASSWORD` was not set)
 - [ ] Keep `ALLOW_REGISTRATION` disabled unless self-registration is needed
 - [ ] Set `PUBLIC_URL` when running behind a reverse proxy, and `TRUSTED_PROXIES` if the proxy is not on a loopback or private address (or `none` if clients connect directly from a private network)
@@ -601,10 +601,10 @@ spec:
 
 ```bash
 # Generate secure secrets - ALWAYS DO THIS!
-JWT_SECRET=$(openssl rand -hex 32)  # required; min 32 bytes, no default
+JWT_SECRET=$(openssl rand -hex 32)  # optional; min 32 bytes when set
 DB_PASSWORD=$(openssl rand -base64 32)
 
-# The server refuses to start with a missing, short, or example JWT_SECRET
+# The server refuses to start with a short or example JWT_SECRET
 
 # Restrict file permissions
 chmod 600 .env

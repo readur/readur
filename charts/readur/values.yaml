@@ -4,25 +4,30 @@
 ## Any values that you find in the above `values.yaml` can be provided to this chart and are then rendered.
 
 ## Credentials. By default the chart creates a Secret named `<release>-auth`
-## with a random JWT_SECRET (64 characters) and a random initial ADMIN_PASSWORD.
-## Both are generated once and preserved across upgrades. Read the admin
-## password with:
+## with a random initial ADMIN_PASSWORD, generated once and preserved across
+## upgrades. Read it with:
 ##   kubectl get secret <release>-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
 ##
-## GitOps / `helm template`: preserving generated values relies on Helm's
-## `lookup` function, which only works when Helm talks to the cluster
+## JWT_SECRET is optional. Without it Readur generates a signing key on first
+## start and keeps it in its database; `readur rotate-jwt-secret` replaces it.
+## Set `auth.jwtSecret` (or JWT_SECRET in `auth.existingSecret`) to manage the
+## key yourself.
+##
+## GitOps / `helm template`: preserving the generated admin password relies on
+## Helm's `lookup` function, which only works when Helm talks to the cluster
 ## (`helm install` / `helm upgrade`). Renderers that do not, such as
-## `helm template` and Argo CD, cannot see the existing Secret and generate
-## new random values on every render, which signs out all users and changes
-## the admin password. With those tools, set
-## `auth.existingSecret` to a Secret you manage (e.g. Sealed Secrets or
-## External Secrets), or set both `auth.jwtSecret` and `auth.adminPassword`.
+## `helm template` and Argo CD, cannot see the existing Secret and generate a
+## new value on every render. With those tools, set `auth.existingSecret` to a
+## Secret you manage (e.g. Sealed Secrets or External Secrets), or set
+## `auth.adminPassword`.
 auth:
-  # Use an existing Secret instead. It must contain the key JWT_SECRET (at
-  # least 32 bytes) and may contain ADMIN_PASSWORD.
+  # Use an existing Secret instead. It may contain ADMIN_PASSWORD and
+  # JWT_SECRET (at least 32 bytes).
   existingSecret: ""
-  # Explicit values; leave empty to generate them.
+  # Optional JWT signing secret (at least 32 bytes); leave empty to let
+  # Readur keep a generated key in its database.
   jwtSecret: ""
+  # Initial admin password; leave empty to generate one.
   adminPassword: ""
 
 controllers:

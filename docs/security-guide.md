@@ -11,13 +11,13 @@ Readur supports multiple authentication methods to secure your document manageme
 #### Local Authentication
 
 ```yaml
-# Required: JWT signing secret (min 32 bytes). Generate with: openssl rand -hex 32
+# Optional: JWT signing secret (min 32 bytes). Generate with: openssl rand -hex 32
 JWT_SECRET: "<output of: openssl rand -hex 32>"
 JWT_TTL_HOURS: "12"            # token lifetime, 1-720 (default 12)
 ALLOW_REGISTRATION: "false"    # self-registration (default false)
 ```
 
-The server refuses to start if `JWT_SECRET` is unset, shorter than 32 bytes, or a published example value. `READUR_INSECURE_DEV_MODE=true` relaxes this for throwaway local development only.
+When `JWT_SECRET` is unset, Readur generates a random signing key on first start and stores it in the database; `readur rotate-jwt-secret` replaces it (restart the servers afterwards; all sessions end). When `JWT_SECRET` is set, it takes precedence and the server refuses to start if it is shorter than 32 bytes or a published example value. `READUR_INSECURE_DEV_MODE=true` relaxes this for throwaway local development only.
 
 Initial admin account: `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` (default `<username>@localhost`) and `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, a random password is written with mode `0600` to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (override with `ADMIN_PASSWORD_FILE`); it is not written to the logs. Delete the file after changing the password.
 
@@ -245,7 +245,8 @@ Implement regular secret rotation:
 # rotate-secrets.sh
 
 # Generate new secrets
-# (rotating JWT_SECRET signs out all users)
+# (rotating JWT_SECRET signs out all users; without JWT_SECRET, run
+# `readur rotate-jwt-secret` instead and restart the server)
 NEW_JWT_SECRET=$(openssl rand -hex 32)
 
 # Update application configuration

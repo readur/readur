@@ -105,7 +105,7 @@ services:
     environment:
       # Core settings
       DATABASE_URL: postgresql://readur:readur@postgres:5432/readur
-      JWT_SECRET: "${JWT_SECRET}"   # required; generate with: openssl rand -hex 32
+      JWT_SECRET: "${JWT_SECRET}"   # optional; generate with: openssl rand -hex 32
       
       # OIDC configuration
       OIDC_ENABLED: "true"
@@ -335,7 +335,7 @@ services:
     image: ghcr.io/readur/readur:main
     environment:
       DATABASE_URL: postgresql://readur:readur@postgres:5432/readur
-      JWT_SECRET: "${JWT_SECRET}"   # required; generate with: openssl rand -hex 32
+      JWT_SECRET: "${JWT_SECRET}"   # optional; generate with: openssl rand -hex 32
 
       # Authentik OIDC Configuration
       OIDC_ENABLED: "true"

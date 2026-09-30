@@ -93,7 +93,7 @@ DATABASE_URL=postgresql://readur:password@localhost/readur
 
 # Server Configuration
 SERVER_ADDRESS=0.0.0.0:8000
-JWT_SECRET=<output of: openssl rand -hex 32>   # required, min 32 bytes
+JWT_SECRET=<output of: openssl rand -hex 32>   # optional, min 32 bytes when set
 
 # S3 Storage Configuration
 S3_ENABLED=true

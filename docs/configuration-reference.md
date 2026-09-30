@@ -17,7 +17,7 @@ This document provides a comprehensive reference for all configuration options a
 | `SERVER_ADDRESS` | String | `0.0.0.0:8080` | Server bind address (host:port) | No |
 | `SERVER_HOST` | String | `0.0.0.0` | Server host (used if SERVER_ADDRESS not set) | No |
 | `SERVER_PORT` | String | `8080` | Server port (used if SERVER_ADDRESS not set) | No |
-| `JWT_SECRET` | String | - | Secret used to sign JWT tokens. Must be at least 32 bytes and must not be a published example value; the server refuses to start otherwise. Generate with `openssl rand -hex 32` | **Yes** |
+| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database (`readur rotate-jwt-secret` replaces it). When set, it takes precedence, must be at least 32 bytes and must not be a published example value. Generate with `openssl rand -hex 32` | No |
 | `SESSION_SECRET` | String | Auto-generated | Secret for session encryption | Recommended |
 | `UPLOAD_PATH` | String | `./uploads` | Directory for file uploads | No |
 | `ALLOWED_FILE_TYPES` | String | `pdf,txt,doc,docx,png,jpg,jpeg` | Comma-separated allowed extensions | No |
@@ -43,8 +43,8 @@ These settings are read at startup. Invalid values (for example a malformed CIDR
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `JWT_SECRET` | String | - | Secret used to sign JWT tokens. Must be at least 32 bytes and must not be a published example value (such as `your-secret-key`, `change-me` or `secret`). Generate with `openssl rand -hex 32` | **Yes** |
-| `READUR_INSECURE_DEV_MODE` | Boolean | `false` | Allows the server to start with a short or example `JWT_SECRET` (a non-empty value is still required). For throwaway local development and CI only; never set in production | No |
+| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database, shared by every instance using that database; run `readur rotate-jwt-secret` to replace it (restart the servers afterwards; all sessions end). When set, it takes precedence, must be at least 32 bytes and must not be a published example value (such as `your-secret-key`, `change-me` or `secret`). Generate with `openssl rand -hex 32` | No |
+| `READUR_INSECURE_DEV_MODE` | Boolean | `false` | Allows the server to start with a short or example `JWT_SECRET`. For throwaway local development and CI only; never set in production | No |
 | `JWT_TTL_HOURS` | Integer | `12` | Lifetime of issued login tokens, in hours (1-720) | No |
 | `ADMIN_USERNAME` | String | `admin` | Username of the initial admin account created on first startup | No |
 | `ADMIN_EMAIL` | String | `<username>@localhost` | Email of the initial admin account | No |
@@ -350,7 +350,7 @@ stringData:
 
 ### Helm Chart Values
 
-The Helm chart (`charts/readur`) manages `JWT_SECRET` and the initial `ADMIN_PASSWORD` in a Secret named `<release>-auth`. When no values are given, both are generated randomly on install and kept on upgrade. The Secret has `helm.sh/resource-policy: keep`, so it also remains after `helm uninstall`.
+The Helm chart (`charts/readur`) manages the initial `ADMIN_PASSWORD` in a Secret named `<release>-auth`. When no value is given, it is generated randomly on install and kept on upgrade. The Secret has `helm.sh/resource-policy: keep`, so it also remains after `helm uninstall`. `JWT_SECRET` is optional: set `auth.jwtSecret` (or include it in `auth.existingSecret`) to manage it yourself; otherwise Readur keeps a generated key in its database. A `JWT_SECRET` already stored in the Secret by an earlier chart version is kept.
 
 | Value | Default | Description |
 |-------|---------|-------------|
