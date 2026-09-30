@@ -5,6 +5,7 @@ import {
   installSessionInterceptor,
   isCurrentSessionToken,
   shouldResetSessionOn401,
+  withSessionRotation,
 } from '../authEvents';
 import { isSafeInlineMime, previewSandbox } from '../contentSafety';
 
@@ -84,6 +85,45 @@ describe('session interceptor', () => {
     expect(isCurrentSessionToken(undefined)).toBe(false);
     vi.mocked(localStorage.getItem).mockReturnValue(null);
     expect(isCurrentSessionToken('Bearer abc')).toBe(false);
+  });
+
+  test('keeps the session while its token is being replaced', async () => {
+    vi.mocked(localStorage.getItem).mockReturnValue('old');
+    const api = createApi();
+    const listener = vi.fn();
+    window.addEventListener(AUTH_LOGOUT_EVENT, listener);
+
+    // A request with the old token is rejected after the server revoked it
+    // but before the password-change response stored the new token.
+    await withSessionRotation(async () => {
+      await expect(
+        api.get('/documents', { headers: { Authorization: 'Bearer old' } })
+      ).rejects.toBeDefined();
+    });
+    expect(localStorage.removeItem).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+
+    // Once the rotation is over (e.g. it failed), a rejected token ends the session again.
+    await expect(
+      api.get('/documents', { headers: { Authorization: 'Bearer old' } })
+    ).rejects.toBeDefined();
+    expect(localStorage.removeItem).toHaveBeenCalledWith('token');
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener(AUTH_LOGOUT_EVENT, listener);
+  });
+
+  test('lifts the rotation guard when the rotation fails', async () => {
+    vi.mocked(localStorage.getItem).mockReturnValue('old');
+    const api = createApi();
+    const listener = vi.fn();
+    window.addEventListener(AUTH_LOGOUT_EVENT, listener);
+
+    await expect(withSessionRotation(async () => { throw new Error('failed') })).rejects.toThrow('failed');
+    await expect(
+      api.get('/documents', { headers: { Authorization: 'Bearer old' } })
+    ).rejects.toBeDefined();
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener(AUTH_LOGOUT_EVENT, listener);
   });
 
   test('does not clear the session on a failed login', async () => {
