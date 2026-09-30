@@ -1,0 +1,95 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+.threads,
+.replies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.thread {
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.nested {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin-left: var(--s-4);
+  padding-left: var(--s-3);
+  border-left: 1px solid var(--line);
+}
+
+.nested > form {
+  align-self: stretch;
+}
+
+.replies {
+  align-self: stretch;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2) 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.author {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.time,
+.edited {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  color: var(--fg-meta);
+}
+
+.content {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--fg);
+}
+
+.actions {
+  display: flex;
+  gap: var(--s-1);
+}
+
+.error {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-bg);
+  color: var(--danger);
+}

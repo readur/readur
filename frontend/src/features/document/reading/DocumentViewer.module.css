@@ -1,0 +1,79 @@
+.frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 480px;
+  height: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 220px);
+  object-fit: contain;
+}
+
+.pdf {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 220px);
+  min-height: 480px;
+  border: 0;
+  background: var(--surface);
+}
+
+.text {
+  align-self: stretch;
+  width: 100%;
+  max-height: calc(100vh - 220px);
+  margin: 0;
+  padding: var(--s-4);
+  overflow: auto;
+  background: var(--surface);
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--fg);
+}
+
+.text:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--fg-2);
+}
+
+.message p {
+  margin: 0;
+}
+
+.messageTitle {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+@media (max-width: 719px) {
+  .frame,
+  .pdf {
+    min-height: 360px;
+  }
+
+  .pdf {
+    height: 70vh;
+  }
+}
