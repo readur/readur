@@ -817,7 +817,7 @@ impl TestConfigBuilder {
         self
     }
     
-    fn build(self, database_url: String) -> crate::config::Config {
+    pub(crate) fn build(self, database_url: String) -> crate::config::Config {
         crate::config::Config {
             database_url,
             server_address: "127.0.0.1:0".to_string(),

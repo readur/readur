@@ -47,6 +47,27 @@ pub fn ocrmypdf_strategy2_args() -> Vec<&'static str> {
     ]
 }
 
+/// Full ocrmypdf command line for one OCR strategy: the strategy flags, then
+/// `--sidecar <sidecar_path>` so the recognised text is written as the pages are
+/// OCR'd, then the input and output PDFs.
+///
+/// The text must come from this run's sidecar. Re-reading the OCR'd PDF with a
+/// second `ocrmypdf --skip-text --sidecar` pass skips every page (they now carry
+/// a text layer) and the sidecar holds only "[OCR skipped on page(s) N]".
+pub fn ocrmypdf_ocr_command_args(
+    strategy_args: &[&str],
+    sidecar_path: &str,
+    input_path: &str,
+    output_path: &str,
+) -> Vec<String> {
+    let mut args: Vec<String> = strategy_args.iter().map(|a| a.to_string()).collect();
+    args.push("--sidecar".to_string());
+    args.push(sidecar_path.to_string());
+    args.push(input_path.to_string());
+    args.push(output_path.to_string());
+    args
+}
+
 /// RAII guard for automatic cleanup of temporary files
 struct FileCleanupGuard {
     file_path: String,
@@ -1103,22 +1124,19 @@ impl EnhancedOcrService {
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
         );
         let temp_ocr_path = format!("{}/{}", self.temp_dir, temp_ocr_filename);
-        
+        let temp_text_path = format!("{}.txt", temp_ocr_path);
+
         // Run ocrmypdf with progressive fallback strategies
         let ocrmypdf_result = tokio::time::timeout(
             std::time::Duration::from_secs(self.ocr_timeout_seconds),
             tokio::task::spawn_blocking({
                 let file_path = file_path.to_string();
                 let temp_ocr_path = temp_ocr_path.clone();
+                let temp_text_path = temp_text_path.clone();
                 move || {
                     // Strategy 1: Standard OCR with cleaning
-                    let mut cmd = std::process::Command::new("ocrmypdf");
-                    for arg in ocrmypdf_strategy1_args() {
-                        cmd.arg(arg);
-                    }
-                    let mut result = cmd
-                        .arg(&file_path)
-                        .arg(&temp_ocr_path)
+                    let mut result = std::process::Command::new("ocrmypdf")
+                        .args(ocrmypdf_ocr_command_args(&ocrmypdf_strategy1_args(), &temp_text_path, &file_path, &temp_ocr_path))
                         .output();
                     
                     if result.is_ok() && result.as_ref().unwrap().status.success() {
@@ -1127,13 +1145,8 @@ impl EnhancedOcrService {
                     
                     // Strategy 2: If standard OCR fails, try with error recovery
                     eprintln!("Standard OCR failed, trying recovery mode...");
-                    let mut cmd = std::process::Command::new("ocrmypdf");
-                    for arg in ocrmypdf_strategy2_args() {
-                        cmd.arg(arg);
-                    }
-                    result = cmd
-                        .arg(&file_path)
-                        .arg(&temp_ocr_path)
+                    result = std::process::Command::new("ocrmypdf")
+                        .args(ocrmypdf_ocr_command_args(&ocrmypdf_strategy2_args(), &temp_text_path, &file_path, &temp_ocr_path))
                         .output();
                     
                     if result.is_ok() && result.as_ref().unwrap().status.success() {
@@ -1154,6 +1167,7 @@ impl EnhancedOcrService {
         };
 
         if !ocrmypdf_output.status.success() {
+            let _ = tokio::fs::remove_file(&temp_text_path).await;
             let stderr = String::from_utf8_lossy(&ocrmypdf_output.stderr);
             let stdout = String::from_utf8_lossy(&ocrmypdf_output.stdout);
             return Err(anyhow!(
@@ -1173,39 +1187,14 @@ impl EnhancedOcrService {
             ));
         }
         
-        // Extract text from the OCR'd PDF
-        let ocr_text_result = tokio::task::spawn_blocking({
-            let temp_ocr_path = temp_ocr_path.clone();
-            move || -> Result<String> {
-                let _bytes = std::fs::read(&temp_ocr_path)?;
-                // Catch panics from pdf-extract library (same pattern as used elsewhere)
-                // Extract text from the OCR'd PDF using ocrmypdf's sidecar option
-                let temp_text_path = format!("{}.txt", temp_ocr_path);
-                let extract_result = std::process::Command::new("ocrmypdf")
-                    .arg("--skip-text") // Don't re-OCR — just extract existing text layer
-                    .arg("--sidecar")   // Extract text to a sidecar file
-                    .arg(&temp_text_path)
-                    .arg(&temp_ocr_path)
-                    .arg("-")  // Output to stdout (dummy, required by ocrmypdf)
-                    .output()?;
-                
-                if !extract_result.status.success() {
-                    let stderr = String::from_utf8_lossy(&extract_result.stderr);
-                    return Err(anyhow!(
-                        "ocrmypdf text extraction failed: {}",
-                        stderr
-                    ));
-                }
-                
-                // Read the extracted text from the sidecar file
-                let text = std::fs::read_to_string(&temp_text_path)?;
-                
-                // Clean up the text file
-                let _ = std::fs::remove_file(&temp_text_path);
-                Ok(text.trim().to_string())
-            }
-        }).await??;
-        
+        // Read the text ocrmypdf wrote to the sidecar during the OCR run
+        let sidecar_text = tokio::fs::read_to_string(&temp_text_path).await;
+        let _ = tokio::fs::remove_file(&temp_text_path).await;
+        let ocr_text_result = sidecar_text
+            .map_err(|e| anyhow!("Failed to read ocrmypdf sidecar text for '{}': {}", file_path, e))?
+            .trim()
+            .to_string();
+
         // Clean up temporary file
         let _ = tokio::fs::remove_file(&temp_ocr_path).await;
         

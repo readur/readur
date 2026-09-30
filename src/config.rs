@@ -60,7 +60,22 @@ pub struct Config {
     pub public_url: Option<String>,
 }
 
+/// Polling interval the watch-folder scanner uses when WATCH_INTERVAL_SECONDS is unset.
+pub const DEFAULT_WATCH_INTERVAL_SECONDS: u64 = 30;
+/// File-stability wait the watch-folder scanner uses when FILE_STABILITY_CHECK_MS is unset.
+pub const DEFAULT_FILE_STABILITY_CHECK_MS: u64 = 1000;
+
 impl Config {
+    /// Seconds between watch-folder scans, as the watcher actually runs them.
+    pub fn effective_watch_interval_seconds(&self) -> u64 {
+        self.watch_interval_seconds.unwrap_or(DEFAULT_WATCH_INTERVAL_SECONDS)
+    }
+
+    /// Milliseconds a watched file must stay unchanged before it is ingested.
+    pub fn effective_file_stability_check_ms(&self) -> u64 {
+        self.file_stability_check_ms.unwrap_or(DEFAULT_FILE_STABILITY_CHECK_MS)
+    }
+
     pub fn from_env() -> Result<Self> {
         // Load .env file if present
         match dotenvy::dotenv() {
@@ -956,5 +971,19 @@ mod s3_env_tests {
         assert_eq!(parse_force_path_style(Some("false"), Some("true")), Some(false));
         // unset -> auto-detect
         assert_eq!(parse_force_path_style(None, None), None);
+    }
+
+    #[test]
+    fn effective_watch_settings_fall_back_to_the_watcher_defaults() {
+        let mut config = crate::test_utils::TestConfigBuilder::default().build(String::new());
+        config.watch_interval_seconds = None;
+        config.file_stability_check_ms = None;
+        assert_eq!(config.effective_watch_interval_seconds(), DEFAULT_WATCH_INTERVAL_SECONDS);
+        assert_eq!(config.effective_file_stability_check_ms(), DEFAULT_FILE_STABILITY_CHECK_MS);
+
+        config.watch_interval_seconds = Some(5);
+        config.file_stability_check_ms = Some(250);
+        assert_eq!(config.effective_watch_interval_seconds(), 5);
+        assert_eq!(config.effective_file_stability_check_ms(), 250);
     }
 }

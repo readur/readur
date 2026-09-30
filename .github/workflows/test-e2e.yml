@@ -60,6 +60,7 @@ jobs:
             pkg-config \
             libclang-dev \
             ocrmypdf \
+            poppler-utils \
             clang
 
       - name: Setup Rust
