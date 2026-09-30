@@ -214,8 +214,8 @@ describe('LabelSelector', () => {
       await user.type(screen.getByRole('combobox'), 'New Label');
       await user.click(await screen.findByRole('option', { name: 'Create label "New Label"' }));
 
-      const dialog = await screen.findByRole('dialog', { name: 'Create New Label' });
-      expect(within(dialog).getByRole('textbox', { name: /label name/i })).toHaveValue('New Label');
+      const dialog = await screen.findByRole('dialog', { name: 'Create a label' });
+      expect(within(dialog).getByRole('textbox', { name: /^name/i })).toHaveValue('New Label');
       await user.click(within(dialog).getByRole('button', { name: 'Create' }));
 
       await waitFor(() =>
@@ -237,7 +237,7 @@ describe('LabelSelector', () => {
       renderSelector({ onCreateLabel });
       await user.type(screen.getByRole('combobox'), 'New Label');
       await user.click(await screen.findByRole('option', { name: 'Create label "New Label"' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Create New Label' });
+      const dialog = await screen.findByRole('dialog', { name: 'Create a label' });
       await user.click(within(dialog).getByRole('button', { name: 'Create' }));
 
       expect(await within(dialog).findByText('Create failed')).toBeInTheDocument();

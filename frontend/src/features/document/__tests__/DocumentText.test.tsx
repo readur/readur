@@ -78,7 +78,7 @@ describe('extracted text: word count and stats', () => {
     renderPage();
     await title();
     expect(within(textSection()).getByText('The text appears here when OCR finishes.')).toBeInTheDocument();
-    expect(within(textSection()).getByText('PENDING')).toBeInTheDocument();
+    expect(within(textSection()).getByText('Pending')).toBeInTheDocument();
     expect(m.documentService.getOcrText).not.toHaveBeenCalled();
   });
 
@@ -315,7 +315,7 @@ describe('document polling', () => {
       vi.advanceTimersByTime(POLL_INTERVAL_MS);
     });
     expect(await textBody()).toHaveTextContent('Invoice 42');
-    expect(screen.getByRole('group', { name: 'Document summary' })).toHaveTextContent('INDEXED');
+    expect(screen.getByRole('group', { name: 'Document summary' })).toHaveTextContent('Indexed');
     await act(async () => {
       vi.advanceTimersByTime(POLL_INTERVAL_MS * 3);
     });

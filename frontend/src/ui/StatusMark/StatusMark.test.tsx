@@ -4,15 +4,15 @@ import { describe, expect, it } from 'vitest';
 import { StatusMark, type StatusState } from './StatusMark';
 
 const WORDS: Array<[StatusState, string, string]> = [
-  ['pending', '○', 'PENDING'],
+  ['pending', '○', 'Pending'],
   ['processing', '◐', 'OCR'],
-  ['completed', '■', 'INDEXED'],
-  ['failed', '▲', 'FAILED'],
-  ['healthy', '■', 'HEALTHY'],
-  ['syncing', '◐', 'SYNCING'],
-  ['warning', '◆', 'CHECK'],
-  ['error', '▲', 'ERROR'],
-  ['disabled', '—', 'OFF'],
+  ['completed', '■', 'Indexed'],
+  ['failed', '▲', 'Failed'],
+  ['healthy', '■', 'Healthy'],
+  ['syncing', '◐', 'Syncing'],
+  ['warning', '◆', 'Check'],
+  ['error', '▲', 'Error'],
+  ['disabled', '—', 'Off'],
 ];
 
 describe('StatusMark', () => {
@@ -43,7 +43,7 @@ describe('StatusMark', () => {
 
   it('ignores progress for states other than processing', () => {
     render(<StatusMark state="completed" progress={{ current: 3, total: 12 }} />);
-    expect(screen.getByText('INDEXED')).toBeInTheDocument();
+    expect(screen.getByText('Indexed')).toBeInTheDocument();
     expect(screen.queryByText(/3\/12/)).not.toBeInTheDocument();
   });
 
@@ -66,6 +66,6 @@ describe('StatusMark', () => {
         <StatusMark state="failed" />
       </button>,
     );
-    expect(screen.getByRole('button', { name: 'FAILED' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Failed' })).toBeInTheDocument();
   });
 });

@@ -150,7 +150,7 @@ describe('Home', () => {
       expect(within(uploads).getByText('6')).toBeInTheDocument();
       expect(within(uploads).getByText(/Last arrival/)).toBeInTheDocument();
       expect(within(uploads).getByRole('img', { name: /^29 in the last 14 days, most on .+ \(6\)$/ })).toBeInTheDocument();
-      expect(within(uploads).getByText('HEALTHY')).toBeInTheDocument();
+      expect(within(uploads).getByText('Healthy')).toBeInTheDocument();
 
       const watch = laneItem('Watch folder');
       expect(within(watch).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('href', '/intake?section=watch');
@@ -182,10 +182,10 @@ describe('Home', () => {
         lane('o1', [0], { name: 'Old share', enabled: false }),
       ];
       await renderHome();
-      expect(within(laneItem('Broken share')).getByText('ERROR')).toBeInTheDocument();
-      expect(within(laneItem('Busy share')).getByText('SYNCING')).toBeInTheDocument();
+      expect(within(laneItem('Broken share')).getByText('Error')).toBeInTheDocument();
+      expect(within(laneItem('Busy share')).getByText('Syncing')).toBeInTheDocument();
       expect(within(laneItem('Busy share')).getByText('S3')).toBeInTheDocument();
-      expect(within(laneItem('Old share')).getByText('OFF')).toBeInTheDocument();
+      expect(within(laneItem('Old share')).getByText('Off')).toBeInTheDocument();
       expect(within(laneItem('Broken share')).getByText('WebDAV')).toBeInTheDocument();
     });
 

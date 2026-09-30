@@ -110,7 +110,7 @@ describe('changed state: acknowledge on leave', () => {
     );
     const lit = screen.getByRole('row', { name: /L1\.pdf/ });
     expect(lit).toHaveAttribute('data-changed', 'true');
-    expect(within(lit).getByText('CHANGED')).toBeInTheDocument();
+    expect(within(lit).getByText('Changed')).toBeInTheDocument();
     view.unmount();
     await settle();
     expect(isLit('document', 'L1')).toBe(false);
@@ -162,7 +162,7 @@ describe('changed state: acknowledge on leave', () => {
 });
 
 describe('changed state: one vocabulary', () => {
-  const word = (el: HTMLElement) => el.textContent?.trim().toUpperCase();
+  const word = (el: HTMLElement) => el.textContent?.trim();
 
   function renderTags(reason: 'new' | 'changed' | 'failed') {
     markLit('document', 'x', reason);
@@ -173,9 +173,9 @@ describe('changed state: one vocabulary', () => {
   }
 
   it.each([
-    ['new', 'NEW'],
-    ['changed', 'CHANGED'],
-    ['failed', 'CHANGED'],
+    ['new', 'New'],
+    ['changed', 'Changed'],
+    ['failed', 'Changed'],
   ] as const)('the same %s event reads %s on Home, the Library and Intake', (reason, expected) => {
     expect(renderTags(reason)).toEqual([expected, expected, expected]);
   });

@@ -17,7 +17,7 @@ const editingLabel = createMockLabel({
 const renderDialog = (props: Partial<React.ComponentProps<typeof LabelCreateDialog>> = {}) =>
   renderWithProviders(<LabelCreateDialog open onClose={vi.fn()} onSubmit={vi.fn()} {...props} />);
 
-const nameField = () => screen.getByRole('textbox', { name: /label name/i });
+const nameField = () => screen.getByRole('textbox', { name: /^name/i });
 const descriptionField = () => screen.getByRole('textbox', { name: /description/i });
 const colorField = () => screen.getByRole('textbox', { name: /custom color/i });
 const submitButton = (name: RegExp | string = 'Create') => screen.getByRole('button', { name });
@@ -39,9 +39,9 @@ describe('LabelCreateDialog', () => {
   });
 
   describe('create mode', () => {
-    test('is a dialog named "Create New Label"', () => {
+    test('is a dialog named "Create a label"', () => {
       renderDialog();
-      expect(screen.getByRole('dialog', { name: 'Create New Label' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Create a label' })).toBeInTheDocument();
     });
 
     test('renders every field', () => {
@@ -84,7 +84,7 @@ describe('LabelCreateDialog', () => {
   describe('edit mode', () => {
     test('is named "Edit Label"', () => {
       renderDialog({ editingLabel });
-      expect(screen.getByRole('dialog', { name: 'Edit Label' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Edit label' })).toBeInTheDocument();
     });
 
     test('fills the form from the label', () => {
@@ -231,7 +231,7 @@ describe('LabelCreateDialog', () => {
 
     test('shows a placeholder name while empty', () => {
       renderDialog();
-      expect(within(preview()).getAllByText('Label Preview')).toHaveLength(2);
+      expect(within(preview()).getAllByText('Label preview')).toHaveLength(2);
     });
   });
 

@@ -344,16 +344,16 @@ describe('Library detail panel', () => {
       renderLibrary();
       await screen.findByRole('rowheader', { name: /lease\.pdf/ });
       expect(rowFor(/lease\.pdf/)).toHaveAttribute('data-changed', 'true');
-      expect(within(rowFor(/lease\.pdf/)).getByText('NEW')).toBeInTheDocument();
-      expect(within(rowFor(/photo\.png/)).getByText('CHANGED')).toBeInTheDocument();
+      expect(within(rowFor(/lease\.pdf/)).getByText('New')).toBeInTheDocument();
+      expect(within(rowFor(/photo\.png/)).getByText('Changed')).toBeInTheDocument();
       expect(rowFor(/invoice-march/)).not.toHaveAttribute('data-changed');
 
       await openWithEnter(user, /lease\.pdf/);
       expect(isLit('document', 'd2')).toBe(false);
       await user.keyboard('{Escape}');
-      await waitFor(() => expect(within(rowFor(/lease\.pdf/)).queryByText('NEW')).not.toBeInTheDocument());
+      await waitFor(() => expect(within(rowFor(/lease\.pdf/)).queryByText('New')).not.toBeInTheDocument());
       expect(rowFor(/lease\.pdf/)).not.toHaveAttribute('data-changed');
-      expect(within(rowFor(/photo\.png/)).getByText('CHANGED')).toBeInTheDocument();
+      expect(within(rowFor(/photo\.png/)).getByText('Changed')).toBeInTheDocument();
     });
 
     test('"Mark all seen" appears with lit rows and clears them', async () => {

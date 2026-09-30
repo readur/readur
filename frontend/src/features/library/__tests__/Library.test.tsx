@@ -58,14 +58,14 @@ describe('Library', () => {
       await loaded();
       const [first, second, third] = bodyRows();
       expect(within(first).getByRole('gridcell', { name: 'PDF' })).toBeInTheDocument();
-      expect(within(first).getByText('INDEXED')).toBeInTheDocument();
+      expect(within(first).getByText('Indexed')).toBeInTheDocument();
       expect(within(first).getByText('Upload')).toBeInTheDocument();
       expect(within(first).getByText('Tax')).toBeInTheDocument();
       expect(within(first).getByText('Home')).toBeInTheDocument();
       expect(within(first).getByText('+1')).toBeInTheDocument();
       expect(within(first).getByText('2.0 KB')).toBeInTheDocument();
       expect(await within(second).findByText('Office NAS')).toBeInTheDocument();
-      expect(within(second).getByText('FAILED')).toBeInTheDocument();
+      expect(within(second).getByText('Failed')).toBeInTheDocument();
       expect(within(third).getByText('OCR 3/12')).toBeInTheDocument();
       expect(within(third).getByRole('gridcell', { name: 'PNG' })).toBeInTheDocument();
     });
@@ -195,7 +195,7 @@ describe('Library', () => {
       renderLibrary();
       await loaded();
       await user.click(screen.getByRole('button', { name: 'Collection' }));
-      await user.type(await screen.findByRole('searchbox', { name: 'Find a label' }), 'ta');
+      await user.type(await screen.findByRole('searchbox', { name: 'Find a collection' }), 'ta');
       expect(screen.queryByRole('checkbox', { name: 'Home' })).not.toBeInTheDocument();
       await user.click(screen.getByRole('checkbox', { name: 'Tax' }));
       await waitFor(() => expect(currentUrl()).toBe('/documents?labels=l-tax'));

@@ -200,15 +200,15 @@ describe('LabelsSection: create', () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Create Label' }));
-    expect(await screen.findByRole('dialog', { name: 'Create New Label' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Create a label' })).toBeInTheDocument();
   });
 
   it('posts the new label', async () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Create Label' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Create New Label' });
-    await user.type(within(dialog).getByRole('textbox', { name: /Label Name/ }), 'New Label');
+    const dialog = await screen.findByRole('dialog', { name: 'Create a label' });
+    await user.type(within(dialog).getByRole('textbox', { name: /^Name/ }), 'New Label');
     await user.click(within(dialog).getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(apiMock.post).toHaveBeenCalledWith('/labels', expect.objectContaining({ name: 'New Label' })));
   });
@@ -218,8 +218,8 @@ describe('LabelsSection: create', () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Create Label' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Create New Label' });
-    await user.type(within(dialog).getByRole('textbox', { name: /Label Name/ }), 'Work');
+    const dialog = await screen.findByRole('dialog', { name: 'Create a label' });
+    await user.type(within(dialog).getByRole('textbox', { name: /^Name/ }), 'Work');
     await user.click(within(dialog).getByRole('button', { name: 'Create' }));
     expect(await within(dialog).findByText(/dup|already exists/)).toBeInTheDocument();
   });
@@ -230,15 +230,15 @@ describe('LabelsSection: edit', () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Edit label Personal Project' }));
-    expect(await screen.findByRole('dialog', { name: 'Edit Label' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Edit label' })).toBeInTheDocument();
   });
 
   it('puts the updated label', async () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Edit label Personal Project' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Edit Label' });
-    const name = within(dialog).getByRole('textbox', { name: /Label Name/ });
+    const dialog = await screen.findByRole('dialog', { name: 'Edit label' });
+    const name = within(dialog).getByRole('textbox', { name: /^Name/ });
     await user.clear(name);
     await user.type(name, 'Updated Label');
     await user.click(within(dialog).getByRole('button', { name: 'Update' }));
@@ -319,7 +319,7 @@ describe('LabelsSection: empty states', () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Create Your First Label' }));
-    expect(await screen.findByRole('dialog', { name: 'Create New Label' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Create a label' })).toBeInTheDocument();
   });
 });
 
@@ -329,8 +329,8 @@ describe('LabelsSection: refresh', () => {
     render();
     await waitFor(() => expect(apiMock.get).toHaveBeenCalledTimes(1));
     await user.click(await screen.findByRole('button', { name: 'Create Label' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Create New Label' });
-    await user.type(within(dialog).getByRole('textbox', { name: /Label Name/ }), 'New Label');
+    const dialog = await screen.findByRole('dialog', { name: 'Create a label' });
+    await user.type(within(dialog).getByRole('textbox', { name: /^Name/ }), 'New Label');
     await user.click(within(dialog).getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(apiMock.get).toHaveBeenCalledTimes(2));
   });

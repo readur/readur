@@ -53,7 +53,7 @@ describe('document page: facts line', () => {
     renderPage();
     await title();
     expect(facts()).toEqual(['PDF', '2 pages', '2.0 MB', 'Upload', expect.stringMatching(/^Added .*2025/), 'OCR 96%']);
-    expect(within(summary()).getByText('INDEXED')).toBeInTheDocument();
+    expect(within(summary()).getByText('Indexed')).toBeInTheDocument();
   });
 
   it('leaves out what is unknown instead of showing dashes', async () => {
@@ -116,11 +116,11 @@ describe('document page: facts line', () => {
   });
 
   it.each([
-    [undefined, 'PENDING'],
-    ['pending', 'PENDING'],
+    [undefined, 'Pending'],
+    ['pending', 'Pending'],
     ['processing', 'OCR'],
-    ['completed', 'INDEXED'],
-    ['failed', 'FAILED'],
+    ['completed', 'Indexed'],
+    ['failed', 'Failed'],
   ])('shows OCR status %s as %s', async (status, word) => {
     load(makeDocument({ ocr_status: status, has_ocr_text: status === 'completed' }));
     renderPage();

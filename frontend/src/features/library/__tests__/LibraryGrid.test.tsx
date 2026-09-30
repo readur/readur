@@ -76,9 +76,9 @@ describe('Library grid', () => {
     markLit('document', 'd1', 'new');
     renderLibrary();
     const invoice = (await card(/invoice-march\.pdf/)).closest('li') as HTMLElement;
-    expect(within(invoice).getByText('NEW')).toBeInTheDocument();
+    expect(within(invoice).getByText('New')).toBeInTheDocument();
     await user.click(await card(/invoice-march\.pdf/));
-    await waitFor(() => expect(within(invoice).queryByText('NEW')).not.toBeInTheDocument());
+    await waitFor(() => expect(within(invoice).queryByText('New')).not.toBeInTheDocument());
   });
 
   test('clicking a card opens the detail panel', async () => {
