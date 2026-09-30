@@ -149,7 +149,7 @@ All primitives are exported from `frontend/src/ui` (barrel `index.ts`).
 - `useLit(kind, id): {lit:boolean, reason?:string}`
 - `useLitCount(kind?): number`
 
-It persists acknowledged IDs in localStorage under the key `readur.lit.v1` and is capped at 2000 entries. It is fed by NotificationContext events and the sync-progress WebSocket. It's safe to call before any lit entry exists.
+It persists the currently lit (unseen) entries with their reasons in localStorage under the key `readur.lit.v1`; acknowledging removes an entry and is capped at 2000 entries. It is fed by NotificationContext events and the sync-progress WebSocket. It's safe to call before any lit entry exists.
 
 ## 7. Testing conventions
 
