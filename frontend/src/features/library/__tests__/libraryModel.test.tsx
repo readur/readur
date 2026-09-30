@@ -1,7 +1,8 @@
 import { describe, test, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { HighlightedText, SnippetLine, bestSnippet, byteRangesToUtf16, matchRanges } from '../Highlight';
-import { NO_MIME_MATCH, groupOf, mimeTypesFor, shortType } from '../mime';
+import { shortType } from '../../../lib/fileType';
+import { NO_MIME_MATCH, groupOf, mimeTypesFor } from '../mime';
 import { DEFAULT_SIZE, parseQuery, toParams, type LibraryQuery } from '../urlState';
 import { formatBytes, formatRelative } from '../format';
 

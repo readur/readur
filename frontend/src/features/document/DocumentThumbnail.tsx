@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { documentService } from '../../services/api';
-import { shortType } from '../library/mime';
+import { shortType } from '../../lib/fileType';
 import { fileKind } from './format';
 import { cachedThumbnail, hasNoThumbnail, loadThumbnail, requestThumbnail } from './thumbnailLoader';
 import styles from './DocumentThumbnail.module.css';

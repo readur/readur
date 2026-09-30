@@ -3,7 +3,7 @@ import type { LabelData } from '../labels';
 import type { Document, OcrResponse } from '../../services/api';
 import { IconButton, Pass, PassCell, StatusMark } from '../../ui';
 import { Edit } from '../../ui/icons';
-import { typeCodeOf } from './fileType';
+import { typeCodeOf } from '../../lib/fileType';
 import { formatBytes, formatStamp, ocrState, sourceLabel, type OcrExtras } from './format';
 import styles from './DocumentPass.module.css';
 

@@ -6,7 +6,7 @@ import { AddedCell, ChangeTag, LabelsCell, NameCell, StatusCell } from './cells'
 import type { LibraryRow } from './data';
 import { formatBytes, formatRelative } from './format';
 import { SnippetLine, bestSnippet } from './Highlight';
-import { shortType } from './mime';
+import { shortType } from '../../lib/fileType';
 import { SORT_FIELDS, type SortField } from './urlState';
 
 interface LibraryTableProps {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { typeCodeOf } from '../fileType';
+import { typeCodeOf } from '../../../lib/fileType';
 import { formatStamp, sourceLabel } from '../format';
 
 const t = (_key: string, fallback: string) => fallback;

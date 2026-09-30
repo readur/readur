@@ -6,13 +6,14 @@ import { labelService } from '../../services/api/labels';
 import { Button, Dialog, Pass, PassCell, Skeleton, SlideOver, StatusMark, useToast } from '../../ui';
 import { Delete, Download, OpenInNew, Refresh, Share } from '../../ui/icons';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
+import { formatStamp } from '../document/format';
 import { SharedLinksDialog } from '../document/sharing/SharedLinksDialog';
 import { LabelSelector, toLabelData, type LabelData, type LabelDraft } from '../labels';
 import { StatusCell } from './cells';
 import { displayName, type LibraryRow } from './data';
-import { formatBytes, formatDateTime, ocrState } from './format';
+import { formatBytes, ocrState } from './format';
 import { HighlightedText, matchRanges } from './Highlight';
-import { shortType } from './mime';
+import { shortType } from '../../lib/fileType';
 import { useOcrExcerpt, type OcrExcerpt } from './useOcrExcerpt';
 import styles from './Library.module.css';
 
@@ -141,10 +142,10 @@ function DetailBody({
         </PassCell>
         <PassCell label={t('library.columns.source', 'Source')}>{sourceName(row)}</PassCell>
         <PassCell label={t('library.columns.added', 'Added')} mono>
-          {formatDateTime(row.created_at, i18n.language)}
+          {formatStamp(row.created_at)}
         </PassCell>
         <PassCell label={t('library.columns.updated', 'Updated')} mono>
-          {formatDateTime(row.updated_at, i18n.language)}
+          {formatStamp(row.updated_at)}
         </PassCell>
         {excerpt?.language ? (
           <PassCell label={t('library.detail.language', 'Language')}>{excerpt.language}</PassCell>

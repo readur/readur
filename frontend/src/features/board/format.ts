@@ -1,4 +1,4 @@
-import { typeCodeOf } from '../document/fileType';
+import { typeCodeOf } from '../../lib/fileType';
 
 /** Locale-aware formatting helpers for the Board. All results are short, for mono cells. */
 

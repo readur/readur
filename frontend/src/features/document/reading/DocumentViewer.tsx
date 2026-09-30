@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { documentService } from '../../../services/api';
 import { Skeleton } from '../../../ui';
-import { typeCodeOf } from '../fileType';
+import { typeCodeOf } from '../../../lib/fileType';
 import { fileKind } from '../format';
 import styles from './DocumentViewer.module.css';
 
