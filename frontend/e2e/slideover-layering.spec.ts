@@ -32,11 +32,12 @@ for (const [label, size] of [
 
     const close = panel.getByRole('button', { name: /close/i }).first();
     await expect(close).toBeVisible();
-    expect(await isOnTop(close), 'close button is covered').toBe(true);
+    // Poll: the panel is still sliding in for the first frames.
+    await expect.poll(() => isOnTop(close), { message: 'close button is covered' }).toBe(true);
 
     const open = panel.getByRole('button', { name: 'Open', exact: true });
     await expect(open).toBeVisible();
-    expect(await isOnTop(open), 'footer Open action is covered').toBe(true);
+    await expect.poll(() => isOnTop(open), { message: 'footer Open action is covered' }).toBe(true);
     const box = (await open.boundingBox())!;
     expect(box.y + box.height).toBeLessThanOrEqual(size.height);
   });
