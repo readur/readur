@@ -74,7 +74,9 @@ describe('Library', () => {
       renderLibrary();
       await loaded();
       const first = bodyRows()[0];
-      expect(within(first).getByText(/2026/)).toBeInTheDocument();
+      // The full date and time is there for assistive tech; the visible text is relative (or the date past a week).
+      expect(within(first).getAllByText(/2026/).length).toBeGreaterThan(0);
+      expect(first.querySelector('time')).toHaveAttribute('dateTime', DOCS[0].created_at);
     });
   });
 

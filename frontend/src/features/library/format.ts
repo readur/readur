@@ -1,3 +1,4 @@
+import { formatRelativeTime } from '../../lib/relativeTime';
 import type { StatusState } from '../../ui';
 
 /** OCR status as a StatusMark state. A missing status means the job is still queued. */
@@ -37,26 +38,12 @@ export function formatDateTime(value: string | null | undefined, lng?: string): 
   return date.toLocaleString(lng, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
-  ['year', 365 * 24 * 3600],
-  ['month', 30 * 24 * 3600],
-  ['week', 7 * 24 * 3600],
-  ['day', 24 * 3600],
-  ['hour', 3600],
-  ['minute', 60],
-];
-
-/** "3 days ago" in the user's language; "now" under a minute. */
+/**
+ * "3 days ago" / "21 min. ago" / "now", then the date past a week: the app's one relative-time
+ * format (lib/relativeTime), so the Library reads the same as Home and Intake.
+ */
 export function formatRelative(value: string | null | undefined, lng?: string, now = Date.now()): string {
-  if (!value) return '—';
-  const time = new Date(value).getTime();
-  if (Number.isNaN(time)) return '—';
-  const seconds = Math.round((time - now) / 1000);
-  const rtf = new Intl.RelativeTimeFormat(lng, { numeric: 'auto', style: 'short' });
-  for (const [unit, size] of UNITS) {
-    if (Math.abs(seconds) >= size) return rtf.format(Math.round(seconds / size), unit);
-  }
-  return rtf.format(0, 'second');
+  return formatRelativeTime(value, { locale: lng, now });
 }
 
 /** Local calendar date as YYYY-MM-DD (the URL's date format). */

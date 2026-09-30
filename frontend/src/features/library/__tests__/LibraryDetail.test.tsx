@@ -92,27 +92,47 @@ describe('Library detail panel', () => {
   });
 
   describe('content', () => {
-    test('shows the document facts', async () => {
+    test('shows the document facts as one line, leaving out what is unknown', async () => {
       const user = userEvent.setup();
       renderLibrary();
       await openWithEnter(user, /invoice-march/);
       const facts = await within(panel()).findByRole('group', { name: 'Document facts' });
-      const value = (term: string) => within(facts).getByText(term).nextElementSibling;
-      expect(value('Type')).toHaveTextContent('PDF');
-      expect(value('Size')).toHaveTextContent('2.0 KB');
-      expect(value('Source')).toHaveTextContent('Upload');
-      await waitFor(() => expect(value('Pages/OCR')).toHaveTextContent('2'));
-      expect(within(facts).getByText('Language').nextElementSibling).toHaveTextContent('eng');
-      expect(value('Confidence')).toHaveTextContent('91%');
-      expect(value('Added')).toHaveTextContent(/^2026-\d\d-\d\d \d\d:\d\d$/);
-      expect(value('Updated')).toHaveTextContent(/^2026-\d\d-\d\d \d\d:\d\d$/);
+      await waitFor(() => expect(within(facts).getByText('2 pages')).toBeInTheDocument());
+      const parts = Array.from(facts.children).map((c) => c.textContent);
+      expect(parts[0]).toBe('PDF');
+      expect(parts).toContain('2.0 KB');
+      expect(parts).toContain('Upload');
+      expect(parts).toContain('ENG');
+      expect(parts).toContain('OCR 91%');
+      expect(parts.some((p) => /^Added .*2026/.test(p ?? ''))).toBe(true);
+      expect(parts).not.toContain('—');
     });
 
-    test('shows the OCR status in the header', async () => {
+    test('the title is the filename in its real case, with the full name as a tooltip', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      const heading = within(panel()).getByRole('heading', { name: 'invoice-march.pdf' });
+      expect(heading.querySelector('[title]')).toHaveAttribute('title', 'invoice-march.pdf');
+    });
+
+    test('Open is the primary action and Delete sits apart as a danger action', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      const buttons = within(panel()).getAllByRole('button').map((b) => b.textContent?.trim());
+      const order = ['Open', 'Download', 'Share', 'Delete'].map((n) => buttons.indexOf(n));
+      expect(order.every((i) => i >= 0)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+    });
+
+    test('shows the OCR status as a pill beside the facts, not a confidence yet', async () => {
       const user = userEvent.setup();
       renderLibrary();
       await openWithEnter(user, /photo\.png/);
-      expect(within(panel()).getByRole('heading', { name: /OCR 3\/12/ })).toBeInTheDocument();
+      const facts = await within(panel()).findByRole('group', { name: 'Document facts' });
+      expect((facts.parentElement as HTMLElement).textContent).toMatch(/OCR 3\/12/);
+      expect(within(facts).queryByText(/^OCR \d+%$/)).not.toBeInTheDocument();
       await settle();
     });
 

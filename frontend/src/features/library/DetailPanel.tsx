@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { documentService } from '../../services/api';
 import { labelService } from '../../services/api/labels';
-import { Button, Dialog, Pass, PassCell, Skeleton, SlideOver, StatusMark, useToast } from '../../ui';
+import { Button, Dialog, Skeleton, SlideOver, useToast } from '../../ui';
 import { Delete, Download, OpenInNew, Refresh, Share } from '../../ui/icons';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
-import { formatStamp } from '../document/format';
+import { formatAdded } from '../document/meta';
 import { SharedLinksDialog } from '../document/sharing/SharedLinksDialog';
 import { LabelSelector, notifyLabelsChanged, toLabelData, type LabelData, type LabelDraft } from '../labels';
 import { StatusCell } from './cells';
@@ -14,6 +14,7 @@ import { displayName, type LibraryRow } from './data';
 import { formatBytes, ocrState } from './format';
 import { HighlightedText, matchRanges } from './Highlight';
 import { shortType } from '../../lib/fileType';
+import type { TFunction } from 'i18next';
 import { useOcrExcerpt, type OcrExcerpt } from './useOcrExcerpt';
 import styles from './Library.module.css';
 
@@ -73,9 +74,8 @@ export function DetailPanel(props: DetailPanelProps) {
       onNavigate={onNavigate}
       title={
         row ? (
-          <span className={styles.panelTitle}>
-            <span className={styles.panelName}>{displayName(row)}</span>
-            <StatusCell row={row} />
+          <span className={styles.panelName} title={displayName(row)}>
+            {displayName(row)}
           </span>
         ) : (
           t('library.detail.title', 'Document')
@@ -101,10 +101,6 @@ function DetailBody({
   const toast = useToast();
   const ocr = useOcrExcerpt(row.id, panel.ocrCache, panel.ocrEpoch);
   const excerpt = ocr.status === 'ready' ? ocr.excerpt : null;
-  const confidence = row.ocr_confidence ?? excerpt?.confidence ?? null;
-  const hasConfidence = confidence != null;
-  const progress =
-    row.ocr_progress_total && row.ocr_progress_total > 0 ? `${row.ocr_progress_current ?? 0}/${row.ocr_progress_total}` : null;
 
   const saveLabels = async (next: LabelData[]) => {
     const id = row.id;
@@ -135,35 +131,16 @@ function DetailBody({
 
   return (
     <div className={styles.detail}>
-      <Pass aria-label={t('library.detail.facts', 'Document facts')}>
-        <PassCell label={t('library.columns.type', 'Type')} mono>
-          {shortType(row.mime_type)}
-        </PassCell>
-        <PassCell label={t('library.detail.pagesOcr', 'Pages/OCR')} mono>
-          {progress ?? (excerpt?.pages != null ? String(excerpt.pages) : '—')}
-        </PassCell>
-        <PassCell label={t('library.columns.size', 'Size')} mono>
-          {formatBytes(row.file_size, i18n.language)}
-        </PassCell>
-        <PassCell label={t('library.columns.source', 'Source')}>{sourceName(row)}</PassCell>
-        {excerpt?.language ? (
-          <PassCell label={t('library.detail.language', 'Language')} wide={!hasConfidence}>
-            {excerpt.language}
-          </PassCell>
-        ) : null}
-        {hasConfidence ? (
-          <PassCell label={t('library.detail.confidence', 'Confidence')} mono wide={!excerpt?.language}>
-            {`${Math.round(confidence)}%`}
-          </PassCell>
-        ) : null}
-        {/* The dates go last: on a phone each takes a full row, so the cells above stay paired. */}
-        <PassCell label={t('library.columns.added', 'Added')} mono wide>
-          {formatStamp(row.created_at)}
-        </PassCell>
-        <PassCell label={t('library.columns.updated', 'Updated')} mono wide>
-          {formatStamp(row.updated_at)}
-        </PassCell>
-      </Pass>
+      <div className={styles.factsRow}>
+        <StatusCell row={row} />
+        <p className={styles.facts} role="group" aria-label={t('library.detail.facts', 'Document facts')}>
+          {detailMeta(row, excerpt, sourceName(row), t, i18n.language).map((part, i) => (
+            <span key={i} className={styles.fact}>
+              {part}
+            </span>
+          ))}
+        </p>
+      </div>
 
       <div className={styles.preview}>
         <DocumentThumbnail
@@ -183,7 +160,7 @@ function DetailBody({
           <Skeleton lines={4} label={t('library.detail.loadingText', 'Loading text')} />
         ) : excerpt?.text ? (
           <p className={styles.excerpt}>
-            <HighlightedText text={excerpt.text} ranges={matchRanges(excerpt.text, query)} />
+            <HighlightedText text={tidy(excerpt.text)} ranges={matchRanges(tidy(excerpt.text), query)} />
             {excerpt.truncated ? '…' : null}
           </p>
         ) : (
@@ -262,20 +239,22 @@ function DetailActions({ row, onRowChange, onDeleted, openHref, panel }: InnerPr
       <Button variant="primary" icon={<OpenInNew fontSize="small" />} onPress={() => navigate(openHref ? openHref(row) : `/documents/${row.id}`)}>
         {t('library.detail.open', 'Open')}
       </Button>
-      <Button icon={<Download fontSize="small" />} isPending={busy === 'download'} onPress={() => void download()}>
+      <Button variant="secondary" icon={<Download fontSize="small" />} isPending={busy === 'download'} onPress={() => void download()}>
         {t('library.detail.download', 'Download')}
       </Button>
+      <Button variant="secondary" icon={<Share fontSize="small" />} onPress={() => setSharing(true)}>
+        {t('library.detail.share', 'Share')}
+      </Button>
       {failed ? (
-        <Button icon={<Refresh fontSize="small" />} isPending={busy === 'retry'} onPress={() => void retry()}>
+        <Button variant="secondary" icon={<Refresh fontSize="small" />} isPending={busy === 'retry'} onPress={() => void retry()}>
           {t('library.detail.retry', 'Retry OCR')}
         </Button>
       ) : null}
-      <Button variant="ghost" icon={<Share fontSize="small" />} onPress={() => setSharing(true)}>
-        {t('library.detail.share', 'Share')}
-      </Button>
-      <Button variant="danger" icon={<Delete fontSize="small" />} onPress={() => setConfirmDelete(true)}>
-        {t('library.detail.delete', 'Delete')}
-      </Button>
+      <span className={styles.actionsEnd}>
+        <Button variant="danger" icon={<Delete fontSize="small" />} onPress={() => setConfirmDelete(true)}>
+          {t('library.detail.delete', 'Delete')}
+        </Button>
+      </span>
       <SharedLinksDialog documentId={row.id} filename={displayName(row)} isOpen={sharing} onOpenChange={setSharing} />
       <Dialog
         role="alertdialog"
@@ -289,7 +268,7 @@ function DetailActions({ row, onRowChange, onDeleted, openHref, panel }: InnerPr
             <Button variant="ghost" isDisabled={busy === 'delete'} onPress={() => setConfirmDelete(false)}>
               {t('library.cancel', 'Cancel')}
             </Button>
-            <Button variant="danger" isPending={busy === 'delete'} onPress={() => void remove()}>
+            <Button variant="danger-solid" isPending={busy === 'delete'} onPress={() => void remove()}>
               {t('library.detail.delete', 'Delete')}
             </Button>
           </>
@@ -302,4 +281,31 @@ function DetailActions({ row, onRowChange, onDeleted, openHref, panel }: InnerPr
       </Dialog>
     </div>
   );
+}
+
+/**
+ * The document's facts as short phrases for one line, like the document page: "PDF · 2 pages ·
+ * 2.0 KB · Upload · Added 20 Sep 2026 12:00 · ENG · OCR 91%". Unknown values are left out.
+ */
+export function detailMeta(row: LibraryRow, excerpt: OcrExcerpt | null, source: string, t: TFunction, lng?: string): string[] {
+  const parts = [shortType(row.mime_type)];
+  // OCR progress ("OCR 3/12") is on the status pill beside this line, so it is not repeated.
+  if (excerpt?.pages) {
+    parts.push(t('library.detail.pages', { count: excerpt.pages, defaultValue: '{{count}} pages', defaultValue_one: '1 page' }));
+  }
+  if (row.file_size != null && Number.isFinite(row.file_size)) parts.push(formatBytes(row.file_size, lng));
+  parts.push(source);
+  const added = formatAdded(row.created_at, lng);
+  if (added) parts.push(t('library.detail.added', { date: added, defaultValue: 'Added {{date}}' }));
+  if (excerpt?.language) parts.push(excerpt.language.toUpperCase());
+  const confidence = row.ocr_confidence ?? excerpt?.confidence ?? null;
+  if (confidence != null && ocrState(row.ocr_status) === 'completed') {
+    parts.push(t('library.detail.ocr', { value: Math.round(confidence), defaultValue: 'OCR {{value}}%' }));
+  }
+  return parts;
+}
+
+/** Runs of blank lines shown as one paragraph gap (display only). */
+function tidy(text: string): string {
+  return text.replace(/\n[ \t]*(?:\n[ \t]*)+/g, '\n\n');
 }

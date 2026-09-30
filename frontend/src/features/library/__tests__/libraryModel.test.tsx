@@ -173,5 +173,8 @@ describe('formatting', () => {
     expect(formatRelative('2026-09-26T12:00:00Z', 'en', now)).toBe('3 days ago');
     expect(formatRelative('2026-09-29T11:59:50Z', 'en', now)).toBe('now');
     expect(formatRelative(null, 'en', now)).toBe('—');
+    expect(formatRelative('2026-09-29T11:39:00Z', 'en', now)).toBe('21 min. ago');
+    // Past a week the date itself is clearer.
+    expect(formatRelative('2026-08-01T12:00:00Z', 'en', now)).toBe('Aug 1, 2026');
   });
 });
