@@ -315,16 +315,8 @@ impl TestContext {
             rate_limiters: crate::rate_limit::RateLimiters::new(),
         });
         
-        let app = Router::new()
-            .nest("/api/auth", crate::routes::auth::router())
-            .nest("/api/documents", crate::routes::documents::router())
-            .nest("/api/search", crate::routes::search::router())
-            .nest("/api/settings", crate::routes::settings::router())
-            .nest("/api/users", crate::routes::users::router())
-            .nest("/api/ignored/files", crate::routes::ignored_files::ignored_files_routes())
-            .nest("/api/ocr", crate::routes::ocr::router())
-            .nest("/api/metrics", crate::routes::metrics::router())
-            .nest("/metrics", crate::routes::prometheus_metrics::router())
+        // Same routes the server mounts (src/main.rs).
+        let app = crate::routes::api_router()
             .with_state(state.clone())
             .layer(axum::extract::DefaultBodyLimit::max(max_body_size));
         
@@ -876,16 +868,7 @@ impl TestConfigBuilder {
 /// Create test app with provided AppState
 #[cfg(any(test, feature = "test-utils"))]
 pub fn create_test_app(state: Arc<AppState>) -> Router {
-    Router::new()
-        .nest("/api/auth", crate::routes::auth::router())
-        .nest("/api/documents", crate::routes::documents::router())
-        .nest("/api/search", crate::routes::search::router())
-        .nest("/api/settings", crate::routes::settings::router())
-        .nest("/api/users", crate::routes::users::router())
-        .nest("/api/ignored/files", crate::routes::ignored_files::ignored_files_routes())
-        .nest("/api/ocr", crate::routes::ocr::router())
-        .nest("/api/queue", crate::routes::queue::router())
-        .with_state(state)
+    crate::routes::api_router().with_state(state)
 }
 
 /// Legacy function for backward compatibility - will be deprecated

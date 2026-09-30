@@ -574,27 +574,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Using index.html file: {}", index_file.display());
     
     // Create the router with the updated state
-    let mut app = Router::new()
-        .route("/api/health", get(readur::health_check))
-        .nest("/api/auth", readur::routes::auth::router())
-        .nest("/api/documents", readur::routes::documents::router())
-        .nest("/api/ignored/files", readur::routes::ignored_files::ignored_files_routes())
-        .nest("/api/labels", readur::routes::labels::router())
-        .nest("/api/metrics", readur::routes::metrics::router())
-        .nest("/metrics", readur::routes::prometheus_metrics::router())
-        .nest("/api/notifications", readur::routes::notifications::router())
-        .nest("/api/ocr", readur::routes::ocr::router())
-        .nest("/api/queue", readur::routes::queue::router())
-        .nest("/api/search", readur::routes::search::router())
-        .nest("/api/settings", readur::routes::settings::router())
-        .nest("/api/source/errors", readur::routes::source_errors::router())
-        .nest("/api/sources", readur::routes::sources::router())
-        .nest("/api/users", readur::routes::users::router())
-        .nest("/api/webdav", readur::routes::webdav::router())
-        .nest("/api/webdav/scan/failures", readur::routes::webdav_scan_failures::router())
-        .nest("/api/shared/links", readur::routes::shared_links::authenticated_router())
-        .nest("/api/public/shared", readur::routes::shared_links::public_router())
-        .nest("/api/comments", readur::routes::comments::router())
+    let mut app = readur::routes::api_router()
         .merge(readur::swagger::create_swagger_router())
         .fallback_service(
             ServeDir::new(&static_dir)

@@ -34,8 +34,8 @@ fn cleanup_scope_role(auth_user: &AuthUser, scope: &CleanupScopeQuery) -> UserRo
 
 /// Bulk delete multiple documents
 #[utoipa::path(
-    delete,
-    path = "/api/documents",
+    post,
+    path = "/api/documents/bulk/delete",
     tag = "documents",
     security(
         ("bearer_auth" = [])
