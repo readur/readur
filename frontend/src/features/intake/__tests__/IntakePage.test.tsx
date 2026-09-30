@@ -9,7 +9,7 @@ vi.mock('../attention/AttentionSection', () => ({ AttentionSection: () => <p>att
 vi.mock('../ignored/IgnoredSection', () => ({ IgnoredSection: () => <p>ignored section</p> }));
 vi.mock('../../../services/api', async () => (await import('./intakeMocks')).apiModule);
 
-import IntakePage, { parseSection } from '../IntakePage';
+import IntakePage, { parseSection, revealSelectedTab } from '../IntakePage';
 import { ocrDoc, ocrList, renderIntake, resetIntakeState, settle, source } from './intakeTestUtils';
 import { documentService, ok, queueService, serveDefaults, sourcesService } from './intakeMocks';
 
@@ -103,5 +103,41 @@ describe('Intake page', () => {
     expect(parseSection('connections')).toBe('connections');
     expect(parseSection(null)).toBe('upload');
     expect(parseSection('nope')).toBe('upload');
+  });
+});
+
+describe('revealSelectedTab', () => {
+  const rect = (left: number, width: number) =>
+    ({ left, right: left + width, width, top: 0, bottom: 40, height: 40, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
+
+  function tabRow(tabLeft: number, tabWidth: number) {
+    const scroller = document.createElement('div');
+    const tab = document.createElement('div');
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', 'true');
+    scroller.append(tab);
+    scroller.getBoundingClientRect = () => rect(16, 358);
+    tab.getBoundingClientRect = () => rect(tabLeft, tabWidth);
+    scroller.scrollLeft = 100;
+    return scroller;
+  }
+
+  it('scrolls right until a tab cut off at the right edge is fully visible', () => {
+    const scroller = tabRow(352, 120);
+    revealSelectedTab(scroller);
+    expect(scroller.scrollLeft).toBe(100 + (352 + 120 - 374));
+  });
+
+  it('scrolls left for a tab cut off at the left edge', () => {
+    const scroller = tabRow(-20, 100);
+    revealSelectedTab(scroller);
+    expect(scroller.scrollLeft).toBe(100 - 36);
+  });
+
+  it('leaves a visible tab alone, and does nothing without a row', () => {
+    const scroller = tabRow(40, 100);
+    revealSelectedTab(scroller);
+    expect(scroller.scrollLeft).toBe(100);
+    expect(() => revealSelectedTab(null)).not.toThrow();
   });
 });

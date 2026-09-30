@@ -51,12 +51,19 @@ test.describe('No horizontal overflow at 390px', () => {
     await visit(page, '/documents', async () => {
       await expect(helpers.documentRows()).toHaveCount(2, { timeout: TIMEOUTS.medium });
     });
+    // Columns dropped on a phone fold into the row: still visible, and announced with the row.
+    const row = helpers.documentRows().filter({ hasText: LONG_NAME });
+    await expect(row.getByText('Size:', { exact: true })).toBeVisible();
+    await expect(row).toHaveAccessibleDescription(/Type ?: PNG ?; Source ?: .+; Labels ?: .*; Size ?: .+; Added ?: .+;/);
 
     await visit(page, `/documents/${readable}`);
 
     for (const section of ['upload', 'connections', 'watch', 'attention', 'ignored'] as const) {
       await visit(page, `/intake?section=${section}`, async (p) => {
-        await expect(p.getByRole('tab', { selected: true })).toBeVisible();
+        // The selected tab is scrolled into view within the tab row.
+        const tab = await p.getByRole('tab', { selected: true }).boundingBox();
+        expect(tab!.x).toBeGreaterThanOrEqual(0);
+        expect(tab!.x + tab!.width).toBeLessThanOrEqual(390);
         if (section === 'attention') {
           await expect(p.getByRole('grid', { name: 'Failed documents' }).getByText('broken-overflow-check.pdf')).toBeVisible({
             timeout: TIMEOUTS.medium,
