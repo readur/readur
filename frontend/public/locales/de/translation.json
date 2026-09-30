@@ -988,7 +988,167 @@
       "ocrResumeFailed": "Administratorzugriff erforderlich, um OCR-Verarbeitung fortzusetzen",
       "ocrResumeFailedGeneric": "Fehler beim Fortsetzen der OCR-Verarbeitung",
       "serverConfigLoadFailed": "Administratorzugriff erforderlich, um Serverkonfiguration anzuzeigen",
-      "serverConfigLoadFailedGeneric": "Fehler beim Laden der Serverkonfiguration"
+      "serverConfigLoadFailedGeneric": "Fehler beim Laden der Serverkonfiguration",
+      "settingsLoadFailed": "Einstellungen konnten nicht geladen werden"
+    },
+    "adminOnly": {
+      "title": "Nur für Administratoren",
+      "description": "Wenden Sie sich an einen Administrator, wenn Sie diese Einstellungen ändern müssen."
+    },
+    "apiKeys": {
+      "active": "Aktiv",
+      "alreadyRevoked": "Bereits widerrufen",
+      "copied": "Kopiert",
+      "copiedStatus": "In die Zwischenablage kopiert",
+      "copy": "API-Schlüssel kopieren",
+      "copyFailed": "Kopieren in die Zwischenablage fehlgeschlagen. Bitte markieren und manuell kopieren.",
+      "create": "API-Schlüssel erstellen",
+      "createFailed": "API-Schlüssel konnte nicht erstellt werden.",
+      "createTitle": "API-Schlüssel erstellen",
+      "created": "Erstellt",
+      "empty": "Sie haben noch keine API-Schlüssel.",
+      "expiration": "Ablauf",
+      "expired": "Abgelaufen",
+      "expires": "Läuft ab",
+      "expiry": {
+        "7": "7 Tage",
+        "30": "30 Tage",
+        "90": "90 Tage",
+        "180": "180 Tage",
+        "365": "1 Jahr",
+        "never": "Nie (nicht empfohlen)"
+      },
+      "intro": "Verwenden Sie einen API-Schlüssel im Header „Authorization: Bearer“, um Skripte und Integrationen zu authentifizieren. Schlüssel haben alle Rechte Ihres Kontos – behandeln Sie sie wie Passwörter.",
+      "keyName": "Name des Schlüssels:",
+      "lastUsed": "Zuletzt verwendet",
+      "loadFailed": "API-Schlüssel konnten nicht geladen werden.",
+      "name": "Name",
+      "nameHelp": "Eine Bezeichnung, die Sie später wiedererkennen.",
+      "namePlaceholder": "z. B. backup-script",
+      "nameRequired": "Bitte geben Sie diesem Schlüssel einen Namen.",
+      "never": "Nie",
+      "prefix": "Präfix",
+      "revealTitle": "Ihr neuer API-Schlüssel",
+      "revealWarning": "Kopieren Sie diesen Schlüssel jetzt. Aus Sicherheitsgründen wird er nicht erneut angezeigt – wenn Sie ihn verlieren, müssen Sie einen neuen erstellen.",
+      "revoke": "Widerrufen",
+      "revokeFailed": "API-Schlüssel konnte nicht widerrufen werden.",
+      "revokeMessage": "{{name}} widerrufen? Alle Skripte und Integrationen, die diesen Schlüssel verwenden, funktionieren sofort nicht mehr. Dies kann nicht rückgängig gemacht werden.",
+      "revokeNamed": "{{name}} widerrufen",
+      "revokeTitle": "API-Schlüssel widerrufen",
+      "revoked": "Widerrufen",
+      "saved": "Ich habe ihn gespeichert",
+      "status": "Status",
+      "usage": "Verwendung:"
+    },
+    "appearance": {
+      "dark": "Dunkel",
+      "language": "Sprache der Oberfläche",
+      "light": "Hell",
+      "system": "System",
+      "systemHelp": "Einstellung des Geräts übernehmen",
+      "theme": "Design"
+    },
+    "debugTools": {
+      "checkFailed": "fehlgeschlagen",
+      "checkPassed": "OK"
+    },
+    "fold": {
+      "close": "Schließen",
+      "edit": "Bearbeiten"
+    },
+    "groups": {
+      "languages": "Sprachen",
+      "ocrControls": "Verarbeitungssteuerung",
+      "processing": "Verarbeitung",
+      "qualityThresholds": "Qualitätsschwellen"
+    },
+    "labels": {
+      "createFailed": "Label konnte nicht erstellt werden",
+      "deleteFailed": "Label konnte nicht gelöscht werden",
+      "intro": "Labels ordnen Dokumente und Quellen. Die Zahlen zeigen, wie oft ein Label verwendet wird.",
+      "invalidData": "Ungültiges Datenformat vom Server erhalten",
+      "unexpectedStatus": "Unerwartete Serverantwort ({{status}})",
+      "updateFailed": "Label konnte nicht aktualisiert werden"
+    },
+    "languageSelector": {
+      "addMore_one": "Weitere Sprachen hinzufügen (noch {{count}})",
+      "addMore_other": "Weitere Sprachen hinzufügen (noch {{count}})",
+      "available": "Verfügbare Sprachen",
+      "help": "Die Hauptsprache wird zuerst verarbeitet, um die Genauigkeit zu verbessern. Mehrere Sprachen helfen bei gemischtsprachigen Dokumenten.",
+      "loadFailed": "OCR-Sprachen konnten nicht geladen werden",
+      "loading": "Sprachen werden geladen…",
+      "max_one": "Für optimale Leistung ist höchstens {{count}} Sprache erlaubt.",
+      "max_other": "Für optimale Leistung sind höchstens {{count}} Sprachen erlaubt.",
+      "none": "Keine Sprachen ausgewählt. Dokumente verwenden die Standard-OCR-Sprache.",
+      "primaryNote": "(Hauptsprache)",
+      "primaryTag": "Hauptsprache",
+      "remove": "{{language}} entfernen",
+      "select": "OCR-Sprachen auswählen…",
+      "selected": "Ausgewählte Sprachen",
+      "setPrimary": "Als Hauptsprache",
+      "title": "OCR-Sprachen"
+    },
+    "nav": {
+      "label": "Einstellungsbereiche",
+      "matches_one": "{{count}} Bereich passt",
+      "matches_other": "{{count}} Bereiche passen",
+      "noMatches": "Keine Einstellung passt zu „{{query}}“",
+      "search": "Einstellungen durchsuchen",
+      "searchPlaceholder": "Nach Namen filtern",
+      "section": "Bereich"
+    },
+    "sections": {
+      "apiKeys": "API-Schlüssel",
+      "appearance": "Darstellung",
+      "debug": "Diagnose",
+      "general": "Allgemein",
+      "labels": "Labels",
+      "ocr": "OCR",
+      "server": "Server",
+      "users": "Benutzer"
+    },
+    "summary": {
+      "advanced": "Fenster {{w}} · Morphologie {{m}} · Ausgleich {{h}} · Bilder speichern {{s}}",
+      "days_one": "{{count}} Tag",
+      "days_other": "{{count}} Tage",
+      "defaultLanguage": "Standard",
+      "enhancement": "Helligkeit {{b}} · Kontrast {{c}}× · Rauschen {{n}} · Schärfe {{s}}",
+      "enhancementSkipped": "übersprungen · nur Originalbilder",
+      "fileProcessing": "max. {{size}} MB · {{memory}} MB Speicher · Drehen {{rotate}}",
+      "forever": "unbegrenzt",
+      "imageSize": "{{w}} × {{h}} px · Skalierung {{u}}×",
+      "languages": "{{languages}} · Auto-Erkennung {{auto}}",
+      "off": "aus",
+      "on": "an",
+      "paused": "pausiert",
+      "processing": "{{jobs}} Aufträge · {{timeout}} s · Priorität {{priority}}",
+      "running": "läuft",
+      "search": "{{perPage}} pro Seite · {{snippet}} Zeichen · unscharf {{fuzzy}}",
+      "storage": "aufbewahren {{retention}} · Bereinigung {{cleanup}} · Komprimierung {{compression}}",
+      "thresholds": "Helligkeit {{b}} · Kontrast {{c}} · Rauschen {{n}} · Schärfe {{s}}"
+    },
+    "users": {
+      "createDirFor": "Überwachungsordner für {{name}} erstellen",
+      "deleteNamed": "{{name}} löschen",
+      "deleteTitle": "Benutzer löschen",
+      "editNamed": "{{name}} bearbeiten",
+      "emailRequired": "Geben Sie eine E-Mail-Adresse ein.",
+      "empty": "Noch keine Benutzer",
+      "intro": "Personen, die sich an diesem Readur-Server anmelden können.",
+      "loadFailed": "Benutzer konnten nicht geladen werden",
+      "passwordRequired": "Geben Sie ein Passwort ein.",
+      "removeDirFor": "Überwachungsordner von {{name}} entfernen",
+      "usernameRequired": "Geben Sie einen Benutzernamen ein.",
+      "viewDirFor": "Überwachungsordner von {{name}} anzeigen"
+    },
+    "validation": {
+      "choose": "Wählen Sie eine der Optionen.",
+      "integer": "Geben Sie eine ganze Zahl ein.",
+      "min": "Geben Sie {{min}} oder mehr ein.",
+      "number": "Geben Sie eine Zahl ein.",
+      "odd": "Geben Sie eine ungerade Zahl ein.",
+      "range": "Geben Sie einen Wert von {{min}} bis {{max}} ein.",
+      "required": "Geben Sie einen Wert ein."
     }
   },
   "labels": {

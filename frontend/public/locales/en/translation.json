@@ -1007,7 +1007,167 @@
       "ocrResumeFailed": "Admin access required to resume OCR processing",
       "ocrResumeFailedGeneric": "Failed to resume OCR processing",
       "serverConfigLoadFailed": "Admin access required to view server configuration",
-      "serverConfigLoadFailedGeneric": "Failed to load server configuration"
+      "serverConfigLoadFailedGeneric": "Failed to load server configuration",
+      "settingsLoadFailed": "Failed to load settings"
+    },
+    "adminOnly": {
+      "title": "Admins only",
+      "description": "Ask an administrator if you need to change these settings."
+    },
+    "apiKeys": {
+      "active": "Active",
+      "alreadyRevoked": "Already revoked",
+      "copied": "Copied",
+      "copiedStatus": "Copied to clipboard",
+      "copy": "Copy API key",
+      "copyFailed": "Failed to copy to clipboard. Please select and copy manually.",
+      "create": "Create API key",
+      "createFailed": "Failed to create API key.",
+      "createTitle": "Create API key",
+      "created": "Created",
+      "empty": "You don't have any API keys yet.",
+      "expiration": "Expiration",
+      "expired": "Expired",
+      "expires": "Expires",
+      "expiry": {
+        "7": "7 days",
+        "30": "30 days",
+        "90": "90 days",
+        "180": "180 days",
+        "365": "1 year",
+        "never": "Never (not recommended)"
+      },
+      "intro": "Use an API key in the Authorization: Bearer header to authenticate scripts and integrations. Keys carry your full account permissions — treat them like passwords.",
+      "keyName": "Key name:",
+      "lastUsed": "Last used",
+      "loadFailed": "Failed to load API keys.",
+      "name": "Name",
+      "nameHelp": "A label you'll recognize later.",
+      "namePlaceholder": "e.g. backup-script",
+      "nameRequired": "Please give this key a name.",
+      "never": "Never",
+      "prefix": "Prefix",
+      "revealTitle": "Your new API key",
+      "revealWarning": "Copy this key now. For your security it will not be shown again — if you lose it you'll need to create a new one.",
+      "revoke": "Revoke",
+      "revokeFailed": "Failed to revoke API key.",
+      "revokeMessage": "Revoke {{name}}? Any scripts or integrations using this key will immediately stop working. This cannot be undone.",
+      "revokeNamed": "Revoke {{name}}",
+      "revokeTitle": "Revoke API key",
+      "revoked": "Revoked",
+      "saved": "I've saved it",
+      "status": "Status",
+      "usage": "Use it like:"
+    },
+    "appearance": {
+      "dark": "Dark",
+      "language": "Interface language",
+      "light": "Light",
+      "system": "System",
+      "systemHelp": "Follow your device setting",
+      "theme": "Theme"
+    },
+    "debugTools": {
+      "checkFailed": "failed",
+      "checkPassed": "OK"
+    },
+    "fold": {
+      "close": "Close",
+      "edit": "Edit"
+    },
+    "groups": {
+      "languages": "Languages",
+      "ocrControls": "Processing controls",
+      "processing": "Processing",
+      "qualityThresholds": "Quality thresholds"
+    },
+    "labels": {
+      "createFailed": "Failed to create label",
+      "deleteFailed": "Failed to delete label",
+      "intro": "Labels organise documents and sources. Counts show how often each label is used.",
+      "invalidData": "Received invalid data format from server",
+      "unexpectedStatus": "Server returned unexpected response ({{status}})",
+      "updateFailed": "Failed to update label"
+    },
+    "languageSelector": {
+      "addMore_one": "Add more languages ({{count}} remaining)",
+      "addMore_other": "Add more languages ({{count}} remaining)",
+      "available": "Available Languages",
+      "help": "The primary language is processed first for better accuracy. Multiple languages help with mixed-language documents.",
+      "loadFailed": "Failed to load OCR languages",
+      "loading": "Loading languages...",
+      "max_one": "Maximum {{count}} language allowed for optimal performance.",
+      "max_other": "Maximum {{count}} languages allowed for optimal performance.",
+      "none": "No languages selected. Documents will use default OCR language.",
+      "primaryNote": "(Primary)",
+      "primaryTag": "Primary",
+      "remove": "Remove {{language}}",
+      "select": "Select OCR languages...",
+      "selected": "Selected languages",
+      "setPrimary": "Set Primary",
+      "title": "OCR Languages"
+    },
+    "nav": {
+      "label": "Settings sections",
+      "matches_one": "{{count}} section matches",
+      "matches_other": "{{count}} sections match",
+      "noMatches": "No settings match “{{query}}”",
+      "search": "Search settings",
+      "searchPlaceholder": "Filter by name",
+      "section": "Section"
+    },
+    "sections": {
+      "apiKeys": "API keys",
+      "appearance": "Appearance",
+      "debug": "Debug",
+      "general": "General",
+      "labels": "Labels",
+      "ocr": "OCR",
+      "server": "Server",
+      "users": "Users"
+    },
+    "summary": {
+      "advanced": "window {{w}} · morphology {{m}} · equalization {{h}} · save images {{s}}",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days",
+      "defaultLanguage": "default",
+      "enhancement": "brightness {{b}} · contrast {{c}}× · noise {{n}} · sharpen {{s}}",
+      "enhancementSkipped": "skipped · original images only",
+      "fileProcessing": "{{size}} MB max · {{memory}} MB memory · rotate {{rotate}}",
+      "forever": "forever",
+      "imageSize": "{{w}} × {{h}} px · upscale {{u}}×",
+      "languages": "{{languages}} · auto-detect {{auto}}",
+      "off": "off",
+      "on": "on",
+      "paused": "paused",
+      "processing": "{{jobs}} jobs · {{timeout}}s · {{priority}} priority",
+      "running": "running",
+      "search": "{{perPage}} per page · {{snippet}} chars · fuzzy {{fuzzy}}",
+      "storage": "keep {{retention}} · cleanup {{cleanup}} · compression {{compression}}",
+      "thresholds": "brightness {{b}} · contrast {{c}} · noise {{n}} · sharpness {{s}}"
+    },
+    "users": {
+      "createDirFor": "Create watch directory for {{name}}",
+      "deleteNamed": "Delete {{name}}",
+      "deleteTitle": "Delete user",
+      "editNamed": "Edit {{name}}",
+      "emailRequired": "Enter an email address.",
+      "empty": "No users yet",
+      "intro": "People who can sign in to this Readur server.",
+      "loadFailed": "Failed to load users",
+      "passwordRequired": "Enter a password.",
+      "removeDirFor": "Remove watch directory for {{name}}",
+      "usernameRequired": "Enter a username.",
+      "viewDirFor": "View watch directory for {{name}}"
+    },
+    "validation": {
+      "choose": "Choose one of the options.",
+      "integer": "Enter a whole number.",
+      "min": "Enter {{min}} or more.",
+      "number": "Enter a number.",
+      "odd": "Enter an odd number.",
+      "range": "Enter a value from {{min}} to {{max}}.",
+      "required": "Enter a value."
     }
   },
   "labels": {

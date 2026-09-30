@@ -988,7 +988,167 @@
       "ocrResumeFailed": "Accès administrateur requis pour reprendre le traitement OCR",
       "ocrResumeFailedGeneric": "Échec de la reprise du traitement OCR",
       "serverConfigLoadFailed": "Accès administrateur requis pour afficher la configuration du serveur",
-      "serverConfigLoadFailedGeneric": "Échec du chargement de la configuration du serveur"
+      "serverConfigLoadFailedGeneric": "Échec du chargement de la configuration du serveur",
+      "settingsLoadFailed": "Impossible de charger les paramètres"
+    },
+    "adminOnly": {
+      "title": "Réservé aux administrateurs",
+      "description": "Demandez à un administrateur si vous devez modifier ces paramètres."
+    },
+    "apiKeys": {
+      "active": "Active",
+      "alreadyRevoked": "Déjà révoquée",
+      "copied": "Copiée",
+      "copiedStatus": "Copiée dans le presse-papiers",
+      "copy": "Copier la clé API",
+      "copyFailed": "Échec de la copie. Sélectionnez et copiez la clé manuellement.",
+      "create": "Créer une clé API",
+      "createFailed": "Impossible de créer la clé API.",
+      "createTitle": "Créer une clé API",
+      "created": "Créée",
+      "empty": "Vous n'avez pas encore de clé API.",
+      "expiration": "Expiration",
+      "expired": "Expirée",
+      "expires": "Expire",
+      "expiry": {
+        "7": "7 jours",
+        "30": "30 jours",
+        "90": "90 jours",
+        "180": "180 jours",
+        "365": "1 an",
+        "never": "Jamais (déconseillé)"
+      },
+      "intro": "Utilisez une clé API dans l'en-tête Authorization: Bearer pour authentifier scripts et intégrations. Les clés disposent de toutes les autorisations de votre compte : traitez-les comme des mots de passe.",
+      "keyName": "Nom de la clé :",
+      "lastUsed": "Dernière utilisation",
+      "loadFailed": "Impossible de charger les clés API.",
+      "name": "Nom",
+      "nameHelp": "Un nom que vous reconnaîtrez plus tard.",
+      "namePlaceholder": "ex. backup-script",
+      "nameRequired": "Veuillez donner un nom à cette clé.",
+      "never": "Jamais",
+      "prefix": "Préfixe",
+      "revealTitle": "Votre nouvelle clé API",
+      "revealWarning": "Copiez cette clé maintenant. Pour votre sécurité, elle ne sera plus affichée : si vous la perdez, il faudra en créer une nouvelle.",
+      "revoke": "Révoquer",
+      "revokeFailed": "Impossible de révoquer la clé API.",
+      "revokeMessage": "Révoquer {{name}} ? Les scripts et intégrations qui utilisent cette clé cesseront immédiatement de fonctionner. Cette action est irréversible.",
+      "revokeNamed": "Révoquer {{name}}",
+      "revokeTitle": "Révoquer la clé API",
+      "revoked": "Révoquée",
+      "saved": "Je l'ai enregistrée",
+      "status": "Statut",
+      "usage": "Utilisation :"
+    },
+    "appearance": {
+      "dark": "Sombre",
+      "language": "Langue de l'interface",
+      "light": "Clair",
+      "system": "Système",
+      "systemHelp": "Suivre le réglage de l'appareil",
+      "theme": "Thème"
+    },
+    "debugTools": {
+      "checkFailed": "échouée",
+      "checkPassed": "réussie"
+    },
+    "fold": {
+      "close": "Fermer",
+      "edit": "Modifier"
+    },
+    "groups": {
+      "languages": "Langues",
+      "ocrControls": "Contrôle du traitement",
+      "processing": "Traitement",
+      "qualityThresholds": "Seuils de qualité"
+    },
+    "labels": {
+      "createFailed": "Impossible de créer l'étiquette",
+      "deleteFailed": "Impossible de supprimer l'étiquette",
+      "intro": "Les étiquettes organisent documents et sources. Les compteurs indiquent l'utilisation de chacune.",
+      "invalidData": "Format de données invalide reçu du serveur",
+      "unexpectedStatus": "Réponse inattendue du serveur ({{status}})",
+      "updateFailed": "Impossible de mettre à jour l'étiquette"
+    },
+    "languageSelector": {
+      "addMore_one": "Ajouter des langues ({{count}} restante)",
+      "addMore_other": "Ajouter des langues ({{count}} restantes)",
+      "available": "Langues disponibles",
+      "help": "La langue principale est traitée en premier pour plus de précision. Plusieurs langues aident pour les documents multilingues.",
+      "loadFailed": "Impossible de charger les langues OCR",
+      "loading": "Chargement des langues…",
+      "max_one": "Maximum {{count}} langue pour des performances optimales.",
+      "max_other": "Maximum {{count}} langues pour des performances optimales.",
+      "none": "Aucune langue sélectionnée. Les documents utiliseront la langue OCR par défaut.",
+      "primaryNote": "(Principale)",
+      "primaryTag": "Principale",
+      "remove": "Retirer {{language}}",
+      "select": "Choisir les langues OCR…",
+      "selected": "Langues sélectionnées",
+      "setPrimary": "Définir comme principale",
+      "title": "Langues OCR"
+    },
+    "nav": {
+      "label": "Sections des paramètres",
+      "matches_one": "{{count}} section correspond",
+      "matches_other": "{{count}} sections correspondent",
+      "noMatches": "Aucun paramètre ne correspond à « {{query}} »",
+      "search": "Rechercher un paramètre",
+      "searchPlaceholder": "Filtrer par nom",
+      "section": "Section"
+    },
+    "sections": {
+      "apiKeys": "Clés API",
+      "appearance": "Apparence",
+      "debug": "Débogage",
+      "general": "Général",
+      "labels": "Étiquettes",
+      "ocr": "OCR",
+      "server": "Serveur",
+      "users": "Utilisateurs"
+    },
+    "summary": {
+      "advanced": "fenêtre {{w}} · morphologie {{m}} · égalisation {{h}} · images {{s}}",
+      "days_one": "{{count}} jour",
+      "days_other": "{{count}} jours",
+      "defaultLanguage": "par défaut",
+      "enhancement": "luminosité {{b}} · contraste {{c}}× · bruit {{n}} · netteté {{s}}",
+      "enhancementSkipped": "ignorée · images originales uniquement",
+      "fileProcessing": "{{size}} Mo max · {{memory}} Mo de mémoire · rotation {{rotate}}",
+      "forever": "indéfiniment",
+      "imageSize": "{{w}} × {{h}} px · agrandissement {{u}}×",
+      "languages": "{{languages}} · détection auto {{auto}}",
+      "off": "non",
+      "on": "oui",
+      "paused": "en pause",
+      "processing": "{{jobs}} tâches · {{timeout}} s · priorité {{priority}}",
+      "running": "en cours",
+      "search": "{{perPage}} par page · {{snippet}} caractères · approx. {{fuzzy}}",
+      "storage": "conserver {{retention}} · nettoyage {{cleanup}} · compression {{compression}}",
+      "thresholds": "luminosité {{b}} · contraste {{c}} · bruit {{n}} · netteté {{s}}"
+    },
+    "users": {
+      "createDirFor": "Créer le dossier surveillé de {{name}}",
+      "deleteNamed": "Supprimer {{name}}",
+      "deleteTitle": "Supprimer l'utilisateur",
+      "editNamed": "Modifier {{name}}",
+      "emailRequired": "Saisissez une adresse e-mail.",
+      "empty": "Aucun utilisateur pour l'instant",
+      "intro": "Personnes pouvant se connecter à ce serveur Readur.",
+      "loadFailed": "Impossible de charger les utilisateurs",
+      "passwordRequired": "Saisissez un mot de passe.",
+      "removeDirFor": "Supprimer le dossier surveillé de {{name}}",
+      "usernameRequired": "Saisissez un nom d'utilisateur.",
+      "viewDirFor": "Voir le dossier surveillé de {{name}}"
+    },
+    "validation": {
+      "choose": "Choisissez une des options.",
+      "integer": "Saisissez un nombre entier.",
+      "min": "Saisissez {{min}} ou plus.",
+      "number": "Saisissez un nombre.",
+      "odd": "Saisissez un nombre impair.",
+      "range": "Saisissez une valeur entre {{min}} et {{max}}.",
+      "required": "Saisissez une valeur."
     }
   },
   "labels": {
