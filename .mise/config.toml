@@ -1,0 +1,236 @@
+# mise: pinned developer toolchain + tasks for readur. Optional -- plain
+# cargo/npm keep working -- but it is the easiest way to get the same tool
+# versions CI uses, plus the git hooks.
+#
+#   Onboard:         mise install      (installs tools + the lefthook git hooks)
+#   List tasks:      mise tasks
+#   Run a task:      mise run lines
+#   What CI runs:    mise run ci
+#
+# SYSTEM LIBRARIES ARE NOT MANAGED HERE. Every task that compiles the crate
+# (clippy, complexity*, test, ci) needs the OCR stack's development packages on
+# the host: tesseract + leptonica headers, pkg-config, libclang (for bindgen)
+# and OpenSSL. On Debian/Ubuntu that is the apt list in
+# .github/workflows/test-unit.yml ("Install system dependencies"); on NixOS run
+# the task inside a nix-shell providing
+# `pkg-config leptonica tesseract libclang openssl` (and export LIBCLANG_PATH).
+# The no-toolchain tasks (lines*, ratchets-test, fmt*) need none of that.
+
+[settings]
+# Maintain .mise/mise.lock: pins the exact resolved version, download URL and
+# checksum per platform so every machine and CI runner installs byte-identical
+# tools. Regenerate with `mise lock` after changing [tools] and commit the
+# result (the `mise-lock` pre-commit hook does this for you).
+lockfile = true
+
+# Always install the prebuilt Node binary, never build from source -- a source
+# build needs python + a C++ toolchain and takes many minutes. Set here (not on
+# the [tools] entry) because a project-level setting overrides a user's global
+# `node.compile = true` (common on NixOS), which would otherwise leak into the
+# committed lockfile with options that CI's resolution does not match.
+[settings.node]
+compile = false
+
+[tools]
+# Matches `FROM rust:1.98-bookworm` in Dockerfile / Dockerfile.dev.
+rust = { version = "1.98.1", components = "rustfmt,clippy" }
+# Matches `FROM node:24-bookworm` in Dockerfile and `node-version: "24"` in CI.
+# npm ships with node; frontend/package-lock.json is an npm lockfile.
+node = "24.21.0"
+# Formatter for everything that is not Rust: TS/JS, JSON, Markdown, YAML, TOML.
+# Config in .oxfmtrc.json, ignores in .prettierignore.
+oxfmt = "0.71.0"
+# Git hooks; definitions live in .lefthook.toml. Installed by [hooks] below.
+lefthook = "2.1.14"
+shellcheck = "0.11.0"
+actionlint = "1.7.12"
+# Prebuilt release binary (aqua), so onboarding never compiles zizmor from source
+# through the registry's cargo fallback.
+"aqua:zizmorcore/zizmor" = "1.30.1"
+
+# Runs after `mise install`: wires the git hooks. Skipped in CI (both `CI` and
+# `GITHUB_ACTIONS` are checked): hooks are meaningless on a runner, and a CI job
+# that installs only a subset of [tools] must not have this hook pull in the rest.
+# `[hooks]`, not `[settings]`: mise silently ignores `settings.postinstall`.
+[hooks]
+postinstall = "[ -n \"${CI:-}${GITHUB_ACTIONS:-}\" ] || lefthook install"
+
+# ── Formatting ───────────────────────────────────────────────────────────────
+#
+# NOT YET A CI GATE. Neither the Rust crate nor the frontend is formatter-clean
+# today (rustfmt would touch ~260 of ~275 .rs files; oxfmt ~170 of ~175 frontend
+# files), so the pre-commit hooks format ON TOUCH -- only the staged files -- and
+# `fmt-check` is advisory. FOLLOW-UP: land one repo-wide `mise run fmt` commit
+# (listed in a .git-blame-ignore-revs), then add `fmt-check` to [tasks.ci] and
+# CI, and switch the `format-rust` hook back to `cargo fmt --all`.
+
+[tasks.fmt]
+description = "Format everything: Rust (cargo fmt) + TS/JS/JSON/MD/YAML/TOML (oxfmt). Rewrites most of the repo today -- see the note above."
+run = ["cargo fmt --all", "oxfmt ."]
+
+[tasks.fmt-check]
+description = "Check formatting (advisory until the one-time repo-wide format lands)"
+run = ["cargo fmt --all -- --check", "oxfmt --check ."]
+
+# ── Rust ─────────────────────────────────────────────────────────────────────
+
+[tasks.clippy]
+description = "Clippy across all targets and features (advisory: not a CI gate yet)"
+run = "cargo clippy --all-targets --all-features"
+
+[tasks.test]
+description = "Rust unit tests (lib + unit_tests), as test-unit.yml runs them"
+# Integration tests need Postgres (testcontainers/TEST_DATABASE_URL) and are
+# their own CI workflow; run them with `cargo test --test <name>`.
+run = [
+  "cargo test --lib --no-fail-fast",
+  "cargo test --tests unit_tests --no-fail-fast",
+]
+
+# ── Frontend (npm, in frontend/) ─────────────────────────────────────────────
+# There is no `lint` script in frontend/package.json, so there is no
+# frontend-lint task; add both together if ESLint is ever introduced.
+
+[tasks.frontend-install]
+description = "Install frontend dependencies from the lockfile"
+dir = "frontend"
+run = "npm ci"
+
+[tasks.frontend-typecheck]
+description = "Typecheck the frontend (CI gate)"
+dir = "frontend"
+depends = ["frontend-install"]
+run = "npm run type-check"
+
+[tasks.frontend-test]
+description = "Frontend unit tests (CI gate)"
+dir = "frontend"
+depends = ["frontend-install"]
+run = "npm run test:unit"
+
+[tasks.frontend-build]
+description = "Production build of the frontend (what the Docker image ships)"
+dir = "frontend"
+depends = ["frontend-install"]
+run = "npm run build"
+
+[tasks.frontend]
+description = "All frontend gates"
+depends = ["frontend-typecheck", "frontend-test", "frontend-build"]
+
+# ── Ratchets ─────────────────────────────────────────────────────────────────
+#
+# Each ships as a pair: an advisory report task people run while they work, and
+# a `-check` gate CI runs. A gate that can only say "no" gets routed around; the
+# report is what turns a red pipeline into a worklist.
+
+[tasks.lines]
+description = "List every source file above the 1000-line cap, with its baseline (advisory)"
+run = "python3 scripts/lint-file-length.py --list"
+
+[tasks.lines-check]
+description = "Ratchet gate: no new file over 1000 lines, no baselined file grows (CI gate)"
+# The cap, the frozen BASELINE and the reasoning behind both live in
+# scripts/lint-file-length.py -- read its module docstring before arguing with
+# the number. Needs no toolchain; runs in well under a second.
+run = "python3 scripts/lint-file-length.py"
+
+[tasks.lines-baseline]
+description = "Print a paste-ready BASELINE dict for scripts/lint-file-length.py (after a paydown)"
+# Flags any entry that would be RAISED -- pasting that is the one move the
+# ratchet forbids.
+run = "python3 scripts/lint-file-length.py --emit-baseline"
+
+[tasks.ratchets-test]
+description = "Unit tests for the ratchet scripts (scripts/ci/test_*.py) (CI gate)"
+run = "python3 -m unittest discover -s scripts/ci -p 'test_*.py'"
+
+[tasks.complexity]
+description = "Report every function above the cognitive-complexity threshold in clippy.toml (advisory)"
+# `cognitive_complexity` is a nursery, allow-by-default lint, so `mise run
+# clippy` never sees it -- it is opted into here and in `complexity-check` only.
+#
+# clippy's output is captured and its exit status checked BEFORE any filtering:
+# piping clippy straight into grep discards its status, so a crate that does not
+# compile would print a short list (or "none") -- the most misleading possible
+# answer.
+run = '''
+set -eu
+echo "==> functions above the cognitive-complexity threshold (see clippy.toml)"
+OUT=$(cargo clippy --all-targets --all-features -q -- -W clippy::cognitive_complexity 2>&1) || {
+  printf '%s\n' "$OUT" >&2
+  echo "error: clippy failed to build the crate; this list would be missing" >&2
+  echo "findings rather than reporting that there are none. Fix the build first." >&2
+  exit 1
+}
+printf '%s\n' "$OUT" \
+  | grep -A2 'cognitive complexity of' \
+  | grep -E 'cognitive complexity of|-->' \
+  || echo "none -- everything is under the threshold"
+'''
+
+[tasks.complexity-check]
+description = "Ratchet gate: count of over-threshold functions may not exceed BUDGET (CI gate)"
+# RATCHET: BUDGET is the number of functions over the threshold when the gate
+# landed. It may only go DOWN: when you split an over-threshold function, lower
+# BUDGET in the same commit. A NEW over-threshold function fails the gate.
+#
+# Counted as distinct `--> path:line:col` locations through `sort -u`, not as
+# warning lines: `--all-targets` lints a file once per target (lib, bin, test),
+# so counting lines would over-report several times over.
+#
+# clippy's exit status is checked separately, NOT via `set -o pipefail`: with
+# pipefail, a clean crate makes the first grep exit 1 and fails the gate exactly
+# when everything is fine. Capturing first separates "clippy could not answer"
+# from "clippy answered, and the answer is none".
+#
+# PLACEHOLDER: BUDGET below is not yet measured. Set it to the COUNT this task
+# prints on a compiling tree before merging (then it only ratchets down).
+run = '''
+set -eu
+BUDGET=999999 # PLACEHOLDER -- replace with the measured count before merge
+OUT=$(cargo clippy --all-targets --all-features -q -- -W clippy::cognitive_complexity 2>&1) || {
+  printf '%s\n' "$OUT" >&2
+  echo "error: clippy failed to build the crate; the complexity count would be meaningless." >&2
+  exit 1
+}
+COUNT=$(printf '%s\n' "$OUT" | grep -A1 'cognitive complexity of' | grep -oE '[-]{2}> [^ ]+' | sort -u | wc -l)
+echo "==> functions above the cognitive-complexity threshold: $COUNT (budget: $BUDGET)"
+if [ "$COUNT" -gt "$BUDGET" ]; then
+  echo "error: $COUNT function(s) exceed the cognitive-complexity threshold (budget $BUDGET)." >&2
+  echo "Run 'mise run complexity' to list them; extract pure, unit-testable" >&2
+  echo "helpers instead of raising BUDGET." >&2
+  exit 1
+fi
+if [ "$COUNT" -lt "$BUDGET" ]; then
+  echo "note: $COUNT is below the budget of $BUDGET -- lower BUDGET in" >&2
+  echo ".mise/config.toml to $COUNT so the improvement is locked in." >&2
+fi
+'''
+
+[tasks.ratchets]
+description = "All ratchets: file length (+ its tests) and complexity"
+depends = ["lines-check", "ratchets-test", "complexity-check"]
+
+# ── Workflows ────────────────────────────────────────────────────────────────
+
+[tasks.workflow-lint]
+description = "Lint GitHub Actions workflows (actionlint + zizmor; advisory)"
+run = ["actionlint", "zizmor --offline .github/workflows"]
+
+# ── Aggregate ────────────────────────────────────────────────────────────────
+
+[tasks.ci]
+description = "The CI gates that run without Postgres/Docker, in CI order"
+# Mirrors: the `ratchets` job (lines-check, ratchets-test, complexity-check),
+# test-unit.yml (Rust lib + unit_tests, frontend type-check + unit tests) and the
+# frontend build the Docker image performs. NOT included: the integration and
+# e2e workflows (they need Postgres and a running server) and the advisory
+# fmt-check / clippy / workflow-lint tasks.
+depends = [
+  "lines-check",
+  "ratchets-test",
+  "complexity-check",
+  "test",
+  "frontend",
+]
