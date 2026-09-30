@@ -82,9 +82,10 @@
   flex-wrap: wrap;
   gap: var(--s-3);
   margin: 0;
-  font-family: var(--font-data);
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
   color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .problem {

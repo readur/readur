@@ -136,9 +136,10 @@
 }
 
 .mark {
-  font-family: var(--font-data);
+  font-family: var(--font-ui);
   color: var(--accent);
   animation: pulse var(--dur-2) var(--ease) infinite alternate;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {

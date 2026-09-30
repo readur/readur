@@ -88,7 +88,7 @@ export const SECTIONS: readonly SectionDef[] = [
     fallback: 'Users',
     adminOnly: true,
     entries: [
-      e('users', 'settings.userManagement.addUser', 'Add User'),
+      e('users', 'settings.userManagement.addUser', 'Add user'),
       e('users', 'settings.userManagement.tableHeaders.watchDirectory', 'Watch Directory'),
     ],
   },

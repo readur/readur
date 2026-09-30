@@ -812,7 +812,7 @@
     },
     "userManagement": {
       "title": "Gestión de Usuarios",
-      "addUser": "Agregar Usuario",
+      "addUser": "Agregar usuario",
       "tableHeaders": {
         "username": "Nombre de Usuario",
         "email": "Correo Electrónico",

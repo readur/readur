@@ -47,7 +47,7 @@
 }
 
 .meta {
-  font-family: var(--font-data);
+  font-family: var(--font-ui);
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-sm);
   color: var(--fg-meta);
@@ -104,7 +104,7 @@
   min-width: 18px;
   margin-inline-start: var(--s-2);
   padding: 0 var(--s-1);
-  font-family: var(--font-data);
+  font-family: var(--font-ui);
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-xs);
   line-height: 18px;
@@ -129,12 +129,13 @@
   gap: var(--s-1);
   min-height: 28px;
   padding: 0 var(--s-1) 0 var(--s-2);
-  font-family: var(--font-data);
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   max-width: 100%;
+  font-variant-numeric: tabular-nums;
 }
 
 .chipText {

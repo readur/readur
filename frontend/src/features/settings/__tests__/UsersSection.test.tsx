@@ -40,7 +40,7 @@ describe('UsersSection', () => {
   it('validates the create form inline', async () => {
     const user = userEvent.setup();
     render();
-    await user.click(await screen.findByRole('button', { name: 'Add User' }));
+    await user.click(await screen.findByRole('button', { name: 'Add user' }));
     const dialog = await screen.findByRole('dialog', { name: 'Create New User' });
     await user.type(within(dialog).getByRole('textbox', { name: /Email/ }), 'not-an-email');
     await user.click(within(dialog).getByRole('button', { name: 'Create' }));
@@ -53,7 +53,7 @@ describe('UsersSection', () => {
   it('creates a user and toasts', async () => {
     const user = userEvent.setup();
     render();
-    await user.click(await screen.findByRole('button', { name: 'Add User' }));
+    await user.click(await screen.findByRole('button', { name: 'Add user' }));
     const dialog = await screen.findByRole('dialog', { name: 'Create New User' });
     await user.type(within(dialog).getByRole('textbox', { name: /Username/ }), 'carol');
     await user.type(within(dialog).getByRole('textbox', { name: /Email/ }), 'carol@example.com');
@@ -102,7 +102,7 @@ describe('UsersSection', () => {
     apiMock.post.mockRejectedValue(httpError(409, { error: 'dup', code: 'USER_DUPLICATE_USERNAME' }));
     const user = userEvent.setup();
     render();
-    await user.click(await screen.findByRole('button', { name: 'Add User' }));
+    await user.click(await screen.findByRole('button', { name: 'Add user' }));
     const dialog = await screen.findByRole('dialog', { name: 'Create New User' });
     await user.type(within(dialog).getByRole('textbox', { name: /Username/ }), 'bob');
     await user.type(within(dialog).getByRole('textbox', { name: /Email/ }), 'b@example.com');

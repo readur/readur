@@ -11,12 +11,9 @@
 .heading,
 .panelTitle {
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-2);
 }
 

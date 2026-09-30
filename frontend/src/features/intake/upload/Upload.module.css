@@ -37,7 +37,7 @@
 .accepted {
   margin: 0;
   max-width: 64ch;
-  font-family: var(--font-data);
+  font-family: var(--font-ui);
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-sm);
   color: var(--fg-meta);

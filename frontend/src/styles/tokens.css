@@ -1,6 +1,6 @@
 /* Design tokens: the only source of colour, type, space, shape and motion.
    Colour traces to the logo: steel blue (accent), coral (new), amber (warn).
-   Source hues (--src-1..8) stay at least 30° away from the accent's blue so a source badge
+   Source hues (--src-1..8) stay at least 25° away from the accent's blue so a source badge
    never reads as an action: teal, purple, green, olive, orange, rose, magenta, indigo. */
 
 :root,
@@ -180,7 +180,6 @@
   --font-label: "Archivo Variable", system-ui, sans-serif;
   --font-data: "Martian Mono Variable", ui-monospace, monospace;
   --font-label-stretch: 75%;
-  --font-display-stretch: 68%;
   --tracking-label: 0.06em;
 
   --fs-xs: 11px;

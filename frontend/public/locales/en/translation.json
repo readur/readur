@@ -911,7 +911,7 @@
     },
     "userManagement": {
       "title": "User Management",
-      "addUser": "Add User",
+      "addUser": "Add user",
       "tableHeaders": {
         "username": "Username",
         "email": "Email",
