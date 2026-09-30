@@ -216,7 +216,7 @@
   padding: var(--s-5) var(--s-3);
 }
 
-/* Pass strip segments */
+/* Segmented strip */
 
 .segment {
   display: flex;
@@ -295,11 +295,6 @@
   line-height: var(--lh-display);
   white-space: nowrap;
   color: var(--fg);
-}
-
-/* The one number the strip leads with. */
-.figureLead .figureValue {
-  font-size: var(--fs-2xl);
 }
 
 .figurePlain {

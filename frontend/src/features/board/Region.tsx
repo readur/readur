@@ -10,7 +10,7 @@ export interface RegionProps {
   /** Right side of the header: a link or a control. */
   headerAction?: ReactNode;
   className?: string;
-  /** `segment`: one labelled part of the Board's pass strip (title on the left, no own frame). */
+  /** `segment`: one labelled part of the Board's segmented strip (title on the left, no own frame). */
   variant?: 'panel' | 'segment';
   children: ReactNode;
 }

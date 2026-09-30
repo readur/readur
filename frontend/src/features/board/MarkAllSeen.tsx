@@ -4,13 +4,13 @@ import { clearBulkArrivals, useBulkArrivals } from './litFeeders';
 import { acknowledgeAll, useShownLitCount, type LitKind } from './litStore';
 
 export interface MarkAllSeenProps {
-  /** The kinds of lit rows this board shows. */
+  /** The kinds of flagged (unseen) rows this page shows. */
   kinds: readonly LitKind[];
 }
 
 /**
- * Ghost "Mark all seen" action for a board that shows lit rows. Renders nothing while none of
- * the given kinds has a lit row (and no bulk-arrival summary is pending).
+ * Ghost "Mark all seen" action for a page that shows flagged (unseen) rows. Renders nothing while
+ * none of the given kinds has an unseen row (and no bulk-arrival summary is pending).
  */
 export function MarkAllSeen({ kinds }: MarkAllSeenProps) {
   const { t } = useTranslation();

@@ -45,7 +45,7 @@ function extensionOf(name: string | null | undefined): string | null {
 }
 
 /**
- * The short type code shown in every TYPE cell (Library, Board, document pass): PDF, DOCX, PNG…
+ * The short type code shown in every TYPE cell (Library, Board, document summary): PDF, DOCX, PNG…
  * The MIME type decides, through the Library's table (so a .docx reads DOCX everywhere); a
  * generic or missing MIME type falls back to the file name's extension; with neither, a dash.
  */

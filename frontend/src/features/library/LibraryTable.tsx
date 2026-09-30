@@ -103,7 +103,7 @@ export function LibraryTable({
     void litVersion;
     return (row: LibraryRow) => isShownLit('document', row.id);
   }, [litVersion]);
-  // Rows seen lit during this visit are acknowledged when the user leaves the Library.
+  // Rows seen flagged during this visit are acknowledged when the user leaves the Library.
   const rowIds = useMemo(() => rows.map(getRowId), [rows]);
   useAcknowledgeOnLeave('document', rowIds);
 

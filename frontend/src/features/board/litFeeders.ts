@@ -106,7 +106,7 @@ export function resetDocumentBaseline(): void {
  * The last-seen time is stored, so documents that arrived while the app was closed are marked on
  * the first sync after a reload. With no stored time (first ever run) nothing is marked, unless
  * `newerThan` is given. When `total` (the library size) shows that more than BULK_THRESHOLD
- * documents arrived since the last sync, none of them is lit: a single "N new documents" summary
+ * documents arrived since the last sync, none of them is flagged: a single "N new documents" summary
  * is raised instead (see useBulkArrivals).
  */
 export function syncDocuments(docs: BoardDocument[], newerThan?: number, total?: number): void {

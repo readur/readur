@@ -7,7 +7,7 @@ import { Region, RegionError } from './Region';
 import { useResource } from './useResource';
 import styles from './Board.module.css';
 
-/** Library totals (documents, storage, share indexed, labels) as a segment of the pass strip. */
+/** Library totals (documents, storage, share indexed, labels) as a segment of the Board's segmented strip. */
 export function TotalsRow() {
   const { t, i18n } = useTranslation();
   const totals = useResource(fetchTotals);

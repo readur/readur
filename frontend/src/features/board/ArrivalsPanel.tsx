@@ -34,7 +34,7 @@ export function ArrivalsPanel() {
     if (data) syncDocuments(data.documents, undefined, data.total);
   }, [data]);
 
-  // Rows (and a bulk summary) seen lit during this visit are acknowledged when the user leaves.
+  // Rows (and a bulk summary) seen flagged during this visit are acknowledged when the user leaves.
   const bulkSeen = bulk > 0;
   const rowIds = useMemo(() => (data?.documents ?? []).map((d) => d.id), [data]);
   useAcknowledgeOnLeave('document', rowIds, bulkSeen ? clearBulkArrivals : undefined);

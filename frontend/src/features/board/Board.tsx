@@ -45,7 +45,7 @@ export default function Board() {
       />
       <div className={styles.grid}>
         <AttentionStrip failed={failed} sources={sources} />
-        {/* One segmented pass strip: the queue, then the library. */}
+        {/* One segmented strip: the queue, then the library. */}
         <div className={styles.strip}>
           <div className={styles.stripInner}>
             <ProcessingPanel failed={failed} stats={stats} />

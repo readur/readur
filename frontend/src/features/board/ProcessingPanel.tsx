@@ -21,7 +21,7 @@ export interface ProcessingPanelProps {
   stats: Resource<QueueFigures | null>;
 }
 
-/** OCR queue at a glance, as one segment of the Board's pass strip; admins can pause and resume it. */
+/** OCR queue at a glance, as one segment of the Board's segmented strip; admins can pause and resume it. */
 export function ProcessingPanel({ failed, stats }: ProcessingPanelProps) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -63,7 +63,7 @@ export function ProcessingPanel({ failed, stats }: ProcessingPanelProps) {
         </div>
       ) : (
         <Figures aria-label={title}>
-          <Figure lead label={t('board.processing.pending', 'Pending')}>{n(q?.pending)}</Figure>
+          <Figure label={t('board.processing.pending', 'Pending')}>{n(q?.pending)}</Figure>
           <Figure label={t('board.processing.processing', 'Processing')}>{n(q?.processing)}</Figure>
           <Figure label={t('board.processing.failed', 'Failed')}>{n(failed.data?.total)}</Figure>
           <Figure label={t('board.processing.doneToday', 'Done today')}>{n(q?.completedToday)}</Figure>
