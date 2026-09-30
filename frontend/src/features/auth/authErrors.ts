@@ -30,7 +30,7 @@ export function loginErrorMessage(err: unknown, t: TFunction): string {
   if (info.category === 'server') {
     return t('auth.login.errors.server', 'The server had a problem. Try again in a moment.');
   }
-  return info.message || t('auth.login.errors.generic', 'Sign-in failed. Try again.');
+  return t('auth.login.errors.generic', 'Sign-in failed. Try again.');
 }
 
 /** Maps a failed SSO start to a message the user can act on. */
@@ -57,6 +57,41 @@ export function safeRedirect(from: unknown): string | null {
     path = `${l.pathname ?? ''}${l.search ?? ''}${l.hash ?? ''}`;
   }
   if (!path || !path.startsWith('/') || path.startsWith('//')) return null;
+  // Backslashes are treated as slashes by browsers (`/\evil.com`); control characters can smuggle URLs.
+  for (const ch of path) {
+    const code = ch.charCodeAt(0);
+    if (ch === '\\' || code <= 0x1f || code === 0x7f) return null;
+  }
   if (path === '/login' || path.startsWith('/login?') || path.startsWith('/auth/callback')) return null;
   return path;
+}
+
+const REJECTED = ['invalid_request', 'unauthorized_client', 'unsupported_response_type', 'invalid_scope'];
+const UNAVAILABLE = ['server_error', 'temporarily_unavailable'];
+const REAUTH = ['login_required', 'consent_required', 'interaction_required'];
+
+/**
+ * Callback error text is never taken from the URL: standard OAuth2/OIDC codes get a fixed
+ * message, anything else a generic one (with the code only if it looks like a plain code).
+ */
+export function callbackErrorMessage(code: string, t: TFunction): string {
+  if (code === 'access_denied') {
+    return t('auth.callback.errors.access_denied', 'Access was denied. Ask your administrator whether you have access to Readur.');
+  }
+  if (REJECTED.includes(code)) {
+    return t('auth.callback.errors.misconfigured', 'The SSO provider rejected the request. Ask your administrator to check the SSO setup.');
+  }
+  if (UNAVAILABLE.includes(code)) {
+    return t('auth.callback.errors.provider_unavailable', 'The SSO provider had a problem. Try again in a moment.');
+  }
+  if (REAUTH.includes(code)) {
+    return t('auth.callback.errors.login_required', 'The SSO provider needs you to sign in again. Go back and retry.');
+  }
+  if (/^[a-z_]{1,40}$/.test(code)) {
+    return t('auth.callback.failedCode', {
+      defaultValue: 'SSO sign-in failed (code: {{code}}). Try again or ask your administrator.',
+      code,
+    });
+  }
+  return t('auth.callback.failedGeneric', 'SSO sign-in failed. Try again or ask your administrator.');
 }

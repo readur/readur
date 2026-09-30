@@ -142,6 +142,17 @@ describe('LoginRoute password sign-in', () => {
     await waitFor(() => expect(where()).toHaveTextContent('/board'));
   });
 
+  it.each(['/\\evil.example', '/ok\nhttp://evil.example'])('ignores an unsafe "from" %j', async (from) => {
+    const user = userEvent.setup();
+    renderLogin({
+      login: vi.fn().mockResolvedValue(undefined),
+      entry: { pathname: '/login', state: { from } },
+    });
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(where()).toHaveTextContent('/board'));
+  });
+
   it('submits with Enter from the password field', async () => {
     const login = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
@@ -196,6 +207,26 @@ describe('LoginRoute errors', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Wrong username or password');
     expect(screen.getByRole('button', { name: 'Sign in' })).not.toHaveAttribute('aria-busy');
+  });
+
+  it('shows the generic message, not server text, for an unmapped status', async () => {
+    const user = userEvent.setup();
+    renderLogin({
+      login: failWith(
+        new AxiosError('failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+          status: 429,
+          data: { message: 'SERVER-SECRET-DETAIL' },
+          statusText: '',
+          headers: {},
+          config: {} as never,
+        }),
+      ),
+    });
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Sign-in failed. Try again.');
+    expect(alert).not.toHaveTextContent('SERVER-SECRET-DETAIL');
   });
 
   it('explains an unreachable server in an alert', async () => {

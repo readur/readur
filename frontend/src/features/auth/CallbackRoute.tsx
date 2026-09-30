@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api';
+import { callbackErrorMessage } from './authErrors';
 import { AuthLayout } from './AuthLayout';
 import styles from './Auth.module.css';
 
@@ -17,7 +18,7 @@ export default function CallbackRoute() {
     const token = searchParams.get('token');
     const errorParam = searchParams.get('error');
     if (errorParam) {
-      setError(t('auth.callback.failed', { defaultValue: 'SSO sign-in failed: {{reason}}', reason: errorParam }));
+      setError(callbackErrorMessage(errorParam, t));
       return;
     }
     if (!token) {

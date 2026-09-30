@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { AppShell, PageFallback } from '../features/shell';
@@ -26,7 +26,8 @@ const Public = ({ children }: { children: ReactNode }) => (
 /** Signed-in routes render inside the shell; everything else goes to /login. */
 function RequireUser() {
   const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
   return (
     <NotificationProvider>
       <AppShell />
