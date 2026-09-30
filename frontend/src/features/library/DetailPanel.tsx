@@ -8,7 +8,7 @@ import { Delete, Download, OpenInNew, Refresh, Share } from '../../ui/icons';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
 import { formatStamp } from '../document/format';
 import { SharedLinksDialog } from '../document/sharing/SharedLinksDialog';
-import { LabelSelector, toLabelData, type LabelData, type LabelDraft } from '../labels';
+import { LabelSelector, notifyLabelsChanged, toLabelData, type LabelData, type LabelDraft } from '../labels';
 import { StatusCell } from './cells';
 import { displayName, type LibraryRow } from './data';
 import { formatBytes, ocrState } from './format';
@@ -24,6 +24,8 @@ interface DetailPanelProps {
   onNavigate: (direction: 'previous' | 'next') => void;
   /** The search text, highlighted in the OCR excerpt. */
   query: string;
+  /** Where Open goes; the document page by default. */
+  openHref?: (row: LibraryRow) => string;
   sourceName: (row: LibraryRow) => string;
   availableLabels: LabelData[];
   onLabelCreated: (label: LabelData) => void;
@@ -113,6 +115,7 @@ function DetailBody({
     onRowChange(id, { labels: next });
     try {
       await labelService.setDocumentLabels(id, next.map((l) => l.id));
+      notifyLabelsChanged();
       if (seq > (saved.get(id)?.seq ?? 0)) saved.set(id, { seq, labels: next });
       toast.show({ title: t('library.detail.labelsSaved', 'Labels saved'), tone: 'success' });
     } catch {
@@ -126,6 +129,7 @@ function DetailBody({
     const res = await labelService.create(draft);
     const created = toLabelData(res.data);
     onLabelCreated(created);
+    notifyLabelsChanged();
     return created;
   };
 
@@ -205,7 +209,7 @@ function DetailBody({
   );
 }
 
-function DetailActions({ row, onRowChange, onDeleted, panel }: InnerProps) {
+function DetailActions({ row, onRowChange, onDeleted, openHref, panel }: InnerProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toast = useToast();
@@ -255,7 +259,7 @@ function DetailActions({ row, onRowChange, onDeleted, panel }: InnerProps) {
 
   return (
     <div className={styles.actions}>
-      <Button variant="primary" icon={<OpenInNew fontSize="small" />} onPress={() => navigate(`/documents/${row.id}`)}>
+      <Button variant="primary" icon={<OpenInNew fontSize="small" />} onPress={() => navigate(openHref ? openHref(row) : `/documents/${row.id}`)}>
         {t('library.detail.open', 'Open')}
       </Button>
       <Button icon={<Download fontSize="small" />} isPending={busy === 'download'} onPress={() => void download()}>

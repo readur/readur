@@ -4,8 +4,8 @@ import { BulkRetryModal } from '../../components/BulkRetryModal';
 import { documentService } from '../../services/api';
 import { labelService } from '../../services/api/labels';
 import { BulkActionBar, Button, Dialog, useToast } from '../../ui';
-import { Delete, Download, Label as LabelIcon, Refresh } from '../../ui/icons';
-import { LabelSelector, toLabelData, type LabelData, type LabelDraft } from '../labels';
+import { BookmarkBorder, Delete, Download, Label as LabelIcon, Refresh } from '../../ui/icons';
+import { LabelSelector, notifyLabelsChanged, toLabelData, type LabelData, type LabelDraft } from '../labels';
 import { bulkDeleteResult, toneOf } from '../intake/attention/outcome';
 import { displayName, type LibraryRow } from './data';
 import styles from './Library.module.css';
@@ -19,12 +19,14 @@ interface BulkActionsProps {
   onChanged: () => void;
   /** Called with the ids that were deleted. */
   onDeleted?: (ids: string[]) => void;
+  /** Offers "Save as collection" first in the bar (the Search page). */
+  onSaveCollection?: () => void;
 }
 
 type Open = 'label' | 'retry' | 'delete' | null;
 
 /** The floating bar for the rows the user ticked, and the dialogs behind its actions. */
-export function BulkActions({ selected, onClear, availableLabels, onLabelCreated, onChanged, onDeleted }: BulkActionsProps) {
+export function BulkActions({ selected, onClear, availableLabels, onLabelCreated, onChanged, onDeleted, onSaveCollection }: BulkActionsProps) {
   const { t } = useTranslation();
   const toast = useToast();
   const [open, setOpen] = useState<Open>(null);
@@ -45,6 +47,7 @@ export function BulkActions({ selected, onClear, availableLabels, onLabelCreated
     setBusy(true);
     try {
       await labelService.bulkAssign(ids, pickedLabels.map((l) => l.id), 'add');
+      notifyLabelsChanged();
       toast.show({ title: t('library.bulk.labelled', { count, defaultValue: 'Labels added to {{count}} documents', defaultValue_one: 'Labels added to 1 document' }), tone: 'success' });
       setOpen(null);
       setPickedLabels([]);
@@ -117,6 +120,7 @@ export function BulkActions({ selected, onClear, availableLabels, onLabelCreated
     const res = await labelService.create(draft);
     const created = toLabelData(res.data);
     onLabelCreated(created);
+    notifyLabelsChanged();
     return created;
   };
 
@@ -126,6 +130,9 @@ export function BulkActions({ selected, onClear, availableLabels, onLabelCreated
         count={count}
         onClear={onClear}
         actions={[
+          ...(onSaveCollection
+            ? [{ id: 'collection', label: t('library.collection.action', 'Save as collection'), icon: <BookmarkBorder fontSize="small" />, onPress: onSaveCollection }]
+            : []),
           { id: 'label', label: t('library.bulk.addLabel', 'Add label'), icon: <LabelIcon fontSize="small" />, onPress: () => setOpen('label') },
           { id: 'retry', label: t('library.bulk.retry', 'Retry OCR'), icon: <Refresh fontSize="small" />, onPress: () => setOpen('retry') },
           {

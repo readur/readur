@@ -25,7 +25,7 @@ export const documentService = {
   enhancedSearch: vi.fn(),
   getById: vi.fn(),
 };
-export const searchService = { enhancedSearch: vi.fn() };
+export const searchService = { enhancedSearch: vi.fn(), getTimeline: vi.fn() };
 export const sharedLinksService = { listByDocument: vi.fn(), create: vi.fn(), revoke: vi.fn() };
 export const apiClient = { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() };
 export const labelService = {
@@ -158,6 +158,8 @@ class MemoryStorage implements Storage {
 /** Default happy-path responses; tests override what they need. */
 export function setupLibraryMocks() {
   Object.defineProperty(window, 'localStorage', { value: new MemoryStorage(), configurable: true, writable: true });
+  // Most Library tests read the table; the grid tests switch the layout themselves.
+  window.localStorage.setItem('readur.library.view', 'table');
   acknowledgeAll();
   flushLit();
   resetThumbnailLoader();
@@ -187,6 +189,7 @@ export function setupLibraryMocks() {
     data: { success: true, deleted_count: ids.length, failed_count: 0, deleted_documents: ids },
   }));
   searchService.enhancedSearch.mockResolvedValue(searchResponse([]));
+  searchService.getTimeline.mockResolvedValue({ data: [] });
   sharedLinksService.listByDocument.mockResolvedValue({ data: [] });
   apiClient.get.mockImplementation((url: string) =>
     Promise.resolve({ data: url === '/sources' ? [{ id: 's1', name: 'Office NAS', source_type: 'webdav' }] : [] }),

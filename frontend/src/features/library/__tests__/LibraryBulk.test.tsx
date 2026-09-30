@@ -195,12 +195,12 @@ describe('Library bulk actions', () => {
     await settle();
   });
 
-  test('searching clears the selection', async () => {
+  test('searching leaves for the Search page and drops the selection', async () => {
     const user = userEvent.setup();
     renderLibrary();
     await select(user, /lease\.pdf/);
     await user.type(screen.getByRole('searchbox', { name: 'Search documents' }), 'tax{Enter}');
-    await waitFor(() => expect(currentUrl()).toBe('/documents?q=tax'));
+    await waitFor(() => expect(currentUrl()).toBe('/search?q=tax'));
     expect(screen.queryByRole('toolbar', { name: 'Bulk actions' })).not.toBeInTheDocument();
     await settle();
   });

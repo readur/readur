@@ -1,6 +1,6 @@
 /**
- * Integration tests for search in the Library (formerly SearchPage.integration.test.tsx). The
- * whole Library renders against mocked services, reached through the /search redirect.
+ * Integration tests for Search and the Library together: the whole pages render against mocked
+ * services, and a search started in the Library carries on in Search.
  */
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
@@ -12,60 +12,35 @@ vi.mock('../../../services/api', async () => (await import('./serviceMocks')).ap
 vi.mock('../../../services/api/labels', async () => (await import('./serviceMocks')).labelsModule());
 vi.mock('../../../components/BulkRetryModal', async () => (await import('./serviceMocks')).retryModalModule());
 
-describe('Search in the Library (integration)', () => {
+describe('Search (integration)', () => {
   beforeEach(() => {
     setupLibraryMocks();
     searchService.enhancedSearch.mockResolvedValue(searchResponse([hit(DOCS[0], 'Invoice for March', [[0, 7]])], 1));
   });
 
-  test('renders without crashing', async () => {
+  test('renders the Search page with its field and filters', async () => {
     renderLibrary('/search');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();
-    await settle();
-  });
-
-  test('contains the search field', async () => {
-    renderLibrary('/search');
-    expect(await screen.findByRole('searchbox', { name: 'Search documents' })).toBeInTheDocument();
-    await settle();
-  });
-
-  test('shows the basic interface: heading, search, filters and the board', async () => {
-    renderLibrary('/search');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Search' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search documents' })).toBeInTheDocument();
     const strip = screen.getByRole('search', { name: 'Search and filter' });
-    for (const name of ['Type', 'Label', 'Status', 'Source', 'Added']) {
+    for (const name of ['Type', 'Collection', 'Status', 'Source', 'Added']) {
       expect(within(strip).getByRole('button', { name })).toBeInTheDocument();
     }
-    expect(await screen.findByRole('grid', { name: 'Documents' })).toBeInTheDocument();
     await settle();
   });
 
-  test('/search?q= lands on the Library searching for q', async () => {
-    renderLibrary('/search?q=invoice');
-    await waitFor(() => expect(currentUrl()).toBe('/documents?q=invoice'));
-    expect(screen.getByRole('searchbox', { name: 'Search documents' })).toHaveValue('invoice');
-    await screen.findByRole('rowheader', { name: /invoice-march/ });
-    expect(lastSearchParams()).toMatchObject({ query: 'invoice' });
-  });
-
-  test('/search?query= (the old name) also works, keeping other parameters', async () => {
-    renderLibrary('/search?query=tax&status=failed&type=pdf');
-    await waitFor(() => expect(currentUrl()).toBe('/documents?q=tax&status=failed&type=pdf'));
-    await settle();
-  });
-
-  test('a search typed on the page runs end to end', async () => {
+  test('a search typed in the Library runs on the Search page', async () => {
     const user = userEvent.setup();
-    renderLibrary('/search');
+    renderLibrary('/documents');
     await user.type(await screen.findByRole('searchbox', { name: 'Search documents' }), 'invoice{Enter}');
-    await waitFor(() => expect(currentUrl()).toBe('/documents?q=invoice'));
-    const row = (await screen.findByRole('rowheader', { name: /invoice-march/ })).closest('[role="row"]') as HTMLElement;
-    expect(row.querySelector('mark')).toHaveTextContent('Invoice');
+    await waitFor(() => expect(currentUrl()).toBe('/search?q=invoice'));
+    const link = await screen.findByRole('link', { name: /invoice-march/ });
+    expect(link.closest('li')?.querySelector('mark')).toHaveTextContent('Invoice');
+    expect(lastSearchParams()).toMatchObject({ query: 'invoice' });
   });
 });
 
-describe('Search in the Library (performance)', () => {
+describe('Library (performance)', () => {
   beforeEach(() => {
     setupLibraryMocks();
   });

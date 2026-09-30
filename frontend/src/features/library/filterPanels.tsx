@@ -6,7 +6,7 @@ import type { LabelData } from '../labels';
 import type { LibrarySource } from './data';
 import { isoDay } from './format';
 import { TYPE_GROUPS, TYPE_GROUP_LABELS, type TypeGroup } from './mime';
-import { STATUSES, UPLOADED, type OcrStatus } from './urlState';
+import { STATUSES, UPLOADED, WATCHED, type OcrStatus } from './urlState';
 import styles from './Library.module.css';
 
 const toggle = <T,>(list: readonly T[], item: T): T[] =>
@@ -105,9 +105,11 @@ export function StatusPanel({ value, onChange }: { value: OcrStatus | null; onCh
   );
 }
 
+const KINDS = [UPLOADED, WATCHED];
+
 /**
- * Connections plus "Upload". The API cannot combine "uploaded" with specific connections, so
- * picking Upload clears the connections and the other way round.
+ * Uploads, the watch folder and each connection. The API cannot combine the first two with
+ * specific connections, so picking one of those clears the connections and the other way round.
  */
 export function SourcePanel({
   sources,
@@ -119,20 +121,21 @@ export function SourcePanel({
   onChange: (v: string[]) => void;
 }) {
   const { t } = useTranslation();
-  const uploaded = value.includes(UPLOADED);
+  const kinds = value.filter((v) => KINDS.includes(v));
+  const connections = value.filter((v) => !KINDS.includes(v));
+  const kind = (id: string, label: string) => (
+    <Checkbox label={label} isSelected={kinds.includes(id)} onChange={() => onChange(toggle(kinds, id))} />
+  );
   return (
     <div className={styles.panelList}>
-      <Checkbox
-        label={t('library.source.upload', 'Upload')}
-        isSelected={uploaded}
-        onChange={() => onChange(uploaded ? [] : [UPLOADED])}
-      />
+      {kind(UPLOADED, t('library.source.upload', 'Upload'))}
+      {kind(WATCHED, t('library.source.watch', 'Watch folder'))}
       {sources.map((s) => (
         <Checkbox
           key={s.id}
           label={s.name}
-          isSelected={value.includes(s.id)}
-          onChange={() => onChange(toggle(value.filter((v) => v !== UPLOADED), s.id))}
+          isSelected={connections.includes(s.id)}
+          onChange={() => onChange(toggle(connections, s.id))}
         />
       ))}
     </div>

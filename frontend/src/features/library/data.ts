@@ -1,10 +1,10 @@
 import api, { documentService, searchService } from '../../services/api';
 import type { DocumentListParams, EnhancedSearchParams } from '../../services/api';
 import { labelService } from '../../services/api/labels';
-import type { DocumentResponse, EnhancedDocumentResponse, SearchSnippet } from '../../types/generated';
+import type { DocumentResponse, EnhancedDocumentResponse, MonthCount, SearchSnippet } from '../../types/generated';
 import { toLabelData, type LabelData } from '../labels';
 import { dayBoundary } from './format';
-import { UPLOADED, isSearch, type LibraryQuery } from './urlState';
+import { UPLOADED, WATCHED, isSearch, type LibraryQuery } from './urlState';
 
 /** One board row: the fields shared by the list and search responses. */
 export interface LibraryRow {
@@ -25,6 +25,11 @@ export interface LibraryRow {
   ocr_progress_total?: number;
   snippets?: SearchSnippet[];
 }
+
+/** `source_type` of documents picked up from the watch folder (they have no `source_id`). */
+export const WATCH_SOURCE_TYPE = 'watch_folder';
+/** `source_type` of documents uploaded through the app. */
+export const UPLOAD_SOURCE_TYPE = 'direct_upload';
 
 export interface LibrarySource {
   id: string;
@@ -63,7 +68,12 @@ export const displayName = (row: Pick<LibraryRow, 'original_filename' | 'filenam
 
 /** Filters shared by the list and search requests. */
 function filterParams(query: LibraryQuery, mimeTypes: string[]) {
-  const uploadedOnly = query.sources.includes(UPLOADED);
+  // Uploads and the watch folder are source types; the API cannot mix them with connection ids.
+  const kinds = [
+    ...(query.sources.includes(UPLOADED) ? [UPLOAD_SOURCE_TYPE] : []),
+    ...(query.sources.includes(WATCHED) ? [WATCH_SOURCE_TYPE] : []),
+  ];
+  const connections = query.sources.filter((s) => s !== UPLOADED && s !== WATCHED);
   const from = query.from ? dayBoundary(query.from, 'start') : null;
   // An end before the start is rejected by the API; the Added panel flags it, so ignore it here.
   const inverted = Boolean(query.from && query.to && query.from > query.to);
@@ -74,8 +84,8 @@ function filterParams(query: LibraryQuery, mimeTypes: string[]) {
     ocr_status: query.status ?? undefined,
     mime_types: mimeTypes.length ? mimeTypes : undefined,
     label_ids: query.labels.length ? query.labels : undefined,
-    source_ids: uploadedOnly ? undefined : query.sources.length ? query.sources : undefined,
-    source_types: uploadedOnly ? ['direct_upload'] : undefined,
+    source_ids: kinds.length ? undefined : connections.length ? connections : undefined,
+    source_types: kinds.length ? kinds : undefined,
     created_from: from ?? undefined,
     created_to: to ?? undefined,
   };
@@ -91,9 +101,47 @@ export function searchParams(query: LibraryQuery, mimeTypes: string[]): Enhanced
     query: query.q.trim(),
     include_snippets: true,
     search_mode: query.mode ?? undefined,
-    // Without an explicit sort, search results come back by relevance.
-    ...(query.sortExplicit ? { sort_by: query.sort, sort_order: query.order } : {}),
+    // Newest first unless the user asked for the best matches first.
+    ...(query.relevance ? {} : { sort_by: query.sort, sort_order: query.order }),
   };
+}
+
+/**
+ * Params for the month histogram: the same search and filters, but every date, so the chart keeps
+ * showing the whole spread of matches while a month is picked.
+ */
+export function timelineParams(query: LibraryQuery, mimeTypes: string[]): EnhancedSearchParams {
+  const filters = filterParams(query, mimeTypes);
+  return {
+    query: query.q.trim(),
+    search_mode: query.mode ?? undefined,
+    ocr_status: filters.ocr_status,
+    mime_types: filters.mime_types,
+    label_ids: filters.label_ids,
+    source_ids: filters.source_ids,
+    source_types: filters.source_types,
+  };
+}
+
+export async function fetchTimeline(query: LibraryQuery, mimeTypes: string[]): Promise<MonthCount[]> {
+  const res = await searchService.getTimeline(timelineParams(query, mimeTypes));
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+/** The API returns at most this many results per request. */
+const ID_PAGE = 1000;
+
+/** The ids of every match of the search (not just the current page), for acting on all of them. */
+export async function fetchAllMatchIds(query: LibraryQuery, mimeTypes: string[], total: number): Promise<string[]> {
+  const base = searchParams(query, mimeTypes);
+  const ids: string[] = [];
+  for (let offset = 0; offset < total; offset += ID_PAGE) {
+    const res = await searchService.enhancedSearch({ ...base, include_snippets: false, limit: ID_PAGE, offset });
+    const docs = res.data.documents ?? [];
+    ids.push(...docs.map((d) => d.id));
+    if (docs.length < ID_PAGE) break;
+  }
+  return Array.from(new Set(ids));
 }
 
 export async function fetchRows(query: LibraryQuery, mimeTypes: string[]): Promise<RowsPage> {

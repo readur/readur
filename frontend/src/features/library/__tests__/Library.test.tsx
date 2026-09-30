@@ -165,7 +165,7 @@ describe('Library', () => {
       renderLibrary('/documents?status=failed&labels=l-tax&source=uploaded&type=pdf');
       await loaded();
       expect(screen.getByRole('button', { name: /status failed/i })).toBeInTheDocument();
-      expect(await screen.findByRole('button', { name: /label tax/i })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /collection tax/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /source upload/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /type pdf/i })).toBeInTheDocument();
     });
@@ -190,11 +190,11 @@ describe('Library', () => {
       await waitFor(() => expect(lastListParams()).toMatchObject({ mime_types: ['image/png'] }));
     });
 
-    test('the label filter searches and ticks labels', async () => {
+    test('the collection filter searches and ticks labels', async () => {
       const user = userEvent.setup();
       renderLibrary();
       await loaded();
-      await user.click(screen.getByRole('button', { name: 'Label' }));
+      await user.click(screen.getByRole('button', { name: 'Collection' }));
       await user.type(await screen.findByRole('searchbox', { name: 'Find a label' }), 'ta');
       expect(screen.queryByRole('checkbox', { name: 'Home' })).not.toBeInTheDocument();
       await user.click(screen.getByRole('checkbox', { name: 'Tax' }));
@@ -228,12 +228,23 @@ describe('Library', () => {
       await waitFor(() => expect(currentUrl()).toBe('/documents?type=pdf'));
     });
 
-    test('"Clear all" removes every filter but keeps the search', async () => {
+    test('"Clear all" removes every filter', async () => {
       const user = userEvent.setup();
-      renderLibrary('/documents?q=tax&status=failed&type=pdf&labels=l-tax');
+      renderLibrary('/documents?status=failed&type=pdf&labels=l-tax&sort=filename&order=asc');
       await screen.findByRole('grid');
       await user.click(screen.getByRole('button', { name: 'Clear all' }));
-      await waitFor(() => expect(currentUrl()).toBe('/documents?q=tax'));
+      await waitFor(() => expect(currentUrl()).toBe('/documents?sort=filename&order=asc'));
+    });
+
+    test('the watch folder is a source of its own', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await loaded();
+      await user.click(screen.getByRole('button', { name: 'Source' }));
+      await user.click(await screen.findByRole('checkbox', { name: 'Watch folder' }));
+      await waitFor(() => expect(currentUrl()).toBe('/documents?source=watch'));
+      await waitFor(() => expect(lastListParams()).toMatchObject({ source_types: ['watch_folder'] }));
+      expect(lastListParams().source_ids).toBeUndefined();
     });
 
     test('changing a filter returns to page 1', async () => {

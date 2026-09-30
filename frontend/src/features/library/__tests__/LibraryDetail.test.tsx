@@ -124,11 +124,11 @@ describe('Library detail panel', () => {
       expect(documentService.getOcrText).toHaveBeenCalledWith('d1');
     });
 
-    test('marks search matches in the OCR text', async () => {
+    test('marks search matches in the OCR text (quick look from Search)', async () => {
       const user = userEvent.setup();
       searchService.enhancedSearch.mockResolvedValue(searchResponse([hit(DOCS[0], 'Invoice for March', [[0, 7]])]));
-      renderLibrary('/documents?q=total');
-      await openWithEnter(user, /invoice-march/);
+      renderLibrary('/search?q=total');
+      await user.click(await screen.findByRole('button', { name: /quick look at invoice-march/i }));
       await within(panel()).findByText(/120 EUR/);
       const marks = Array.from(panel().querySelectorAll('mark')).map((m) => m.textContent);
       expect(marks).toEqual(['Total']);

@@ -4,8 +4,9 @@ import { TEST_FILES } from './utils/test-data';
 import { TestHelpers, escapeRegExp } from './utils/test-helpers';
 
 /**
- * Library (/documents): URL-driven sort and filters, row → detail slideout, keyboard walk.
- * Each test signs in as a fresh regular user, so the Library holds only what the test seeds.
+ * Library (/documents): thumbnail grid or table, URL-driven sort and filters, row → detail
+ * slideout, keyboard walk, collection pages. Each test signs in as a fresh regular user, so the
+ * Library holds only what the test seeds.
  */
 
 /** Seed text documents with unique content (identical files would be de-duplicated). */
@@ -26,9 +27,13 @@ const rowNames = async (helpers: TestHelpers, seeded: readonly string[]) => {
   return texts.map((text) => seeded.find((name) => text.includes(name)) ?? text.trim());
 };
 
-async function openLibrary(page: Page, query = '') {
+/** The Library in the given layout (the table unless asked otherwise). */
+async function openLibrary(page: Page, query = '', view: 'table' | 'grid' = 'table') {
   await page.goto(`/documents${query}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+  const layout = page.getByRole('radiogroup', { name: 'Layout' });
+  const toggle = layout.getByRole('radio', { name: view === 'table' ? 'Table' : 'Grid' });
+  if (!(await toggle.isChecked())) await toggle.click();
 }
 
 test.describe('Library', () => {
@@ -145,5 +150,47 @@ test.describe('Library', () => {
 
     await expect(page).toHaveURL(new RegExp(`/documents/${id}`));
     await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
+  });
+
+  test('should show thumbnails by month in the grid and remember the layout', async ({ dynamicUserPage: page }) => {
+    const helpers = new TestHelpers(page);
+    const run = Math.random().toString(36).slice(2, 6);
+    await seedTextDocuments(helpers, [`grid-a-${run}.txt`, `grid-b-${run}.txt`]);
+
+    await openLibrary(page, '', 'grid');
+    await expect(helpers.documentsGrid()).toHaveCount(0);
+    // Newest first, under this month's heading
+    await expect(page.getByRole('main').getByRole('heading', { level: 2 }).first()).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: `Select grid-a-${run}.txt` })).toBeAttached();
+
+    // A card opens the same slideout as a row
+    await page.getByRole('button', { name: new RegExp(`grid-b-${run}`) }).click();
+    await expect(page.getByRole('dialog', { name: new RegExp(`grid-b-${run}`) })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // The layout is remembered
+    await page.getByRole('radiogroup', { name: 'Layout' }).getByRole('radio', { name: 'Table' }).click();
+    await page.reload();
+    await expect(helpers.documentsGrid()).toBeVisible();
+  });
+
+  test('should show a collection as its own page', async ({ dynamicUserPage: page }) => {
+    const helpers = new TestHelpers(page);
+    const run = Math.random().toString(36).slice(2, 6);
+    const [id] = await seedTextDocuments(helpers, [`collected-${run}.txt`, `loose-${run}.txt`]);
+    const name = `Receipts ${run}`;
+    const label = await page.evaluate(async ({ name, id }) => {
+      const token = localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const res = await fetch('/api/labels', { method: 'POST', headers, body: JSON.stringify({ name, color: '#28a745' }) });
+      const created = await res.json();
+      await fetch(`/api/labels/documents/${id}`, { method: 'PUT', headers, body: JSON.stringify({ label_ids: [created.id] }) });
+      return created.id as string;
+    }, { name, id });
+
+    await page.goto(`/documents?label=${label}`);
+    await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    await expect(page.getByText(`collected-${run}.txt`)).toBeVisible();
+    await expect(page.getByText(`loose-${run}.txt`)).toHaveCount(0);
   });
 });

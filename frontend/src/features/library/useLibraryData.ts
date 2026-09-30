@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LabelData } from '../labels';
+import { useTranslation } from 'react-i18next';
+import { LABELS_CHANGED_EVENT, type LabelData } from '../labels';
 import {
   fetchLabels,
   fetchMimeTypes,
@@ -10,6 +11,7 @@ import {
   searchParams,
   type LibraryRow,
   type LibrarySource,
+  WATCH_SOURCE_TYPE,
 } from './data';
 import { mimeTypesFor } from './mime';
 import { isSearch, type LibraryQuery } from './urlState';
@@ -40,7 +42,25 @@ export function useFacets() {
     };
   }, []);
 
-  const addLabel = useCallback((label: LabelData) => setLabels((prev) => [...prev, label]), []);
+  // Labels made elsewhere (another page's "Save as collection", Settings) show up here too.
+  useEffect(() => {
+    let live = true;
+    const refresh = () => {
+      fetchLabels()
+        .then((l) => live && setLabels(l))
+        .catch(() => undefined);
+    };
+    window.addEventListener(LABELS_CHANGED_EVENT, refresh);
+    return () => {
+      live = false;
+      window.removeEventListener(LABELS_CHANGED_EVENT, refresh);
+    };
+  }, []);
+
+  const addLabel = useCallback(
+    (label: LabelData) => setLabels((prev) => (prev.some((l) => l.id === label.id) ? prev : [...prev, label])),
+    [],
+  );
 
   return { labels, addLabel, sources, mimeTypes, mimeReady };
 }
@@ -49,7 +69,7 @@ export function useFacets() {
  * The current page of rows for the query. A single-character query is not searched (the list
  * shows unsearched), and only the newest request may update the rows.
  */
-export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mimeReady: boolean) {
+export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mimeReady: boolean, enabled = true) {
   const [rows, setRows] = useState<LibraryRow[]>([]);
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState<RowsStatus>('loading');
@@ -63,7 +83,7 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
     [query, mimes],
   );
   // A Type filter needs the MIME list first, so wait for the facets in that case.
-  const waiting = query.types.length > 0 && !mimeReady;
+  const waiting = !enabled || (query.types.length > 0 && !mimeReady);
 
   useEffect(() => {
     if (waiting) return;
@@ -90,5 +110,20 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }, []);
 
-  return { rows, total, status, reload, patchRow };
+  return { rows, total, status, reload, patchRow, mimes };
+}
+
+/** A row's source as people know it: the connection's name, or "Upload". */
+export function useSourceName(sources: readonly LibrarySource[]) {
+  const { t } = useTranslation();
+  const byId = useMemo(() => new Map(sources.map((s) => [s.id, s.name])), [sources]);
+  return useCallback(
+    (row: Pick<LibraryRow, 'source_id' | 'source_type'>) => {
+      if (!row.source_id) {
+        return row.source_type === WATCH_SOURCE_TYPE ? t('library.source.watch', 'Watch folder') : t('library.source.upload', 'Upload');
+      }
+      return byId.get(row.source_id) ?? row.source_type ?? t('library.source.unknown', 'Connection');
+    },
+    [byId, t],
+  );
 }

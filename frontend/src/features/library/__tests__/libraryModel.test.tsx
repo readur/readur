@@ -21,6 +21,7 @@ describe('URL state', () => {
       sort: 'file_size',
       order: 'asc',
       sortExplicit: true,
+      relevance: false,
       types: ['pdf', 'image'],
       labels: ['a', 'b'],
       status: 'failed',
@@ -31,6 +32,18 @@ describe('URL state', () => {
       size: 100,
       mode: 'fuzzy',
     });
+  });
+
+  test('sort=relevance asks for best matches first and survives the round trip', () => {
+    const q = parse('q=knee&sort=relevance');
+    expect(q).toMatchObject({ relevance: true, sortExplicit: false, sort: 'created_at' });
+    expect(toParams(q).toString()).toBe('q=knee&sort=relevance');
+  });
+
+  test('label= (the collection link) is read as a collection filter', () => {
+    expect(parse('label=a').labels).toEqual(['a']);
+    expect(parse('label=a&labels=a,b').labels).toEqual(['a', 'b']);
+    expect(toParams(parse('label=a')).toString()).toBe('labels=a');
   });
 
   test('drops values it does not know', () => {

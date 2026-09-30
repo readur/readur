@@ -32,14 +32,39 @@
   display: flex;
   align-items: flex-start;
   gap: var(--s-1);
-  flex: 1 1 320px;
-  max-width: 480px;
+  flex: 1 1 280px;
+  max-width: 340px;
   min-width: 0;
 }
 
 .search {
   flex: 1;
   min-width: 0;
+}
+
+/* The Search page's field: taller, with body-size text. */
+.searchLarge input {
+  min-height: 48px;
+  font-size: var(--fs-lg);
+}
+
+.collectionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.collectionSwatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: var(--label-color, var(--fg-meta));
+  border-radius: 50%;
+}
+
+.sort {
+  min-width: 176px;
 }
 
 .chips {
@@ -68,7 +93,7 @@
 }
 
 .clearAll:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -105,6 +130,12 @@
 
   .density {
     display: none;
+  }
+
+  .sort,
+  .mobileSort {
+    flex: 1;
+    min-width: 0;
   }
 }
 
@@ -156,7 +187,7 @@
 }
 
 .radio[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -191,12 +222,8 @@
 
 .helpHeading {
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-md);
+  font-size: var(--fs-lg);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
 }
 
 .helpText {
@@ -252,7 +279,7 @@
 }
 
 .example:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -366,10 +393,11 @@
 }
 
 .mark {
-  padding: 0 1px;
-  color: var(--signal-ink);
-  background: var(--signal);
-  border-radius: 2px;
+  padding: 0 2px;
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--warn-soft);
+  border-radius: 3px;
 }
 
 /* Detail panel */
@@ -420,13 +448,9 @@
 
 .sectionHeading {
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--fg-2);
+  color: var(--fg);
 }
 
 .excerpt {

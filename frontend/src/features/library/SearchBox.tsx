@@ -11,13 +11,20 @@ const TYPING = 'input, textarea, select, [contenteditable=""], [contenteditable=
 interface SearchBoxProps {
   value: string;
   onChange: (q: string) => void;
+  /** Focus the field on mount with the caret after the text (typing carried over from another page). */
+  autoFocus?: boolean;
+  /** The Search page's large field. */
+  size?: 'md' | 'lg';
+  placeholder?: string;
+  /** `typing` searches after a pause; `submit` only on Enter (a field that leads to another page). */
+  commitOn?: 'typing' | 'submit';
 }
 
 /**
  * The Library's search field. Typing is debounced; Enter and clearing apply at once; `/`
  * anywhere outside a text field focuses it (ahead of the command palette's `/`).
  */
-export function SearchBox({ value, onChange }: SearchBoxProps) {
+export function SearchBox({ value, onChange, autoFocus = false, size = 'md', placeholder, commitOn = 'typing' }: SearchBoxProps) {
   const { t } = useTranslation();
   const [text, setText] = useState(value);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -32,6 +39,16 @@ export function SearchBox({ value, onChange }: SearchBoxProps) {
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  useEffect(() => {
+    if (!autoFocus) return;
+    const input = wrapRef.current?.querySelector('input');
+    if (!input) return;
+    input.focus();
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+    // Only on mount: later renders must not steal focus back.
   }, []);
 
   useEffect(() => {
@@ -56,18 +73,18 @@ export function SearchBox({ value, onChange }: SearchBoxProps) {
   };
 
   const trimmed = text.trim();
-  const showHint = trimmed.length > 0 && trimmed.length < MIN_QUERY;
+  const showHint = commitOn === 'typing' && trimmed.length > 0 && trimmed.length < MIN_QUERY;
 
   return (
-    <div ref={wrapRef} className={styles.search}>
+    <div ref={wrapRef} className={size === 'lg' ? `${styles.search} ${styles.searchLarge}` : styles.search}>
       <SearchField
         aria-label={t('library.search.label', 'Search documents')}
-        placeholder={t('library.search.placeholder', 'Search names and text…')}
+        placeholder={placeholder ?? t('library.search.placeholder', 'Search names and text…')}
         value={text}
         onChange={(next) => {
           setText(next);
           if (timer.current) clearTimeout(timer.current);
-          timer.current = setTimeout(() => commit(next), SEARCH_DEBOUNCE_MS);
+          if (commitOn === 'typing') timer.current = setTimeout(() => commit(next), SEARCH_DEBOUNCE_MS);
         }}
         onSubmit={(next) => commit(next)}
         onClear={() => commit('')}
