@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { NotificationProvider, useNotifications } from '../NotificationContext';
 import { NotificationType } from '../../types/notification';
 import React from 'react';
@@ -213,7 +213,7 @@ describe('NotificationContext', () => {
     expect(screen.getByTestId('unread-count')).toHaveTextContent('0');
   });
 
-  test('should handle batch notifications with batching window', async () => {
+  test('should handle batch notifications with batching window', () => {
     renderWithProvider();
     
     // Add batch notification
@@ -229,12 +229,10 @@ describe('NotificationContext', () => {
       vi.advanceTimersByTime(2100); // Slightly more than BATCH_WINDOW_MS (2000ms)
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
-    }, { timeout: 10000 });
+    expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
 
     expect(screen.getByTestId('unread-count')).toHaveTextContent('1');
-  }, 15000);
+  });
 
   test('should batch multiple operations of same type', async () => {
     renderWithProvider();
@@ -253,13 +251,11 @@ describe('NotificationContext', () => {
       vi.advanceTimersByTime(2100);
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
-    }, { timeout: 10000 });
+    expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
 
     // Should only have one batched notification
     expect(screen.getByTestId('unread-count')).toHaveTextContent('1');
-  }, 15000);
+  });
 
   test('should limit notifications to MAX_NOTIFICATIONS', async () => {
     renderWithProvider();
@@ -426,13 +422,11 @@ describe('NotificationContext - Batch Notifications', () => {
       vi.advanceTimersByTime(2100);
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
-    }, { timeout: 10000 });
+    expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
 
     expect(screen.getByTestId('notification-title')).toHaveTextContent('File Uploaded');
     expect(screen.getByTestId('notification-message')).toHaveTextContent('document.pdf uploaded successfully');
-  }, 15000);
+  });
 
   test('should create batch notification for multiple files', async () => {
     render(
@@ -449,13 +443,11 @@ describe('NotificationContext - Batch Notifications', () => {
       vi.advanceTimersByTime(2100);
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
-    }, { timeout: 10000 });
+    expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
 
     expect(screen.getByTestId('notification-title')).toHaveTextContent('Batch Upload Complete');
     expect(screen.getByTestId('notification-message')).toHaveTextContent('3 files uploaded successfully');
-  }, 15000);
+  });
 
   test('should handle mixed success/failure batch', async () => {
     render(
@@ -472,13 +464,11 @@ describe('NotificationContext - Batch Notifications', () => {
       vi.advanceTimersByTime(2100);
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
-    }, { timeout: 10000 });
+    expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
 
     expect(screen.getByTestId('notification-title')).toHaveTextContent('Batch Upload Complete');
     expect(screen.getByTestId('notification-message')).toHaveTextContent('2 files uploaded, 1 failed');
-  }, 15000);
+  });
 
   test('should handle all failed batch', async () => {
     render(
@@ -495,11 +485,9 @@ describe('NotificationContext - Batch Notifications', () => {
       vi.advanceTimersByTime(2100);
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
-    }, { timeout: 10000 });
+    expect(screen.getByTestId('notifications-count')).toHaveTextContent('1');
 
     expect(screen.getByTestId('notification-title')).toHaveTextContent('Batch Upload Complete');
     expect(screen.getByTestId('notification-message')).toHaveTextContent('Failed to upload 2 files');
-  }, 15000);
+  });
 });

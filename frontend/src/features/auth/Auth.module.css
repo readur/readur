@@ -1,0 +1,176 @@
+.page {
+  min-height: 100vh;
+  background: var(--ground);
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-4);
+}
+
+.column {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.logo {
+  display: block;
+}
+
+.wordmark {
+  font-family: var(--font-ui);
+  font-stretch: 75%;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: var(--fs-xl);
+  line-height: 1;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-stretch: 75%;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: var(--fs-2xl);
+  line-height: 1.1;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.passwordRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+
+.passwordRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Aligns the toggle with the input, below the visible label. */
+.passwordRow > :last-child {
+  margin-top: 22px;
+}
+
+.alert {
+  display: flex;
+  gap: var(--s-2);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--s-3);
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+}
+
+.notice {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--fg-meta);
+  font-family: var(--font-ui);
+  font-stretch: 75%;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: var(--fs-sm);
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.footer {
+  margin: 0;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--fs-lg);
+}
+
+.mark {
+  font-family: var(--font-data);
+  color: var(--fg);
+  animation: pulse var(--dur-2) var(--ease) infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark {
+    animation: none;
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.backLink {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: var(--fs-md);
+}
+
+.backLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
