@@ -6,7 +6,8 @@ import type { UserRole } from '../../../types/generated';
 import { IconButton } from '../../../ui';
 import { Delete, Edit, Reply } from '../../../ui/icons';
 import { CommentForm } from './CommentForm';
-import { relativeTime } from './relativeTime';
+import { formatDateTime } from '../format';
+import { formatRelativeTime } from '../../../lib/relativeTime';
 import styles from './Comments.module.css';
 
 export interface CommentItemProps {
@@ -39,8 +40,12 @@ export function CommentItem({ comment, currentUserId, currentUserRole, onReply, 
     <article className={styles.item} aria-label={t('document.comments.by', { name: comment.username, defaultValue: 'Comment by {{name}}' })}>
       <header className={styles.meta}>
         <span className={styles.author}>{comment.username}</span>
-        <time className={styles.time} dateTime={comment.created_at}>
-          {relativeTime(comment.created_at, i18n.language)}
+        <time
+          className={styles.time}
+          dateTime={comment.created_at}
+          title={formatDateTime(comment.created_at, i18n.language)}
+        >
+          {formatRelativeTime(comment.created_at, { locale: i18n.language })}
         </time>
         {comment.is_edited ? <span className={styles.edited}>{t('document.comments.edited', 'edited')}</span> : null}
       </header>

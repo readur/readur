@@ -324,6 +324,9 @@ describe('document page: details', () => {
     expect(within(details).getByRole('heading', { name: 'File' })).toBeInTheDocument();
     expect(within(details).getByRole('heading', { name: 'Processing' })).toBeInTheDocument();
     expect(within(details).getByRole('heading', { name: 'Activity' })).toBeInTheDocument();
+    // Activity older than a week shows the date, with the full time on hover.
+    const added = within(details).getAllByText(/Jun 2025|Jun 15, 2025/).find((el) => el.tagName === 'TIME');
+    expect(added).toHaveAttribute('dateTime', '2025-06-15T10:00:00Z');
     expect(within(details).getByText('Camera model')).toBeInTheDocument();
     expect(within(details).getByText('PDF version')).toBeInTheDocument();
     expect(within(details).getByText('X100')).toBeInTheDocument();

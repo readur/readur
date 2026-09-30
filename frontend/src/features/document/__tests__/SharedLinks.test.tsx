@@ -102,7 +102,7 @@ describe('share links dialog', () => {
   it('lists existing links with status, views and expiry', async () => {
     m.sharedLinksService.listByDocument.mockResolvedValue({
       data: [
-        link({ max_views: 10 }),
+        link({ max_views: 10, created_at: new Date(Date.now() - 3 * 3_600_000).toISOString() }),
         link({ id: 'link-2', token: 'zz9', is_expired: true, expires_at: '2025-01-01T00:00:00Z' }),
         link({ id: 'link-3', token: 'yy8', is_revoked: true }),
       ],
@@ -114,7 +114,10 @@ describe('share links dialog', () => {
     expect(items[0]).toHaveTextContent('Active');
     expect(items[0]).toHaveTextContent('3 / 10');
     expect(items[0]).toHaveTextContent('Never');
+    // Recent times read relative, older ones as the date.
+    expect(items[0]).toHaveTextContent('3 hr. ago');
     expect(items[1]).toHaveTextContent('Expired');
+    expect(items[1]).toHaveTextContent(/15 Jun 2025|Jun 15, 2025/);
     expect(within(items[1]).getByRole('button', { name: 'Copy link' })).toBeDisabled();
     expect(items[2]).toHaveTextContent('Revoked');
     expect(within(items[2]).getByRole('button', { name: 'Revoke link' })).toBeDisabled();

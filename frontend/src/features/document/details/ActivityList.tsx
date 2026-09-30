@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { Document, OcrResponse } from '../../../services/api';
 import type { StatusState } from '../../../ui';
 import { Warning } from '../../../ui/icons';
+import { formatRelativeTime } from '../../../lib/relativeTime';
 import { formatDateTime, formatNumber } from '../format';
 import styles from './Details.module.css';
 
@@ -83,8 +84,8 @@ export function ActivityList({
             </span>
             {e.description ? <span className={styles.eventDescription}>{e.description}</span> : null}
           </div>
-          <time className={styles.eventTime} dateTime={e.at}>
-            {formatDateTime(e.at, i18n.language)}
+          <time className={styles.eventTime} dateTime={e.at} title={formatDateTime(e.at, i18n.language)}>
+            {formatRelativeTime(e.at, { locale: i18n.language })}
           </time>
         </li>
       ))}

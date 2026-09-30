@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { sharedLinksService, type SharedLinkData } from '../../../services/api';
 import { Button, IconButton, useToast } from '../../../ui';
 import { ContentCopy, LinkOff } from '../../../ui/icons';
+import { formatRelativeTime } from '../../../lib/relativeTime';
 import { apiErrorMessage, formatDateTime } from '../format';
 import styles from './Sharing.module.css';
 
@@ -91,11 +92,17 @@ export function SharedLinksList({ links, onRevoked }: SharedLinksListProps) {
               </div>
               <div>
                 <dt>{t('document.share.expiresShort', 'Expires')}</dt>
-                <dd>{link.expires_at ? formatDateTime(link.expires_at, i18n.language) : t('document.share.never', 'Never')}</dd>
+                <dd title={link.expires_at ? formatDateTime(link.expires_at, i18n.language) : undefined}>
+                  {link.expires_at
+                    ? formatRelativeTime(link.expires_at, { locale: i18n.language })
+                    : t('document.share.never', 'Never')}
+                </dd>
               </div>
               <div>
                 <dt>{t('document.share.createdShort', 'Created')}</dt>
-                <dd>{formatDateTime(link.created_at, i18n.language)}</dd>
+                <dd title={formatDateTime(link.created_at, i18n.language)}>
+                  {formatRelativeTime(link.created_at, { locale: i18n.language })}
+                </dd>
               </div>
               {link.has_password ? (
                 <div>

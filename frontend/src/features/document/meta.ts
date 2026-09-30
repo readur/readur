@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { Document, OcrResponse } from '../../services/api';
 import { typeCodeOf } from '../../lib/fileType';
+import { formatAbsoluteDate } from '../../lib/relativeTime';
 import { formatBytes, ocrState, sourceLabel, type OcrExtras } from './format';
 
 /** "30 Sep 2026 08:04" in the reader's language and time zone, or null for a missing date. */
@@ -8,7 +9,7 @@ export function formatAdded(value: string | null | undefined, lng?: string): str
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  const day = date.toLocaleDateString(lng, { day: 'numeric', month: 'short', year: 'numeric' });
+  const day = formatAbsoluteDate(date, lng);
   const time = date.toLocaleTimeString(lng, { hour: '2-digit', minute: '2-digit' });
   return `${day} ${time}`;
 }

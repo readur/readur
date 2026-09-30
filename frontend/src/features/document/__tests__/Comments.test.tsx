@@ -46,7 +46,7 @@ describe('comments', () => {
     renderPanel();
     const comment = await screen.findByRole('article', { name: 'Comment by ada' });
     expect(within(comment).getByText('Please check the total.')).toBeInTheDocument();
-    expect(within(comment).getByText('5 minutes ago')).toBeInTheDocument();
+    expect(within(comment).getByText('5 min. ago')).toHaveAttribute('dateTime');
     expect(m.commentsService.list).toHaveBeenCalledWith('doc-1');
   });
 
