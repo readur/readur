@@ -13,7 +13,7 @@ use base64ct::Encoding;
 use jsonwebtoken::{decode, decode_header, jwk::JwkSet, Algorithm, DecodingKey, Validation};
 use rand::Rng;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -40,7 +40,7 @@ pub struct OidcDiscovery {
 pub struct OidcUserInfo {
     pub sub: String,
     pub email: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bool_claim")]
     pub email_verified: Option<bool>,
     pub name: Option<String>,
     pub preferred_username: Option<String>,
@@ -286,18 +286,32 @@ impl OidcClient {
     }
 
     async fn verify_id_token(&self, id_token: &str, expected_nonce: &str) -> Result<IdTokenClaims> {
+        if header_declares_no_signature(id_token) {
+            return Err(anyhow!("Unsigned ID tokens are not accepted"));
+        }
         let header = decode_header(id_token).map_err(|e| anyhow!("Malformed ID token: {}", e))?;
 
+        // Every accepted algorithm is listed explicitly so that a new variant
+        // in the JWT library has to be reviewed before it is accepted.
         let key = match header.alg {
             Algorithm::HS256 | Algorithm::HS384 | Algorithm::HS512 => {
-                // Symmetric ID tokens are keyed with the client secret.
+                // Symmetric ID tokens are keyed with the client secret, so
+                // they are only accepted from confidential clients.
                 let secret = self
                     .client_secret
                     .as_ref()
                     .ok_or_else(|| anyhow!("HMAC-signed ID token but no client secret configured"))?;
                 DecodingKey::from_secret(secret.as_bytes())
             }
-            _ => self.signing_key(header.kid.as_deref()).await?,
+            Algorithm::RS256
+            | Algorithm::RS384
+            | Algorithm::RS512
+            | Algorithm::PS256
+            | Algorithm::PS384
+            | Algorithm::PS512
+            | Algorithm::ES256
+            | Algorithm::ES384
+            | Algorithm::EdDSA => self.signing_key(header.kid.as_deref()).await?,
         };
 
         let mut validation = Validation::new(header.alg);
@@ -350,7 +364,17 @@ impl OidcClient {
             None if set.keys.len() == 1 => &set.keys[0],
             None => return None,
         };
-        DecodingKey::from_jwk(jwk).ok()
+        match DecodingKey::from_jwk(jwk) {
+            Ok(key) => Some(key),
+            Err(e) => {
+                tracing::warn!(
+                    kid = ?jwk.common.key_id,
+                    "Provider JWKS contains a key that cannot be used: {}",
+                    e
+                );
+                None
+            }
+        }
     }
 
     async fn fetch_jwks(&self) -> Result<JwkSet> {
@@ -420,13 +444,34 @@ fn ensure_issuer_matches(configured: &str, discovered: &str) -> Result<()> {
     }
 }
 
-/// `email_verified` is a boolean per spec, but some providers send a string.
+/// `email_verified` is a boolean per spec, but some providers send the
+/// strings "true" / "false". Anything else is treated as absent.
 fn parse_bool_claim(value: &serde_json::Value) -> Option<bool> {
     match value {
         serde_json::Value::Bool(b) => Some(*b),
-        serde_json::Value::String(s) => Some(s.eq_ignore_ascii_case("true")),
+        serde_json::Value::String(s) if s.trim().eq_ignore_ascii_case("true") => Some(true),
+        serde_json::Value::String(s) if s.trim().eq_ignore_ascii_case("false") => Some(false),
         _ => None,
     }
+}
+
+fn deserialize_bool_claim<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<bool>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.as_ref().and_then(parse_bool_claim))
+}
+
+/// True when the token's header declares `"alg": "none"` (in any case).
+fn header_declares_no_signature(token: &str) -> bool {
+    let Some(encoded) = token.split('.').next() else {
+        return false;
+    };
+    let Ok(bytes) = base64ct::Base64UrlUnpadded::decode_vec(encoded.trim_end_matches('=')) else {
+        return false;
+    };
+    serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|header| header.get("alg").and_then(|alg| alg.as_str()).map(|alg| alg.eq_ignore_ascii_case("none")))
+        .unwrap_or(false)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -469,7 +514,29 @@ mod tests {
     fn email_verified_parsing() {
         assert_eq!(parse_bool_claim(&serde_json::json!(true)), Some(true));
         assert_eq!(parse_bool_claim(&serde_json::json!("true")), Some(true));
-        assert_eq!(parse_bool_claim(&serde_json::json!("false")), Some(false));
+        assert_eq!(parse_bool_claim(&serde_json::json!("False")), Some(false));
+        assert_eq!(parse_bool_claim(&serde_json::json!("yes")), None);
         assert_eq!(parse_bool_claim(&serde_json::json!(1)), None);
+    }
+
+    #[test]
+    fn userinfo_accepts_string_email_verified() {
+        let parse = |v: serde_json::Value| serde_json::from_value::<OidcUserInfo>(v).unwrap().email_verified;
+        assert_eq!(parse(serde_json::json!({"sub": "s", "email_verified": "true"})), Some(true));
+        assert_eq!(parse(serde_json::json!({"sub": "s", "email_verified": "false"})), Some(false));
+        assert_eq!(parse(serde_json::json!({"sub": "s", "email_verified": true})), Some(true));
+        assert_eq!(parse(serde_json::json!({"sub": "s", "email_verified": null})), None);
+        assert_eq!(parse(serde_json::json!({"sub": "s"})), None);
+    }
+
+    #[test]
+    fn unsigned_tokens_are_detected() {
+        let encode = |header: &str| {
+            format!("{}.e30.", base64ct::Base64UrlUnpadded::encode_string(header.as_bytes()))
+        };
+        assert!(header_declares_no_signature(&encode(r#"{"alg":"none"}"#)));
+        assert!(header_declares_no_signature(&encode(r#"{"alg":"NONE","typ":"JWT"}"#)));
+        assert!(!header_declares_no_signature(&encode(r#"{"alg":"RS256"}"#)));
+        assert!(!header_declares_no_signature("not-a-token"));
     }
 }
