@@ -1,50 +1,33 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tab, TabList, TabPanel, Tabs } from '../../../ui';
-import { useMediaQuery } from '../../shell';
-import styles from '../DocumentPage.module.css';
-
-/** At this width and up the preview and the text sit side by side. */
-export const WIDE_QUERY = '(min-width: 1100px)';
+import type { ReadingView } from '../hooks/useReadingView';
+import styles from './ReadingArea.module.css';
 
 export interface ReadingAreaProps {
+  view: ReadingView;
   preview: ReactNode;
   text: ReactNode;
-  /** Rendered collapsible under the columns on wide screens, as the third tab otherwise. */
-  details: (layout: 'wide' | 'tabs') => ReactNode;
-  /** Tab to show first on narrow screens. */
-  defaultTab?: 'preview' | 'text' | 'details';
+  /** Measured height that reaches the bottom of the window. */
+  height?: number;
+  /** Negative bottom margin, to use the shell's bottom padding. */
+  pullUp?: number;
+  ref?: Ref<HTMLDivElement>;
 }
 
-/** Two columns (preview | text) on wide screens; Preview / Text / Details tabs below 1100px. */
-export function ReadingArea({ preview, text, details, defaultTab = 'preview' }: ReadingAreaProps) {
+/**
+ * The file and its text in one box that fills the rest of the window. Both panes stay mounted
+ * when hidden, so switching views keeps the PDF's scroll position and the find state.
+ */
+export function ReadingArea({ view, preview, text, height, pullUp, ref }: ReadingAreaProps) {
   const { t } = useTranslation();
-  const wide = useMediaQuery(WIDE_QUERY);
-
-  if (wide) {
-    return (
-      <>
-        <div className={styles.columns}>
-          <section className={styles.previewColumn} aria-label={t('document.tabs.preview', 'Preview')}>
-            {preview}
-          </section>
-          <div className={styles.textColumn}>{text}</div>
-        </div>
-        {details('wide')}
-      </>
-    );
-  }
-
   return (
-    <Tabs defaultSelectedKey={defaultTab} className={styles.tabs}>
-      <TabList aria-label={t('document.tabs.label', 'Document views')}>
-        <Tab id="preview">{t('document.tabs.preview', 'Preview')}</Tab>
-        <Tab id="text">{t('document.tabs.text', 'Text')}</Tab>
-        <Tab id="details">{t('document.tabs.details', 'Details')}</Tab>
-      </TabList>
-      <TabPanel id="preview">{preview}</TabPanel>
-      <TabPanel id="text">{text}</TabPanel>
-      <TabPanel id="details">{details('tabs')}</TabPanel>
-    </Tabs>
+    <div ref={ref} className={styles.area} data-view={view} style={height ? { height, marginBottom: pullUp ? -pullUp : undefined } : undefined}>
+      <section className={styles.viewer} aria-label={t('document.view.document', 'Document')} hidden={view === 'text'}>
+        {preview}
+      </section>
+      <div className={styles.text} hidden={view === 'document'}>
+        {text}
+      </div>
+    </div>
   );
 }

@@ -22,7 +22,7 @@ describe('DocumentViewer', () => {
     m.documentService.view.mockResolvedValue({ data: new Blob(['%PDF']) });
     render(<DocumentViewer documentId="d1" filename="a.pdf" mimeType="application/pdf" />);
     expect(screen.getByRole('status', { name: 'Loading preview' })).toBeInTheDocument();
-    expect(await screen.findByTitle('a.pdf')).toHaveAttribute('src', 'blob:fake');
+    expect(await screen.findByTitle('a.pdf')).toHaveAttribute('src', 'blob:fake#navpanes=0&pagemode=none&view=FitH');
     expect(m.documentService.view).toHaveBeenCalledWith('d1');
   });
 
@@ -109,7 +109,7 @@ describe('MetadataDisplay', () => {
       />,
     );
     expect(screen.getByRole('heading', { name: 'Source metadata' })).toBeInTheDocument();
-    expect(screen.getByText('Camera Model')).toBeInTheDocument();
+    expect(screen.getByText('Camera model')).toBeInTheDocument();
     expect(screen.getByText('644 (octal)')).toBeInTheDocument();
     expect(screen.getByText('Yes')).toBeInTheDocument();
     expect(screen.getByText('a')).toBeInTheDocument();

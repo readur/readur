@@ -67,9 +67,8 @@
 
 .time,
 .edited {
-  font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--fg-meta);
 }
 
@@ -90,6 +89,6 @@
   padding: var(--s-2) var(--s-3);
   border: 1px solid var(--danger);
   border-radius: var(--radius);
-  background: var(--danger-bg);
+  background: var(--danger-soft);
   color: var(--danger);
 }

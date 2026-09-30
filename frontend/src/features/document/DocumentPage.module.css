@@ -1,79 +1,18 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--s-4);
+  gap: var(--s-3);
   min-width: 0;
 }
 
-/* Breadcrumb */
-
-.breadcrumb ol {
+.head {
   display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--fg-meta);
-}
-
-.breadcrumb li {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
+  flex-direction: column;
+  gap: var(--s-3);
   min-width: 0;
 }
 
-.breadcrumb li + li::before {
-  content: '/';
-  color: var(--line-strong);
-}
-
-.breadcrumb a {
-  color: var(--fg-2);
-  text-decoration: none;
-  border-radius: var(--radius);
-}
-
-.breadcrumb a:hover {
-  color: var(--fg);
-  text-decoration: underline;
-}
-
-.breadcrumb a:focus-visible,
-.linkButton:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.crumbCurrent {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--fg-meta);
-}
-
-/* Header */
-
-.pageHeader {
-  margin-bottom: 0;
-}
-
-.pageHeader > :first-child {
-  flex: 1 1 320px;
-}
-
-.title {
-  max-width: 100%;
-}
-
-/* Inline label editor under the summary strip */
+/* Inline label editor under the labels row. */
 
 .labelEditor {
   display: flex;
@@ -83,6 +22,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
 }
 
 .labelEditorActions {
@@ -91,29 +31,12 @@
   gap: var(--s-2);
 }
 
-/* Reading area */
+/* Loading placeholder: the same shape as the page. */
 
-.columns {
+.skeletonArea {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--s-5);
-  align-items: start;
-}
-
-.previewColumn {
-  position: sticky;
-  top: var(--s-4);
-  min-width: 0;
-}
-
-.textColumn {
-  min-width: 0;
-}
-
-.tabs {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--s-4);
 }
 
 /* Not found / error */
@@ -134,11 +57,20 @@
   align-items: center;
   min-height: 40px;
   padding: 0 var(--s-4);
-  border-radius: var(--radius);
-  background: var(--btn-bg);
-  color: var(--btn-fg);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-fg);
   font-weight: 600;
   text-decoration: none;
+}
+
+.linkButton:hover {
+  background: var(--accent-hover);
+}
+
+.linkButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Dialogs */
@@ -160,7 +92,7 @@
   max-width: 100%;
   max-height: 70vh;
   object-fit: contain;
-  border: 1px solid var(--line);
+  background: var(--surface-sunken);
   border-radius: var(--radius);
 }
 
@@ -169,12 +101,8 @@
   color: var(--fg-2);
 }
 
-@media (max-width: 1099px) {
-  .columns {
+@media (max-width: 959px) {
+  .skeletonArea {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .previewColumn {
-    position: static;
   }
 }

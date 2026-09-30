@@ -12,11 +12,18 @@ export interface MetadataDisplayProps {
 
 const DATE_HINTS = ['date', 'time', 'created', 'modified'];
 
+const ACRONYMS = new Set(['pdf', 'id', 'url', 'exif', 'gps', 'dpi', 'iso', 'ocr', 'mime']);
+
+/** `pdf_creation_date` → "PDF creation date": sentence case, known acronyms kept upper. */
 export function formatKeyName(key: string): string {
-  return key
+  const words = key
     .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .map((w) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w.toLowerCase()));
+  const sentence = words.join(' ');
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
 function MetadataValue({ name, value }: { name: string; value: unknown }): ReactNode {
@@ -43,9 +50,9 @@ function MetadataValue({ name, value }: { name: string; value: unknown }): React
   }
   if (typeof value === 'string' && DATE_HINTS.some((h) => name.toLowerCase().includes(h))) {
     const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) return <span className={styles.mono}>{date.toLocaleString(i18n.language)}</span>;
+    if (!Number.isNaN(date.getTime())) return <>{date.toLocaleString(i18n.language)}</>;
   }
-  if (typeof value === 'number') return <span className={styles.mono}>{value}</span>;
+  if (typeof value === 'number') return <>{value}</>;
   return <>{String(value)}</>;
 }
 
@@ -85,7 +92,7 @@ export function MetadataDisplay({ metadata, title, compact = false }: MetadataDi
   }
   return (
     <div className={styles.block}>
-      <h3 className={styles.blockTitle}>{heading}</h3>
+      <h2 className={styles.blockTitle}>{heading}</h2>
       {grid}
     </div>
   );

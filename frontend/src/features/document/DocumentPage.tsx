@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import LabelSelector from '../labels/LabelSelector';
@@ -9,17 +9,22 @@ import { Button, EmptyState, useToast } from '../../ui';
 import { acknowledge } from '../board/litStore';
 import { DeleteDocumentDialog, ProcessedImageDialog } from './DocumentDialogs';
 import { DocumentHeader } from './DocumentHeader';
-import { DocumentPass } from './DocumentPass';
+import { DocumentToolbar } from './DocumentToolbar';
 import { DocumentPageSkeleton } from './DocumentPageSkeleton';
 import { DocumentDetails } from './details/DocumentDetails';
 import { saveBlob } from './download';
+import { fileKind } from './format';
 import { useDocument } from './hooks/useDocument';
 import { useDocumentLabels } from './hooks/useDocumentLabels';
+import { useFillHeight } from './hooks/useFillHeight';
 import { useOcrText } from './hooks/useOcrText';
+import { useReadingView } from './hooks/useReadingView';
 import { useRetryHistory } from './hooks/useRetryHistory';
+import { useSourceName } from './hooks/useSourceName';
 import { DocumentViewer } from './reading/DocumentViewer';
 import { OcrTextPanel } from './reading/OcrTextPanel';
 import { ReadingArea } from './reading/ReadingArea';
+import { ViewSwitch } from './reading/ViewSwitch';
 import { SharedLinksDialog } from './sharing/SharedLinksDialog';
 import { SidePanel, type SidePanelTab } from './SidePanel';
 import styles from './DocumentPage.module.css';
@@ -32,7 +37,12 @@ function useLibraryHref(query: string): string {
   return query ? `/documents?q=${encodeURIComponent(query)}` : '/documents';
 }
 
-/** /documents/:id: read one document next to its extracted text. */
+/** Tells the sidebar and anything else listing labels that their counts moved. */
+function announceLabelsChanged() {
+  window.dispatchEvent(new CustomEvent('readur:labels-changed'));
+}
+
+/** /documents/:id: read one document, its text, or both side by side. */
 export function DocumentPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
@@ -47,6 +57,11 @@ export function DocumentPage() {
   const { ocr, state: ocrLoad } = useOcrText(doc);
   const labels = useDocumentLabels(id);
   const retry = useRetryHistory(id, `${doc?.ocr_status ?? ''}:${awaitingRetry}`);
+  const sourceName = useSourceName(doc?.source_id);
+  const reading = useReadingView({
+    wantsText: query.trim() !== '',
+    noPreview: doc ? fileKind(doc.mime_type) === 'other' && Boolean(doc.has_ocr_text) : false,
+  });
 
   const [retrying, setRetrying] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -59,6 +74,11 @@ export function DocumentPage() {
   const [panelTab, setPanelTab] = useState<SidePanelTab>('comments');
   const [draftLabels, setDraftLabels] = useState<LabelData[] | null>(null);
   const [savingLabels, setSavingLabels] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsId = useId();
+  const headRef = useRef<HTMLDivElement>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
+  const fill = useFillHeight(areaRef, headRef, doc ? doc.id : null);
 
   useEffect(() => {
     if (id) acknowledge('document', id);
@@ -147,6 +167,7 @@ export function DocumentPage() {
     try {
       await labels.save(draftLabels);
       setDraftLabels(null);
+      announceLabelsChanged();
     } catch {
       toast.show({ title: t('document.toast.labelsFailed', "Couldn't save the labels"), tone: 'danger' });
     } finally {
@@ -154,67 +175,77 @@ export function DocumentPage() {
     }
   };
 
-  const details = (layout: 'wide' | 'tabs') => (
-    <DocumentDetails
-      document={doc}
-      ocr={ocr}
-      retry={retry}
-      onShowRetryHistory={() => setHistoryOpen(true)}
-      collapsible={layout === 'wide'}
-    />
-  );
-
   return (
     <div className={styles.page}>
-      <DocumentHeader
-        document={doc}
-        libraryHref={libraryHref}
-        isRetrying={retrying}
-        isDownloading={downloading}
-        isCommentsOpen={panelOpen && panelTab === 'comments'}
-        onDownload={download}
-        onShare={() => setShareOpen(true)}
-        onRetry={retryOcr}
-        onDelete={() => setDeleteOpen(true)}
-        onViewProcessed={() => setProcessedOpen(true)}
-        onToggleComments={() => {
-          setPanelTab('comments');
-          setPanelOpen((open) => !(open && panelTab === 'comments'));
-        }}
-      />
+      <div ref={headRef} className={styles.head}>
+        <DocumentHeader
+          document={doc}
+          ocr={ocr}
+          sourceName={sourceName}
+          libraryHref={libraryHref}
+          isRetrying={retrying}
+          isDownloading={downloading}
+          isCommentsOpen={panelOpen && panelTab === 'comments'}
+          onDownload={download}
+          onShare={() => setShareOpen(true)}
+          onRetry={retryOcr}
+          onDelete={() => setDeleteOpen(true)}
+          onViewProcessed={() => setProcessedOpen(true)}
+          onToggleComments={() => {
+            setPanelTab('comments');
+            setPanelOpen((open) => !(open && panelTab === 'comments'));
+          }}
+        />
 
-      <DocumentPass
-        document={doc}
-        ocr={ocr}
-        labels={labels.labels}
-        isEditingLabels={draftLabels !== null}
-        onEditLabels={() => setDraftLabels((d) => (d === null ? labels.labels : null))}
-      />
+        <DocumentToolbar
+          labels={labels.labels}
+          tags={doc.tags ?? []}
+          isEditingLabels={draftLabels !== null}
+          onEditLabels={() => setDraftLabels((d) => (d === null ? labels.labels : null))}
+          detailsId={detailsId}
+          isDetailsOpen={detailsOpen}
+          onToggleDetails={() => setDetailsOpen((open) => !open)}
+          viewSwitch={<ViewSwitch view={reading.view} canSplit={reading.canSplit} onChange={reading.setView} />}
+        />
 
-      {draftLabels !== null ? (
-        <section className={styles.labelEditor} aria-label={t('document.labels.editor', 'Edit labels')}>
-          <LabelSelector
-            selectedLabels={draftLabels}
-            availableLabels={labels.available}
-            onLabelsChange={setDraftLabels}
-            onCreateLabel={labels.create}
-            placeholder={t('document.labels.placeholder', 'Search or create labels…')}
-            size="small"
-            disabled={labels.isLoading || savingLabels}
+        {draftLabels !== null ? (
+          <section className={styles.labelEditor} aria-label={t('document.labels.editor', 'Edit labels')}>
+            <LabelSelector
+              selectedLabels={draftLabels}
+              availableLabels={labels.available}
+              onLabelsChange={setDraftLabels}
+              onCreateLabel={labels.create}
+              placeholder={t('document.labels.placeholder', 'Search or create labels…')}
+              size="small"
+              disabled={labels.isLoading || savingLabels}
+            />
+            <div className={styles.labelEditorActions}>
+              <Button variant="ghost" size="sm" isDisabled={savingLabels} onPress={() => setDraftLabels(null)}>
+                {t('document.labels.cancel', 'Cancel')}
+              </Button>
+              <Button variant="primary" size="sm" isPending={savingLabels} onPress={saveLabels}>
+                {t('document.labels.save', 'Save labels')}
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
+        {detailsOpen ? (
+          <DocumentDetails
+            id={detailsId}
+            document={doc}
+            ocr={ocr}
+            retry={retry}
+            onShowRetryHistory={() => setHistoryOpen(true)}
           />
-          <div className={styles.labelEditorActions}>
-            <Button variant="ghost" size="sm" isDisabled={savingLabels} onPress={() => setDraftLabels(null)}>
-              {t('document.labels.cancel', 'Cancel')}
-            </Button>
-            <Button variant="primary" size="sm" isPending={savingLabels} onPress={saveLabels}>
-              {t('document.labels.save', 'Save labels')}
-            </Button>
-          </div>
-        </section>
-      ) : null}
+        ) : null}
+      </div>
 
       <ReadingArea
-        defaultTab={query ? 'text' : 'preview'}
+        ref={areaRef}
+        view={reading.view}
+        height={fill.height}
+        pullUp={fill.pullUp}
         preview={<DocumentViewer documentId={doc.id} filename={doc.original_filename} mimeType={doc.mime_type} />}
         text={
           <OcrTextPanel
@@ -225,7 +256,6 @@ export function DocumentPage() {
             initialQuery={query}
           />
         }
-        details={details}
       />
 
       <SidePanel documentId={doc.id} isOpen={panelOpen} onOpenChange={setPanelOpen} tab={panelTab} onTabChange={setPanelTab} />

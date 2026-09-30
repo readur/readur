@@ -18,6 +18,12 @@ export interface DocumentViewerProps {
   load?: () => Promise<{ data: BlobPart }>;
 }
 
+/**
+ * Opens the browser's PDF viewer with its page-thumbnail sidebar closed and the page fitted to
+ * the frame's width, so the page itself gets the room.
+ */
+export const PDF_VIEW_PARAMS = '#navpanes=0&pagemode=none&view=FitH';
+
 type ViewState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; url: string; text?: string };
 
 /** Inline preview of the original file: PDF in a frame, images, and plain text. */
@@ -53,7 +59,7 @@ export function DocumentViewer({ documentId, filename, mimeType, load }: Documen
   if (view.status === 'loading') {
     return (
       <div className={styles.frame}>
-        <Skeleton height={480} label={t('document.viewer.loading', 'Loading preview')} />
+        <Skeleton height="100%" label={t('document.viewer.loading', 'Loading preview')} />
       </div>
     );
   }
@@ -66,7 +72,7 @@ export function DocumentViewer({ documentId, filename, mimeType, load }: Documen
   }
   if (kind === 'image') {
     return (
-      <div className={styles.frame}>
+      <div className={`${styles.frame} ${styles.imageFrame}`}>
         <img className={styles.image} src={view.url} alt={filename} />
       </div>
     );
@@ -74,7 +80,7 @@ export function DocumentViewer({ documentId, filename, mimeType, load }: Documen
   if (kind === 'pdf') {
     return (
       <div className={styles.frame}>
-        <iframe className={styles.pdf} src={view.url} title={filename} sandbox={previewSandbox(mimeType)} />
+        <iframe className={styles.pdf} src={`${view.url}${PDF_VIEW_PARAMS}`} title={filename} sandbox={previewSandbox(mimeType)} />
       </div>
     );
   }

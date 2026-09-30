@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,7 +41,7 @@ describe('shared document page', () => {
   it('shows a minimal header and a loading state', () => {
     m.sharedLinksPublicService.getMetadata.mockReturnValue(new Promise(() => {}));
     renderShared();
-    expect(screen.getByRole('banner')).toHaveTextContent('READUR');
+    expect(screen.getByRole('banner')).toHaveTextContent('Readur');
     // Wordmark only: no label above or beside it.
     expect(screen.getByRole('banner')).not.toHaveTextContent('Shared document');
     expect(screen.getByRole('status', { name: 'Loading shared document' })).toBeInTheDocument();
@@ -76,10 +76,21 @@ describe('shared document page', () => {
     renderShared();
     await screen.findByRole('heading', { level: 1, name });
     const facts = screen.getByRole('group', { name: 'Document summary' });
-    const terms = within(facts).getAllByRole('term').map((el) => el.textContent);
-    const values = within(facts).getAllByRole('definition').map((el) => el.textContent);
-    expect(values[terms.indexOf('Type')]).toBe(code);
+    expect(facts.firstElementChild).toHaveTextContent(code);
     expect(facts).not.toHaveTextContent(mime);
+  });
+
+  it('says when the link expires, or that it never does', async () => {
+    m.sharedLinksPublicService.getMetadata.mockResolvedValue({ data: { ...metadata, expires_at: '2030-01-02T10:00:00Z' } });
+    const first = renderShared();
+    await screen.findByRole('heading', { level: 1, name: 'contract.pdf' });
+    expect(screen.getByRole('group', { name: 'Document summary' })).toHaveTextContent(/Link expires .*2030/);
+    first.unmount();
+
+    m.sharedLinksPublicService.getMetadata.mockResolvedValue({ data: { ...metadata, expires_at: null } });
+    renderShared();
+    await screen.findByRole('heading', { level: 1, name: 'contract.pdf' });
+    expect(screen.getByRole('group', { name: 'Document summary' })).toHaveTextContent('Link never expires');
   });
 
   it('loads the preview only when asked, since it counts as a view', async () => {

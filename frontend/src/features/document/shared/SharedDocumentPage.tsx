@@ -2,11 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { sharedLinksPublicService, type SharedDocumentMetadata } from '../../../services/api';
-import { Button, EmptyState, Pass, PassCell, Skeleton, TextField } from '../../../ui';
+import { Button, EmptyState, Skeleton, TextField } from '../../../ui';
 import { Download, Lock, Visibility } from '../../../ui/icons';
 import { filenameFromDisposition, saveBlob } from '../download';
 import { typeCodeOf } from '../../../lib/fileType';
-import { apiErrorMessage, formatBytes, formatDateTime, httpStatus } from '../format';
+import { apiErrorMessage, formatBytes, httpStatus } from '../format';
+import { formatAdded } from '../meta';
 import { DocumentViewer } from '../reading/DocumentViewer';
 import styles from './SharedDocumentPage.module.css';
 
@@ -108,8 +109,8 @@ export function SharedDocumentPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <span className={styles.wordmark}>
-          <img src="/readur-64.png" alt="" width={20} height={20} />
-          READUR
+          <img src="/readur-64.png" alt="" width={24} height={24} />
+          Readur
         </span>
       </header>
 
@@ -173,17 +174,23 @@ export function SharedDocumentPage() {
 
         {state.status === 'ready' && meta && token ? (
           <div className={styles.ready}>
-            <h1 className={styles.title}>{meta.original_filename}</h1>
-            <Pass aria-label={t('document.pass.label', 'Document summary')}>
-              <PassCell label={t('document.shared.file', 'File')} span={2}>{meta.original_filename}</PassCell>
-              <PassCell label={t('document.pass.type', 'Type')} mono>{typeCodeOf(meta.mime_type, meta.original_filename)}</PassCell>
-              <PassCell label={t('document.pass.size', 'Size')} mono>{formatBytes(meta.file_size)}</PassCell>
-              {meta.expires_at !== undefined ? (
-                <PassCell label={t('document.shared.expires', 'Expires')} mono>
-                  {meta.expires_at ? formatDateTime(meta.expires_at, i18n.language) : t('document.share.never', 'Never')}
-                </PassCell>
-              ) : null}
-            </Pass>
+            <div className={styles.intro}>
+              <h1 className={styles.title}>{meta.original_filename}</h1>
+              <p className={styles.meta} role="group" aria-label={t('document.pass.label', 'Document summary')}>
+                <span className={styles.fact}>{typeCodeOf(meta.mime_type, meta.original_filename)}</span>
+                <span className={styles.fact}>{formatBytes(meta.file_size)}</span>
+                {meta.expires_at !== undefined ? (
+                  <span className={styles.fact}>
+                    {meta.expires_at
+                      ? t('document.shared.expiresOn', {
+                          date: formatAdded(meta.expires_at, i18n.language) ?? '',
+                          defaultValue: 'Link expires {{date}}',
+                        })
+                      : t('document.shared.noExpiry', 'Link never expires')}
+                  </span>
+                ) : null}
+              </p>
+            </div>
             {downloadError ? (
               <p className={styles.error} role="alert">
                 {downloadError}
@@ -200,12 +207,14 @@ export function SharedDocumentPage() {
               ) : null}
             </div>
             {showPreview ? (
-              <DocumentViewer
-                documentId={token}
-                filename={meta.original_filename}
-                mimeType={meta.mime_type}
-                load={() => sharedLinksPublicService.viewDocument(token, verified)}
-              />
+              <section className={styles.preview} aria-label={t('document.view.document', 'Document')}>
+                <DocumentViewer
+                  documentId={token}
+                  filename={meta.original_filename}
+                  mimeType={meta.mime_type}
+                  load={() => sharedLinksPublicService.viewDocument(token, verified)}
+                />
+              </section>
             ) : (
               <p className={styles.hint}>
                 {t('document.shared.previewHint', 'Opening the preview counts as a view of this link.')}

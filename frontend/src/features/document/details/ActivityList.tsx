@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { Document, OcrResponse } from '../../../services/api';
-import { StatusMark, type StatusState } from '../../../ui';
+import type { StatusState } from '../../../ui';
+import { Warning } from '../../../ui/icons';
 import { formatDateTime, formatNumber } from '../format';
 import styles from './Details.module.css';
 
@@ -71,12 +72,18 @@ export function ActivityList({
     <ol className={styles.activity}>
       {events.map((e) => (
         <li key={e.id} className={styles.event}>
-          <span className={styles.eventMark}>{e.state ? <StatusMark state={e.state} size="sm" /> : null}</span>
           <div className={styles.eventText}>
-            <span className={styles.eventTitle}>{e.title}</span>
+            <span className={styles.eventTitle} data-state={e.state}>
+              {e.state === 'failed' ? (
+                <span aria-hidden="true" className={styles.eventGlyph}>
+                  <Warning fontSize="inherit" />
+                </span>
+              ) : null}
+              {e.title}
+            </span>
             {e.description ? <span className={styles.eventDescription}>{e.description}</span> : null}
           </div>
-          <time className={styles.mono} dateTime={e.at}>
+          <time className={styles.eventTime} dateTime={e.at}>
             {formatDateTime(e.at, i18n.language)}
           </time>
         </li>

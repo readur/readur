@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--ground);
+  background: var(--bg);
   color: var(--fg);
   font-family: var(--font-ui);
 }
@@ -22,11 +22,9 @@
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-size: var(--fs-lg);
   font-weight: 700;
-  letter-spacing: var(--tracking-label);
+  letter-spacing: -0.01em;
 }
 
 .main {
@@ -51,32 +49,52 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
 }
 
 .ready {
-  max-width: 960px;
+  max-width: 1040px;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
 }
 
 .lock {
   font-size: var(--fs-2xl);
-  color: var(--fg-meta);
+  color: var(--accent);
 }
 
 .title {
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-2xl);
-  font-weight: 700;
-  line-height: var(--lh-display);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+}
+
+.fact + .fact::before {
+  content: '·';
+  padding: 0 var(--s-2);
+  color: var(--fg-meta);
 }
 
 .hint {
   margin: 0;
-  font-size: var(--fs-sm);
+  font-size: 13px;
   color: var(--fg-2);
 }
 
@@ -86,12 +104,21 @@
   gap: var(--s-2);
 }
 
+.preview {
+  height: min(78vh, 1100px);
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
 .error {
   margin: 0;
   padding: var(--s-2) var(--s-3);
   border: 1px solid var(--danger);
-  border-radius: var(--radius);
-  background: var(--danger-bg);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
@@ -102,5 +129,14 @@
 
   .main {
     padding: var(--s-5) var(--s-4);
+  }
+
+  .title {
+    font-size: 22px;
+  }
+
+  .preview {
+    height: 70vh;
+    min-height: 360px;
   }
 }

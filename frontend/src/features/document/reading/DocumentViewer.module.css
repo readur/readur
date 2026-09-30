@@ -1,61 +1,69 @@
+/*
+ * The viewer fills whatever box it is given: the reading pane on the document page, a fixed
+ * height on the shared page. The file sits on a sunken surface so the page reads as paper.
+ */
 .frame {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 480px;
+  width: 100%;
   height: 100%;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  min-height: 0;
+  background: var(--surface-sunken);
   overflow: hidden;
+}
+
+.imageFrame {
+  padding: var(--s-4);
 }
 
 .image {
   display: block;
-  max-width: 100%;
-  max-height: calc(100vh - 220px);
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
 .pdf {
   display: block;
   width: 100%;
-  height: calc(100vh - 220px);
-  min-height: 480px;
+  height: 100%;
   border: 0;
-  background: var(--surface);
+  background: var(--surface-sunken);
 }
 
 .text {
   align-self: stretch;
   width: 100%;
-  max-height: calc(100vh - 220px);
+  height: 100%;
   margin: 0;
-  padding: var(--s-4);
+  padding: var(--s-5);
   overflow: auto;
   background: var(--surface);
   font-family: var(--font-data);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-body);
+  font-size: 13px;
+  line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--fg);
 }
 
 .text:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
 .message {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: var(--s-2);
+  height: 100%;
   padding: var(--s-6) var(--s-5);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  background: var(--surface-sunken);
   color: var(--fg-2);
+  text-align: center;
 }
 
 .message p {
@@ -63,17 +71,7 @@
 }
 
 .messageTitle {
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--fg);
-}
-
-@media (max-width: 719px) {
-  .frame,
-  .pdf {
-    min-height: 360px;
-  }
-
-  .pdf {
-    height: 70vh;
-  }
 }

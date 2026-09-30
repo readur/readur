@@ -46,12 +46,19 @@ export const makeOcr = (overrides: Partial<OcrResponse> = {}): OcrResponse => ({
 
 export const testUser = { id: 'user-1', username: 'ada', email: 'ada@example.com', role: 'user' as UserRole };
 
-/** Media queries: wide desktop layout (two columns) unless `narrow` is set. */
-export function setViewport(wide = true) {
+/**
+ * Media queries for the reading view. `true` / 'wide' is a desktop (side by side by default),
+ * 'mid' fits two panes but defaults to Document, `false` / 'narrow' is a phone.
+ */
+export function setViewport(size: boolean | 'wide' | 'mid' | 'narrow' = true) {
+  const s = size === true ? 'wide' : size === false ? 'narrow' : size;
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     configurable: true,
-    value: createResponsiveMatchMediaMock({ '(min-width: 1100px)': wide }),
+    value: createResponsiveMatchMediaMock({
+      '(min-width: 1200px)': s === 'wide',
+      '(min-width: 960px)': s !== 'narrow',
+    }),
   });
 }
 

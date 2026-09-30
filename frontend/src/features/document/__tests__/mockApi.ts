@@ -35,6 +35,9 @@ export function createApiMock() {
       listByDocument: vi.fn(),
       revoke: vi.fn(),
     },
+    sourcesService: {
+      list: vi.fn(),
+    },
     sharedLinksPublicService: {
       getMetadata: vi.fn(),
       verifyPassword: vi.fn(),
@@ -58,6 +61,8 @@ export function primeApi(m: ApiMock) {
   });
   m.commentsService.list.mockResolvedValue({ data: [] });
   m.sharedLinksService.listByDocument.mockResolvedValue({ data: [] });
+  m.sourcesService.list.mockResolvedValue({ data: [] });
+  window.localStorage.clear();
 }
 
 /** An axios-like rejection with an HTTP status. */

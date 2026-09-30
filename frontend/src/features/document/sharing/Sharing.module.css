@@ -63,7 +63,7 @@
   padding: var(--s-2) var(--s-3);
   border: 1px solid var(--danger);
   border-radius: var(--radius);
-  background: var(--danger-bg);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
@@ -75,13 +75,9 @@
 
 .sectionTitle {
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-md);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--fg-meta);
+  color: var(--fg);
 }
 
 .links {
@@ -91,6 +87,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 
 .link {
@@ -118,17 +115,18 @@
 }
 
 .status {
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-xs);
+  flex: none;
+  padding: 1px var(--s-2);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-2);
+  background: var(--surface-2);
+  border-radius: 999px;
 }
 
 .status[data-status='active'] {
   color: var(--ok);
+  background: var(--ok-soft);
 }
 
 .linkMeta {
@@ -173,7 +171,7 @@
   padding: var(--s-2);
   border: 1px solid var(--danger);
   border-radius: var(--radius);
-  background: var(--danger-bg);
+  background: var(--danger-soft);
   color: var(--fg);
   font-size: var(--fs-sm);
 }

@@ -94,16 +94,89 @@ describe('extracted text: word count and stats', () => {
     expect(await screen.findByText('Text copied')).toBeInTheDocument();
   });
 
-  it('switches between readable and monospace text', async () => {
+  it('switches to monospace from the display options and remembers it', async () => {
     const user = userEvent.setup();
     load();
     renderPage();
     await title();
     await textBody();
-    const toggle = screen.getByRole('switch', { name: 'Monospace' });
-    expect(toggle).not.toBeChecked();
-    await user.click(toggle);
-    expect(toggle).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Text display options' }));
+    const option = await screen.findByRole('menuitemcheckbox', { name: 'Monospace' });
+    expect(option).toHaveAttribute('aria-checked', 'false');
+    await user.click(option);
+    expect(option).toHaveAttribute('aria-checked', 'true');
+    expect(window.localStorage.getItem('readur.document.mono')).toBe('1');
+    await user.click(option);
+    expect(option).toHaveAttribute('aria-checked', 'false');
+    expect(window.localStorage.getItem('readur.document.mono')).toBe('0');
+  });
+});
+
+describe('extracted text: reading layout', () => {
+  const raw = 'Report\n\n\n\nLine one\nLine two\n\n   \n\nLast part\n';
+
+  it('turns runs of blank lines into single paragraph gaps and keeps line breaks', async () => {
+    load(makeDocument(), makeOcr({ ocr_text: raw }));
+    renderPage();
+    await title();
+    const body = await textBody();
+    const paragraphs = Array.from(body.querySelectorAll('p')).map((p) => p.textContent);
+    expect(paragraphs).toEqual(['Report', 'Line one\nLine two', 'Last part']);
+  });
+
+  it('still copies the raw text, blank lines and all', async () => {
+    const user = userEvent.setup();
+    const writeText = stubClipboard();
+    load(makeDocument(), makeOcr({ ocr_text: raw }));
+    renderPage();
+    await title();
+    await textBody();
+    await user.click(screen.getByRole('button', { name: 'Copy all text' }));
+    expect(writeText).toHaveBeenCalledWith(raw);
+  });
+
+  it('reports a failed copy', async () => {
+    const user = userEvent.setup();
+    const writeText = stubClipboard();
+    writeText.mockRejectedValue(new Error('denied'));
+    load();
+    renderPage();
+    await title();
+    await textBody();
+    await user.click(screen.getByRole('button', { name: 'Copy all text' }));
+    expect(await screen.findByText("Couldn't copy the text")).toBeInTheDocument();
+  });
+
+  it('explains a failed OCR in plain words, with the raw message behind a disclosure', async () => {
+    load(makeDocument({ ocr_status: 'failed', has_ocr_text: false }));
+    m.documentService.getDocumentRetryHistory.mockResolvedValue({
+      data: {
+        document_id: 'doc-1',
+        total_retries: 1,
+        retry_history: [
+          {
+            id: 'r1',
+            retry_reason: 'manual',
+            priority: 10,
+            created_at: '2025-06-16T11:00:00Z',
+            previous_error: 'Tesseract timed out\nstage: ocr\npath: /app/uploads/x.pdf',
+          },
+        ],
+      },
+    });
+    renderPage();
+    await title();
+    const section = textSection();
+    expect(await within(section).findByText('OCR took too long and was stopped')).toBeInTheDocument();
+    expect(within(section).getByText('Show the full message')).toBeInTheDocument();
+  });
+
+  it('says so when the text could not be loaded', async () => {
+    load();
+    m.documentService.getOcrText.mockRejectedValue(new Error('down'));
+    renderPage();
+    await title();
+    expect(await within(textSection()).findByText("Couldn't load the extracted text.")).toBeInTheDocument();
   });
 });
 
@@ -126,6 +199,38 @@ describe('extracted text: find', () => {
 
     await user.keyboard('{Enter}');
     expect(screen.getByText('1 of 2')).toBeInTheDocument();
+
+    await user.keyboard('{Shift>}{Enter}{/Shift}');
+    expect(screen.getByText('2 of 2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Previous match' }));
+    expect(screen.getByText('1 of 2')).toBeInTheDocument();
+  });
+
+  it('clears the find field with its clear button', async () => {
+    const user = userEvent.setup();
+    load();
+    renderPage();
+    await title();
+    const body = await textBody();
+    const field = screen.getByRole('searchbox', { name: 'Find in text' });
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+    await user.type(field, 'invoice');
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(field).toHaveValue('');
+    expect(body.querySelector('mark')).toBeNull();
+  });
+
+  it('matches the words of a search one by one when the phrase is not in the text', async () => {
+    load(makeDocument(), makeOcr({ ocr_text: 'Injury to the left shoulder. The shoulder healed.' }));
+    renderPage({ path: '/documents/doc-1?q=shoulder injury' });
+    await title();
+    const body = await textBody();
+    expect(Array.from(body.querySelectorAll('mark')).map((mk) => mk.textContent)).toEqual([
+      'Injury',
+      'shoulder',
+      'shoulder',
+    ]);
+    expect(screen.getByText('1 of 3')).toBeInTheDocument();
   });
 
   it('says when nothing matches', async () => {
