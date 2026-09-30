@@ -17,7 +17,7 @@ This document provides a comprehensive reference for all configuration options a
 | `SERVER_ADDRESS` | String | `0.0.0.0:8080` | Server bind address (host:port) | No |
 | `SERVER_HOST` | String | `0.0.0.0` | Server host (used if SERVER_ADDRESS not set) | No |
 | `SERVER_PORT` | String | `8080` | Server port (used if SERVER_ADDRESS not set) | No |
-| `JWT_SECRET` | String | Auto-generated | Secret key for JWT tokens (min 32 chars) | Recommended |
+| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database (`readur rotate-jwt-secret` replaces it). When set, it takes precedence, must be at least 32 bytes and must not be a published example value. Generate with `openssl rand -hex 32` | No |
 | `SESSION_SECRET` | String | Auto-generated | Secret for session encryption | Recommended |
 | `UPLOAD_PATH` | String | `./uploads` | Directory for file uploads | No |
 | `ALLOWED_FILE_TYPES` | String | `pdf,txt,doc,docx,png,jpg,jpeg` | Comma-separated allowed extensions | No |
@@ -37,6 +37,36 @@ This document provides a comprehensive reference for all configuration options a
 | `MAX_LOGIN_ATTEMPTS` | Integer | `5` | Maximum failed login attempts | No |
 | `LOCKOUT_DURATION` | Integer | `900` | Account lockout duration (seconds) | No |
 
+### Security and Access Control
+
+These settings are read at startup. Invalid values (for example a malformed CIDR, an out-of-range `JWT_TTL_HOURS`, an invalid CORS origin, or a Boolean other than `true`/`false`/`1`/`0`/`yes`/`no`/`on`/`off`) stop the server with an error.
+
+| Variable | Type | Default | Description | Required |
+|----------|------|---------|-------------|----------|
+| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database, shared by every instance using that database; run `readur rotate-jwt-secret` to replace it (restart the servers afterwards; all sessions end). When set, it takes precedence, must be at least 32 bytes and must not be a published example value (such as `your-secret-key`, `change-me` or `secret`). Generate with `openssl rand -hex 32` | No |
+| `READUR_INSECURE_DEV_MODE` | Boolean | `false` | Allows the server to start with a short or example `JWT_SECRET`. For throwaway local development and CI only; never set in production | No |
+| `JWT_TTL_HOURS` | Integer | `12` | Lifetime of issued login tokens, in hours (1-720) | No |
+| `ADMIN_USERNAME` | String | `admin` | Username of the initial admin account created on first startup | No |
+| `ADMIN_EMAIL` | String | `<username>@localhost` | Email of the initial admin account | No |
+| `ADMIN_PASSWORD` | String | - | Password of the initial admin account (min 8 chars). If unset, a random 24-character password is generated and written to a file (see `ADMIN_PASSWORD_FILE`); it is not written to the logs | No |
+| `ADMIN_PASSWORD_FILE` | String | `<UPLOAD_PATH>/.readur/initial-admin-password` | Where a generated initial admin password is written (mode `0600`). In the Docker image this is `/app/uploads/.readur/initial-admin-password`. An existing file is never overwritten; if one is present when the admin account has to be created, startup stops and asks for it to be removed. The startup log shows the path | No |
+| `ALLOW_REGISTRATION` | Boolean | `false` | Enables self-registration. Self-registered accounts are created disabled and must be approved (enabled) by an administrator in user management before they can sign in | No |
+| `LOCAL_SOURCE_ALLOWED_PATHS` | String | - | Comma-separated directories that local folder sources may use. When set, every local folder source (including those created by admins) must be inside one of these directories; each entry must exist at startup. When unset, only admins can create local folder sources | No |
+| `TRUSTED_PROXIES` | String | loopback and private networks | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` header is trusted when determining the client IP (used for rate limiting). When unset, `127.0.0.0/8`, `::1/128`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `fc00::/7` are trusted; `none` or an empty value trusts no proxy | No |
+| `CORS_ALLOWED_ORIGINS` | String | - (none) | Comma-separated origins allowed to make cross-origin requests, each as `scheme://host[:port]` (a trailing slash is ignored). The server refuses to start if an entry is not a valid http(s) origin. The bundled frontend is same-origin and needs no entry | No |
+| `METRICS_TOKEN` | String | - | Bearer token (min 16 chars) for Prometheus scrapes of `/metrics`. Without it, `/metrics` requires an admin session or admin API key | No |
+| `PUBLIC_URL` | String | - | Public base URL of the Readur instance (e.g. `https://readur.example.com`). Used to build the post-login OIDC redirect and shared-link URLs; request headers are not used for this. When unset, OIDC falls back to the origin of `OIDC_REDIRECT_URI` and shared links fall back to `http://<SERVER_ADDRESS>` | Recommended behind a proxy |
+| `OIDC_LINK_EXISTING_BY_EMAIL` | Boolean | `false` | Link an OIDC login to an existing local account with the same email address. Only applies when the identity provider reports `email_verified: true` | No |
+
+Related API behavior:
+
+- `POST /api/auth/logout` revokes all sessions of the current user.
+- `POST /api/auth/password` lets a signed-in user change their own password.
+- `/api/ocr/health` requires authentication; `POST /api/ocr/perform` has been removed.
+- Source API responses do not include stored WebDAV passwords or S3 secret keys. The source config instead carries `has_password` / `has_secret_access_key` flags; omit the field or send an empty value on update to keep the stored secret. The settings response likewise has `has_webdav_password` instead of `webdav_password`.
+- Document cleanup endpoints (`DELETE /api/documents/cleanup/low/confidence`, `DELETE /api/documents/cleanup/failed/ocr` and the cleanup preview) act on the caller's own documents, including for admins. An admin can pass `?all_users=true` to act on all users' documents.
+- OIDC login completes at `/auth/callback#code=...`; the frontend exchanges the one-time code at `POST /api/auth/oidc/exchange`. The token is not placed in the URL query.
+
 ### OIDC/SSO Configuration
 
 | Variable | Type | Default | Description | Required |
@@ -50,6 +80,8 @@ This document provides a comprehensive reference for all configuration options a
 | `OIDC_USER_INFO_ENDPOINT` | String | Auto-discovered | User info endpoint | No |
 | `OIDC_TOKEN_ENDPOINT` | String | Auto-discovered | Token endpoint | No |
 | `OIDC_AUTH_ENDPOINT` | String | Auto-discovered | Authorization endpoint | No |
+| `OIDC_LINK_EXISTING_BY_EMAIL` | Boolean | `false` | Link an OIDC login to an existing local account with the same email, only when the IdP reports `email_verified` | No |
+| `PUBLIC_URL` | String | - | Public base URL used to build the post-login OIDC redirect and shared links. When unset, OIDC uses the origin of `OIDC_REDIRECT_URI` | Recommended |
 
 ### Storage Configuration
 
@@ -73,7 +105,7 @@ This document provides a comprehensive reference for all configuration options a
 | `S3_SECRET_ACCESS_KEY` | String | - | AWS Secret Access Key | If S3 enabled |
 | `S3_REGION` | String | `us-east-1` | AWS region | No |
 | `S3_ENDPOINT_URL` | String | - | Custom S3 endpoint for S3-compatible services (MinIO, RustFS, etc.). Alias: `S3_ENDPOINT` | No |
-| `S3_FORCE_PATH_STYLE` | Boolean | auto | `true` forces path-style addressing, `false` forces virtual-hosted. Unset = auto-detect (path-style probed first when a custom endpoint is set; without a custom endpoint, the AWS default of virtual-hosted style is used and no probing occurs). Alias: `S3_PATH_STYLE` | No |
+| `S3_FORCE_PATH_STYLE` | Boolean | auto | `true` forces path-style addressing, `false` forces virtual-hosted. Unset = path-style when a custom endpoint is set, otherwise the AWS default of virtual-hosted style. Alias: `S3_PATH_STYLE` | No |
 | `S3_PREFIX` | String | - | S3 key prefix | No |
 | `S3_USE_SSL` | Boolean | `true` | Use HTTPS for S3 | No |
 | `S3_VERIFY_SSL` | Boolean | `true` | Verify SSL certificates | No |
@@ -173,6 +205,7 @@ This document provides a comprehensive reference for all configuration options a
 | `HEALTH_CHECK_PATH` | String | `/health` | Health check endpoint | No |
 | `READY_CHECK_PATH` | String | `/ready` | Readiness check endpoint | No |
 | `METRICS_PATH` | String | `/metrics` | Metrics endpoint | No |
+| `METRICS_TOKEN` | String | - | Bearer token (min 16 chars) accepted on `/metrics` for Prometheus scrapes. Without it, `/metrics` requires an admin session or admin API key | No |
 | `TRACING_ENABLED` | Boolean | `false` | Enable distributed tracing | No |
 | `JAEGER_ENDPOINT` | String | - | Jaeger collector endpoint | If tracing enabled |
 | `TRACE_SAMPLE_RATE` | Float | `0.1` | Trace sampling rate (0-1) | No |
@@ -182,12 +215,12 @@ This document provides a comprehensive reference for all configuration options a
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
 | `CORS_ENABLED` | Boolean | `true` | Enable CORS | No |
-| `CORS_ALLOWED_ORIGINS` | String | `*` | Allowed CORS origins | No |
+| `CORS_ALLOWED_ORIGINS` | String | - (none) | Comma-separated origins (`scheme://host[:port]`) allowed to make cross-origin requests; invalid entries stop startup. Not needed for the bundled frontend, which is served from the same origin | No |
 | `CORS_ALLOWED_METHODS` | String | `GET,POST,PUT,DELETE,OPTIONS` | Allowed HTTP methods | No |
 | `CORS_ALLOWED_HEADERS` | String | `*` | Allowed headers | No |
 | `CORS_MAX_AGE` | Integer | `3600` | CORS preflight cache (seconds) | No |
 | `PROXY_COUNT` | Integer | `0` | Number of reverse proxies | No |
-| `TRUSTED_PROXIES` | String | - | Comma-separated trusted proxy IPs | No |
+| `TRUSTED_PROXIES` | String | loopback and private networks | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` header is used to determine the client IP (for example, for rate limiting). When unset, loopback and private networks are trusted; `none` or an empty value trusts no proxy | No |
 | `WEBSOCKET_ENABLED` | Boolean | `true` | Enable WebSocket support | No |
 | `WEBSOCKET_MAX_CONNECTIONS` | Integer | `1000` | Maximum WebSocket connections | No |
 
@@ -310,9 +343,26 @@ metadata:
 type: Opaque
 stringData:
   DATABASE_URL: "postgresql://readur:password@postgres:5432/readur"
-  JWT_SECRET: "your-secure-random-secret-min-32-chars"
+  JWT_SECRET: "<output of: openssl rand -hex 32>"
   S3_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
   S3_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+```
+
+### Helm Chart Values
+
+The Helm chart (`charts/readur`) manages the initial `ADMIN_PASSWORD` in a Secret named `<release>-auth`. When no value is given, it is generated randomly on install and kept on upgrade. The Secret has `helm.sh/resource-policy: keep`, so it also remains after `helm uninstall`. `JWT_SECRET` is optional: set `auth.jwtSecret` (or include it in `auth.existingSecret`) to manage it yourself; otherwise Readur keeps a generated key in its database. A `JWT_SECRET` already stored in the Secret by an earlier chart version is kept.
+
+| Value | Default | Description |
+|-------|---------|-------------|
+| `auth.existingSecret` | `""` | Name of an existing Secret to use instead. It must contain `JWT_SECRET` (at least 32 bytes) and may contain `ADMIN_PASSWORD` |
+| `auth.jwtSecret` | `""` | Explicit JWT secret; generated (64 characters) when empty |
+| `auth.adminPassword` | `""` | Explicit initial admin password; generated when empty |
+
+**GitOps / `helm template`:** keeping generated values across upgrades relies on Helm's `lookup` function, which only works when Helm talks to the cluster (`helm install` / `helm upgrade`). Renderers that do not, such as `helm template` and Argo CD, cannot see the existing Secret and would generate new random values on every render, signing out all users and changing the admin password. With these tools, set `auth.existingSecret` to a Secret you manage (for example with Sealed Secrets or External Secrets), or set both `auth.jwtSecret` and `auth.adminPassword` explicitly.
+
+```bash
+# Read the initial admin password
+kubectl get secret <release>-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
 ```
 
 ## Configuration Precedence

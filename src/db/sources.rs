@@ -290,6 +290,7 @@ impl Database {
                validation_status, last_validation_at, validation_score, validation_issues
                FROM sources 
                WHERE enabled = true AND status != 'syncing'
+                 AND user_id IN (SELECT id FROM users WHERE is_active)
                ORDER BY last_sync_at ASC NULLS FIRST"#
         )
         .fetch_all(&self.pool)

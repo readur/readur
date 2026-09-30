@@ -21,7 +21,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 use chrono;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{LoginRequest, LoginResponse, UserRole};
 use readur::routes::documents::types::{DocumentUploadResponse, PaginatedDocumentsResponse};
 
 fn get_base_url() -> String {
@@ -140,25 +140,12 @@ impl LoadTestClient {
             .as_nanos();
         let username = format!("load_test_user_{}_{}_{}_{}_{}", user_index, test_id, nanos, Uuid::new_v4().simple(), chrono::Utc::now().timestamp_millis());
         let email = format!("load_test_{}_{}@{}.example.com", user_index, test_id, nanos);
-        let password = "loadtestpassword123";
+        let password = &readur::test_utils::test_password();
         
-        // Register user
-        let user_data = CreateUser {
-            username: username.clone(),
-            email: email.clone(),
-            password: password.to_string(),
-            role: Some(UserRole::User),
-        };
-        
-        let register_response = self.client
-            .post(&format!("{}/api/auth/register", get_base_url()))
-            .json(&user_data)
-            .send()
-            .await?;
-        
-        if !register_response.status().is_success() {
-            return Err(format!("Registration failed: {}", register_response.text().await?).into());
-        }
+        // Create the account in the server's database
+        readur::test_utils::create_live_server_user(&username, &email, password, UserRole::User)
+            .await
+            .map_err(|e| format!("Registration failed: {}", e))?;
         
         // Login to get token
         let login_data = LoginRequest {

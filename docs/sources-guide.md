@@ -101,6 +101,17 @@ Batch processing scenarios benefit from local sources when you need to process l
 
 Setting up a local folder source requires a descriptive name and the absolute paths to directories you want to monitor. The paths must be accessible from the Readur server and should use complete filesystem paths rather than relative references.
 
+Which directories may be used is controlled by the `LOCAL_SOURCE_ALLOWED_PATHS` environment variable:
+
+- **Unset (default)**: only administrators can create local folder sources.
+- **Set** to a comma-separated list of directories (for example `LOCAL_SOURCE_ALLOWED_PATHS=/mnt/documents,/srv/scans`): any user may create local folder sources, but every watch folder of every local folder source, including those created by admins, must be inside one of the listed directories. Each listed directory must exist when the server starts.
+
+Paths are resolved (including symbolic links) before the check. The same check runs each time a local folder source syncs, so an existing source whose folders fall outside the allowed directories stops syncing until its configuration is updated.
+
+```bash
+LOCAL_SOURCE_ALLOWED_PATHS=/mnt/documents,/srv/scans
+```
+
 You can filter monitoring to specific file types using file extension lists, which helps avoid processing irrelevant files in mixed-use directories. Enable automatic sync with appropriate intervals based on how frequently documents arrive - frequent arrivals might warrant 5-minute intervals, while archive monitoring might only need hourly checks.
 
 The recursive option includes subdirectories in monitoring, which is useful for hierarchical document structures. Use the symlink following option cautiously, as it can lead to infinite loops if symbolic links create circular references in your filesystem.
@@ -468,6 +479,9 @@ Sources are continuously monitored and assigned health scores (0-100):
    - Test with curl: `curl -u username:password https://server.com/webdav/`
 
 #### Local Folder Issues
+
+**Symptom**: Source creation is rejected because of the path
+**Solutions**: If `LOCAL_SOURCE_ALLOWED_PATHS` is set, make sure every watch folder is inside one of the listed directories. If it is unset, only administrators can create local folder sources.
 
 **Symptom**: "Permission denied" or "Directory not found"
 **Solutions**:

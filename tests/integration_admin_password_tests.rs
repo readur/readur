@@ -2,17 +2,49 @@ use anyhow::Result;
 use readur::test_utils::{TestContext, TestAuthHelper};
 use readur::{seed, commands, models::{CreateUser, UserRole}};
 
+fn clear_seed_env() {
+    for var in ["ADMIN_PASSWORD", "ADMIN_USERNAME", "ADMIN_EMAIL", "ADMIN_PASSWORD_FILE"] {
+        std::env::remove_var(var);
+    }
+}
+
+/// Upload path inside a fresh temporary directory, so a generated password
+/// file lands somewhere disposable.
+fn seed_upload_path() -> String {
+    let dir = tempfile::tempdir().expect("tempdir").keep();
+    dir.join("uploads").to_string_lossy().into_owned()
+}
+
 /// Test that admin user is created with auto-generated password on first run
 #[tokio::test]
 async fn test_admin_seed_creates_user_with_auto_password() {
     let ctx = TestContext::new().await;
+    let data_dir = tempfile::tempdir().expect("tempdir");
+    let upload_path = data_dir.path().join("uploads");
     let result: Result<()> = async {
         // Clear any env vars to test auto-generation
-        std::env::remove_var("ADMIN_PASSWORD");
-        std::env::remove_var("ADMIN_USERNAME");
+        clear_seed_env();
 
         // Run seed
-        seed::seed_admin_user(&ctx.state.db).await?;
+        seed::seed_admin_user(&ctx.state.db, upload_path.to_str().unwrap()).await?;
+
+        // The generated password is written inside the upload directory,
+        // readable only by the owner.
+        let password_file = upload_path
+            .join(seed::INITIAL_ADMIN_PASSWORD_DIR)
+            .join(seed::INITIAL_ADMIN_PASSWORD_FILE);
+        assert_eq!(password_file, seed::initial_admin_password_path(upload_path.to_str().unwrap()));
+        let password = std::fs::read_to_string(&password_file)?.trim().to_string();
+        assert_eq!(password.len(), 24, "Generated password should be written to the file");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&password_file)?.permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "Password file should only be readable by its owner");
+        }
+        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let token = auth_helper.login_user("admin", &password).await;
+        assert!(!token.is_empty(), "Should be able to login with the generated password");
 
         // Verify admin user exists
         let admin = ctx.state.db.get_user_by_username("admin").await?
@@ -30,11 +62,71 @@ async fn test_admin_seed_creates_user_with_auto_password() {
         );
 
         // Verify email format
-        assert_eq!(admin.email, "admin@readur.com", "Email should use default format");
+        assert_eq!(admin.email, "admin@localhost", "Email should use default format");
 
         Ok(())
     }.await;
 
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    result.unwrap();
+}
+
+/// An existing password file is never overwritten; seeding fails instead.
+#[tokio::test]
+async fn test_admin_seed_does_not_overwrite_existing_password_file() {
+    let ctx = TestContext::new().await;
+    let data_dir = tempfile::tempdir().expect("tempdir");
+    let upload_path = data_dir.path().join("uploads");
+    let result: Result<()> = async {
+        clear_seed_env();
+        let password_file = seed::initial_admin_password_path(upload_path.to_str().unwrap());
+        std::fs::create_dir_all(password_file.parent().unwrap())?;
+        std::fs::write(&password_file, "previous-contents\n")?;
+
+        let outcome = seed::seed_admin_user(&ctx.state.db, upload_path.to_str().unwrap()).await;
+        assert!(outcome.is_err(), "seeding must not replace an existing password file");
+        assert_eq!(std::fs::read_to_string(&password_file)?, "previous-contents\n");
+        assert!(ctx.state.db.get_user_by_username("admin").await?.is_none());
+
+        #[cfg(unix)]
+        {
+            // A symlink at the path is not followed either.
+            let target = data_dir.path().join("elsewhere");
+            std::fs::remove_file(&password_file)?;
+            std::os::unix::fs::symlink(&target, &password_file)?;
+            assert!(seed::seed_admin_user(&ctx.state.db, upload_path.to_str().unwrap()).await.is_err());
+            assert!(!target.exists(), "the symlink target must not be created");
+        }
+        Ok(())
+    }.await;
+
+    clear_seed_env();
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    result.unwrap();
+}
+
+/// Test that ADMIN_EMAIL overrides the default admin email
+#[tokio::test]
+async fn test_admin_seed_uses_admin_email() {
+    let ctx = TestContext::new().await;
+    let result: Result<()> = async {
+        clear_seed_env();
+        std::env::set_var("ADMIN_PASSWORD", "emailtest123");
+        std::env::set_var("ADMIN_EMAIL", "ops@example.org");
+
+        seed::seed_admin_user(&ctx.state.db, &seed_upload_path()).await?;
+
+        let admin = ctx.state.db.get_user_by_username("admin").await?
+            .expect("Admin user should exist");
+        assert_eq!(admin.email, "ops@example.org");
+        Ok(())
+    }.await;
+
+    clear_seed_env();
     if let Err(e) = ctx.cleanup_and_close().await {
         eprintln!("Warning: Test cleanup failed: {}", e);
     }
@@ -51,7 +143,7 @@ async fn test_admin_seed_uses_env_password() {
         std::env::remove_var("ADMIN_USERNAME");
 
         // Run seed
-        seed::seed_admin_user(&ctx.state.db).await?;
+        seed::seed_admin_user(&ctx.state.db, &seed_upload_path()).await?;
 
         // Verify admin user exists
         let admin = ctx.state.db.get_user_by_username("admin").await?
@@ -84,12 +176,12 @@ async fn test_admin_seed_does_not_duplicate_user() {
         std::env::remove_var("ADMIN_USERNAME");
 
         // Run seed first time
-        seed::seed_admin_user(&ctx.state.db).await?;
+        seed::seed_admin_user(&ctx.state.db, &seed_upload_path()).await?;
         let first_admin = ctx.state.db.get_user_by_username("admin").await?
             .expect("Admin should exist after first seed");
 
         // Run seed second time
-        seed::seed_admin_user(&ctx.state.db).await?;
+        seed::seed_admin_user(&ctx.state.db, &seed_upload_path()).await?;
         let second_admin = ctx.state.db.get_user_by_username("admin").await?
             .expect("Admin should still exist after second seed");
 
@@ -124,7 +216,7 @@ async fn test_admin_seed_allows_login() {
         std::env::remove_var("ADMIN_USERNAME");
 
         // Run seed
-        seed::seed_admin_user(&ctx.state.db).await?;
+        seed::seed_admin_user(&ctx.state.db, &seed_upload_path()).await?;
 
         // Attempt login
         let auth_helper = TestAuthHelper::new(ctx.app.clone());

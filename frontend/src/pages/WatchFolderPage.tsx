@@ -263,7 +263,7 @@ const WatchFolderPage: React.FC = () => {
             <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
               <PersonIcon color="primary" />
               {t('watchFolder.personalWatchDirectory')}
-              {user.role === 'Admin' && (
+              {user.role === 'admin' && (
                 <Chip
                   icon={<AdminIcon />}
                   label={t('watchFolder.admin')}
@@ -390,7 +390,7 @@ const WatchFolderPage: React.FC = () => {
           <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <FolderIcon color="primary" />
             {t('watchFolder.globalWatchFolderConfiguration')}
-            {user?.role === 'Admin' && (
+            {user?.role === 'admin' && (
               <Chip
                 label={t('watchFolder.adminOnly')}
                 size="small"
@@ -400,7 +400,7 @@ const WatchFolderPage: React.FC = () => {
               />
             )}
           </Typography>
-          {user?.role !== 'Admin' && (
+          {user?.role !== 'admin' && (
             <Alert severity="info" sx={{ mb: 2 }}>
               {t('watchFolder.systemWideInfo')}
             </Alert>

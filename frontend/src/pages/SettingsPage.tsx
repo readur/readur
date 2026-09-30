@@ -39,13 +39,17 @@ import {
 import Grid from '@mui/material/GridLegacy';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, 
          CloudSync as CloudSyncIcon, Folder as FolderIcon,
-         Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon,
-         Pause as PauseIcon, Stop as StopIcon, CheckCircle as CheckCircleIcon,
+         Assessment as AssessmentIcon,
+         CheckCircle as CheckCircleIcon,
          Error as ErrorIcon, Visibility as VisibilityIcon, CreateNewFolder as CreateNewFolderIcon,
          RemoveCircle as RemoveCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, isAdmin as isAdminUser } from '../contexts/AuthContext';
+import ChangePasswordForm from '../components/Auth/ChangePasswordForm';
+import RequireAdmin from '../components/Auth/RequireAdmin';
+import OcrQueueControls from '../components/Settings/OcrQueueControls';
+import UserStatusCell from '../components/Settings/UserStatusCell';
 import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
-import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
+import api, { ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
 import LanguageSelector from '../components/LanguageSelector';
 import ApiKeysManager from '../components/ApiKeys/ApiKeysManager';
@@ -56,8 +60,18 @@ interface User {
   id: string;
   username: string;
   email: string;
+  role?: 'admin' | 'user';
+  is_active?: boolean;
   created_at: string;
 }
+
+// Tab identifiers (stable regardless of which tabs are visible to the user).
+const TAB_GENERAL = 0;
+const TAB_OCR = 1;
+const TAB_USERS = 2;
+const TAB_SERVER = 3;
+const TAB_API_KEYS = 4;
+const TAB_ACCOUNT = 5;
 
 interface Settings {
   ocrLanguage: string;
@@ -197,6 +211,7 @@ function useDebounce<T extends (...args: any[]) => any>(func: T, delay: number):
 const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
   const { user: currentUser } = useAuth();
+  const isAdmin = isAdminUser(currentUser);
   const { flags } = useFeatureFlags();
   const perUserWatchEnabled = flags.enablePerUserWatch;
   const isPWA = usePWA();
@@ -265,10 +280,6 @@ const SettingsPage: React.FC = () => {
     password: '' 
   });
   
-  // OCR Admin Controls State
-  const [ocrStatus, setOcrStatus] = useState<{ is_paused: boolean; status: 'paused' | 'running' } | null>(null);
-  const [ocrActionLoading, setOcrActionLoading] = useState(false);
-  
   // Server Configuration State
   const [serverConfig, setServerConfig] = useState<ServerConfiguration | null>(null);
   const [configLoading, setConfigLoading] = useState(false);
@@ -291,14 +302,23 @@ const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     fetchSettings();
-    fetchUsers();
-    fetchOcrStatus();
-    fetchServerConfiguration();
-  }, []);
+    // User management, OCR queue controls and server configuration are admin-only.
+    if (isAdmin) {
+      fetchUsers();
+      fetchServerConfiguration();
+    }
+  }, [isAdmin]);
+
+  // If the current user is not an admin, never leave an admin tab selected.
+  useEffect(() => {
+    if (!isAdmin && (tabValue === TAB_USERS || tabValue === TAB_SERVER)) {
+      setTabValue(TAB_GENERAL);
+    }
+  }, [isAdmin, tabValue]);
 
   // Fetch watch directory information after users are loaded
   useEffect(() => {
-    if (users.length > 0 && perUserWatchEnabled) {
+    if (isAdmin && users.length > 0 && perUserWatchEnabled) {
       fetchUserWatchDirectories();
     }
   }, [users, perUserWatchEnabled]);
@@ -451,6 +471,29 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleSetUserActive = async (target: User, active: boolean): Promise<void> => {
+    if (target.id === currentUser?.id) {
+      showSnackbar(t('settings.messages.cannotDeactivateSelf', 'You cannot deactivate your own account'), 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      await api.put(`/users/${target.id}`, { is_active: active });
+      setUsers(prev => prev.map(u => (u.id === target.id ? { ...u, is_active: active } : u)));
+      showSnackbar(
+        active
+          ? t('settings.messages.userEnabled', { username: target.username, defaultValue: '{{username}} can now sign in' })
+          : t('settings.messages.userDisabled', { username: target.username, defaultValue: '{{username}} has been disabled and signed out' }),
+        'success'
+      );
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      showSnackbar(ErrorHelper.getUserMessage(error, t('settings.messages.settingsUpdateFailed')), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteUser = async (userId: string): Promise<void> => {
     if (userId === currentUser?.id) {
       showSnackbar(t('settings.messages.cannotDeleteSelf'), 'error');
@@ -528,52 +571,6 @@ const SettingsPage: React.FC = () => {
     Object.entries(updates).forEach(([key, value]) => {
       handleSettingsChange(key as keyof Settings, value);
     });
-  };
-
-  const fetchOcrStatus = async (): Promise<void> => {
-    try {
-      const response = await queueService.getOcrStatus();
-      setOcrStatus(response.data);
-    } catch (error: any) {
-      console.error('Error fetching OCR status:', error);
-      // Don't show error for OCR status since it might not be available for non-admin users
-    }
-  };
-
-  const handlePauseOcr = async (): Promise<void> => {
-    setOcrActionLoading(true);
-    try {
-      await queueService.pauseOcr();
-      showSnackbar(t('settings.messages.ocrPaused'), 'success');
-      fetchOcrStatus(); // Refresh status
-    } catch (error: any) {
-      console.error('Error pausing OCR:', error);
-      if (error.response?.status === 403) {
-        showSnackbar(t('settings.messages.ocrPauseFailed'), 'error');
-      } else {
-        showSnackbar(t('settings.messages.ocrPauseFailedGeneric'), 'error');
-      }
-    } finally {
-      setOcrActionLoading(false);
-    }
-  };
-
-  const handleResumeOcr = async (): Promise<void> => {
-    setOcrActionLoading(true);
-    try {
-      await queueService.resumeOcr();
-      showSnackbar(t('settings.messages.ocrResumed'), 'success');
-      fetchOcrStatus(); // Refresh status
-    } catch (error: any) {
-      console.error('Error resuming OCR:', error);
-      if (error.response?.status === 403) {
-        showSnackbar(t('settings.messages.ocrResumeFailed'), 'error');
-      } else {
-        showSnackbar(t('settings.messages.ocrResumeFailedGeneric'), 'error');
-      }
-    } finally {
-      setOcrActionLoading(false);
-    }
   };
 
   const fetchServerConfiguration = async (): Promise<void> => {
@@ -871,15 +868,20 @@ const SettingsPage: React.FC = () => {
             },
           }}
         >
-          <Tab label={t('settings.tabs.general')} />
-          <Tab label={t('settings.tabs.ocrSettings')} />
-          <Tab label={t('settings.tabs.userManagement')} />
-          <Tab label={t('settings.tabs.serverConfiguration')} />
-          <Tab label="API Keys" />
+          <Tab value={TAB_GENERAL} label={t('settings.tabs.general')} />
+          <Tab value={TAB_OCR} label={t('settings.tabs.ocrSettings')} />
+          <Tab value={TAB_ACCOUNT} label={t('settings.tabs.account', 'Account')} />
+          {isAdmin && (
+            <Tab value={TAB_USERS} label={t('settings.tabs.userManagement')} />
+          )}
+          {isAdmin && (
+            <Tab value={TAB_SERVER} label={t('settings.tabs.serverConfiguration')} />
+          )}
+          <Tab value={TAB_API_KEYS} label="API Keys" />
         </Tabs>
 
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
-          {tabValue === 0 && (
+          {tabValue === TAB_GENERAL && (
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
                 {t('settings.general.title')}
@@ -965,66 +967,9 @@ const SettingsPage: React.FC = () => {
               </Card>
 
               {/* Admin OCR Controls */}
-              <Card sx={{ mb: 3 }}>
-                <CardContent>
-                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    <StopIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    {t('settings.general.ocrControls.title')}
-                  </Typography>
-                  <Divider sx={{ mb: 2 }} />
-
-                  <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                    {t('settings.general.ocrControls.description')}
-                  </Typography>
-
-                  <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} md={6}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Button
-                          variant={ocrStatus?.is_paused ? "outlined" : "contained"}
-                          color={ocrStatus?.is_paused ? "success" : "warning"}
-                          startIcon={ocrActionLoading ? <CircularProgress size={16} /> :
-                                   (ocrStatus?.is_paused ? <PlayArrowIcon /> : <PauseIcon />)}
-                          onClick={ocrStatus?.is_paused ? handleResumeOcr : handlePauseOcr}
-                          disabled={ocrActionLoading || loading}
-                          size="large"
-                        >
-                          {ocrActionLoading ? t('common.status.processing') :
-                           ocrStatus?.is_paused ? t('settings.general.ocrControls.resumeOcr') : t('settings.general.ocrControls.pauseOcr')}
-                        </Button>
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12} md={6}>
-                      {ocrStatus && (
-                        <Box>
-                          <Chip
-                            label={t('settings.general.ocrControls.ocrStatusLabel', { status: ocrStatus.status.toUpperCase() })}
-                            color={ocrStatus.is_paused ? "warning" : "success"}
-                            variant="outlined"
-                            icon={ocrStatus.is_paused ? <PauseIcon /> : <PlayArrowIcon />}
-                            size="medium"
-                          />
-                          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
-                            {ocrStatus.is_paused
-                              ? t('settings.general.ocrControls.ocrPausedMessage')
-                              : t('settings.general.ocrControls.ocrActiveMessage')}
-                          </Typography>
-                        </Box>
-                      )}
-                    </Grid>
-                  </Grid>
-
-                  {ocrStatus?.is_paused && (
-                    <Alert severity="warning" sx={{ mt: 2 }}>
-                      <Typography variant="body2">
-                        <strong>{t('settings.general.ocrControls.pausedAlertTitle')}</strong><br />
-                        {t('settings.general.ocrControls.pausedAlertMessage')}
-                      </Typography>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
+              {isAdmin && (
+                <OcrQueueControls disabled={loading} onMessage={showSnackbar} />
+              )}
 
               <Card sx={{ mb: 3 }}>
                 <CardContent>
@@ -1225,7 +1170,7 @@ const SettingsPage: React.FC = () => {
             </Box>
           )}
 
-          {tabValue === 1 && (
+          {tabValue === TAB_OCR && (
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
                 {t('settings.ocrSettings.title')}
@@ -1461,7 +1406,17 @@ const SettingsPage: React.FC = () => {
             </Box>
           )}
 
-          {tabValue === 2 && (
+          {tabValue === TAB_ACCOUNT && (
+            <Box>
+              <Typography variant="h6" sx={{ mb: 3 }}>
+                {t('settings.account.title', 'Account')}
+              </Typography>
+              <ChangePasswordForm />
+            </Box>
+          )}
+
+          {tabValue === TAB_USERS && (
+            <RequireAdmin fallback={null}>
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h6">
@@ -1477,6 +1432,15 @@ const SettingsPage: React.FC = () => {
                 </Button>
               </Box>
 
+              {users.some(u => u.is_active === false) && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  {t('settings.userManagement.pendingApprovalNotice', {
+                    count: users.filter(u => u.is_active === false).length,
+                    defaultValue: '{{count}} account(s) are disabled or awaiting approval. Enable an account to let that user sign in.',
+                  })}
+                </Alert>
+              )}
+
               <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
                 <Table sx={{ minWidth: 800 }}>
                   <TableHead>
@@ -1484,6 +1448,7 @@ const SettingsPage: React.FC = () => {
                       <TableCell>{t('settings.userManagement.tableHeaders.username')}</TableCell>
                       <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{t('settings.userManagement.tableHeaders.email')}</TableCell>
                       <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{t('settings.userManagement.tableHeaders.createdAt')}</TableCell>
+                      <TableCell>{t('settings.userManagement.tableHeaders.status', 'Status')}</TableCell>
                       {perUserWatchEnabled && (
                         <TableCell>{t('settings.userManagement.tableHeaders.watchDirectory')}</TableCell>
                       )}
@@ -1492,7 +1457,10 @@ const SettingsPage: React.FC = () => {
                   </TableHead>
                   <TableBody>
                     {users.map((user) => (
-                      <TableRow key={user.id}>
+                      <TableRow
+                        key={user.id}
+                        sx={user.is_active === false ? { bgcolor: 'action.hover' } : undefined}
+                      >
                         <TableCell>
                           <Box>
                             <Typography variant="body2" fontWeight="medium">
@@ -1521,6 +1489,14 @@ const SettingsPage: React.FC = () => {
                         </TableCell>
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                           {new Date(user.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <UserStatusCell
+                            user={user}
+                            isSelf={user.id === currentUser?.id}
+                            disabled={loading}
+                            onChange={(active) => handleSetUserActive(user, active)}
+                          />
                         </TableCell>
                         {perUserWatchEnabled && (
                           <TableCell>
@@ -1625,9 +1601,11 @@ const SettingsPage: React.FC = () => {
                 </Table>
               </TableContainer>
             </Box>
+            </RequireAdmin>
           )}
 
-          {tabValue === 3 && (
+          {tabValue === TAB_SERVER && (
+            <RequireAdmin fallback={null}>
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
                 {t('settings.serverConfiguration.title')}
@@ -1804,9 +1782,10 @@ const SettingsPage: React.FC = () => {
                 </Alert>
               )}
             </Box>
+            </RequireAdmin>
           )}
 
-          {tabValue === 4 && (
+          {tabValue === TAB_API_KEYS && (
             <Box>
               <ApiKeysManager />
             </Box>

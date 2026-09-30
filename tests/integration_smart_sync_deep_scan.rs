@@ -27,6 +27,8 @@ mod tests {
             oidc_issuer: None,
             oidc_email: None,
             auth_provider: AuthProvider::Local,
+            token_version: 0,
+            is_active: true,
         };
     
         (test_context.state().clone(), user, test_context)

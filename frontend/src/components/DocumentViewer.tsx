@@ -7,6 +7,7 @@ import {
   Paper,
 } from '@mui/material';
 import { documentService } from '../services/api';
+import { previewSandbox } from '../services/contentSafety';
 
 interface DocumentViewerProps {
   documentId: string;
@@ -90,6 +91,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({
             height="100%"
             style={{ border: 'none', borderRadius: '8px' }}
             title={filename}
+            sandbox={previewSandbox(mimeType)}
           />
         </Box>
       );

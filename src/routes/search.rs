@@ -74,7 +74,7 @@ async fn search_documents(
 
     let documents = state
         .db
-        .search_documents(auth_user.user.id, &search_request)
+        .search_documents_with_role(auth_user.user.id, auth_user.user.role.clone(), &search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
 

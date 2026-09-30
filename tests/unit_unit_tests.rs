@@ -131,6 +131,8 @@ fn test_user_response_conversion() {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
     
     let response: UserResponse = user.clone().into();

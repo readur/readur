@@ -58,6 +58,7 @@ import {
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { api, documentService, queueService, BulkOcrRetryResponse, ErrorHelper, ErrorCodes } from '../services/api';
+import { openDocumentInNewTabSafely } from '../services/documentTabs';
 import DocumentViewer from '../components/DocumentViewer';
 import FailedDocumentViewer from '../components/FailedDocumentViewer';
 import MetadataDisplay from '../components/MetadataDisplay';
@@ -345,7 +346,6 @@ const DocumentManagementPage: React.FC = () => {
       fetchIgnoredFiles();
     }
   }, [currentTab, duplicatesPagination.page, ignoredFilesPagination.page, ignoredFilesSearchTerm, ignoredFilesSourceTypeFilter]);
-
 
   const getFailureReasonColor = (reason: string): "error" | "warning" | "info" | "default" => {
     switch (reason) {
@@ -1517,7 +1517,7 @@ const DocumentManagementPage: React.FC = () => {
                                               <Tooltip title="View Document">
                                                 <IconButton
                                                   size="small"
-                                                  onClick={() => window.open(`/api/documents/${doc.id}/view`, '_blank')}
+                                                  onClick={() => openDocumentInNewTabSafely(doc.id, doc.original_filename)}
                                                   sx={{ color: theme.palette.primary.main }}
                                                 >
                                                   <VisibilityIcon />

@@ -93,7 +93,7 @@ DATABASE_URL=postgresql://readur:password@localhost/readur
 
 # Server Configuration
 SERVER_ADDRESS=0.0.0.0:8000
-JWT_SECRET=your-secure-jwt-secret
+JWT_SECRET=<output of: openssl rand -hex 32>   # optional, min 32 bytes when set
 
 # S3 Storage Configuration
 S3_ENABLED=true
@@ -122,7 +122,7 @@ S3_REGION=us-east-1
 S3_ENDPOINT_URL=http://localhost:9000
 ```
 
-Path-style addressing is auto-detected when a custom endpoint is set; set `S3_FORCE_PATH_STYLE=true` only if you need to force it explicitly.
+Path-style addressing is used by default when a custom endpoint is set; set `S3_FORCE_PATH_STYLE=false` only if your service requires virtual-hosted addressing.
 
 #### Wasabi
 ```bash

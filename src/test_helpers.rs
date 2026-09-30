@@ -221,6 +221,12 @@ pub fn create_test_config_with_db(database_url: &str) -> Config {
 
         // Public URL
         public_url: None,
+        // Tests create users through the public registration endpoint.
+        security: crate::config::SecurityConfig {
+            allow_registration: true,
+            registration_requires_approval: false,
+            ..Default::default()
+        },
     }
 }
 

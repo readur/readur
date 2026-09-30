@@ -74,7 +74,22 @@
       "oidcAuthFailed": "L'authentification OIDC a échoué. Veuillez vérifier avec votre administrateur.",
       "oidcNotConfigured": "OIDC n'est pas configuré sur ce serveur. Veuillez utiliser la connexion par nom d'utilisateur/mot de passe.",
       "oidcInitFailed": "Échec de l'initialisation de la connexion OIDC. Veuillez réessayer.",
-      "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants."
+      "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants.",
+      "logoutIncomplete": "Vous êtes déconnecté sur cet appareil, mais le serveur n'a pas pu être joint. Votre session précédente peut rester valide jusqu'à son expiration."
+    },
+    "oidcCallback": {
+      "errors": {
+        "provider_error": "Le fournisseur d'identité n'a pas terminé la connexion. Veuillez réessayer.",
+        "invalid_state": "La demande de connexion est invalide ou a expiré. Veuillez vous reconnecter.",
+        "auth_failed": "L'authentification auprès du fournisseur d'identité a échoué. Veuillez vous reconnecter.",
+        "no_account": "Aucun compte n'est disponible pour cette identité. Contactez votre administrateur.",
+        "account_disabled": "Ce compte est désactivé ou en attente d'approbation par un administrateur.",
+        "server_error": "Une erreur serveur est survenue pendant la connexion. Veuillez réessayer plus tard.",
+        "unknown": "La connexion a échoué. Veuillez vous reconnecter.",
+        "missingCode": "Aucun code d'authentification n'a été reçu du serveur.",
+        "invalidCode": "Ce lien de connexion est invalide ou a expiré. Veuillez vous reconnecter.",
+        "tooManyAttempts": "Trop de tentatives. Veuillez patienter un moment puis vous reconnecter."
+      }
     }
   },
   "navigation": {

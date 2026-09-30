@@ -1,6 +1,6 @@
 use axum::{
     extract::{Multipart, Path, Query, State},
-    http::{StatusCode, header::CONTENT_TYPE},
+    http::StatusCode,
     response::{Json, Response, IntoResponse},
     body::Body,
 };
@@ -605,16 +605,16 @@ pub async fn download_document(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header(CONTENT_TYPE, document.mime_type)
-        .header("Content-Disposition", format!("attachment; filename=\"{}\"", document.original_filename))
-        .header("Content-Length", file_data.len().to_string())
-        .body(Body::from(file_data))
-        .map_err(|e| {
-            error!("Failed to build response: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let response = crate::http_security::user_content_response(
+        &document.mime_type,
+        &document.original_filename,
+        false,
+        file_data,
+    )
+    .map_err(|e| {
+        error!("Failed to build response: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     debug!("Document downloaded: {}", document_id);
     Ok(response)
@@ -662,15 +662,16 @@ pub async fn view_document(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header(CONTENT_TYPE, document.mime_type)
-        .header("Content-Length", file_data.len().to_string())
-        .body(Body::from(file_data))
-        .map_err(|e| {
-            error!("Failed to build response: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let response = crate::http_security::user_content_response(
+        &document.mime_type,
+        &document.original_filename,
+        true,
+        file_data,
+    )
+    .map_err(|e| {
+        error!("Failed to build response: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     debug!("Document viewed: {}", document_id);
     Ok(response)

@@ -21,12 +21,6 @@ use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 #[cfg(any(test, feature = "test-utils"))]
 use tower::util::ServiceExt;
-#[cfg(any(test, feature = "test-utils"))]
-use reqwest::{Response, StatusCode};
-#[cfg(any(test, feature = "test-utils"))]
-use std::sync::Mutex;
-#[cfg(any(test, feature = "test-utils"))]
-use std::collections::HashMap;
 
 /// Cleanup strategy for database cleanup operations
 #[cfg(any(test, feature = "test-utils"))]
@@ -315,16 +309,8 @@ impl TestContext {
             rate_limiters: crate::rate_limit::RateLimiters::new(),
         });
         
-        let app = Router::new()
-            .nest("/api/auth", crate::routes::auth::router())
-            .nest("/api/documents", crate::routes::documents::router())
-            .nest("/api/search", crate::routes::search::router())
-            .nest("/api/settings", crate::routes::settings::router())
-            .nest("/api/users", crate::routes::users::router())
-            .nest("/api/ignored/files", crate::routes::ignored_files::ignored_files_routes())
-            .nest("/api/ocr", crate::routes::ocr::router())
-            .nest("/api/metrics", crate::routes::metrics::router())
-            .nest("/metrics", crate::routes::prometheus_metrics::router())
+        // Same routes the server mounts (src/main.rs).
+        let app = crate::routes::api_router()
             .with_state(state.clone())
             .layer(axum::extract::DefaultBodyLimit::max(max_body_size));
         
@@ -341,6 +327,11 @@ impl TestContext {
     /// Get the app router for making requests
     pub fn app(&self) -> &Router {
         &self.app
+    }
+
+    /// Auth helper bound to this context's app and database.
+    pub fn auth_helper(&self) -> TestAuthHelper {
+        TestAuthHelper::with_db(self.app.clone(), self.state.db.clone())
     }
     
     /// Get the application state
@@ -858,6 +849,12 @@ impl TestConfigBuilder {
 
             // Public URL
             public_url: None,
+            // Tests create users through the public registration endpoint.
+            security: crate::config::SecurityConfig {
+                allow_registration: true,
+                registration_requires_approval: false,
+                ..Default::default()
+            },
         }
     }
 }
@@ -865,16 +862,7 @@ impl TestConfigBuilder {
 /// Create test app with provided AppState
 #[cfg(any(test, feature = "test-utils"))]
 pub fn create_test_app(state: Arc<AppState>) -> Router {
-    Router::new()
-        .nest("/api/auth", crate::routes::auth::router())
-        .nest("/api/documents", crate::routes::documents::router())
-        .nest("/api/search", crate::routes::search::router())
-        .nest("/api/settings", crate::routes::settings::router())
-        .nest("/api/users", crate::routes::users::router())
-        .nest("/api/ignored/files", crate::routes::ignored_files::ignored_files_routes())
-        .nest("/api/ocr", crate::routes::ocr::router())
-        .nest("/api/queue", crate::routes::queue::router())
-        .with_state(state)
+    crate::routes::api_router().with_state(state)
 }
 
 /// Legacy function for backward compatibility - will be deprecated
@@ -896,12 +884,18 @@ pub async fn create_test_app_with_container() -> (Router, Arc<ContainerAsync<Pos
 #[cfg(any(test, feature = "test-utils"))]
 pub struct TestAuthHelper {
     app: Router,
+    db: Option<crate::db::Database>,
 }
 
 #[cfg(any(test, feature = "test-utils"))]
 impl TestAuthHelper {
     pub fn new(app: Router) -> Self {
-        Self { app }
+        Self { app, db: None }
+    }
+
+    /// Helper with direct database access, required for creating admins.
+    pub fn with_db(app: Router, db: crate::db::Database) -> Self {
+        Self { app, db: Some(db) }
     }
     
     /// Create a regular test user with unique credentials
@@ -1005,109 +999,43 @@ impl TestAuthHelper {
         }
     }
     
-    /// Create an admin test user with unique credentials
+    /// Create an admin test user with unique credentials.
+    ///
+    /// Public registration never grants roles, so the account is inserted
+    /// directly through the database. The helper must have been built with
+    /// [`TestAuthHelper::with_db`] (or [`TestContext::auth_helper`]).
     pub async fn create_admin_user(&self) -> TestUser {
-        // Generate a more unique ID using process ID, thread ID (as debug string), and nanoseconds
-        let test_id = format!("{}_{}_{}", 
+        let db = self.db.as_ref().expect(
+            "TestAuthHelper::create_admin_user needs database access; \
+             construct the helper with TestAuthHelper::with_db or TestContext::auth_helper",
+        );
+
+        let test_id = format!("{}_{}",
             std::process::id(),
-            format!("{:?}", std::thread::current().id()).replace("ThreadId(", "").replace(")", ""),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            uuid::Uuid::new_v4().simple()
         );
         let username = format!("adminuser_{}", test_id);
         let email = format!("admin_{}@example.com", test_id);
         let password = "adminpass123";
-        
-        let admin_data = json!({
-            "username": username,
-            "email": email,
-            "password": password,
-            "role": "admin"
-        });
-        
-        let response = self.make_request("POST", "/api/auth/register", Some(admin_data), None).await;
-        
-        // Debug logging to understand CI vs local differences
-        let response_str = String::from_utf8_lossy(&response);
-        println!("DEBUG: Admin register response body: {}", response_str);
-        println!("DEBUG: Admin register response length: {} bytes", response.len());
-        
-        // Try to parse as JSON first to see what we actually got
-        let user_response = match serde_json::from_slice::<serde_json::Value>(&response) {
-            Ok(json_value) => {
-                println!("DEBUG: Admin parsed JSON structure: {:#}", json_value);
-                
-                // Check if this is an error response due to username collision
-                if let Some(error_msg) = json_value.get("error").and_then(|e| e.as_str()) {
-                    if error_msg.contains("Username already exists") {
-                        println!("DEBUG: Admin username collision detected, retrying with UUID suffix");
-                        // Retry with a UUID suffix for guaranteed uniqueness
-                        let retry_username = format!("{}_{}",
-                            username,
-                            uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
-                        );
-                        let retry_email = format!("admin_{}@example.com", 
-                            uuid::Uuid::new_v4().to_string().replace('-', "")[..16].to_string()
-                        );
-                        
-                        let retry_admin_data = json!({
-                            "username": retry_username,
-                            "email": retry_email,
-                            "password": password,
-                            "role": "admin"
-                        });
-                        
-                        let retry_response = self.make_request("POST", "/api/auth/register", Some(retry_admin_data), None).await;
-                        let retry_response_str = String::from_utf8_lossy(&retry_response);
-                        println!("DEBUG: Retry admin register response body: {}", retry_response_str);
-                        
-                        let retry_json_value = serde_json::from_slice::<serde_json::Value>(&retry_response)
-                            .expect("Retry admin response should be valid JSON");
-                        
-                        match serde_json::from_value::<UserResponse>(retry_json_value) {
-                            Ok(user_response) => {
-                                return TestUser {
-                                    user_response,
-                                    username: retry_username,
-                                    password: password.to_string(),
-                                    token: None,
-                                };
-                            },
-                            Err(e) => {
-                                eprintln!("ERROR: Failed to parse UserResponse from retry admin JSON: {}", e);
-                                panic!("Failed to parse UserResponse from retry admin: {}", e);
-                            }
-                        }
-                    }
-                }
-                
-                // Try to parse as UserResponse
-                match serde_json::from_value::<UserResponse>(json_value) {
-                    Ok(user_response) => user_response,
-                    Err(e) => {
-                        eprintln!("ERROR: Failed to parse admin UserResponse from JSON: {}", e);
-                        eprintln!("ERROR: Expected fields: id (UUID), username (String), email (String), role (UserRole)");
-                        panic!("Failed to parse admin UserResponse: {}", e);
-                    }
-                }
-            },
-            Err(e) => {
-                eprintln!("ERROR: Admin response is not valid JSON: {}", e);
-                eprintln!("ERROR: Raw admin response: {:?}", response);
-                panic!("Invalid JSON response from admin register endpoint: {}", e);
-            }
-        };
-        
+
+        let user = db
+            .create_user(crate::models::CreateUser {
+                username: username.clone(),
+                email,
+                password: password.to_string(),
+                role: Some(crate::models::UserRole::Admin),
+            })
+            .await
+            .expect("Failed to create admin test user");
+
         TestUser {
-            user_response,
+            user_response: user.into(),
             username,
             password: password.to_string(),
             token: None,
         }
     }
-    
+
     /// Create an admin test user (alias for create_admin_user for backward compatibility)
     pub async fn create_test_admin(&self) -> TestUser {
         self.create_admin_user().await
@@ -1204,8 +1132,8 @@ pub async fn create_test_user(app: &Router) -> UserResponse {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
-pub async fn create_admin_user(app: &Router) -> UserResponse {
-    let auth_helper = TestAuthHelper::new(app.clone());
+pub async fn create_admin_user(app: &Router, db: &crate::db::Database) -> UserResponse {
+    let auth_helper = TestAuthHelper::with_db(app.clone(), db.clone());
     let admin_user = auth_helper.create_admin_user().await;
     admin_user.user_response
 }
@@ -1214,6 +1142,46 @@ pub async fn create_admin_user(app: &Router) -> UserResponse {
 pub async fn login_user(app: &Router, username: &str, password: &str) -> String {
     let auth_helper = TestAuthHelper::new(app.clone());
     auth_helper.login_user(username, password).await
+}
+
+/// Database URL of the separately running server used by live-server tests
+/// (`TEST_DATABASE_URL`, then `DATABASE_URL`).
+#[cfg(any(test, feature = "test-utils"))]
+pub fn live_server_database_url() -> String {
+    std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string())
+}
+
+/// Generate a fresh random password for a test account.
+#[cfg(any(test, feature = "test-utils"))]
+pub fn test_password() -> String {
+    format!("pw-{}", uuid::Uuid::new_v4().simple())
+}
+
+/// Create an active account directly in a live server's database.
+///
+/// Tests that talk to a running server over HTTP cannot rely on public
+/// registration: it is closed by default, never grants roles, and new
+/// accounts await admin approval. Log in over HTTP afterwards as usual.
+#[cfg(any(test, feature = "test-utils"))]
+pub async fn create_live_server_user(
+    username: &str,
+    email: &str,
+    password: &str,
+    role: crate::models::UserRole,
+) -> anyhow::Result<crate::models::User> {
+    let db = crate::db::Database::new_with_pool_config(&live_server_database_url(), 2, 0).await?;
+    let user = db
+        .create_user(crate::models::CreateUser {
+            username: username.to_string(),
+            email: email.to_string(),
+            password: password.to_string(),
+            role: Some(role),
+        })
+        .await;
+    db.close().await;
+    user
 }
 
 /// Centralized test Document helpers to reduce duplication across test files

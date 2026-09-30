@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::models::{LoginRequest, LoginResponse};
 use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
@@ -50,22 +50,9 @@ impl OcrTestClient {
     }
     
     async fn register_and_login(&mut self, username: &str, email: &str, password: &str) -> Result<String, Box<dyn std::error::Error>> {
-        let user_data = CreateUser {
-            username: username.to_string(),
-            email: email.to_string(),
-            password: password.to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        
-        let register_response = self.client
-            .post(&format!("{}/api/auth/register", get_base_url()))
-            .json(&user_data)
-            .send()
-            .await?;
-        
-        if !register_response.status().is_success() {
-            return Err(format!("Registration failed: {}", register_response.text().await?).into());
-        }
+        readur::test_utils::create_live_server_user(username, email, password, readur::models::UserRole::User)
+            .await
+            .map_err(|e| format!("Registration failed: {}", e))?;
         
         let login_data = LoginRequest {
             username: username.to_string(),

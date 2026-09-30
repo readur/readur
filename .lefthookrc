@@ -1,0 +1,16 @@
+# Sourced by lefthook before running hook commands (see `rc` in .lefthook.toml).
+# Puts the mise-managed tools (rustfmt, oxfmt, shellcheck, zizmor, ...) on PATH
+# even when the committer has not run `mise activate` in their shell -- `git
+# commit` from a GUI client or a bare login shell must still find the
+# formatters. Without mise, tools are taken from PATH as-is.
+# (-s bash: mise has no plain "sh" formatter; its bash output is POSIX exports.)
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise env -s bash 2>/dev/null)" || true
+fi
+
+# Gate the shellcheck hook at error severity (shellcheck reads SHELLCHECK_OPTS
+# natively). The existing scripts carry warning/info-level findings and
+# shellcheck has no baseline mechanism, so default severity would fail any
+# commit touching one of them on pre-existing findings. Burn them down, then
+# drop this.
+export SHELLCHECK_OPTS="--severity=error"

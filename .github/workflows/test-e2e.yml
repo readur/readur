@@ -12,6 +12,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # CI_JWT_SECRET is generated per run (see "Generate throwaway JWT secret").
+  # Seeded admin account; the E2E suite logs in with it to provision test users.
+  E2E_ADMIN_USERNAME: admin
+  E2E_ADMIN_PASSWORD: e2e-ci-admin-password
 
 jobs:
   e2e-tests:
@@ -43,6 +47,12 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Generate throwaway JWT secret
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "::add-mask::$secret"
+          echo "CI_JWT_SECRET=$secret" >> "$GITHUB_ENV"
 
       - name: Install system dependencies
         run: |
@@ -91,7 +101,9 @@ jobs:
           echo "Server started with PID: $(cat backend.pid)"
         env:
           DATABASE_URL: postgres://readur:readur@localhost:5432/readur
-          JWT_SECRET: test-secret-key
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          ADMIN_USERNAME: ${{ env.E2E_ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
           PORT: 8000
           FRONTEND_PATH: ./frontend/dist
           UPLOAD_PATH: ./uploads

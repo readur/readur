@@ -32,7 +32,7 @@ struct AdminTestClient {
 impl AdminTestClient {
     async fn new() -> Self {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app().clone());
+        let auth_helper = ctx.auth_helper();
         Self {
             ctx,
             auth_helper,
@@ -242,11 +242,13 @@ impl AdminTestClient {
         Ok(metrics)
     }
     
-    /// Get Prometheus metrics (usually public)
+    /// Get Prometheus metrics (admin session or METRICS_TOKEN required)
     async fn get_prometheus_metrics(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let token = self.admin_token.as_ref().ok_or("Admin not logged in")?;
         let request = Request::builder()
             .method("GET")
             .uri("/metrics")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())
             .unwrap();
             

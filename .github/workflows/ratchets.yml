@@ -1,0 +1,78 @@
+name: Ratchets
+
+# Forward-only code-health gates. Each freezes today's backlog and fails only on
+# NEW debt; the numbers only ever go down. Every gate here is also a mise task
+# (same command), so `mise run ratchets` (or `mise run ci`) reproduces this job
+# locally.
+#
+#   lines-check       no source file over 1000 physical lines; files already
+#                     over it are frozen at their current length
+#                     (scripts/lint-file-length.py BASELINE). No toolchain.
+#   ratchets-test     the lint's own unit tests (scripts/ci/test_*.py).
+#   complexity-check  functions over clippy's cognitive-complexity threshold
+#                     (clippy.toml) may not exceed BUDGET (.mise/config.toml).
+#                     Runs a full clippy, so it needs the same OCR system
+#                     libraries as the Rust test jobs.
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    branches:
+      - master
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ratchets-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Only the tools a step names are installed below; do not let `mise run`
+  # auto-install the rest of [tools] (node, oxfmt, ...) for tasks that do not
+  # use them.
+  MISE_TASK_RUN_AUTO_INSTALL: "false"
+
+jobs:
+  ratchets:
+    name: Ratchets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # Toolchain-free gates first: they answer in about a second, so a
+      # file-length failure is reported before the clippy build starts.
+      - name: File-length ratchet
+        run: python3 scripts/lint-file-length.py
+
+      - name: Ratchet script tests
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
+
+      # Build dependencies only (headers + bindgen); the OCR runtime packages
+      # the test jobs install are not needed to lint.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libtesseract-dev \
+            libleptonica-dev \
+            pkg-config \
+            libclang-dev \
+            clang
+
+      - name: Setup mise (Rust toolchain from .mise/mise.lock)
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          install_args: rust
+
+      - name: Complexity ratchet
+        run: mise run complexity-check

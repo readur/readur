@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::Json,
+    response::{IntoResponse, Json, Response},
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -10,7 +10,14 @@ use tracing::{error, info};
 use crate::{
     auth::AuthUser,
     errors::source::SourceError,
-    models::{CreateSource, SourceResponse, SourceWithStats, UpdateSource, SourceType},
+    models::{
+        merge_stored_secrets, CreateSource, SourceResponse, SourceType, SourceWithStats,
+        UpdateSource, User, UserRole,
+    },
+    services::local_folder_service::{authorize_local_folder_paths, LocalFolderPathError},
+    services::s3_service::S3Service,
+    services::webdav::WebDAVConfig,
+    utils::outbound::{validate_outbound_url, validate_outbound_url_for_config},
     AppState,
 };
 
@@ -92,9 +99,17 @@ pub async fn create_source(
     // Validate source configuration based on type
     if let Err(validation_error) = validate_source_config(&source_data) {
         error!("Source validation failed: {}", validation_error);
-        error!("Invalid source data received: {:?}", source_data);
         return Err(SourceError::configuration_invalid(validation_error));
     }
+
+    authorize_source_config(source_data.source_type, &source_data.config, &auth_user.user, &state, false)
+        .await
+        .map_err(|rejection| match rejection {
+            ConfigRejection::Forbidden => {
+                SourceError::access_denied("local folder", "not permitted for this user")
+            }
+            ConfigRejection::Invalid(reason) => SourceError::configuration_invalid(reason),
+        })?;
 
     let source = state
         .db
@@ -200,7 +215,7 @@ pub async fn get_source(
     request_body = UpdateSource,
     responses(
         (status = 200, description = "Source updated successfully", body = SourceResponse),
-        (status = 400, description = "Bad request - invalid update data"),
+        (status = 400, description = "Bad request - invalid update data, or a stored credential would be reused for a different server or account"),
         (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
         (status = 500, description = "Internal server error")
@@ -210,10 +225,10 @@ pub async fn update_source(
     auth_user: AuthUser,
     Path(source_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
-    Json(update_data): Json<UpdateSource>,
-) -> Result<Json<SourceResponse>, StatusCode> {
-    info!("Updating source {} with data: {:?}", source_id, update_data);
-    
+    Json(mut update_data): Json<UpdateSource>,
+) -> Result<Response, StatusCode> {
+    info!("Updating source {}", source_id);
+
     // Check if source exists
     let existing = state
         .db
@@ -223,12 +238,25 @@ pub async fn update_source(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // Validate config if provided
-    if let Some(config) = &update_data.config {
-        if let Err(validation_error) = validate_config_for_type(&existing.source_type, config) {
+    if let Some(config) = update_data.config.take() {
+        let config = match merge_stored_secrets(existing.source_type, &existing.config, config) {
+            Ok(config) => config,
+            Err(refused) => return Ok(super::validation::secret_reuse_refused(refused)),
+        };
+        if let Err(validation_error) = validate_config_for_type(&existing.source_type, &config) {
             error!("Config validation failed for source {}: {}", source_id, validation_error);
-            error!("Invalid config received: {:?}", config);
             return Err(StatusCode::BAD_REQUEST);
         }
+        authorize_source_config(existing.source_type, &config, &auth_user.user, &state, false)
+            .await
+            .map_err(|rejection| match rejection {
+                ConfigRejection::Forbidden => StatusCode::FORBIDDEN,
+                ConfigRejection::Invalid(reason) => {
+                    error!("Config rejected for source {}: {}", source_id, reason);
+                    StatusCode::BAD_REQUEST
+                }
+            })?;
+        update_data.config = Some(config);
     }
 
     let source = state
@@ -252,7 +280,7 @@ pub async fn update_source(
     response.total_documents_ocr = total_documents_ocr;
 
     info!("Successfully updated source {}: {}", source_id, response.name);
-    Ok(Json(response))
+    Ok(Json(response).into_response())
 }
 
 /// Delete a source
@@ -318,4 +346,62 @@ pub fn validate_config_for_type(
             Ok(())
         }
     }
+}
+
+/// Why a source configuration was refused beyond its basic shape.
+pub enum ConfigRejection {
+    /// The caller may not use this configuration. Carries no detail.
+    Forbidden,
+    Invalid(String),
+}
+
+/// Checks that go beyond deserializing a configuration: local folders must be
+/// permitted for `user`, and WebDAV / S3 endpoints must be allowed outbound
+/// destinations. `strict` also rejects hosts that cannot be resolved, for
+/// callers about to connect right away.
+pub async fn authorize_source_config(
+    source_type: SourceType,
+    config: &serde_json::Value,
+    user: &User,
+    state: &AppState,
+    strict: bool,
+) -> Result<(), ConfigRejection> {
+    let invalid = || ConfigRejection::Invalid(format!("Invalid {} configuration", source_type));
+
+    let urls = match source_type {
+        SourceType::LocalFolder => {
+            let cfg: crate::models::LocalFolderSourceConfig =
+                serde_json::from_value(config.clone()).map_err(|_| invalid())?;
+            return authorize_local_folder_paths(
+                &cfg.watch_folders,
+                user.role == UserRole::Admin,
+                &state.config.security.local_source_allowed_paths,
+            )
+            .map(|_| ())
+            .map_err(|e| match e {
+                LocalFolderPathError::Forbidden => ConfigRejection::Forbidden,
+                LocalFolderPathError::Invalid(reason) => ConfigRejection::Invalid(reason),
+            });
+        }
+        SourceType::WebDAV => {
+            let cfg: crate::models::WebDAVSourceConfig =
+                serde_json::from_value(config.clone()).map_err(|_| invalid())?;
+            vec![WebDAVConfig::normalize_server_url(&cfg.server_url)]
+        }
+        SourceType::S3 => {
+            let cfg: crate::models::S3SourceConfig =
+                serde_json::from_value(config.clone()).map_err(|_| invalid())?;
+            S3Service::outbound_urls(&cfg)
+        }
+    };
+
+    for url in urls {
+        let result = if strict {
+            validate_outbound_url(&url).await
+        } else {
+            validate_outbound_url_for_config(&url).await
+        };
+        result.map_err(|e| ConfigRejection::Invalid(e.to_string()))?;
+    }
+    Ok(())
 }

@@ -1,0 +1,18 @@
+# Crate-wide clippy configuration.
+
+# The cognitive-complexity ratchet's threshold -- restated, not changed.
+#
+# 25 is clippy's own default for `clippy::cognitive_complexity`, so writing it
+# here changes nothing about what the lint reports today. What it changes is who
+# owns the number: a threshold that moved during a Rust toolchain bump would
+# silently re-grade every function in the crate. Pinning it here means the number
+# only changes in a diff someone reviews.
+#
+# `mise run clippy` is unaffected by this line. `cognitive_complexity` is a
+# nursery lint and allow-by-default, so it fires only where it is explicitly
+# opted into -- the `complexity` and `complexity-check` tasks in
+# .mise/config.toml, and nowhere else. Do not raise it because a function is
+# inconveniently close to the line: lift a pure, unit-testable helper out of the
+# tangle instead, which lowers the score by removing branches rather than by
+# moving the goalposts.
+cognitive-complexity-threshold = 25

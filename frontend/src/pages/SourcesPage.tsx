@@ -81,6 +81,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import SyncProgressDisplay from '../components/SyncProgress';
+import { buildSourceConfig, buildTestConnectionRequest } from '../services/sourceConnectionTest';
 
 interface Source {
   id: string;
@@ -112,6 +113,33 @@ interface SnackbarState {
   severity: 'success' | 'error' | 'warning' | 'info';
 }
 
+const createDefaultSourceForm = () => ({
+  name: '',
+  source_type: 'webdav' as 'webdav' | 'local_folder' | 's3',
+  enabled: true,
+  // WebDAV fields
+  server_url: '',
+  username: '',
+  password: '',
+  server_type: 'generic' as 'nextcloud' | 'owncloud' | 'generic',
+  // Local Folder fields
+  recursive: true,
+  follow_symlinks: false,
+  // S3 fields
+  bucket_name: '',
+  region: 'us-east-1',
+  access_key_id: '',
+  secret_access_key: '',
+  endpoint_url: '',
+  force_path_style: 'auto' as 'auto' | 'path' | 'vhost',
+  prefix: '',
+  // Common fields
+  watch_folders: ['/Documents'],
+  file_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
+  auto_sync: false,
+  sync_interval_minutes: 60,
+});
+
 const SourcesPage: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -133,32 +161,7 @@ const SourcesPage: React.FC = () => {
   });
 
   // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    source_type: 'webdav' as 'webdav' | 'local_folder' | 's3',
-    enabled: true,
-    // WebDAV fields
-    server_url: '',
-    username: '',
-    password: '',
-    server_type: 'generic' as 'nextcloud' | 'owncloud' | 'generic',
-    // Local Folder fields
-    recursive: true,
-    follow_symlinks: false,
-    // S3 fields
-    bucket_name: '',
-    region: 'us-east-1',
-    access_key_id: '',
-    secret_access_key: '',
-    endpoint_url: '',
-    force_path_style: 'auto' as 'auto' | 'path' | 'vhost',
-    prefix: '',
-    // Common fields
-    watch_folders: ['/Documents'],
-    file_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
-    auto_sync: false,
-    sync_interval_minutes: 60,
-  });
+  const [formData, setFormData] = useState(createDefaultSourceForm);
 
   // Additional state for enhanced features
   const [newFolder, setNewFolder] = useState('');
@@ -179,7 +182,7 @@ const SourcesPage: React.FC = () => {
 
   useEffect(() => {
     loadSources();
-    if (user?.role === 'Admin') {
+    if (user?.role === 'admin') {
       loadOcrStatus();
     }
   }, [user]);
@@ -241,7 +244,7 @@ const SourcesPage: React.FC = () => {
 
   // OCR Control Functions (Admin only)
   const loadOcrStatus = async () => {
-    if (user?.role !== 'Admin') return;
+    if (user?.role !== 'admin') return;
     try {
       const response = await queueService.getOcrStatus();
       setOcrStatus(response.data);
@@ -251,7 +254,7 @@ const SourcesPage: React.FC = () => {
   };
 
   const handlePauseOcr = async () => {
-    if (user?.role !== 'Admin') return;
+    if (user?.role !== 'admin') return;
     setOcrLoading(true);
     try {
       await queueService.pauseOcr();
@@ -266,7 +269,7 @@ const SourcesPage: React.FC = () => {
   };
 
   const handleResumeOcr = async () => {
-    if (user?.role !== 'Admin') return;
+    if (user?.role !== 'admin') return;
     setOcrLoading(true);
     try {
       await queueService.resumeOcr();
@@ -446,32 +449,7 @@ const SourcesPage: React.FC = () => {
 
   const handleCreateSource = () => {
     setEditingSource(null);
-    setFormData({
-      name: '',
-      source_type: 'webdav',
-      enabled: true,
-      // WebDAV fields
-      server_url: '',
-      username: '',
-      password: '',
-      server_type: 'generic',
-      // Local Folder fields
-      recursive: true,
-      follow_symlinks: false,
-      // S3 fields
-      bucket_name: '',
-      region: 'us-east-1',
-      access_key_id: '',
-      secret_access_key: '',
-      endpoint_url: '',
-      force_path_style: 'auto',
-      prefix: '',
-      // Common fields
-      watch_folders: ['/Documents'],
-      file_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
-      auto_sync: false,
-      sync_interval_minutes: 60,
-    });
+    setFormData(createDefaultSourceForm());
     setCrawlEstimate(null);
     setNewFolder('');
     setNewExtension('');
@@ -488,7 +466,8 @@ const SourcesPage: React.FC = () => {
       // WebDAV fields
       server_url: config.server_url || '',
       username: config.username || '',
-      password: config.password || '',
+      // Secrets are never returned by the API; leave blank to keep the stored value.
+      password: '',
       server_type: config.server_type || 'generic',
       // Local Folder fields
       recursive: config.recursive !== undefined ? config.recursive : true,
@@ -497,7 +476,7 @@ const SourcesPage: React.FC = () => {
       bucket_name: config.bucket_name || '',
       region: config.region || 'us-east-1',
       access_key_id: config.access_key_id || '',
-      secret_access_key: config.secret_access_key || '',
+      secret_access_key: '',
       endpoint_url: config.endpoint_url || '',
       force_path_style: config.force_path_style === true ? 'path'
         : config.force_path_style === false ? 'vhost' : 'auto',
@@ -516,45 +495,9 @@ const SourcesPage: React.FC = () => {
 
   const handleSaveSource = async () => {
     try {
-      let config = {};
-      
-      // Build config based on source type
-      if (formData.source_type === 'webdav') {
-        config = {
-          server_url: formData.server_url,
-          username: formData.username,
-          password: formData.password,
-          watch_folders: formData.watch_folders,
-          file_extensions: formData.file_extensions,
-          auto_sync: formData.auto_sync,
-          sync_interval_minutes: formData.sync_interval_minutes,
-          server_type: formData.server_type,
-        };
-      } else if (formData.source_type === 'local_folder') {
-        config = {
-          watch_folders: formData.watch_folders,
-          file_extensions: formData.file_extensions,
-          auto_sync: formData.auto_sync,
-          sync_interval_minutes: formData.sync_interval_minutes,
-          recursive: formData.recursive,
-          follow_symlinks: formData.follow_symlinks,
-        };
-      } else if (formData.source_type === 's3') {
-        config = {
-          bucket_name: formData.bucket_name,
-          region: formData.region,
-          access_key_id: formData.access_key_id,
-          secret_access_key: formData.secret_access_key,
-          endpoint_url: formData.endpoint_url,
-          force_path_style: formData.force_path_style === 'path' ? true
-            : formData.force_path_style === 'vhost' ? false : null,
-          prefix: formData.prefix,
-          watch_folders: formData.watch_folders,
-          file_extensions: formData.file_extensions,
-          auto_sync: formData.auto_sync,
-          sync_interval_minutes: formData.sync_interval_minutes,
-        };
-      }
+      // On update an omitted secret means "keep the stored value", so never
+      // send an empty secret for an existing source.
+      const config = buildSourceConfig(formData, { omitBlankSecrets: !!editingSource });
 
       if (editingSource) {
         await api.put(`/sources/${editingSource.id}`, {
@@ -639,49 +582,14 @@ const SourcesPage: React.FC = () => {
   const handleTestConnection = async () => {
     setTestingConnection(true);
     try {
-      let response;
-      if (formData.source_type === 'webdav') {
-        response = await api.post('/sources/test/connection', {
-          source_type: 'webdav',
-          config: {
-            server_url: formData.server_url,
-            username: formData.username,
-            password: formData.password,
-            server_type: formData.server_type,
-            watch_folders: formData.watch_folders,
-            file_extensions: formData.file_extensions,
-          }
-        });
-      } else if (formData.source_type === 'local_folder') {
-        response = await api.post('/sources/test/connection', {
-          source_type: 'local_folder',
-          config: {
-            watch_folders: formData.watch_folders,
-            file_extensions: formData.file_extensions,
-            recursive: formData.recursive,
-            follow_symlinks: formData.follow_symlinks,
-          }
-        });
-      } else if (formData.source_type === 's3') {
-        response = await api.post('/sources/test/connection', {
-          source_type: 's3',
-          config: {
-            bucket_name: formData.bucket_name,
-            region: formData.region,
-            access_key_id: formData.access_key_id,
-            secret_access_key: formData.secret_access_key,
-            endpoint_url: formData.endpoint_url,
-            force_path_style: formData.force_path_style === 'path' ? true
-              : formData.force_path_style === 'vhost' ? false : null,
-            prefix: formData.prefix,
-          }
-        });
-      }
+      const config = buildSourceConfig(formData);
+      const response = await api.post('/sources/test/connection',
+        buildTestConnectionRequest(formData.source_type, config, editingSource));
 
-      if (response && response.data.success) {
+      if (response.data.success) {
         showSnackbar(response.data.message || t('sources.messages.connectionSuccess'), 'success');
       } else {
-        showSnackbar(response?.data.message || t('sources.errors.connectionFailed'), 'error');
+        showSnackbar(response.data.message || t('sources.errors.connectionFailed'), 'error');
       }
     } catch (error: any) {
       console.error('Failed to test connection:', error);
@@ -1434,7 +1342,7 @@ const SourcesPage: React.FC = () => {
           </Button>
 
           {/* OCR Controls for Admin Users */}
-          {user?.role === 'Admin' && (
+          {user?.role === 'admin' && (
             <>
               {ocrLoading ? (
                 <CircularProgress size={24} />
@@ -1706,7 +1614,13 @@ const SourcesPage: React.FC = () => {
                         fullWidth
                         label="Password"
                         type="password"
+                        autoComplete="new-password"
                         value={formData.password}
+                        placeholder={editingSource ? t('sources.form.keepCurrentSecret', 'Leave blank to keep current') : undefined}
+                        InputLabelProps={editingSource ? { shrink: true } : undefined}
+                        helperText={editingSource && editingSource.config?.has_password
+                          ? t('sources.form.passwordStored', 'A password is stored for this source')
+                          : undefined}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                       />
@@ -2338,7 +2252,13 @@ const SourcesPage: React.FC = () => {
                         fullWidth
                         label="Secret Access Key"
                         type="password"
+                        autoComplete="new-password"
                         value={formData.secret_access_key}
+                        placeholder={editingSource ? t('sources.form.keepCurrentSecret', 'Leave blank to keep current') : undefined}
+                        InputLabelProps={editingSource ? { shrink: true } : undefined}
+                        helperText={editingSource && editingSource.config?.has_secret_access_key
+                          ? t('sources.form.secretStored', 'A secret is stored for this source')
+                          : undefined}
                         onChange={(e) => setFormData({ ...formData, secret_access_key: e.target.value })}
                         sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                       />

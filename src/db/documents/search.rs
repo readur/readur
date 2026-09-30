@@ -7,12 +7,18 @@ use super::helpers::{map_row_to_document, apply_role_based_filter, apply_paginat
 use crate::db::Database;
 
 impl Database {
-    /// Performs basic document search with PostgreSQL full-text search
+    /// Performs basic document search over the user's own documents
     pub async fn search_documents(&self, user_id: Uuid, search_request: &SearchRequest) -> Result<Vec<Document>> {
+        self.search_documents_with_role(user_id, UserRole::User, search_request).await
+    }
+
+    /// Basic full-text search, scoped like `count_search_documents` so that
+    /// result pages and totals agree.
+    pub async fn search_documents_with_role(&self, user_id: Uuid, user_role: UserRole, search_request: &SearchRequest) -> Result<Vec<Document>> {
         let mut query = QueryBuilder::<Postgres>::new("SELECT ");
         query.push(DOCUMENT_FIELDS);
-        query.push(" FROM documents WHERE user_id = ");
-        query.push_bind(user_id);
+        query.push(" FROM documents WHERE 1=1");
+        apply_role_based_filter(&mut query, user_id, user_role);
 
         // Add search conditions
         if !search_request.query.trim().is_empty() {

@@ -52,7 +52,7 @@ const CommentItem: React.FC<CommentItemProps> = ({
 }) => {
   const [editing, setEditing] = useState(false);
   const isAuthor = currentUserId === comment.user_id;
-  const isAdmin = currentUserRole === 'Admin';
+  const isAdmin = currentUserRole === 'admin';
   const canEdit = isAuthor;
   const canDelete = isAuthor || isAdmin;
 

@@ -21,6 +21,10 @@ The fastest way to get Readur running:
 git clone https://github.com/perfectra1n/readur
 cd readur
 
+# Optional: JWT_SECRET signs session tokens. When unset, a key is generated on
+# first start and stored in the database. To manage it yourself:
+# echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+
 # Start all services
 docker compose up --build -d
 
@@ -29,24 +33,16 @@ open http://localhost:8000
 ```
 
 **Admin credentials:**
-- Username: `admin`
-- Password: Auto-generated on first run (check container logs)
+- Username: `admin` (override with `ADMIN_USERNAME`)
+- Password: the value of `ADMIN_PASSWORD` if set; otherwise generated on first run and written to a file
 
-On first startup, Readur generates a secure admin password and displays it in the logs:
-```
-==============================================
-  READUR ADMIN USER CREATED
-==============================================
+If `ADMIN_PASSWORD` is not set, Readur generates a random 24-character password on first startup and writes it to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in the Docker image) with mode `0600`. The password is not written to the logs; the startup log shows the file path. Set `ADMIN_PASSWORD_FILE` to choose a different location.
 
-Username: admin
-Password: [your-generated-password]
-
-⚠️   SAVE THESE CREDENTIALS IMMEDIATELY!
-⚠️   This password will not be shown again.
-==============================================
+```bash
+docker compose exec readur cat /app/uploads/.readur/initial-admin-password
 ```
 
-View the logs with: `docker compose logs readur`
+Sign in, change the password, then delete the file.
 
 To reset the admin password later:
 ```bash
@@ -126,7 +122,7 @@ Required environment variables:
 **Option 1: Using DATABASE_URL (recommended)**:
 ```env
 DATABASE_URL=postgresql://readur_user:your_password@localhost/readur
-JWT_SECRET=your-super-secret-jwt-key-change-this
+JWT_SECRET=<output of: openssl rand -hex 32>
 SERVER_ADDRESS=0.0.0.0:8000
 UPLOAD_PATH=./uploads
 WATCH_FOLDER=./watch
@@ -142,12 +138,14 @@ POSTGRES_DB=readur
 POSTGRES_USER=readur_user
 POSTGRES_PASSWORD=your_password
 
-JWT_SECRET=your-super-secret-jwt-key-change-this
+JWT_SECRET=<output of: openssl rand -hex 32>
 SERVER_ADDRESS=0.0.0.0:8000
 UPLOAD_PATH=./uploads
 WATCH_FOLDER=./watch
 ALLOWED_FILE_TYPES=pdf,png,jpg,jpeg,gif,bmp,tiff,txt,rtf,doc,docx
 ```
+
+> **Note**: `JWT_SECRET` is optional. When it is unset, Readur generates a signing key on first start and stores it in the database; `readur rotate-jwt-secret` replaces it. If you set `JWT_SECRET`, it must be at least 32 bytes and not a published example value (generate one with `openssl rand -hex 32`), and it takes precedence over the stored key.
 
 > **Note**: If `DATABASE_URL` is set, it takes priority over individual PostgreSQL variables. This is useful for different deployment scenarios where some platforms provide a single connection string while others provide individual components.
 

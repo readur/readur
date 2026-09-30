@@ -2,7 +2,6 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Json, Response},
-    body::Body,
 };
 use std::sync::Arc;
 use tracing::{debug, error};
@@ -414,11 +413,7 @@ pub async fn view_failed_document(
                 .to_string()
         });
     
-    let response = Response::builder()
-        .header("Content-Type", content_type)
-        .header("Content-Length", file_data.len())
-        .header("Content-Disposition", format!("inline; filename=\"{}\"", filename))
-        .body(Body::from(file_data))
+    let response = crate::http_security::user_content_response(&content_type, &filename, true, file_data)
         .map_err(|e| {
             error!("Failed to build response: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR

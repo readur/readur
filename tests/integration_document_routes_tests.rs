@@ -36,6 +36,8 @@ mod document_routes_deletion_tests {
             oidc_issuer: None,
             oidc_email: None,
             auth_provider: AuthProvider::Local,
+            token_version: 0,
+            is_active: true,
         }
     }
 

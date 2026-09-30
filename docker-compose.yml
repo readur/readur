@@ -41,7 +41,11 @@ services:
       SERVER_PORT: 8000
       
       # Security
-      JWT_SECRET: your-secret-key-change-this-in-production
+      # Optional. When empty, a signing key is generated on first start and
+      # stored in the database (rotate it with `readur rotate-jwt-secret`).
+      # To manage it yourself, set a random value of at least 32 bytes, e.g.
+      # `openssl rand -hex 32`.
+      JWT_SECRET: ${JWT_SECRET:-}
       
       # File paths
       UPLOAD_PATH: /app/uploads

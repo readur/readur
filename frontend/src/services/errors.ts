@@ -123,7 +123,15 @@ export const ErrorHelper = {
           status: axiosError.response.status,
         }
       }
-      
+
+      // Plain `{ "error": "..." }` bodies (no error code)
+      if (typeof (axiosError.response?.data as any)?.error === 'string') {
+        return {
+          message: (axiosError.response!.data as any).error,
+          status: axiosError.response!.status,
+        }
+      }
+
       // Default axios error handling
       return {
         message: axiosError.message || 'An error occurred',
