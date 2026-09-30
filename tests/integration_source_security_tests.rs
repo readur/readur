@@ -247,6 +247,86 @@ async fn metadata_service_addresses_are_refused() {
     let _ = ctx.cleanup_and_close().await;
 }
 
+/// The configuration objects the source form sends to `test/connection`
+/// (see `buildSourceConfig` in the frontend) must parse as the typed configs.
+#[tokio::test]
+async fn connection_test_accepts_the_configs_the_source_form_sends() {
+    let ctx = TestContext::new().await;
+    let (user_token, admin_token) = tokens(&ctx).await;
+    let dir = tempfile::tempdir().unwrap();
+    let sync = json!({"watch_folders": ["/Documents"], "file_extensions": ["pdf"], "auto_sync": false, "sync_interval_minutes": 60});
+    let with_sync = |mut config: Value| {
+        config.as_object_mut().unwrap().extend(sync.as_object().unwrap().clone());
+        config
+    };
+    let cases = [
+        ("webdav", &user_token, with_sync(json!({
+            "server_url": "http://169.254.169.254/dav", "username": "", "password": "", "server_type": "generic"
+        }))),
+        ("s3", &user_token, with_sync(json!({
+            "bucket_name": "b", "region": "us-east-1", "access_key_id": "AK", "secret_access_key": "",
+            "endpoint_url": "http://[fe80::1]:9000", "force_path_style": null, "prefix": ""
+        }))),
+        ("local_folder", &admin_token, with_sync(json!({
+            "watch_folders": [dir.path().to_str().unwrap()], "recursive": true, "follow_symlinks": false
+        }))),
+    ];
+    for (source_type, token, config) in cases {
+        let (status, _, body) = send(
+            &ctx,
+            "POST",
+            "/api/sources/test/connection",
+            token,
+            Some(json!({"source_type": source_type, "config": config})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{}: {}", source_type, String::from_utf8_lossy(&body));
+        let message = json_body(&body)["message"].as_str().unwrap_or_default().to_string();
+        assert_ne!(message, format!("Invalid {} configuration", source_type));
+    }
+
+    let _ = ctx.cleanup_and_close().await;
+}
+
+/// A source without a stored secret (anonymous WebDAV) stays editable and
+/// testable by ID.
+#[tokio::test]
+async fn sources_without_a_secret_stay_editable() {
+    let ctx = TestContext::new().await;
+    let (user_token, _) = tokens(&ctx).await;
+    let config = json!({
+        "server_url": "https://192.168.1.30/dav", "username": "", "password": "",
+        "watch_folders": ["/"], "file_extensions": ["pdf"], "auto_sync": false,
+        "sync_interval_minutes": 60, "server_type": "generic"
+    });
+    let create = json!({"name": "anonymous", "source_type": "webdav", "enabled": false, "config": config});
+    let (status, _, body) = send(&ctx, "POST", "/api/sources", &user_token, Some(create)).await;
+    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    let id = json_body(&body)["id"].as_str().unwrap().to_string();
+
+    let mut edited = config.clone();
+    edited.as_object_mut().unwrap().remove("password");
+    edited["watch_folders"] = json!(["/Scans"]);
+    let (status, _, body) =
+        send(&ctx, "PUT", &format!("/api/sources/{}", id), &user_token, Some(json!({"config": edited.clone()}))).await;
+    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(json_body(&body)["config"]["has_password"], json!(false));
+
+    edited["server_url"] = json!("http://169.254.169.254/dav");
+    let (status, _, body) = send(
+        &ctx,
+        "POST",
+        "/api/sources/test/connection",
+        &user_token,
+        Some(json!({"source_type": "webdav", "source_id": id, "config": edited})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    assert_ne!(json_body(&body)["message"], json!("Invalid webdav configuration"));
+
+    let _ = ctx.cleanup_and_close().await;
+}
+
 #[tokio::test]
 async fn settings_never_return_the_webdav_password() {
     let ctx = TestContext::new().await;
