@@ -46,7 +46,7 @@ function Label({
 
   const content: ReactNode = (
     <>
-      <span className={styles.swatch} style={swatchStyle(label.color) as CSSProperties} data-swatch="" aria-hidden="true" />
+      <span className={styles.swatch} data-swatch="" aria-hidden="true" />
       {Icon ? (
         <span className={styles.tagIcon} aria-hidden="true">
           <Icon fontSize="inherit" />
@@ -60,6 +60,7 @@ function Label({
   return (
     <span
       className={cx(styles.tag, styles[size], styles[variant], disabled && styles.disabled, className)}
+      style={swatchStyle(label.color) as CSSProperties}
       data-label={label.id}
       data-disabled={disabled || undefined}
     >

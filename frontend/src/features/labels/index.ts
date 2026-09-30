@@ -13,3 +13,6 @@ export {
   toLabelData,
 } from './labelData';
 export type { LabelData, LabelDraft } from './labelData';
+export { LABELS_CHANGED_EVENT, notifyLabelsChanged } from './labelEvents';
+export { ColorChoices } from './ColorChoices';
+export type { ColorChoicesProps } from './ColorChoices';

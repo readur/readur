@@ -9,11 +9,13 @@
   font-family: var(--font-ui);
   color: var(--fg);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
 }
 
+/* A chip tinted with the label's own colour; the text stays the page's text colour. */
 .filled {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--label-color, var(--fg-meta)) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--label-color, var(--fg-meta)) 40%, var(--surface));
 }
 
 .outlined {
@@ -67,7 +69,7 @@
 
 .tagButton[data-focus-visible],
 .tagRemove[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -76,8 +78,7 @@
   width: 8px;
   height: 8px;
   background: var(--label-color, var(--fg-meta));
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: 50%;
 }
 
 .tagIcon {
@@ -147,12 +148,9 @@
 }
 
 .fieldLabel {
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-sm);
+  font-family: var(--font-ui);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-2);
 }
 
@@ -190,7 +188,7 @@
 
 .comboInput[data-focus-visible],
 .comboInput:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -268,7 +266,7 @@
 }
 
 .option[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -350,7 +348,7 @@
 
 .colorChoice[data-focus-visible],
 .iconChoice[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

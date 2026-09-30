@@ -1,15 +1,14 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Label as RACLabel, Radio, RadioGroup } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { Button, Dialog, TextField } from '../../ui';
+import { ColorChoices } from './ColorChoices';
 import Label from './Label';
 import {
   DEFAULT_LABEL_COLOR,
-  LABEL_COLORS,
   LABEL_ICONS,
   isHexColor,
-  swatchStyle,
   type LabelData,
   type LabelDraft,
 } from './labelData';
@@ -183,21 +182,12 @@ function LabelCreateDialog({ open, onClose, onSubmit, prefilledName = '', editin
           rows={2}
           isDisabled={saving}
         />
-        <RadioGroup
-          className={styles.choiceGroup}
-          value={LABEL_COLORS.some((c) => c.value === form.color) ? form.color : null}
+        <ColorChoices
+          label={t('labels.create.colorLabel', 'Color')}
+          value={form.color}
           onChange={(color) => update({ color })}
           isDisabled={saving}
-        >
-          <RACLabel className={styles.fieldLabel}>{t('labels.create.colorLabel', 'Color')}</RACLabel>
-          <div className={styles.choices}>
-            {LABEL_COLORS.map((c) => (
-              <Radio key={c.value} value={c.value} className={styles.colorChoice} aria-label={t(c.nameKey, c.fallback)}>
-                <span className={styles.colorDot} style={swatchStyle(c.value) as CSSProperties} aria-hidden="true" />
-              </Radio>
-            ))}
-          </div>
-        </RadioGroup>
+        />
         <TextField
           label={t('labels.create.customColorLabel', 'Custom Color (hex)')}
           value={form.color}

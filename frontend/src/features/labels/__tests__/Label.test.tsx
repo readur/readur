@@ -50,19 +50,19 @@ describe('Label', () => {
   });
 
   describe('colour', () => {
-    test('passes the label colour to the swatch', () => {
+    test('tints the chip and its swatch with the label colour', () => {
       renderLabel();
-      expect(swatchOf('Test Label').style.getPropertyValue('--label-color')).toBe('#ff0000');
+      expect(tagOf('Test Label').style.getPropertyValue('--label-color')).toBe('#ff0000');
     });
 
     test('accepts short hex colours', () => {
       renderLabel({ label: { ...mockLabel, color: '#0f0' } });
-      expect(swatchOf('Test Label').style.getPropertyValue('--label-color')).toBe('#0f0');
+      expect(tagOf('Test Label').style.getPropertyValue('--label-color')).toBe('#0f0');
     });
 
     test('ignores a colour that is not a hex value', () => {
       renderLabel({ label: { ...mockLabel, color: 'red; background: url(x)' } });
-      expect(swatchOf('Test Label').style.getPropertyValue('--label-color')).toBe('');
+      expect(tagOf('Test Label').style.getPropertyValue('--label-color')).toBe('');
     });
 
     test('never paints the name on the label colour (dark colour)', () => {
