@@ -238,7 +238,8 @@ jobs:
           fi
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
-          JWT_SECRET: stress-test-secret
+          # CI-only signing key: must be 32+ bytes or the server refuses to start.
+          JWT_SECRET: 9b3f6c1e2a7d4058b6e1c3f2a9d8e7b4c5a6f1e0d2b3c4a5f6e7d8c9b0a1f2e3
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch

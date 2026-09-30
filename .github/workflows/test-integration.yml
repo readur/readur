@@ -13,6 +13,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: postgresql://readur:readur@localhost:5432/readur
+  # Fixed signing key for the throwaway CI server only (32+ bytes, not a
+  # published example value, otherwise the server refuses to start). The test
+  # step uses the same value so tokens minted in tests verify on the server.
+  CI_JWT_SECRET: 55d90d87f068819258508dec17e962cdf8d2d458c90589c4978e2dc5cb96e5e7
+  CI_ADMIN_PASSWORD: integration-ci-admin-password
 
 jobs:
   integration-tests:
@@ -131,7 +136,9 @@ jobs:
           echo "Server started with PID: $(cat readur.pid)"
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
-          JWT_SECRET: test-secret-key
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: ${{ env.CI_ADMIN_PASSWORD }}
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch
@@ -240,7 +247,7 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           API_URL: http://localhost:8000
-          JWT_SECRET: test-secret-key
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch

@@ -12,6 +12,12 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Fixed values for the throwaway CI server only. The JWT key must be 32+
+  # bytes and not a published example value or the server refuses to start.
+  CI_JWT_SECRET: 55d90d87f068819258508dec17e962cdf8d2d458c90589c4978e2dc5cb96e5e7
+  # Seeded admin account; the E2E suite logs in with it to provision test users.
+  E2E_ADMIN_USERNAME: admin
+  E2E_ADMIN_PASSWORD: e2e-ci-admin-password
 
 jobs:
   e2e-tests:
@@ -91,7 +97,9 @@ jobs:
           echo "Server started with PID: $(cat backend.pid)"
         env:
           DATABASE_URL: postgres://readur:readur@localhost:5432/readur
-          JWT_SECRET: test-secret-key
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          ADMIN_USERNAME: ${{ env.E2E_ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
           PORT: 8000
           FRONTEND_PATH: ./frontend/dist
           UPLOAD_PATH: ./uploads
