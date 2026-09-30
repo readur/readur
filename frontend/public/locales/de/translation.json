@@ -75,6 +75,50 @@
       "oidcNotConfigured": "OIDC ist auf diesem Server nicht konfiguriert. Bitte verwenden Sie die Benutzername/Passwort-Anmeldung.",
       "oidcInitFailed": "OIDC-Anmeldung konnte nicht initialisiert werden. Bitte versuchen Sie es erneut.",
       "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten."
+    },
+    "login": {
+      "wordmark": "Readur",
+      "title": "Anmelden",
+      "loading": "Anmeldeoptionen werden geladen",
+      "username": "Benutzername",
+      "password": "Passwort",
+      "usernameRequired": "Benutzernamen eingeben",
+      "passwordRequired": "Passwort eingeben",
+      "showPassword": "Passwort anzeigen",
+      "hidePassword": "Passwort verbergen",
+      "submit": "Anmelden",
+      "signingIn": "Anmeldung läuft…",
+      "sso": "Mit SSO anmelden",
+      "redirecting": "Weiterleitung…",
+      "noMethods": "Auf diesem Server ist keine Anmeldemethode aktiviert. Bitten Sie eine Administratorin oder einen Administrator, Passwort- oder SSO-Anmeldung zu aktivieren.",
+      "errors": {
+        "invalidCredentials": "Benutzername oder Passwort falsch. Prüfen Sie beides und versuchen Sie es erneut.",
+        "accountDisabled": "Dieses Konto ist deaktiviert. Bitten Sie eine Administratorin oder einen Administrator, es wieder zu aktivieren.",
+        "sessionExpired": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an.",
+        "unreachable": "Der Server ist nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+        "server": "Auf dem Server ist ein Problem aufgetreten. Versuchen Sie es gleich noch einmal.",
+        "generic": "Anmeldung fehlgeschlagen. Versuchen Sie es erneut.",
+        "ssoNotConfigured": "SSO ist auf diesem Server nicht eingerichtet. Melden Sie sich mit Benutzername und Passwort an.",
+        "ssoFailed": "SSO-Anmeldung fehlgeschlagen. Versuchen Sie es erneut oder wenden Sie sich an Ihre Administration.",
+        "ssoStart": "SSO-Anmeldung konnte nicht gestartet werden. Versuchen Sie es erneut."
+      },
+      "or": "oder"
+    },
+    "callback": {
+      "title": "Anmeldung läuft…",
+      "wait": "Einen Moment, die Anmeldung wird abgeschlossen.",
+      "errorTitle": "Anmeldung fehlgeschlagen",
+      "noToken": "Der Server hat kein Anmeldetoken gesendet. Gehen Sie zurück und versuchen Sie es erneut.",
+      "generic": "Die Anmeldung konnte nicht abgeschlossen werden. Versuchen Sie es erneut.",
+      "back": "Zurück zur Anmeldung",
+      "errors": {
+        "access_denied": "Zugriff verweigert. Fragen Sie Ihre Administration, ob Sie Zugriff auf Readur haben.",
+        "misconfigured": "Der SSO-Anbieter hat die Anfrage abgelehnt. Bitten Sie Ihre Administration, die SSO-Einrichtung zu prüfen.",
+        "provider_unavailable": "Beim SSO-Anbieter ist ein Problem aufgetreten. Versuchen Sie es gleich noch einmal.",
+        "login_required": "Der SSO-Anbieter verlangt eine erneute Anmeldung. Gehen Sie zurück und versuchen Sie es erneut."
+      },
+      "failedCode": "SSO-Anmeldung fehlgeschlagen (Code: {{code}}). Versuchen Sie es erneut oder wenden Sie sich an Ihre Administration.",
+      "failedGeneric": "SSO-Anmeldung fehlgeschlagen. Versuchen Sie es erneut oder wenden Sie sich an Ihre Administration."
     }
   },
   "navigation": {

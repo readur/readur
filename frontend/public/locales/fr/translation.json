@@ -75,6 +75,50 @@
       "oidcNotConfigured": "OIDC n'est pas configuré sur ce serveur. Veuillez utiliser la connexion par nom d'utilisateur/mot de passe.",
       "oidcInitFailed": "Échec de l'initialisation de la connexion OIDC. Veuillez réessayer.",
       "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants."
+    },
+    "login": {
+      "wordmark": "Readur",
+      "title": "Connexion",
+      "loading": "Chargement des options de connexion",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "usernameRequired": "Saisissez votre nom d'utilisateur",
+      "passwordRequired": "Saisissez votre mot de passe",
+      "showPassword": "Afficher le mot de passe",
+      "hidePassword": "Masquer le mot de passe",
+      "submit": "Se connecter",
+      "signingIn": "Connexion…",
+      "sso": "Se connecter avec SSO",
+      "redirecting": "Redirection…",
+      "noMethods": "Aucune méthode de connexion n'est activée sur ce serveur. Demandez à un administrateur d'activer la connexion par mot de passe ou SSO.",
+      "errors": {
+        "invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect. Vérifiez les deux et réessayez.",
+        "accountDisabled": "Ce compte est désactivé. Demandez à un administrateur de le réactiver.",
+        "sessionExpired": "Votre session a expiré. Reconnectez-vous.",
+        "unreachable": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+        "server": "Le serveur a rencontré un problème. Réessayez dans un instant.",
+        "generic": "Échec de la connexion. Réessayez.",
+        "ssoNotConfigured": "SSO n'est pas configuré sur ce serveur. Connectez-vous avec votre nom d'utilisateur et votre mot de passe.",
+        "ssoFailed": "Échec de la connexion SSO. Réessayez ou contactez votre administrateur.",
+        "ssoStart": "Impossible de démarrer la connexion SSO. Réessayez."
+      },
+      "or": "ou"
+    },
+    "callback": {
+      "title": "Connexion en cours…",
+      "wait": "Un instant, nous terminons votre connexion.",
+      "errorTitle": "Échec de la connexion",
+      "noToken": "Le serveur n'a pas envoyé de jeton de connexion. Revenez en arrière et réessayez.",
+      "generic": "Impossible de terminer la connexion. Réessayez.",
+      "back": "Retour à la connexion",
+      "errors": {
+        "access_denied": "Accès refusé. Demandez à votre administrateur si vous avez accès à Readur.",
+        "misconfigured": "Le fournisseur SSO a rejeté la demande. Demandez à votre administrateur de vérifier la configuration SSO.",
+        "provider_unavailable": "Le fournisseur SSO a rencontré un problème. Réessayez dans un instant.",
+        "login_required": "Le fournisseur SSO demande une nouvelle connexion. Revenez en arrière et réessayez."
+      },
+      "failedCode": "Échec de la connexion SSO (code : {{code}}). Réessayez ou contactez votre administrateur.",
+      "failedGeneric": "Échec de la connexion SSO. Réessayez ou contactez votre administrateur."
     }
   },
   "navigation": {

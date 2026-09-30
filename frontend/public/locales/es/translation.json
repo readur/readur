@@ -75,6 +75,50 @@
       "oidcNotConfigured": "OIDC no está configurado en este servidor. Por favor usa inicio de sesión con nombre de usuario/contraseña.",
       "oidcInitFailed": "Falló el inicio de sesión OIDC. Por favor intenta de nuevo.",
       "loginFailed": "Falló el inicio de sesión. Por favor verifica tus credenciales."
+    },
+    "login": {
+      "wordmark": "Readur",
+      "title": "Iniciar sesión",
+      "loading": "Cargando opciones de inicio de sesión",
+      "username": "Usuario",
+      "password": "Contraseña",
+      "usernameRequired": "Introduce tu usuario",
+      "passwordRequired": "Introduce tu contraseña",
+      "showPassword": "Mostrar contraseña",
+      "hidePassword": "Ocultar contraseña",
+      "submit": "Iniciar sesión",
+      "signingIn": "Iniciando sesión…",
+      "sso": "Iniciar sesión con SSO",
+      "redirecting": "Redirigiendo…",
+      "noMethods": "Este servidor no tiene ningún método de inicio de sesión habilitado. Pide a un administrador que habilite el acceso con contraseña o SSO.",
+      "errors": {
+        "invalidCredentials": "Usuario o contraseña incorrectos. Revisa ambos e inténtalo de nuevo.",
+        "accountDisabled": "Esta cuenta está desactivada. Pide a un administrador que la reactive.",
+        "sessionExpired": "Tu sesión ha caducado. Inicia sesión de nuevo.",
+        "unreachable": "No se puede conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.",
+        "server": "El servidor tuvo un problema. Inténtalo de nuevo en un momento.",
+        "generic": "No se pudo iniciar sesión. Inténtalo de nuevo.",
+        "ssoNotConfigured": "SSO no está configurado en este servidor. Inicia sesión con tu usuario y contraseña.",
+        "ssoFailed": "Falló el inicio de sesión con SSO. Inténtalo de nuevo o consulta con tu administrador.",
+        "ssoStart": "No se pudo iniciar el acceso con SSO. Inténtalo de nuevo."
+      },
+      "or": "o"
+    },
+    "callback": {
+      "title": "Iniciando sesión…",
+      "wait": "Un momento mientras terminamos de iniciar tu sesión.",
+      "errorTitle": "Error al iniciar sesión",
+      "noToken": "El servidor no envió un token de acceso. Vuelve atrás e inténtalo de nuevo.",
+      "generic": "No se pudo completar el inicio de sesión. Inténtalo de nuevo.",
+      "back": "Volver a iniciar sesión",
+      "errors": {
+        "access_denied": "Acceso denegado. Pregunta a tu administrador si tienes acceso a Readur.",
+        "misconfigured": "El proveedor de SSO rechazó la solicitud. Pide a tu administrador que revise la configuración de SSO.",
+        "provider_unavailable": "El proveedor de SSO tuvo un problema. Inténtalo de nuevo en un momento.",
+        "login_required": "El proveedor de SSO necesita que inicies sesión de nuevo. Vuelve atrás e inténtalo otra vez."
+      },
+      "failedCode": "Falló el inicio de sesión con SSO (código: {{code}}). Inténtalo de nuevo o consulta con tu administrador.",
+      "failedGeneric": "Falló el inicio de sesión con SSO. Inténtalo de nuevo o consulta con tu administrador."
     }
   },
   "navigation": {

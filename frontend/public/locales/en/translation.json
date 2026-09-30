@@ -75,6 +75,50 @@
       "oidcNotConfigured": "OIDC is not configured on this server. Please use username/password login.",
       "oidcInitFailed": "Failed to initiate OIDC login. Please try again.",
       "loginFailed": "Failed to log in. Please check your credentials."
+    },
+    "login": {
+      "wordmark": "Readur",
+      "title": "Sign in",
+      "loading": "Loading sign-in options",
+      "username": "Username",
+      "password": "Password",
+      "usernameRequired": "Enter your username",
+      "passwordRequired": "Enter your password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "submit": "Sign in",
+      "signingIn": "Signing in…",
+      "sso": "Sign in with SSO",
+      "redirecting": "Redirecting…",
+      "noMethods": "No sign-in method is enabled on this server. Ask an administrator to enable password or SSO sign-in.",
+      "errors": {
+        "invalidCredentials": "Wrong username or password. Check both and try again.",
+        "accountDisabled": "This account is disabled. Ask an administrator to re-enable it.",
+        "sessionExpired": "Your session expired. Sign in again.",
+        "unreachable": "Cannot reach the server. Check your connection and try again.",
+        "server": "The server had a problem. Try again in a moment.",
+        "generic": "Sign-in failed. Try again.",
+        "ssoNotConfigured": "SSO is not set up on this server. Sign in with your username and password.",
+        "ssoFailed": "SSO sign-in failed. Try again or ask your administrator.",
+        "ssoStart": "Could not start SSO sign-in. Try again."
+      },
+      "or": "or"
+    },
+    "callback": {
+      "title": "Signing you in…",
+      "wait": "One moment while we finish signing you in.",
+      "errorTitle": "Sign-in failed",
+      "noToken": "The server did not send a sign-in token. Go back and try again.",
+      "generic": "Could not finish signing you in. Try again.",
+      "back": "Back to sign in",
+      "errors": {
+        "access_denied": "Access was denied. Ask your administrator whether you have access to Readur.",
+        "misconfigured": "The SSO provider rejected the request. Ask your administrator to check the SSO setup.",
+        "provider_unavailable": "The SSO provider had a problem. Try again in a moment.",
+        "login_required": "The SSO provider needs you to sign in again. Go back and retry."
+      },
+      "failedCode": "SSO sign-in failed (code: {{code}}). Try again or ask your administrator.",
+      "failedGeneric": "SSO sign-in failed. Try again or ask your administrator."
     }
   },
   "navigation": {
