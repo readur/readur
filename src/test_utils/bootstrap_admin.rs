@@ -8,7 +8,16 @@ use serde_json::json;
 /// registration only creates standard users, so tests create further admins
 /// through `POST /api/users` while signed in as this account.
 pub const TEST_BOOTSTRAP_ADMIN_USERNAME: &str = "test_bootstrap_admin";
-pub const TEST_BOOTSTRAP_ADMIN_PASSWORD: &str = "bootstrap_admin_pass123";
+
+/// Password of the bootstrap admin: `ADMIN_PASSWORD` from the environment when
+/// set and non-empty, otherwise a random value generated once per process.
+pub fn bootstrap_admin_password() -> &'static str {
+    static PASSWORD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    PASSWORD.get_or_init(|| match std::env::var("ADMIN_PASSWORD") {
+        Ok(p) if !p.is_empty() => p,
+        _ => uuid::Uuid::new_v4().simple().to_string(),
+    })
+}
 
 /// Insert the bootstrap admin directly, hashing its password once per process
 /// at the minimum bcrypt cost to keep test setup fast.
@@ -17,7 +26,7 @@ pub(crate) async fn seed_bootstrap_admin(db: &crate::db::Database) -> anyhow::Re
     let hash = match HASH.get() {
         Some(hash) => hash.clone(),
         None => {
-            let hash = bcrypt::hash(TEST_BOOTSTRAP_ADMIN_PASSWORD, 4)?;
+            let hash = bcrypt::hash(bootstrap_admin_password(), 4)?;
             HASH.get_or_init(|| hash).clone()
         }
     };

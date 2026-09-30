@@ -1030,7 +1030,7 @@ impl TestAuthHelper {
         let password = "adminpass123";
 
         let bootstrap_token = self
-            .login_user(TEST_BOOTSTRAP_ADMIN_USERNAME, TEST_BOOTSTRAP_ADMIN_PASSWORD)
+            .login_user(TEST_BOOTSTRAP_ADMIN_USERNAME, bootstrap_admin_password())
             .await;
         let admin_data = json!({
             "username": username,
