@@ -1,0 +1,13 @@
+{
+  "vitest": "0.28.5",
+  "coverageProvider": "@vitest/coverage-c8@0.28.5",
+  "measuredAt": "2026-09-30T02:43:00Z",
+  "testFiles": 55,
+  "tests": 638,
+  "statements": 42.39,
+  "branches": 68.59,
+  "functions": 42.94,
+  "lines": 42.39,
+  "include": ["src/**/*.{ts,tsx}"],
+  "exclude": ["**/*.test.{ts,tsx}", "src/test/**", "**/*.d.ts", "src/**/__tests__/**", "src/main.tsx"]
+}
