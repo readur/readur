@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { previewObjectUrl } from './previewUrl';
+import { useRef } from 'react';
+import { ImagePreview } from './ImagePreview';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button, TextField } from '../../../ui';
@@ -17,10 +17,6 @@ export function UploadPanel({ session: s, onShowResults }: { session: DebugSessi
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const failed = s.processingStatus.toLowerCase().includes('failed');
-  const previewUrl = useMemo(() => previewObjectUrl(s.selectedFile), [s.selectedFile]);
-  useEffect(() => () => {
-    if (previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(previewUrl);
-  }, [previewUrl]);
 
   return (
     <div className={shared.stack}>
@@ -96,12 +92,7 @@ export function UploadPanel({ session: s, onShowResults }: { session: DebugSessi
           </div>
         </div>
       ) : null}
-      {previewUrl ? (
-        <figure className={styles.figure}>
-          <figcaption className={styles.panelTitle}>{t('debug.preview')}</figcaption>
-          <img src={previewUrl} alt={s.selectedFile?.name ?? ''} className={styles.previewImage} />
-        </figure>
-      ) : null}
+      <ImagePreview file={s.selectedFile} caption={t('debug.preview')} />
     </div>
   );
 }

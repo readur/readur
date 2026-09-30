@@ -185,3 +185,10 @@
   color: var(--danger);
   overflow-wrap: anywhere;
 }
+
+.previewCanvas {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
