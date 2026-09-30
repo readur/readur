@@ -93,8 +93,11 @@ export function FailedOcrPanel() {
     setDeleting(true);
     try {
       const res = await documentService.bulkDelete(selectedIds);
-      const deleted = (res.data as { deleted_count?: number } | undefined)?.deleted_count;
+      const body = res.data as { deleted_count?: number; deleted_documents?: string[] } | undefined;
+      const deleted = body?.deleted_count;
       const outcome = outcomeOf(deleted, selectedIds.length);
+      // Only documents the server confirms as deleted are cleared; the rest stay marked and selected.
+      const gone = new Set(body?.deleted_documents ?? (outcome === 'all' ? selectedIds : []));
       if (outcome === 'none') {
         toast.show({ title: t('intake.attention.deleteNone', 'No documents were deleted'), tone: 'danger' });
       } else {
@@ -105,8 +108,8 @@ export function FailedOcrPanel() {
           }),
           tone: toneOf(outcome),
         });
-        ackAll(selectedDocs);
-        setSelected(new Set());
+        ackAll(selectedDocs.filter((d) => gone.has(d.id)));
+        setSelected(new Set(selectedIds.filter((id) => !gone.has(id))));
         setConfirmDelete(false);
       }
       await failed.reload();

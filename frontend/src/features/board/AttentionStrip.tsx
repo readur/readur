@@ -69,7 +69,17 @@ export function AttentionStrip({ failed, sources }: AttentionStripProps) {
     async (item: AttentionItem) => {
       try {
         if (item.kind === 'document') {
-          await documentService.retryOcr(item.id);
+          const res = await documentService.retryOcr(item.id);
+          const body = res?.data as { success?: boolean; message?: string } | undefined;
+          // The API answers 200 with success:false when OCR is already running for the document.
+          if (body?.success === false) {
+            toast.show({
+              title: t('board.attention.retryFailed', 'Could not retry'),
+              description: body.message || item.name,
+              tone: 'danger',
+            });
+            return;
+          }
           failed.reload();
         } else {
           await sourcesService.triggerSync(item.id);

@@ -18,6 +18,7 @@ vi.mock('../../../services/api', () => ({
 }));
 
 import Board from '../Board';
+import { ToastProvider } from '../../../ui';
 import { isLit, markLit } from '../litStore';
 import { doc, renderPage, resetBoardState } from './boardTestUtils';
 import type { UserRole } from '../../../types/generated';
@@ -286,6 +287,22 @@ describe('Board', () => {
       await user.click(within(row).getByRole('button', { name: 'Retry invoice.pdf' }));
       expect(m.documentService.retryOcr).toHaveBeenCalledWith('doc-real-7');
       expect(m.documentService.getFailedOcrDocuments).toHaveBeenCalledWith(10);
+    });
+
+    it('reports a refused retry (200 with success:false) instead of "Retry started"', async () => {
+      const user = userEvent.setup();
+      m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [{ id: 'doc-3', filename: 'busy.pdf', failure_reason: 'x' }] } });
+      m.documentService.retryOcr.mockResolvedValue({ data: { success: false, message: 'OCR is already processing' } });
+      renderPage(
+        <ToastProvider>
+          <Board />
+        </ToastProvider>,
+      );
+      await screen.findByText('d1.pdf');
+      await user.click(await screen.findByRole('button', { name: 'Retry busy.pdf' }));
+      expect(await screen.findByText('OCR is already processing')).toBeInTheDocument();
+      expect(screen.queryByText('Retry started')).not.toBeInTheDocument();
+      expect(m.documentService.getFailedOcrDocuments).toHaveBeenCalledTimes(1);
     });
 
     it('dismiss acknowledges the row, removes it and keeps it removed after a reload', async () => {

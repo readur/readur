@@ -25,8 +25,18 @@ const KEY1 = 'document:doc-1@2026-01-02T00:00:00Z';
 function serveOcr(docs: unknown[]) {
   documentService.getFailedOcrDocuments.mockImplementation(() => ok(ocrList(docs)));
 }
-function serveImports(records: unknown[]) {
-  ocrService.listFailedDocuments.mockImplementation(() => ok(failedList(records)));
+/** Behaves like GET /documents/failed: exact stage/reason filters, then limit/offset, total of the filtered set. */
+function serveImports(records: Array<Record<string, unknown>>) {
+  ocrService.listFailedDocuments.mockImplementation(
+    (q: { stage?: string; reason?: string; limit?: number; offset?: number } = {}) => {
+      const hits = records.filter(
+        (r) => (!q.stage || r.failure_stage === q.stage) && (!q.reason || r.failure_reason === q.reason),
+      );
+      const offset = q.offset ?? 0;
+      const page = hits.slice(offset, offset + (q.limit ?? 25));
+      return ok({ ...failedList(page), pagination: { total: hits.length, limit: q.limit ?? 25, offset, total_pages: 1 } });
+    },
+  );
 }
 
 const board = () => screen.findByRole('grid', { name: 'Failed documents' });
@@ -165,6 +175,25 @@ describe('Failed OCR bulk actions use real document ids', () => {
     expect(toast.closest('[role="alert"]')).not.toBeNull();
   });
 
+  it('after a partial delete, clears only the deleted document and keeps the other marked and selected', async () => {
+    documentService.bulkDelete.mockImplementation(() => ok({ deleted_count: 1, failed_count: 1, deleted_documents: ['doc-1'], failed_documents: ['doc-2'] }));
+    const user = userEvent.setup();
+    renderIntake(<FailedOcrPanel />);
+    const grid = await board();
+    const key2 = 'document:doc-2@2026-01-03T00:00:00Z';
+    expect(isLit('attention', key2)).toBe(true);
+    await user.click(within(grid).getByRole('checkbox', { name: 'Select All' }));
+    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete' }));
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete 2 documents?' })).getByRole('button', { name: 'Delete documents' }));
+    await screen.findByText('1 of 2 documents deleted');
+    expect(isLit('attention', KEY1)).toBe(false);
+    expect(isLit('attention', key2)).toBe(true);
+    const row2 = within(await board()).getByRole('row', { name: /scan2\.pdf/ });
+    expect(within(row2).getByRole('checkbox')).toBeChecked();
+    expect(within(within(await board()).getByRole('row', { name: /scan1\.pdf/ })).getByRole('checkbox')).not.toBeChecked();
+    expect(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
   it('keeps the retry dialog open with an error when nothing was queued', async () => {
     documentService.bulkRetryOcr.mockImplementation((req: { preview_only?: boolean }) =>
       ok({ success: true, message: '', queued_count: req.preview_only ? 2 : 0, matched_count: 2, documents: [], estimated_total_time_minutes: 1 }),
@@ -287,8 +316,40 @@ describe('Other import failures (read-only records, ported runtime checks)', () 
     const grid = await importsBoard();
     expect(within(grid).getByRole('row', { name: /rec-9\.pdf/ })).toHaveTextContent('Ingestion');
     expect(within(grid).queryByRole('row', { name: /ocr-rec\.pdf/ })).not.toBeInTheDocument();
+    // OCR records are never requested: every call names a non-OCR stage.
+    for (const [q] of ocrService.listFailedDocuments.mock.calls) expect(q.stage).not.toBe('ocr');
+    expect(ocrService.listFailedDocuments.mock.calls.every(([q]) => Boolean(q.stage))).toBe(true);
     expect(within(grid).queryAllByRole('checkbox')).toHaveLength(0);
     expect(within(grid).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('pages across stages with the server totals: full pages, correct total, nothing dropped', async () => {
+    const ingestion = Array.from({ length: 20 }, (_, i) => failedDoc(`ing-${i}`, { failure_stage: 'ingestion', failure_reason: 'file_too_large' }));
+    const storage = Array.from({ length: 10 }, (_, i) => failedDoc(`sto-${i}`, { failure_stage: 'storage', failure_reason: 'other' }));
+    const ocrOnes = Array.from({ length: 40 }, (_, i) => failedDoc(`ocr-${i}`, { failure_stage: 'ocr' }));
+    serveImports([...ocrOnes, ...ingestion, ...storage]);
+    const user = userEvent.setup();
+    renderIntake(<FailedOcrPanel />);
+    const grid = await importsBoard();
+    const dataRows = () => within(grid).getAllByRole('row').slice(1);
+    await waitFor(() => expect(dataRows()).toHaveLength(25));
+    expect(dataRows()[0]).toHaveTextContent('ing-0.pdf');
+    expect(dataRows()[24]).toHaveTextContent('sto-4.pdf');
+    const section = grid.closest('section') as HTMLElement;
+    expect(within(section).getByText(/1–25 of 30/)).toBeInTheDocument();
+    await user.click(within(section).getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(dataRows()).toHaveLength(5));
+    expect(dataRows()[0]).toHaveTextContent('sto-5.pdf');
+    expect(dataRows()[4]).toHaveTextContent('sto-9.pdf');
+    expect(within(grid).queryByText('No other import failures.')).not.toBeInTheDocument();
+  });
+
+  it('shows the empty state only when the server has no non-OCR failures', async () => {
+    serveImports(Array.from({ length: 30 }, (_, i) => failedDoc(`ocr-${i}`, { failure_stage: 'ocr' })));
+    renderIntake(<FailedOcrPanel />);
+    const grid = await importsBoard();
+    expect(await within(grid).findByText('No other import failures.')).toBeInTheDocument();
+    expect(within(grid.closest('section') as HTMLElement).queryByRole('button', { name: /next/i })).not.toBeInTheDocument();
   });
 
   it('filters by stage and reason on the server and clears the filters', async () => {
@@ -302,8 +363,14 @@ describe('Other import failures (read-only records, ported runtime checks)', () 
     await user.click(screen.getByRole('button', { name: /all reasons/i }));
     await user.click(screen.getByRole('option', { name: 'OCR timed out' }));
     await waitFor(() => expect(ocrService.listFailedDocuments).toHaveBeenLastCalledWith(expect.objectContaining({ reason: 'ocr_timeout' })));
+    ocrService.listFailedDocuments.mockClear();
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
-    await waitFor(() => expect(ocrService.listFailedDocuments).toHaveBeenLastCalledWith(expect.objectContaining({ stage: undefined, reason: undefined })));
+    // "All stages" asks for each non-OCR stage separately, without a reason.
+    await waitFor(() => {
+      const stages = ocrService.listFailedDocuments.mock.calls.map(([q]) => q.stage);
+      expect(new Set(stages)).toEqual(new Set(['ingestion', 'validation', 'storage', 'processing', 'sync']));
+    });
+    expect(ocrService.listFailedDocuments.mock.calls.every(([q]) => q.reason === undefined)).toBe(true);
   });
 
   it('opens read-only details with confidence and word count and no document actions', async () => {

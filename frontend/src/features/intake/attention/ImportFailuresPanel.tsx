@@ -1,17 +1,17 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BoardTable, Button, Pagination, Select, SelectItem, StatusMark, type BoardColumn } from '../../../ui';
-import { ocrService, type FailedDocumentRow } from '../../../services/api';
+import type { FailedDocumentRow } from '../../../services/api';
 import { formatRelative } from '../shared/format';
 import { Notice, sharedStyles } from '../shared/parts';
 import { useLoader } from '../shared/useLoader';
-import { FAILURE_REASONS, FAILURE_STAGES, failedName, failureSummary, reasonLabel, stageLabel } from './failureLabels';
+import { FAILURE_REASONS, failedName, failureSummary, reasonLabel, stageLabel } from './failureLabels';
+import { fetchImportFailures, NON_OCR_STAGES } from './importFailures';
 import { ImportFailureDetail } from './ImportFailureDetail';
 
 export const IMPORT_FAILURES_PAGE_SIZE = 25;
 const ALL = 'all';
-/** OCR failures are listed above with their actions; this list covers the other stages. */
-const STAGES = FAILURE_STAGES.filter((s) => s !== 'ocr');
+const STAGES = NON_OCR_STAGES;
 
 /**
  * Failed import records (GET /documents/failed) for stages other than OCR. These are records,
@@ -28,19 +28,17 @@ export function ImportFailuresPanel() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const list = useLoader(
-    async () =>
-      (
-        await ocrService.listFailedDocuments({
-          limit: pageSize,
-          offset: (page - 1) * pageSize,
-          stage: stage === ALL ? undefined : stage,
-          reason: reason === ALL ? undefined : reason,
-        })
-      ).data,
+    () =>
+      fetchImportFailures({
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        stage: stage === ALL ? undefined : stage,
+        reason: reason === ALL ? undefined : reason,
+      }),
     [page, pageSize, stage, reason],
   );
-  const rows = (list.data?.documents ?? []).filter((d) => d.failure_stage !== 'ocr');
-  const total = list.data?.pagination?.total ?? rows.length;
+  const rows = list.data?.rows ?? [];
+  const total = list.data?.total ?? 0;
   const open = rows.find((d) => d.id === openId) ?? null;
 
   const columns: BoardColumn<FailedDocumentRow>[] = [
