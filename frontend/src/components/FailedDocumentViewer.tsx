@@ -7,6 +7,7 @@ import {
   Paper,
 } from '@mui/material';
 import { api } from '../services/api';
+import { previewSandbox } from '../services/contentSafety';
 
 interface FailedDocumentViewerProps {
   failedDocumentId: string;
@@ -44,7 +45,9 @@ const FailedDocumentViewer: React.FC<FailedDocumentViewerProps> = ({
         responseType: 'blob'
       });
       
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }));
+      // Text is always rendered as plain text so markup in the file is never interpreted.
+      const blobType = mimeType?.startsWith('text/') ? 'text/plain' : mimeType;
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: blobType }));
       setDocumentUrl(url);
     } catch (err: any) {
       console.error('Failed to load failed document:', err);
@@ -110,6 +113,7 @@ const FailedDocumentViewer: React.FC<FailedDocumentViewerProps> = ({
               height="400px"
               style={{ border: 'none', borderRadius: '4px' }}
               title={filename}
+              sandbox={previewSandbox(mimeType)}
             />
           ) : mimeType?.startsWith('text/') ? (
             <Box sx={{ 
@@ -128,6 +132,7 @@ const FailedDocumentViewer: React.FC<FailedDocumentViewerProps> = ({
                 height="400px"
                 style={{ border: 'none' }}
                 title={filename}
+                sandbox={previewSandbox(mimeType)}
               />
             </Box>
           ) : (

@@ -44,7 +44,9 @@ import {
   Visibility as PreviewIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { api } from '../services/api';
+import { api, documentService } from '../services/api';
+import DocumentViewer from '../components/DocumentViewer';
+import AuthenticatedImage from '../components/AuthenticatedImage';
 
 interface DebugStep {
   step: number;
@@ -645,7 +647,11 @@ const DebugPage: React.FC = () => {
                 <Button
                   variant="outlined"
                   size="small"
-                  onClick={() => window.open(`/api/documents/${uploadedDocumentId}/view`, '_blank')}
+                  onClick={() => {
+                    documentService.openInNewTab(uploadedDocumentId).catch((err) => {
+                      console.error('Failed to open document:', err);
+                    });
+                  }}
                   startIcon={<PreviewIcon />}
                 >
                   {t('debug.actions.viewDocument')}
@@ -1004,40 +1010,30 @@ const DebugPage: React.FC = () => {
                   <Grid item xs={12} md={6}>
                     <Paper sx={{ p: 2 }}>
                       <Typography variant="subtitle1" gutterBottom>Original Document</Typography>
-                      <Box 
-                        component="iframe"
-                        src={`/api/documents/${debugInfo.document_id}/view`}
+                      <Box
                         sx={{
-                          width: '100%',
                           height: '300px',
+                          overflow: 'auto',
                           border: '1px solid',
                           borderColor: 'divider',
                           borderRadius: 1
                         }}
-                      />
+                      >
+                        <DocumentViewer
+                          documentId={debugInfo.document_id}
+                          filename={debugInfo.filename}
+                          mimeType={debugInfo.file_analysis?.mime_type || 'application/octet-stream'}
+                        />
+                      </Box>
                     </Paper>
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Paper sx={{ p: 2 }}>
                       <Typography variant="subtitle1" gutterBottom>Processed Image (OCR Input)</Typography>
-                      <Box 
-                        component="img"
-                        src={`/api/documents/${debugInfo.document_id}/processed/image`}
+                      <AuthenticatedImage
+                        load={() => documentService.getProcessedImage(debugInfo.document_id)}
                         alt="Processed image for OCR"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                          (e.target as HTMLImageElement).parentNode?.appendChild(
-                            document.createTextNode('Processed image not available')
-                          );
-                        }}
-                        sx={{
-                          maxWidth: '100%',
-                          maxHeight: '300px',
-                          objectFit: 'contain',
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 1
-                        }}
+                        unavailableText="Processed image not available"
                       />
                     </Paper>
                   </Grid>

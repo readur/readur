@@ -10,7 +10,7 @@ export interface TestUserResponse {
   id: string;
   username: string;
   email: string;
-  role: 'Admin' | 'User';
+  role: 'admin' | 'user';
 }
 
 export interface E2ETestUser {

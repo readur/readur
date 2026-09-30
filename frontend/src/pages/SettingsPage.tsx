@@ -43,7 +43,9 @@ import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon,
          Pause as PauseIcon, Stop as StopIcon, CheckCircle as CheckCircleIcon,
          Error as ErrorIcon, Visibility as VisibilityIcon, CreateNewFolder as CreateNewFolderIcon,
          RemoveCircle as RemoveCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, isAdmin as isAdminUser } from '../contexts/AuthContext';
+import ChangePasswordForm from '../components/Auth/ChangePasswordForm';
+import RequireAdmin from '../components/Auth/RequireAdmin';
 import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
 import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
@@ -56,8 +58,18 @@ interface User {
   id: string;
   username: string;
   email: string;
+  role?: 'admin' | 'user';
+  is_active?: boolean;
   created_at: string;
 }
+
+// Tab identifiers (stable regardless of which tabs are visible to the user).
+const TAB_GENERAL = 0;
+const TAB_OCR = 1;
+const TAB_USERS = 2;
+const TAB_SERVER = 3;
+const TAB_API_KEYS = 4;
+const TAB_ACCOUNT = 5;
 
 interface Settings {
   ocrLanguage: string;
@@ -197,6 +209,7 @@ function useDebounce<T extends (...args: any[]) => any>(func: T, delay: number):
 const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
   const { user: currentUser } = useAuth();
+  const isAdmin = isAdminUser(currentUser);
   const { flags } = useFeatureFlags();
   const perUserWatchEnabled = flags.enablePerUserWatch;
   const isPWA = usePWA();
@@ -291,14 +304,24 @@ const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     fetchSettings();
-    fetchUsers();
-    fetchOcrStatus();
-    fetchServerConfiguration();
-  }, []);
+    // User management, OCR queue controls and server configuration are admin-only.
+    if (isAdmin) {
+      fetchUsers();
+      fetchOcrStatus();
+      fetchServerConfiguration();
+    }
+  }, [isAdmin]);
+
+  // If the current user is not an admin, never leave an admin tab selected.
+  useEffect(() => {
+    if (!isAdmin && (tabValue === TAB_USERS || tabValue === TAB_SERVER)) {
+      setTabValue(TAB_GENERAL);
+    }
+  }, [isAdmin, tabValue]);
 
   // Fetch watch directory information after users are loaded
   useEffect(() => {
-    if (users.length > 0 && perUserWatchEnabled) {
+    if (isAdmin && users.length > 0 && perUserWatchEnabled) {
       fetchUserWatchDirectories();
     }
   }, [users, perUserWatchEnabled]);
@@ -446,6 +469,29 @@ const SettingsPage: React.FC = () => {
       } else {
         showSnackbar(errorInfo.message || t('settings.messages.settingsUpdateFailed'), 'error');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetUserActive = async (target: User, active: boolean): Promise<void> => {
+    if (target.id === currentUser?.id) {
+      showSnackbar(t('settings.messages.cannotDeactivateSelf', 'You cannot deactivate your own account'), 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      await api.put(`/users/${target.id}`, { is_active: active });
+      setUsers(prev => prev.map(u => (u.id === target.id ? { ...u, is_active: active } : u)));
+      showSnackbar(
+        active
+          ? t('settings.messages.userEnabled', { username: target.username, defaultValue: '{{username}} can now sign in' })
+          : t('settings.messages.userDisabled', { username: target.username, defaultValue: '{{username}} has been disabled and signed out' }),
+        'success'
+      );
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      showSnackbar(ErrorHelper.getUserMessage(error, t('settings.messages.settingsUpdateFailed')), 'error');
     } finally {
       setLoading(false);
     }
@@ -871,15 +917,20 @@ const SettingsPage: React.FC = () => {
             },
           }}
         >
-          <Tab label={t('settings.tabs.general')} />
-          <Tab label={t('settings.tabs.ocrSettings')} />
-          <Tab label={t('settings.tabs.userManagement')} />
-          <Tab label={t('settings.tabs.serverConfiguration')} />
-          <Tab label="API Keys" />
+          <Tab value={TAB_GENERAL} label={t('settings.tabs.general')} />
+          <Tab value={TAB_OCR} label={t('settings.tabs.ocrSettings')} />
+          <Tab value={TAB_ACCOUNT} label={t('settings.tabs.account', 'Account')} />
+          {isAdmin && (
+            <Tab value={TAB_USERS} label={t('settings.tabs.userManagement')} />
+          )}
+          {isAdmin && (
+            <Tab value={TAB_SERVER} label={t('settings.tabs.serverConfiguration')} />
+          )}
+          <Tab value={TAB_API_KEYS} label="API Keys" />
         </Tabs>
 
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
-          {tabValue === 0 && (
+          {tabValue === TAB_GENERAL && (
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
                 {t('settings.general.title')}
@@ -965,6 +1016,7 @@ const SettingsPage: React.FC = () => {
               </Card>
 
               {/* Admin OCR Controls */}
+              {isAdmin && (
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ mb: 2 }}>
@@ -1025,6 +1077,7 @@ const SettingsPage: React.FC = () => {
                   )}
                 </CardContent>
               </Card>
+              )}
 
               <Card sx={{ mb: 3 }}>
                 <CardContent>
@@ -1225,7 +1278,7 @@ const SettingsPage: React.FC = () => {
             </Box>
           )}
 
-          {tabValue === 1 && (
+          {tabValue === TAB_OCR && (
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
                 {t('settings.ocrSettings.title')}
@@ -1461,7 +1514,17 @@ const SettingsPage: React.FC = () => {
             </Box>
           )}
 
-          {tabValue === 2 && (
+          {tabValue === TAB_ACCOUNT && (
+            <Box>
+              <Typography variant="h6" sx={{ mb: 3 }}>
+                {t('settings.account.title', 'Account')}
+              </Typography>
+              <ChangePasswordForm />
+            </Box>
+          )}
+
+          {tabValue === TAB_USERS && (
+            <RequireAdmin fallback={null}>
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h6">
@@ -1477,6 +1540,15 @@ const SettingsPage: React.FC = () => {
                 </Button>
               </Box>
 
+              {users.some(u => u.is_active === false) && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  {t('settings.userManagement.pendingApprovalNotice', {
+                    count: users.filter(u => u.is_active === false).length,
+                    defaultValue: '{{count}} account(s) are disabled or awaiting approval. Enable an account to let that user sign in.',
+                  })}
+                </Alert>
+              )}
+
               <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
                 <Table sx={{ minWidth: 800 }}>
                   <TableHead>
@@ -1484,6 +1556,7 @@ const SettingsPage: React.FC = () => {
                       <TableCell>{t('settings.userManagement.tableHeaders.username')}</TableCell>
                       <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{t('settings.userManagement.tableHeaders.email')}</TableCell>
                       <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{t('settings.userManagement.tableHeaders.createdAt')}</TableCell>
+                      <TableCell>{t('settings.userManagement.tableHeaders.status', 'Status')}</TableCell>
                       {perUserWatchEnabled && (
                         <TableCell>{t('settings.userManagement.tableHeaders.watchDirectory')}</TableCell>
                       )}
@@ -1492,7 +1565,10 @@ const SettingsPage: React.FC = () => {
                   </TableHead>
                   <TableBody>
                     {users.map((user) => (
-                      <TableRow key={user.id}>
+                      <TableRow
+                        key={user.id}
+                        sx={user.is_active === false ? { bgcolor: 'action.hover' } : undefined}
+                      >
                         <TableCell>
                           <Box>
                             <Typography variant="body2" fontWeight="medium">
@@ -1521,6 +1597,51 @@ const SettingsPage: React.FC = () => {
                         </TableCell>
                         <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                           {new Date(user.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Tooltip
+                              title={
+                                user.id === currentUser?.id
+                                  ? t('settings.userManagement.cannotDeactivateSelf', 'You cannot deactivate your own account')
+                                  : user.is_active === false
+                                    ? t('settings.userManagement.enableUser', 'Enable account')
+                                    : t('settings.userManagement.disableUser', 'Disable account')
+                              }
+                            >
+                              <span>
+                                <Switch
+                                  size="small"
+                                  checked={user.is_active !== false}
+                                  onChange={(e) => handleSetUserActive(user, e.target.checked)}
+                                  disabled={loading || user.id === currentUser?.id}
+                                  inputProps={{
+                                    'aria-label': t('settings.userManagement.activeToggleLabel', {
+                                      username: user.username,
+                                      defaultValue: 'Account active for {{username}}',
+                                    }),
+                                  }}
+                                />
+                              </span>
+                            </Tooltip>
+                            {user.is_active === false ? (
+                              <Chip
+                                size="small"
+                                color="warning"
+                                label={t('settings.userManagement.statusPending', 'Disabled / pending approval')}
+                              />
+                            ) : (
+                              <Chip
+                                size="small"
+                                color="success"
+                                variant="outlined"
+                                label={t('settings.userManagement.statusActive', 'Active')}
+                              />
+                            )}
+                            {user.role === 'admin' && (
+                              <Chip size="small" variant="outlined" label={t('settings.userManagement.roleAdmin', 'Admin')} />
+                            )}
+                          </Box>
                         </TableCell>
                         {perUserWatchEnabled && (
                           <TableCell>
@@ -1625,9 +1746,11 @@ const SettingsPage: React.FC = () => {
                 </Table>
               </TableContainer>
             </Box>
+            </RequireAdmin>
           )}
 
-          {tabValue === 3 && (
+          {tabValue === TAB_SERVER && (
+            <RequireAdmin fallback={null}>
             <Box>
               <Typography variant="h6" sx={{ mb: 3 }}>
                 {t('settings.serverConfiguration.title')}
@@ -1804,9 +1927,10 @@ const SettingsPage: React.FC = () => {
                 </Alert>
               )}
             </Box>
+            </RequireAdmin>
           )}
 
-          {tabValue === 4 && (
+          {tabValue === TAB_API_KEYS && (
             <Box>
               <ApiKeysManager />
             </Box>

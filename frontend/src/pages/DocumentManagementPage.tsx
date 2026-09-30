@@ -1517,7 +1517,11 @@ const DocumentManagementPage: React.FC = () => {
                                               <Tooltip title="View Document">
                                                 <IconButton
                                                   size="small"
-                                                  onClick={() => window.open(`/api/documents/${doc.id}/view`, '_blank')}
+                                                  onClick={() => {
+                                                    documentService.openInNewTab(doc.id, doc.original_filename).catch((err) => {
+                                                      console.error('Failed to open document:', err);
+                                                    });
+                                                  }}
                                                   sx={{ color: theme.palette.primary.main }}
                                                 >
                                                   <VisibilityIcon />

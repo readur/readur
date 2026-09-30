@@ -1,47 +1,78 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Box, CircularProgress, Typography, Alert, Container } from '@mui/material';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, LoginResponse } from '../../contexts/AuthContext';
 import { api, ErrorHelper, ErrorCodes } from '../../services/api';
 
+/**
+ * Read the one-time handoff code (or an error) from the URL fragment
+ * (`/auth/callback#code=...`). Query parameters are also checked for `error`
+ * so provider-side failures still display.
+ */
+const readCallbackParams = (): { code: string | null; error: string | null } => {
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const fragment = new URLSearchParams(hash);
+  const query = new URLSearchParams(window.location.search);
+  return {
+    code: fragment.get('code'),
+    error: fragment.get('error') ?? query.get('error'),
+  };
+};
+
+/** Remove the code from the address bar and browser history immediately. */
+const stripCallbackParams = (): void => {
+  if (window.location.hash || window.location.search) {
+    window.history.replaceState(window.history.state, '', window.location.pathname);
+  }
+};
+
 const OidcCallback: React.FC = () => {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { completeLogin } = useAuth();
   const [error, setError] = useState<string>('');
   const [processing, setProcessing] = useState<boolean>(true);
+  // The code is single-use; make sure it is only redeemed once even if the
+  // effect runs twice (React StrictMode).
+  const startedRef = useRef(false);
 
   useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
     const handleCallback = async () => {
+      const { code, error: callbackError } = readCallbackParams();
+      stripCallbackParams();
+
       try {
-        const token = searchParams.get('token');
-        const error = searchParams.get('error');
-
-        if (error) {
-          setError(`Authentication failed: ${error}`);
+        if (callbackError) {
+          setError(`Authentication failed: ${callbackError}`);
           setProcessing(false);
           return;
         }
 
-        if (!token) {
-          setError('No authentication token received from server');
+        if (!code) {
+          setError('No authentication code received from server');
           setProcessing(false);
           return;
         }
 
-        // Store the token and set up API authorization
-        localStorage.setItem('token', token);
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
-        // Redirect to dashboard - the page will reload and AuthContext will pick up the token
-        window.location.href = '/dashboard';
+        const response = await api.post<LoginResponse>('/auth/oidc/exchange', { code });
+        completeLogin(response.data);
+        navigate('/dashboard', { replace: true });
       } catch (err: any) {
         console.error('OIDC callback error:', err);
 
         const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
+        const status = err?.response?.status;
 
         // Handle specific OIDC callback errors
-        if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_OIDC_AUTH_FAILED)) {
+        if (status === 401) {
+          setError('This sign-in link is invalid or has expired. Please try logging in again.');
+        } else if (status === 429) {
+          setError('Too many attempts. Please wait a moment and try logging in again.');
+        } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_OIDC_AUTH_FAILED)) {
           setError('OIDC authentication failed. Please try logging in again or contact your administrator.');
         } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_AUTH_PROVIDER_NOT_CONFIGURED)) {
           setError('OIDC is not configured on this server. Please use username/password login.');
@@ -65,7 +96,7 @@ const OidcCallback: React.FC = () => {
     };
 
     handleCallback();
-  }, [searchParams, navigate, login]);
+  }, []);
 
   const handleReturnToLogin = () => {
     navigate('/login');

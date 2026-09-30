@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import Login from './components/Auth/Login';
 import OidcCallback from './components/Auth/OidcCallback';
+import Register from './components/Register';
 import AppLayout from './components/Layout/AppLayout';
 import Dashboard from './components/Dashboard/Dashboard';
 import UploadPage from './pages/UploadPage';
@@ -59,6 +60,7 @@ function App(): React.ReactElement {
       <CssBaseline />
       <Routes>
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
+        <Route path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" />} />
         <Route path="/auth/callback" element={<OidcCallback />} />
         <Route path="/shared/:token" element={<SharedDocumentPage />} />
         <Route

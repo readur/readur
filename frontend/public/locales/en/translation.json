@@ -74,8 +74,12 @@
       "oidcAuthFailed": "OIDC authentication failed. Please check with your administrator.",
       "oidcNotConfigured": "OIDC is not configured on this server. Please use username/password login.",
       "oidcInitFailed": "Failed to initiate OIDC login. Please try again.",
-      "loginFailed": "Failed to log in. Please check your credentials."
-    }
+      "loginFailed": "Failed to log in. Please check your credentials.",
+      "accountDisabledOrPending": "This account is disabled or awaiting administrator approval",
+      "tooManyAttempts": "Too many sign-in attempts. Please try again later.",
+      "tooManyAttemptsRetry": "Too many sign-in attempts. Please try again in {{seconds}} seconds."
+    },
+    "createAccountLink": "Don't have an account? Request one"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -735,7 +739,8 @@
       "general": "General",
       "ocrSettings": "OCR Settings",
       "userManagement": "User Management",
-      "serverConfiguration": "Server Configuration"
+      "serverConfiguration": "Server Configuration",
+      "account": "Account"
     },
     "general": {
       "title": "General Settings",
@@ -850,7 +855,8 @@
         "email": "Email",
         "createdAt": "Created At",
         "watchDirectory": "Watch Directory",
-        "actions": "Actions"
+        "actions": "Actions",
+        "status": "Status"
       },
       "watchDirectory": {
         "statusActive": "Active",
@@ -876,7 +882,15 @@
         "title": "Remove Watch Directory",
         "message": "Are you sure you want to remove the watch directory for user \"{{username}}\"? This action cannot be undone and will stop monitoring their directory for new files.",
         "removeButton": "Remove Directory"
-      }
+      },
+      "pendingApprovalNotice": "{{count}} account(s) are disabled or awaiting approval. Enable an account to let that user sign in.",
+      "cannotDeactivateSelf": "You cannot deactivate your own account",
+      "enableUser": "Enable account",
+      "disableUser": "Disable account",
+      "activeToggleLabel": "Account active for {{username}}",
+      "statusPending": "Disabled / pending approval",
+      "statusActive": "Active",
+      "roleAdmin": "Admin"
     },
     "serverConfiguration": {
       "title": "Server Configuration (Admin Only)",
@@ -950,7 +964,24 @@
       "ocrResumeFailed": "Admin access required to resume OCR processing",
       "ocrResumeFailedGeneric": "Failed to resume OCR processing",
       "serverConfigLoadFailed": "Admin access required to view server configuration",
-      "serverConfigLoadFailedGeneric": "Failed to load server configuration"
+      "serverConfigLoadFailedGeneric": "Failed to load server configuration",
+      "cannotDeactivateSelf": "You cannot deactivate your own account",
+      "userEnabled": "{{username}} can now sign in",
+      "userDisabled": "{{username}} has been disabled and signed out"
+    },
+    "account": {
+      "title": "Account",
+      "changePassword": "Change password",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "confirmNewPassword": "Confirm new password",
+      "updatePassword": "Update password",
+      "passwordPolicy": "At least {{min}} characters",
+      "passwordMismatch": "The new passwords do not match",
+      "passwordChanged": "Password changed. Other sessions for your account have been signed out.",
+      "wrongCurrentPassword": "Current password is incorrect",
+      "tooManyAttempts": "Too many attempts. Please try again later.",
+      "passwordChangeFailed": "Failed to change password"
     }
   },
   "labels": {
@@ -1066,14 +1097,20 @@
     },
     "actions": {
       "signup": "Sign up",
-      "creating": "Creating account..."
+      "creating": "Creating account...",
+      "backToSignIn": "Back to sign in"
     },
     "links": {
       "signin": "Already have an account? Sign in"
     },
     "errors": {
-      "failed": "Failed to register"
-    }
+      "failed": "Failed to register",
+      "passwordTooShort": "Password must be at least {{min}} characters long",
+      "disabled": "Self-registration is disabled on this server.",
+      "rateLimited": "Too many registration attempts. Please try again later."
+    },
+    "pendingApproval": "Account created. An administrator must approve it before you can sign in.",
+    "passwordHint": "At least {{min}} characters"
   },
   "debug": {
     "title": "Document Processing Debug",
@@ -1358,7 +1395,10 @@
       "sourceType": "Source Type",
       "sourceEnabled": "Source Enabled",
       "sourceEnabledHelper": "Enable this source for syncing",
-      "sourceNamePlaceholder": "My Document Server"
+      "sourceNamePlaceholder": "My Document Server",
+      "keepCurrentSecret": "Leave blank to keep current",
+      "passwordStored": "A password is stored for this source",
+      "secretStored": "A secret is stored for this source"
     },
     "webdav": {
       "title": "WebDAV Configuration",

@@ -1,4 +1,6 @@
 import axios from 'axios'
+import { AUTH_LOGOUT_EVENT, shouldResetSessionOn401 } from './authEvents'
+import { isSafeInlineMime } from './contentSafety'
 
 const api = axios.create({
   baseURL: '/api',
@@ -6,6 +8,28 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+// When an authenticated request is rejected with 401 the session has expired
+// or been revoked (logout elsewhere, password change, account disabled).
+// Clear the stored token and signal AuthContext so the app returns to /login.
+// 401s from the credential-checking auth endpoints are left to their callers.
+api.interceptors?.response?.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status
+    const config = error?.config
+    const authHeader =
+      config?.headers?.Authorization ?? config?.headers?.authorization
+    if (status === 401 && authHeader && shouldResetSessionOn401(config?.url)) {
+      localStorage.removeItem('token')
+      delete api.defaults.headers.common['Authorization']
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT))
+      }
+    }
+    return Promise.reject(error)
+  }
+)
 
 export { api }
 export default api
@@ -340,6 +364,33 @@ export const documentService = {
     return api.get(`/documents/${id}/view`, {
       responseType: 'blob',
     })
+  },
+
+  /**
+   * Open a document in a new tab using the authenticated API (a plain link
+   * to /api/documents/... would not carry the bearer token). Types that a
+   * browser could execute as active content are downloaded instead.
+   */
+  openInNewTab: async (id: string, filename?: string) => {
+    // Open the tab synchronously so popup blockers treat it as user-initiated.
+    const newTab = window.open('', '_blank')
+    if (newTab) newTab.opener = null
+    try {
+      const response = await api.get(`/documents/${id}/view`, { responseType: 'blob' })
+      const mimeType = String(response.headers?.['content-type'] || '').split(';')[0].trim().toLowerCase()
+      if (!newTab || !isSafeInlineMime(mimeType)) {
+        newTab?.close()
+        await documentService.downloadFile(id, filename)
+        return
+      }
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }))
+      newTab.location.href = url
+      // Give the new tab time to load before releasing the blob.
+      setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
+    } catch (error) {
+      newTab?.close()
+      throw error
+    }
   },
 
   getThumbnail: (id: string) => {

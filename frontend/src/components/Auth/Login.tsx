@@ -13,6 +13,7 @@ import {
   Fade,
   Grow,
   CircularProgress,
+  Link,
 } from '@mui/material';
 import {
   Visibility,
@@ -24,7 +25,7 @@ import {
 } from '@mui/icons-material';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { api, ErrorHelper, ErrorCodes } from '../../services/api';
@@ -37,8 +38,16 @@ interface LoginFormData {
 
 interface AuthConfig {
   allow_local_auth: boolean;
+  allow_registration?: boolean;
   oidc_enabled: boolean;
 }
+
+const retryAfterSeconds = (err: unknown): number | null => {
+  const headers = (err as any)?.response?.headers;
+  const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
+  const seconds = raw !== undefined ? parseInt(String(raw), 10) : NaN;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+};
 
 const Login: React.FC = () => {
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
@@ -62,13 +71,13 @@ const Login: React.FC = () => {
           const config = await response.json();
           setAuthConfig(config);
         } else {
-          // Default to allowing both if config fetch fails
-          setAuthConfig({ allow_local_auth: true, oidc_enabled: true });
+          // Default to allowing both sign-in methods if config fetch fails
+          setAuthConfig({ allow_local_auth: true, allow_registration: false, oidc_enabled: true });
         }
       } catch (err) {
         console.error('Failed to fetch auth config:', err);
-        // Default to allowing both if config fetch fails
-        setAuthConfig({ allow_local_auth: true, oidc_enabled: true });
+        // Default to allowing both sign-in methods if config fetch fails
+        setAuthConfig({ allow_local_auth: true, allow_registration: false, oidc_enabled: true });
       } finally {
         setConfigLoading(false);
       }
@@ -93,9 +102,30 @@ const Login: React.FC = () => {
       console.error('Login failed:', err);
       
       const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
-      
+      const status = errorInfo.status;
+
       // Handle specific login errors
-      if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_INVALID_CREDENTIALS)) {
+      if (status === 401) {
+        setError(t('auth.errors.invalidCredentials'));
+      } else if (status === 403) {
+        // Account disabled / awaiting approval, or local login disabled.
+        const serverMessage = (err as any)?.response?.data?.error;
+        setError(
+          typeof serverMessage === 'string' && serverMessage
+            ? serverMessage
+            : t('auth.errors.accountDisabledOrPending', 'This account is disabled or awaiting administrator approval')
+        );
+      } else if (status === 429) {
+        const wait = retryAfterSeconds(err);
+        setError(
+          wait
+            ? t('auth.errors.tooManyAttemptsRetry', {
+                seconds: wait,
+                defaultValue: 'Too many sign-in attempts. Please try again in {{seconds}} seconds.',
+              })
+            : t('auth.errors.tooManyAttempts', 'Too many sign-in attempts. Please try again later.')
+        );
+      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_INVALID_CREDENTIALS)) {
         setError(t('auth.errors.invalidCredentials'));
       } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
         setError(t('auth.errors.accountDisabled'));
@@ -401,8 +431,13 @@ const Login: React.FC = () => {
                       </Button>
                     )}
 
-                    <Box sx={{ textAlign: 'center', mt: 2 }}>
-                    </Box>
+                    {authConfig.allow_local_auth && authConfig.allow_registration === true && (
+                      <Box sx={{ textAlign: 'center', mt: 2 }}>
+                        <Link component={RouterLink} to="/register" variant="body2">
+                          {t('auth.createAccountLink', "Don't have an account? Request one")}
+                        </Link>
+                      </Box>
+                    )}
                   </Box>
                 </CardContent>
               </Card>

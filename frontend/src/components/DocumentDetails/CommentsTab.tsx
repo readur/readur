@@ -135,7 +135,7 @@ const CommentsTab: React.FC<CommentsTabProps> = ({ documentId }) => {
                 thread={thread}
                 documentId={documentId}
                 currentUserId={user?.id ?? ''}
-                currentUserRole={user?.role ?? 'User'}
+                currentUserRole={user?.role ?? 'user'}
                 onRefresh={fetchComments}
               />
             </Box>
