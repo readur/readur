@@ -35,9 +35,11 @@
 
 .warning {
   margin: 0;
-  padding-left: var(--s-3);
+  padding: var(--s-2) var(--s-3);
   font-size: var(--fs-sm);
   line-height: var(--lh-body);
   color: var(--fg);
-  border-left: 3px solid var(--line-strong);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
 }

@@ -85,12 +85,11 @@
   color: var(--fg);
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-left-width: 3px;
   border-radius: var(--radius);
 }
 
 .notice[data-tone='warning'] {
-  border-left-color: var(--line-strong);
+  border-color: var(--line-strong);
 }
 
 .notice[data-tone='danger'] {

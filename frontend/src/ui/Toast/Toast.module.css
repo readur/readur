@@ -34,7 +34,6 @@
   color: var(--fg);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-left-width: 4px;
   border-radius: var(--radius);
   box-shadow: var(--shadow-overlay);
   outline: none;
@@ -45,9 +44,8 @@
   outline-offset: 2px;
 }
 
-.info { border-left-color: var(--line-strong); }
-.success { border-left-color: var(--ok); }
-.danger { border-left-color: var(--danger); background: var(--danger-bg); }
+/* Tone shows in the icon (and the hidden prefix); danger also tints the whole toast. */
+.danger { border-color: var(--danger); background: var(--danger-bg); }
 
 .content {
   display: flex;
