@@ -74,6 +74,28 @@ impl UserWatchService {
         Ok(())
     }
 
+    /// Resolve the watch directory for `username`, refusing names that are
+    /// not valid directory names or that would resolve outside `base_dir`.
+    fn resolve_user_directory(&self, username: &str) -> Result<PathBuf> {
+        Self::validate_username(username)?;
+        let user_dir = self.base_dir.join(username);
+
+        // A lexical check is not enough if the entry is a symlink, so compare
+        // canonical paths whenever the directory already exists.
+        if user_dir.exists() {
+            let base_canonical = self.base_dir.canonicalize()?;
+            let dir_canonical = user_dir.canonicalize()?;
+            if !dir_canonical.starts_with(&base_canonical) || dir_canonical == base_canonical {
+                return Err(anyhow::anyhow!(
+                    "User watch directory '{}' resolves outside the watch base directory",
+                    user_dir.display()
+                ));
+            }
+        }
+
+        Ok(user_dir)
+    }
+
     /// Initialize the service by creating the base directory and discovering existing user directories
     /// 
     /// # Returns
@@ -141,8 +163,8 @@ impl UserWatchService {
     /// # Returns
     /// * PathBuf to the user's watch directory
     pub async fn ensure_user_directory(&self, user: &User) -> Result<PathBuf> {
-        // Validate username for security
-        Self::validate_username(&user.username)?;
+        // Validate username and confine the path to base_dir
+        let user_dir = self.resolve_user_directory(&user.username)?;
         // Check cache first (read lock)
         {
             let cache = self.user_directories.read().await;
@@ -167,8 +189,6 @@ impl UserWatchService {
             }
         }
 
-        let user_dir = self.base_dir.join(&user.username);
-        
         // Use atomic directory creation to avoid race conditions
         match tokio::fs::create_dir_all(&user_dir).await {
             Ok(_) => {
@@ -298,9 +318,9 @@ impl UserWatchService {
     /// * Result indicating success or failure
     pub async fn remove_user_directory(&self, user: &User) -> Result<()> {
         info!("Removing user watch directory for {}", user.username);
-        
-        let user_dir = self.base_dir.join(&user.username);
-        
+
+        let user_dir = self.resolve_user_directory(&user.username)?;
+
         if user_dir.exists() {
             // Remove directory and all contents
             tokio::fs::remove_dir_all(&user_dir).await

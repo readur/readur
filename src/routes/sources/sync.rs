@@ -515,16 +515,21 @@ pub async fn sync_progress_websocket(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, StatusCode> {
-    // Extract and verify token from Sec-WebSocket-Protocol header for secure WebSocket auth
+    // WebSocket handshakes are not subject to CORS, so the origin is
+    // checked explicitly.
+    if !websocket_origin_allowed(&headers, &state.config) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Token travels in Sec-WebSocket-Protocol (`bearer.<token>`) because
+    // browsers cannot set an Authorization header on WebSocket requests.
     let (token, auth_protocol) = extract_websocket_token_and_protocol(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
-    
-    let claims = crate::auth::verify_jwt(&token, &state.config.jwt_secret)
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
-    
-    let user = state.db.get_user_by_id(claims.sub).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    
+
+    // Same checks as every other endpoint: API keys, revocation, account state.
+    let user = crate::auth::authenticate_token(&token, &state)
+        .await
+        .map_err(|resp| resp.status())?;
+
     // Verify the source exists and the user has access
     let _source = state
         .db
@@ -655,6 +660,54 @@ async fn handle_websocket(mut socket: WebSocket, source_id: Uuid, state: Arc<App
     info!("WebSocket connection terminated for source {}", source_id);
 }
 
+/// Decide whether a WebSocket handshake's `Origin` is acceptable.
+///
+/// Non-browser clients usually send no `Origin`; those are allowed because
+/// they must still present a valid token. When an `Origin` is present it must
+/// match the request's own `Host`, the configured `PUBLIC_URL`, or one of
+/// `CORS_ALLOWED_ORIGINS`.
+fn websocket_origin_allowed(headers: &HeaderMap, config: &crate::config::Config) -> bool {
+    let Some(origin) = headers.get(axum::http::header::ORIGIN) else {
+        return true;
+    };
+    let Ok(origin) = origin.to_str() else {
+        return false;
+    };
+    let origin = origin.trim_end_matches('/');
+
+    // Compare the origin's host[:port] with the Host header.
+    let origin_authority = origin.split_once("://").map(|(_, rest)| rest);
+    let host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|h| h.to_str().ok());
+    if let (Some(authority), Some(host)) = (origin_authority, host) {
+        if authority.eq_ignore_ascii_case(host) {
+            return true;
+        }
+    }
+
+    let public_origin = config.public_url.as_deref().and_then(url_origin);
+    if public_origin.is_some_and(|p| p.eq_ignore_ascii_case(origin)) {
+        return true;
+    }
+
+    config
+        .security
+        .cors_allowed_origins
+        .iter()
+        .any(|allowed| allowed.trim_end_matches('/').eq_ignore_ascii_case(origin))
+}
+
+/// `scheme://host[:port]` of a URL, without path.
+fn url_origin(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    let authority = rest.split('/').next()?;
+    if authority.is_empty() {
+        return None;
+    }
+    Some(format!("{}://{}", scheme, authority))
+}
+
 /// Extract JWT token from WebSocket headers securely
 /// Uses Sec-WebSocket-Protocol header to avoid token exposure in logs/URLs
 fn extract_websocket_token(headers: &HeaderMap) -> Option<String> {
@@ -729,6 +782,34 @@ pub async fn get_sync_status(
 
     // Get current progress
     let progress_info = state.sync_progress_tracker.get_progress(source_id);
-    
+
     Ok(Json(progress_info))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headers(origin: Option<&str>, host: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert("host", host.parse().unwrap());
+        if let Some(origin) = origin {
+            h.insert("origin", origin.parse().unwrap());
+        }
+        h
+    }
+
+    #[test]
+    fn websocket_origin_checks() {
+        let mut config = crate::test_helpers::create_test_config();
+        config.public_url = Some("https://docs.example.com/app".to_string());
+        config.security.cors_allowed_origins = vec!["http://localhost:5173".to_string()];
+
+        assert!(websocket_origin_allowed(&headers(None, "internal:8000"), &config));
+        assert!(websocket_origin_allowed(&headers(Some("http://internal:8000"), "internal:8000"), &config));
+        assert!(websocket_origin_allowed(&headers(Some("https://docs.example.com"), "internal:8000"), &config));
+        assert!(websocket_origin_allowed(&headers(Some("http://localhost:5173"), "internal:8000"), &config));
+        assert!(!websocket_origin_allowed(&headers(Some("https://other.example"), "internal:8000"), &config));
+        assert!(!websocket_origin_allowed(&headers(Some("null"), "internal:8000"), &config));
+    }
 }
