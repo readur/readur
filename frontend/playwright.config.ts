@@ -50,6 +50,8 @@ export default defineConfig({
       fullyParallel: false,
       workers: 1, // Force WebSocket tests to run serially
     },
+    // Firefox and WebKit are kept for local runs; CI runs only the two Chromium projects until
+    // these are verified (see .github/workflows/test-e2e.yml).
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'] },

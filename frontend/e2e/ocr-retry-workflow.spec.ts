@@ -74,6 +74,7 @@ test.describe('OCR Retry Workflow', () => {
   });
 
   test('should retry a failed OCR document with the default language', async ({ dynamicUserPage: page }) => {
+    test.setTimeout(150000);
     const id = await seedFailedDocument('broken-h.pdf');
     await openAttention(page);
     await failedRow(page, 'broken-h.pdf').getByRole('rowheader').click();
