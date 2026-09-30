@@ -1,0 +1,650 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-30T08:06:46+00:00",
+  "title": "Design System: Readur",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#EEF0F2",
+        "tonalRamp": [
+          "oklch(15% 0.006 250)",
+          "oklch(26% 0.006 250)",
+          "oklch(37% 0.006 250)",
+          "oklch(48% 0.006 250)",
+          "oklch(59% 0.006 250)",
+          "oklch(70% 0.006 250)",
+          "oklch(82% 0.006 250)",
+          "oklch(95% 0.006 250)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Panel White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "oklch(15% 0.004 250)",
+          "oklch(26% 0.004 250)",
+          "oklch(37% 0.004 250)",
+          "oklch(48% 0.004 250)",
+          "oklch(59% 0.004 250)",
+          "oklch(70% 0.004 250)",
+          "oklch(82% 0.004 250)",
+          "oklch(95% 0.004 250)"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Row Tint",
+        "canonical": "#F6F7F8",
+        "tonalRamp": [
+          "oklch(15% 0.004 250)",
+          "oklch(26% 0.004 250)",
+          "oklch(37% 0.004 250)",
+          "oklch(48% 0.004 250)",
+          "oklch(59% 0.004 250)",
+          "oklch(70% 0.004 250)",
+          "oklch(82% 0.004 250)",
+          "oklch(95% 0.004 250)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#D5D9DE",
+        "tonalRamp": [
+          "oklch(15% 0.01 250)",
+          "oklch(26% 0.01 250)",
+          "oklch(37% 0.01 250)",
+          "oklch(48% 0.01 250)",
+          "oklch(59% 0.01 250)",
+          "oklch(70% 0.01 250)",
+          "oklch(82% 0.01 250)",
+          "oklch(95% 0.01 250)"
+        ]
+      },
+      "ink": {
+        "role": "primary",
+        "displayName": "Board Ink",
+        "canonical": "#0B0D10",
+        "tonalRamp": [
+          "#0B0D10",
+          "#262B31",
+          "#3B424A",
+          "#5A6169",
+          "#9AA0A6",
+          "#B5BBC2",
+          "#D5D9DE",
+          "#EEF0F2"
+        ]
+      },
+      "fg-2": {
+        "role": "neutral",
+        "displayName": "Second Ink",
+        "canonical": "#3B424A",
+        "tonalRamp": [
+          "oklch(15% 0.015 250)",
+          "oklch(26% 0.015 250)",
+          "oklch(37% 0.015 250)",
+          "oklch(48% 0.015 250)",
+          "oklch(59% 0.015 250)",
+          "oklch(70% 0.015 250)",
+          "oklch(82% 0.015 250)",
+          "oklch(95% 0.015 250)"
+        ]
+      },
+      "fg-meta": {
+        "role": "neutral",
+        "displayName": "Meta Grey",
+        "canonical": "#5A6169",
+        "tonalRamp": [
+          "oklch(15% 0.015 250)",
+          "oklch(26% 0.015 250)",
+          "oklch(37% 0.015 250)",
+          "oklch(48% 0.015 250)",
+          "oklch(59% 0.015 250)",
+          "oklch(70% 0.015 250)",
+          "oklch(82% 0.015 250)",
+          "oklch(95% 0.015 250)"
+        ]
+      },
+      "signal": {
+        "role": "secondary",
+        "displayName": "Signal Yellow",
+        "canonical": "#FFD400",
+        "tonalRamp": [
+          "oklch(15% 0.17 95)",
+          "oklch(26% 0.17 95)",
+          "oklch(37% 0.17 95)",
+          "oklch(48% 0.17 95)",
+          "oklch(59% 0.17 95)",
+          "oklch(70% 0.17 95)",
+          "oklch(82% 0.17 95)",
+          "oklch(95% 0.17 95)"
+        ]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Failure Red",
+        "canonical": "#B42318",
+        "tonalRamp": [
+          "oklch(15% 0.17 29)",
+          "oklch(26% 0.17 29)",
+          "oklch(37% 0.17 29)",
+          "oklch(48% 0.17 29)",
+          "oklch(59% 0.17 29)",
+          "oklch(70% 0.17 29)",
+          "oklch(82% 0.17 29)",
+          "oklch(95% 0.17 29)"
+        ]
+      },
+      "danger-bg": {
+        "role": "tertiary",
+        "displayName": "Failure Tint",
+        "canonical": "#FDECEA",
+        "tonalRamp": [
+          "oklch(15% 0.05 29)",
+          "oklch(26% 0.05 29)",
+          "oklch(37% 0.05 29)",
+          "oklch(48% 0.05 29)",
+          "oklch(59% 0.05 29)",
+          "oklch(70% 0.05 29)",
+          "oklch(82% 0.05 29)",
+          "oklch(95% 0.05 29)"
+        ]
+      },
+      "ok": {
+        "role": "tertiary",
+        "displayName": "Indexed Green",
+        "canonical": "#1F7A3A",
+        "tonalRamp": [
+          "oklch(15% 0.13 150)",
+          "oklch(26% 0.13 150)",
+          "oklch(37% 0.13 150)",
+          "oklch(48% 0.13 150)",
+          "oklch(59% 0.13 150)",
+          "oklch(70% 0.13 150)",
+          "oklch(82% 0.13 150)",
+          "oklch(95% 0.13 150)"
+        ]
+      },
+      "night-ground": {
+        "role": "neutral",
+        "displayName": "Night Board",
+        "canonical": "#0B0D10",
+        "tonalRamp": [
+          "oklch(15% 0.008 255)",
+          "oklch(26% 0.008 255)",
+          "oklch(37% 0.008 255)",
+          "oklch(48% 0.008 255)",
+          "oklch(59% 0.008 255)",
+          "oklch(70% 0.008 255)",
+          "oklch(82% 0.008 255)",
+          "oklch(95% 0.008 255)"
+        ]
+      },
+      "night-surface": {
+        "role": "neutral",
+        "displayName": "Night Panel",
+        "canonical": "#15191E",
+        "tonalRamp": [
+          "oklch(15% 0.012 255)",
+          "oklch(26% 0.012 255)",
+          "oklch(37% 0.012 255)",
+          "oklch(48% 0.012 255)",
+          "oklch(59% 0.012 255)",
+          "oklch(70% 0.012 255)",
+          "oklch(82% 0.012 255)",
+          "oklch(95% 0.012 255)"
+        ]
+      },
+      "night-surface-2": {
+        "role": "neutral",
+        "displayName": "Night Row Tint",
+        "canonical": "#1C2127",
+        "tonalRamp": [
+          "oklch(15% 0.014 255)",
+          "oklch(26% 0.014 255)",
+          "oklch(37% 0.014 255)",
+          "oklch(48% 0.014 255)",
+          "oklch(59% 0.014 255)",
+          "oklch(70% 0.014 255)",
+          "oklch(82% 0.014 255)",
+          "oklch(95% 0.014 255)"
+        ]
+      },
+      "night-line": {
+        "role": "neutral",
+        "displayName": "Night Hairline",
+        "canonical": "#262B31",
+        "tonalRamp": [
+          "oklch(15% 0.014 255)",
+          "oklch(26% 0.014 255)",
+          "oklch(37% 0.014 255)",
+          "oklch(48% 0.014 255)",
+          "oklch(59% 0.014 255)",
+          "oklch(70% 0.014 255)",
+          "oklch(82% 0.014 255)",
+          "oklch(95% 0.014 255)"
+        ]
+      },
+      "night-fg": {
+        "role": "neutral",
+        "displayName": "Night Type",
+        "canonical": "#E8EAED",
+        "tonalRamp": [
+          "oklch(15% 0.006 255)",
+          "oklch(26% 0.006 255)",
+          "oklch(37% 0.006 255)",
+          "oklch(48% 0.006 255)",
+          "oklch(59% 0.006 255)",
+          "oklch(70% 0.006 255)",
+          "oklch(82% 0.006 255)",
+          "oklch(95% 0.006 255)"
+        ]
+      },
+      "night-fg-2": {
+        "role": "neutral",
+        "displayName": "Night Second Type",
+        "canonical": "#B5BBC2",
+        "tonalRamp": [
+          "oklch(15% 0.012 255)",
+          "oklch(26% 0.012 255)",
+          "oklch(37% 0.012 255)",
+          "oklch(48% 0.012 255)",
+          "oklch(59% 0.012 255)",
+          "oklch(70% 0.012 255)",
+          "oklch(82% 0.012 255)",
+          "oklch(95% 0.012 255)"
+        ]
+      },
+      "night-fg-meta": {
+        "role": "neutral",
+        "displayName": "Night Meta Grey",
+        "canonical": "#9AA0A6",
+        "tonalRamp": [
+          "oklch(15% 0.012 255)",
+          "oklch(26% 0.012 255)",
+          "oklch(37% 0.012 255)",
+          "oklch(48% 0.012 255)",
+          "oklch(59% 0.012 255)",
+          "oklch(70% 0.012 255)",
+          "oklch(82% 0.012 255)",
+          "oklch(95% 0.012 255)"
+        ]
+      },
+      "night-danger": {
+        "role": "tertiary",
+        "displayName": "Night Failure Red",
+        "canonical": "#F97066",
+        "tonalRamp": [
+          "oklch(15% 0.17 25)",
+          "oklch(26% 0.17 25)",
+          "oklch(37% 0.17 25)",
+          "oklch(48% 0.17 25)",
+          "oklch(59% 0.17 25)",
+          "oklch(70% 0.17 25)",
+          "oklch(82% 0.17 25)",
+          "oklch(95% 0.17 25)"
+        ]
+      },
+      "night-danger-bg": {
+        "role": "tertiary",
+        "displayName": "Night Failure Tint",
+        "canonical": "#2A1414",
+        "tonalRamp": [
+          "oklch(15% 0.04 25)",
+          "oklch(26% 0.04 25)",
+          "oklch(37% 0.04 25)",
+          "oklch(48% 0.04 25)",
+          "oklch(59% 0.04 25)",
+          "oklch(70% 0.04 25)",
+          "oklch(82% 0.04 25)",
+          "oklch(95% 0.04 25)"
+        ]
+      },
+      "night-ok": {
+        "role": "tertiary",
+        "displayName": "Night Indexed Green",
+        "canonical": "#4ADE80",
+        "tonalRamp": [
+          "oklch(15% 0.18 150)",
+          "oklch(26% 0.18 150)",
+          "oklch(37% 0.18 150)",
+          "oklch(48% 0.18 150)",
+          "oklch(59% 0.18 150)",
+          "oklch(70% 0.18 150)",
+          "oklch(82% 0.18 150)",
+          "oklch(95% 0.18 150)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The single page title in the page header; Archivo at 68% width (font-stretch: var(--font-display-stretch)), 800, uppercase."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Standalone titles: sign-in panel, upload drop zone, shared-document title."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Slide-over and dialog titles; wordmark at 700."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Reading text, row names (500), OCR excerpts, field values."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Column heads, pass labels, chip labels, tabs, buttons (12px), status words; 75% width (font-stretch: var(--font-label-stretch)), uppercase, tracked 0.06em."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "Every number, size, date, count, type code, key cap; Martian Mono, tabular figures."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "The count beside the display title; 16px variant in board totals strips."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-overlay",
+        "value": "0 8px 24px rgba(11, 13, 16, 0.16)",
+        "purpose": "Only on floating layers: slide-over, dialog, palette, popover, menu, toast, bulk bar. Night: 0 8px 24px rgba(0, 0, 0, 0.6)."
+      },
+      {
+        "name": "focus-ring",
+        "value": "outline: 2px solid var(--focus); outline-offset: 2px",
+        "purpose": "Keyboard focus everywhere; ink by day, signal yellow by night; inset (-2px) inside tables."
+      },
+      {
+        "name": "changed-edge",
+        "value": "3px var(--signal) bar on the row's left edge",
+        "purpose": "Persistent mark on a changed row until seen."
+      }
+    ],
+    "motion": [
+      {
+        "name": "dur-1",
+        "value": "120ms",
+        "purpose": "Colour and border transitions on controls."
+      },
+      {
+        "name": "dur-2",
+        "value": "200ms",
+        "purpose": "Slide-over entry and exit."
+      },
+      {
+        "name": "ease",
+        "value": "cubic-bezier(.2, .8, .2, 1)",
+        "purpose": "The only easing curve."
+      },
+      {
+        "name": "flip-rerank",
+        "value": "FLIP on rows keyed by data-flip-key",
+        "purpose": "Rows re-rank in place when sort or live updates change order; instant under reduced motion (durations drop to 0ms); change marks persist."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "max-width: 719px"
+      },
+      {
+        "name": "desktop",
+        "value": "min-width: 720px"
+      },
+      {
+        "name": "board-stack",
+        "value": "max-width: 899px"
+      },
+      {
+        "name": "strip-vertical",
+        "value": "max-width: 599px"
+      },
+      {
+        "name": "two-column",
+        "value": "max-width: 479px (Pass: container query)"
+      },
+      {
+        "name": "pass-wide-row",
+        "value": "container max-width: 399px"
+      }
+    ],
+    "layers": [
+      {
+        "name": "z-shell",
+        "value": "1100"
+      },
+      {
+        "name": "z-dock",
+        "value": "1150"
+      },
+      {
+        "name": "z-overlay",
+        "value": "1200"
+      },
+      {
+        "name": "z-toast",
+        "value": "1300"
+      },
+      {
+        "name": "z-palette",
+        "value": "1400"
+      },
+      {
+        "name": "z-skip",
+        "value": "1500"
+      }
+    ],
+    "statusVocabulary": [
+      {
+        "state": "pending",
+        "glyph": "○",
+        "word": "PENDING",
+        "tone": "neutral"
+      },
+      {
+        "state": "processing",
+        "glyph": "◐",
+        "word": "OCR (OCR n/m with progress)",
+        "tone": "neutral"
+      },
+      {
+        "state": "completed",
+        "glyph": "■",
+        "word": "INDEXED",
+        "tone": "ok"
+      },
+      {
+        "state": "failed",
+        "glyph": "▲",
+        "word": "FAILED",
+        "tone": "danger"
+      },
+      {
+        "state": "healthy",
+        "glyph": "■",
+        "word": "HEALTHY",
+        "tone": "ok"
+      },
+      {
+        "state": "syncing",
+        "glyph": "◐",
+        "word": "SYNCING",
+        "tone": "neutral"
+      },
+      {
+        "state": "warning",
+        "glyph": "◆",
+        "word": "CHECK",
+        "tone": "neutral"
+      },
+      {
+        "state": "error",
+        "glyph": "▲",
+        "word": "ERROR",
+        "tone": "danger"
+      },
+      {
+        "state": "disabled",
+        "glyph": "—",
+        "word": "OFF",
+        "tone": "neutral"
+      }
+    ],
+    "internalOnlyVocabulary": [
+      "departure board",
+      "pass",
+      "lit",
+      "gate",
+      "boarding"
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one main action per view, e.g. Add documents.",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 5v14M5 12h14\"/></svg>Add documents</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); height: 40px; padding: 0 var(--s-4); font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-sm); line-height: 1; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); } .ds-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-btn:active { transform: translateY(1px); } .ds-btn-primary { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); } .ds-btn-primary:hover { background: var(--fg-2); border-color: var(--fg-2); color: var(--surface); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined ink action beside a primary (Download, Share, Retry).",
+      "html": "<button class=\"ds-btn ds-btn-secondary\">Download</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); height: 40px; padding: 0 var(--s-4); font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-sm); line-height: 1; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); } .ds-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-btn:active { transform: translateY(1px); } .ds-btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--line-strong); } .ds-btn-secondary:hover { background: var(--surface-2); }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive actions only.",
+      "html": "<button class=\"ds-btn ds-btn-danger\">Delete</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); height: 40px; padding: 0 var(--s-4); font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-sm); line-height: 1; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); } .ds-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-btn:active { transform: translateY(1px); } .ds-btn-danger { background: var(--surface); color: var(--danger); border-color: var(--danger); } .ds-btn-danger:hover { background: var(--danger-bg); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Condensed caps label above a 40px hairline field.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Name</span><input class=\"ds-field-control\" placeholder=\"Search names and text...\"></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: var(--s-1); font-family: var(--font-ui); font-size: var(--fs-md); color: var(--fg); } .ds-field-label { font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-sm); color: var(--fg-2); } .ds-field-control { min-height: 40px; padding: 0 var(--s-3); font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); transition: border-color var(--dur-1) var(--ease); } .ds-field-control::placeholder { color: var(--fg-meta); } .ds-field-control:hover { border-color: var(--line-strong); } .ds-field-control:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Top Bar Navigation",
+      "kind": "nav",
+      "refersTo": "top-bar",
+      "description": "Wordmark, condensed caps tabs with a 2px ink underline on the active tab, search trigger, mono synced readout.",
+      "html": "<nav class=\"ds-topbar\"><span class=\"ds-wordmark\">Readur</span><a class=\"ds-tab\" href=\"#\">Board</a><a class=\"ds-tab ds-tab-active\" href=\"#\" aria-current=\"page\">Library</a><a class=\"ds-tab\" href=\"#\">Intake</a><a class=\"ds-tab\" href=\"#\">Settings</a><button class=\"ds-search\">Search documents...<kbd class=\"ds-kbd\">Ctrl K</kbd></button><span class=\"ds-synced\">synced 2m ago</span></nav>",
+      "css": ".ds-topbar { display: flex; align-items: stretch; gap: var(--s-4); height: 56px; padding: 0 var(--s-4); background: var(--surface); border-bottom: 1px solid var(--line); font-family: var(--font-ui); } .ds-wordmark { align-self: center; font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-weight: 700; font-size: var(--fs-lg); color: var(--fg); } .ds-tab { display: inline-flex; align-items: center; padding: 0 var(--s-3); font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-md); color: var(--fg-2); text-decoration: none; } .ds-tab:hover { color: var(--fg); } .ds-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; } .ds-tab-active { color: var(--fg); box-shadow: inset 0 -2px 0 var(--line-strong); } .ds-search { align-self: center; flex: 1; max-width: 420px; display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 var(--s-2) 0 var(--s-3); font: inherit; font-size: var(--fs-md); color: var(--fg-meta); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); cursor: text; } .ds-search:hover { border-color: var(--fg-meta); } .ds-search:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-kbd { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: var(--fs-xs); color: var(--fg-2); background: var(--surface-2); padding: 0 var(--s-1); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: var(--radius); } .ds-synced { align-self: center; font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: var(--fs-sm); color: var(--fg-meta); }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "filter-chip-active",
+      "description": "Facet chip: caps label, mono value, clear button once active.",
+      "html": "<span class=\"ds-chip\"><button class=\"ds-chip-trigger\"><span class=\"ds-chip-label\">Type</span><span class=\"ds-chip-value\">PDF</span></button><button class=\"ds-chip-clear\" aria-label=\"Clear\">&times;</button></span>",
+      "css": ".ds-chip { display: inline-flex; align-items: stretch; height: 28px; color: var(--fg); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); } .ds-chip-trigger { display: inline-flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-2); color: inherit; background: transparent; border: 0; border-radius: var(--radius); cursor: pointer; } .ds-chip-trigger:hover { background: var(--surface-2); } .ds-chip-trigger:focus-visible, .ds-chip-clear:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-chip-label { font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-xs); color: var(--fg-2); } .ds-chip-value { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: var(--fs-sm); } .ds-chip-clear { width: 26px; padding: 0; color: var(--fg-2); background: transparent; border: 0; border-left: 1px solid var(--line); cursor: pointer; } .ds-chip-clear:hover { color: var(--fg); background: var(--surface-2); }"
+    },
+    {
+      "name": "Board Table",
+      "kind": "custom",
+      "refersTo": "board-table-row",
+      "description": "Sticky caps head over hairline rows; a changed row carries the 3px signal edge and a NEW/CHANGED tag until seen; status is shape plus word.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Name</th><th>Status</th><th class=\"ds-end\">Size</th><th>Added ▼</th></tr></thead><tbody><tr class=\"ds-changed\"><td><span class=\"ds-tag\">New</span> insurance-policy-home.txt</td><td><span class=\"ds-mark ds-ok\"><span class=\"ds-glyph\">■</span>Indexed</span></td><td class=\"ds-num ds-end\">93 B</td><td class=\"ds-num\">1 min. ago</td></tr><tr><td>test_file.doc</td><td><span class=\"ds-mark ds-danger\"><span class=\"ds-glyph\">▲</span>Failed</span></td><td class=\"ds-num ds-end\">2.0 KB</td><td class=\"ds-num\">3 min. ago</td></tr></tbody></table>",
+      "css": ".ds-table { width: 100%; border-collapse: separate; border-spacing: 0; font-family: var(--font-ui); font-size: var(--fs-md); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); } .ds-table th { height: 32px; padding: 0 var(--s-3); text-align: left; font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-xs); color: var(--fg-meta); background: var(--surface-2); border-bottom: 1px solid var(--line-strong); } .ds-table td { position: relative; height: 40px; padding: 0 var(--s-3); border-bottom: 1px solid var(--line); background: var(--surface); } .ds-table tr:last-child td { border-bottom: 0; } .ds-table tbody tr:hover td { background: var(--surface-2); } .ds-changed td:first-child::before { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 3px; background: var(--signal); } .ds-end { text-align: right !important; } .ds-num { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: var(--fs-sm); } .ds-tag { padding: 0 var(--s-1); font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-xs); line-height: 18px; color: var(--signal-ink); background: var(--signal); border-radius: 2px; } .ds-mark { display: inline-flex; align-items: center; gap: var(--s-1); font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-xs); } .ds-glyph { font-family: var(--font-data); } .ds-ok { color: var(--ok); } .ds-danger { color: var(--danger); }"
+    },
+    {
+      "name": "Pass",
+      "kind": "card",
+      "refersTo": "pass-cell",
+      "description": "Segmented fact strip: caps labels above mono values, hairlines drawn as 1px gaps.",
+      "html": "<dl class=\"ds-pass\"><div class=\"ds-cell\"><dt>Status</dt><dd class=\"ds-status\">■ Indexed</dd></div><div class=\"ds-cell\"><dt>Type</dt><dd>TXT</dd></div><div class=\"ds-cell\"><dt>Size</dt><dd>93 B</dd></div><div class=\"ds-cell\"><dt>Added</dt><dd>2026-09-30 00:57</dd></div></dl>",
+      "css": ".ds-pass { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 1px; margin: 0; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; } .ds-cell { display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-3) var(--s-4); background: var(--surface); } .ds-cell dt { font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-xs); color: var(--fg-meta); } .ds-cell dd { margin: 0; font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: var(--fs-xl); line-height: var(--lh-display); color: var(--fg); } .ds-cell dd.ds-status { font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-sm); color: var(--ok); }"
+    },
+    {
+      "name": "Bulk Action Bar",
+      "kind": "custom",
+      "refersTo": "bulk-action-bar",
+      "description": "Floating inverted ink bar with a mono count and actions.",
+      "html": "<div class=\"ds-bulk\"><span class=\"ds-bulk-count\"><span class=\"ds-bulk-n\">3</span><span class=\"ds-bulk-w\">Selected</span></span><button class=\"ds-bulk-btn\">Add label</button><button class=\"ds-bulk-btn\">Download</button></div>",
+      "css": ".ds-bulk { display: inline-flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-3); color: var(--btn-fg); background: var(--btn-bg); border-radius: var(--radius); box-shadow: var(--shadow-overlay); } .ds-bulk-count { display: inline-flex; align-items: baseline; gap: var(--s-1); padding-right: var(--s-2); } .ds-bulk-n { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: var(--fs-md); font-weight: 600; } .ds-bulk-w { font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-xs); } .ds-bulk-btn { height: 32px; padding: 0 var(--s-3); font-family: var(--font-label); font-stretch: var(--font-label-stretch); font-weight: 600; text-transform: uppercase; letter-spacing: var(--tracking-label); font-size: var(--fs-sm); color: var(--btn-fg); background: transparent; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; } .ds-bulk-btn:hover { background: color-mix(in srgb, var(--btn-fg) 14%, transparent); } .ds-bulk-btn:focus-visible { outline: 2px solid var(--btn-fg); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Paperwork Board",
+    "overview": "Readur reads like a live departure board for documents. Every surface is a board you scan top to bottom: condensed uppercase column heads, one hairline per row, numbers in a monospaced data face that never jitters. A document's facts are laid out as a segmented strip of labelled cells (internally, a \"pass\"). When something changes (OCR finishes, a sync fails) the row is marked and stays marked until the person has seen it. That persistent mark is the one moment of colour the system allows itself.\n\nThe palette is ink on cool paper by day and pale type on a night board after dark, with a single signal yellow and a red kept for failure. Depth is flat: hairlines and tonal steps separate things, and shadows appear only on elements that float above the page. Density is high but calm. Rows are 40px (32px compact), labels are small and tracked, and whitespace comes from a 4px module rather than from padded cards. The system turns down the stat-card-grid SaaS dashboard with an indigo accent. Figures sit in strips and tables, never in isolated tiles.\n\nThe metaphor words (departure board, pass, lit, gate, boarding) belong to design documents and code comments only. User copy says what things are: \"Needs attention\", \"Mark all seen\", \"New\", \"Changed\", \"Indexed\", \"Failed\". The shipped navigation tab \"Board\" and the region title \"Arrivals\" are the only exceptions, and neither should become a precedent for more metaphor in copy.",
+    "keyCharacteristics": [
+      "Condensed, uppercase, tracked Archivo for every label, head, tab, and button. Normal-width Archivo for reading text.",
+      "Martian Mono with tabular figures for every number, size, date, count, and type code.",
+      "1px hairlines and a 4px radius everywhere. No gradients.",
+      "Signal yellow only as a filled tag with ink text, a 3px edge bar, a search-match highlight, or a count badge.",
+      "Every state is a shape plus a word (○ ◐ ■ ▲ ◆ —). Colour alone never carries meaning.",
+      "Light and night themes share one token set. Only values change, never structure."
+    ],
+    "rules": [
+      {
+        "name": "The Lit Until Seen Rule",
+        "body": "Yellow means \"changed since you last looked\", and nothing else. A marked row keeps its edge bar through sorting, paging, and reduced motion until the person opens it or marks everything seen.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Placements Rule",
+        "body": "Signal yellow is either a fill with ink text on top or a 3px bar. It is never yellow text, a yellow border, or a yellow surface.",
+        "section": "colors"
+      },
+      {
+        "name": "The Red Is Failure Rule",
+        "body": "Red is only for failed, error, invalid, or destructive states.",
+        "section": "colors"
+      },
+      {
+        "name": "The Every Number Is Mono Rule",
+        "body": "Numbers, sizes, dates, durations, counts, and file-type codes are set in Martian Mono with tabular figures. This applies in tables, chips, badges, pass cells, and the bulk-bar count.",
+        "section": "typography"
+      },
+      {
+        "name": "The Width Carries Rank Rule",
+        "body": "Hierarchy comes from width and case before size. Condensed caps mean structure (heads, labels, controls). Normal width means content. Don't set reading text in condensed caps, and don't set labels in normal-width sentence case.",
+        "section": "typography"
+      },
+      {
+        "name": "The Stack, Never Scroll Rule",
+        "body": "On phones a table row folds into lines; the page never scrolls sideways. A table only scrolls inside its own box if it is still wider than the screen after folding.",
+        "section": "layout"
+      },
+      {
+        "name": "The Only Floaters Cast Rule",
+        "body": "A shadow means \"this sits above the page\". Tables, regions, strips, and cards at rest have none.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** set every number, size, date, count, and type code in Martian Mono with tabular figures.",
+      "**Do** pair every state with its shape and word (○ ◐ ■ ▲ ◆ —) through the status mark.",
+      "**Do** mark changes with the 3px signal edge bar plus a NEW / CHANGED tag, and keep both until the person has seen the item.",
+      "**Do** build facts as passes and totals as segmented strips: labels above values, hairlines drawn as 1px gaps.",
+      "**Do** use condensed (75%) uppercase tracked Archivo for heads, labels, tabs, and buttons, and 68% width at 800 for the one page title.",
+      "**Do** take every layer from the z-index tokens and every value from tokens.css. Surfaces never hard-code a colour.",
+      "**Do** fold table rows into lines on phones rather than scrolling sideways.",
+      "**Do** keep the metaphor vocabulary (departure board, pass, lit, gate) out of user-facing copy in all four locales."
+    ],
+    "donts": [
+      "**Don't** build a stat-card grid or tint an accent indigo. Figures belong in strips and tables.",
+      "**Don't** use signal yellow as text, a border, a surface tint, or a success colour.",
+      "**Don't** use red for anything but failure, error, invalid, or destructive states.",
+      "**Don't** add shadows to anything that rests on the page, and don't use gradients.",
+      "**Don't** convey state by colour alone.",
+      "**Don't** put a small caps kicker or eyebrow above a page title. The breadcrumb on document pages is navigation, not a kicker.",
+      "**Don't** set reading text in condensed caps."
+    ]
+  }
+}
