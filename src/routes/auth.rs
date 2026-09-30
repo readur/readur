@@ -7,6 +7,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use ts_rs::TS;
 
 use crate::{
     auth::{create_jwt, AuthUser},
@@ -26,7 +27,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .nest("/keys", crate::routes::api_keys::router())
 }
 
-#[derive(Serialize, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema, TS)]
+#[ts(export)]
 struct AuthConfig {
     allow_local_auth: bool,
     oidc_enabled: bool,

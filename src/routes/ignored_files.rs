@@ -10,6 +10,7 @@ use sqlx::Row;
 use std::sync::Arc;
 use uuid::Uuid;
 use utoipa::{OpenApi, ToSchema};
+use ts_rs::TS;
 
 use crate::{
     auth::AuthUser,
@@ -39,13 +40,15 @@ use crate::{
 )]
 pub struct IgnoredFilesApi;
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct BulkDeleteIgnoredFilesRequest {
     /// List of ignored file IDs to delete
     pub ignored_file_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct IgnoredFilesStats {
     /// Total number of ignored files for the user
     pub total_ignored_files: i64,
@@ -57,7 +60,8 @@ pub struct IgnoredFilesStats {
     pub most_recent_ignored_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SourceTypeCount {
     pub source_type: Option<String>,
     pub count: i64,

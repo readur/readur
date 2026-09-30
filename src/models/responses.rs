@@ -3,10 +3,12 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use utoipa::{ToSchema, IntoParams};
 use serde_json;
+use ts_rs::TS;
 
 use super::document::Document;
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SearchSnippet {
     /// The snippet text content
     pub text: String,
@@ -18,7 +20,8 @@ pub struct SearchSnippet {
     pub highlight_ranges: Vec<HighlightRange>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct HighlightRange {
     /// Start position of highlight within the snippet
     pub start: i32,
@@ -26,7 +29,8 @@ pub struct HighlightRange {
     pub end: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentResponse {
     /// Unique identifier for the document
     pub id: Uuid,
@@ -53,9 +57,11 @@ pub struct DocumentResponse {
     pub user_id: Uuid,
     /// Username of the user who uploaded/owns the document
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub username: Option<String>,
     /// SHA256 hash of the file content
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub file_hash: Option<String>,
     /// Whether OCR text has been extracted
     pub has_ocr_text: bool,
@@ -69,40 +75,52 @@ pub struct DocumentResponse {
     pub ocr_status: Option<String>,
     /// Current page being processed (for multi-page documents during OCR)
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub ocr_progress_current: Option<i32>,
     /// Total pages to process (for multi-page documents during OCR)
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub ocr_progress_total: Option<i32>,
     /// Original file creation timestamp from source system
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub original_created_at: Option<DateTime<Utc>>,
     /// Original file modification timestamp from source system
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub original_modified_at: Option<DateTime<Utc>>,
     /// Original path where the file was located (from source system)
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub source_path: Option<String>,
     /// Type of source where file was ingested from
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub source_type: Option<String>,
     /// UUID of the source system/configuration
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub source_id: Option<Uuid>,
     /// File permissions from source system (Unix mode bits)
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub file_permissions: Option<i32>,
     /// File owner from source system
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub file_owner: Option<String>,
     /// File group from source system
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub file_group: Option<String>,
     /// Additional metadata from source system (EXIF data, PDF metadata, custom attributes, etc.)
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub source_metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct EnhancedDocumentResponse {
     /// Unique identifier for the document
     pub id: Uuid,
@@ -142,9 +160,11 @@ pub struct EnhancedDocumentResponse {
     pub ocr_status: Option<String>,
     /// Current page being processed (present only while OCR is processing)
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub ocr_progress_current: Option<i32>,
     /// Total pages to process (present only while OCR is processing)
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[ts(optional)]
     pub ocr_progress_total: Option<i32>,
     /// Search relevance score (0-1, higher is more relevant)
     pub search_rank: Option<f32>,
@@ -187,7 +207,8 @@ impl EnhancedDocumentResponse {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct IgnoredFileResponse {
     pub id: Uuid,
     pub file_hash: String,
@@ -206,7 +227,8 @@ pub struct IgnoredFileResponse {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentListResponse {
     /// List of documents
     pub documents: Vec<DocumentResponse>,
@@ -220,10 +242,12 @@ pub struct DocumentListResponse {
     pub limit: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentOcrResponse {
     /// Document ID
     #[serde(rename = "id", with = "uuid_as_string")]
+    #[ts(type = "string")]
     pub id: Uuid,
     /// Original filename
     pub filename: String,
@@ -243,7 +267,8 @@ pub struct DocumentOcrResponse {
     pub pages_processed: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentOperationResponse {
     /// Whether the operation was successful
     pub success: bool,
@@ -257,7 +282,8 @@ pub struct DocumentOperationResponse {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, rename = "LegacyBulkDeleteResponse")]
 pub struct BulkDeleteResponse {
     /// Whether the operation was successful
     pub success: bool,
@@ -277,7 +303,8 @@ pub struct BulkDeleteResponse {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct PaginationInfo {
     /// Total number of items available
     pub total: i64,
@@ -291,7 +318,8 @@ pub struct PaginationInfo {
     pub has_more: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentDuplicatesResponse {
     /// List of document groups that are duplicates of each other
     pub duplicate_groups: Vec<Vec<DocumentResponse>>,
@@ -303,7 +331,8 @@ pub struct DocumentDuplicatesResponse {
     pub pagination: PaginationInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS, IntoParams)]
+#[ts(export, optional_fields)]
 pub struct IgnoredFilesQuery {
     /// Maximum number of results to return (default: 25)
     pub limit: Option<i64>,

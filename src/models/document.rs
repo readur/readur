@@ -4,6 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use utoipa::ToSchema;
 use serde_json;
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Document {
@@ -48,7 +49,8 @@ pub struct Document {
     pub source_metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema, TS)]
+#[ts(export)]
 pub enum FailureReason {
     #[serde(rename = "duplicate_content")]
     DuplicateContent,
@@ -86,7 +88,8 @@ pub enum FailureReason {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema, TS)]
+#[ts(export)]
 pub enum FailureStage {
     #[serde(rename = "ingestion")]
     Ingestion,
@@ -139,7 +142,8 @@ impl std::fmt::Display for FailureStage {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct FailedDocument {
     /// Unique identifier for the failed document record
     pub id: Uuid,
@@ -191,7 +195,8 @@ pub struct FailedDocument {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct ProcessedImage {
     pub id: Uuid,
     pub document_id: Uuid,
@@ -206,7 +211,8 @@ pub struct ProcessedImage {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct CreateProcessedImage {
     pub document_id: Uuid,
     pub user_id: Uuid,
@@ -219,7 +225,8 @@ pub struct CreateProcessedImage {
     pub file_size: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct IgnoredFile {
     pub id: Uuid,
     pub file_hash: String,
@@ -237,7 +244,8 @@ pub struct IgnoredFile {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct CreateIgnoredFile {
     pub file_hash: String,
     pub filename: String,

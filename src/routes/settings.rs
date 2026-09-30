@@ -6,6 +6,7 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
+use ts_rs::TS;
 
 use crate::{
     auth::AuthUser,
@@ -140,7 +141,8 @@ async fn update_settings(
     Ok(Json(settings.into()))
 }
 
-#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[derive(Debug, Serialize, utoipa::ToSchema, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 struct ServerConfiguration {
     max_file_size_mb: u64,

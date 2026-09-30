@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use utoipa::ToSchema;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema, TS)]
+#[ts(export)]
 pub enum UserRole {
     #[serde(rename = "admin")]
     Admin,
@@ -12,7 +14,8 @@ pub enum UserRole {
     User,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema, TS)]
+#[ts(export)]
 pub enum AuthProvider {
     #[serde(rename = "local")]
     Local,
@@ -62,7 +65,8 @@ impl TryFrom<String> for AuthProvider {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
@@ -79,7 +83,8 @@ pub struct User {
     pub auth_provider: AuthProvider,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct CreateUser {
     pub username: String,
     pub email: String,
@@ -92,19 +97,22 @@ fn default_user_role() -> Option<UserRole> {
     Some(UserRole::User)
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct LoginResponse {
     pub token: String,
     pub user: UserResponse,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct UserResponse {
     pub id: Uuid,
     pub username: String,
@@ -112,7 +120,8 @@ pub struct UserResponse {
     pub role: UserRole,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct UpdateUser {
     pub username: Option<String>,
     pub email: Option<String>,

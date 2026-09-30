@@ -8,6 +8,7 @@ use axum::{
 use std::sync::Arc;
 use serde::Serialize;
 use utoipa::ToSchema;
+use ts_rs::TS;
 
 use crate::{auth::AuthUser, AppState, models::UserRole};
 
@@ -19,7 +20,8 @@ fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
     }
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SystemMetrics {
     pub database: DatabaseMetrics,
     pub ocr: OcrMetrics,
@@ -29,14 +31,16 @@ pub struct SystemMetrics {
     pub timestamp: i64,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DatabaseMetrics {
     pub active_connections: i32,
     pub total_queries_today: i64,
     pub avg_query_time_ms: f64,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct OcrMetrics {
     pub pending_jobs: i64,
     pub processing_jobs: i64,
@@ -47,7 +51,8 @@ pub struct OcrMetrics {
     pub oldest_pending_minutes: Option<f64>,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentMetrics {
     pub total_documents: i64,
     pub documents_uploaded_today: i64,
@@ -57,14 +62,16 @@ pub struct DocumentMetrics {
     pub documents_without_ocr: i64,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct UserMetrics {
     pub total_users: i64,
     pub active_users_today: i64,
     pub new_registrations_today: i64,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct GeneralSystemMetrics {
     pub uptime_seconds: u64,
     pub app_version: String,

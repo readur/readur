@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
+use ts_rs::TS;
 
 use super::responses::EnhancedDocumentResponse;
 
@@ -71,7 +72,8 @@ where
 }
 
 /// Whitelisted columns that document lists and searches can be sorted by.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum DocumentSortField {
     CreatedAt,
@@ -111,7 +113,8 @@ impl DocumentSortField {
 }
 
 /// Sort direction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum SortOrder {
     Asc,
@@ -133,7 +136,8 @@ pub const FILTERABLE_OCR_STATUSES: [&str; 4] = ["pending", "processing", "comple
 /// Filters shared by the document list and search endpoints.
 ///
 /// All values are passed to SQL as bind parameters only.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentFilters {
     /// OCR status: pending (also matches documents with no status), processing, completed, failed
     pub ocr_status: Option<String>,
@@ -188,16 +192,20 @@ impl DocumentFilters {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, ToSchema, IntoParams)]
+#[derive(Debug, Default, Serialize, Deserialize, ToSchema, TS, IntoParams)]
+#[ts(export, optional_fields)]
 pub struct SearchRequest {
     /// Search query text (searches both document content and OCR-extracted text)
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub query: String,
     /// Filter by specific tags (label names)
     #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    #[ts(optional = nullable, type = "string")]
     pub tags: Option<Vec<String>>,
     /// Filter by MIME types (e.g., "application/pdf", "image/png")
     #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    #[ts(optional = nullable, type = "string")]
     pub mime_types: Option<Vec<String>>,
     /// Maximum number of results to return (default: 25)
     pub limit: Option<i64>,
@@ -218,12 +226,15 @@ pub struct SearchRequest {
     pub ocr_status: Option<String>,
     /// Filter by label IDs (comma-separated UUIDs, matches any)
     #[serde(default, deserialize_with = "deserialize_comma_separated_uuids")]
+    #[ts(optional = nullable, type = "string")]
     pub label_ids: Option<Vec<Uuid>>,
     /// Filter by source IDs (comma-separated UUIDs, matches any)
     #[serde(default, deserialize_with = "deserialize_comma_separated_uuids")]
+    #[ts(optional = nullable, type = "string")]
     pub source_ids: Option<Vec<Uuid>>,
     /// Filter by source types (comma-separated); `direct_upload` also matches documents without a source
     #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    #[ts(optional = nullable, type = "string")]
     pub source_types: Option<Vec<String>>,
     /// Only documents created at or after this RFC 3339 timestamp
     pub created_from: Option<DateTime<Utc>>,
@@ -247,7 +258,8 @@ impl SearchRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub enum SearchMode {
     /// Simple text search with basic word matching
     #[serde(rename = "simple")]
@@ -270,7 +282,8 @@ impl Default for SearchMode {
 }
 
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SearchResponse {
     pub documents: Vec<EnhancedDocumentResponse>,
     pub total: i64,
@@ -278,13 +291,15 @@ pub struct SearchResponse {
     pub suggestions: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct FacetItem {
     pub value: String,
     pub count: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SearchFacetsResponse {
     pub mime_types: Vec<FacetItem>,
     pub tags: Vec<FacetItem>,

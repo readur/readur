@@ -2,11 +2,13 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
+use ts_rs::TS;
 
 use crate::models::search::{deserialize_comma_separated, deserialize_comma_separated_uuids};
 use crate::models::{DocumentFilters, DocumentSortField, SortOrder};
 
-#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+#[derive(Debug, Deserialize, ToSchema, TS, IntoParams)]
+#[ts(export, optional_fields)]
 pub struct PaginationQuery {
     /// Maximum number of documents to return (default: 25)
     pub limit: Option<i64>,
@@ -20,18 +22,23 @@ pub struct PaginationQuery {
     pub ocr_status: Option<String>,
     /// Filter by MIME types (comma-separated, matches any)
     #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    #[ts(optional = nullable, type = "string")]
     pub mime_types: Option<Vec<String>>,
     /// Filter by label IDs (comma-separated UUIDs, matches any)
     #[serde(default, deserialize_with = "deserialize_comma_separated_uuids")]
+    #[ts(optional = nullable, type = "string")]
     pub label_ids: Option<Vec<Uuid>>,
     /// Filter by label names (comma-separated, matches any)
     #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    #[ts(optional = nullable, type = "string")]
     pub tags: Option<Vec<String>>,
     /// Filter by source IDs (comma-separated UUIDs, matches any)
     #[serde(default, deserialize_with = "deserialize_comma_separated_uuids")]
+    #[ts(optional = nullable, type = "string")]
     pub source_ids: Option<Vec<Uuid>>,
     /// Filter by source types (comma-separated); `direct_upload` also matches documents without a source
     #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    #[ts(optional = nullable, type = "string")]
     pub source_types: Option<Vec<String>>,
     /// Only documents created at or after this RFC 3339 timestamp
     pub created_from: Option<DateTime<Utc>>,
@@ -55,7 +62,8 @@ impl PaginationQuery {
     }
 }
 
-#[derive(Deserialize, ToSchema, IntoParams)]
+#[derive(Deserialize, ToSchema, TS, IntoParams)]
+#[ts(export, optional_fields)]
 pub struct FailedDocumentsQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
@@ -63,24 +71,28 @@ pub struct FailedDocumentsQuery {
     pub reason: Option<String>, // 'duplicate_content', 'low_ocr_confidence', etc.
 }
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(Deserialize, Serialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct BulkDeleteRequest {
     pub document_ids: Vec<uuid::Uuid>,
 }
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(Deserialize, Serialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct DeleteLowConfidenceRequest {
     pub max_confidence: f32,
     pub preview_only: Option<bool>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct RetryOcrRequest {
     pub language: Option<String>,
     pub languages: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(Deserialize, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentUploadResponse {
     pub id: uuid::Uuid,
     pub filename: String,
@@ -90,7 +102,8 @@ pub struct DocumentUploadResponse {
     pub message: String,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct BulkDeleteResponse {
     pub deleted_count: i64,
     pub failed_count: i64,
@@ -100,7 +113,8 @@ pub struct BulkDeleteResponse {
     pub total_files_failed: i64,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentDebugInfo {
     pub document_id: uuid::Uuid,
     pub filename: String,
@@ -118,7 +132,8 @@ pub struct DocumentDebugInfo {
     pub user_settings: Option<crate::models::SettingsResponse>,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentPaginationInfo {
     pub total: i64,
     pub limit: i64,
@@ -126,7 +141,8 @@ pub struct DocumentPaginationInfo {
     pub has_more: bool,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct PaginatedDocumentsResponse {
     pub documents: Vec<crate::models::DocumentResponse>,
     pub pagination: DocumentPaginationInfo,

@@ -8,6 +8,7 @@ use uuid::Uuid;
 use tracing::{error, info};
 use serde::{Deserialize};
 use utoipa::ToSchema;
+use ts_rs::TS;
 
 use crate::{
     auth::AuthUser,
@@ -16,7 +17,8 @@ use crate::{
     AppState,
 };
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct TestConnectionRequest {
     pub source_type: SourceType,
     pub config: serde_json::Value,

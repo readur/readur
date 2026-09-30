@@ -11,10 +11,12 @@ use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, Row};
+use ts_rs::TS;
 
 use crate::{auth::AuthUser, errors::label::LabelError, AppState};
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct Label {
     pub id: Uuid,
     pub user_id: Option<Uuid>, // nullable for system labels
@@ -32,11 +34,13 @@ pub struct Label {
     pub source_count: i64,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct CreateLabel {
     pub name: String,
     pub description: Option<String>,
     #[serde(default = "default_color")]
+    #[ts(optional = nullable)]
     pub color: String,
     pub background_color: Option<String>,
     pub icon: Option<String>,
@@ -46,7 +50,8 @@ fn default_color() -> String {
     "#0969da".to_string()
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct UpdateLabel {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -55,22 +60,27 @@ pub struct UpdateLabel {
     pub icon: Option<String>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct LabelAssignment {
     pub label_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+#[derive(Debug, Deserialize, ToSchema, TS, IntoParams)]
+#[ts(export, optional_fields)]
 pub struct LabelQuery {
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub include_counts: bool,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct BulkUpdateRequest {
     pub document_ids: Vec<Uuid>,
     pub label_ids: Vec<Uuid>,
     #[serde(default = "default_bulk_mode")]
+    #[ts(optional = nullable)]
     pub mode: String, // "replace", "add", or "remove"
 }
 

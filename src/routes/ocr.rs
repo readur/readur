@@ -8,6 +8,7 @@ use axum::{
 use serde::Serialize;
 use std::sync::Arc;
 use utoipa::ToSchema;
+use ts_rs::TS;
 
 use crate::{
     auth::AuthUser,
@@ -15,13 +16,15 @@ use crate::{
     AppState,
 };
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct AvailableLanguagesResponse {
     pub available_languages: Vec<LanguageInfo>,
     pub current_user_language: String,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct LanguageInfo {
     pub code: String,
     pub name: String,
