@@ -603,6 +603,34 @@ async fn resolve_oidc_user(state: &Arc<AppState>, info: &OidcUserInfo) -> Result
         }
     }
 
+    // Accounts created by earlier releases stored the issuer exactly as
+    // configured (OIDC_ISSUER_URL) rather than the discovered issuer. Find
+    // those and migrate them to the discovered value.
+    let configured = state.config.oidc_issuer_url.as_deref().unwrap_or_default();
+    for legacy_issuer in legacy_issuer_variants(configured, &issuer) {
+        match state.db.get_user_by_oidc_subject(&info.sub, &legacy_issuer).await {
+            Ok(Some(user)) => {
+                return state
+                    .db
+                    .update_user_oidc_issuer(user.id, &issuer)
+                    .await
+                    .map(|user| {
+                        tracing::info!(user_id = %user.id, "Updated stored OIDC issuer to the discovered value");
+                        user
+                    })
+                    .map_err(|e| {
+                        tracing::error!("Failed to update stored OIDC issuer: {}", e);
+                        internal()
+                    });
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::error!("Database error during OIDC lookup: {}", e);
+                return Err(internal());
+            }
+        }
+    }
+
     if let Some(email) = info.email.as_deref() {
         match state.db.get_user_by_email(email).await {
             Ok(Some(existing)) => {
@@ -645,6 +673,24 @@ async fn resolve_oidc_user(state: &Arc<AppState>, info: &OidcUserInfo) -> Result
     create_new_oidc_user(state, info, &issuer).await
 }
 
+/// Issuer strings under which earlier releases may have stored an identity:
+/// the configured issuer URL with and without a trailing slash, excluding the
+/// discovered issuer (which is looked up first).
+fn legacy_issuer_variants(configured: &str, discovered: &str) -> Vec<String> {
+    let configured = configured.trim();
+    if configured.is_empty() {
+        return Vec::new();
+    }
+    let base = configured.trim_end_matches('/');
+    let mut variants: Vec<String> = Vec::new();
+    for candidate in [configured.to_string(), base.to_string(), format!("{}/", base)] {
+        if candidate != discovered && !variants.contains(&candidate) {
+            variants.push(candidate);
+        }
+    }
+    variants
+}
+
 /// Deterministic fallback username derived from the external identity.
 fn fallback_oidc_username(issuer: &str, sub: &str) -> String {
     format!("oidc_{}", &sha256_hex(&format!("{}|{}", issuer, sub))[..12])
@@ -665,8 +711,13 @@ async fn create_new_oidc_user(
         .or_else(|| info.email.clone())
         .filter(|u| validate_account_username(u).is_ok())
         .unwrap_or_else(|| fallback.clone());
-    if matches!(state.db.get_user_by_username(&username).await, Ok(Some(_))) {
-        username = fallback;
+    match state.db.get_user_by_username(&username).await {
+        Ok(Some(_)) => username = fallback,
+        Ok(None) => {}
+        Err(e) => {
+            tracing::error!("Database error while checking OIDC username: {}", e);
+            return Err(json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"));
+        }
     }
 
     let user_email = info
@@ -711,5 +762,16 @@ mod tests {
         assert_eq!(a, fallback_oidc_username("https://idp", "1"));
         assert_ne!(a, fallback_oidc_username("https://idp", "2"));
         assert!(validate_account_username(&a).is_ok());
+    }
+
+    #[test]
+    fn legacy_issuer_variants_cover_trailing_slash_forms() {
+        let v = legacy_issuer_variants("https://idp.example/realms/x", "https://idp.example/realms/x");
+        assert_eq!(v, vec!["https://idp.example/realms/x/".to_string()]);
+
+        let v = legacy_issuer_variants("https://idp.example/", "https://idp.example");
+        assert_eq!(v, vec!["https://idp.example/".to_string()]);
+
+        assert!(legacy_issuer_variants("", "https://idp.example").is_empty());
     }
 }

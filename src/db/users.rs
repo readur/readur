@@ -175,6 +175,20 @@ impl Database {
         Ok(row.as_ref().map(user_from_row))
     }
 
+    /// Rewrite the stored issuer of an account bound to an OIDC identity.
+    pub async fn update_user_oidc_issuer(&self, user_id: Uuid, oidc_issuer: &str) -> Result<User> {
+        let row = sqlx::query(&format!(
+            "UPDATE users SET oidc_issuer = $2, updated_at = NOW()
+             WHERE id = $1
+             RETURNING {USER_COLUMNS}"
+        ))
+        .bind(user_id)
+        .bind(oidc_issuer)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(user_from_row(&row))
+    }
+
     pub async fn create_oidc_user(
         &self,
         user: CreateUser,

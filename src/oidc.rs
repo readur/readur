@@ -148,6 +148,7 @@ impl OidcClient {
             .map_err(|e| anyhow!("Failed to build HTTP client: {}", e))?;
 
         let discovery = Self::discover_endpoints(&http_client, issuer_url).await?;
+        ensure_issuer_matches(issuer_url, &discovery.issuer)?;
 
         Ok(Self {
             client_id,
@@ -403,6 +404,22 @@ impl OidcClient {
     }
 }
 
+/// The discovered issuer must be identical to the configured issuer URL
+/// (OpenID Connect Discovery 1.0 section 4.3). A trailing slash difference is
+/// tolerated because configurations commonly include or omit it.
+fn ensure_issuer_matches(configured: &str, discovered: &str) -> Result<()> {
+    if configured.trim().trim_end_matches('/') == discovered.trim_end_matches('/') {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "OIDC discovery document issuer '{}' does not match OIDC_ISSUER_URL '{}'; \
+             set OIDC_ISSUER_URL to the issuer published by the provider",
+            discovered,
+            configured
+        ))
+    }
+}
+
 /// `email_verified` is a boolean per spec, but some providers send a string.
 fn parse_bool_claim(value: &serde_json::Value) -> Option<bool> {
     match value {
@@ -437,6 +454,15 @@ mod tests {
         let b = random_urlsafe(32);
         assert_ne!(a, b);
         assert!(a.len() >= 43);
+    }
+
+    #[test]
+    fn issuer_must_match_modulo_trailing_slash() {
+        assert!(ensure_issuer_matches("https://idp.example/realms/a", "https://idp.example/realms/a").is_ok());
+        assert!(ensure_issuer_matches("https://idp.example/realms/a/", "https://idp.example/realms/a").is_ok());
+        assert!(ensure_issuer_matches("https://idp.example", "https://idp.example/").is_ok());
+        assert!(ensure_issuer_matches("https://idp.example/realms/a", "https://other.example/realms/a").is_err());
+        assert!(ensure_issuer_matches("https://idp.example/realms/a", "https://idp.example/realms/b").is_err());
     }
 
     #[test]
