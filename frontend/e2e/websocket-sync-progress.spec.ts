@@ -1,673 +1,314 @@
 import { test, expect } from './fixtures/auth';
+import type { Locator, Page, WebSocketRoute } from '@playwright/test';
 import { TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
+
+/**
+ * Live sync progress in Intake → Connections → a connection's detail panel. The panel shows
+ * "<name> sync progress" while the connection is syncing, fed by
+ * /api/sources/:id/sync/progress/ws. The connection word (Connecting…/Connected/Live/
+ * Reconnecting…/Disconnected/Connection failed) is a role=status inside that region.
+ *
+ * Most tests route the WebSocket (page.routeWebSocket) so progress is deterministic; the
+ * first one talks to the real server.
+ */
+
+const WS_PATTERN = /\/api\/sources\/[^/]+\/sync\/progress\/ws/;
+
+function progress(sourceId: string, overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    type: 'progress',
+    data: {
+      source_id: sourceId,
+      phase: 'processing_files',
+      phase_description: 'Processing files',
+      elapsed_time_secs: 12,
+      directories_found: 4,
+      directories_processed: 2,
+      files_found: 10,
+      files_processed: 3,
+      bytes_processed: 2048,
+      processing_rate_files_per_sec: 1.5,
+      files_progress_percent: 30,
+      estimated_time_remaining_secs: 20,
+      current_directory: '/Documents/2026',
+      current_file: 'invoice.pdf',
+      errors: 0,
+      warnings: 0,
+      is_active: true,
+      ...overrides,
+    },
+  });
+}
 
 test.describe('WebSocket Sync Progress', () => {
   let helpers: TestHelpers;
 
   test.beforeEach(async ({ dynamicAdminPage }) => {
     helpers = new TestHelpers(dynamicAdminPage);
-    await helpers.navigateToPage('/sources');
+    await dynamicAdminPage.goto('/board');
   });
 
-  // Helper function to trigger sync on a source
-  async function triggerSourceSync(page: any, sourceName: string, syncType: 'quick' | 'deep' = 'quick') {
-    const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-    await expect(sourceCard).toBeVisible({ timeout: 10000 });
-    
-    // Hover over the source card to reveal action buttons
-    await sourceCard.hover();
-    // Wait for hover effect to complete
-    await expect(sourceCard.locator('[data-testid="sync-button"], button:has(svg[data-testid="PlayArrowIcon"])')).toBeVisible({ timeout: 3000 });
-    
-    // Find the sync button (PlayArrow icon button)
-    const syncButton = sourceCard.locator('[data-testid="sync-button"], button:has(svg[data-testid="PlayArrowIcon"])').first();
-    
-    await expect(syncButton).toBeVisible({ timeout: 5000 });
-    await syncButton.click();
-    
-    // Wait for sync modal and select sync type
-    const syncModal = page.getByRole('dialog');
-    await expect(syncModal).toBeVisible({ timeout: 5000 });
-    
-    const syncTypeText = syncType === 'quick' ? 'Quick Sync' : 'Deep Scan';
-    
-    // Try multiple selectors for the sync type cards
-    const cardSelectors = [
-      `[role="button"]:has-text("${syncTypeText}")`,
-      `.MuiCard-root:has-text("${syncTypeText}")`,
-      `div:has-text("${syncTypeText}"):has-text("${syncType === 'quick' ? 'Fast incremental sync' : 'Complete rescan'}")`,
-      `h6:has-text("${syncTypeText}")`,
-    ];
-    
-    let syncCard = null;
-    for (const selector of cardSelectors) {
-      const element = page.locator(selector).first();
-      if (await element.isVisible({ timeout: 2000 })) {
-        syncCard = element;
-        break;
-      }
-    }
-    
-    if (!syncCard) {
-      // Fallback: try to find by card content structure
-      syncCard = syncModal.locator('.MuiCard-root').filter({ hasText: syncTypeText }).first();
-    }
-    
-    await expect(syncCard).toBeVisible({ timeout: 5000 });
-    await syncCard.click();
+  /** Report the given connections as syncing so their panels show live progress. */
+  async function markSyncing(page: Page, ids: string[]) {
+    await page.route('**/api/sources', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      const response = await route.fetch();
+      const list = await response.json();
+      for (const s of list) if (ids.includes(s.id)) s.status = 'syncing';
+      await route.fulfill({ response, json: list });
+    });
   }
 
-  // Helper function to find sync progress display
-  async function findSyncProgressDisplay(page: any, sourceName: string) {
-    // First wait for the source status to change to 'syncing' by checking the source card
-    const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-    
-    // Wait for sync status to be visible on the source card (this indicates sync has started)
-    try {
-      await expect(sourceCard.locator(':has-text("Syncing"), :has-text("syncing")')).toBeVisible({ timeout: 8000 });
-    } catch (e) {
-      // Source sync status not detected, continue looking for progress display
-    }
-    
-    const progressSelectors = [
-      `div:has-text("${sourceName} - Sync Progress")`,
-      '.MuiCard-root:has-text("Sync Progress")',
-      'div h6:has-text("Sync Progress")',
-      '[data-testid="sync-progress"]',
-      // More specific selectors based on the component structure
-      '.MuiCard-root:has-text("Progress")',
-      'div:has-text("Progress")',
-    ];
-    
-    for (const selector of progressSelectors) {
-      const element = page.locator(selector).first();
-      if (await element.isVisible({ timeout: 8000 })) {
-        return element;
-      }
-    }
-    
-    // Final fallback - wait for any progress indicator
-    await page.waitForLoadState('networkidle');
-    const fallbackElement = page.locator('[data-testid="sync-progress"], .MuiCard-root:has-text("Progress")').first();
-    
-    if (await fallbackElement.isVisible({ timeout: 5000 })) {
-      return fallbackElement;
-    }
-    
-    console.log('No progress display found, returning fallback element anyway');
-    return fallbackElement;
+  /** Create a syncing connection and open its panel. Returns the progress region. */
+  async function openSyncingConnection(page: Page, base: string): Promise<{ id: string; name: string; progressRegion: Locator; panel: Locator }> {
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName(base) });
+    await markSyncing(page, [source.id]);
+    await helpers.openIntake('connections');
+    const panel = await helpers.openConnection(source.name);
+    return { ...source, panel, progressRegion: panel.getByRole('region', { name: `${source.name} sync progress` }) };
   }
+
+  const statusWord = (region: Locator) => region.getByRole('status').first();
 
   test('should establish WebSocket connection for sync progress', async ({ dynamicAdminPage: page }) => {
-    // Add browser console logging to debug WebSocket connections
-    const consoleLogs: string[] = [];
-    page.on('console', msg => {
-      const text = msg.text();
-      consoleLogs.push(text);
-      if (text.includes('WebSocket') || text.includes('websocket') || text.includes('token') || text.includes('auth')) {
-        console.log(`Browser console: ${text}`);
-      }
-    });
+    const sockets: string[] = [];
+    page.on('websocket', (ws) => sockets.push(ws.url()));
 
-    // Create a test source first
-    const sourceName = await helpers.createTestSource('WebSocket Test Source', 'webdav');
-    
-    // Trigger sync using helper function
-    await triggerSourceSync(page, sourceName, 'quick');
-    
-    // Wait for sync progress display to appear
-    const progressDisplay = await findSyncProgressDisplay(page, sourceName);
-    await expect(progressDisplay).toBeVisible({ timeout: TIMEOUTS.medium });
-    
-    // Debug: Check what token is stored
-    const tokenInfo = await page.evaluate(() => {
-      const token = localStorage.getItem('token');
-      return {
-        hasToken: !!token,
-        tokenLength: token?.length || 0,
-        tokenStart: token?.substring(0, 20) || 'none'
-      };
-    });
-    console.log('Token info:', tokenInfo);
-    
-    // Check that connection status is shown using MUI Chip component
-    const statusSelectors = [
-      'span.MuiChip-label:has-text("Connected")',
-      'span.MuiChip-label:has-text("Connecting")',
-      'span.MuiChip-label:has-text("Live")',
-      '.MuiChip-root:has-text("Connected")',
-      '.MuiChip-root:has-text("Connecting")',
-      '.MuiChip-root:has-text("Live")',
-    ];
-    
-    let connectionStatus = null;
-    for (const selector of statusSelectors) {
-      const element = progressDisplay.locator(selector).first();
-      if (await element.isVisible({ timeout: 3000 })) {
-        connectionStatus = element;
-        console.log(`Found connection status using selector: ${selector}`);
-        break;
-      }
-    }
-    
-    if (connectionStatus) {
-      await expect(connectionStatus).toBeVisible({ timeout: TIMEOUTS.short });
-    }
-    
-    // Wait a bit to see if the connection transitions from "Connecting" to "Connected"
-    await page.waitForTimeout(5000);
-    
-    // Check final connection status
-    const finalConnectionChip = progressDisplay.locator('.MuiChip-root:has-text("Connecting"), .MuiChip-root:has-text("Connected"), .MuiChip-root:has-text("Live"), .MuiChip-root:has-text("Disconnected")').first();
-    const finalStatus = await finalConnectionChip.textContent().catch(() => 'not found');
-    console.log(`Final connection status: ${finalStatus}`);
-    
-    // Log any relevant console messages
-    const relevantLogs = consoleLogs.filter(log => 
-      log.includes('WebSocket') || log.includes('websocket') || log.includes('Connected') || 
-      log.includes('token') || log.includes('auth') || log.includes('error')
-    );
-    if (relevantLogs.length > 0) {
-      console.log('Relevant browser logs:', relevantLogs);
-    }
-    
-    // Should receive progress updates - look for progress indicators
-    const progressIndicators = progressDisplay.locator('.MuiLinearProgress-root, [role="progressbar"], :has-text("initializing"), :has-text("discovering"), :has-text("processing")').first();
-    await expect(progressIndicators).toBeVisible({ timeout: TIMEOUTS.short });
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('WebSocket Test Source') });
+    await helpers.openIntake('connections');
+    const panel = await helpers.openConnection(source.name);
+
+    // A real sync against the real server
+    const sync = page.waitForResponse((r) => r.url().includes(`/api/sources/${source.id}/sync`) && r.request().method() === 'POST');
+    await panel.getByRole('button', { name: 'Sync now' }).click();
+    expect((await sync).ok()).toBe(true);
+
+    const region = panel.getByRole('region', { name: `${source.name} sync progress` });
+    await expect(region).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(statusWord(region)).toHaveText(/Connecting…|Connected|Live/);
+    expect(sockets.some((u) => u.includes(`/api/sources/${source.id}/sync/progress/ws`))).toBe(true);
+    await expect(statusWord(region)).toHaveText(/Connected|Live/, { timeout: TIMEOUTS.medium });
   });
 
   test('should handle WebSocket connection errors gracefully', async ({ dynamicAdminPage: page }) => {
-    // Mock WebSocket connection failure
-    await page.route('**/sync/progress/ws**', route => {
-      route.abort('connectionrefused');
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      const id = ws.url().split('/sources/')[1].split('/')[0];
+      ws.send(progress(id));
+      setTimeout(() => ws.close({ code: 4000, reason: 'test failure' }), 300);
     });
-    
-    // Create and sync a source
-    const sourceName = await helpers.createTestSource('Error Test Source', 'webdav');
-    
-    // Trigger sync using helper function
-    await triggerSourceSync(page, sourceName, 'quick');
-    
-    // Should show connection error using MUI Chip or Alert components
-    const errorSelectors = [
-      'span.MuiChip-label:has-text("Disconnected")',
-      'span.MuiChip-label:has-text("Connection Failed")', 
-      'span.MuiChip-label:has-text("Error")',
-      '.MuiChip-root:has-text("Disconnected")',
-      '.MuiChip-root:has-text("Connection Failed")',
-      '.MuiAlert-root:has-text("error")',
-      ':has-text("Connection failed")',
-    ];
-    
-    let errorIndicator = null;
-    for (const selector of errorSelectors) {
-      const element = page.locator(selector).first();
-      if (await element.isVisible({ timeout: 5000 })) {
-        errorIndicator = element;
-        console.log(`Found error indicator using selector: ${selector}`);
-        break;
-      }
-    }
-    
-    if (errorIndicator) {
-      await expect(errorIndicator).toBeVisible({ timeout: TIMEOUTS.medium });
-    }
+    const { progressRegion } = await openSyncingConnection(page, 'Error Test Source');
+
+    await expect(progressRegion).toBeVisible();
+    await expect(statusWord(progressRegion)).toHaveText(/Reconnecting…|Disconnected|Connection failed/, { timeout: TIMEOUTS.medium });
+    // The last progress stays on screen
+    await expect(progressRegion.getByRole('group', { name: 'Sync figures' })).toBeVisible();
   });
 
   test('should automatically reconnect on WebSocket disconnection', async ({ dynamicAdminPage: page }) => {
-    // Create and sync a source
-    const sourceName = await helpers.createTestSource('Reconnect Test Source', 'webdav');
-    
-    const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-    
-    // Trigger sync using helper function
-    await triggerSourceSync(page, sourceName, 'quick');
-    
-    // Wait for initial connection
-    const progressDisplay = await findSyncProgressDisplay(page, sourceName);
-    await expect(progressDisplay).toBeVisible({ timeout: TIMEOUTS.medium });
-    
-    const connectedStatus = progressDisplay.locator('.MuiChip-root:has-text("Connected"), .MuiChip-root:has-text("Live")').first();
-    await expect(connectedStatus).toBeVisible({ timeout: TIMEOUTS.medium });
-    
-    // Simulate disconnection by closing the WebSocket from the client side
-    await page.evaluate(() => {
-      // Find and close any WebSocket connections
-      const websocketManager = (window as any).WebSocketSyncProgressManager;
-      if (websocketManager && websocketManager.ws) {
-        websocketManager.ws.close(1000, 'Test disconnect');
+    let connections = 0;
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      connections += 1;
+      const id = ws.url().split('/sources/')[1].split('/')[0];
+      if (connections === 1) {
+        ws.send(progress(id, { is_active: false }));
+        setTimeout(() => ws.close({ code: 4001, reason: 'dropped' }), 300);
+      } else {
+        ws.send(progress(id, { files_processed: 7, files_progress_percent: 70 }));
       }
-      
-      // Also try to trigger a forced disconnection by simulating network issues
-      window.dispatchEvent(new Event('offline'));
-      setTimeout(() => {
-        window.dispatchEvent(new Event('online'));
-      }, 1000);
     });
-    
-    // Wait a moment for the disconnection to be processed
-    await page.waitForTimeout(2000);
-    
-    // Should show reconnecting or disconnected status
-    const disconnectionStatus = progressDisplay.locator('.MuiChip-root:has-text("Reconnecting"), .MuiChip-root:has-text("Disconnected"), .MuiChip-root:has-text("Connecting")').first();
-    
-    // Wait for either reconnecting status or successful reconnection
-    try {
-      await expect(disconnectionStatus).toBeVisible({ timeout: TIMEOUTS.short });
-    } catch (error) {
-      // If we don't see a disconnection status, that's actually ok - the connection might be stable
-      // or reconnection might happen so fast we miss the intermediate state
-      console.log('Reconnection test: No intermediate disconnection state observed (connection may be stable)');
-    }
-    
-    // Verify we end up in a connected state (either stayed connected or reconnected)
-    const finalStatus = progressDisplay.locator('.MuiChip-root:has-text("Connected"), .MuiChip-root:has-text("Live"), .MuiChip-root:has-text("Reconnecting")').first();
-    await expect(finalStatus).toBeVisible({ timeout: TIMEOUTS.medium });
+    const { progressRegion } = await openSyncingConnection(page, 'Reconnect Test Source');
+
+    await expect(progressRegion).toBeVisible();
+    await expect.poll(() => connections, { timeout: TIMEOUTS.medium }).toBeGreaterThanOrEqual(2);
+    await expect(statusWord(progressRegion)).toHaveText(/Live$/, { timeout: TIMEOUTS.medium });
+    await expect(progressRegion).toContainText('7 / 10 files (70.0%)');
   });
 
   test('should display real-time progress updates via WebSocket', async ({ dynamicAdminPage: page }) => {
-    // Create a source and start sync
-    const sourceName = await helpers.createTestSource('Progress Updates Test', 'webdav');
-    
-    // Trigger sync using helper function
-    await triggerSourceSync(page, sourceName, 'quick');
-    
-    const progressDisplay = await findSyncProgressDisplay(page, sourceName);
-    await expect(progressDisplay).toBeVisible({ timeout: TIMEOUTS.medium });
-    
-    // Should show different phases over time - look for phase descriptions
-    const phases = ['initializing', 'discovering', 'processing', 'evaluating'];
-    
-    // At least one phase should be visible
-    let phaseFound = false;
-    for (const phase of phases) {
-      try {
-        await expect(progressDisplay.locator(`:has-text("${phase}")`)).toBeVisible({ timeout: 2000 });
-        phaseFound = true;
-        break;
-      } catch (e) {
-        // Phase might have passed quickly, continue to next
-        continue;
-      }
-    }
-    
-    // If no specific phase found, at least verify there's some progress content within the progress display
-    if (!phaseFound) {
-      const progressContent = progressDisplay.locator('.MuiLinearProgress-root, :has-text("files"), :has-text("Directories"), :has-text("Phase")').first();
-      await expect(progressContent).toBeVisible({ timeout: TIMEOUTS.short });
-    }
-    
-    // Should show numerical progress - look for files/directories statistics within the progress display
-    const statsLocator = progressDisplay.locator('.MuiLinearProgress-root, [role="progressbar"], :has-text("files processed"), :has-text("directories")').first();
-    await expect(statsLocator).toBeVisible({ timeout: TIMEOUTS.short });
+    let socket: WebSocketRoute | null = null;
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      socket = ws;
+      ws.send(progress(ws.url().split('/sources/')[1].split('/')[0], { phase_description: 'Discovering directories', files_processed: 0, files_found: 0, files_progress_percent: 0 }));
+    });
+    const { id, progressRegion } = await openSyncingConnection(page, 'Progress Updates Test');
+
+    const figures = progressRegion.getByRole('group', { name: 'Sync figures' });
+    await expect(figures).toContainText('Discovering directories');
+
+    socket!.send(progress(id));
+    await expect(figures).toContainText('Processing files');
+    await expect(figures).toContainText('3 / 10 files (30.0%)');
+    await expect(figures).toContainText('2 / 4');
+    await expect(progressRegion.getByRole('progressbar', { name: 'Files progress' })).toBeVisible();
+    await expect(progressRegion).toContainText('/Documents/2026');
+    await expect(progressRegion).toContainText('invoice.pdf');
+
+    socket!.send(progress(id, { files_processed: 10, files_progress_percent: 100, errors: 2, warnings: 1 }));
+    await expect(figures).toContainText('10 / 10 files (100.0%)');
+    await expect(progressRegion).toContainText('2 errors');
+    await expect(progressRegion).toContainText('1 warning');
   });
 
   test('should handle multiple concurrent WebSocket connections', async ({ dynamicAdminPage: page }) => {
-    // Create multiple sources
-    const sourceNames = [];
-    const baseNames = ['Multi Source 1', 'Multi Source 2'];
-    
-    for (const baseName of baseNames) {
-      const sourceName = await helpers.createTestSource(baseName, 'webdav');
-      sourceNames.push(sourceName);
-    }
-    
-    // Mock successful sync responses to ensure syncs start
-    await page.route('**/api/sources/*/sync', route => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ message: 'Sync started successfully', sync_id: 'test-sync-' + Date.now() })
-      });
+    const urls = new Set<string>();
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      urls.add(ws.url());
+      ws.send(progress(ws.url().split('/sources/')[1].split('/')[0]));
     });
-    
-    // Start sync on all sources
-    for (const sourceName of sourceNames) {
-      try {
-        // Trigger sync using helper function
-        await triggerSourceSync(page, sourceName, 'quick');
-        console.log(`Started sync for ${sourceName}`);
-        
-        // Wait a moment between syncs
-        await page.waitForTimeout(1000);
-      } catch (error) {
-        console.log(`Failed to start sync for ${sourceName}: ${error}`);
-        // Continue with other sources even if one fails
-      }
+    const a = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Multi Source 1') });
+    const b = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Multi Source 2') });
+    await markSyncing(page, [a.id, b.id]);
+    await helpers.openIntake('connections');
+
+    // Both rows report syncing
+    await expect(helpers.connectionRow(a.name)).toContainText('SYNCING');
+    await expect(helpers.connectionRow(b.name)).toContainText('SYNCING');
+
+    for (const s of [a, b]) {
+      const panel = await helpers.openConnection(s.name);
+      await expect(panel.getByRole('region', { name: `${s.name} sync progress` }).getByRole('status').first()).toHaveText(/Live$/);
+      await panel.getByRole('button', { name: 'Close' }).click();
+      await expect(panel).toBeHidden();
     }
-    
-    // Since WebDAV connections are failing in test environment, look for sync attempts instead
-    // Check that sync was attempted by looking for sync status on sources
-    let syncAttempts = 0;
-    for (const sourceName of sourceNames) {
-      const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-      
-      // Look for sync status indicators (syncing, error, etc.)
-      const syncStatus = sourceCard.locator(':has-text("Syncing"), :has-text("Error"), :has-text("Failed"), .MuiChip-root').first();
-      
-      if (await syncStatus.isVisible({ timeout: 3000 })) {
-        syncAttempts++;
-        console.log(`Found sync status for ${sourceName}`);
-      }
-    }
-    
-    // Verify that at least some sync attempts were made
-    console.log(`Sync attempts detected: ${syncAttempts}/${sourceNames.length}`);
-    expect(syncAttempts).toBeGreaterThan(0);
-    
-    // Since actual WebSocket progress displays won't appear due to WebDAV failures,
-    // verify that the sync infrastructure is in place by checking for:
-    // 1. Sources are visible
-    // 2. Sync buttons are functional
-    // 3. API calls are being made
-    
-    for (const sourceName of sourceNames) {
-      const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-      await expect(sourceCard).toBeVisible({ timeout: 5000 });
-    }
-    
-    console.log('Multiple concurrent WebSocket test completed - infrastructure verified');
+    expect([...urls].some((u) => u.includes(a.id))).toBe(true);
+    expect([...urls].some((u) => u.includes(b.id))).toBe(true);
   });
 
   test('should authenticate WebSocket connection with JWT token', async ({ dynamicAdminPage: page }) => {
-    // Check that user has a valid JWT token stored
-    const tokenInfo = await page.evaluate(() => {
-      const token = localStorage.getItem('token');
-      return {
-        hasToken: !!token,
-        tokenLength: token?.length || 0,
-        isValidJWT: token ? token.includes('.') : false // JWT tokens have dots
+    await page.routeWebSocket(WS_PATTERN, (ws) => ws.send(progress(ws.url().split('/sources/')[1].split('/')[0])));
+    // Record the subprotocols the app offers (installed after the route so it wraps it)
+    await page.addInitScript(() => {
+      const Current = window.WebSocket;
+      (window as any).__wsProtocols = [];
+      (window as any).WebSocket = class extends Current {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          (window as any).__wsProtocols.push(protocols ?? null);
+          super(url, protocols);
+        }
       };
     });
-    
-    console.log('Token info:', tokenInfo);
-    expect(tokenInfo.hasToken).toBe(true);
-    expect(tokenInfo.tokenLength).toBeGreaterThan(50); // JWT tokens are usually longer
-    expect(tokenInfo.isValidJWT).toBe(true);
-    
-    // Create and sync a source
-    const sourceName = await helpers.createTestSource('Auth Test Source', 'webdav');
-    
-    // Trigger sync using helper function
-    await triggerSourceSync(page, sourceName, 'quick');
-    
-    // Wait for progress display to appear - this indicates successful WebSocket auth
-    const progressDisplay = await findSyncProgressDisplay(page, sourceName);
-    await expect(progressDisplay).toBeVisible({ timeout: TIMEOUTS.medium });
-    
-    // Check for successful connection status - this proves auth worked
-    const connectionStatus = progressDisplay.locator('.MuiChip-root:has-text("Connected"), .MuiChip-root:has-text("Live")').first();
-    await expect(connectionStatus).toBeVisible({ timeout: TIMEOUTS.short });
-    
-    console.log('WebSocket authentication test passed - connection established successfully');
+    const token = await helpers.getAuthToken();
+    expect(token.split('.')).toHaveLength(3);
+
+    const { progressRegion } = await openSyncingConnection(page, 'Auth Test Source');
+    await expect(statusWord(progressRegion)).toHaveText(/Live$/);
+
+    const protocols = await page.evaluate(() => (window as any).__wsProtocols as (string[] | null)[]);
+    expect(protocols.flat()).toContain(`bearer.${token}`);
   });
 
   test('should handle WebSocket authentication failures', async ({ dynamicAdminPage: page }) => {
-    // Mock authentication failure for WebSocket connections
-    await page.route('**/sync/progress/ws**', route => {
-      if (route.request().url().includes('token=')) {
-        route.fulfill({ status: 401, body: 'Unauthorized' });
-      } else {
-        route.continue();
-      }
+    let connections = 0;
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      connections += 1;
+      ws.send(progress(ws.url().split('/sources/')[1].split('/')[0], { is_active: false }));
+      // 1008 = policy violation, what the server sends for a bad token
+      setTimeout(() => ws.close({ code: 1008, reason: 'Unauthorized' }), 200);
     });
-    
-    // Also mock successful sync initiation
-    await page.route('**/api/sources/*/sync', route => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ message: 'Sync started successfully', sync_id: 'test-auth-fail-sync' })
-      });
-    });
-    
-    // Create and sync a source
-    const sourceName = await helpers.createTestSource('Auth Fail Test', 'webdav');
-    
-    const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-    
-    try {
-      // Trigger sync using helper function
-      await triggerSourceSync(page, sourceName, 'quick');
-      console.log('Sync initiated for auth failure test');
-      
-      // Since we can't test actual WebSocket auth failures due to WebDAV issues,
-      // verify that the test infrastructure is working and that auth tokens exist
-      const tokenInfo = await page.evaluate(() => {
-        const token = localStorage.getItem('token');
-        return {
-          hasToken: !!token,
-          tokenLength: token?.length || 0,
-          isValidJWT: token ? token.includes('.') : false
-        };
-      });
-      
-      console.log('Token verification for auth test:', tokenInfo);
-      expect(tokenInfo.hasToken).toBe(true);
-      expect(tokenInfo.isValidJWT).toBe(true);
-      
-      // Look for any error indicators or connection status
-      const errorSelectors = [
-        ':has-text("Authentication failed")',
-        ':has-text("Unauthorized")',
-        ':has-text("Connection Failed")',
-        ':has-text("Error")',
-        '.MuiChip-root:has-text("Disconnected")'
-      ];
-      
-      let foundError = false;
-      for (const selector of errorSelectors) {
-        const errorElement = page.locator(selector);
-        if (await errorElement.isVisible({ timeout: 2000 })) {
-          console.log(`Found error indicator: ${selector}`);
-          foundError = true;
-          break;
-        }
-      }
-      
-      // Since WebDAV is failing anyway, we expect some kind of error state
-      // This verifies the error handling infrastructure is in place
-      console.log(`Error handling test completed - error detected: ${foundError}`);
-      
-    } catch (error) {
-      console.log(`Auth failure test completed with expected sync issues: ${error}`);
-      // This is expected due to WebDAV connection issues
-    }
+    const { progressRegion } = await openSyncingConnection(page, 'Auth Fail Test');
+
+    // The panel says the feed is down instead of pretending to be live, and keeps the last figures
+    await expect(statusWord(progressRegion)).toHaveText(/Reconnecting…$|Disconnected$|Connection failed$/, { timeout: TIMEOUTS.medium });
+    await expect(progressRegion.getByRole('group', { name: 'Sync figures' })).toBeVisible();
+    expect(connections).toBeGreaterThanOrEqual(1);
   });
 
   test('should properly clean up WebSocket connections on component unmount', async ({ dynamicAdminPage: page }) => {
-    // Instead of creating a new source, just use existing sources to test component lifecycle
-    // This avoids the hanging issue with source creation
-    
-    // Wait for any existing sources to load
-    await page.waitForTimeout(2000);
-    
-    // Find any existing source to test with
-    const existingSources = page.locator('[data-testid="source-item"]');
-    const sourceCount = await existingSources.count();
-    console.log(`Found ${sourceCount} existing sources for cleanup test`);
-    
-    if (sourceCount > 0) {
-      const firstSource = existingSources.first();
-      await expect(firstSource).toBeVisible({ timeout: 5000 });
-      console.log('Using existing source for cleanup test');
-    }
-    
-    // Test component cleanup by reloading the page
-    // This will unmount and remount all components, testing cleanup behavior
-    console.log('Reloading page to test component cleanup');
-    await page.reload();
-    
-    // Wait for page to load again
-    await helpers.waitForLoadingToComplete();
-    
-    // Verify sources are still loaded after reload (component remounted)
-    const sourcesAfterReload = page.locator('[data-testid="source-item"]');
-    const sourceCountAfter = await sourcesAfterReload.count();
-    console.log(`Found ${sourceCountAfter} sources after reload`);
-    
-    // The test passes if the page loads successfully after reload
-    // This verifies component cleanup and remounting works
-    expect(sourceCountAfter).toBeGreaterThanOrEqual(0);
-    
-    console.log('WebSocket cleanup test completed - component lifecycle verified via reload');
+    let closedByClient = false;
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      ws.onClose(() => {
+        closedByClient = true;
+      });
+      ws.send(progress(ws.url().split('/sources/')[1].split('/')[0]));
+    });
+    const { panel, progressRegion } = await openSyncingConnection(page, 'Cleanup Test');
+    await expect(statusWord(progressRegion)).toHaveText(/Live$/);
+
+    await panel.getByRole('button', { name: 'Close' }).click();
+    await expect(panel).toBeHidden();
+    await expect.poll(() => closedByClient, { timeout: TIMEOUTS.short }).toBe(true);
   });
 
   test('should handle WebSocket message parsing errors', async ({ dynamicAdminPage: page }) => {
-    // Mock WebSocket with malformed messages
-    await page.addInitScript(() => {
-      const originalWebSocket = window.WebSocket;
-      window.WebSocket = class extends originalWebSocket {
-        constructor(url: string, protocols?: string | string[]) {
-          super(url, protocols);
-          
-          // Override message handling to send malformed data
-          setTimeout(() => {
-            if (this.onmessage) {
-              this.onmessage({
-                data: 'invalid json {malformed',
-                type: 'message'
-              } as MessageEvent);
-            }
-          }, 1000);
-        }
-      };
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      ws.send('invalid json {malformed');
+      ws.send(progress(ws.url().split('/sources/')[1].split('/')[0]));
     });
-    
-    // Create and sync a source
-    const sourceName = await helpers.createTestSource('Parse Error Test', 'webdav');
-    
-    const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-    
-    // Trigger sync using helper function
-    await triggerSourceSync(page, sourceName, 'quick');
-    
-    // Should handle parsing errors gracefully (not crash the UI)
-    const progressDisplay = page.locator('.MuiCard-root:has-text("Sync Progress")').first();
-    await expect(progressDisplay).toBeVisible();
-    
-    // Check console for error messages (optional)
-    const logs = [];
-    page.on('console', msg => {
-      if (msg.type() === 'error') {
-        logs.push(msg.text());
-      }
-    });
-    
-    await page.waitForTimeout(3000);
-    
-    // Verify the UI didn't crash (still showing some content)
-    await expect(page.locator('body')).toBeVisible();
+    const { progressRegion } = await openSyncingConnection(page, 'Parse Error Test');
+
+    // The bad frame is ignored; the good one still renders
+    await expect(progressRegion.getByRole('group', { name: 'Sync figures' })).toContainText('3 / 10 files (30.0%)');
+    expect(errors).toEqual([]);
   });
 
   test('should display WebSocket connection status indicators', async ({ dynamicAdminPage: page }) => {
-    // Create and sync a source
-    const sourceName = await helpers.createTestSource('Status Test Source', 'webdav');
-    
-    const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-    
-    // Trigger sync using helper function
-    await triggerSourceSync(page, sourceName, 'quick');
-    
-    const progressDisplay = page.locator('.MuiCard-root:has-text("Sync Progress")').first();
-    await expect(progressDisplay).toBeVisible();
-    
-    // Should show connecting status initially - be more specific to avoid selecting source type chips
-    const statusChip = progressDisplay.locator('.MuiChip-root:has-text("Connecting"), .MuiChip-root:has-text("Connected"), .MuiChip-root:has-text("Live")').first();
-    await expect(statusChip).toBeVisible();
-    await expect(statusChip).toContainText(/connecting|connected|live/i);
-    
-    // Should show connected status once established (temporarily accepting "Connecting" for debugging)
-    const connectedStatus = progressDisplay.locator('.MuiChip-root:has-text("Connected"), .MuiChip-root:has-text("Live"), .MuiChip-root:has-text("Connecting")').first();
-    await expect(connectedStatus).toBeVisible({ timeout: TIMEOUTS.medium });
-    
-    // Should have visual indicators (icons, colors, etc.)
-    await expect(statusChip).toHaveClass(/MuiChip-root/);
+    let socket: WebSocketRoute | null = null;
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      socket = ws;
+    });
+    const { id, progressRegion } = await openSyncingConnection(page, 'Status Test Source');
+
+    // Open but no progress yet: "Connected" with a waiting note
+    await expect(statusWord(progressRegion)).toHaveText(/Connected$/);
+    await expect(progressRegion).toContainText('Waiting for sync progress information…');
+
+    // An active sync turns it "Live" and marks the region SYNCING
+    socket!.send(progress(id));
+    await expect(statusWord(progressRegion)).toHaveText(/Live$/);
+    await expect(progressRegion).toContainText('SYNCING');
+
+    // The region folds away and back
+    const collapse = progressRegion.getByRole('button', { name: 'Collapse' });
+    await collapse.click();
+    await expect(progressRegion.getByRole('group', { name: 'Sync figures' })).toBeHidden();
+    await progressRegion.getByRole('button', { name: 'Expand' }).click();
+    await expect(progressRegion.getByRole('group', { name: 'Sync figures' })).toBeVisible();
   });
 
   test('should support WebSocket connection health monitoring', async ({ dynamicAdminPage: page }) => {
-    // This test verifies that the WebSocket connection monitors connection health
-    
-    let heartbeatReceived = false;
-    
-    // Mock WebSocket to track heartbeat/health messages
-    await page.addInitScript(() => {
-      const originalWebSocket = window.WebSocket;
-      (window as any).WebSocket = class extends originalWebSocket {
-        send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
-          if (typeof data === 'string' && (data.includes('ping') || data.includes('heartbeat'))) {
-            (window as any).heartbeatReceived = true;
-          }
-          super.send(data);
-        }
-      };
+    let socket: WebSocketRoute | null = null;
+    await page.routeWebSocket(WS_PATTERN, (ws) => {
+      socket = ws;
+      ws.send(progress(ws.url().split('/sources/')[1].split('/')[0]));
     });
-    
-    // Create and sync a source
-    const sourceName = await helpers.createTestSource('Ping Test Source', 'webdav');
-    
-    const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-    
-    // Trigger sync using helper function
-    await triggerSourceSync(page, sourceName, 'quick');
-    
-    // Wait for connection and potential health check messages
-    await page.waitForTimeout(5000);
-    
-    // The main thing is that the connection remains healthy and shows connected status
-    const progressDisplay = page.locator('.MuiCard-root:has-text("Sync Progress")').first();
-    const connectedStatus = progressDisplay.locator('.MuiChip-root:has-text("Connected"), .MuiChip-root:has-text("Live")').first();
-    await expect(connectedStatus).toBeVisible();
-    
-    // Check if health monitoring was attempted (optional)
-    const healthCheckAttempted = await page.evaluate(() => (window as any).heartbeatReceived);
-    console.log(`Health check attempted: ${healthCheckAttempted}`);
+    const { progressRegion } = await openSyncingConnection(page, 'Ping Test Source');
+    await expect(statusWord(progressRegion)).toHaveText(/Live$/);
+
+    // Heartbeats keep the connection healthy without changing the figures
+    for (let i = 0; i < 3; i++) {
+      socket!.send(JSON.stringify({ type: 'heartbeat', data: { source_id: 'x', is_active: true, timestamp: Date.now() } }));
+      await page.waitForTimeout(300);
+    }
+    await expect(statusWord(progressRegion)).toHaveText(/Live$/);
+    await expect(progressRegion.getByRole('group', { name: 'Sync figures' })).toContainText('3 / 10 files (30.0%)');
+
+    // A heartbeat saying the sync is no longer active clears the figures
+    socket!.send(JSON.stringify({ type: 'heartbeat', data: { source_id: 'x', is_active: false, timestamp: Date.now() } }));
+    await expect(progressRegion).toContainText('Waiting for sync progress information…');
   });
 });
 
 test.describe('WebSocket Sync Progress - Cross-browser Compatibility', () => {
-  // Helper function local to this describe block
-  async function triggerSourceSyncLocal(page: any, sourceName: string, syncType: 'quick' | 'deep' = 'quick') {
-    const sourceCard = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`).first();
-    await expect(sourceCard).toBeVisible({ timeout: 10000 });
-    
-    await sourceCard.hover();
-    await page.waitForTimeout(1500);
-    
-    const syncButton = sourceCard.locator('button').filter({
-      has: page.locator('svg[data-testid="PlayArrowIcon"]')
-    }).first();
-    
-    await expect(syncButton).toBeVisible({ timeout: 5000 });
-    await syncButton.click();
-    
-    const syncModal = page.getByRole('dialog');
-    await expect(syncModal).toBeVisible({ timeout: 5000 });
-    
-    const syncTypeText = syncType === 'quick' ? 'Quick Sync' : 'Deep Scan';
-    const syncCard = syncModal.locator('.MuiCard-root').filter({ hasText: syncTypeText }).first();
-    await expect(syncCard).toBeVisible({ timeout: 5000 });
-    await syncCard.click();
-  }
-
   test('should work in different browser engines', async ({ dynamicAdminPage: page }) => {
-    // This test would run across different browsers (Chrome, Firefox, Safari)
-    // The test framework should handle this automatically
-    
-    // Create and sync a source
     const helpers = new TestHelpers(page);
-    await helpers.navigateToPage('/sources');
-    const sourceName = await helpers.createTestSource('Cross Browser Test', 'webdav');
-    
-    // Trigger sync using local helper function
-    await triggerSourceSyncLocal(page, sourceName, 'quick');
-    
-    // Should work regardless of browser
-    const progressDisplay = page.locator('.MuiCard-root:has-text("Sync Progress")').first();
-    await expect(progressDisplay).toBeVisible({ timeout: TIMEOUTS.medium });
-    
-    const connectionStatus = progressDisplay.locator('.MuiChip-root:has-text("Connected"), .MuiChip-root:has-text("Connecting"), .MuiChip-root:has-text("Live")').first();
-    await expect(connectionStatus).toBeVisible({ timeout: TIMEOUTS.short });
+    await page.goto('/board');
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Cross Browser Test') });
+    await page.route('**/api/sources', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      const response = await route.fetch();
+      const list = await response.json();
+      for (const s of list) if (s.id === source.id) s.status = 'syncing';
+      await route.fulfill({ response, json: list });
+    });
+    await page.routeWebSocket(WS_PATTERN, (ws) => ws.send(progress(source.id)));
+
+    await helpers.openIntake('connections');
+    const panel = await helpers.openConnection(source.name);
+    const region = panel.getByRole('region', { name: `${source.name} sync progress` });
+    await expect(region).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(region.getByRole('status').first()).toHaveText(/Connected|Connecting…|Live/);
   });
 });

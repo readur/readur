@@ -1,256 +1,140 @@
 import { test, expect } from './fixtures/auth';
-import { TIMEOUTS } from './utils/test-data';
+import type { Page } from '@playwright/test';
+import { TEST_FILES, TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
+/**
+ * Library list + document page. Every test signs in as a fresh user and seeds its own
+ * document through the API, so nothing depends on data left by other tests.
+ */
 test.describe('Document Management', () => {
   let helpers: TestHelpers;
+  let docId: string;
 
-  test.beforeEach(async ({ dynamicAdminPage }) => {
-    helpers = new TestHelpers(dynamicAdminPage);
-    await helpers.navigateToPage('/documents');
+  test.beforeEach(async ({ dynamicUserPage }) => {
+    helpers = new TestHelpers(dynamicUserPage);
+    docId = await helpers.uploadDocumentViaAPI(TEST_FILES.test1);
+    await helpers.waitForOCRComplete(docId);
   });
 
-  test('should display document list', async ({ dynamicAdminPage: page }) => {
-    // The documents page should be visible with title and description
-    // Use more flexible selectors for headings - based on artifact, it's h4
-    const documentsHeading = page.locator('h4:has-text("Documents")');
-    await expect(documentsHeading).toBeVisible({ timeout: 10000 });
-    
-    // Look for document management interface elements
-    const documentManagementContent = page.locator('text=Manage, text=explore, text=library, text=document');
-    if (await documentManagementContent.first().isVisible({ timeout: 5000 })) {
-      console.log('Found document management interface description');
-    }
-    
-    // Check for document cards/items - based on the artifact, documents are shown as headings with level 6
-    const documentSelectors = [
-      'h6:has-text(".png"), h6:has-text(".pdf"), h6:has-text(".jpg"), h6:has-text(".jpeg")', // Document filenames
-      '.MuiCard-root',
-      '[data-testid="document-item"]',
-      '.document-item',
-      '.document-card',
-      '[role="article"]'
-    ];
-    
-    let hasDocuments = false;
-    for (const selector of documentSelectors) {
-      const count = await page.locator(selector).count();
-      if (count > 0) {
-        hasDocuments = true;
-        console.log(`Found ${count} documents using selector: ${selector}`);
-        // Just verify the first one exists, no need for strict visibility check
-        const firstElement = page.locator(selector).first();
-        if (await firstElement.isVisible({ timeout: 3000 })) {
-          console.log('First document element is visible');
-        }
-        break;
-      }
-    }
-    
-    if (!hasDocuments) {
-      console.log('No documents found - checking for empty state or upload interface');
-      // Check for empty state or prompt to upload
-      const emptyStateIndicators = page.locator('text=No documents, text=Upload, text=empty, text=Start');
-      if (await emptyStateIndicators.first().isVisible({ timeout: 5000 })) {
-        console.log('Found empty state indicator');
-      }
-    }
-    
-    // The page should be functional - check for common document page elements
-    const functionalElements = [
-      '[role="main"] >> textbox[placeholder*="Search"]', // Main content search
-      '[role="main"] >> input[placeholder*="Search"]',
-      'button:has-text("Upload")',
-      'button:has-text("Add")',
-      '[role="main"]'
-    ];
-    
-    let foundFunctionalElement = false;
-    for (const selector of functionalElements) {
-      try {
-        if (await page.locator(selector).isVisible({ timeout: 3000 })) {
-          console.log(`Found functional element: ${selector}`);
-          foundFunctionalElement = true;
-          break;
-        }
-      } catch (error) {
-        // Skip if selector has issues
-        console.log(`Selector ${selector} had issues, trying next...`);
-      }
-    }
-    
-    // At minimum, the page should have loaded successfully (not showing login page)
-    const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
-    expect(isOnLoginPage).toBe(false);
-    
-    console.log('Document list page test completed successfully');
+  const openDocument = async (page: Page) => {
+    await page.goto('/documents');
+    await helpers.documentRows().filter({ hasText: 'test1.png' }).getByRole('rowheader').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/documents/${docId}`), { timeout: TIMEOUTS.medium });
+    await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
+  };
+
+  test('should display document list', async ({ dynamicUserPage: page }) => {
+    await page.goto('/documents');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+    await expect(page.getByText('1 document', { exact: true })).toBeVisible();
+    await expect(page.getByRole('searchbox', { name: 'Search documents' })).toBeVisible();
+
+    const row = helpers.documentRows().filter({ hasText: 'test1.png' });
+    await expect(row).toBeVisible();
+    await expect(row.getByRole('gridcell', { name: 'PNG', exact: true })).toBeVisible();
+    await expect(row.getByRole('gridcell', { name: 'INDEXED', exact: true })).toBeVisible();
   });
 
-  test.skip('should navigate to document details', async ({ dynamicAdminPage: page }) => {
-    // Click on first document if available
-    const firstDocument = page.locator('.MuiCard-root').first();
-    
-    if (await firstDocument.isVisible()) {
-      await firstDocument.click();
-      
-      // Should navigate to document details page
-      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
-      
-      // Should show document details
-      await expect(page.locator('[data-testid="document-details"], .document-details, h1, h2')).toBeVisible();
-    } else {
-      test.skip();
-    }
+  test('should navigate to document details', async ({ dynamicUserPage: page }) => {
+    await openDocument(page);
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Library' })).toBeVisible();
   });
 
-  test.skip('should display document metadata', async ({ dynamicAdminPage: page }) => {
-    const firstDocument = page.locator('.MuiCard-root').first();
-    
-    if (await firstDocument.isVisible()) {
-      await firstDocument.click();
-      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
-      
-      // Should show various metadata fields
-      await expect(page.locator(':has-text("Bytes"), :has-text("OCR"), :has-text("Download")')).toBeVisible();
-    } else {
-      test.skip();
+  test('should display document metadata', async ({ dynamicUserPage: page }) => {
+    await openDocument(page);
+
+    const summary = page.getByRole('group', { name: 'Document summary' });
+    for (const term of ['Status', 'Type', 'Size', 'Source', 'Added', 'Confidence']) {
+      await expect(summary.getByRole('term').filter({ hasText: new RegExp(`^${term}$`) })).toBeVisible();
     }
+    await expect(summary).toContainText('PNG');
+    await expect(summary).toContainText(/KB/);
   });
 
-  test.skip('should allow document download', async ({ dynamicAdminPage: page }) => {
-    const firstDocument = page.locator('[data-testid="document-item"], .document-item, .document-card').first();
-    
-    if (await firstDocument.isVisible()) {
-      await firstDocument.click();
-      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
-      
-      // Look for download button
-      const downloadButton = page.locator('[data-testid="download"], button:has-text("Download"), .download-button');
-      if (await downloadButton.isVisible()) {
-        // Set up download listener
-        const downloadPromise = page.waitForEvent('download');
-        
-        await downloadButton.click();
-        
-        // Verify download started
-        const download = await downloadPromise;
-        expect(download.suggestedFilename()).toBeTruthy();
-      }
-    }
+  test('should allow document download', async ({ dynamicUserPage: page }) => {
+    await openDocument(page);
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('main').getByRole('button', { name: 'Download' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('test1.png');
   });
 
-  test.skip('should allow document deletion', async ({ dynamicAdminPage: page }) => {
-    const firstDocument = page.locator('[data-testid="document-item"], .document-item, .document-card').first();
-    
-    if (await firstDocument.isVisible()) {
-      await firstDocument.click();
-      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
-      
-      // Look for delete button
-      const deleteButton = page.locator('[data-testid="delete"], button:has-text("Delete"), .delete-button');
-      if (await deleteButton.isVisible()) {
-        await deleteButton.click();
-        
-        // Should show confirmation dialog
-        const confirmButton = page.locator('button:has-text("Confirm"), button:has-text("Yes"), [data-testid="confirm-delete"]');
-        if (await confirmButton.isVisible()) {
-          await confirmButton.click();
-          
-          // Should redirect back to documents list
-          await page.waitForURL(/\/documents$/, { timeout: TIMEOUTS.medium });
-        }
-      }
-    }
+  test('should allow document deletion', async ({ dynamicUserPage: page }) => {
+    await openDocument(page);
+
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete document' }).click();
+
+    const confirm = page.getByRole('alertdialog', { name: 'Delete this document?' });
+    await expect(confirm).toBeVisible();
+    const deleted = helpers.waitForApiCall(`/api/documents/${docId}`);
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+    expect((await deleted).ok()).toBe(true);
+
+    await expect(page).toHaveURL(/\/documents(\?|$)/, { timeout: TIMEOUTS.medium });
+    await expect(helpers.documentRows().filter({ hasText: 'test1.png' })).toHaveCount(0);
   });
 
-  test.skip('should filter documents by type', async ({ dynamicAdminPage: page }) => {
-    // Look for filter controls
-    const filterDropdown = page.locator('[data-testid="type-filter"], select[name="type"], .type-filter');
-    if (await filterDropdown.isVisible()) {
-      await filterDropdown.selectOption('pdf');
-      
-      await helpers.waitForLoadingToComplete();
-      
-      // Should show only PDF documents
-      const documentItems = page.locator('[data-testid="document-item"], .document-item');
-      if (await documentItems.count() > 0) {
-        // Check that visible documents are PDFs
-        await expect(documentItems.first().locator(':has-text(".pdf"), .pdf-icon')).toBeVisible();
-      }
-    }
+  test('should filter documents by type', async ({ dynamicUserPage: page }) => {
+    await helpers.uploadBufferViaAPI('notes.txt', Buffer.from(`plain text ${Date.now()}`), 'text/plain');
+    await page.goto('/documents');
+    await expect(helpers.documentRows()).toHaveCount(2);
+
+    await page.getByRole('search', { name: 'Search and filter' }).getByRole('button', { name: 'Type' }).click();
+    await page.getByRole('dialog', { name: 'Type' }).getByText('Images', { exact: true }).click();
+    await expect(page).toHaveURL(/type=image/);
+    await page.keyboard.press('Escape');
+
+    await expect(helpers.documentRows()).toHaveCount(1);
+    await expect(helpers.documentRows().first()).toContainText('test1.png');
   });
 
-  test.skip('should sort documents', async ({ dynamicAdminPage: page }) => {
-    const sortDropdown = page.locator('[data-testid="sort"], select[name="sort"], .sort-dropdown');
-    if (await sortDropdown.isVisible()) {
-      await sortDropdown.selectOption('date-desc');
-      
-      await helpers.waitForLoadingToComplete();
-      
-      // Documents should be reordered
-      await expect(page.locator('[data-testid="document-list"], .document-list')).toBeVisible();
-    }
+  test('should sort documents', async ({ dynamicUserPage: page }) => {
+    await helpers.uploadBufferViaAPI('big.txt', Buffer.from('x'.repeat(20000) + Date.now()), 'text/plain');
+    await page.goto('/documents');
+    await expect(helpers.documentRows()).toHaveCount(2);
+
+    const size = helpers.documentsGrid().getByRole('columnheader', { name: 'Size' });
+    await size.click();
+    await expect(page).toHaveURL(/sort=file_size/);
+    const firstAfterOne = await helpers.documentRows().first().getByRole('rowheader').innerText();
+    await size.click();
+    await expect(page).toHaveURL(/sort=file_size/);
+    await expect(helpers.documentRows().first().getByRole('rowheader')).not.toHaveText(firstAfterOne);
+    await expect(size).toHaveAttribute('aria-sort', /ascending|descending/);
   });
 
-  test.skip('should display OCR status', async ({ dynamicAdminPage: page }) => {
-    const firstDocument = page.locator('.MuiCard-root').first();
-    
-    if (await firstDocument.isVisible()) {
-      await firstDocument.click();
-      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
-      
-      // Should show OCR status information
-      await expect(page.locator(':has-text("OCR"), [data-testid="ocr-status"], .ocr-status')).toBeVisible();
-    } else {
-      // Skip test if no documents
-      test.skip();
-    }
+  test('should display OCR status', async ({ dynamicUserPage: page }) => {
+    await openDocument(page);
+    await expect(page.getByRole('group', { name: 'Document summary' })).toContainText('INDEXED');
   });
 
-  test.skip('should search within document content', async ({ dynamicAdminPage: page }) => {
-    const firstDocument = page.locator('.MuiCard-root').first();
-    
-    if (await firstDocument.isVisible()) {
-      await firstDocument.click();
-      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
-      
-      // Look for in-document search
-      const searchInput = page.locator('[data-testid="document-search"], input[placeholder*="search" i]');
-      if (await searchInput.isVisible()) {
-        await searchInput.fill('test');
-        
-        // Should highlight matches in document content
-        await expect(page.locator('.highlight, mark, .search-highlight')).toBeVisible({ 
-          timeout: TIMEOUTS.short 
-        });
-      }
-    } else {
-      // Skip test if no documents
-      test.skip();
-    }
+  test('should search within document content', async ({ dynamicUserPage: page }) => {
+    await openDocument(page);
+    await helpers.extractedText();
+
+    await page.getByRole('searchbox', { name: 'Find in text' }).fill('text');
+    await expect(page.getByRole('region', { name: 'Extracted text' }).locator('mark').first()).toBeVisible({
+      timeout: TIMEOUTS.short,
+    });
+    await expect(page.getByRole('button', { name: 'Next match' })).toBeEnabled();
   });
 
-  test.skip('should paginate document list', async ({ dynamicAdminPage: page }) => {
-    // Look for pagination controls
-    const nextPageButton = page.locator('[data-testid="next-page"], button:has-text("Next"), .pagination-next');
-    if (await nextPageButton.isVisible()) {
-      const initialDocuments = await page.locator('[data-testid="document-item"], .document-item').count();
-      
-      await nextPageButton.click();
-      
-      await helpers.waitForLoadingToComplete();
-      
-      // Should load different documents
-      const newDocuments = await page.locator('[data-testid="document-item"], .document-item').count();
-      expect(newDocuments).toBeGreaterThan(0);
-    }
-  });
+  // Pagination across pages is covered by library.spec.ts ("should sort by name across pages"),
+  // which seeds 26 documents; seeding that many here would double the suite's upload load.
+  test.skip('should paginate document list', async () => {});
 
-  test('should show document thumbnails'.skip, async ({ dynamicAdminPage: page }) => {
-    // Check for document thumbnails in list view
-    const documentThumbnails = page.locator('[data-testid="document-thumbnail"], .thumbnail, .document-preview');
-    if (await documentThumbnails.first().isVisible()) {
-      await expect(documentThumbnails.first()).toBeVisible();
-    }
+  test('should show document thumbnails', async ({ dynamicUserPage: page }) => {
+    await page.goto('/documents');
+    await helpers.documentRows().filter({ hasText: 'test1.png' }).getByRole('rowheader').click();
+    const panel = page.getByRole('dialog');
+    await expect(panel.locator('img').first()).toBeVisible({ timeout: TIMEOUTS.medium });
+
+    await panel.getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'test1.png' })).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 });

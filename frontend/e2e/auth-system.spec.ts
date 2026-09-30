@@ -26,9 +26,9 @@ test.describe('E2E Auth System', () => {
     const loginSuccess = await authHelper.loginUser(testUser.credentials);
     expect(loginSuccess).toBe(true);
     
-    // Verify we're on the dashboard
-    await expect(page).toHaveURL(/.*\/dashboard.*/);
-    await expect(page.locator('h4:has-text("Welcome back,")')).toBeVisible();
+    // Verify we're on the Board
+    await expect(page).toHaveURL(/\/board/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
     
   });
 
@@ -42,9 +42,9 @@ test.describe('E2E Auth System', () => {
     const loginSuccess = await authHelper.loginUser(testAdmin.credentials);
     expect(loginSuccess).toBe(true);
     
-    // Verify we're on the dashboard
-    await expect(page).toHaveURL(/.*\/dashboard.*/);
-    await expect(page.locator('h4:has-text("Welcome back,")')).toBeVisible();
+    // Verify we're on the Board
+    await expect(page).toHaveURL(/\/board/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
     
   });
 
@@ -74,31 +74,32 @@ test.describe('E2E Auth System', () => {
   test('dynamic admin should have admin permissions', async ({ dynamicAdminPage }) => {
     // The dynamicAdminPage fixture should have created and logged in an admin user
     
-    // Navigate to debug page which might have admin-only features
+    // The legacy /debug URL lands on the admin-only Debug settings section
     await dynamicAdminPage.goto('/debug');
-    
-    // Should not be redirected to dashboard (would happen for non-admin users)
-    await expect(dynamicAdminPage).toHaveURL(/.*\/debug.*/);
-    
-    // Should see debug page content (admin accessible)
-    await expect(dynamicAdminPage.locator('h1, h2, h3, h4, h5, h6').first()).toBeVisible({ timeout: 10000 });
-    
+    await expect(dynamicAdminPage).toHaveURL(/\/settings\/debug/);
+    await expect(dynamicAdminPage.getByRole('heading', { level: 2, name: 'Debug' })).toBeVisible({ timeout: 10000 });
+
+    // Admin-only sections are listed in the settings nav
+    const nav = dynamicAdminPage.getByRole('navigation', { name: 'Settings sections' });
+    await expect(nav.getByRole('link', { name: 'Users' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Debug' })).toBeVisible();
+
   });
 
   test('dynamic user should have user permissions', async ({ dynamicUserPage }) => {
     // The dynamicUserPage fixture should have created and logged in a regular user
     
-    // Try to navigate to dashboard (should work for all users)
+    // The Board works for every user (the legacy /dashboard URL redirects there)
     await dynamicUserPage.goto('/dashboard');
-    
-    // Should successfully access dashboard
-    await dynamicUserPage.waitForLoadState('networkidle');
-    
-    // Should see dashboard content
-    const currentUrl = dynamicUserPage.url();
-    const isDashboard = currentUrl.includes('/dashboard');
-    
-    expect(isDashboard).toBe(true);
-    
+    await expect(dynamicUserPage).toHaveURL(/\/board/);
+    await expect(dynamicUserPage.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+
+    // Admin-only settings sections are hidden from regular users
+    await dynamicUserPage.goto('/settings');
+    const nav = dynamicUserPage.getByRole('navigation', { name: 'Settings sections' });
+    await expect(nav.getByRole('link', { name: 'General' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Users' })).toHaveCount(0);
+    await expect(nav.getByRole('link', { name: 'Debug' })).toHaveCount(0);
+
   });
 });

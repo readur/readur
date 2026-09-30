@@ -5,95 +5,99 @@ test.describe('Authentication', () => {
   test('should display login form on initial visit', async ({ page }) => {
     await page.goto('/');
 
-    // Check for login form elements using Material-UI structure
-    await expect(page.locator('input[type="text"]').first()).toBeVisible();
-    await expect(page.locator('input[type="password"]').first()).toBeVisible();
-    await expect(page.locator('button[type="submit"]')).toBeVisible();
+    // Signed-out visitors land on the sign-in page.
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+    await expect(page.getByLabel('Username')).toBeVisible();
+    await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   });
 
   test('should login with valid credentials', async ({ page }) => {
-    // Create a dynamic test user via API
     const authHelper = new E2ETestAuthHelper(page);
     const testUser = await authHelper.createTestUser();
 
-    // Login with the dynamically created user
     const loginSuccess = await authHelper.loginUser(testUser.credentials);
     expect(loginSuccess).toBe(true);
 
-    // Should redirect to dashboard
-    await page.waitForURL(/.*\/dashboard.*/, { timeout: TIMEOUTS.navigation });
-
-    // Verify we're logged in by checking for welcome message
-    await expect(page.locator('h4:has-text("Welcome back,")')).toBeVisible();
+    // Sign-in lands on the Board.
+    await expect(page).toHaveURL(/\/board/, { timeout: TIMEOUTS.navigation });
+    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
   });
 
   test('should show error with invalid credentials', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/login');
 
-    await page.fill('input[type="text"]', 'invaliduser');
-    await page.fill('input[type="password"]', 'wrongpassword');
+    await page.getByLabel('Username').fill('invaliduser');
+    await page.getByLabel('Password', { exact: true }).fill('wrongpassword');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-    await page.click('button[type="submit"]');
+    await expect(page.getByRole('alert')).toBeVisible({ timeout: TIMEOUTS.api });
 
-    // Should show error message (Material-UI Alert)
-    await expect(page.locator('.MuiAlert-root, [role="alert"]')).toBeVisible({ timeout: TIMEOUTS.api });
-
-    // Should remain on login page
-    await expect(page.locator('input[type="text"]')).toBeVisible();
+    // Should remain on the sign-in page
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByLabel('Username')).toBeVisible();
   });
 
-  test.skip('should logout successfully', async ({ page }) => {
-    // Create and login with a dynamic test user
+  test('should logout successfully', async ({ page }) => {
     const authHelper = new E2ETestAuthHelper(page);
     const testUser = await authHelper.createTestUser();
-    await authHelper.loginUser(testUser.credentials);
+    expect(await authHelper.loginUser(testUser.credentials)).toBe(true);
 
-    await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.navigation });
+    await authHelper.logout();
 
-    // Find and click profile/account button in the top app bar (has AccountIcon)
-    const profileButton = page.locator('button:has([data-testid="AccountCircleIcon"])');
-    await profileButton.click();
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByLabel('Username')).toBeVisible();
 
-    // Wait for profile menu to open and click logout
-    const logoutMenuItem = page.locator('li[role="menuitem"]:has-text("Logout")');
-    await logoutMenuItem.click();
-
-    // Should redirect back to login
-    await page.waitForURL(/\/login|\//, { timeout: TIMEOUTS.navigation });
-    await expect(page.locator('input[name="username"]')).toBeVisible();
+    // Protected pages send the visitor back to sign-in
+    await page.goto('/documents');
+    await expect(page).toHaveURL(/\/login/);
   });
 
-  test.skip('should persist session on page reload', async ({ page }) => {
-    // Create and login with a dynamic test user
+  test('should persist session on page reload', async ({ page }) => {
     const authHelper = new E2ETestAuthHelper(page);
     const testUser = await authHelper.createTestUser();
-    await authHelper.loginUser(testUser.credentials);
+    expect(await authHelper.loginUser(testUser.credentials)).toBe(true);
 
-    await page.waitForURL(/\/dashboard|\//, { timeout: TIMEOUTS.navigation });
-
-    // Reload the page
     await page.reload();
 
-    // Wait for page to load after reload
-    await page.waitForLoadState('networkidle');
-
-    // Should still be logged in (either on dashboard or main page, but not login)
-    await page.waitForURL(/\/dashboard|\/(?!login)/, { timeout: TIMEOUTS.navigation });
-    await expect(page.locator('input[name="username"]')).not.toBeVisible();
+    await expect(page).toHaveURL(/\/board/, { timeout: TIMEOUTS.navigation });
+    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    await expect(page.getByLabel('Username')).toHaveCount(0);
   });
 
   test('should validate required fields', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/login');
 
-    // Try to submit without filling fields
-    await page.click('button[type="submit"]');
+    let loginCalled = false;
+    page.on('request', (r) => {
+      if (r.url().includes('/api/auth/login')) loginCalled = true;
+    });
 
-    // Should show validation errors or prevent submission
-    const usernameInput = page.locator('input[type="text"]');
-    const passwordInput = page.locator('input[type="password"]');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-    // Check for HTML5 validation or custom validation messages
-    await expect(usernameInput).toBeVisible();
-    await expect(passwordInput).toBeVisible();
+    // Inline errors, no request
+    await expect(page.getByText('Enter your username')).toBeVisible();
+    await expect(page.getByText('Enter your password')).toBeVisible();
+    await expect(page).toHaveURL(/\/login/);
+    expect(loginCalled).toBe(false);
+  });
+
+  // App bug (reported in the Task 13 report): after sign-in the login page navigates to
+  // `state.from`, then the `/login` route's own `<Navigate to="/board">` (rendered once the
+  // user is set) overrides it, so the visitor always ends on /board.
+  test.fixme('should return to the requested page after sign-in', async ({ page }) => {
+    const authHelper = new E2ETestAuthHelper(page);
+    const testUser = await authHelper.createTestUser();
+
+    await page.goto('/settings/appearance');
+    await expect(page).toHaveURL(/\/login/);
+
+    await page.getByLabel('Username').fill(testUser.credentials.username);
+    await page.getByLabel('Password', { exact: true }).fill(testUser.credentials.password);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+
+    await expect(page).toHaveURL(/\/settings\/appearance/, { timeout: TIMEOUTS.navigation });
   });
 });

@@ -1,283 +1,172 @@
 import { test, expect } from './fixtures/auth';
+import type { Page } from '@playwright/test';
 import { TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
+import { E2ETestAuthHelper } from './utils/test-auth-helper';
 
+/**
+ * Settings sections live at /settings/<section>. Each group folds open with "Edit <group>";
+ * Save/Cancel appear once a field changes and Save sends only the changed keys.
+ */
 test.describe('Settings Management', () => {
   let helpers: TestHelpers;
 
   test.beforeEach(async ({ dynamicAdminPage }) => {
     helpers = new TestHelpers(dynamicAdminPage);
-    await helpers.navigateToPage('/settings');
   });
 
-  test.skip('should display settings interface', async ({ dynamicAdminPage: page }) => {
-    // Check for settings page components
-    await expect(page.locator('[data-testid="settings-container"], .settings-page, .settings-form')).toBeVisible();
+  const sectionNav = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' });
+
+  async function saveGroup(page: Page) {
+    const put = page.waitForResponse((r) => r.url().includes('/api/settings') && r.request().method() === 'PUT', {
+      timeout: TIMEOUTS.medium,
+    });
+    await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
+    const response = await put;
+    expect(response.ok()).toBe(true);
+    await helpers.waitForToast(/Settings updated successfully/);
+    return JSON.parse(response.request().postData() ?? '{}');
+  }
+
+  test('should display settings interface', async ({ dynamicAdminPage: page }) => {
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'General' })).toBeVisible();
+
+    const nav = sectionNav(page);
+    for (const name of ['General', 'OCR', 'Users', 'Server', 'API keys', 'Labels', 'Debug', 'Appearance']) {
+      await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
+    }
+    await expect(nav.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'page');
+
+    // Each section has its own URL
+    await nav.getByRole('link', { name: 'OCR' }).click();
+    await expect(page).toHaveURL(/\/settings\/ocr/);
+    await expect(page.getByRole('heading', { level: 2, name: 'OCR' })).toBeVisible();
+
+    // Unknown sections fall back to /settings
+    await page.goto('/settings/nope');
+    await expect(page).toHaveURL(/\/settings$/);
   });
 
   test('should update OCR settings', async ({ dynamicAdminPage: page }) => {
-    // Look for OCR settings section
-    const ocrSection = page.locator('[data-testid="ocr-settings"], .ocr-section, .settings-section:has-text("OCR")');
-    if (await ocrSection.isVisible()) {
-      // Change OCR language
-      const languageSelect = page.locator('select[name="ocrLanguage"], [data-testid="ocr-language"]');
-      if (await languageSelect.isVisible()) {
-        await languageSelect.selectOption('spa'); // Spanish
-        
-        const saveResponse = helpers.waitForApiCall('/api/settings');
-        
-        // Save settings
-        await page.click('button[type="submit"], button:has-text("Save"), [data-testid="save-settings"]');
-        
-        await saveResponse;
-        await helpers.waitForToast();
-      }
-    }
+    await page.goto('/settings/ocr');
+    await page.getByRole('button', { name: 'Edit Languages' }).click();
+    const languages = page.getByRole('region', { name: 'Languages' });
+
+    await languages.getByRole('button', { name: /Add more languages/ }).click();
+    await languages.getByRole('group', { name: 'Available Languages' }).getByText('Spanish', { exact: true }).click();
+    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText('Spanish');
+
+    const body = await saveGroup(page);
+    expect(body.preferred_languages).toEqual(['eng', 'spa']);
+
+    // Persisted: a reload shows both languages
+    await page.reload();
+    await page.getByRole('button', { name: 'Edit Languages' }).click();
+    await expect(page.getByRole('list', { name: 'Selected languages' })).toContainText('Spanish');
   });
 
-  test('should update watch folder settings', async ({ dynamicAdminPage: page }) => {
-    // Navigate to watch folder section if it's a separate page
-    const watchFolderNav = page.locator('a[href="/watch-folder"], [data-testid="watch-folder-nav"]');
-    if (await watchFolderNav.isVisible()) {
-      await watchFolderNav.click();
-      await helpers.waitForLoadingToComplete();
-    }
-    
-    // Look for watch folder settings
-    const watchSection = page.locator('[data-testid="watch-settings"], .watch-folder-section, .settings-section:has-text("Watch")');
-    if (await watchSection.isVisible()) {
-      // Enable watch folder
-      const enableWatch = page.locator('input[type="checkbox"][name="enableWatch"], [data-testid="enable-watch"]');
-      if (await enableWatch.isVisible()) {
-        await enableWatch.check();
-        
-        // Set watch folder path
-        const pathInput = page.locator('input[name="watchPath"], [data-testid="watch-path"]');
-        if (await pathInput.isVisible()) {
-          await pathInput.fill('/tmp/watch-folder');
-        }
-        
-        const saveResponse = helpers.waitForApiCall('/api/settings');
-        
-        await page.click('button[type="submit"], button:has-text("Save")');
-        
-        await saveResponse;
-        await helpers.waitForToast();
-      }
-    }
-  });
-
-  test('should update notification settings', async ({ dynamicAdminPage: page }) => {
-    const notificationSection = page.locator('[data-testid="notification-settings"], .notification-section, .settings-section:has-text("Notification")');
-    if (await notificationSection.isVisible()) {
-      // Enable notifications
-      const enableNotifications = page.locator('input[type="checkbox"][name="enableNotifications"], [data-testid="enable-notifications"]');
-      if (await enableNotifications.isVisible()) {
-        await enableNotifications.check();
-        
-        // Configure notification types
-        const ocrNotifications = page.locator('input[type="checkbox"][name="ocrNotifications"], [data-testid="ocr-notifications"]');
-        if (await ocrNotifications.isVisible()) {
-          await ocrNotifications.check();
-        }
-        
-        const syncNotifications = page.locator('input[type="checkbox"][name="syncNotifications"], [data-testid="sync-notifications"]');
-        if (await syncNotifications.isVisible()) {
-          await syncNotifications.check();
-        }
-        
-        const saveResponse = helpers.waitForApiCall('/api/settings');
-        
-        await page.click('button[type="submit"], button:has-text("Save")');
-        
-        await saveResponse;
-        await helpers.waitForToast();
-      }
-    }
+  test('should show the watch folder configuration', async ({ dynamicAdminPage: page }) => {
+    // The server watch folder is read-only configuration (Settings → Server);
+    // the watch queue itself is Intake → Watch folder.
+    await page.goto('/settings/server');
+    await page.getByRole('button', { name: 'Edit Watch Folder Configuration' }).click();
+    const watch = page.getByRole('region', { name: 'Watch Folder Configuration' });
+    await expect(watch.getByRole('term').filter({ hasText: 'Watch Interval' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'File Upload Configuration' }).getByRole('term').filter({ hasText: 'Watch Folder' })).toBeAttached();
   });
 
   test('should update search settings', async ({ dynamicAdminPage: page }) => {
-    const searchSection = page.locator('[data-testid="search-settings"], .search-section, .settings-section:has-text("Search")');
-    if (await searchSection.isVisible()) {
-      // Configure search results per page
-      const resultsPerPage = page.locator('select[name="resultsPerPage"], [data-testid="results-per-page"]');
-      if (await resultsPerPage.isVisible()) {
-        await resultsPerPage.selectOption('25');
-      }
-      
-      // Enable/disable features
-      const enhancedSearch = page.locator('input[type="checkbox"][name="enhancedSearch"], [data-testid="enhanced-search"]');
-      if (await enhancedSearch.isVisible()) {
-        await enhancedSearch.check();
-      }
-      
-      const saveResponse = helpers.waitForApiCall('/api/settings');
-      
-      await page.click('button[type="submit"], button:has-text("Save")');
-      
-      await saveResponse;
-      await helpers.waitForToast();
-    }
-  });
+    await page.goto('/settings');
+    await page.getByRole('button', { name: 'Edit Search Configuration' }).click();
+    const group = page.getByRole('region', { name: 'Search Configuration' });
 
-  test('should reset settings to defaults', async ({ dynamicAdminPage: page }) => {
-    // Look for reset button
-    const resetButton = page.locator('button:has-text("Reset"), button:has-text("Default"), [data-testid="reset-settings"]');
-    if (await resetButton.isVisible()) {
-      await resetButton.click();
-      
-      // Should show confirmation
-      const confirmButton = page.locator('button:has-text("Confirm"), button:has-text("Yes"), [data-testid="confirm-reset"]');
-      if (await confirmButton.isVisible()) {
-        const resetResponse = helpers.waitForApiCall('/api/settings/reset');
-        
-        await confirmButton.click();
-        
-        await resetResponse;
-        await helpers.waitForToast();
-        
-        // Page should reload with default values
-        await helpers.waitForLoadingToComplete();
-      }
-    }
+    await group.getByRole('spinbutton', { name: 'Snippet Length' }).fill('240');
+    await expect(page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+
+    const body = await saveGroup(page);
+    // Only the changed key is sent
+    expect(Object.keys(body)).toEqual(['search_snippet_length']);
+    expect(body.search_snippet_length).toBe(240);
+
+    await page.reload();
+    await expect(page.getByText(/240 chars/)).toBeVisible();
   });
 
   test('should validate settings before saving', async ({ dynamicAdminPage: page }) => {
-    // Try to set invalid values
-    const pathInput = page.locator('input[name="watchPath"], [data-testid="watch-path"]');
-    if (await pathInput.isVisible()) {
-      // Enter invalid path
-      await pathInput.fill('invalid/path/with/spaces and special chars!');
-      
-      await page.click('button[type="submit"], button:has-text("Save")');
-      
-      // Should show validation error
-      await helpers.waitForToast();
-      
-      // Should not save invalid settings
-      expect(await pathInput.inputValue()).toBe('invalid/path/with/spaces and special chars!');
-    }
-  });
+    await page.goto('/settings');
+    await page.getByRole('button', { name: 'Edit File Processing' }).click();
+    const field = page.getByRole('spinbutton', { name: 'Max File Size (MB)' });
 
-  test('should export settings', async ({ dynamicAdminPage: page }) => {
-    const exportButton = page.locator('button:has-text("Export"), [data-testid="export-settings"]');
-    if (await exportButton.isVisible()) {
-      // Set up download listener
-      const downloadPromise = page.waitForEvent('download');
-      
-      await exportButton.click();
-      
-      // Verify download started
-      const download = await downloadPromise;
-      expect(download.suggestedFilename()).toContain('settings');
-    }
-  });
+    let saved = false;
+    page.on('request', (r) => {
+      if (r.url().includes('/api/settings') && r.method() === 'PUT') saved = true;
+    });
 
-  test('should import settings', async ({ dynamicAdminPage: page }) => {
-    const importButton = page.locator('button:has-text("Import"), [data-testid="import-settings"]');
-    if (await importButton.isVisible()) {
-      // Look for file input
-      const fileInput = page.locator('input[type="file"], [data-testid="settings-file"]');
-      if (await fileInput.isVisible()) {
-        // Create a mock settings file
-        const settingsContent = JSON.stringify({
-          ocrLanguage: 'eng',
-          enableNotifications: true,
-          resultsPerPage: 20
-        });
-        
-        await fileInput.setInputFiles({
-          name: 'settings.json',
-          mimeType: 'application/json',
-          buffer: Buffer.from(settingsContent)
-        });
-        
-        const importResponse = helpers.waitForApiCall('/api/settings/import');
-        
-        await importButton.click();
-        
-        await importResponse;
-        await helpers.waitForToast();
-      }
-    }
+    await field.fill('0');
+    await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(saved).toBe(false);
+
+    // Cancel restores the saved value
+    await page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(field).toHaveValue('50');
   });
 
   test('should display current system status', async ({ dynamicAdminPage: page }) => {
-    // Look for system status section
-    const statusSection = page.locator('[data-testid="system-status"], .status-section, .settings-section:has-text("Status")');
-    if (await statusSection.isVisible()) {
-      // Should show various system metrics
-      await expect(statusSection.locator(':has-text("Database"), :has-text("Storage"), :has-text("OCR")')).toBeVisible();
+    await page.goto('/settings/server');
+    await expect(page.getByRole('heading', { level: 2, name: 'Server' })).toBeVisible();
+    for (const group of ['File Upload Configuration', 'OCR Processing Configuration', 'Server Information']) {
+      await expect(page.getByRole('heading', { level: 3, name: group })).toBeVisible();
     }
+    await page.getByRole('button', { name: 'Edit Server Information' }).click();
+    await expect(page.getByRole('region', { name: 'Server Information' }).getByRole('term').filter({ hasText: 'Version' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Refresh Configuration' })).toBeVisible();
   });
 
   test('should test OCR functionality', async ({ dynamicAdminPage: page }) => {
-    const ocrSection = page.locator('[data-testid="ocr-settings"], .ocr-section');
-    if (await ocrSection.isVisible()) {
-      const testButton = page.locator('button:has-text("Test OCR"), [data-testid="test-ocr"]');
-      if (await testButton.isVisible()) {
-        const testResponse = helpers.waitForApiCall('/api/ocr/test');
-        
-        await testButton.click();
-        
-        await testResponse;
-        
-        // Should show test result
-        await helpers.waitForToast();
-      }
-    }
+    // The Debug section runs a file through the OCR pipeline step by step
+    await page.goto('/settings/debug');
+    await expect(page.getByRole('heading', { level: 2, name: 'Debug' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Upload/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Search Existing/ })).toBeVisible();
   });
 
-  test('should clear cache', async ({ dynamicAdminPage: page }) => {
-    const clearCacheButton = page.locator('button:has-text("Clear Cache"), [data-testid="clear-cache"]');
-    if (await clearCacheButton.isVisible()) {
-      const clearResponse = helpers.waitForApiCall('/api/cache/clear');
-      
-      await clearCacheButton.click();
-      
-      await clearResponse;
-      await helpers.waitForToast();
-    }
-  });
+  test('should update user profile', async ({ dynamicAdminPage: page, testAdmin }) => {
+    // Profile edits are an admin action in Settings → Users
+    const other = await new E2ETestAuthHelper(page).createTestUser();
+    await page.goto('/settings/users');
+    const name = other.credentials.username;
+    await page.getByRole('button', { name: `Edit ${name}` }).click();
 
-  test('should update user profile', async ({ dynamicAdminPage: page }) => {
-    // Look for user profile section
-    const profileSection = page.locator('[data-testid="profile-settings"], .profile-section, .settings-section:has-text("Profile")');
-    if (await profileSection.isVisible()) {
-      // Update email
-      const emailInput = page.locator('input[name="email"], [data-testid="user-email"]');
-      if (await emailInput.isVisible()) {
-        await emailInput.fill('newemail@example.com');
-      }
-      
-      // Update name
-      const nameInput = page.locator('input[name="name"], [data-testid="user-name"]');
-      if (await nameInput.isVisible()) {
-        await nameInput.fill('Updated Name');
-      }
-      
-      const saveResponse = helpers.waitForApiCall('/api/users/profile');
-      
-      await page.click('button[type="submit"], button:has-text("Save")');
-      
-      await saveResponse;
-      await helpers.waitForToast();
-    }
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const newEmail = `updated_${Date.now()}@example.com`;
+    await dialog.getByRole('textbox', { name: /email/i }).fill(newEmail);
+
+    const put = helpers.waitForApiCall(`/api/users/${other.userResponse.id}`);
+    await dialog.getByRole('button', { name: /update/i }).click();
+    expect((await put).ok()).toBe(true);
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('grid', { name: 'User Management' }).getByRole('row', { name })).toContainText(newEmail);
+    expect(testAdmin.credentials.username).not.toBe(name);
   });
 
   test('should change password', async ({ dynamicAdminPage: page }) => {
-    const passwordSection = page.locator('[data-testid="password-settings"], .password-section, .settings-section:has-text("Password")');
-    if (await passwordSection.isVisible()) {
-      await page.fill('input[name="currentPassword"], [data-testid="current-password"]', 'currentpass');
-      await page.fill('input[name="newPassword"], [data-testid="new-password"]', 'newpassword123');
-      await page.fill('input[name="confirmPassword"], [data-testid="confirm-password"]', 'newpassword123');
-      
-      const changeResponse = helpers.waitForApiCall('/api/users/password');
-      
-      await page.click('button[type="submit"], button:has-text("Change Password")');
-      
-      await changeResponse;
-      await helpers.waitForToast();
-    }
+    const auth = new E2ETestAuthHelper(page);
+    const other = await auth.createTestUser();
+    await page.goto('/settings/users');
+    await page.getByRole('button', { name: `Edit ${other.credentials.username}` }).click();
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/password/i).fill('changedpass456');
+    const put = helpers.waitForApiCall(`/api/users/${other.userResponse.id}`);
+    await dialog.getByRole('button', { name: /update/i }).click();
+    expect((await put).ok()).toBe(true);
+
+    // The new password works, the old one does not
+    await expect(auth.loginUserAPI({ username: other.credentials.username, password: 'changedpass456' })).resolves.toBeTruthy();
+    await expect(auth.loginUserAPI(other.credentials)).rejects.toThrow();
   });
 });

@@ -1,237 +1,142 @@
 import { test, expect } from './fixtures/auth';
-import { SEARCH_QUERIES, TIMEOUTS, API_ENDPOINTS } from './utils/test-data';
+import type { Page } from '@playwright/test';
+import { SEARCH_QUERIES, TEST_FILES, TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
+/**
+ * Search is part of the Library: /documents?q=… (the old /search URL redirects there).
+ * Each test signs in as a fresh user and seeds OCR'd images with known text.
+ */
 test.describe('Search Functionality', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ dynamicAdminPage }) => {
-    helpers = new TestHelpers(dynamicAdminPage);
-    await helpers.navigateToPage('/search');
-    // Ensure we have test documents for search functionality
-    await helpers.ensureTestDocumentsExist();
+  test.beforeEach(async ({ dynamicUserPage }) => {
+    helpers = new TestHelpers(dynamicUserPage);
+    // test1.png → "Test 1 / This is some text from text 1", test3.jpeg → "... text 3"
+    const ids = [await helpers.uploadDocumentViaAPI(TEST_FILES.test1), await helpers.uploadDocumentViaAPI(TEST_FILES.test3)];
+    for (const id of ids) await helpers.waitForOCRComplete(id);
+    await dynamicUserPage.goto('/search');
+    await expect(dynamicUserPage).toHaveURL(/\/documents/);
   });
 
-  test.skip('should display search interface', async ({ dynamicAdminPage: page }) => {
-    // Check for search components
-    await expect(page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]')).toBeVisible();
-    await expect(page.locator('button:has-text("Search"), [data-testid="search-button"]')).toBeVisible();
+  const searchBox = (page: Page) => page.getByRole('searchbox', { name: 'Search documents' });
+
+  async function search(page: Page, q: string) {
+    const box = searchBox(page);
+    await box.fill(q);
+    const response = helpers.waitForApiCall('/api/search', TIMEOUTS.medium);
+    await box.press('Enter');
+    await response;
+    await expect(page).toHaveURL(new RegExp(`[?&]q=${encodeURIComponent(q).replace(/%20/g, '(\\+|%20)')}`));
+  }
+
+  test('should display search interface', async ({ dynamicUserPage: page }) => {
+    await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+    await expect(searchBox(page)).toBeVisible();
+    await expect(searchBox(page)).toHaveAttribute('placeholder', 'Search names and text…');
+    await expect(page.getByRole('button', { name: 'Search help' })).toBeVisible();
   });
 
-  test.skip('should perform basic search', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Search for known OCR content from test images
-    await searchInput.fill(SEARCH_QUERIES.simple);  // "Test 1"
-    
-    // Wait for search API call
-    const searchResponse = helpers.waitForApiCall(API_ENDPOINTS.search);
-    
-    // Press Enter or click search button
-    await searchInput.press('Enter');
-    
-    // Verify search was performed
-    await searchResponse;
-    
-    // Should show search results
-    await expect(page.locator('[data-testid="search-results"], .search-results')).toBeVisible({ 
-      timeout: TIMEOUTS.medium 
-    });
+  test('should perform basic search', async ({ dynamicUserPage: page }) => {
+    await search(page, SEARCH_QUERIES.content); // "some text from text"
+
+    await expect(helpers.documentRows()).toHaveCount(2);
+    await expect(helpers.documentRows().filter({ hasText: 'test1.png' })).toBeVisible();
+    await expect(helpers.documentRows().filter({ hasText: 'test3.jpeg' })).toBeVisible();
   });
 
-  test.skip('should show search suggestions', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Start typing "Test" to trigger suggestions based on OCR content
-    await searchInput.type('Test', { delay: 100 });
-    
-    // Should show suggestion dropdown
-    await expect(page.locator('[data-testid="search-suggestions"], .suggestions, .autocomplete')).toBeVisible({ 
-      timeout: TIMEOUTS.short 
-    });
+  test('should show search suggestions', async ({ dynamicUserPage: page }) => {
+    // Type-ahead suggestions moved from the search bar to the ⌘K palette
+    await page.getByRole('button', { name: 'Search documents' }).click();
+    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    await palette.getByRole('searchbox', { name: 'Search' }).pressSequentially('some text', { delay: 50 });
+    const documents = palette.getByRole('group', { name: 'Documents' });
+    await expect(documents.getByRole('menuitem', { name: /test1\.png/ })).toBeVisible({ timeout: TIMEOUTS.short });
+    await expect(documents.getByRole('menuitem', { name: /Show all results/ })).toBeVisible();
   });
 
-  test.skip('should filter search results', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Search for content that should match multiple test images
-    await searchInput.fill(SEARCH_QUERIES.content);  // "some text from text"
-    await searchInput.press('Enter');
-    
-    await helpers.waitForLoadingToComplete();
-    
-    // Apply filters
-    const filterButton = page.locator('[data-testid="filters"], button:has-text("Filter"), .filter-toggle');
-    if (await filterButton.isVisible()) {
-      await filterButton.click();
-      
-      // Select image type filter (since our test files are images)
-      const imageFilter = page.locator('input[type="checkbox"][value="image"], input[type="checkbox"][value="png"], label:has-text("Image")');
-      if (await imageFilter.isVisible()) {
-        await imageFilter.check();
-        
-        // Should update search results
-        await helpers.waitForApiCall(API_ENDPOINTS.search);
-      }
-    }
+  test('should filter search results', async ({ dynamicUserPage: page }) => {
+    await search(page, SEARCH_QUERIES.content);
+    await expect(helpers.documentRows()).toHaveCount(2);
+
+    await page.getByRole('search', { name: 'Search and filter' }).getByRole('button', { name: 'Type' }).click();
+    await page.getByRole('dialog', { name: 'Type' }).getByText('PDF', { exact: true }).click();
+    await expect(page).toHaveURL(/type=pdf/);
+    await expect(page).toHaveURL(/q=/);
+    await page.keyboard.press('Escape');
+
+    // No PDFs match: the empty state offers to clear the filters
+    await expect(page.getByText('No matches')).toBeVisible();
+    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page).not.toHaveURL(/type=/);
   });
 
-  test.skip('should perform advanced search', async ({ dynamicAdminPage: page }) => {
-    // Look for advanced search toggle
-    const advancedToggle = page.locator('[data-testid="advanced-search"], button:has-text("Advanced"), .advanced-toggle');
-    
-    if (await advancedToggle.isVisible()) {
-      await advancedToggle.click();
-      
-      // Fill advanced search fields
-      await page.fill('[data-testid="title-search"], input[name="title"]', SEARCH_QUERIES.advanced.title);
-      await page.fill('[data-testid="content-search"], input[name="content"]', SEARCH_QUERIES.advanced.content);
-      
-      // Set date filters if available
-      const dateFromInput = page.locator('[data-testid="date-from"], input[name="dateFrom"], input[type="date"]').first();
-      if (await dateFromInput.isVisible()) {
-        await dateFromInput.fill(SEARCH_QUERIES.advanced.dateFrom);
-      }
-      
-      // Perform advanced search
-      await page.click('button:has-text("Search"), [data-testid="search-button"]');
-      
-      // Verify search results
-      await expect(page.locator('[data-testid="search-results"], .search-results')).toBeVisible({ 
-        timeout: TIMEOUTS.medium 
-      });
-    }
+  test('should perform advanced search', async ({ dynamicUserPage: page }) => {
+    // The old title/content/date form is replaced by match modes (Search help) and filter chips
+    await page.getByRole('button', { name: 'Search help' }).click();
+    const help = page.getByRole('dialog', { name: 'Search help' });
+    await expect(help).toBeVisible();
+    await help.getByText('Exact phrase', { exact: true }).click();
+    await expect(page).toHaveURL(/mode=phrase/);
+    await page.keyboard.press('Escape');
+
+    await search(page, 'text from text 3');
+    await expect(helpers.documentRows()).toHaveCount(1);
+    await expect(helpers.documentRows().first()).toContainText('test3.jpeg');
   });
 
-  test.skip('should handle empty search results', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Search for something that doesn't exist
-    await searchInput.fill(SEARCH_QUERIES.noResults);
-    await searchInput.press('Enter');
-    
-    await helpers.waitForLoadingToComplete();
-    
-    // Should show no results message
-    await expect(page.locator(':has-text("No results"), :has-text("not found"), [data-testid="no-results"]')).toBeVisible({ 
-      timeout: TIMEOUTS.medium 
-    });
+  test('should handle empty search results', async ({ dynamicUserPage: page }) => {
+    await search(page, SEARCH_QUERIES.noResults);
+    await expect(page.getByText('No matches')).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(page.getByText('Nothing fits the current search and filters.')).toBeVisible();
   });
 
-  test.skip('should navigate to document from search results', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Perform search
-    await searchInput.fill(SEARCH_QUERIES.simple);
-    await searchInput.press('Enter');
-    
-    await helpers.waitForLoadingToComplete();
-    
-    // Click on first search result
-    const firstResult = page.locator('[data-testid="search-results"] > *, .search-result').first();
-    if (await firstResult.isVisible()) {
-      await firstResult.click();
-      
-      // Should navigate to document details
-      await page.waitForURL(/\/documents\/[^\/]+/, { timeout: TIMEOUTS.medium });
-    }
+  test('should navigate to document from search results', async ({ dynamicUserPage: page }) => {
+    await search(page, 'text 1');
+    const row = helpers.documentRows().filter({ hasText: 'test1.png' });
+    await row.getByRole('rowheader').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/, { timeout: TIMEOUTS.medium });
+    await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
   });
 
-  test.skip('should preserve search state on page reload', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Perform search
-    await searchInput.fill(SEARCH_QUERIES.simple);
-    await searchInput.press('Enter');
-    
-    await helpers.waitForLoadingToComplete();
-    
-    // Reload page
+  test('should preserve search state on page reload', async ({ dynamicUserPage: page }) => {
+    await search(page, SEARCH_QUERIES.content);
+    await expect(helpers.documentRows()).toHaveCount(2);
+
     await page.reload();
-    
-    // Should preserve search query and results
-    await expect(searchInput).toHaveValue(SEARCH_QUERIES.simple);
-    await expect(page.locator('[data-testid="search-results"], .search-results')).toBeVisible({ 
-      timeout: TIMEOUTS.medium 
-    });
+    await expect(searchBox(page)).toHaveValue(SEARCH_QUERIES.content);
+    await expect(helpers.documentRows()).toHaveCount(2);
   });
 
-  test.skip('should sort search results', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Perform search
-    await searchInput.fill(SEARCH_QUERIES.simple);
-    await searchInput.press('Enter');
-    
-    await helpers.waitForLoadingToComplete();
-    
-    // Look for sort options
-    const sortDropdown = page.locator('[data-testid="sort"], select[name="sort"], .sort-selector');
-    if (await sortDropdown.isVisible()) {
-      await sortDropdown.selectOption('date-desc');
-      
-      // Should update search results order
-      await helpers.waitForApiCall(API_ENDPOINTS.search);
-    }
+  test('should sort search results', async ({ dynamicUserPage: page }) => {
+    await search(page, SEARCH_QUERIES.content);
+    await expect(helpers.documentRows()).toHaveCount(2);
+
+    const name = helpers.documentsGrid().getByRole('columnheader', { name: 'Name' });
+    await name.click();
+    await expect(page).toHaveURL(/sort=filename/);
+    await expect(page).toHaveURL(/q=/);
+    const order = /order=asc/.test(page.url()) ? ['test1.png', 'test3.jpeg'] : ['test3.jpeg', 'test1.png'];
+    await expect(helpers.documentRows().nth(0)).toContainText(order[0]);
+    await expect(helpers.documentRows().nth(1)).toContainText(order[1]);
   });
 
-  test.skip('should paginate search results', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Perform search
-    await searchInput.fill(SEARCH_QUERIES.simple);
-    await searchInput.press('Enter');
-    
-    await helpers.waitForLoadingToComplete();
-    
-    // Look for pagination
-    const nextPageButton = page.locator('[data-testid="next-page"], button:has-text("Next"), .pagination button:last-child');
-    if (await nextPageButton.isVisible()) {
-      await nextPageButton.click();
-      
-      // Should load next page of results
-      await helpers.waitForApiCall(API_ENDPOINTS.search);
-      await expect(page.locator('[data-testid="search-results"], .search-results')).toBeVisible({ 
-        timeout: TIMEOUTS.medium 
-      });
-    }
+  // Needs more matches than the smallest page (25); pagination is covered by library.spec.ts.
+  test.skip('should paginate search results', async () => {});
+
+  test('should highlight search terms in results', async ({ dynamicUserPage: page }) => {
+    await search(page, 'some text');
+    await expect(helpers.documentsGrid().locator('mark').first()).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test.skip('should highlight search terms in results', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Perform search with specific term
-    await searchInput.fill('test');
-    await searchInput.press('Enter');
-    
-    await helpers.waitForLoadingToComplete();
-    
-    // Should highlight search terms in results
-    await expect(page.locator('.highlight, mark, .search-highlight')).toBeVisible({ 
-      timeout: TIMEOUTS.medium 
-    });
-  });
+  test('should clear search results', async ({ dynamicUserPage: page }) => {
+    await search(page, 'text 3');
+    await expect(helpers.documentRows()).toHaveCount(1);
 
-  test.skip('should clear search results', async ({ dynamicAdminPage: page }) => {
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i], [data-testid="search-input"]').first();
-    
-    // Perform search
-    await searchInput.fill(SEARCH_QUERIES.simple);
-    await searchInput.press('Enter');
-    
-    await helpers.waitForLoadingToComplete();
-    
-    // Clear search
-    const clearButton = page.locator('[data-testid="clear-search"], button:has-text("Clear"), .clear-button');
-    if (await clearButton.isVisible()) {
-      await clearButton.click();
-    } else {
-      // Clear by emptying input
-      await searchInput.clear();
-      await searchInput.press('Enter');
-    }
-    
-    // Should clear results
-    await expect(page.locator('[data-testid="search-results"], .search-results')).not.toBeVisible();
+    await page.getByRole('search', { name: 'Search and filter' }).getByRole('button', { name: 'Clear' }).click();
+    await expect(page).not.toHaveURL(/q=/);
+    await expect(searchBox(page)).toHaveValue('');
+    await expect(helpers.documentRows()).toHaveCount(2);
   });
 });
