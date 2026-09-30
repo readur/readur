@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import OidcCallback from '../OidcCallback';
+import OidcCallback, { OIDC_CALLBACK_ERROR_CODES } from '../OidcCallback';
 import { api } from '../../../services/api';
 import { AuthContext } from '../../../contexts/AuthContext';
 
@@ -76,13 +76,53 @@ describe('OidcCallback', () => {
     expect(completeLogin).not.toHaveBeenCalled();
   });
 
-  test('shows an error passed back in the callback URL', async () => {
-    setUrl('/auth/callback?error=access_denied');
+  const expectedMessages: Record<string, RegExp> = {
+    provider_error: /identity provider did not complete the sign-in/i,
+    invalid_state: /sign-in request is invalid or has expired/i,
+    auth_failed: /Authentication with the identity provider failed/i,
+    no_account: /No account is available for this identity/i,
+    account_disabled: /disabled or awaiting administrator approval/i,
+    server_error: /server error occurred during sign-in/i,
+  };
+
+  test('covers every server error code', () => {
+    expect([...OIDC_CALLBACK_ERROR_CODES].sort()).toEqual(Object.keys(expectedMessages).sort());
+  });
+
+  test.each(Object.entries(expectedMessages))(
+    'maps the %s error code in the URL fragment to a fixed message',
+    async (code, message) => {
+      setUrl(`/auth/callback#error=${code}`);
+
+      renderCallback();
+
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
+      expect(window.location.hash).toBe('');
+    }
+  );
+
+  test('never renders free text from the callback URL', async () => {
+    setUrl('/auth/callback?error=Please%20call%20555-0100%20to%20verify');
 
     renderCallback();
 
-    expect(await screen.findByText(/Authentication failed: access_denied/)).toBeInTheDocument();
+    expect(await screen.findByText(/Sign-in failed. Please try logging in again./)).toBeInTheDocument();
+    expect(screen.queryByText(/555-0100/)).not.toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
+  });
+
+  test('does not render the server message when the exchange fails unexpectedly', async () => {
+    vi.mocked(api.post).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 400, data: { error: 'Some server-provided text' } },
+    });
+    setUrl('/auth/callback#code=abc');
+
+    renderCallback();
+
+    expect(await screen.findByText(/Sign-in failed. Please try logging in again./)).toBeInTheDocument();
+    expect(screen.queryByText(/Some server-provided text/)).not.toBeInTheDocument();
   });
 
   test('shows an error when the code is invalid or expired', async () => {

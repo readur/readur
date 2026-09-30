@@ -75,6 +75,20 @@
       "oidcNotConfigured": "OIDC no está configurado en este servidor. Por favor usa inicio de sesión con nombre de usuario/contraseña.",
       "oidcInitFailed": "Falló el inicio de sesión OIDC. Por favor intenta de nuevo.",
       "loginFailed": "Falló el inicio de sesión. Por favor verifica tus credenciales."
+    },
+    "oidcCallback": {
+      "errors": {
+        "provider_error": "El proveedor de identidad no completó el inicio de sesión. Por favor intenta de nuevo.",
+        "invalid_state": "La solicitud de inicio de sesión no es válida o ha caducado. Por favor inicia sesión de nuevo.",
+        "auth_failed": "La autenticación con el proveedor de identidad falló. Por favor inicia sesión de nuevo.",
+        "no_account": "No hay ninguna cuenta disponible para esta identidad. Contacta a tu administrador.",
+        "account_disabled": "Esta cuenta está deshabilitada o pendiente de aprobación por un administrador.",
+        "server_error": "Se produjo un error del servidor durante el inicio de sesión. Por favor intenta más tarde.",
+        "unknown": "No se pudo iniciar sesión. Por favor inicia sesión de nuevo.",
+        "missingCode": "No se recibió ningún código de autenticación del servidor.",
+        "invalidCode": "Este enlace de inicio de sesión no es válido o ha caducado. Por favor inicia sesión de nuevo.",
+        "tooManyAttempts": "Demasiados intentos. Espera un momento e inicia sesión de nuevo."
+      }
     }
   },
   "navigation": {

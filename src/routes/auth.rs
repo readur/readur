@@ -444,15 +444,72 @@ async fn oidc_login(State(state): State<Arc<AppState>>, client_ip: ClientIp) -> 
         .into_response()
 }
 
+/// Reasons an OIDC callback can fail. Only these fixed codes are passed to
+/// the web UI; details are logged server-side.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OidcCallbackError {
+    ProviderError,
+    InvalidState,
+    AuthFailed,
+    NoAccount,
+    AccountDisabled,
+    ServerError,
+}
+
+impl OidcCallbackError {
+    fn code(self) -> &'static str {
+        match self {
+            Self::ProviderError => "provider_error",
+            Self::InvalidState => "invalid_state",
+            Self::AuthFailed => "auth_failed",
+            Self::NoAccount => "no_account",
+            Self::AccountDisabled => "account_disabled",
+            Self::ServerError => "server_error",
+        }
+    }
+
+    fn status(self) -> StatusCode {
+        match self {
+            Self::ProviderError | Self::AuthFailed => StatusCode::UNAUTHORIZED,
+            Self::InvalidState => StatusCode::BAD_REQUEST,
+            Self::NoAccount | Self::AccountDisabled => StatusCode::FORBIDDEN,
+            Self::ServerError => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    fn message(self) -> &'static str {
+        match self {
+            Self::ProviderError | Self::AuthFailed => "Authentication failed",
+            Self::InvalidState => "Invalid or expired login state",
+            Self::NoAccount => "No account is available for this identity. Contact your administrator.",
+            Self::AccountDisabled => "This account is disabled or awaiting administrator approval",
+            Self::ServerError => "Internal server error",
+        }
+    }
+}
+
+/// Send the browser back to the web UI with a fixed error code in the URL
+/// fragment. Falls back to a JSON error when the UI address is unknown.
+fn oidc_callback_failure(state: &AppState, error: OidcCallbackError) -> Response {
+    let clear_cookie = [(header::SET_COOKIE, oidc_state_cookie(state, "", 0))];
+    match frontend_base_url(state) {
+        Some(base) => {
+            let target = format!("{}/auth/callback#error={}", base, error.code());
+            (clear_cookie, Redirect::to(&target)).into_response()
+        }
+        None => (clear_cookie, json_error(error.status(), error.message())).into_response(),
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/api/auth/oidc/callback",
     tag = "auth",
     responses(
-        (status = 303, description = "Redirect to the web UI with a one-time code in the URL fragment"),
-        (status = 400, description = "Missing or mismatched state / code"),
-        (status = 401, description = "Authentication with the provider failed"),
-        (status = 403, description = "No permitted local account for this identity"),
+        (status = 303, description = "Redirect to the web UI: `/auth/callback#code=<one-time code>` on success, or `/auth/callback#error=<code>` where code is one of provider_error, invalid_state, auth_failed, no_account, account_disabled, server_error"),
+        (status = 400, description = "Missing or mismatched state / code (only when the web UI address is unknown)"),
+        (status = 401, description = "Authentication with the provider failed (only when the web UI address is unknown)"),
+        (status = 403, description = "No permitted local account for this identity (only when the web UI address is unknown)"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -461,71 +518,68 @@ async fn oidc_callback(
     headers: HeaderMap,
     Query(params): Query<OidcCallbackQuery>,
 ) -> Response {
-    let clear_cookie = [(header::SET_COOKIE, oidc_state_cookie(&state, "", 0))];
+    match complete_oidc_callback(&state, &headers, params).await {
+        Ok(response) => response,
+        Err(error) => oidc_callback_failure(&state, error),
+    }
+}
 
+async fn complete_oidc_callback(
+    state: &Arc<AppState>,
+    headers: &HeaderMap,
+    params: OidcCallbackQuery,
+) -> Result<Response, OidcCallbackError> {
     if let Some(error) = params.error {
         tracing::warn!("OIDC provider returned an error: {}", error);
-        return (clear_cookie, json_error(StatusCode::UNAUTHORIZED, "Authentication failed")).into_response();
+        return Err(OidcCallbackError::ProviderError);
     }
 
     let (Some(code), Some(query_state)) = (params.code, params.state) else {
-        return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "Missing code or state")).into_response();
+        return Err(OidcCallbackError::InvalidState);
     };
 
     // The state must match the value bound to this browser at login start
     // (prevents login CSRF), and must still be pending server-side.
-    let cookie_matches = read_cookie(&headers, OIDC_STATE_COOKIE)
+    let cookie_matches = read_cookie(headers, OIDC_STATE_COOKIE)
         .map(|c| constant_time_eq(c.as_bytes(), query_state.as_bytes()))
         .unwrap_or(false);
     if !cookie_matches {
         tracing::warn!("OIDC callback state did not match the browser's state cookie");
-        return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "Invalid login state")).into_response();
+        return Err(OidcCallbackError::InvalidState);
     }
 
     let pending: PendingLogin = match state.db.take_auth_ephemeral(&query_state, EPHEMERAL_OIDC_STATE).await {
-        Ok(Some(value)) => match serde_json::from_value(value) {
-            Ok(p) => p,
-            Err(_) => return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "Invalid login state")).into_response(),
-        },
-        Ok(None) => {
-            return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "Login state expired or already used"))
-                .into_response()
-        }
+        Ok(Some(value)) => serde_json::from_value(value).map_err(|_| OidcCallbackError::InvalidState)?,
+        Ok(None) => return Err(OidcCallbackError::InvalidState),
         Err(e) => {
             tracing::error!("Failed to load OIDC login state: {}", e);
-            return (clear_cookie, json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"))
-                .into_response();
+            return Err(OidcCallbackError::ServerError);
         }
     };
 
     let Some(oidc_client) = state.oidc_client.as_ref() else {
-        return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "OIDC is not configured")).into_response();
+        return Err(OidcCallbackError::ServerError);
     };
 
-    let user_info = match oidc_client.complete_login(&code, &pending).await {
-        Ok(info) => info,
-        Err(e) => {
-            tracing::warn!("OIDC login failed: {}", e);
-            return (clear_cookie, json_error(StatusCode::UNAUTHORIZED, "Authentication failed")).into_response();
-        }
-    };
+    let user_info = oidc_client.complete_login(&code, &pending).await.map_err(|e| {
+        tracing::warn!("OIDC login failed: {}", e);
+        OidcCallbackError::AuthFailed
+    })?;
 
-    let user = match resolve_oidc_user(&state, &user_info).await {
-        Ok(user) => user,
-        Err(response) => return (clear_cookie, response).into_response(),
-    };
+    let user = resolve_oidc_user(state, &user_info).await?;
 
     if !user.is_active {
-        return (
-            clear_cookie,
-            json_error(StatusCode::FORBIDDEN, "This account is disabled or awaiting administrator approval"),
-        )
-            .into_response();
+        return Err(OidcCallbackError::AccountDisabled);
     }
 
     // Hand the session to the SPA via a short-lived single-use code in the
     // URL fragment (never sent to servers or leaked via Referer). The SPA
     // redeems it at /oidc/exchange.
+    let Some(base) = frontend_base_url(state) else {
+        tracing::error!("Cannot determine frontend URL: set PUBLIC_URL or a valid OIDC_REDIRECT_URI");
+        return Err(OidcCallbackError::ServerError);
+    };
+
     let handoff_code = crate::oidc::random_urlsafe(32);
     let handoff = OidcHandoff { user_id: user.id, token_version: user.token_version };
     let stored = match serde_json::to_value(&handoff) {
@@ -538,17 +592,13 @@ async fn oidc_callback(
     };
     if let Err(e) = stored {
         tracing::error!("Failed to persist OIDC handoff: {}", e);
-        return (clear_cookie, json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")).into_response();
+        return Err(OidcCallbackError::ServerError);
     }
 
-    let Some(base) = frontend_base_url(&state) else {
-        tracing::error!("Cannot determine frontend URL: set PUBLIC_URL or a valid OIDC_REDIRECT_URI");
-        return (clear_cookie, json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")).into_response();
-    };
-
     tracing::info!(user_id = %user.id, "OIDC authentication successful");
+    let clear_cookie = [(header::SET_COOKIE, oidc_state_cookie(state, "", 0))];
     let redirect_url = format!("{}/auth/callback#code={}", base, handoff_code);
-    (clear_cookie, Redirect::to(&redirect_url)).into_response()
+    Ok((clear_cookie, Redirect::to(&redirect_url)).into_response())
 }
 
 #[utoipa::path(
@@ -606,14 +656,9 @@ async fn oidc_exchange(
 ///    `OIDC_LINK_EXISTING_BY_EMAIL=true` and the provider asserts the email
 ///    is verified, and that account is not bound to another identity.
 /// 3. Otherwise a new account is created if `OIDC_AUTO_REGISTER=true`.
-async fn resolve_oidc_user(state: &Arc<AppState>, info: &OidcUserInfo) -> Result<User, Response> {
-    let internal = || json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
-    let forbidden = || {
-        json_error(
-            StatusCode::FORBIDDEN,
-            "No account is available for this identity. Contact your administrator.",
-        )
-    };
+async fn resolve_oidc_user(state: &Arc<AppState>, info: &OidcUserInfo) -> Result<User, OidcCallbackError> {
+    let internal = || OidcCallbackError::ServerError;
+    let forbidden = || OidcCallbackError::NoAccount;
 
     let Some(issuer) = state.oidc_client.as_ref().map(|c| c.get_discovery().issuer.clone()) else {
         return Err(internal());
@@ -725,7 +770,7 @@ async fn create_new_oidc_user(
     state: &Arc<AppState>,
     info: &OidcUserInfo,
     issuer: &str,
-) -> Result<User, Response> {
+) -> Result<User, OidcCallbackError> {
     let fallback = fallback_oidc_username(issuer, &info.sub);
 
     // Prefer the provider's username when it is valid and not already taken;
@@ -741,7 +786,7 @@ async fn create_new_oidc_user(
         Ok(None) => {}
         Err(e) => {
             tracing::error!("Database error while checking OIDC username: {}", e);
-            return Err(json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"));
+            return Err(OidcCallbackError::ServerError);
         }
     }
 
@@ -764,7 +809,7 @@ async fn create_new_oidc_user(
         }
         Err(e) => {
             tracing::error!("Failed to create OIDC user: {:#}", e);
-            Err(json_error(StatusCode::FORBIDDEN, "Could not create an account for this identity"))
+            Err(OidcCallbackError::NoAccount)
         }
     }
 }

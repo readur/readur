@@ -79,7 +79,21 @@
       "tooManyAttempts": "Too many sign-in attempts. Please try again later.",
       "tooManyAttemptsRetry": "Too many sign-in attempts. Please try again in {{seconds}} seconds."
     },
-    "createAccountLink": "Don't have an account? Request one"
+    "createAccountLink": "Don't have an account? Request one",
+    "oidcCallback": {
+      "errors": {
+        "provider_error": "The identity provider did not complete the sign-in. Please try again.",
+        "invalid_state": "The sign-in request is invalid or has expired. Please try logging in again.",
+        "auth_failed": "Authentication with the identity provider failed. Please try logging in again.",
+        "no_account": "No account is available for this identity. Contact your administrator.",
+        "account_disabled": "This account is disabled or awaiting administrator approval.",
+        "server_error": "A server error occurred during sign-in. Please try again later.",
+        "unknown": "Sign-in failed. Please try logging in again.",
+        "missingCode": "No authentication code received from server.",
+        "invalidCode": "This sign-in link is invalid or has expired. Please try logging in again.",
+        "tooManyAttempts": "Too many attempts. Please wait a moment and try logging in again."
+      }
+    }
   },
   "navigation": {
     "dashboard": "Dashboard",

@@ -110,6 +110,14 @@ fn location(response: &axum::response::Response) -> String {
         .to_string()
 }
 
+/// The callback sends the browser back to the web UI with a fixed error code.
+fn assert_callback_error(response: &axum::response::Response, code: &str) {
+    assert_eq!(response.status(), StatusCode::SEE_OTHER, "expected redirect for {}", code);
+    assert_eq!(location(response), format!("http://localhost:8000/auth/callback#error={}", code));
+    let cleared = response.headers().get("set-cookie").unwrap().to_str().unwrap();
+    assert!(cleared.contains("Max-Age=0"));
+}
+
 async fn start_login(t: &OidcTestApp) -> LoginStart {
     let response = send(
         &t.app,
@@ -316,7 +324,7 @@ async fn callback_happy_path_creates_user_and_issues_single_use_code() {
         Some(&login.cookie_value),
     )
     .await;
-    assert_eq!(replay.status(), StatusCode::BAD_REQUEST);
+    assert_callback_error(&replay, "invalid_state");
 }
 
 #[tokio::test]
@@ -325,7 +333,7 @@ async fn callback_requires_matching_state_cookie() {
     let login = start_login(&t).await;
 
     let missing = callback(&t, &format!("code=c&state={}", login.state), None).await;
-    assert_eq!(missing.status(), StatusCode::BAD_REQUEST);
+    assert_callback_error(&missing, "invalid_state");
 
     let other = start_login(&t).await;
     let mismatched = callback(
@@ -334,17 +342,17 @@ async fn callback_requires_matching_state_cookie() {
         Some(&other.cookie_value),
     )
     .await;
-    assert_eq!(mismatched.status(), StatusCode::BAD_REQUEST);
+    assert_callback_error(&mismatched, "invalid_state");
 
     let no_state = callback(&t, "code=c", Some(&login.cookie_value)).await;
-    assert_eq!(no_state.status(), StatusCode::BAD_REQUEST);
+    assert_callback_error(&no_state, "invalid_state");
 
     let no_code = callback(&t, &format!("state={}", login.state), Some(&login.cookie_value)).await;
-    assert_eq!(no_code.status(), StatusCode::BAD_REQUEST);
+    assert_callback_error(&no_code, "invalid_state");
 
     // An unknown state is rejected even when cookie and query agree.
     let unknown = callback(&t, "code=c&state=not-issued", Some("not-issued")).await;
-    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    assert_callback_error(&unknown, "invalid_state");
 
     // None of the above reached the token endpoint.
     let requests = t.provider.received_requests().await.unwrap();
@@ -377,7 +385,7 @@ async fn callback_rejects_wrong_nonce() {
         Some(&login.cookie_value),
     )
     .await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_callback_error(&response, "auth_failed");
     assert!(t.state.db.get_user_by_username(&username).await.unwrap().is_none());
 }
 
@@ -397,7 +405,7 @@ async fn callback_rejects_token_response_without_valid_id_token() {
         .mount(&t.provider)
         .await;
     let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_callback_error(&response, "auth_failed");
 
     // id_token for a different audience.
     let login = start_login(&t).await;
@@ -407,7 +415,7 @@ async fn callback_rejects_token_response_without_valid_id_token() {
     )
     .await;
     let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_callback_error(&response, "auth_failed");
 }
 
 #[tokio::test]
@@ -444,7 +452,7 @@ async fn callback_does_not_link_existing_local_account_by_default() {
     .await;
 
     let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_callback_error(&response, "no_account");
 
     let after = t.state.db.get_user_by_id(local.id).await.unwrap().unwrap();
     assert!(after.oidc_subject.is_none());
@@ -476,7 +484,7 @@ async fn callback_links_verified_email_when_enabled() {
     )
     .await;
     let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_callback_error(&response, "no_account");
 
     let subject = unique("sub-");
     let login = start_login(&t).await;
@@ -493,17 +501,21 @@ async fn callback_links_verified_email_when_enabled() {
 }
 
 #[tokio::test]
-async fn callback_provider_errors_are_unauthorized() {
+async fn callback_provider_errors_redirect_with_fixed_codes() {
     let t = setup().await;
 
+    // Free text from the provider is never passed on to the web UI.
     let login = start_login(&t).await;
     let response = callback(
         &t,
-        &format!("error=access_denied&state={}", login.state),
+        &format!(
+            "error=access_denied&error_description=%3Cscript%3E&state={}",
+            login.state
+        ),
         Some(&login.cookie_value),
     )
     .await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_callback_error(&response, "provider_error");
 
     let login = start_login(&t).await;
     Mock::given(method("POST"))
@@ -512,7 +524,117 @@ async fn callback_provider_errors_are_unauthorized() {
         .mount(&t.provider)
         .await;
     let response = callback(&t, &format!("code=bad&state={}", login.state), Some(&login.cookie_value)).await;
+    assert_callback_error(&response, "auth_failed");
+}
+
+#[tokio::test]
+async fn callback_reports_disabled_accounts() {
+    let t = setup().await;
+    let subject = unique("sub-");
+    let username = unique("disabled_");
+    let user = t
+        .state
+        .db
+        .create_oidc_user(
+            CreateUser {
+                username: username.clone(),
+                email: format!("{}@example.com", username),
+                password: String::new(),
+                role: Some(UserRole::User),
+            },
+            &subject,
+            &t.provider.uri(),
+            &format!("{}@example.com", username),
+        )
+        .await
+        .unwrap();
+    t.state
+        .db
+        .update_user(user.id, None, None, None, Some(false))
+        .await
+        .unwrap();
+
+    let login = start_login(&t).await;
+    mock_token_endpoint(&t, id_token(&t, json!({ "sub": subject, "nonce": login.nonce }))).await;
+    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    assert_callback_error(&response, "account_disabled");
+}
+
+#[tokio::test]
+async fn callback_without_frontend_address_returns_json_errors() {
+    let t = setup().await;
+    let mut state = (*t.state).clone();
+    state.config.public_url = None;
+    state.config.oidc_redirect_uri = Some("not a url".to_string());
+    let app = Router::new()
+        .nest("/api/auth", readur::routes::auth::router())
+        .with_state(Arc::new(state));
+
+    let response = send(
+        &app,
+        Request::get("/api/auth/oidc/callback?error=access_denied").body(Body::empty()).unwrap(),
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(body_json(response).await["error"], "Authentication failed");
+}
+
+#[tokio::test]
+async fn accounts_stored_under_the_configured_issuer_are_migrated() {
+    // Earlier releases stored the issuer as configured, here with a trailing
+    // slash that the provider's discovery document does not have.
+    let t = setup_with(|c| c.oidc_issuer_url = c.oidc_issuer_url.as_ref().map(|u| format!("{}/", u))).await;
+    let subject = unique("sub-");
+    let username = unique("legacy_");
+    let legacy_issuer = format!("{}/", t.provider.uri());
+    let user = t
+        .state
+        .db
+        .create_oidc_user(
+            CreateUser {
+                username: username.clone(),
+                email: format!("{}@example.com", username),
+                password: String::new(),
+                role: Some(UserRole::User),
+            },
+            &subject,
+            &legacy_issuer,
+            &format!("{}@example.com", username),
+        )
+        .await
+        .unwrap();
+
+    let login = start_login(&t).await;
+    mock_token_endpoint(&t, id_token(&t, json!({ "sub": subject, "nonce": login.nonce }))).await;
+    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    assert!(location(&response).contains("#code="), "unexpected redirect {}", location(&response));
+
+    let after = t.state.db.get_user_by_id(user.id).await.unwrap().unwrap();
+    assert_eq!(after.oidc_issuer.as_deref(), Some(t.provider.uri().as_str()));
+}
+
+#[tokio::test]
+async fn client_refuses_a_discovery_document_for_another_issuer() {
+    let ctx = TestContext::new().await;
+    let provider = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/.well-known/openid-configuration"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "issuer": "https://other-issuer.example",
+            "authorization_endpoint": format!("{}/auth", provider.uri()),
+            "token_endpoint": format!("{}/token", provider.uri()),
+        })))
+        .mount(&provider)
+        .await;
+
+    let mut config = ctx.state.config.clone();
+    config.oidc_enabled = true;
+    config.oidc_client_id = Some(CLIENT_ID.to_string());
+    config.oidc_client_secret = Some(CLIENT_SECRET.to_string());
+    config.oidc_issuer_url = Some(provider.uri());
+    config.oidc_redirect_uri = Some(REDIRECT_URI.to_string());
+    let err = OidcClient::new(&config).await.expect_err("mismatched issuer must be refused");
+    assert!(err.to_string().contains("does not match"), "{}", err);
 }
 
 #[tokio::test]

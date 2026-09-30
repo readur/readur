@@ -75,6 +75,20 @@
       "oidcNotConfigured": "OIDC ist auf diesem Server nicht konfiguriert. Bitte verwenden Sie die Benutzername/Passwort-Anmeldung.",
       "oidcInitFailed": "OIDC-Anmeldung konnte nicht initialisiert werden. Bitte versuchen Sie es erneut.",
       "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten."
+    },
+    "oidcCallback": {
+      "errors": {
+        "provider_error": "Der Identitätsanbieter hat die Anmeldung nicht abgeschlossen. Bitte versuchen Sie es erneut.",
+        "invalid_state": "Die Anmeldeanfrage ist ungültig oder abgelaufen. Bitte melden Sie sich erneut an.",
+        "auth_failed": "Die Authentifizierung beim Identitätsanbieter ist fehlgeschlagen. Bitte melden Sie sich erneut an.",
+        "no_account": "Für diese Identität ist kein Konto verfügbar. Wenden Sie sich an Ihren Administrator.",
+        "account_disabled": "Dieses Konto ist deaktiviert oder wartet auf die Freigabe durch einen Administrator.",
+        "server_error": "Bei der Anmeldung ist ein Serverfehler aufgetreten. Bitte versuchen Sie es später erneut.",
+        "unknown": "Die Anmeldung ist fehlgeschlagen. Bitte melden Sie sich erneut an.",
+        "missingCode": "Vom Server wurde kein Authentifizierungscode empfangen.",
+        "invalidCode": "Dieser Anmeldelink ist ungültig oder abgelaufen. Bitte melden Sie sich erneut an.",
+        "tooManyAttempts": "Zu viele Versuche. Bitte warten Sie einen Moment und melden Sie sich erneut an."
+      }
     }
   },
   "navigation": {
