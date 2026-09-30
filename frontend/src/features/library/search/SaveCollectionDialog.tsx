@@ -193,7 +193,7 @@ export function SaveCollectionDialog({ isOpen, onOpenChange, count, labels, sugg
               isDisabled={saving}
               autoFocus
             />
-            <ColorChoices label={t('library.collection.color', 'Colour')} value={color} onChange={setColor} isDisabled={saving} />
+            <ColorChoices label={t('library.collection.color', 'Color')} value={color} onChange={setColor} isDisabled={saving} />
           </>
         ) : (
           <Select
