@@ -5,7 +5,8 @@ import { sharedLinksPublicService, type SharedDocumentMetadata } from '../../../
 import { Button, EmptyState, Pass, PassCell, Skeleton, TextField } from '../../../ui';
 import { Download, Lock, Visibility } from '../../../ui/icons';
 import { filenameFromDisposition, saveBlob } from '../download';
-import { apiErrorMessage, fileTypeCode, formatBytes, formatDateTime, httpStatus } from '../format';
+import { typeCodeOf } from '../../../lib/fileType';
+import { apiErrorMessage, formatBytes, formatDateTime, httpStatus } from '../format';
 import { DocumentViewer } from '../reading/DocumentViewer';
 import styles from './SharedDocumentPage.module.css';
 
@@ -176,7 +177,7 @@ export function SharedDocumentPage() {
             <h1 className={styles.title}>{meta.original_filename}</h1>
             <Pass aria-label={t('document.pass.label', 'Document summary')}>
               <PassCell label={t('document.shared.file', 'File')} span={2}>{meta.original_filename}</PassCell>
-              <PassCell label={t('document.pass.type', 'Type')} mono>{fileTypeCode(meta.mime_type) ?? meta.mime_type}</PassCell>
+              <PassCell label={t('document.pass.type', 'Type')} mono>{typeCodeOf(meta.mime_type, meta.original_filename)}</PassCell>
               <PassCell label={t('document.pass.size', 'Size')} mono>{formatBytes(meta.file_size)}</PassCell>
               {meta.expires_at !== undefined ? (
                 <PassCell label={t('document.shared.expires', 'Expires')} mono>

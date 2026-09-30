@@ -53,7 +53,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 /**
  * Short, fixed-width timestamp for mono cells: `2026-09-29 11:04` in the user's time zone.
- * Used by the document pass and the Library slideout (ADDED / UPDATED).
+ * Used by the document summary strip and the Library slideout (ADDED / UPDATED).
  */
 export function formatStamp(value: string | null | undefined): string {
   if (!value) return '—';
@@ -94,19 +94,6 @@ export function sourceLabel(
 
 export function formatNumber(value: number, lng?: string): string {
   return value.toLocaleString(lng);
-}
-
-/** Short, language-neutral file type code (PDF, PNG, JPEG…) or null for a generic kind. */
-export function fileTypeCode(mimeType: string | null | undefined): string | null {
-  const mime = (mimeType ?? '').toLowerCase();
-  if (mime.includes('pdf')) return 'PDF';
-  if (mime.includes('png')) return 'PNG';
-  if (mime.includes('jpeg') || mime.includes('jpg')) return 'JPEG';
-  if (mime.includes('tiff')) return 'TIFF';
-  if (mime.includes('gif')) return 'GIF';
-  if (mime.includes('webp')) return 'WEBP';
-  if (mime === 'text/plain') return 'TXT';
-  return null;
 }
 
 export type FileKind = 'pdf' | 'image' | 'text' | 'other';

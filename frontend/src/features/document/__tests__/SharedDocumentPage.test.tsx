@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -64,6 +64,21 @@ describe('shared document page', () => {
     expect(m.sharedLinksPublicService.downloadDocument).toHaveBeenCalledWith('tok-1', undefined);
     await waitFor(() => expect(click).toHaveBeenCalled());
     click.mockRestore();
+  });
+
+  it.each([
+    ['report.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'DOCX'],
+    ['scan.tiff', 'image/tiff', 'TIFF'],
+    ['notes.md', 'application/octet-stream', 'MD'],
+  ])('shows %s as a short type code, never a raw MIME type', async (name, mime, code) => {
+    m.sharedLinksPublicService.getMetadata.mockResolvedValue({ data: { ...metadata, original_filename: name, mime_type: mime } });
+    renderShared();
+    await screen.findByRole('heading', { level: 1, name });
+    const facts = screen.getByRole('group', { name: 'Document summary' });
+    const terms = within(facts).getAllByRole('term').map((el) => el.textContent);
+    const values = within(facts).getAllByRole('definition').map((el) => el.textContent);
+    expect(values[terms.indexOf('Type')]).toBe(code);
+    expect(facts).not.toHaveTextContent(mime);
   });
 
   it('loads the preview only when asked, since it counts as a view', async () => {
