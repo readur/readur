@@ -3,16 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { BoardTable, EmptyState, StatusMark, type BoardColumn } from '../../ui';
 import { fetchArrivals, POLL_MS } from './data';
-import { fileTypeLabel, formatAge, formatBytes } from './format';
-import { syncDocuments } from './litFeeders';
-import { acknowledge, isLit, useLit, useLitCount } from './litStore';
+import { fileTypeLabel, formatAge, formatBytes, formatCount } from './format';
+import { clearBulkArrivals, syncDocuments, useBulkArrivals } from './litFeeders';
+import { acknowledge, isShownLit, useAcknowledgeOnLeave, useLitCount, useShownLit } from './litStore';
 import { ChangedTag, Region, RegionError } from './Region';
 import { docName, documentState, type BoardDocument } from './types';
 import { useResource } from './useResource';
 import styles from './Board.module.css';
 
 function NameCell({ doc }: { doc: BoardDocument }) {
-  const { lit, reason } = useLit('document', doc.id);
+  const { lit, reason } = useShownLit('document', doc.id);
   return (
     <span className={styles.name}>
       {lit ? <ChangedTag reason={reason} /> : null}
@@ -28,9 +28,16 @@ export function ArrivalsPanel() {
   const { data, loading, error, reload } = useResource(fetchArrivals, POLL_MS);
   useLitCount('document'); // re-render when a row is marked or acknowledged
 
+  const bulk = useBulkArrivals();
+
   useEffect(() => {
-    if (data) syncDocuments(data.documents);
+    if (data) syncDocuments(data.documents, undefined, data.total);
   }, [data]);
+
+  // Rows (and a bulk summary) seen lit during this visit are acknowledged when the user leaves.
+  const bulkSeen = bulk > 0;
+  const rowIds = useMemo(() => (data?.documents ?? []).map((d) => d.id), [data]);
+  useAcknowledgeOnLeave('document', rowIds, bulkSeen ? clearBulkArrivals : undefined);
 
   const open = useCallback(
     (id: string) => {
@@ -99,6 +106,18 @@ export function ArrivalsPanel() {
       ) : (
         <>
           {error ? <RegionError message={t('board.arrivals.error', 'Recent documents could not be loaded.')} onRetry={reload} /> : null}
+          {bulk > 0 ? (
+            <p className={styles.bulk} role="status">
+              <ChangedTag reason="new" />
+              <span>
+                <span className={styles.bulkCount}>{formatCount(bulk, i18n.language)}</span>{' '}
+                {bulk === 1 ? t('board.arrivals.bulkOne', 'new document') : t('board.arrivals.bulkMany', 'new documents')}
+              </span>
+              <Link className={styles.link} to="/documents?sort=created_at&order=desc" onClick={clearBulkArrivals}>
+                {t('board.arrivals.bulkOpen', 'Open in Library, newest first')}
+              </Link>
+            </p>
+          ) : null}
           <BoardTable
             aria-label={title}
             density="compact"
@@ -106,7 +125,7 @@ export function ArrivalsPanel() {
             rows={data?.documents ?? []}
             getRowId={(d) => d.id}
             isLoading={loading}
-            isRowLit={(d) => isLit('document', d.id)}
+            isRowLit={(d) => isShownLit('document', d.id)}
             onRowAction={open}
           />
         </>

@@ -3,7 +3,7 @@
  * since the user last looked at them. Entries survive reloads via localStorage and are removed
  * once acknowledged. Components read it through `useLit` / `useLitCount`.
  */
-import { useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 
 export type LitKind = 'document' | 'source' | 'attention';
 export type LitReason = 'new' | 'changed' | 'failed';
@@ -15,6 +15,11 @@ export interface LitState {
 
 export const LIT_STORAGE_KEY = 'readur.lit.v1';
 export const LIT_CAP = 2000;
+/**
+ * How many entries of one kind are shown lit at once: the newest ones. Older entries stay stored
+ * (and come back once newer ones are seen), so a bulk import can never light hundreds of rows.
+ */
+export const LIT_SHOWN_CAP = 25;
 
 const KINDS: readonly string[] = ['document', 'source', 'attention'];
 const REASONS: readonly string[] = ['new', 'changed', 'failed'];
@@ -57,6 +62,12 @@ export interface LitStore {
   isLit(kind: LitKind, id: string): boolean;
   reasonOf(kind: LitKind, id: string): LitReason | undefined;
   count(kind?: LitKind): number;
+  /** Lit and among the newest {@link LIT_SHOWN_CAP} entries of its kind. */
+  isShown(kind: LitKind, id: string): boolean;
+  /** The reason of a shown entry; undefined when not lit or beyond the shown cap. */
+  shownReason(kind: LitKind, id: string): LitReason | undefined;
+  /** Number of shown entries of one kind (at most {@link LIT_SHOWN_CAP}). */
+  shownCount(kind: LitKind): number;
   subscribe(listener: () => void): () => void;
   /** Writes any pending change to storage now (writes are otherwise batched per tick). */
   flush(): void;
@@ -66,6 +77,8 @@ export interface LitStore {
 export function createLitStore(): LitStore {
   // Insertion order doubles as age order: the first key is the oldest entry.
   let entries: Map<string, Entry> | null = null;
+  /** Keys of the newest entries per kind; rebuilt lazily after any change. */
+  let shown: Map<LitKind, Set<string>> | null = null;
   const listeners = new Set<() => void>();
 
   const trim = (map: Map<string, Entry>) => {
@@ -115,7 +128,27 @@ export function createLitStore(): LitStore {
     if (entries) persist(entries);
   };
 
+  const shownOf = (kind: LitKind): Set<string> => {
+    if (!shown) {
+      const next = new Map<LitKind, Set<string>>();
+      // Walk newest first so each kind keeps its newest entries.
+      const all = Array.from(load().entries());
+      for (let i = all.length - 1; i >= 0; i -= 1) {
+        const [key, e] = all[i];
+        let set = next.get(e.kind);
+        if (!set) {
+          set = new Set();
+          next.set(e.kind, set);
+        }
+        if (set.size < LIT_SHOWN_CAP) set.add(key);
+      }
+      shown = next;
+    }
+    return shown.get(kind) ?? new Set();
+  };
+
   const commit = (_map: Map<string, Entry>) => {
+    shown = null;
     if (!dirty) {
       dirty = true;
       queueMicrotask(flush);
@@ -129,6 +162,7 @@ export function createLitStore(): LitStore {
     if (e.storageArea && e.storageArea !== getStorage()) return;
     dirty = false;
     entries = null;
+    shown = null;
     listeners.forEach((l) => l());
   };
 
@@ -172,6 +206,16 @@ export function createLitStore(): LitStore {
       });
       return n;
     },
+    isShown(kind, id) {
+      return shownOf(kind).has(keyOf(kind, id));
+    },
+    shownReason(kind, id) {
+      const key = keyOf(kind, id);
+      return shownOf(kind).has(key) ? load().get(key)?.reason : undefined;
+    },
+    shownCount(kind) {
+      return shownOf(kind).size;
+    },
     subscribe(listener) {
       if (listeners.size === 0 && typeof window !== 'undefined') window.addEventListener('storage', onStorage);
       listeners.add(listener);
@@ -191,6 +235,10 @@ export const markLit = (kind: LitKind, id: string, reason: LitReason): void =>
 export const acknowledge = (kind: LitKind, id: string): void => store.acknowledge(kind, id);
 export const acknowledgeAll = (kind?: LitKind): void => store.acknowledgeAll(kind);
 export const isLit = (kind: LitKind, id: string): boolean => store.isLit(kind, id);
+/** Why an entry is lit (undefined when it is not). */
+export const litReason = (kind: LitKind, id: string): LitReason | undefined => store.reasonOf(kind, id);
+/** Whether a row should be drawn lit: marked, and among the newest entries of its kind. */
+export const isShownLit = (kind: LitKind, id: string): boolean => store.isShown(kind, id);
 /** Writes pending changes to localStorage immediately. */
 export const flushLit = (): void => store.flush();
 
@@ -211,4 +259,65 @@ export function useLitCount(kind?: LitKind): number {
     () => store.count(kind),
     () => 0,
   );
+}
+
+/** Like `useLit`, but only for entries within the shown cap: what a row should draw. */
+export function useShownLit(kind: LitKind, id: string): LitState {
+  const reason = useSyncExternalStore(
+    store.subscribe,
+    () => store.shownReason(kind, id),
+    () => undefined,
+  );
+  return useMemo(() => (reason ? { lit: true, reason } : { lit: false }), [reason]);
+}
+
+/** Number of rows of one kind currently drawn lit (at most LIT_SHOWN_CAP). */
+export function useShownLitCount(kind: LitKind): number {
+  return useSyncExternalStore(
+    store.subscribe,
+    () => store.shownCount(kind),
+    () => 0,
+  );
+}
+
+/**
+ * Acknowledge-on-leave for a board. Every row in `ids` that is drawn lit while the board is on
+ * screen is remembered, and all of them are acknowledged when the board unmounts (the user
+ * leaves the page) or the page is hidden. A lit row therefore stays lit for the whole visit in
+ * which it is first seen, and is clear on the next one.
+ */
+export function useAcknowledgeOnLeave(kind: LitKind, ids: readonly string[], onLeave?: () => void): void {
+  const seen = useRef(new Set<string>());
+  const leave = useRef(onLeave);
+  useEffect(() => {
+    leave.current = onLeave;
+  }, [onLeave]);
+  const version = useLitCount(kind);
+  const idsKey = ids.join('\u0000');
+
+  useEffect(() => {
+    for (const id of idsKey ? idsKey.split('\u0000') : []) {
+      if (store.isShown(kind, id)) seen.current.add(id);
+    }
+  }, [kind, idsKey, version]);
+
+  const generation = useRef(0);
+  useEffect(() => {
+    const current = ++generation.current;
+    const ackSeen = () => {
+      seen.current.forEach((id) => store.acknowledge(kind, id));
+      seen.current.clear();
+      leave.current?.();
+      store.flush();
+    };
+    window.addEventListener('pagehide', ackSeen);
+    return () => {
+      window.removeEventListener('pagehide', ackSeen);
+      // Deferred by a microtask: React's development double-mount runs this effect again at
+      // once (a new generation), which cancels the acknowledgement; a real unmount lets it run.
+      queueMicrotask(() => {
+        if (generation.current === current) ackSeen();
+      });
+    };
+  }, [kind]);
 }

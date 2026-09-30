@@ -259,4 +259,32 @@ describe('litStore', () => {
     });
     expect(lit.isLit('document', 'a')).toBe(true);
   });
+  it('shows only the newest LIT_SHOWN_CAP entries of each kind, independently per kind', async () => {
+    const lit = await loadModule();
+    for (let i = 0; i < 30; i += 1) lit.markLit('document', `d${i}`, 'new');
+    lit.markLit('attention', 'a1', 'failed');
+    const docs = renderHook(() => lit.useShownLitCount('document'));
+    const attention = renderHook(() => lit.useShownLitCount('attention'));
+    expect(docs.result.current).toBe(lit.LIT_SHOWN_CAP);
+    expect(attention.result.current).toBe(1);
+    expect(lit.isShownLit('document', 'd4')).toBe(false);
+    expect(lit.isShownLit('document', 'd5')).toBe(true);
+    // Stored entries beyond the cap are kept, and surface once newer ones are seen.
+    expect(lit.isLit('document', 'd4')).toBe(true);
+    act(() => lit.acknowledge('document', 'd29'));
+    expect(lit.isShownLit('document', 'd4')).toBe(true);
+    expect(docs.result.current).toBe(lit.LIT_SHOWN_CAP);
+  });
+
+  it('useShownLit reports the reason only for shown entries', async () => {
+    const lit = await loadModule();
+    lit.markLit('document', 'old', 'changed');
+    const { result } = renderHook(() => lit.useShownLit('document', 'old'));
+    expect(result.current).toEqual({ lit: true, reason: 'changed' });
+    act(() => {
+      for (let i = 0; i < lit.LIT_SHOWN_CAP; i += 1) lit.markLit('document', `n${i}`, 'new');
+    });
+    expect(result.current).toEqual({ lit: false });
+    expect(lit.litReason('document', 'old')).toBe('changed');
+  });
 });

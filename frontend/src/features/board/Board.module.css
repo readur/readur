@@ -22,8 +22,21 @@
   min-width: 0;
 }
 
-.totals {
+.strip {
   grid-column: 1 / -1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Segments and cells sit on the line colour with 1px gaps: the gaps are the hairlines. */
+.stripInner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--line);
 }
 
 @media (max-width: 899px) {
@@ -203,16 +216,125 @@
   padding: var(--s-5) var(--s-3);
 }
 
-/* Processing */
+/* Pass strip segments */
 
-.processingHead {
+.segment {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
+  flex: 1 1 auto;
+  gap: 1px;
+  min-width: 0;
+  background: var(--line);
+}
+
+.segmentHead {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  min-width: 96px;
+  padding: var(--s-2) var(--s-3);
+  background: var(--surface);
+}
+
+.segmentBody {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: var(--s-2) var(--s-3);
+  background: var(--surface);
+}
+
+.segmentBody .error {
+  border-bottom: 0;
+  padding: var(--s-1) 0;
+  background: transparent;
+}
+
+.figuresWrap {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.figures {
+  display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
-  padding: var(--s-3);
-  border-top: 1px solid var(--line);
+  gap: 1px;
+  margin: 0;
+  min-width: 0;
+  background: var(--line);
+}
+
+.figure {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--s-1);
+  min-width: 88px;
+  padding: var(--s-2) var(--s-3);
+  background: var(--surface);
+}
+
+.figureLabel {
+  margin: 0;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--fg-meta);
+}
+
+.figureValue {
+  margin: 0;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-display);
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+/* The one number the strip leads with. */
+.figureLead .figureValue {
+  font-size: var(--fs-2xl);
+}
+
+.figurePlain {
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+}
+
+@media (max-width: 599px) {
+  .segment {
+    flex-direction: column;
+    flex-basis: 100%;
+  }
+
+  .segmentHead {
+    min-width: 0;
+  }
+}
+
+/* Bulk arrivals summary */
+
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-md);
+  color: var(--fg);
+}
+
+.bulkCount {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
 }
 
 .ocrState {

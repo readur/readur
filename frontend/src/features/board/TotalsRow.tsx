@@ -1,12 +1,13 @@
 import { useTranslation } from 'react-i18next';
-import { Pass, PassCell, Skeleton } from '../../ui';
+import { Skeleton } from '../../ui';
 import { fetchLabelCount, fetchTotals } from './data';
+import { Figure, Figures } from './Figures';
 import { formatBytes, formatCount } from './format';
 import { Region, RegionError } from './Region';
 import { useResource } from './useResource';
 import styles from './Board.module.css';
 
-/** Library totals: documents, storage, share indexed, labels. */
+/** Library totals (documents, storage, share indexed, labels) as a segment of the pass strip. */
 export function TotalsRow() {
   const { t, i18n } = useTranslation();
   const totals = useResource(fetchTotals);
@@ -17,22 +18,24 @@ export function TotalsRow() {
   const labelCount = labels.data;
 
   return (
-    <Region className={styles.totals} title={title}>
+    <Region variant="segment" title={title}>
       {totals.error && !d ? (
-        <RegionError message={t('board.totals.error', 'Library totals could not be loaded.')} onRetry={totals.reload} />
+        <div className={styles.segmentBody}>
+          <RegionError message={t('board.totals.error', 'Library totals could not be loaded.')} onRetry={totals.reload} />
+        </div>
       ) : !d ? (
-        <div className={styles.body}>
+        <div className={styles.segmentBody}>
           <Skeleton lines={1} label={t('board.loading', 'Loading')} />
         </div>
       ) : (
-        <Pass aria-label={title}>
-          <PassCell label={t('board.totals.documents', 'Documents')} mono>{formatCount(d.documents, i18n.language)}</PassCell>
-          <PassCell label={t('board.totals.storage', 'Storage')} mono>{formatBytes(d.storageBytes, i18n.language)}</PassCell>
-          <PassCell label={t('board.totals.indexed', 'Indexed')} mono>{`${indexed}%`}</PassCell>
-          <PassCell label={t('board.totals.labels', 'Labels')} mono>
+        <Figures aria-label={title}>
+          <Figure label={t('board.totals.documents', 'Documents')}>{formatCount(d.documents, i18n.language)}</Figure>
+          <Figure label={t('board.totals.storage', 'Storage')}>{formatBytes(d.storageBytes, i18n.language)}</Figure>
+          <Figure label={t('board.totals.indexed', 'Indexed')}>{`${indexed}%`}</Figure>
+          <Figure label={t('board.totals.labels', 'Labels')}>
             {labelCount === null || labelCount === undefined ? '—' : formatCount(labelCount, i18n.language)}
-          </PassCell>
-        </Pass>
+          </Figure>
+        </Figures>
       )}
     </Region>
   );

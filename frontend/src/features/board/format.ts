@@ -1,3 +1,5 @@
+import { typeCodeOf } from '../document/fileType';
+
 /** Locale-aware formatting helpers for the Board. All results are short, for mono cells. */
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -44,12 +46,9 @@ export function formatMinutes(minutes?: number | null): string {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
-/** Upper-case type label from a file name, falling back to the MIME subtype. */
+/** Upper-case type code (PDF, DOCX, PNG…), the same helper the Library and document page use. */
 export function fileTypeLabel(name?: string, mime?: string): string {
-  const ext = name && name.includes('.') ? name.split('.').pop() : undefined;
-  if (ext && ext.length <= 5) return ext.toUpperCase();
-  const sub = mime?.split('/')[1];
-  return sub ? sub.split(/[+;.-]/)[0].toUpperCase().slice(0, 5) : '—';
+  return typeCodeOf(mime, name);
 }
 
 export function humanizeReason(reason?: string | null): string {

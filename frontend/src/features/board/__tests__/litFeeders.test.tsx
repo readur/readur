@@ -12,7 +12,8 @@ vi.mock('../../../services/api', () => ({
 
 import { NotificationProvider, useNotifications } from '../../../contexts/NotificationContext';
 import { resetDocumentBaseline, syncDocuments, useLitFeeders } from '../litFeeders';
-import { isLit, useLit } from '../litStore';
+import { BULK_ARRIVALS_KEY, BULK_THRESHOLD } from '../litFeeders';
+import { isLit, litReason, useLit } from '../litStore';
 import { doc, resetBoardState } from './boardTestUtils';
 
 type AddFn = ReturnType<typeof useNotifications>['addNotification'];
@@ -140,5 +141,41 @@ describe('syncDocuments', () => {
     syncDocuments([doc('fresh', { created_at: new Date(now).toISOString() }), doc('stale', { created_at: new Date(now - 3600_000).toISOString() })], now - 1000);
     expect(isLit('document', 'fresh')).toBe(true);
     expect(isLit('document', 'stale')).toBe(false);
+  });
+  it('keeps an unseen arrival NEW when its OCR then finishes, but a failure turns it CHANGED', () => {
+    const now = Date.now();
+    syncDocuments([doc('old', { created_at: new Date(now - 3600_000).toISOString() })]);
+    syncDocuments([
+      doc('a', { created_at: new Date(now).toISOString(), ocr_status: 'processing' }),
+      doc('b', { created_at: new Date(now).toISOString(), ocr_status: 'processing' }),
+    ]);
+    syncDocuments([
+      doc('a', { created_at: new Date(now).toISOString(), ocr_status: 'completed' }),
+      doc('b', { created_at: new Date(now).toISOString(), ocr_status: 'failed' }),
+    ]);
+    expect(litReason('document', 'a')).toBe('new');
+    expect(litReason('document', 'b')).toBe('failed');
+  });
+
+  it(`raises one summary instead of lighting rows when more than ${BULK_THRESHOLD} documents arrive at once`, () => {
+    const now = Date.now();
+    syncDocuments([doc('old', { created_at: new Date(now - 3600_000).toISOString() })], undefined, 1);
+    const batch = Array.from({ length: 10 }, (_, i) =>
+      doc(`n${i}`, { created_at: new Date(now - i * 1000).toISOString(), ocr_status: 'processing' }),
+    );
+    syncDocuments(batch, undefined, 1 + 40);
+    batch.forEach((d) => expect(isLit('document', d.id)).toBe(false));
+    expect(window.localStorage.getItem(BULK_ARRIVALS_KEY)).toBe('40');
+    // Their OCR finishing later does not light them one by one either.
+    syncDocuments(batch.map((d) => ({ ...d, ocr_status: 'completed' })), undefined, 41);
+    batch.forEach((d) => expect(isLit('document', d.id)).toBe(false));
+  });
+
+  it(`lights a batch of ${BULK_THRESHOLD} or fewer as individual NEW rows`, () => {
+    const now = Date.now();
+    syncDocuments([doc('old', { created_at: new Date(now - 3600_000).toISOString() })], undefined, 1);
+    syncDocuments([doc('n1', { created_at: new Date(now).toISOString() })], undefined, 1 + BULK_THRESHOLD);
+    expect(litReason('document', 'n1')).toBe('new');
+    expect(window.localStorage.getItem(BULK_ARRIVALS_KEY)).toBeNull();
   });
 });

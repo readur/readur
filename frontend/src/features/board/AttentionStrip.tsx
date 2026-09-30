@@ -5,14 +5,16 @@ import { BoardTable, Button, StatusMark, useToast, type BoardColumn } from '../.
 import { documentService, sourcesService } from '../../services/api';
 import { loadDismissed, saveDismissed } from './dismissed';
 import { formatAge, humanizeReason } from './format';
-import { acknowledge, markLit } from './litStore';
+import { DOCUMENT_EVENTS_KEY, flagNewFailures } from '../intake/shared/seenEvents';
+import type { FailedOcrPage } from './data';
+import { acknowledge, isShownLit, useAcknowledgeOnLeave, useLitCount, useShownLit } from './litStore';
 import { ChangedTag, Region, RegionError } from './Region';
 import { docName, type AttentionItem, type BoardSource, type FailedOcrDocument } from './types';
 import type { Resource } from './useResource';
 import styles from './Board.module.css';
 
 export interface AttentionStripProps {
-  failed: Resource<FailedOcrDocument[]>;
+  failed: Resource<FailedOcrPage>;
   sources: Resource<BoardSource[]>;
 }
 
@@ -43,6 +45,16 @@ export function buildAttentionItems(failed: FailedOcrDocument[], sources: BoardS
   return [...bad, ...docs];
 }
 
+function AttentionName({ item }: { item: AttentionItem }) {
+  const { lit, reason } = useShownLit('attention', item.key);
+  return (
+    <span className={styles.name}>
+      {lit ? <ChangedTag reason={reason} /> : null}
+      <span className={styles.nameText}>{item.name}</span>
+    </span>
+  );
+}
+
 /** Failed OCR documents and connections in error. Renders nothing when there is nothing to do. */
 export function AttentionStrip({ failed, sources }: AttentionStripProps) {
   const { t, i18n } = useTranslation();
@@ -51,14 +63,25 @@ export function AttentionStrip({ failed, sources }: AttentionStripProps) {
   const [dismissed, setDismissed] = useState<string[]>(loadDismissed);
 
   const items = useMemo(
-    () => buildAttentionItems(failed.data ?? [], sources.data ?? []).filter((i) => !dismissed.includes(i.key)),
+    () => buildAttentionItems(failed.data?.documents ?? [], sources.data ?? []).filter((i) => !dismissed.includes(i.key)),
     [failed.data, sources.data, dismissed],
   );
 
-  // Every listed item is unseen until dismissed.
+  useLitCount('attention'); // re-render when a row is marked or acknowledged
+  // Each failure occurrence is flagged once, in the same event log Intake › Needs attention uses,
+  // so it is lit on both surfaces until seen on either, and never re-lit after that.
   useEffect(() => {
-    items.forEach((i) => markLit('attention', i.key, 'failed'));
+    flagNewFailures(
+      DOCUMENT_EVENTS_KEY,
+      'attention',
+      items.map((i) => ({ id: i.key, eventKey: i.key })),
+    );
   }, [items]);
+  // Rows seen lit during this visit are acknowledged when the user leaves the Board.
+  useAcknowledgeOnLeave(
+    'attention',
+    items.map((i) => i.key),
+  );
 
   const dismiss = useCallback((key: string) => {
     acknowledge('attention', key);
@@ -108,12 +131,7 @@ export function AttentionStrip({ failed, sources }: AttentionStripProps) {
         id: 'name',
         label: t('board.col.name', 'Name'),
         isRowHeader: true,
-        render: (i) => (
-          <span className={styles.name}>
-            <ChangedTag reason="new" />
-            <span className={styles.nameText}>{i.name}</span>
-          </span>
-        ),
+        render: (i) => <AttentionName item={i} />,
       },
       {
         id: 'status',
@@ -179,7 +197,7 @@ export function AttentionStrip({ failed, sources }: AttentionStripProps) {
           columns={columns}
           rows={items}
           getRowId={(i) => i.key}
-          isRowLit={() => true}
+          isRowLit={(i) => isShownLit('attention', i.key)}
           onRowAction={open}
         />
       ) : null}

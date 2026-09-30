@@ -237,7 +237,8 @@ describe('Board', () => {
       expect(rows).toHaveLength(2);
       rows.forEach((r) => {
         expect(r).toHaveAttribute('data-changed', 'true');
-        expect(within(r).getByText('New')).toBeInTheDocument();
+        // A failure is a change to something already known: CHANGED, beside the ▲ FAILED / ERROR mark.
+        expect(within(r).getByText('Changed')).toBeInTheDocument();
       });
       const docRow = within(strip).getByRole('row', { name: /scan\.tiff/ });
       expect(within(docRow).getByText('FAILED')).toBeInTheDocument();
@@ -394,12 +395,16 @@ describe('Board', () => {
 
   describe('Processing', () => {
     it('shows the queue values', async () => {
+      // FAILED counts failed documents (the Needs attention list), not the queue's failed jobs.
+      m.documentService.getFailedOcrDocuments.mockResolvedValue({
+        data: { documents: [{ id: 'f1', filename: 'scan.tiff', failure_reason: 'x' }], pagination: { total: 12 } },
+      });
       await renderBoard();
       const group = await within(region('Processing')).findByRole('group', { name: 'Processing' });
       const value = (label: string) => within(group).getByText(label).closest('div')?.querySelector('dd')?.textContent;
       expect(value('Pending')).toBe('7');
       expect(value('Processing')).toBe('2');
-      expect(value('Failed')).toBe('3');
+      await waitFor(() => expect(value('Failed')).toBe('12'));
       expect(value('Done today')).toBe('41');
       expect(value('Oldest wait')).toBe('2h 10m');
       expect(within(region('Processing')).getByText('HEALTHY')).toBeInTheDocument();
