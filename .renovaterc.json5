@@ -1,0 +1,56 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "config:recommended",
+    "docker:enableMajor",
+    "helpers:pinGitHubActionDigestsToSemver",
+    "abandonments:recommended",
+    "github>home-operations/renovate-config:annotated.json5",
+    "github>home-operations/renovate-config:groups.json5",
+    "github>home-operations/renovate-config:labels.json5",
+    "github>home-operations/renovate-config:semanticCommits.json5",
+    ":automergePr",
+    ":configMigration",
+    ":dependencyDashboard",
+    ":disableRateLimiting",
+  ],
+  dependencyDashboardTitle: "Renovate Dashboard 🤖",
+  minimumReleaseAgeBehaviour: "timestamp-optional",
+  labels: ["dependencies", "renovate"],
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ["before 3am on the first day of the month"],
+    commitMessageExtra: "({{manager}})",
+    additionalBranchPrefix: "{{manager}}-",
+  },
+  packageRules: [
+    {
+      description: "NPM Bump Range Strategy",
+      matchManagers: ["npm"],
+      rangeStrategy: "bump",
+    },
+    {
+      description: "Auto-merge non-major updates once every CI check passes, after a 3-day release cooldown",
+      matchUpdateTypes: ["minor", "patch", "digest", "lockFileMaintenance"],
+      automerge: true,
+      minimumReleaseAge: "3 days",
+    },
+    // Keep below the automerge rule so this one wins for 0.x minors.
+    {
+      description: "zer0ver: 0.x minors can break at any time, don't automerge them",
+      matchUpdateTypes: ["minor"],
+      matchCurrentVersion: "/^v?0\\./",
+      automerge: false,
+    },
+  ],
+  customManagers: [
+    {
+      customType: "regex",
+      description: "Bump the pinned ocrmypdf pip install in GitHub workflows",
+      managerFilePatterns: ["/^\\.github/workflows/.*\\.ya?ml$/"],
+      matchStrings: ["ocrmypdf==(?<currentValue>[0-9][0-9.]*)"],
+      depNameTemplate: "ocrmypdf",
+      datasourceTemplate: "pypi",
+    },
+  ],
+}

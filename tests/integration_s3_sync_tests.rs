@@ -29,6 +29,7 @@ fn create_test_aws_s3_config() -> S3SourceConfig {
         secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string(),
         prefix: Some("documents/".to_string()),
         endpoint_url: None, // Use AWS S3
+        force_path_style: None,
         watch_folders: vec!["documents/".to_string()],
         auto_sync: true,
         sync_interval_minutes: 120,
@@ -45,6 +46,7 @@ fn create_test_minio_config() -> S3SourceConfig {
         secret_access_key: "minioadmin".to_string(),
         prefix: Some("".to_string()),
         endpoint_url: Some("https://minio.example.com".to_string()),
+        force_path_style: None,
         watch_folders: vec!["".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,
@@ -364,12 +366,13 @@ fn test_s3_error_handling_scenarios() {
         secret_access_key: "test".to_string(),
         prefix: Some("".to_string()),
         endpoint_url: None,
+        force_path_style: None,
         watch_folders: vec!["".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,
         file_extensions: vec![".pdf".to_string()],
     };
-    
+
     assert!(invalid_bucket_config.bucket_name.contains('_'));
     assert!(invalid_bucket_config.bucket_name.contains('!'));
     
@@ -381,12 +384,13 @@ fn test_s3_error_handling_scenarios() {
         secret_access_key: "".to_string(), // Empty
         prefix: Some("".to_string()),
         endpoint_url: None,
+        force_path_style: None,
         watch_folders: vec!["".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,
         file_extensions: vec![".pdf".to_string()],
     };
-    
+
     assert!(empty_creds_config.access_key_id.is_empty());
     assert!(empty_creds_config.secret_access_key.is_empty());
     
@@ -398,6 +402,7 @@ fn test_s3_error_handling_scenarios() {
         secret_access_key: "test".to_string(),
         prefix: Some("".to_string()),
         endpoint_url: None,
+        force_path_style: None,
         watch_folders: vec!["".to_string()],
         auto_sync: true,
         sync_interval_minutes: 60,

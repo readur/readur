@@ -413,9 +413,9 @@ impl FileService {
             return self.read_file(&thumbnail_path.to_string_lossy()).await;
         }
 
-        // Resolve file path and generate thumbnail
-        let resolved_path = self.resolve_file_path(file_path).await?;
-        let thumbnail_data = self.generate_thumbnail(&resolved_path, filename).await?;
+        // generate_thumbnail reads via read_file, which handles both s3://
+        // paths and legacy local path resolution — no pre-resolution needed.
+        let thumbnail_data = self.generate_thumbnail(file_path, filename).await?;
         
         // Save thumbnail to cache
         fs::write(&thumbnail_path, &thumbnail_data).await?;

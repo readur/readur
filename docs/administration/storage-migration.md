@@ -59,7 +59,7 @@ export S3_SECRET_ACCESS_KEY="your-secret-key"
 export S3_REGION="us-east-1"
 
 # Optional: Custom endpoint for S3-compatible services
-export S3_ENDPOINT="https://s3.amazonaws.com"
+export S3_ENDPOINT_URL="https://s3.amazonaws.com"
 ```
 
 ### Step 2: Test with Dry Run
@@ -136,7 +136,7 @@ Update your deployment configuration to use the new storage backend:
 ```yaml
 # docker-compose.yml
 environment:
-  - STORAGE_BACKEND=s3
+  - STORAGE_BACKEND=s3  # equivalent to S3_ENABLED=true
   - S3_BUCKET_NAME=your-readur-bucket
   - S3_ACCESS_KEY_ID=your-access-key
   - S3_SECRET_ACCESS_KEY=your-secret-key

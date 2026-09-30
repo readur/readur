@@ -82,7 +82,7 @@ S3_SECRET_ACCESS_KEY=your-secret-access-key
 S3_REGION=us-east-1
 
 # Optional: For S3-compatible services (MinIO, Wasabi, etc.)
-S3_ENDPOINT=https://s3-compatible-endpoint.com
+S3_ENDPOINT_URL=https://s3-compatible-endpoint.com
 ```
 
 ### Configuration File Example (.env)
@@ -103,7 +103,7 @@ S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 S3_REGION=us-west-2
 
 # Optional S3 endpoint for compatible services
-# S3_ENDPOINT=https://minio.example.com
+# S3_ENDPOINT_URL=https://minio.example.com
 
 # Upload Configuration
 UPLOAD_PATH=./temp_uploads
@@ -119,8 +119,10 @@ S3_BUCKET_NAME=readur-bucket
 S3_ACCESS_KEY_ID=minioadmin
 S3_SECRET_ACCESS_KEY=minioadmin
 S3_REGION=us-east-1
-S3_ENDPOINT=http://localhost:9000
+S3_ENDPOINT_URL=http://localhost:9000
 ```
+
+Path-style addressing is auto-detected when a custom endpoint is set; set `S3_FORCE_PATH_STYLE=true` only if you need to force it explicitly.
 
 #### Wasabi
 ```bash
@@ -129,7 +131,7 @@ S3_BUCKET_NAME=readur-bucket
 S3_ACCESS_KEY_ID=your-wasabi-key
 S3_SECRET_ACCESS_KEY=your-wasabi-secret
 S3_REGION=us-east-1
-S3_ENDPOINT=https://s3.wasabisys.com
+S3_ENDPOINT_URL=https://s3.wasabisys.com
 ```
 
 #### Backblaze B2
@@ -139,7 +141,7 @@ S3_BUCKET_NAME=readur-bucket
 S3_ACCESS_KEY_ID=your-b2-key-id
 S3_SECRET_ACCESS_KEY=your-b2-application-key
 S3_REGION=us-west-002
-S3_ENDPOINT=https://s3.us-west-002.backblazeb2.com
+S3_ENDPOINT_URL=https://s3.us-west-002.backblazeb2.com
 ```
 
 ## Migration from Local Storage

@@ -1584,8 +1584,35 @@ impl EnhancedOcrService {
 
     /// Extract text from any supported file type
     pub async fn extract_text(&self, file_path: &str, mime_type: &str, settings: &Settings, progress_callback: Option<ProgressCallback>) -> Result<OcrResult> {
-        // Resolve the actual file path
+        // Files in a remote storage backend (s3://...) must be downloaded to a
+        // local temp file before the extractors (which read the local FS) run.
+        if file_path.starts_with("s3://") {
+            let data = self.file_service.read_file(file_path).await?;
+            let extension = std::path::Path::new(file_path)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("bin");
+            tokio::fs::create_dir_all(&self.temp_dir).await?;
+            let temp_path = format!(
+                "{}/ocr_download_{}.{}",
+                self.temp_dir,
+                uuid::Uuid::new_v4(),
+                extension
+            );
+            tokio::fs::write(&temp_path, &data).await?;
+            let _cleanup = FileCleanupGuard::new(&temp_path);
+            return self
+                .extract_text_from_local_path(&temp_path, mime_type, settings, progress_callback)
+                .await;
+        }
+
         let resolved_path = self.resolve_file_path(file_path).await?;
+        self.extract_text_from_local_path(&resolved_path, mime_type, settings, progress_callback)
+            .await
+    }
+
+    /// Run the type-specific extractors against a path on the local filesystem.
+    async fn extract_text_from_local_path(&self, resolved_path: &str, mime_type: &str, settings: &Settings, progress_callback: Option<ProgressCallback>) -> Result<OcrResult> {
         match mime_type {
             "application/pdf" => {
                 #[cfg(feature = "ocr")]

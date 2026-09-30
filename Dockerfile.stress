@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for WebDAV Stress Testing
-FROM rust:1.95-alpine AS builder
+FROM rust:1.98-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -25,7 +25,7 @@ COPY scripts ./scripts
 RUN cargo build --release --features stress-testing
 
 # Runtime stage
-FROM alpine:3.23
+FROM alpine:3.24
 
 # Install runtime dependencies
 RUN apk add --no-cache \

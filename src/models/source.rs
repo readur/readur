@@ -187,6 +187,10 @@ pub struct S3SourceConfig {
     pub access_key_id: String,
     pub secret_access_key: String,
     pub endpoint_url: Option<String>, // For S3-compatible services
+    /// S3 addressing style: Some(true) = force path-style (MinIO/RustFS),
+    /// Some(false) = force virtual-hosted, None = auto-detect.
+    #[serde(default)]
+    pub force_path_style: Option<bool>,
     pub prefix: Option<String>,       // Optional path prefix
     pub watch_folders: Vec<String>,   // S3 prefixes to monitor
     pub file_extensions: Vec<String>,

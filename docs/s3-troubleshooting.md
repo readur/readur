@@ -243,8 +243,8 @@ aws s3 cp /tmp/large-test s3://your-bucket-name/test-large
 1. **MinIO configuration:**
    ```bash
    # Correct endpoint format
-   S3_ENDPOINT=http://minio.local:9000  # No https:// for local
-   S3_ENDPOINT=https://minio.example.com  # With SSL
+   S3_ENDPOINT_URL=http://minio.local:9000  # No https:// for local
+   S3_ENDPOINT_URL=https://minio.example.com  # With SSL
    
    # Path-style addressing
    S3_FORCE_PATH_STYLE=true
@@ -252,7 +252,7 @@ aws s3 cp /tmp/large-test s3://your-bucket-name/test-large
 
 **Wasabi configuration:** Configure the correct endpoint and region for Wasabi storage.
    ```bash
-   S3_ENDPOINT=https://s3.wasabisys.com
+   S3_ENDPOINT_URL=https://s3.wasabisys.com
    S3_REGION=us-east-1  # Or your Wasabi region
    ```
 
@@ -351,7 +351,7 @@ aws cloudwatch get-metric-statistics \
      --accelerate-configuration Status=Enabled
    
    # Update endpoint
-   S3_ENDPOINT=https://your-bucket.s3-accelerate.amazonaws.com
+   S3_ENDPOINT_URL=https://your-bucket.s3-accelerate.amazonaws.com
    ```
 
 **Implement caching:** Add caching layers to reduce repeated S3 requests and improve response times.

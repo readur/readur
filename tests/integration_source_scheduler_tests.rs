@@ -681,6 +681,7 @@ async fn test_config_validation() {
         secret_access_key: "secret".to_string(),
         prefix: Some("docs/".to_string()),
         endpoint_url: Some("https://minio.example.com".to_string()),
+        force_path_style: None,
         watch_folders: vec!["docs/".to_string()],
         auto_sync: true,
         sync_interval_minutes: 120,

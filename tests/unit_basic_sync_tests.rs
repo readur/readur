@@ -74,6 +74,7 @@ fn test_s3_config_serialization() {
         access_key_id: "AKIATEST".to_string(),
         secret_access_key: "secrettest".to_string(),
         endpoint_url: Some("https://minio.example.com".to_string()),
+        force_path_style: None,
         prefix: Some("documents/".to_string()),
         watch_folders: vec!["documents/".to_string()],
         file_extensions: vec![".pdf".to_string(), ".docx".to_string()],
@@ -212,13 +213,14 @@ fn test_s3_bucket_name_validation() {
             access_key_id: "test".to_string(),
             secret_access_key: "test".to_string(),
             endpoint_url: None,
+            force_path_style: None,
             prefix: None,
             watch_folders: vec!["".to_string()],
             file_extensions: vec![".pdf".to_string()],
             auto_sync: true,
             sync_interval_minutes: 120,
         };
-        
+
         assert_eq!(config.bucket_name, bucket_name);
         // Basic validation rules
         assert!(!config.bucket_name.is_empty());
@@ -235,6 +237,7 @@ fn test_endpoint_url_handling() {
         access_key_id: "AKIA...".to_string(),
         secret_access_key: "secret".to_string(),
         endpoint_url: None, // AWS S3
+        force_path_style: None,
         prefix: None,
         watch_folders: vec!["".to_string()],
         file_extensions: vec![".pdf".to_string()],
@@ -251,6 +254,7 @@ fn test_endpoint_url_handling() {
         access_key_id: "minioadmin".to_string(),
         secret_access_key: "minioadmin".to_string(),
         endpoint_url: Some("https://minio.example.com".to_string()),
+        force_path_style: None,
         prefix: None,
         watch_folders: vec!["".to_string()],
         file_extensions: vec![".pdf".to_string()],
