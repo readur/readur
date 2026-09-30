@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::models::{LoginRequest, LoginResponse};
 use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
@@ -41,24 +41,10 @@ async fn debug_ocr_content() {
     let username = format!("debug_test_{}", timestamp);
     let email = format!("debug_{}@test.com", timestamp);
     
-    // Register user
-    let user_data = CreateUser {
-        username: username.clone(),
-        email: email.clone(),
-        password: "testpass123".to_string(),
-        role: Some(readur::models::UserRole::User),
-    };
-    
-    let register_response = client
-        .post(&format!("{}/api/auth/register", get_base_url()))
-        .json(&user_data)
-        .send()
+    // Create the account in the server's database
+    readur::test_utils::create_live_server_user(&username, &email, "testpass123", readur::models::UserRole::User)
         .await
         .expect("Registration should work");
-    
-    if !register_response.status().is_success() {
-        panic!("Registration failed: {}", register_response.text().await.unwrap_or_default());
-    }
     
     // Login
     let login_data = LoginRequest {

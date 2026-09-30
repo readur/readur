@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole, SourceType};
+use readur::models::{LoginRequest, LoginResponse, UserRole, SourceType};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -53,39 +53,10 @@ impl SourceTestClient {
         let email = format!("source_test_{}@example.com", timestamp);
         let password = "testpassword123";
         
-        // Register user with retry logic
-        let user_data = CreateUser {
-            username: username.clone(),
-            email: email.clone(),
-            password: password.to_string(),
-            role: Some(role),
-        };
-        
-        let mut retry_count = 0;
-        let register_response = loop {
-            match self.client
-                .post(&format!("{}/api/auth/register", get_base_url()))
-                .json(&user_data)
-                .timeout(Duration::from_secs(10))
-                .send()
-                .await
-            {
-                Ok(resp) => break resp,
-                Err(e) => {
-                    retry_count += 1;
-                    if retry_count >= 3 {
-                        return Err(format!("Registration failed after 3 retries: {}", e).into());
-                    }
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                }
-            }
-        };
-        
-        if !register_response.status().is_success() {
-            let status = register_response.status();
-            let text = register_response.text().await.unwrap_or_else(|_| "No response body".to_string());
-            return Err(format!("Registration failed with status {}: {}", status, text).into());
-        }
+        // Create the account in the server's database
+        readur::test_utils::create_live_server_user(&username, &email, password, role)
+            .await
+            .map_err(|e| format!("Registration failed: {}", e))?;
         
         // Login to get token
         let login_data = LoginRequest {

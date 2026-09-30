@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{LoginRequest, LoginResponse, UserRole};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -62,52 +62,19 @@ impl ErrorHandlingTestClient {
         let email = format!("error_test_{}@example.com", timestamp);
         let password = "testpassword123";
         
-        // Register user with retry logic
-        let mut attempts = 0;
-        let max_attempts = 3;
-        
-        while attempts < max_attempts {
-            let user_data = CreateUser {
-                username: username.clone(),
-                email: email.clone(),
-                password: password.to_string(),
-                role: Some(role.clone()),
-            };
-            
-            match self.client
-                .post(&format!("{}/api/auth/register", get_base_url()))
-                .json(&user_data)
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    if response.status().is_success() {
-                        break;
-                    } else {
-                        attempts += 1;
-                        if attempts >= max_attempts {
-                            return Err(format!("Registration failed after {} attempts: {}", max_attempts, response.text().await?).into());
-                        }
-                        sleep(Duration::from_millis(100 * attempts as u64)).await;
-                    }
-                }
-                Err(e) => {
-                    attempts += 1;
-                    if attempts >= max_attempts {
-                        return Err(format!("Registration network error after {} attempts: {}", max_attempts, e).into());
-                    }
-                    sleep(Duration::from_millis(100 * attempts as u64)).await;
-                }
-            }
-        }
-        
+        // Create the account in the server's database
+        readur::test_utils::create_live_server_user(&username, &email, password, role)
+            .await
+            .map_err(|e| format!("Registration failed: {}", e))?;
+
         // Login with retry logic
         let login_data = LoginRequest {
             username: username.clone(),
             password: password.to_string(),
         };
-        
-        attempts = 0;
+
+        let max_attempts = 3;
+        let mut attempts = 0;
         while attempts < max_attempts {
             match self.client
                 .post(&format!("{}/api/auth/login", get_base_url()))
@@ -614,8 +581,7 @@ async fn test_network_timeout_scenarios() {
         .json(&json!({
             "username": "timeout_test",
             "email": "timeout@example.com",
-            "password": "password123",
-            "role": "user"
+            "password": "password123"
         }))
         .send()
         .await;
@@ -772,28 +738,24 @@ async fn test_database_constraint_violations() {
     let token = client.token.as_ref().unwrap();
     
     // Test 1: Duplicate email registration attempt
-    let original_user = json!({
-        "username": "original_user",
-        "email": "unique@example.com",
-        "password": "password123",
-        "role": "user"
-    });
-    
-    let register_response = client.client
-        .post(&format!("{}/api/auth/register", get_base_url()))
-        .json(&original_user)
-        .send()
-        .await
-        .expect("First registration should complete");
-    
-    println!("✅ First user registration: {}", register_response.status());
-    
+    let unique_suffix = Uuid::new_v4().simple().to_string();
+    let original_email = format!("unique_{}@example.com", unique_suffix);
+    readur::test_utils::create_live_server_user(
+        &format!("original_user_{}", unique_suffix),
+        &original_email,
+        "password123",
+        UserRole::User,
+    )
+    .await
+    .expect("First user creation should succeed");
+
+    println!("✅ First user created");
+
     // Try to register another user with the same email
     let duplicate_email_user = json!({
-        "username": "different_username",
-        "email": "unique@example.com", // Same email
-        "password": "different_password",
-        "role": "user"
+        "username": format!("different_username_{}", unique_suffix),
+        "email": original_email, // Same email
+        "password": "different_password"
     });
     
     let duplicate_response = client.client

@@ -132,7 +132,7 @@ BASELINE: dict[str, int] = {
     "frontend/src/pages/SettingsPage.tsx": 1915,
     "tests/webdav_stress_tests.rs": 1879,
     "src/test_utils.rs": 1812,
-    "tests/integration_file_processing_pipeline_tests.rs": 1716,
+    "tests/integration_file_processing_pipeline_tests.rs": 1687,
     "tests/integration_source_sync_cancellation_workflow_tests.rs": 1531,
     "frontend/src/pages/SearchPage.tsx": 1528,
     "src/ocr/xml_extractor.rs": 1429,
@@ -144,7 +144,6 @@ BASELINE: dict[str, int] = {
     "frontend/src/pages/DocumentsPage.tsx": 1112,
     "frontend/src/pages/DebugPage.tsx": 1085,
     "tests/integration_ocrmypdf_strategy_validation_tests.rs": 1037,
-    "tests/integration_document_deletion_integration_tests.rs": 1008,
 }
 
 

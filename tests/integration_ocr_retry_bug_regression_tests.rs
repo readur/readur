@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{LoginRequest, LoginResponse, UserRole};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -52,19 +52,9 @@ impl OcrRetryRegressionTestHelper {
         let password = "test_password_123";
         let email = format!("{}@test.com", username);
 
-        let create_user = CreateUser {
-            username: username.clone(),
-            password: password.to_string(),
-            email: email.clone(),
-            role: Some(UserRole::Admin),
-        };
-
-        let _create_response = client
-            .post(&format!("{}/api/users", get_base_url()))
-            .json(&create_user)
-            .timeout(TIMEOUT)
-            .send()
-            .await?;
+        readur::test_utils::create_live_server_user(&username, &email, password, UserRole::Admin)
+            .await
+            .map_err(|e| format!("Failed to create admin user: {}", e))?;
 
         let login_request = LoginRequest {
             username: username.clone(),
