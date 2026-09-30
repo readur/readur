@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ api: { get: vi.fn() }, sourceService: { getArrivals: vi.fn() } }));
+const m = vi.hoisted(() => ({ api: { get: vi.fn() }, sourceService: { getArrivals: vi.fn(), list: vi.fn() } }));
 vi.mock('../../../services/api', () => ({ default: m.api, api: m.api, documentService: {}, sourceService: m.sourceService }));
 
-import { fetchArrivals, isQuiet, laneHealth, laneHref, median, weekTotal, type SourceArrivals } from '../arrivals';
+import { fetchArrivals, groupLanes, isQuiet, LANE_CAP, laneHealth, laneHref, median, rankLanes, weekTotal, windowTotal, type SourceArrivals } from '../arrivals';
 import { documentLane } from '../sourceTint';
 import { lane } from './homeTestUtils';
 
@@ -53,7 +53,10 @@ describe('laneHealth', () => {
     expect(laneHealth(asLane(lane('s', [1], { status: 'syncing' })))).toBe('syncing');
     expect(laneHealth(asLane(lane('upload', [1])))).toBe('healthy');
     expect(laneHealth(asLane(lane('watch', [0])))).toBe('idle');
-    expect(laneHealth(asLane(lane('s', [0], { last_arrival_at: null })))).toBe('healthy');
+    // A source that never received anything is idle, unless it reports a problem itself.
+    expect(laneHealth(asLane(lane('s', [0], { last_arrival_at: null })))).toBe('idle');
+    expect(laneHealth(asLane(lane('s', [0], { last_arrival_at: null, status: 'warning' })))).toBe('warning');
+    expect(laneHealth(asLane(lane('s', [0], { last_arrival_at: null, status: 'error' })))).toBe('error');
   });
 });
 
@@ -69,8 +72,37 @@ describe('laneHref', () => {
 describe('fetchArrivals', () => {
   it('asks for the given number of days and returns the lanes', async () => {
     m.sourceService.getArrivals.mockResolvedValueOnce({ data: [{ key: 'upload' }] });
+    m.sourceService.list.mockResolvedValueOnce({ data: {} });
     await expect(fetchArrivals(7)).resolves.toEqual([{ key: 'upload' }]);
     expect(m.sourceService.getArrivals).toHaveBeenCalledWith(7);
+  });
+
+  it('folds each source\'s last health check into its status', async () => {
+    m.sourceService.getArrivals.mockResolvedValueOnce({
+      data: [
+        lane('w', [1]),
+        lane('c', [1]),
+        lane('busy', [1], { status: 'syncing' }),
+        lane('ok', [1]),
+        lane('upload', [1]),
+      ],
+    });
+    m.sourceService.list.mockResolvedValueOnce({
+      data: [
+        { id: 'w', validation_status: 'warning' },
+        { id: 'c', validation_status: 'critical' },
+        { id: 'busy', validation_status: 'warning' },
+        { id: 'ok', validation_status: 'healthy' },
+      ],
+    });
+    const out = await fetchArrivals();
+    expect(out.map((l) => l.status)).toEqual(['warning', 'error', 'syncing', 'idle', null]);
+  });
+
+  it('keeps the lanes when the sources list fails', async () => {
+    m.sourceService.getArrivals.mockResolvedValueOnce({ data: [lane('w', [1])] });
+    m.sourceService.list.mockRejectedValueOnce(new Error('no'));
+    await expect(fetchArrivals()).resolves.toHaveLength(1);
   });
 
   it('returns no lanes for an unexpected body', async () => {
@@ -86,5 +118,43 @@ describe('documentLane', () => {
     expect(documentLane({ source_type: 'watch' })).toEqual({ key: 'watch', kind: 'watch' });
     expect(documentLane({ source_type: 'web_upload' })).toEqual({ key: 'upload', kind: 'upload' });
     expect(documentLane({})).toEqual({ key: 'upload', kind: 'upload' });
+  });
+});
+
+describe('ranking and the cap', () => {
+  const busy = [1, 2, 1, 3, 1, 2, 1, 1, 2, 1, 1, 2, 1];
+  const keys = (ls: SourceArrivals[]) => ls.map((l) => l.key);
+
+  it('puts problems first, then the most arrivals in the window, then the latest arrival', () => {
+    const lanes = [
+      lane('small', [1, 0], { last_arrival_at: hoursAgo(10) }),
+      lane('upload', [5, 5]),
+      lane('broken', [0, 0], { status: 'error', last_arrival_at: null }),
+      lane('quiet', [...busy, 0], { last_arrival_at: hoursAgo(40) }),
+      lane('older', [0, 1], { last_arrival_at: hoursAgo(5) }),
+      lane('newer', [0, 1], { last_arrival_at: hoursAgo(1) }),
+      lane('warn', [0, 0], { status: 'warning', last_arrival_at: null }),
+    ].map(asLane);
+    expect(keys(rankLanes(lanes, NOW))).toEqual(['quiet', 'broken', 'warn', 'upload', 'newer', 'older', 'small']);
+    expect(windowTotal(lanes[1])).toBe(10);
+  });
+
+  it(`shows every lane when there are ${LANE_CAP} or fewer`, () => {
+    const lanes = [lane('upload', [0], { last_arrival_at: null }), lane('watch', [0], { last_arrival_at: null })].map(asLane);
+    expect(groupLanes(lanes, NOW)).toEqual({ shown: lanes, hidden: 0 });
+  });
+
+  it(`caps at ${LANE_CAP}, keeps problem lanes, and never gives a slot to a silent lane`, () => {
+    const silent = Array.from({ length: 200 }, (_, i) => asLane(lane(`s${i}`, [0, 0], { last_arrival_at: null })));
+    const active = Array.from({ length: 6 }, (_, i) => asLane(lane(`a${i}`, [0, i + 1])));
+    const broken = asLane(lane('broken', [0, 0], { status: 'error', last_arrival_at: null }));
+    const { shown, hidden } = groupLanes([...silent, ...active, broken], NOW);
+    expect(keys(shown)).toEqual(['broken', 'a5', 'a4', 'a3', 'a2']);
+    expect(hidden).toBe(202);
+  });
+
+  it('shows no lane when none of many has arrivals or a problem', () => {
+    const silent = Array.from({ length: 8 }, (_, i) => asLane(lane(`s${i}`, [0], { last_arrival_at: null })));
+    expect(groupLanes(silent, NOW)).toEqual({ shown: [], hidden: 8 });
   });
 });

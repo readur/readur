@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { EmptyState, Skeleton, SourceDot, StatusMark, type StatusState } from '../../ui';
 import { sourceHue } from '../../lib/sourceColor';
 import { ArrivalBars } from './ArrivalBars';
-import { laneHealth, laneHref, type LaneHealth, type SourceArrivals } from './arrivals';
+import { ARRIVAL_DAYS, groupLanes, laneHealth, laneHref, type LaneHealth, type SourceArrivals } from './arrivals';
 import { formatAge, formatCount } from './format';
 import { Region, RegionError } from './Region';
 import type { Resource } from './useResource';
@@ -13,6 +13,7 @@ const MARK: Record<Exclude<LaneHealth, 'quiet' | 'idle'>, StatusState> = {
   healthy: 'healthy',
   syncing: 'syncing',
   error: 'error',
+  warning: 'warning',
   off: 'disabled',
 };
 
@@ -90,11 +91,27 @@ function Lane({ lane, now }: { lane: SourceArrivals; now: number }) {
   );
 }
 
-/** One lane per way documents come in: each source, the watch folder and uploads. */
+function LaneList({ lanes, now, label }: { lanes: SourceArrivals[]; now: number; label: string }) {
+  return (
+    <ul className={styles.lanes} aria-label={label}>
+      {lanes.map((lane) => (
+        <Lane key={lane.key} lane={lane} now={now} />
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * One lane per way documents come in: each source, the watch folder and uploads. Problems and
+ * the busiest lanes come first; only the five most active are shown (see groupLanes), the rest
+ * are one link away in Intake.
+ */
 export function SourceLanes({ arrivals, now }: { arrivals: Resource<SourceArrivals[]>; now: number }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data, error, reload } = arrivals;
   const title = t('home.lanes.title', 'Coming in');
+  const groups = data ? groupLanes(data, now) : null;
+  const n = (v: number) => formatCount(v, i18n.language);
 
   return (
     <Region
@@ -107,18 +124,26 @@ export function SourceLanes({ arrivals, now }: { arrivals: Resource<SourceArriva
     >
       {error && !data ? (
         <RegionError message={t('home.lanes.error', 'Arrivals could not be loaded.')} onRetry={reload} />
-      ) : !data ? (
+      ) : !groups ? (
         <div className={styles.panelBody}>
           <Skeleton lines={3} label={t('board.loading', 'Loading')} />
         </div>
-      ) : data.length === 0 ? (
+      ) : data?.length === 0 ? (
         <EmptyState title={t('home.lanes.empty', 'No sources yet')} />
       ) : (
-        <ul className={styles.lanes} aria-label={title}>
-          {data.map((lane) => (
-            <Lane key={lane.key} lane={lane} now={now} />
-          ))}
-        </ul>
+        <>
+          {groups.shown.length ? (
+            <LaneList lanes={groups.shown} now={now} label={title} />
+          ) : (
+            <p className={styles.panelBody}>{t('home.lanes.allSilent', 'Nothing arrived from any source in the last {{days}} days.', { days: ARRIVAL_DAYS })}</p>
+          )}
+          {groups.hidden > 0 ? (
+            <Link className={styles.moreRow} to="/intake?section=connections">
+              {t('home.lanes.more', '{{formatted}} more sources', { count: groups.hidden, formatted: n(groups.hidden) })}
+              <span aria-hidden="true">→</span>
+            </Link>
+          ) : null}
+        </>
       )}
     </Region>
   );

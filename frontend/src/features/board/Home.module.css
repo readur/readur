@@ -15,6 +15,45 @@
 [data-hue="7"] { --lane: var(--src-7); --lane-soft: var(--src-7-soft); }
 [data-hue="8"] { --lane: var(--src-8); --lane-soft: var(--src-8-soft); }
 
+/* Status line under the greeting */
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+}
+
+.statusPart {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.statusPart + .statusPart::before {
+  content: "·";
+  margin: 0 var(--s-2);
+  color: var(--fg-meta);
+}
+
+.statusFailed {
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.statusLink {
+  font-weight: 600;
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.statusLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* Panels */
 
 .panel {
@@ -157,7 +196,7 @@
   grid-template-columns: minmax(150px, 1.1fr) minmax(168px, 1.6fr) 84px minmax(128px, 0.8fr) 108px;
   align-items: center;
   column-gap: var(--s-5);
-  min-height: 56px;
+  min-height: 52px;
   padding: var(--s-2) var(--s-5);
   border-top: 1px solid var(--line);
 }
@@ -262,6 +301,31 @@
 
 [data-theme="dark"] .quiet {
   color: var(--bg);
+}
+
+/* The footer row that leads to every other source */
+
+.moreRow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 44px;
+  padding: 0 var(--s-5);
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 var(--radius) var(--radius);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.moreRow:hover {
+  background: var(--surface-2);
+}
+
+.moreRow:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 /* 14-day bar strip: the one authored moment, bars rise into place on load. */
@@ -576,21 +640,27 @@
 /* Narrow screens: a lane stacks into name + health, then the strip, then its figures. */
 
 @media (max-width: 899px) {
+  /* Two lines per lane: name and health, then the strip and today's count. */
   .lane {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "name health"
-      "bars bars"
-      "today last";
-    row-gap: var(--s-2);
-    padding: var(--s-3) var(--s-4);
+      "bars today";
+    row-gap: var(--s-1);
+    min-height: 0;
+    padding: var(--s-2) var(--s-4);
   }
 
   .laneName { grid-area: name; }
-  .bars { grid-area: bars; }
-  .laneToday { grid-area: today; }
-  .laneLast { grid-area: last; text-align: right; }
+  .bars { grid-area: bars; height: 22px; }
+  .laneToday { grid-area: today; text-align: right; }
   .laneHealth { grid-area: health; }
+  .laneKind,
+  .laneLast { display: none; }
+
+  .moreRow {
+    padding: 0 var(--s-4);
+  }
 
   .panelHead,
   .lines {
@@ -615,6 +685,22 @@
   .failureWhy {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+}
+
+@media (max-width: 599px) {
+  /* The dots only read well on one line: on phones the parts wrap apart with a gap instead. */
+  .status {
+    gap: var(--s-1) var(--s-4);
+  }
+
+  .statusPart + .statusPart::before {
+    content: none;
+  }
+
+  /* Six thumbnails are enough to see what arrived without pushing the sources off the page. */
+  .card:nth-child(n + 7) {
+    display: none;
   }
 }
 

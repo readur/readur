@@ -23,3 +23,12 @@ export function formatAge(iso?: string | null, locale?: string, now: number = Da
   }
   return rtf.format(-Math.max(0, seconds), 'second');
 }
+
+/** Minutes as a short duration, e.g. "45m" or "2h 10m". */
+export function formatMinutes(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  if (total < 60) return `${total}m`;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}

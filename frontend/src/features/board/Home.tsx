@@ -5,11 +5,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { PageHeader } from '../shell';
 import { fetchArrivals, weekTotal } from './arrivals';
 import { fetchFailedOcr, fetchQueueFigures, POLL_MS } from './data';
-import { formatCount } from './format';
 import { JustArrived } from './JustArrived';
 import { MarkAllSeen } from './MarkAllSeen';
 import { PipelinePanel } from './PipelinePanel';
 import { SourceLanes } from './SourceLanes';
+import { StatusLine } from './StatusLine';
 import { useResource } from './useResource';
 import styles from './Home.module.css';
 
@@ -36,28 +36,22 @@ function useGreeting(now: number): string {
   return name ? t('home.greeting.afternoon', 'Good afternoon, {{name}}', { name }) : t('home.greeting.afternoonPlain', 'Good afternoon');
 }
 
-/** Home: is everything still coming in, what is being processed, what just arrived. */
+/** Home: what just arrived, whether everything is still coming in, and what needs a look. */
 export default function Home() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const now = useNow();
   const greeting = useGreeting(now);
   const arrivals = useResource(fetchArrivals, POLL_MS);
   const failed = useResource(fetchFailedOcr, POLL_MS);
   const stats = useResource(fetchQueueFigures, POLL_MS);
 
-  const week = arrivals.data ? weekTotal(arrivals.data) : null;
-  const meta =
-    week === null
-      ? undefined
-      : week === 0
-        ? t('home.week.none', 'Nothing arrived this week')
-        : t('home.week.count', '{{formatted}} arrived this week', { count: week, formatted: formatCount(week, i18n.language) });
+  const week = arrivals.data ? weekTotal(arrivals.data) : undefined;
 
   return (
     <>
       <PageHeader
         title={greeting}
-        meta={meta}
+        meta={<StatusLine week={week} queue={stats.data} failed={failed.data} />}
         actions={
           <>
             <MarkAllSeen kinds={HOME_KINDS} />
@@ -68,9 +62,9 @@ export default function Home() {
         }
       />
       <div className={styles.page}>
+        <JustArrived lanes={arrivals.data} now={now} />
         <SourceLanes arrivals={arrivals} now={now} />
         <PipelinePanel failed={failed} stats={stats} />
-        <JustArrived lanes={arrivals.data} now={now} />
       </div>
     </>
   );

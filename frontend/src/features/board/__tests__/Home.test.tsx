@@ -6,7 +6,7 @@ const m = vi.hoisted(() => ({
   api: { get: vi.fn() },
   documentService: { listWithPagination: vi.fn(), getFailedOcrDocuments: vi.fn(), getThumbnail: vi.fn() },
   queueService: { getStats: vi.fn(), getOcrStatus: vi.fn(), pauseOcr: vi.fn(), resumeOcr: vi.fn() },
-  sourceService: { getArrivals: vi.fn() },
+  sourceService: { getArrivals: vi.fn(), list: vi.fn() },
 }));
 
 vi.mock('../../../services/api', () => ({
@@ -55,12 +55,14 @@ function serve() {
   m.queueService.getOcrStatus.mockResolvedValue({ data: { is_paused: false, status: 'running' } });
   m.queueService.pauseOcr.mockResolvedValue({ data: {} });
   m.queueService.resumeOcr.mockResolvedValue({ data: {} });
+  m.sourceService.list.mockResolvedValue({ data: [] });
   m.sourceService.getArrivals.mockImplementation(() =>
     lanes instanceof Error ? Promise.reject(lanes) : Promise.resolve({ data: lanes }),
   );
 }
 
 const region = (name: string) => screen.getByRole('region', { name });
+const summary = () => screen.getByRole('group', { name: 'Summary' });
 const loc = () => screen.getByRole('status', { name: 'location', hidden: true }).textContent;
 const laneItem = (name: string) =>
   within(screen.getByRole('list', { name: 'Coming in' }))
@@ -75,7 +77,7 @@ async function renderHome(role: UserRole = 'admin') {
     role,
   );
   await screen.findByText('d1.pdf');
-  await screen.findByRole('list', { name: 'Coming in' });
+  await within(await screen.findByRole('region', { name: 'Coming in' })).findAllByText(/today|Nothing arrived|No sources/);
   return view;
 }
 
@@ -99,11 +101,38 @@ describe('Home', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Good (morning|afternoon|evening), ada$/);
     // Last seven days: uploads 0+2+5+1+0+3+2+6 → 19 over the last 7 entries (2,5,1,0,3,2,6) = 19, scanner 1+2+2+1+2+3+0 = 11.
-    expect(await screen.findByText('30 arrived this week')).toBeInTheDocument();
+    expect(await within(summary()).findByText('30 arrived this week')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Add documents' })[0]).toHaveAttribute('href', '/intake?section=upload');
     expect(region('Coming in')).toBeInTheDocument();
     expect(region('Processing')).toBeInTheDocument();
     expect(region('Just arrived')).toBeInTheDocument();
+  });
+
+  it('orders the page: summary, Just arrived, Coming in, then the processing detail', async () => {
+    await renderHome();
+    const order = [summary(), region('Just arrived'), region('Coming in'), region('Processing')];
+    for (let i = 1; i < order.length; i += 1) {
+      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('sums up processing and failures in the line under the greeting', async () => {
+    m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [], pagination: { total: 3 } } });
+    await renderHome();
+    expect(await within(summary()).findByText('4 processing · 12 pending')).toBeInTheDocument();
+    expect(await within(summary()).findByText('3 failed')).toBeInTheDocument();
+    expect(within(summary()).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/intake?section=attention');
+  });
+
+  it('says "nothing waiting" when the queue is empty, and only pending when nothing runs', async () => {
+    m.queueService.getStats.mockResolvedValue({ data: { pending_count: 0, processing_count: 0 } });
+    const view = await renderHome();
+    expect(await within(summary()).findByText('nothing waiting')).toBeInTheDocument();
+    expect(within(summary()).queryByText(/failed/)).not.toBeInTheDocument();
+    view.unmount();
+    m.queueService.getStats.mockResolvedValue({ data: { pending: 5, processing: 0 } });
+    await renderHome();
+    expect(await within(summary()).findByText('5 pending')).toBeInTheDocument();
   });
 
   it('says when nothing arrived this week', async () => {
@@ -180,13 +209,16 @@ describe('Home', () => {
         lane('e1', [1], { name: 'Broken share', status: 'error' }),
         lane('y1', [1], { name: 'Busy share', status: 'syncing', kind: 's3' }),
         lane('o1', [0], { name: 'Old share', enabled: false }),
+        lane('w1', [1], { name: 'Checked share' }),
       ];
+      m.sourceService.list.mockResolvedValue({ data: [{ id: 'w1', validation_status: 'warning' }] });
       await renderHome();
       expect(within(laneItem('Broken share')).getByText('Error')).toBeInTheDocument();
       expect(within(laneItem('Busy share')).getByText('Syncing')).toBeInTheDocument();
       expect(within(laneItem('Busy share')).getByText('S3')).toBeInTheDocument();
       expect(within(laneItem('Old share')).getByText('Off')).toBeInTheDocument();
       expect(within(laneItem('Broken share')).getByText('WebDAV')).toBeInTheDocument();
+      expect(within(laneItem('Checked share')).getByText(/^check$/i)).toBeInTheDocument();
     });
 
     it('says when there are no sources', async () => {
@@ -208,22 +240,43 @@ describe('Home', () => {
       expect(await within(coming).findByRole('list', { name: 'Coming in' })).toBeInTheDocument();
     });
 
+    it('shows the five most active lanes, problems first, and links to the rest in Intake', async () => {
+      serve();
+      lanes = [
+        ...Array.from({ length: 190 }, (_, i) => lane(`idle${i}`, [0, 0], { name: `Idle ${i}`, last_arrival_at: null })),
+        ...Array.from({ length: 6 }, (_, i) => lane(`a${i}`, [0, i + 1], { name: `Active ${i}` })),
+        lane('bad', [0, 0], { name: 'Broken share', status: 'error', last_arrival_at: null }),
+      ];
+      await renderHome();
+      const shown = within(screen.getByRole('list', { name: 'Coming in' })).getAllByRole('link');
+      expect(shown.map((a) => a.textContent)).toEqual(['Broken share', 'Active 5', 'Active 4', 'Active 3', 'Active 2']);
+      expect(within(region('Coming in')).getByRole('link', { name: /^192 more sources/ })).toHaveAttribute(
+        'href',
+        '/intake?section=connections',
+      );
+      expect(within(region('Coming in')).getByRole('link', { name: 'Manage sources' })).toBeInTheDocument();
+      expect(within(region('Coming in')).queryByText('Idle 0')).not.toBeInTheDocument();
+    });
+
+    it('says so when none of many sources received anything', async () => {
+      serve();
+      lanes = Array.from({ length: 7 }, (_, i) => lane(`idle${i}`, [0], { name: `Idle ${i}`, last_arrival_at: null }));
+      await renderHome();
+      expect(within(region('Coming in')).getByText('Nothing arrived from any source in the last 14 days.')).toBeInTheDocument();
+      expect(within(region('Coming in')).getByRole('link', { name: /^7 more sources/ })).toBeInTheDocument();
+    });
+
     it('asks the server for 14 days', async () => {
       await renderHome();
       expect(m.sourceService.getArrivals).toHaveBeenCalledWith(14);
     });
   });
 
-  describe('Processing', () => {
-    it('shows what is processing and pending', async () => {
+  describe('Processing detail', () => {
+    it('adds the day\'s throughput and the oldest wait', async () => {
       await renderHome();
-      expect(await within(region('Processing')).findByText('Processing 4 · pending 12')).toBeInTheDocument();
-    });
-
-    it('says "Nothing waiting" when the queue is empty', async () => {
-      m.queueService.getStats.mockResolvedValue({ data: { pending_count: 0, processing_count: 0 } });
-      await renderHome();
-      expect(await within(region('Processing')).findByText('Nothing waiting')).toBeInTheDocument();
+      expect(await within(region('Processing')).findByText('41 done today')).toBeInTheDocument();
+      expect(within(region('Processing')).getByText('oldest waiting 2h 10m')).toBeInTheDocument();
     });
 
     it('lets an admin pause OCR', async () => {
@@ -252,16 +305,16 @@ describe('Home', () => {
 
     it('hides pause and resume from non-admins', async () => {
       await renderHome('user');
-      await within(region('Processing')).findByText('Processing 4 · pending 12');
+      await within(region('Processing')).findByText('41 done today');
       expect(screen.queryByRole('button', { name: 'Pause OCR' })).not.toBeInTheDocument();
     });
 
-    it('leaves the line out, without an error, when the queue is admin-only', async () => {
+    it('leaves the queue out, without an error, when it is admin-only; with no failures there is no detail', async () => {
       m.queueService.getStats.mockRejectedValue({ response: { status: 403 } });
       await renderHome('user');
-      await within(region('Processing')).findByText('No failed documents');
-      expect(within(region('Processing')).queryByText(/pending/)).not.toBeInTheDocument();
-      expect(within(region('Processing')).queryByRole('alert')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('region', { name: 'Processing' })).not.toBeInTheDocument());
+      expect(within(summary()).queryByText(/pending|waiting/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
     it('shows an inline error with Retry when the queue cannot be loaded', async () => {
@@ -272,7 +325,7 @@ describe('Home', () => {
       expect(alert).toHaveTextContent('The OCR queue could not be loaded.');
       m.queueService.getStats.mockResolvedValue({ data: STATS });
       await user.click(within(alert).getByRole('button', { name: 'Retry' }));
-      expect(await within(region('Processing')).findByText('Processing 4 · pending 12')).toBeInTheDocument();
+      expect(await within(region('Processing')).findByText('41 done today')).toBeInTheDocument();
     });
 
     it('shows an error when the OCR state cannot be loaded', async () => {
@@ -284,12 +337,12 @@ describe('Home', () => {
     it('refreshes the queue every 15 seconds', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       await renderHome();
-      await within(region('Processing')).findByText('Processing 4 · pending 12');
+      await within(summary()).findByText('4 processing · 12 pending');
       m.queueService.getStats.mockResolvedValue({ data: { ...STATS, pending: 9 } });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(15_000);
       });
-      await waitFor(() => expect(within(region('Processing')).getByText('Processing 4 · pending 9')).toBeInTheDocument());
+      await waitFor(() => expect(within(summary()).getByText('4 processing · 9 pending')).toBeInTheDocument());
     });
   });
 
@@ -306,13 +359,14 @@ describe('Home', () => {
       },
     });
 
-    it('shows one line with the count, the main causes in plain words and a Review link', async () => {
+    it('names the main causes in plain words, with one Review link in the summary', async () => {
       m.documentService.getFailedOcrDocuments.mockResolvedValue(failures());
       await renderHome();
       const panel = region('Processing');
       expect(await within(panel).findByText('190 failed')).toBeInTheDocument();
+      expect(within(summary()).getByText('190 failed')).toBeInTheDocument();
       expect(within(panel).getByText("OCR failed · Can't read .doc files: install antiword or catdoc")).toBeInTheDocument();
-      expect(within(panel).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/intake?section=attention');
+      expect(screen.getAllByRole('link', { name: 'Review' })).toHaveLength(1);
       // The raw text is not on the page until asked for.
       for (const raw of within(panel).getAllByText(/\/app\/uploads/)) expect(raw.closest('details:not([open])')).not.toBeNull();
     });
@@ -331,9 +385,10 @@ describe('Home', () => {
       expect(within(panel).getByText('Quota reached')).toBeInTheDocument();
     });
 
-    it('says there are no failures', async () => {
+    it('shows no failure line when nothing failed', async () => {
       await renderHome();
-      expect(await within(region('Processing')).findByText('No failed documents')).toBeInTheDocument();
+      await within(region('Processing')).findByText('41 done today');
+      expect(screen.queryByText(/failed$/)).not.toBeInTheDocument();
     });
 
     it('shows an error with Retry when failed documents cannot be loaded', async () => {
@@ -433,7 +488,7 @@ describe('Home', () => {
       const recent = await screen.findByRole('region', { name: 'Just arrived' });
       const alert = await within(recent).findByRole('alert');
       expect(alert).toHaveTextContent('Recent documents could not be loaded.');
-      expect(await within(region('Processing')).findByText('Processing 4 · pending 12')).toBeInTheDocument();
+      expect(await within(summary()).findByText('4 processing · 12 pending')).toBeInTheDocument();
       serve();
       await user.click(within(alert).getByRole('button', { name: 'Retry' }));
       expect(await screen.findByText('d1.pdf')).toBeInTheDocument();

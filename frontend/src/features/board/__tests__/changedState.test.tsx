@@ -9,7 +9,7 @@ const m = vi.hoisted(() => ({
   api: { get: vi.fn() },
   documentService: { listWithPagination: vi.fn(), getFailedOcrDocuments: vi.fn(), getThumbnail: vi.fn() },
   queueService: { getStats: vi.fn(), getOcrStatus: vi.fn(), pauseOcr: vi.fn(), resumeOcr: vi.fn() },
-  sourceService: { getArrivals: vi.fn() },
+  sourceService: { getArrivals: vi.fn(), list: vi.fn() },
 }));
 
 vi.mock('../../../services/api', () => ({
@@ -37,6 +37,7 @@ function serve(documents = [doc('d1'), doc('d2')], total = documents.length) {
   m.queueService.getStats.mockResolvedValue({ data: { pending: 4, processing: 1, failed: 99, completed_today: 8, oldest_pending_minutes: 3 } });
   m.queueService.getOcrStatus.mockResolvedValue({ data: { is_paused: false, status: 'running' } });
   m.sourceService.getArrivals.mockResolvedValue({ data: [] });
+  m.sourceService.list.mockResolvedValue({ data: [] });
 }
 
 async function renderHome() {
@@ -243,10 +244,10 @@ describe('changed state: first run and bulk imports', () => {
 describe('Home truth: queue figures', () => {
   it('reads the queue stats the server actually sends (pending / processing), not its failed jobs', async () => {
     await renderHome();
-    const processing = screen.getByRole('region', { name: 'Processing' });
-    expect(await within(processing).findByText('Processing 1 · pending 4')).toBeInTheDocument();
-    // The queue's 99 failed jobs are not shown: the failures line counts failed documents.
-    expect(within(processing).queryByText(/99/)).not.toBeInTheDocument();
-    expect(within(processing).getByText('No failed documents')).toBeInTheDocument();
+    const summary = screen.getByRole('group', { name: 'Summary' });
+    expect(await within(summary).findByText('1 processing · 4 pending')).toBeInTheDocument();
+    // The queue's 99 failed jobs are not shown: failures count failed documents.
+    expect(screen.queryByText(/99/)).not.toBeInTheDocument();
+    expect(within(summary).queryByText(/failed/)).not.toBeInTheDocument();
   });
 });

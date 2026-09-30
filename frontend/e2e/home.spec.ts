@@ -16,13 +16,21 @@ test.describe('Home', () => {
     await expect(page.getByRole('region', { name: 'Just arrived' })).toBeVisible();
   });
 
-  test('shows a lane for uploads and the watch folder, each with a 14-day strip', async ({ dynamicAdminPage: page }) => {
+  test('puts what just arrived first, then the most active sources', async ({ dynamicAdminPage: page }) => {
     await page.goto('/home');
 
-    const lanes = page.getByRole('list', { name: 'Coming in' });
-    await expect(lanes.getByRole('link', { name: 'Uploads' })).toHaveAttribute('href', '/intake?section=upload');
-    await expect(lanes.getByRole('link', { name: 'Watch folder' })).toHaveAttribute('href', '/intake?section=watch');
-    await expect(lanes.getByRole('img', { name: /in the last 14 days/ }).first()).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Summary' })).toContainText(/arrived this week/);
+    const recent = page.getByRole('region', { name: 'Just arrived' });
+    const coming = page.getByRole('region', { name: 'Coming in' });
+    await expect(coming).toBeVisible();
+    const [recentTop, comingTop] = await Promise.all([recent.boundingBox(), coming.boundingBox()]);
+    expect(recentTop!.y).toBeLessThan(comingTop!.y);
+
+    // At most five lanes; the rest are one link away in Intake.
+    const lanes = coming.getByRole('list', { name: 'Coming in' }).getByRole('listitem');
+    expect(await lanes.count()).toBeLessThanOrEqual(5);
+    const more = coming.getByRole('link', { name: /more sources/ });
+    if (await more.count()) await expect(more).toHaveAttribute('href', '/intake?section=connections');
   });
 
   test('links to the next step from each region', async ({ dynamicAdminPage: page }) => {

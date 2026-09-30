@@ -7,7 +7,7 @@ import { isAdmin } from '../../auth/roles';
 import { failureKind, humanizeFailureReason } from '../../lib/failureReason';
 import { queueService } from '../../services/api';
 import { POLL_MS, type FailedOcrPage, type QueueFigures } from './data';
-import { formatAge, formatCount } from './format';
+import { formatAge, formatCount, formatMinutes } from './format';
 import { Region, RegionError } from './Region';
 import { docName, type FailedOcrDocument } from './types';
 import { useResource, type Resource } from './useResource';
@@ -81,12 +81,12 @@ function ProcessingLine({ stats }: { stats: Resource<QueueFigures | null> }) {
         {paused ? '◆' : idle ? '■' : '◐'}
       </span>
       <p className={styles.lineText}>
-        {idle
-          ? t('home.pipeline.idle', 'Nothing waiting')
-          : t('home.pipeline.busy', 'Processing {{processing}} · pending {{pending}}', {
-              processing: n(q.processing),
-              pending: n(q.pending),
-            })}
+        {t('home.pipeline.doneToday', '{{done}} done today', { count: q.completedToday, done: n(q.completedToday) })}
+        {!idle && q.oldestPendingMinutes !== null ? (
+          <span className={styles.lineNote}>
+            {t('home.pipeline.oldest', 'oldest waiting {{wait}}', { wait: formatMinutes(q.oldestPendingMinutes) })}
+          </span>
+        ) : null}
         {paused ? <span className={styles.lineNote}>{t('home.pipeline.paused', 'OCR is paused')}</span> : null}
       </p>
       {canManage && ocr.data ? (
@@ -140,16 +140,7 @@ function FailuresLine({ failed }: { failed: Resource<FailedOcrPage> }) {
   }
   if (!failed.data) return null;
   const total = failed.data.total;
-  if (total === 0) {
-    return (
-      <div className={styles.line} data-tone="ok">
-        <span className={styles.lineMark} aria-hidden="true">
-          ■
-        </span>
-        <p className={styles.lineText}>{t('home.pipeline.noFailures', 'No failed documents')}</p>
-      </div>
-    );
-  }
+  if (total === 0) return null;
 
   return (
     <div className={styles.failureBlock}>
@@ -163,18 +154,21 @@ function FailuresLine({ failed }: { failed: Resource<FailedOcrPage> }) {
           </strong>
           {causes.length ? <span className={styles.lineNote}>{causes.join(' · ')}</span> : null}
         </p>
-        <Link className={styles.secondaryLink} to="/intake?section=attention">
-          {t('home.pipeline.review', 'Review')}
-        </Link>
       </div>
       {failed.data.documents.length ? <FailureDetails docs={failed.data.documents} /> : null}
     </div>
   );
 }
 
-/** What is being processed and what failed, one line each. */
+/**
+ * The detail behind the status line: the day's OCR throughput with pause and resume for admins,
+ * and why documents failed. Renders nothing when it would add nothing.
+ */
 export function PipelinePanel({ failed, stats }: PipelinePanelProps) {
   const { t } = useTranslation();
+  const noQueue = stats.data === null && !stats.error;
+  const noFailures = failed.data?.total === 0 && !failed.error;
+  if (noQueue && noFailures) return null;
   return (
     <Region title={t('home.pipeline.title', 'Processing')}>
       <div className={styles.lines}>
