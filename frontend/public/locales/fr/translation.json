@@ -3299,22 +3299,29 @@
       "uploads": "Envois",
       "source": "Source",
       "barsLabel": "{{total}} sur les {{days}} derniers jours, le plus le {{day}} ({{most}})",
-      "barsEmpty": "Rien sur les {{days}} derniers jours"
+      "barsEmpty": "Rien sur les {{days}} derniers jours",
+      "more": "{{formatted}} autres sources",
+      "allSilent": "Rien n'est arrivé d'aucune source ces {{days}} derniers jours."
     },
     "pipeline": {
       "title": "Traitement",
-      "idle": "Rien en attente",
-      "busy": "En traitement {{processing}} · en attente {{pending}}",
       "paused": "L'OCR est en pause",
       "failed": "{{formatted}} en échec",
       "failedError": "Les documents en échec n'ont pas pu être chargés.",
-      "noFailures": "Aucun document en échec",
       "review": "Examiner",
       "showRecent": "Afficher les derniers échecs",
-      "rawError": "Texte de l'erreur"
+      "rawError": "Texte de l'erreur",
+      "doneToday": "{{done}} traités aujourd'hui",
+      "oldest": "le plus ancien attend depuis {{wait}}"
     },
     "recent": {
       "title": "Tout juste arrivés"
+    },
+    "status": {
+      "label": "Résumé",
+      "idle": "rien en attente",
+      "busy": "{{processing}} en traitement · {{pending}} en attente",
+      "pending": "{{pending}} en attente"
     }
   }
 }

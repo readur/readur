@@ -3299,22 +3299,29 @@
       "uploads": "Uploads",
       "source": "Quelle",
       "barsLabel": "{{total}} in den letzten {{days}} Tagen, die meisten am {{day}} ({{most}})",
-      "barsEmpty": "Nichts in den letzten {{days}} Tagen"
+      "barsEmpty": "Nichts in den letzten {{days}} Tagen",
+      "more": "{{formatted}} weitere Quellen",
+      "allSilent": "In den letzten {{days}} Tagen ist aus keiner Quelle etwas eingegangen."
     },
     "pipeline": {
       "title": "Verarbeitung",
-      "idle": "Nichts in der Warteschlange",
-      "busy": "In Verarbeitung {{processing}} · wartend {{pending}}",
       "paused": "OCR ist pausiert",
       "failed": "{{formatted}} fehlgeschlagen",
       "failedError": "Fehlgeschlagene Dokumente konnten nicht geladen werden.",
-      "noFailures": "Keine fehlgeschlagenen Dokumente",
       "review": "Prüfen",
       "showRecent": "Letzte Fehler anzeigen",
-      "rawError": "Fehlertext"
+      "rawError": "Fehlertext",
+      "doneToday": "{{done}} heute erledigt",
+      "oldest": "älteste wartet seit {{wait}}"
     },
     "recent": {
       "title": "Gerade eingegangen"
+    },
+    "status": {
+      "label": "Überblick",
+      "idle": "nichts in der Warteschlange",
+      "busy": "{{processing}} in Verarbeitung · {{pending}} wartend",
+      "pending": "{{pending}} wartend"
     }
   }
 }

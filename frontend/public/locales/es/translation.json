@@ -3299,22 +3299,29 @@
       "uploads": "Subidas",
       "source": "Fuente",
       "barsLabel": "{{total}} en los últimos {{days}} días, la mayoría el {{day}} ({{most}})",
-      "barsEmpty": "Nada en los últimos {{days}} días"
+      "barsEmpty": "Nada en los últimos {{days}} días",
+      "more": "{{formatted}} fuentes más",
+      "allSilent": "No ha llegado nada de ninguna fuente en los últimos {{days}} días."
     },
     "pipeline": {
       "title": "Procesamiento",
-      "idle": "Nada en espera",
-      "busy": "Procesando {{processing}} · en espera {{pending}}",
       "paused": "El OCR está en pausa",
       "failed": "{{formatted}} con errores",
       "failedError": "No se pudieron cargar los documentos con errores.",
-      "noFailures": "No hay documentos con errores",
       "review": "Revisar",
       "showRecent": "Mostrar los últimos errores",
-      "rawError": "Texto del error"
+      "rawError": "Texto del error",
+      "doneToday": "{{done}} completados hoy",
+      "oldest": "el más antiguo espera desde hace {{wait}}"
     },
     "recent": {
       "title": "Recién llegados"
+    },
+    "status": {
+      "label": "Resumen",
+      "idle": "nada en espera",
+      "busy": "{{processing}} procesando · {{pending}} en espera",
+      "pending": "{{pending}} en espera"
     }
   }
 }
