@@ -60,10 +60,34 @@ describe('DocumentThumbnail', () => {
     expect(m.documentService.getThumbnail).toHaveBeenCalledWith('d1');
   });
 
-  it('falls back to a file-type icon', async () => {
+  it('falls back to a hairline stub with the mono type code', async () => {
     m.documentService.getThumbnail.mockRejectedValue(new Error('none'));
-    render(<DocumentThumbnail documentId="d1" mimeType="application/pdf" />);
-    expect(await screen.findByTestId('PictureAsPdfIcon')).toBeInTheDocument();
+    const { container } = render(<DocumentThumbnail documentId="d1" mimeType="application/pdf" emptyText="No preview yet" />);
+    expect(await screen.findByText('No preview yet')).toBeInTheDocument();
+    expect(screen.getByText('PDF')).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelector('[data-state="none"]')).toBeInTheDocument();
+  });
+
+  it('does not show "no preview" while the thumbnail is still loading', () => {
+    m.documentService.getThumbnail.mockReturnValue(new Promise(() => undefined));
+    const { container } = render(<DocumentThumbnail documentId="d1" mimeType="application/pdf" emptyText="No preview yet" />);
+    expect(screen.getByText('PDF')).toBeInTheDocument();
+    expect(screen.queryByText('No preview yet')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-state="loading"]')).toBeInTheDocument();
+  });
+
+  it('does not ask the server for types it can only answer with a placeholder', async () => {
+    const { container } = render(
+      <DocumentThumbnail
+        documentId="d1"
+        mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        emptyText="No preview yet"
+      />,
+    );
+    expect(await screen.findByText('No preview yet')).toBeInTheDocument();
+    expect(screen.getByText('DOCX')).toBeInTheDocument();
+    expect(container.querySelector('img')).toBeNull();
+    expect(m.documentService.getThumbnail).not.toHaveBeenCalled();
   });
 
   it('renders nothing without a thumbnail when the fallback is off', async () => {

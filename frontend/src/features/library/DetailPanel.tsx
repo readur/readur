@@ -157,7 +157,13 @@ function DetailBody({
       </Pass>
 
       <div className={styles.preview}>
-        <DocumentThumbnail key={row.id} documentId={row.id} mimeType={row.mime_type} size="large" />
+        <DocumentThumbnail
+          key={row.id}
+          documentId={row.id}
+          mimeType={row.mime_type}
+          size="fill"
+          emptyText={t('library.detail.noPreview', 'No preview yet')}
+        />
       </div>
 
       <section className={styles.detailSection} aria-labelledby={`ocr-${row.id}`}>

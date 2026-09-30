@@ -1,10 +1,24 @@
 .box {
+  box-sizing: border-box;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   overflow: hidden;
   border-radius: var(--radius);
+}
+
+/* A hairline frame on the raised surface: letterboxes real previews and holds the stub. */
+.frame {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.row {
+  width: 40px;
+  height: 28px;
+  border-radius: 2px;
 }
 
 .small {
@@ -22,12 +36,36 @@
   height: 120px;
 }
 
-.image {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: cover;
+.fill {
+  width: 100%;
+  aspect-ratio: 4 / 3;
 }
 
-.icon {
+/* Fit, never crop or squash: odd aspect ratios get bands of the frame colour. */
+.image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.stub {
+  gap: var(--s-2);
+  padding: 2px;
+}
+
+.code {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--fg-2);
+}
+
+.emptyText {
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
   color: var(--fg-meta);
 }

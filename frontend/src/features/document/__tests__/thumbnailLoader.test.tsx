@@ -2,7 +2,7 @@ import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiModule from '../../../services/api';
 import { DocumentThumbnail } from '../DocumentThumbnail';
-import { MAX_IN_FLIGHT, resetThumbnailLoader } from '../thumbnailLoader';
+import { MAX_IN_FLIGHT, isPlaceholderPixels, resetThumbnailLoader } from '../thumbnailLoader';
 import type { ApiMock } from './mockApi';
 
 vi.mock('../../../services/api', async () => (await import('./mockApi')).createApiMock());
@@ -125,9 +125,52 @@ describe('lazy DocumentThumbnail', () => {
     expect(m.documentService.getThumbnail).toHaveBeenCalledTimes(MAX_IN_FLIGHT);
   });
 
-  it('shows the file-type icon when there is no thumbnail', async () => {
+  it('shows the type-code stub when there is no thumbnail', async () => {
     m.documentService.getThumbnail.mockRejectedValue(new Error('none'));
-    const { findByTestId } = render(list(['a']));
-    expect(await findByTestId('PictureAsPdfIcon')).toBeInTheDocument();
+    const { container, findByText } = render(list(['a']));
+    act(() => FakeObserver.show(container.querySelector('span')!));
+    expect(await findByText('PDF')).toBeInTheDocument();
+    await waitFor(() => expect(container.querySelector('[data-state="none"]')).toBeInTheDocument());
+  });
+
+  it('treats the server\'s flat placeholder square as no thumbnail, and remembers it', async () => {
+    m.documentService.getThumbnail.mockResolvedValue({ data: new Blob(['jpg']) });
+    // A decodable image whose every pixel is the server's PDF red.
+    const red = new Uint8ClampedArray(12 * 12 * 4).map((_, i) => [220, 38, 27, 255][i % 4]);
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ close: vi.fn() })));
+    const getContext = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue({ drawImage: vi.fn(), getImageData: () => ({ data: red }) } as unknown as CanvasRenderingContext2D);
+    const first = render(list(['a']));
+    act(() => FakeObserver.show(first.container.querySelector('span')!));
+    await waitFor(() => expect(first.container.querySelector('[data-state="none"]')).toBeInTheDocument());
+    expect(first.container.querySelector('img')).toBeNull();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    first.unmount();
+    // Remounting knows the answer without asking again.
+    const second = render(list(['a']));
+    expect(second.container.querySelector('[data-state="none"]')).toBeInTheDocument();
+    expect(m.documentService.getThumbnail).toHaveBeenCalledTimes(1);
+    getContext.mockRestore();
+  });
+});
+
+describe('isPlaceholderPixels', () => {
+  const fill = (rgb: number[], n = 16) => Array.from({ length: n * 4 }, (_, i) => (i % 4 === 3 ? 255 : rgb[i % 4]));
+
+  it('recognises each flat placeholder colour, allowing for JPEG noise', () => {
+    expect(isPlaceholderPixels(fill([220, 38, 27]))).toBe(true);
+    expect(isPlaceholderPixels(fill([41, 128, 185]))).toBe(true);
+    expect(isPlaceholderPixels(fill([34, 139, 34]))).toBe(true);
+    expect(isPlaceholderPixels(fill([108, 117, 125]))).toBe(true);
+    expect(isPlaceholderPixels(fill([228, 30, 35]))).toBe(true);
+  });
+
+  it('keeps real previews: a white page, or anything with detail', () => {
+    expect(isPlaceholderPixels(fill([255, 255, 255]))).toBe(false);
+    const page = fill([220, 38, 27]);
+    page.splice(0, 4, 0, 0, 0, 255);
+    expect(isPlaceholderPixels(page)).toBe(false);
+    expect(isPlaceholderPixels([])).toBe(false);
   });
 });
