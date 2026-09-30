@@ -28,4 +28,11 @@ describe('Checkbox', () => {
     render(<Checkbox aria-label="Select row" isDisabled />);
     expect(screen.getByRole('checkbox', { name: 'Select row' })).toBeDisabled();
   });
+
+  it('keeps description and error out of the accessible name', () => {
+    render(<Checkbox label="Accept" description="Required to continue" isInvalid errorMessage="Must accept" />);
+    const box = screen.getByRole('checkbox', { name: 'Accept' });
+    expect(box).toHaveAccessibleName('Accept');
+    expect(box).toHaveAccessibleDescription('Required to continue Must accept');
+  });
 });

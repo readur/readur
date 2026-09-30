@@ -71,6 +71,16 @@
   min-width: 0;
 }
 
+.wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.description,
+.error {
+  padding-left: 26px;
+}
+
 .description {
   font-size: var(--fs-sm);
   color: var(--fg-meta);

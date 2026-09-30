@@ -88,3 +88,12 @@
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+
+.toneIcon {
+  flex: none;
+  display: inline-flex;
+  margin-top: 1px;
+}
+
+.success .toneIcon { color: var(--ok); }
+.danger .toneIcon { color: var(--danger); }

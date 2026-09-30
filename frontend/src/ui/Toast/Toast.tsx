@@ -8,7 +8,7 @@ import {
   UNSTABLE_ToastRegion as ToastRegion,
 } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
-import { Close } from '../icons';
+import { Close, Error as ErrorIcon, Info, CheckCircle } from '../icons';
 import { cx } from '../shared/FieldParts';
 import styles from './Toast.module.css';
 
@@ -34,6 +34,10 @@ interface ToastContentValue {
 
 const DEFAULT_TIMEOUT = 5000;
 
+const TONE_DEFAULT = { info: 'Info:', success: 'Success:', danger: 'Error:' } as const;
+
+const TONE_ICON = { info: Info, success: CheckCircle, danger: ErrorIcon } as const;
+
 const ToastContext = createContext<ToastApi | null>(null);
 
 /** Mount once near the app root. Renders the toast region (bottom-right). */
@@ -55,8 +59,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <ToastRegion queue={queue} className={styles.region} aria-label={t('ui.notifications', 'Notifications')}>
         {({ toast }) => (
           <RACToast toast={toast} className={cx(styles.toast, styles[toast.content.tone])}>
-            <ToastContent className={styles.content}>
+            <span className={styles.toneIcon} aria-hidden="true">
+              {(() => {
+                const Icon = TONE_ICON[toast.content.tone];
+                return <Icon fontSize="small" />;
+              })()}
+            </span>
+            <ToastContent className={styles.content} role={toast.content.tone === 'danger' ? 'alert' : 'status'}>
               <Text slot="title" className={styles.title}>
+                <span className="visually-hidden">{t(`ui.toast.${toast.content.tone}`, TONE_DEFAULT[toast.content.tone])} </span>
                 {toast.content.title}
               </Text>
               {toast.content.description ? (

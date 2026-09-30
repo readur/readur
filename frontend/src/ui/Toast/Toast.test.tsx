@@ -4,10 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Button } from '../Button';
 import { ToastProvider, useToast } from './Toast';
 
-function Trigger({ timeout }: { timeout?: number }) {
+function Trigger({ timeout, tone = 'success' }: { timeout?: number; tone?: 'info' | 'success' | 'danger' }) {
   const toast = useToast();
   return (
-    <Button onPress={() => toast.show({ title: 'Saved', description: 'All good', tone: 'success', timeout })}>
+    <Button onPress={() => toast.show({ title: 'Saved', description: 'All good', tone, timeout })}>
       Show
     </Button>
   );
@@ -60,5 +60,41 @@ describe('Toast', () => {
     render(<Trigger />);
     await user.click(screen.getByRole('button', { name: 'Show' }));
     expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['info', 'Info:'],
+    ['success', 'Success:'],
+    ['danger', 'Error:'],
+  ] as const)('exposes the %s tone as text to assistive tech', async (tone, prefix) => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <Trigger tone={tone} />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+    await screen.findByText('All good');
+    expect(screen.getByText('Saved')).toHaveTextContent(`${prefix} Saved`);
+  });
+
+  it('announces danger toasts assertively (role=alert)', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <Trigger tone="danger" />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Error: Saved');
+  });
+
+  it('announces non-danger toasts politely (role=status)', async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+    await screen.findByText('All good');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('All good');
   });
 });
