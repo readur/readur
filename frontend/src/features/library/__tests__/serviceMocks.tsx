@@ -25,6 +25,7 @@ export const documentService = {
   getById: vi.fn(),
 };
 export const searchService = { enhancedSearch: vi.fn() };
+export const sharedLinksService = { listByDocument: vi.fn(), create: vi.fn(), revoke: vi.fn() };
 export const apiClient = { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() };
 export const labelService = {
   list: vi.fn(),
@@ -36,7 +37,7 @@ export const labelService = {
 export const retryModal = vi.fn();
 
 export function apiModule() {
-  return { default: apiClient, api: apiClient, documentService, searchService };
+  return { default: apiClient, api: apiClient, documentService, searchService, sharedLinksService };
 }
 
 export function labelsModule() {
@@ -181,6 +182,7 @@ export function setupLibraryMocks() {
   documentService.delete.mockResolvedValue({ data: {} });
   documentService.bulkDelete.mockResolvedValue({ data: {} });
   searchService.enhancedSearch.mockResolvedValue(searchResponse([]));
+  sharedLinksService.listByDocument.mockResolvedValue({ data: [] });
   apiClient.get.mockImplementation((url: string) =>
     Promise.resolve({ data: url === '/sources' ? [{ id: 's1', name: 'Office NAS', source_type: 'webdav' }] : [] }),
   );

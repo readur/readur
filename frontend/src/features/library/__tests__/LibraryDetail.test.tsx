@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { isLit, markLit } from '../../board/litStore';
 import { currentUrl, renderLibrary, settle } from './libraryTestUtils';
-import { DOCS, documentService, hit, labelService, searchResponse, searchService, setupLibraryMocks } from './serviceMocks';
+import { DOCS, documentService, hit, labelService, searchResponse, searchService, setupLibraryMocks, sharedLinksService } from './serviceMocks';
 
 vi.mock('../../../services/api', async () => (await import('./serviceMocks')).apiModule());
 vi.mock('../../../services/api/labels', async () => (await import('./serviceMocks')).labelsModule());
@@ -206,12 +206,14 @@ describe('Library detail panel', () => {
       expect(await screen.findByText('Text recognition queued again')).toBeInTheDocument();
     });
 
-    test('Share leads to the document’s sharing', async () => {
+    test('Share opens the sharing dialog for the document', async () => {
       const user = userEvent.setup();
       renderLibrary();
       await openWithEnter(user, /lease\.pdf/);
       await user.click(within(panel()).getByRole('button', { name: 'Share' }));
-      expect(currentUrl()).toBe('/documents/d2?share=1');
+      expect(await screen.findByRole('dialog', { name: 'Share lease.pdf' })).toBeInTheDocument();
+      await waitFor(() => expect(sharedLinksService.listByDocument).toHaveBeenCalledWith('d2'));
+      await settle();
     });
 
     test('Delete asks first and cancelling keeps the document', async () => {

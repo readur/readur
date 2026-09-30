@@ -6,6 +6,7 @@ import { labelService } from '../../services/api/labels';
 import { Button, Dialog, Pass, PassCell, Skeleton, SlideOver, StatusMark, useToast } from '../../ui';
 import { Delete, Download, OpenInNew, Refresh, Share } from '../../ui/icons';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
+import { SharedLinksDialog } from '../document/sharing/SharedLinksDialog';
 import { LabelSelector, toLabelData, type LabelData, type LabelDraft } from '../labels';
 import { StatusCell } from './cells';
 import { displayName, type LibraryRow } from './data';
@@ -162,6 +163,7 @@ function DetailActions({ row, onRowChange, onDeleted }: DetailPanelProps & { row
   const navigate = useNavigate();
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [busy, setBusy] = useState<'download' | 'retry' | 'delete' | null>(null);
   const failed = ocrState(row.ocr_status) === 'failed';
 
@@ -216,12 +218,13 @@ function DetailActions({ row, onRowChange, onDeleted }: DetailPanelProps & { row
           {t('library.detail.retry', 'Retry OCR')}
         </Button>
       ) : null}
-      <Button variant="ghost" icon={<Share fontSize="small" />} onPress={() => navigate(`/documents/${row.id}?share=1`)}>
+      <Button variant="ghost" icon={<Share fontSize="small" />} onPress={() => setSharing(true)}>
         {t('library.detail.share', 'Share')}
       </Button>
       <Button variant="danger" icon={<Delete fontSize="small" />} onPress={() => setConfirmDelete(true)}>
         {t('library.detail.delete', 'Delete')}
       </Button>
+      <SharedLinksDialog documentId={row.id} filename={displayName(row)} isOpen={sharing} onOpenChange={setSharing} />
       <Dialog
         role="alertdialog"
         size="sm"
