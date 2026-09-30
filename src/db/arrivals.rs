@@ -38,9 +38,9 @@ impl ArrivalLane {
     }
 }
 
-/// One grouped row: documents of a lane on one day. `day` is `None` for
-/// documents older than the requested window, which still count towards
-/// `last_arrival_at`.
+/// One grouped row: `count` documents of a lane on `day`, the newest at
+/// `last_at`. A group with no `day` only carries the lane's newest arrival of
+/// all time, which may predate the window.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrivalGroup {
     pub lane: ArrivalLane,
@@ -58,6 +58,15 @@ pub struct ArrivalSource {
     pub enabled: bool,
     pub status: String,
 }
+
+/// `(is_watch, predicate)` of the two sourceless lanes, as used in the
+/// last-arrival lookups. Each predicate must match the WHERE clause of its
+/// partial index in `migrations/20260930000003_add_documents_arrivals_indexes.sql`
+/// (beyond `source_id IS NULL`), or the lookup cannot use that index.
+const LANE_PREDICATES: [(&str, &str); 2] = [
+    ("TRUE", "d.source_type = 'watch_folder'"),
+    ("FALSE", "d.source_type IS DISTINCT FROM 'watch_folder'"),
+];
 
 /// First day of a `days`-long window ending on `today` (inclusive).
 pub fn window_start(today: NaiveDate, days: i64) -> NaiveDate {
@@ -190,10 +199,11 @@ impl Database {
             .collect())
     }
 
-    /// Visible documents grouped by lane and UTC day in one query. Documents
-    /// before `since` are grouped under a NULL day so their newest timestamp
-    /// still feeds `last_arrival_at`.
-    async fn arrival_groups(
+    /// Visible documents inside the window, grouped by lane and UTC day. The
+    /// `created_at >= since` range keeps this to the window's rows
+    /// (`idx_documents_created_at_id`, or `idx_documents_user_created_at` for
+    /// a user).
+    async fn arrival_window_groups(
         &self,
         user_id: Uuid,
         role: UserRole,
@@ -202,14 +212,11 @@ impl Database {
         let mut query = QueryBuilder::<Postgres>::new(
             "SELECT source_id, \
              COALESCE(source_id IS NULL AND source_type = 'watch_folder', FALSE) AS is_watch, \
-             CASE WHEN created_at >= ",
+             (created_at AT TIME ZONE 'UTC')::date AS day, \
+             COUNT(*) AS count, MAX(created_at) AS last_at \
+             FROM documents WHERE created_at >= ",
         );
         query.push_bind(since);
-        query.push(
-            " THEN (created_at AT TIME ZONE 'UTC')::date END AS day, \
-             COUNT(*) AS count, MAX(created_at) AS last_at \
-             FROM documents WHERE 1=1",
-        );
         apply_role_based_filter(&mut query, user_id, role);
         query.push(" GROUP BY 1, 2, 3");
         let rows = query.build().fetch_all(&self.pool).await?;
@@ -217,9 +224,66 @@ impl Database {
             .iter()
             .map(|row| ArrivalGroup {
                 lane: ArrivalLane::from_row(row.get("source_id"), row.get("is_watch")),
-                day: row.get("day"),
+                day: Some(row.get("day")),
                 count: row.get("count"),
                 last_at: row.get("last_at"),
+            })
+            .collect())
+    }
+
+    /// Newest arrival of all time per lane, as dayless groups. Each lookup is
+    /// one probe of an expression index from
+    /// `migrations/20260930000003_add_documents_arrivals_indexes.sql`: per
+    /// source, and per user for the watch and upload lanes. The lookups order
+    /// by `created_at AT TIME ZONE 'UTC'`, which only those indexes provide, so
+    /// the planner can't walk `idx_documents_created_at_id` hunting for a quiet
+    /// lane's newest row.
+    async fn arrival_last_groups(
+        &self,
+        user_id: Uuid,
+        role: UserRole,
+    ) -> Result<Vec<ArrivalGroup>> {
+        let is_user = role != UserRole::Admin;
+        let mut query = QueryBuilder::<Postgres>::new(
+            "SELECT s.id AS source_id, FALSE AS is_watch, la.utc AT TIME ZONE 'UTC' AS last_at \
+             FROM sources s CROSS JOIN LATERAL (\
+             SELECT d.created_at AT TIME ZONE 'UTC' AS utc FROM documents d \
+             WHERE d.source_id = s.id",
+        );
+        if is_user {
+            query.push(" AND d.user_id = ");
+            query.push_bind(user_id);
+        }
+        query.push(" ORDER BY d.created_at AT TIME ZONE 'UTC' DESC LIMIT 1) la");
+        if is_user {
+            query.push(" WHERE s.user_id = ");
+            query.push_bind(user_id);
+        }
+        for (is_watch, predicate) in LANE_PREDICATES {
+            query.push(format!(
+                " UNION ALL SELECT NULL::uuid, {}, MAX(la.utc) AT TIME ZONE 'UTC' \
+                 FROM users u CROSS JOIN LATERAL (\
+                 SELECT d.created_at AT TIME ZONE 'UTC' AS utc FROM documents d \
+                 WHERE d.user_id = u.id AND d.source_id IS NULL AND {} \
+                 ORDER BY d.created_at AT TIME ZONE 'UTC' DESC LIMIT 1) la",
+                is_watch, predicate
+            ));
+            if is_user {
+                query.push(" WHERE u.id = ");
+                query.push_bind(user_id);
+            }
+        }
+        let rows = query.build().fetch_all(&self.pool).await?;
+        Ok(rows
+            .iter()
+            .filter_map(|row| {
+                let last_at: Option<DateTime<Utc>> = row.get("last_at");
+                last_at.map(|last_at| ArrivalGroup {
+                    lane: ArrivalLane::from_row(row.get("source_id"), row.get("is_watch")),
+                    day: None,
+                    count: 0,
+                    last_at,
+                })
             })
             .collect())
     }
@@ -237,7 +301,8 @@ impl Database {
             .expect("midnight is a valid time")
             .and_utc();
         let sources = self.arrival_sources(user_id, role).await?;
-        let groups = self.arrival_groups(user_id, role, since).await?;
+        let mut groups = self.arrival_window_groups(user_id, role, since).await?;
+        groups.extend(self.arrival_last_groups(user_id, role).await?);
         Ok(build_arrivals(&sources, &groups, today, days))
     }
 }

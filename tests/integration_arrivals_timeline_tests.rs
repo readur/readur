@@ -184,6 +184,8 @@ async fn arrivals_are_zero_filled_per_lane_and_scoped_like_documents() {
         Doc::new(other_id, midnight).source(Some("web_upload"), None),
         Doc::new(other_id, midnight).source(Some("web_upload"), None),
         Doc::new(other_id, midnight).source(Some("source_sync"), Some(others)),
+        // A lane that has been quiet since before the window.
+        Doc::new(other_id, days_ago(45)).source(Some("watch_folder"), None),
     ] {
         insert(&ctx, doc).await;
     }
@@ -273,7 +275,13 @@ async fn arrivals_are_zero_filled_per_lane_and_scoped_like_documents() {
     );
     assert_eq!(lane(&lanes, &others.to_string())["today"], 1);
     assert_eq!(lane(&lanes, "upload")["today"], 2);
-    assert_eq!(lane(&lanes, "watch")["last_arrival_at"], Value::Null);
+    let quiet = lane(&lanes, "watch");
+    assert!(counts(quiet).iter().all(|c| *c == 0));
+    assert_eq!(
+        parse_time(&quiet["last_arrival_at"]),
+        days_ago(45),
+        "the last arrival may predate the window"
+    );
 
     // Admins see every source and every document, like GET /api/documents.
     let (status, lanes) = get(&ctx, "/api/sources/arrivals", Some(&admin_token)).await;
@@ -291,6 +299,14 @@ async fn arrivals_are_zero_filled_per_lane_and_scoped_like_documents() {
     assert_eq!(lane(&lanes, "upload")["today"], 4);
     assert_eq!(lane(&lanes, &nextcloud.to_string())["today"], 2);
     assert_eq!(lane(&lanes, &others.to_string())["today"], 1);
+    assert_eq!(
+        parse_time(&lane(&lanes, "watch")["last_arrival_at"]),
+        days_ago(3)
+    );
+    assert_eq!(
+        lane(&lanes, &scans.to_string())["last_arrival_at"],
+        Value::Null
+    );
 
     ctx.cleanup_and_close().await.ok();
 }
