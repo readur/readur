@@ -209,9 +209,18 @@ async fn update_user(
     Path(id): Path<Uuid>,
     Json(update_data): Json<UpdateUser>,
 ) -> Result<Json<UserResponse>, UserError> {
+    let existing = state
+        .db
+        .get_user_by_id(id)
+        .await
+        .map_err(|e| UserError::internal_server_error(format!("Failed to fetch user: {}", e)))?
+        .ok_or_else(|| UserError::not_found_by_id(id))?;
+
+    // Only fields that actually change are validated, so accounts whose
+    // username or email predates the current rules stay editable.
     validate_account_fields(
-        update_data.username.as_deref(),
-        update_data.email.as_deref(),
+        update_data.username.as_deref().filter(|u| *u != existing.username),
+        update_data.email.as_deref().filter(|e| *e != existing.email),
         update_data.password.as_deref(),
     )?;
 

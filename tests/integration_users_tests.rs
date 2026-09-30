@@ -711,4 +711,60 @@ mod tests {
         let (status, _) = json_request(&ctx, "GET", "/api/auth/me", &token, None).await;
         assert_eq!(status, StatusCode::OK);
     }
+
+    #[tokio::test]
+    async fn test_admin_can_edit_accounts_with_legacy_usernames() {
+        let ctx = TestContext::new().await;
+        let auth_helper = ctx.auth_helper();
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
+
+        // A username and email that predate the current validation rules.
+        let suffix = &uuid::Uuid::new_v4().simple().to_string()[..10];
+        let legacy_username = format!("legacy user {}", suffix);
+        let legacy_email = format!("legacy {}", suffix);
+        let legacy = ctx.state.db
+            .create_user(CreateUser {
+                username: legacy_username.clone(),
+                email: legacy_email.clone(),
+                password: readur::test_utils::test_password(),
+                role: Some(UserRole::User),
+            })
+            .await
+            .unwrap();
+        let uri = format!("/api/users/{}", legacy.id);
+
+        // Sending the unchanged values back (as the edit form does) is accepted.
+        let (status, updated) = json_request(
+            &ctx,
+            "PUT",
+            &uri,
+            &token,
+            Some(json!({ "username": legacy_username, "email": legacy_email, "is_active": false })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{}", updated);
+        assert_eq!(updated["is_active"], false);
+        assert_eq!(updated["username"], legacy_username.as_str());
+
+        // Changing either one still has to satisfy the rules.
+        for body in [
+            json!({ "username": "still invalid", "email": legacy_email }),
+            json!({ "username": legacy_username, "email": "still invalid" }),
+        ] {
+            let (status, _) = json_request(&ctx, "PUT", &uri, &token, Some(body.clone())).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "expected rejection for {}", body);
+        }
+
+        // Updating a user that does not exist is a 404.
+        let (status, _) = json_request(
+            &ctx,
+            "PUT",
+            &format!("/api/users/{}", uuid::Uuid::new_v4()),
+            &token,
+            Some(json!({ "is_active": true })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
 }
