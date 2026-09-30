@@ -11,7 +11,8 @@ use crate::{
     auth::AuthUser,
     errors::search::SearchError,
     models::{
-        EnhancedDocumentResponse, SearchFacetsResponse, SearchMode, SearchRequest, SearchResponse,
+        EnhancedDocumentResponse, MonthCount, SearchFacetsResponse, SearchMode, SearchRequest,
+        SearchResponse,
     },
     AppState,
 };
@@ -21,6 +22,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/", get(search_documents))
         .route("/enhanced", get(enhanced_search_documents))
         .route("/facets", get(get_search_facets))
+        .route("/timeline", get(search_timeline))
 }
 
 #[utoipa::path(
@@ -187,6 +189,52 @@ async fn enhanced_search_documents(
     };
 
     Ok(Json(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/search/timeline",
+    tag = "search",
+    description = "Number of documents matching the search per UTC creation month, across all matches \
+        (not one page). Takes the same query and filters as /api/search/enhanced; pagination, snippet \
+        and sort parameters are ignored. Months without matches are omitted; ascending by month.",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        SearchRequest
+    ),
+    responses(
+        (status = 200, description = "Match counts per month, oldest first", body = Vec<MonthCount>),
+        (status = 400, description = "Invalid query or filter parameter"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+async fn search_timeline(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Query(search_request): Query<SearchRequest>,
+) -> Result<Json<Vec<MonthCount>>, StatusCode> {
+    // Same acceptance rules as enhanced search, so both calls agree.
+    let filters = search_request.filters();
+    if filters.validate().is_err() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if search_request.query.len() < 2 && !filters.is_active() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let months = state
+        .db
+        .search_timeline(auth_user.user.id, auth_user.user.role, &search_request)
+        .await
+        .map_err(|e| {
+            tracing::error!("Search timeline failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(months))
 }
 
 fn generate_search_suggestions(query: &str) -> Vec<String> {

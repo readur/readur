@@ -9,8 +9,8 @@ use super::helpers::{
 };
 use crate::db::Database;
 use crate::models::{
-    Document, EnhancedDocumentResponse, HighlightRange, SearchMode, SearchRequest, SearchSnippet,
-    UserRole,
+    Document, EnhancedDocumentResponse, HighlightRange, MonthCount, SearchMode, SearchRequest,
+    SearchSnippet, UserRole,
 };
 
 /// SQL expression building the tsquery (or similarity operand) for a search mode.
@@ -67,6 +67,23 @@ fn push_search_condition(
             query.push("))");
         }
     }
+}
+
+/// Appends the visibility, text-match and filter conditions shared by the
+/// search count and the search timeline.
+fn push_search_scope(
+    query: &mut QueryBuilder<Postgres>,
+    user_id: Uuid,
+    user_role: UserRole,
+    search_request: &SearchRequest,
+    mode: &SearchMode,
+) {
+    apply_role_based_filter(query, user_id, user_role);
+    let search_query = search_request.query.trim();
+    if !search_query.is_empty() {
+        push_search_condition(query, search_query, mode);
+    }
+    apply_document_filters(query, &search_request.filters());
 }
 
 impl Database {
@@ -336,19 +353,37 @@ impl Database {
         search_request: &SearchRequest,
         mode: &SearchMode,
     ) -> Result<i64> {
-        let search_query = search_request.query.trim();
-
         let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM documents WHERE 1=1");
-
-        apply_role_based_filter(&mut query, user_id, user_role);
-
-        if !search_query.is_empty() {
-            push_search_condition(&mut query, search_query, mode);
-        }
-
-        apply_document_filters(&mut query, &search_request.filters());
+        push_search_scope(&mut query, user_id, user_role, search_request, mode);
 
         let row: (i64,) = query.build_query_as().fetch_one(&self.pool).await?;
         Ok(row.0)
+    }
+
+    /// Counts every document matching the search (same predicate as
+    /// `count_search_documents`) per UTC creation month, ascending. Months
+    /// without matches are omitted.
+    pub async fn search_timeline(
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+        search_request: &SearchRequest,
+    ) -> Result<Vec<MonthCount>> {
+        let mode = search_request
+            .search_mode
+            .as_ref()
+            .unwrap_or(&SearchMode::Simple);
+        let mut query = QueryBuilder::<Postgres>::new(
+            "SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS month, \
+             COUNT(*) AS count FROM documents WHERE 1=1",
+        );
+        push_search_scope(&mut query, user_id, user_role, search_request, mode);
+        query.push(" GROUP BY 1 ORDER BY 1");
+
+        let rows: Vec<(String, i64)> = query.build_query_as().fetch_all(&self.pool).await?;
+        Ok(rows
+            .into_iter()
+            .map(|(month, count)| MonthCount { month, count })
+            .collect())
     }
 }
