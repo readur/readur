@@ -35,7 +35,9 @@ services:
       SERVER_PORT: 8001  # Different port from dev
       
       # Security
+      # Published test-only secret; accepted only with READUR_INSECURE_DEV_MODE
       JWT_SECRET: readur-test-environment-only-jwt-secret-0123456789
+      READUR_INSECURE_DEV_MODE: "true"
       # Known admin password so test tooling can provision users
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-readur-test-admin-password}
       

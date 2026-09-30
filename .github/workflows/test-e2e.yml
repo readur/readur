@@ -12,9 +12,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Fixed values for the throwaway CI server only. The JWT key must be 32+
-  # bytes and not a published example value or the server refuses to start.
-  CI_JWT_SECRET: 55d90d87f068819258508dec17e962cdf8d2d458c90589c4978e2dc5cb96e5e7
+  # CI_JWT_SECRET is generated per run (see "Generate throwaway JWT secret").
   # Seeded admin account; the E2E suite logs in with it to provision test users.
   E2E_ADMIN_USERNAME: admin
   E2E_ADMIN_PASSWORD: e2e-ci-admin-password
@@ -49,6 +47,12 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Generate throwaway JWT secret
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "::add-mask::$secret"
+          echo "CI_JWT_SECRET=$secret" >> "$GITHUB_ENV"
 
       - name: Install system dependencies
         run: |

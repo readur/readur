@@ -127,6 +127,7 @@ BACKEND_PORT=8000
 # Basic development setup
 DATABASE_URL=postgresql://readur:readur@localhost/readur
 JWT_SECRET=readur-local-development-only-jwt-secret-0123456789
+READUR_INSECURE_DEV_MODE=true   # the example secret above is only accepted in dev mode
 SERVER_ADDRESS=0.0.0.0:8000
 UPLOAD_PATH=./uploads
 WATCH_FOLDER=./watch

@@ -207,6 +207,12 @@ jobs:
         env:
           STRESS_LEVEL: ${{ github.event.inputs.stress_level || 'medium' }}
 
+      - name: Generate throwaway JWT secret
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "::add-mask::$secret"
+          echo "CI_JWT_SECRET=$secret" >> "$GITHUB_ENV"
+
       - name: Build readur with stress testing features
         run: |
           cargo build --release --features stress-testing
@@ -238,8 +244,7 @@ jobs:
           fi
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
-          # CI-only signing key: must be 32+ bytes or the server refuses to start.
-          JWT_SECRET: 9b3f6c1e2a7d4058b6e1c3f2a9d8e7b4c5a6f1e0d2b3c4a5f6e7d8c9b0a1f2e3
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch

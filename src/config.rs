@@ -79,6 +79,13 @@ const KNOWN_WEAK_JWT_SECRETS: &[&str] = &[
     "test-secret-key",
     "test-jwt-secret-key",
     "test-jwt-secret-key-not-for-production",
+    // Values committed in this repository for development, tests and CI.
+    "readur-local-development-only-jwt-secret-0123456789",
+    "readur-local-testing-only-jwt-secret-0123456789",
+    "readur-test-environment-only-jwt-secret-0123456789",
+    "readur-ci-testing-only-jwt-secret-0123456789",
+    "55d90d87f068819258508dec17e962cdf8d2d458c90589c4978e2dc5cb96e5e7",
+    "9b3f6c1e2a7d4058b6e1c3f2a9d8e7b4c5a6f1e0d2b3c4a5f6e7d8c9b0a1f2e3",
 ];
 
 /// Minimum JWT secret length in bytes (HS256 key should be >= 256 bits).
@@ -90,7 +97,8 @@ pub fn validate_jwt_secret(secret: &str) -> Result<()> {
     if trimmed.is_empty() {
         return Err(anyhow::anyhow!("JWT_SECRET must be set"));
     }
-    if KNOWN_WEAK_JWT_SECRETS.iter().any(|weak| trimmed.eq_ignore_ascii_case(weak)) {
+    let is_placeholder = trimmed.starts_with('<') && trimmed.ends_with('>');
+    if is_placeholder || KNOWN_WEAK_JWT_SECRETS.iter().any(|weak| trimmed.eq_ignore_ascii_case(weak)) {
         return Err(anyhow::anyhow!(
             "JWT_SECRET is set to a published example value; generate a random secret (e.g. `openssl rand -hex 32`)"
         ));
@@ -1150,5 +1158,113 @@ mod s3_env_tests {
         assert_eq!(parse_force_path_style(Some("false"), Some("true")), Some(false));
         // unset -> auto-detect
         assert_eq!(parse_force_path_style(None, None), None);
+    }
+}
+
+#[cfg(test)]
+mod jwt_secret_tests {
+    use super::*;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn rejects_empty_short_placeholder_and_known_values() {
+        assert!(validate_jwt_secret("").is_err());
+        assert!(validate_jwt_secret("short").is_err());
+        assert!(validate_jwt_secret("<output of: openssl rand -hex 32>").is_err());
+        for weak in KNOWN_WEAK_JWT_SECRETS {
+            assert!(validate_jwt_secret(weak).is_err(), "{weak} should be rejected");
+        }
+        assert!(validate_jwt_secret("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a6978").is_ok());
+    }
+
+    /// Extract the literal value assigned to a `JWT_SECRET`-like key on a
+    /// line, if any. Returns `None` for lines without an assignment and for
+    /// values computed at runtime (`$VAR`, `$(cmd)`, `${VAR}`, templates).
+    /// For `${VAR:-default}` the default is returned.
+    fn literal_jwt_secret(line: &str) -> Option<String> {
+        let idx = line.find("JWT_SECRET")?;
+        let rest = line[idx + "JWT_SECRET".len()..].trim_start();
+        let rest = rest.strip_prefix('=').or_else(|| rest.strip_prefix(':'))?;
+        let mut value = rest.trim();
+        if let Some(pos) = value.find(" #") {
+            value = value[..pos].trim();
+        }
+        let value = value.trim_matches(|c| c == '"' || c == '\'').trim();
+        if value.is_empty() {
+            return None;
+        }
+        if let Some(inner) = value.strip_prefix("${").and_then(|v| v.strip_suffix('}')) {
+            let (_, default) = inner.split_once(":-")?;
+            return Some(default.trim_matches(|c| c == '"' || c == '\'').to_string());
+        }
+        if value.starts_with('$') || value.starts_with("{{") {
+            return None;
+        }
+        Some(value.to_string())
+    }
+
+    fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in walkdir::WalkDir::new(dir)
+            .into_iter()
+            .filter_entry(|e| e.file_name() != "node_modules")
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
+                out.push(entry.into_path());
+            }
+        }
+    }
+
+    #[test]
+    fn literal_extraction() {
+        assert_eq!(literal_jwt_secret("JWT_SECRET=abc"), Some("abc".into()));
+        assert_eq!(literal_jwt_secret("  JWT_SECRET: \"abc\"  # note"), Some("abc".into()));
+        assert_eq!(literal_jwt_secret("JWT_SECRET: ${JWT_SECRET:-dflt}"), Some("dflt".into()));
+        assert_eq!(literal_jwt_secret("JWT_SECRET: ${JWT_SECRET:?required}"), None);
+        assert_eq!(literal_jwt_secret("JWT_SECRET: ${{ env.CI_JWT_SECRET }}"), None);
+        assert_eq!(literal_jwt_secret("JWT_SECRET=$(openssl rand -hex 32)"), None);
+        assert_eq!(literal_jwt_secret("JWT_SECRET: {{ .Values.x | b64enc }}"), None);
+        assert_eq!(literal_jwt_secret("`JWT_SECRET` is required"), None);
+        assert_eq!(literal_jwt_secret("JWT_SECRET="), None);
+    }
+
+    /// Every JWT secret value committed to the repository (compose files,
+    /// env files, docs, CI workflows, Helm chart) must be refused at startup.
+    #[test]
+    fn committed_jwt_secrets_are_rejected() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files = Vec::new();
+        for entry in std::fs::read_dir(root).expect("read repository root").flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let is_compose = name.starts_with("docker-compose")
+                && (name.ends_with(".yml") || name.ends_with(".yaml"));
+            let wanted = is_compose || name.starts_with(".env") || name.ends_with(".md");
+            if wanted && entry.path().is_file() {
+                files.push(entry.path());
+            }
+        }
+        for dir in ["docs", ".github", "charts"] {
+            collect_files(&root.join(dir), &mut files);
+        }
+
+        let mut checked = 0;
+        let mut accepted = Vec::new();
+        for file in &files {
+            let Ok(content) = std::fs::read_to_string(file) else { continue };
+            for (n, line) in content.lines().enumerate() {
+                if let Some(value) = literal_jwt_secret(line) {
+                    checked += 1;
+                    if validate_jwt_secret(&value).is_ok() {
+                        accepted.push(format!("{}:{}: {}", file.display(), n + 1, value));
+                    }
+                }
+            }
+        }
+        assert!(checked > 0, "expected to find JWT_SECRET examples in the repository");
+        assert!(
+            accepted.is_empty(),
+            "committed JWT_SECRET values must be listed in KNOWN_WEAK_JWT_SECRETS:\n{}",
+            accepted.join("\n")
+        );
     }
 }
