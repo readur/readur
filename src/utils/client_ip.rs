@@ -1,6 +1,10 @@
 //! Client IP resolution that only honours forwarding headers from trusted
 //! reverse proxies (`TRUSTED_PROXIES`). Anything else could be set by the
 //! client itself and must not drive rate limiting or audit logs.
+//!
+//! When `TRUSTED_PROXIES` is unset, loopback and private networks are trusted,
+//! so a reverse proxy on the same host or private network works out of the
+//! box. `TRUSTED_PROXIES=none` (or an empty value) trusts no proxy.
 
 use axum::{
     extract::{ConnectInfo, FromRequestParts},
@@ -36,6 +40,51 @@ impl FromRequestParts<Arc<AppState>> for ClientIp {
         Ok(ClientIp(peer.map(|peer| {
             resolve_client_ip(peer, &parts.headers, &state.config.security.trusted_proxies)
         })))
+    }
+}
+
+/// Networks trusted as reverse proxies when `TRUSTED_PROXIES` is unset.
+pub const DEFAULT_TRUSTED_PROXIES: [&str; 6] =
+    ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"];
+
+/// Parse the `TRUSTED_PROXIES` setting: `None` (unset) gives
+/// [`DEFAULT_TRUSTED_PROXIES`]; an empty value or `none` trusts nothing;
+/// otherwise a comma-separated list of IPs or CIDRs.
+pub fn parse_trusted_proxies(setting: Option<&str>) -> anyhow::Result<Vec<IpNet>> {
+    let Some(setting) = setting else {
+        return Ok(DEFAULT_TRUSTED_PROXIES.iter().map(|net| net.parse().expect("valid default network")).collect());
+    };
+    if setting.trim().eq_ignore_ascii_case("none") {
+        return Ok(Vec::new());
+    }
+    setting
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| {
+            entry
+                .parse::<IpNet>()
+                .or_else(|_| entry.parse::<IpAddr>().map(IpNet::from))
+                .map_err(|_| anyhow::anyhow!("TRUSTED_PROXIES entry '{}' is not an IP or CIDR", entry))
+        })
+        .collect()
+}
+
+/// Startup log line for the `TRUSTED_PROXIES` setting. Reports only how
+/// many ranges apply, never the configured values.
+pub fn describe_trusted_proxies(setting: Option<&str>) -> String {
+    match setting {
+        None => format!(
+            "not set; trusting loopback and private networks ({} ranges). Set TRUSTED_PROXIES=none to trust no proxy",
+            DEFAULT_TRUSTED_PROXIES.len()
+        ),
+        Some(raw) if raw.trim().is_empty() || raw.trim().eq_ignore_ascii_case("none") => {
+            "none; forwarding headers are ignored".to_string()
+        }
+        Some(raw) => {
+            let entries = raw.split(',').filter(|entry| !entry.trim().is_empty()).count();
+            format!("{} range(s) configured", entries)
+        }
     }
 }
 
@@ -195,6 +244,37 @@ mod tests {
     fn all_trusted_hops_resolve_to_the_leftmost() {
         let got = resolve_client_ip(peer(), &headers("10.1.1.1, 10.0.0.5"), &trusted());
         assert_eq!(got, "10.1.1.1".parse::<IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn unset_setting_trusts_loopback_and_private_networks() {
+        let defaults = parse_trusted_proxies(None).unwrap();
+        for ip in ["127.0.0.1", "::1", "10.1.2.3", "172.20.0.5", "192.168.1.1", "fd00::5"] {
+            assert!(is_trusted(&ip.parse().unwrap(), &defaults), "{ip}");
+        }
+        for ip in ["203.0.113.9", "172.32.0.1", "2001:db8::1", "169.254.1.1"] {
+            assert!(!is_trusted(&ip.parse().unwrap(), &defaults), "{ip}");
+        }
+        // Behind a local proxy the forwarded client address is used by default.
+        let got = resolve_client_ip("172.18.0.2".parse().unwrap(), &headers("198.51.100.7"), &defaults);
+        assert_eq!(got, "198.51.100.7".parse::<IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn none_or_empty_setting_trusts_nothing() {
+        for setting in ["none", "NONE", " None ", "", "  "] {
+            assert!(parse_trusted_proxies(Some(setting)).unwrap().is_empty(), "{setting:?}");
+            assert_eq!(describe_trusted_proxies(Some(setting)), "none; forwarding headers are ignored");
+        }
+    }
+
+    #[test]
+    fn explicit_setting_is_parsed_and_counted() {
+        let nets = parse_trusted_proxies(Some("10.0.0.1, 172.16.0.0/12,")).unwrap();
+        assert_eq!(nets, vec!["10.0.0.1/32".parse::<IpNet>().unwrap(), "172.16.0.0/12".parse().unwrap()]);
+        assert_eq!(describe_trusted_proxies(Some("10.0.0.1, 172.16.0.0/12,")), "2 range(s) configured");
+        assert!(parse_trusted_proxies(Some("10.0.0.1,proxy.local")).is_err());
+        assert!(describe_trusted_proxies(None).contains("6 ranges"));
     }
 
     #[test]

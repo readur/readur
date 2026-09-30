@@ -212,7 +212,7 @@ Readur includes built-in rate limiting to prevent abuse:
 - **Comment creation**: 10 comments/minute per user
 - **Shared link creation**: 20 links/hour per user
 
-Per-IP limits use the TCP peer address. Behind a reverse proxy, set `TRUSTED_PROXIES` to the proxy's IPs or CIDRs so the client address from `X-Forwarded-For` is used; the header is ignored for requests from other addresses.
+Per-IP limits use the client address. `X-Forwarded-For` is only honoured for requests arriving from a trusted proxy: by default any loopback or private-network address (`127.0.0.0/8`, `::1/128`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`). Set `TRUSTED_PROXIES` to your proxy's IPs or CIDRs to narrow this, or to `none` if clients reach readur directly from a private network; the header is ignored for requests from other addresses.
 
 Rate limits are enforced automatically using in-memory tracking. When a limit is exceeded, the API returns HTTP 429 (Too Many Requests) with a `retry_after_secs` field indicating when to retry.
 

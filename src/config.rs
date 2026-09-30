@@ -151,15 +151,9 @@ impl SecurityConfig {
             println!("📂 LOCAL_SOURCE_ALLOWED_PATHS: {:?}", local_source_allowed_paths);
         }
 
-        let proxy_entries = env_list("TRUSTED_PROXIES");
-        let mut trusted_proxies = Vec::new();
-        for raw in &proxy_entries {
-            let net = raw.parse::<ipnet::IpNet>()
-                .or_else(|_| raw.parse::<std::net::IpAddr>().map(ipnet::IpNet::from))
-                .map_err(|_| anyhow::anyhow!("TRUSTED_PROXIES entry '{}' is not an IP or CIDR", raw))?;
-            trusted_proxies.push(net);
-        }
-        println!("🌐 TRUSTED_PROXIES: {} range(s) configured", proxy_entries.len());
+        let proxy_setting = env::var("TRUSTED_PROXIES").ok();
+        let trusted_proxies = crate::utils::client_ip::parse_trusted_proxies(proxy_setting.as_deref())?;
+        println!("🌐 TRUSTED_PROXIES: {}", crate::utils::client_ip::describe_trusted_proxies(proxy_setting.as_deref()));
 
         let cors_allowed_origins = env_list("CORS_ALLOWED_ORIGINS")
             .iter()

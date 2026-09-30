@@ -80,7 +80,7 @@ services:
 | Variable | Purpose |
 |----------|---------|
 | `PUBLIC_URL` | The public base URL clients use (e.g. `https://readur.example.com`, or `https://example.com/readur` for a subpath). Readur uses it to build the OIDC post-login redirect and shared-link URLs. Request headers such as `Host` or `X-Forwarded-Host` are not used for this, so set `PUBLIC_URL` when running behind a proxy. |
-| `TRUSTED_PROXIES` | Comma-separated IPs or CIDRs of your reverse proxies. Only requests arriving from these addresses have their `X-Forwarded-For` header used to determine the client IP (for rate limiting). When unset, the proxy's own address is treated as the client IP. Use the address or network the proxy connects from, e.g. the Docker network range. |
+| `TRUSTED_PROXIES` | Comma-separated IPs or CIDRs of your reverse proxies. Only requests arriving from these addresses have their `X-Forwarded-For` header used to determine the client IP (for rate limiting). When unset, loopback and private networks (`127.0.0.0/8`, `::1/128`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`) are trusted, which covers a proxy on the same host or Docker network. Set it to the address or network the proxy connects from to narrow this, or to `none` to trust no proxy. |
 | `CORS_ALLOWED_ORIGINS` | Not needed when the bundled frontend is served through the same proxy (same origin). Set only if a different origin must call the API. |
 
 ## Nginx Configuration

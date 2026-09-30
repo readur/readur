@@ -52,7 +52,7 @@ These settings are read at startup. Invalid values (for example a malformed CIDR
 | `ADMIN_PASSWORD_FILE` | String | `<UPLOAD_PATH>/.readur/initial-admin-password` | Where a generated initial admin password is written (mode `0600`). In the Docker image this is `/app/uploads/.readur/initial-admin-password`. An existing file is never overwritten; if one is present when the admin account has to be created, startup stops and asks for it to be removed. The startup log shows the path | No |
 | `ALLOW_REGISTRATION` | Boolean | `false` | Enables self-registration. Self-registered accounts are created disabled and must be approved (enabled) by an administrator in user management before they can sign in | No |
 | `LOCAL_SOURCE_ALLOWED_PATHS` | String | - | Comma-separated directories that local folder sources may use. When set, every local folder source (including those created by admins) must be inside one of these directories; each entry must exist at startup. When unset, only admins can create local folder sources | No |
-| `TRUSTED_PROXIES` | String | - | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` header is trusted when determining the client IP (used for rate limiting). When unset, the direct peer address is used | No |
+| `TRUSTED_PROXIES` | String | loopback and private networks | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` header is trusted when determining the client IP (used for rate limiting). When unset, `127.0.0.0/8`, `::1/128`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `fc00::/7` are trusted; `none` or an empty value trusts no proxy | No |
 | `CORS_ALLOWED_ORIGINS` | String | - (none) | Comma-separated origins allowed to make cross-origin requests, each as `scheme://host[:port]` (a trailing slash is ignored). The server refuses to start if an entry is not a valid http(s) origin. The bundled frontend is same-origin and needs no entry | No |
 | `METRICS_TOKEN` | String | - | Bearer token (min 16 chars) for Prometheus scrapes of `/metrics`. Without it, `/metrics` requires an admin session or admin API key | No |
 | `PUBLIC_URL` | String | - | Public base URL of the Readur instance (e.g. `https://readur.example.com`). Used to build the post-login OIDC redirect and shared-link URLs; request headers are not used for this. When unset, OIDC falls back to the origin of `OIDC_REDIRECT_URI` and shared links fall back to `http://<SERVER_ADDRESS>` | Recommended behind a proxy |
@@ -220,7 +220,7 @@ Related API behavior:
 | `CORS_ALLOWED_HEADERS` | String | `*` | Allowed headers | No |
 | `CORS_MAX_AGE` | Integer | `3600` | CORS preflight cache (seconds) | No |
 | `PROXY_COUNT` | Integer | `0` | Number of reverse proxies | No |
-| `TRUSTED_PROXIES` | String | - | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` header is used to determine the client IP (for example, for rate limiting). When unset, `X-Forwarded-For` is ignored | No |
+| `TRUSTED_PROXIES` | String | loopback and private networks | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` header is used to determine the client IP (for example, for rate limiting). When unset, loopback and private networks are trusted; `none` or an empty value trusts no proxy | No |
 | `WEBSOCKET_ENABLED` | Boolean | `true` | Enable WebSocket support | No |
 | `WEBSOCKET_MAX_CONNECTIONS` | Integer | `1000` | Maximum WebSocket connections | No |
 

@@ -584,7 +584,7 @@ spec:
 - [ ] Set `JWT_SECRET` to a random value of at least 32 bytes (e.g. `openssl rand -hex 32`); the server will not start without it
 - [ ] Change the initial admin password and delete the generated `initial-admin-password` file (if `ADMIN_PASSWORD` was not set)
 - [ ] Keep `ALLOW_REGISTRATION` disabled unless self-registration is needed
-- [ ] Set `PUBLIC_URL` and `TRUSTED_PROXIES` when running behind a reverse proxy
+- [ ] Set `PUBLIC_URL` when running behind a reverse proxy, and `TRUSTED_PROXIES` if the proxy is not on a loopback or private address (or `none` if clients connect directly from a private network)
 - [ ] Set `METRICS_TOKEN` if Prometheus scrapes `/metrics`
 - [ ] Use HTTPS/SSL in production
 - [ ] **Never disable SSL verification in production** (S3_VERIFY_SSL must be true)
