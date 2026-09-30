@@ -124,7 +124,7 @@ MIN_SCANNED = 300
 # raise a number to land a change -- that is the exact regression this blocks.
 # Regenerate with `mise run lines-baseline` (it warns about any raised entry).
 BASELINE: dict[str, int] = {
-    "frontend/src/pages/SourcesPage.tsx": 2772,
+    "frontend/src/pages/SourcesPage.tsx": 2761,
     "tests/integration_documents_database_tests.rs": 2702,
     "src/services/webdav/service.rs": 2693,
     "frontend/src/pages/DocumentManagementPage.tsx": 2458,

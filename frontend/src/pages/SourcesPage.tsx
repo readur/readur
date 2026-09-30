@@ -81,6 +81,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import SyncProgressDisplay from '../components/SyncProgress';
+import { buildTestConnectionRequest } from '../services/sourceConnectionTest';
 
 interface Source {
   id: string;
@@ -622,44 +623,37 @@ const SourcesPage: React.FC = () => {
   const handleTestConnection = async () => {
     setTestingConnection(true);
     try {
-      let response;
+      let config: Record<string, unknown> | undefined;
       if (formData.source_type === 'webdav') {
-        response = await api.post('/sources/test/connection', {
-          source_type: 'webdav',
-          config: {
-            server_url: formData.server_url,
-            username: formData.username,
-            password: formData.password,
-            server_type: formData.server_type,
-            watch_folders: formData.watch_folders,
-            file_extensions: formData.file_extensions,
-          }
-        });
+        config = {
+          server_url: formData.server_url,
+          username: formData.username,
+          password: formData.password,
+          server_type: formData.server_type,
+          watch_folders: formData.watch_folders,
+          file_extensions: formData.file_extensions,
+        };
       } else if (formData.source_type === 'local_folder') {
-        response = await api.post('/sources/test/connection', {
-          source_type: 'local_folder',
-          config: {
-            watch_folders: formData.watch_folders,
-            file_extensions: formData.file_extensions,
-            recursive: formData.recursive,
-            follow_symlinks: formData.follow_symlinks,
-          }
-        });
+        config = {
+          watch_folders: formData.watch_folders,
+          file_extensions: formData.file_extensions,
+          recursive: formData.recursive,
+          follow_symlinks: formData.follow_symlinks,
+        };
       } else if (formData.source_type === 's3') {
-        response = await api.post('/sources/test/connection', {
-          source_type: 's3',
-          config: {
-            bucket_name: formData.bucket_name,
-            region: formData.region,
-            access_key_id: formData.access_key_id,
-            secret_access_key: formData.secret_access_key,
-            endpoint_url: formData.endpoint_url,
-            force_path_style: formData.force_path_style === 'path' ? true
-              : formData.force_path_style === 'vhost' ? false : null,
-            prefix: formData.prefix,
-          }
-        });
+        config = {
+          bucket_name: formData.bucket_name,
+          region: formData.region,
+          access_key_id: formData.access_key_id,
+          secret_access_key: formData.secret_access_key,
+          endpoint_url: formData.endpoint_url,
+          force_path_style: formData.force_path_style === 'path' ? true
+            : formData.force_path_style === 'vhost' ? false : null,
+          prefix: formData.prefix,
+        };
       }
+      const response = config && await api.post('/sources/test/connection',
+        buildTestConnectionRequest(formData.source_type, config, editingSource));
 
       if (response && response.data.success) {
         showSnackbar(response.data.message || t('sources.messages.connectionSuccess'), 'success');
