@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ocrService } from '../../../services/api';
 import OcrLanguageSelector from '../ocr/OcrLanguageSelector';
-import LegacyPath from '../../../components/OcrLanguageSelector';
 import { httpError } from './settingsTestUtils';
 
 const LANGS = {
@@ -21,10 +20,6 @@ beforeEach(() => {
 });
 
 describe('OcrLanguageSelector', () => {
-  it('is still exported from its previous path', () => {
-    expect(LegacyPath).toBe(OcrLanguageSelector);
-  });
-
   it('shows a loading state, then a labelled select', async () => {
     render(<OcrLanguageSelector value="eng" onChange={vi.fn()} />);
     expect(screen.getByRole('status')).toHaveTextContent('Loading languages...');

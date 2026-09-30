@@ -1,9 +1,8 @@
 /**
  * Lucide icon adapter for Readur.
  *
- * The codebase originally imported icons from `@mui/icons-material` and
- * `@heroicons/react/24/outline`. This module re-exports their Lucide
- * equivalents under the same names so that call-sites only need to swap
+ * The codebase originally imported icons from Material and Heroicons
+ * icon packages. This module exposes Lucide equivalents under the same names so that call-sites only need to swap
  * their import path:
  *
  *   - import { Menu, Dashboard } from './icons'

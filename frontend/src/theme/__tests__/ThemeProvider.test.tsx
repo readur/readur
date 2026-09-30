@@ -63,7 +63,6 @@ describe('ThemeModeProvider', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
-    document.documentElement.classList.remove('dark');
   });
 
   afterEach(() => {
@@ -75,7 +74,6 @@ describe('ThemeModeProvider', () => {
     mount();
     expect(screen.getByTestId('mode').textContent).toBe('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
   it('defaults to light when the system is not dark', () => {
@@ -92,16 +90,14 @@ describe('ThemeModeProvider', () => {
     expect(document.documentElement.dataset.theme).toBe('light');
   });
 
-  it('toggle persists and updates data-theme and .dark', () => {
+  it('toggle persists and updates data-theme', () => {
     installMatchMedia({ [DARK]: false });
     mount();
     act(() => screen.getByText('toggle').click());
     expect(screen.getByTestId('mode').textContent).toBe('dark');
     expect(localStorage.getItem('themeMode')).toBe('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
     act(() => screen.getByText('toggle').click());
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
     expect(document.documentElement.dataset.theme).toBe('light');
   });
 

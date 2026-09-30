@@ -55,7 +55,6 @@ export const ThemeModeProvider: React.FC<{ children: ReactNode }> = ({ children 
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = mode;
-    root.classList.toggle('dark', mode === 'dark');
   }, [mode]);
 
   useEffect(
