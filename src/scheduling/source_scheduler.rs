@@ -12,10 +12,10 @@ use sqlx::Row;
 use crate::{
     AppState,
     models::{SourceType, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
-    models::source::WebDAVTestConnection,
     services::webdav::WebDAVConfig,
-    utils::outbound::{categorize_connection_error, validate_outbound_url},
+    utils::outbound::validate_outbound_url,
 };
+use super::source_connectivity;
 use super::source_sync::SourceSyncService;
 
 struct SyncHealthAnalysis {
@@ -880,7 +880,7 @@ impl SourceScheduler {
         // 2. Connectivity validation
         match source.source_type {
             crate::models::SourceType::WebDAV => {
-                if let Err(e) = Self::validate_webdav_connectivity(source).await {
+                if let Err(e) = source_connectivity::check_webdav(source).await {
                     validation_score -= 25;
                     if validation_status == "healthy" { validation_status = "warning"; }
                     validation_issues.push(serde_json::json!({
@@ -892,7 +892,7 @@ impl SourceScheduler {
                 }
             }
             crate::models::SourceType::LocalFolder => {
-                if let Err(e) = Self::validate_local_folder_access(source).await {
+                if let Err(e) = source_connectivity::check_local_folder(source).await {
                     validation_score -= 25;
                     if validation_status == "healthy" { validation_status = "warning"; }
                     validation_issues.push(serde_json::json!({
@@ -904,7 +904,7 @@ impl SourceScheduler {
                 }
             }
             crate::models::SourceType::S3 => {
-                if let Err(e) = Self::validate_s3_connectivity(source).await {
+                if let Err(e) = source_connectivity::check_s3(source).await {
                     validation_score -= 25;
                     if validation_status == "healthy" { validation_status = "warning"; }
                     validation_issues.push(serde_json::json!({
@@ -1031,70 +1031,6 @@ impl SourceScheduler {
             }
         }
     }
-
-    async fn validate_webdav_connectivity(source: &crate::models::Source) -> Result<(), String> {
-        use crate::models::WebDAVSourceConfig;
-        
-        let config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())
-            .map_err(|e| format!("Config parse error: {}", e))?;
-
-        validate_outbound_url(&WebDAVConfig::normalize_server_url(&config.server_url))
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let webdav_config = crate::services::webdav::WebDAVConfig {
-            server_url: config.server_url.clone(),
-            username: config.username.clone(),
-            password: config.password.clone(),
-            watch_folders: config.watch_folders.clone(),
-            file_extensions: config.file_extensions.clone(),
-            timeout_seconds: 30, // Quick connectivity test
-            server_type: config.server_type.clone(),
-        };
-
-        let _webdav_service = crate::services::webdav::WebDAVService::new(webdav_config).map_err(|e| {
-            warn!("WebDAV health check for source {}: service creation failed: {}", source.id, e);
-            categorize_connection_error(&e.to_string()).to_string()
-        })?;
-
-        let test_config = WebDAVTestConnection {
-            server_url: config.server_url,
-            username: config.username,
-            password: config.password,
-            server_type: config.server_type,
-        };
-        
-        let result = crate::services::webdav::WebDAVService::test_connection_with_config(&test_config)
-            .await
-            .map_err(|e| {
-                warn!("WebDAV health check for source {} failed: {}", source.id, e);
-                categorize_connection_error(&e.to_string()).to_string()
-            })?;
-        if !result.success {
-            warn!("WebDAV health check for source {} failed: {}", source.id, result.message);
-            return Err(categorize_connection_error(&result.message).to_string());
-        }
-
-        Ok(())
-    }
-
-    async fn validate_local_folder_access(_source: &crate::models::Source) -> Result<(), String> {
-        // Simplified local folder validation - could be enhanced
-        // For now, just return OK as local folders are validated differently
-        Ok(())
-    }
-
-    async fn validate_s3_connectivity(source: &crate::models::Source) -> Result<(), String> {
-        // Only the endpoint destination is checked here; a full S3 request
-        // requires more setup than a periodic health check warrants.
-        let config: S3SourceConfig = serde_json::from_value(source.config.clone())
-            .map_err(|e| format!("Config parse error: {}", e))?;
-        for url in crate::services::s3_service::S3Service::outbound_urls(&config) {
-            validate_outbound_url(&url).await.map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    }
-
 
     async fn analyze_sync_patterns(
         source: &crate::models::Source,
