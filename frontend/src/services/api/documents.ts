@@ -7,6 +7,7 @@ import type {
 } from '../../types/generated'
 import { serializeFilterParams, type DocumentListParams } from './filterParams'
 import type { BulkOcrRetryRequest, BulkOcrRetryResponse } from './ocr'
+import type { RetryOcrRequest } from '../../types/generated'
 import type { SearchFacetsResponse, SearchRequest, SearchResponse } from './search'
 import type {
   DocumentRetryHistoryResponse,
@@ -168,8 +169,14 @@ export const documentService = {
     })
   },
 
+  /**
+   * Retry OCR with the document's own languages. The handler takes a JSON body
+   * (`RetryOcrRequest`), so send an empty one: with no body axios omits the
+   * JSON content type and the server answers 415.
+   */
   retryOcr: (id: string) => {
-    return api.post(`/documents/${id}/ocr/retry`)
+    const body: RetryOcrRequest = {}
+    return api.post(`/documents/${id}/ocr/retry`, body)
   },
 
   // Advanced OCR retry functionality

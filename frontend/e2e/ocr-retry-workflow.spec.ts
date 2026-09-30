@@ -54,7 +54,7 @@ test.describe('OCR Retry Workflow', () => {
     const panel = page.getByRole('dialog', { name: 'broken-b.pdf' });
     await expect(panel).toBeVisible();
 
-    // Retry with an explicit language (the default-language path is broken, see the fixme below)
+    // Retry with an explicit language (the default-language path has its own test below)
     const languages = panel.getByRole('region', { name: 'Retry with languages' });
     await languages.getByRole('button', { name: /Select OCR languages/ }).click();
     await languages.getByRole('group', { name: 'Available Languages' }).getByText('English', { exact: true }).click();
@@ -75,17 +75,30 @@ test.describe('OCR Retry Workflow', () => {
     await helpers.waitForToast(/OCR retry queued/);
   });
 
-  // App bug (see the Task 13 report): documentService.retryOcr() POSTs /documents/:id/ocr/retry
-  // with no body, the handler requires a JSON body, and the server answers 415. Every
-  // "Retry OCR" that does not pick languages (Needs attention, Library slideout, Board) fails.
-  test.fixme('should retry a failed OCR document with the default language', async ({ dynamicUserPage: page }) => {
+  test('should retry a failed OCR document with the default language', async ({ dynamicUserPage: page }) => {
     const id = await seedFailedDocument('broken-h.pdf');
     await openAttention(page);
     await failedRow(page, 'broken-h.pdf').getByRole('rowheader').click();
     const panel = page.getByRole('dialog', { name: 'broken-h.pdf' });
-    const retry = page.waitForResponse((r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST');
-    await panel.getByRole('button', { name: 'Retry OCR' }).click();
-    expect((await retry).ok()).toBe(true);
+    await expect(panel).toBeVisible();
+
+    // No languages picked: the request still carries a JSON body (it used to be empty, which
+    // the server refused with 415). The server may refuse a manual retry with 500 while its own
+    // automatic retries are pending, so press Retry until it is accepted, as above.
+    await expect(async () => {
+      const errorToasts = helpers.toasts().getByRole('alertdialog').getByRole('button', { name: 'Close' });
+      while (await errorToasts.count()) await errorToasts.first().click();
+      const retry = page.waitForResponse(
+        (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
+        { timeout: TIMEOUTS.medium },
+      );
+      await panel.getByRole('button', { name: 'Retry OCR' }).click();
+      const response = await retry;
+      expect(response.status()).not.toBe(415);
+      expect(response.request().headers()['content-type']).toMatch(/^application\/json/);
+      expect(response.request().postDataJSON()).toEqual({});
+      expect(response.ok()).toBe(true);
+    }).toPass({ timeout: 90000, intervals: [5000] });
     await helpers.waitForToast(/OCR retry queued/);
   });
 
