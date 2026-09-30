@@ -247,6 +247,44 @@ async fn metadata_service_addresses_are_refused() {
     let _ = ctx.cleanup_and_close().await;
 }
 
+/// Sources sync on behalf of their owner: a disabled owner's sources are
+/// neither scheduled nor synced on request.
+#[tokio::test]
+async fn sources_of_disabled_owners_are_not_synced() {
+    let ctx = TestContext::new().await;
+    let helper = ctx.auth_helper();
+    let mut user = helper.create_test_user().await;
+    let token = user.login(&helper).await.unwrap().to_string();
+    let create = json!({
+        "name": "owned", "source_type": "webdav", "enabled": true,
+        "config": {
+            "server_url": "https://192.168.1.40/dav", "username": "u", "password": "p",
+            "watch_folders": ["/"], "file_extensions": ["pdf"], "auto_sync": true,
+            "sync_interval_minutes": 60, "server_type": "generic"
+        }
+    });
+    let (status, _, body) = send(&ctx, "POST", "/api/sources", &token, Some(create)).await;
+    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    let source_id = uuid::Uuid::parse_str(json_body(&body)["id"].as_str().unwrap()).unwrap();
+    let owner_id = user.user_response.id;
+
+    let db = &ctx.state().db;
+    let scheduled = |sources: Vec<readur::models::Source>| sources.iter().any(|s| s.id == source_id);
+    assert!(scheduled(db.get_sources_for_sync().await.unwrap()));
+
+    db.update_user(owner_id, None, None, None, Some(false)).await.unwrap();
+    assert!(!scheduled(db.get_sources_for_sync().await.unwrap()));
+
+    let source = db.get_source(owner_id, source_id).await.unwrap().unwrap();
+    let service = readur::scheduling::source_sync::SourceSyncService::new(ctx.state().clone());
+    let err = service.sync_source(&source, false).await.unwrap_err();
+    assert_eq!(err.to_string(), readur::scheduling::source_sync::OWNER_INACTIVE_MESSAGE);
+    let source = db.get_source(owner_id, source_id).await.unwrap().unwrap();
+    assert_eq!(source.last_error.as_deref(), Some(readur::scheduling::source_sync::OWNER_INACTIVE_MESSAGE));
+
+    let _ = ctx.cleanup_and_close().await;
+}
+
 /// The configuration objects the source form sends to `test/connection`
 /// (see `buildSourceConfig` in the frontend) must parse as the typed configs.
 #[tokio::test]
