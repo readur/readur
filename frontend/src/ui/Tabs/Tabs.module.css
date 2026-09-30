@@ -1,6 +1,8 @@
 .tabs {
   display: flex;
   flex-direction: column;
+  /* Wide panels or tab rows scroll inside, never widen the page. */
+  min-width: 0;
   font-family: var(--font-ui);
   color: var(--fg);
 }

@@ -53,7 +53,7 @@ export function LowConfidencePanel() {
   const docs = preview?.documents ?? [];
   const columns: BoardColumn<CleanupDocument>[] = [
     { id: 'name', label: t('intake.lowConfidence.col.name', 'Name'), render: (d) => d.original_filename || d.filename },
-    { id: 'size', label: t('intake.lowConfidence.col.size', 'Size'), align: 'end', width: 100, render: (d) => formatBytes(d.file_size, 2) },
+    { id: 'size', hideOnNarrow: true, label: t('intake.lowConfidence.col.size', 'Size'), align: 'end', width: 100, render: (d) => formatBytes(d.file_size, 2) },
     {
       id: 'confidence',
       label: t('intake.lowConfidence.col.confidence', 'Confidence'),
@@ -63,11 +63,12 @@ export function LowConfidencePanel() {
     },
     {
       id: 'status',
+      hideOnNarrow: true,
       label: t('intake.lowConfidence.col.status', 'Status'),
       width: 120,
       render: (d) => <StatusMark state={d.ocr_status === 'failed' ? 'failed' : d.ocr_status === 'completed' ? 'completed' : 'pending'} size="sm" />,
     },
-    { id: 'added', label: t('intake.lowConfidence.col.added', 'Added'), mono: true, width: 130, render: (d) => formatDate(d.created_at, i18n.language) },
+    { id: 'added', hideOnNarrow: true, label: t('intake.lowConfidence.col.added', 'Added'), mono: true, width: 130, render: (d) => formatDate(d.created_at, i18n.language) },
   ];
 
   return (

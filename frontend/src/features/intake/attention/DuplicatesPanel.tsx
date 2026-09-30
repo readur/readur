@@ -74,14 +74,15 @@ export function DuplicatesPanel() {
     { id: 'name', label: t('intake.duplicates.col.name', 'Name'), render: (r) => r.doc.filename },
     {
       id: 'group',
+      hideOnNarrow: true,
       label: t('intake.duplicates.col.group', 'Group'),
       mono: true,
       width: 220,
       render: (r) => `${shortHash(r.group.file_hash, 12)} ${r.position + 1}/${r.group.duplicate_count}`,
     },
-    { id: 'size', label: t('intake.duplicates.col.size', 'Size'), align: 'end', width: 100, render: (r) => formatBytes(r.doc.file_size, 2) },
-    { id: 'type', label: t('intake.duplicates.col.type', 'Type'), mono: true, width: 150, render: (r) => r.doc.mime_type },
-    { id: 'added', label: t('intake.duplicates.col.added', 'Added'), mono: true, width: 170, render: (r) => formatDateTime(r.doc.created_at, i18n.language) },
+    { id: 'size', hideOnNarrow: true, label: t('intake.duplicates.col.size', 'Size'), align: 'end', width: 100, render: (r) => formatBytes(r.doc.file_size, 2) },
+    { id: 'type', hideOnNarrow: true, label: t('intake.duplicates.col.type', 'Type'), mono: true, width: 150, render: (r) => r.doc.mime_type },
+    { id: 'added', hideOnNarrow: true, label: t('intake.duplicates.col.added', 'Added'), mono: true, width: 170, render: (r) => formatDateTime(r.doc.created_at, i18n.language) },
     {
       id: 'actions',
       label: <span className={sharedStyles.visuallyHidden}>{t('intake.duplicates.col.actions', 'Actions')}</span>,

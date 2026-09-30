@@ -45,6 +45,7 @@ export function ArrivalsPanel() {
       { id: 'name', label: t('board.col.name', 'Name'), isRowHeader: true, render: (d) => <NameCell doc={d} /> },
       {
         id: 'type',
+        hideOnNarrow: true,
         label: t('board.col.type', 'Type'),
         width: 72,
         render: (d) => <span className={styles.mono}>{fileTypeLabel(docName(d), d.mime_type)}</span>,
@@ -62,8 +63,8 @@ export function ArrivalsPanel() {
           return <StatusMark state={documentState(d)} progress={progress} size="sm" />;
         },
       },
-      { id: 'size', label: t('board.col.size', 'Size'), width: 96, align: 'end', mono: true, render: (d) => formatBytes(d.file_size, i18n.language) },
-      { id: 'added', label: t('board.col.added', 'Added'), width: 96, align: 'end', mono: true, render: (d) => formatAge(d.created_at, i18n.language) },
+      { id: 'size', hideOnNarrow: true, label: t('board.col.size', 'Size'), width: 96, align: 'end', mono: true, render: (d) => formatBytes(d.file_size, i18n.language) },
+      { id: 'added', hideOnNarrow: true, label: t('board.col.added', 'Added'), width: 96, align: 'end', mono: true, render: (d) => formatAge(d.created_at, i18n.language) },
     ],
     [t, i18n.language],
   );

@@ -17,6 +17,11 @@ export interface BoardColumn<T> {
   mono?: boolean;
   /** Marks the column that names the row for assistive tech. Defaults to the first column. */
   isRowHeader?: boolean;
+  /**
+   * Low-priority column: dropped below 720px so the table fits a phone. The row-header column
+   * is always kept. Whatever still does not fit scrolls inside the table, never the page.
+   */
+  hideOnNarrow?: boolean;
   render: (row: T) => ReactNode;
 }
 

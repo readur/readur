@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { Checkbox } from '../Checkbox';
 import { useFlip } from '../motion';
 import { cx } from '../shared/FieldParts';
+import { useIsNarrow } from '../shared/useMediaQuery';
 import { LoadingRows } from './LoadingRows';
 import type { BoardColumn, BoardTableProps } from './types';
 import { SELECT_CELL_ATTR, useRowPress } from './useRowPress';
@@ -40,6 +41,24 @@ function isData<T>(col: BoardColumn<T>) {
   return col.mono || col.align === 'end';
 }
 
+/** Columns without a width never shrink below this, so a crowded table scrolls instead. */
+const MIN_FLEX_COLUMN = 160;
+const SELECT_WIDTH = 40;
+
+/**
+ * Fixed layout gives every width-less column whatever is left, which can be nothing. On a phone a
+ * minimum table width keeps those columns readable; the container scrolls when the table is wider.
+ */
+function minTableWidth<T>(columns: BoardColumn<T>[], multiple: boolean): number {
+  let total = multiple ? SELECT_WIDTH : 0;
+  for (const col of columns) {
+    if (col.width === undefined) total += MIN_FLEX_COLUMN;
+    else if (typeof col.width === 'number') total += col.width;
+    else if (col.width.endsWith('px')) total += Number.parseFloat(col.width) || 0;
+  }
+  return total;
+}
+
 /**
  * Dense sortable, selectable table built on the React Aria Table. Sorting and selection are
  * controlled by the parent. Rows reorder with a FLIP animation.
@@ -49,7 +68,7 @@ function isData<T>(col: BoardColumn<T>) {
  * select-all checkbox.
  */
 export function BoardTable<T>({
-  columns,
+  columns: allColumns,
   rows,
   getRowId,
   sort,
@@ -76,7 +95,13 @@ export function BoardTable<T>({
   const detailPrefix = useId();
 
   const multiple = selectionMode === 'multiple';
-  const headerIndex = Math.max(0, columns.findIndex((c) => c.isRowHeader));
+  const narrow = useIsNarrow();
+  const headerId = (allColumns.find((c) => c.isRowHeader) ?? allColumns[0])?.id;
+  const columns = useMemo(
+    () => (narrow ? allColumns.filter((c) => !c.hideOnNarrow || c.id === headerId) : allColumns),
+    [allColumns, narrow, headerId],
+  );
+  const headerIndex = Math.max(0, columns.findIndex((c) => c.id === headerId));
   const showSkeleton = isLoading && rows.length === 0;
 
   const sortDescriptor: SortDescriptor | undefined = sort
@@ -95,6 +120,7 @@ export function BoardTable<T>({
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
         className={cx(styles.table, onRowAction && styles.actionable)}
+        style={narrow ? { minWidth: `${minTableWidth(columns, multiple)}px` } : undefined}
         selectionMode={multiple ? 'multiple' : 'none'}
         selectionBehavior="toggle"
         selectedKeys={selectedKeys}

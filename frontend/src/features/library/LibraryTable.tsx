@@ -46,19 +46,20 @@ export function LibraryTable({
   const columns = useMemo<BoardColumn<LibraryRow>[]>(
     () => [
       { id: 'filename', label: t('library.columns.name', 'Name'), sortable: true, render: (r) => <NameCell row={r} /> },
-      { id: 'mime_type', label: t('library.columns.type', 'Type'), sortable: true, width: 72, mono: true, render: (r) => shortType(r.mime_type) },
+      { id: 'mime_type', hideOnNarrow: true, label: t('library.columns.type', 'Type'), sortable: true, width: 72, mono: true, render: (r) => shortType(r.mime_type) },
       { id: 'ocr_status', label: t('library.columns.status', 'Status'), sortable: true, width: 128, render: (r) => <StatusCell row={r} /> },
-      { id: 'source', label: t('library.columns.source', 'Source'), width: 140, render: (r) => sourceName(r) },
-      { id: 'labels', label: t('library.columns.labels', 'Labels'), width: 200, render: (r) => <LabelsCell row={r} /> },
+      { id: 'source', hideOnNarrow: true, label: t('library.columns.source', 'Source'), width: 140, render: (r) => sourceName(r) },
+      { id: 'labels', hideOnNarrow: true, label: t('library.columns.labels', 'Labels'), width: 200, render: (r) => <LabelsCell row={r} /> },
       {
         id: 'file_size',
+        hideOnNarrow: true,
         label: t('library.columns.size', 'Size'),
         sortable: true,
         width: 88,
         align: 'end',
         render: (r) => formatBytes(r.file_size, i18n.language),
       },
-      { id: 'created_at', label: t('library.columns.added', 'Added'), sortable: true, width: 104, mono: true, render: (r) => <AddedCell value={r.created_at} /> },
+      { id: 'created_at', hideOnNarrow: true, label: t('library.columns.added', 'Added'), sortable: true, width: 104, mono: true, render: (r) => <AddedCell value={r.created_at} /> },
     ],
     [t, i18n.language, sourceName],
   );

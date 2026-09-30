@@ -44,9 +44,9 @@ export function ImportFailuresPanel() {
   const columns: BoardColumn<FailedDocumentRow>[] = [
     { id: 'name', label: t('intake.attention.col.name', 'Name'), render: (d) => failedName(d) },
     { id: 'status', label: t('intake.attention.col.status', 'Status'), width: 110, render: () => <StatusMark state="failed" size="sm" /> },
-    { id: 'reason', label: t('intake.attention.col.reason', 'Reason'), width: 200, render: (d) => failureSummary(t, d) },
-    { id: 'stage', label: t('intake.attention.col.stage', 'Stage'), width: 120, render: (d) => stageLabel(t, d.failure_stage) },
-    { id: 'failed', label: t('intake.attention.col.failed', 'Failed'), mono: true, width: 130, render: (d) => formatRelative(d.updated_at, i18n.language) },
+    { id: 'reason', hideOnNarrow: true, label: t('intake.attention.col.reason', 'Reason'), width: 200, render: (d) => failureSummary(t, d) },
+    { id: 'stage', hideOnNarrow: true, label: t('intake.attention.col.stage', 'Stage'), width: 120, render: (d) => stageLabel(t, d.failure_stage) },
+    { id: 'failed', hideOnNarrow: true, label: t('intake.attention.col.failed', 'Failed'), mono: true, width: 130, render: (d) => formatRelative(d.updated_at, i18n.language) },
   ];
 
   const reset = () => setPage(1);

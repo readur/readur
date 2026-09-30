@@ -104,9 +104,9 @@ export function WatchSection() {
 
   const columns: BoardColumn<WatchedLocation>[] = [
     { id: 'path', label: t('intake.watch.col.path', 'Folder'), mono: true, render: (l) => l.path },
-    { id: 'scope', label: t('intake.watch.col.scope', 'Scope'), width: 120, render: (l) => l.scope },
+    { id: 'scope', hideOnNarrow: true, label: t('intake.watch.col.scope', 'Scope'), width: 120, render: (l) => l.scope },
     { id: 'status', label: t('intake.watch.col.status', 'Status'), width: 120, render: (l) => <StatusMark state={l.state} size="sm" /> },
-    { id: 'detail', label: t('intake.watch.col.detail', 'Details'), render: (l) => l.detail },
+    { id: 'detail', hideOnNarrow: true, label: t('intake.watch.col.detail', 'Details'), render: (l) => l.detail },
   ];
 
   const stats = queue.data;

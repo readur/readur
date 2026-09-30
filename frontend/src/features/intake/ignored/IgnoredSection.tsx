@@ -110,13 +110,14 @@ export function IgnoredSection() {
     { id: 'name', label: t('intake.ignored.col.name', 'Name'), render: (f) => f.filename },
     {
       id: 'source',
+      hideOnNarrow: true,
       label: t('intake.ignored.col.source', 'Source'),
       width: 180,
       render: (f) => [sourceTypeLabel(t, f.source_type), sourceNameOf(f)].filter(Boolean).join(' · '),
     },
-    { id: 'size', label: t('intake.ignored.col.size', 'Size'), align: 'end', width: 100, render: (f) => formatBytes(f.file_size, 2) },
-    { id: 'ignored', label: t('intake.ignored.col.ignored', 'Ignored'), mono: true, width: 170, render: (f) => formatDateTime(f.ignored_at, lng) },
-    { id: 'reason', label: t('intake.ignored.col.reason', 'Reason'), width: 180, render: (f) => f.reason || t('intake.ignored.noReason', 'No reason given') },
+    { id: 'size', hideOnNarrow: true, label: t('intake.ignored.col.size', 'Size'), align: 'end', width: 100, render: (f) => formatBytes(f.file_size, 2) },
+    { id: 'ignored', hideOnNarrow: true, label: t('intake.ignored.col.ignored', 'Ignored'), mono: true, width: 170, render: (f) => formatDateTime(f.ignored_at, lng) },
+    { id: 'reason', hideOnNarrow: true, label: t('intake.ignored.col.reason', 'Reason'), width: 180, render: (f) => f.reason || t('intake.ignored.noReason', 'No reason given') },
     {
       id: 'actions',
       label: <span className={sharedStyles.visuallyHidden}>{t('intake.ignored.col.actions', 'Actions')}</span>,

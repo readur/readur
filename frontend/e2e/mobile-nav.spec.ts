@@ -48,9 +48,8 @@ test.describe('Mobile navigation', () => {
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
   });
 
-  // App bug (see the Task 13 report): at 390px the Library grid (/documents), the Intake tab
-  // row and the Board's arrivals table widen the page, so it scrolls sideways (up to ~570px).
-  test.fixme('the page does not scroll sideways', async ({ dynamicUserPage: page }) => {
+  // Populated pages are covered in no-horizontal-overflow.spec.ts.
+  test('the page does not scroll sideways', async ({ dynamicUserPage: page }) => {
     for (const path of ['/board', '/documents', '/intake?section=upload', '/settings']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

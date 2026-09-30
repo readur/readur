@@ -5,8 +5,15 @@
   min-width: 0;
 }
 
-/* The tab row scrolls sideways on narrow screens instead of wrapping. */
+/*
+ * The tab row scrolls sideways on narrow screens instead of wrapping. As a flex item it would
+ * otherwise grow to the tab list's max-content width and push the page sideways. It is also the
+ * containing block for the badges' visually hidden text, which would otherwise escape the clip.
+ */
 .tabScroller {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: thin;

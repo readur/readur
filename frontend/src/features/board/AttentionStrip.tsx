@@ -117,16 +117,18 @@ export function AttentionStrip({ failed, sources }: AttentionStripProps) {
       },
       {
         id: 'status',
+        hideOnNarrow: true,
         label: t('board.col.status', 'Status'),
         width: 110,
         render: (i) => <StatusMark state={i.state} size="sm" />,
       },
       {
         id: 'reason',
+        hideOnNarrow: true,
         label: t('board.col.reason', 'Reason'),
         render: (i) => <span className={styles.reason}>{i.reason || '—'}</span>,
       },
-      { id: 'age', label: t('board.col.age', 'Age'), width: 80, align: 'end', mono: true, render: (i) => formatAge(i.at, i18n.language) },
+      { id: 'age', hideOnNarrow: true, label: t('board.col.age', 'Age'), width: 80, align: 'end', mono: true, render: (i) => formatAge(i.at, i18n.language) },
       {
         id: 'actions',
         label: <span className={styles.srOnly}>{t('board.col.actions', 'Actions')}</span>,

@@ -56,9 +56,10 @@ export function UploadSection() {
         />
       ),
     },
-    { id: 'size', label: t('intake.upload.col.size', 'Size'), align: 'end', width: 100, render: (i) => formatBytes(i.file.size) },
+    { id: 'size', hideOnNarrow: true, label: t('intake.upload.col.size', 'Size'), align: 'end', width: 100, render: (i) => formatBytes(i.file.size) },
     {
       id: 'progress',
+      hideOnNarrow: true,
       label: t('intake.upload.col.progress', 'Progress'),
       width: 180,
       render: (i) => (

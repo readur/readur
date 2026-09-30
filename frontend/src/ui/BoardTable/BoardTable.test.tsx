@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createResponsiveMatchMediaMock } from '../../test/pwa-test-utils';
 import { EmptyState } from '../EmptyState';
 import { BoardTable } from './BoardTable';
 import type { BoardColumn, BoardSort, BoardTableProps, Selection } from './types';
@@ -264,5 +265,53 @@ describe('BoardTable', () => {
     render(<Harness />);
     const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
     expect(within(alphaRow).getByRole('gridcell', { name: '3' })).toBeInTheDocument();
+  });
+});
+
+describe('BoardTable on a narrow screen', () => {
+  const PRIORITY_COLUMNS: BoardColumn<Doc>[] = [
+    { id: 'name', label: 'Name', hideOnNarrow: true, render: (d) => d.name },
+    { id: 'pages', label: 'Pages', align: 'end', width: 90, render: (d) => d.pages },
+    { id: 'type', label: 'Type', width: '120px', hideOnNarrow: true, render: () => 'PDF' },
+  ];
+
+  const setNarrow = (narrow: boolean) => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: createResponsiveMatchMediaMock({ 'max-width: 719px': narrow }),
+    });
+  };
+
+  afterEach(() => setNarrow(false));
+
+  it('drops low-priority columns but always keeps the row header', () => {
+    setNarrow(true);
+    render(<Harness columns={PRIORITY_COLUMNS} selectionMode="multiple" />);
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toContain('Name');
+    expect(headers).toContain('Pages');
+    expect(headers).not.toContain('Type');
+    expect(screen.getByRole('rowheader', { name: 'Alpha.pdf' })).toBeInTheDocument();
+    // Select column (40) + the flexible name column (160) + the 90px column
+    expect(screen.getByRole('grid')).toHaveStyle({ minWidth: '290px' });
+  });
+
+  it('counts pixel widths given as strings and ignores relative ones', () => {
+    setNarrow(true);
+    const columns: BoardColumn<Doc>[] = [
+      { id: 'name', label: 'Name', render: (d) => d.name },
+      { id: 'type', label: 'Type', width: '120px', render: () => 'PDF' },
+      { id: 'pages', label: 'Pages', width: '20%', render: (d) => d.pages },
+    ];
+    render(<Harness columns={columns} />);
+    expect(screen.getByRole('grid')).toHaveStyle({ minWidth: '280px' });
+  });
+
+  it('keeps every column and sets no minimum width on a wide screen', () => {
+    setNarrow(false);
+    render(<Harness columns={PRIORITY_COLUMNS} />);
+    expect(screen.getByRole('columnheader', { name: 'Type' })).toBeInTheDocument();
+    expect(screen.getByRole('grid').style.minWidth).toBe('');
   });
 });

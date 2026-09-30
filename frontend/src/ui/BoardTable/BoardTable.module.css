@@ -1,9 +1,22 @@
 .container {
   --row-height: 40px;
+  /* Contains absolutely positioned cell content (visually hidden text) inside the scroll box. */
+  position: relative;
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+
+/*
+ * On a phone a table that is still wider than the screen scrolls inside its own box, never the
+ * page. (Only there: a scroll container would also stop the sticky head following the page.)
+ */
+@media (max-width: 719px) {
+  .container {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
 }
 
 .container[data-density='compact'] {

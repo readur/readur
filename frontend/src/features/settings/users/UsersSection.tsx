@@ -101,9 +101,10 @@ export default function UsersSection() {
   const columns = useMemo<BoardColumn<UserRow>[]>(() => {
     const cols: BoardColumn<UserRow>[] = [
       { id: 'username', label: t('settings.userManagement.tableHeaders.username'), render: (u) => u.username },
-      { id: 'email', label: t('settings.userManagement.tableHeaders.email'), render: (u) => u.email },
+      { id: 'email', hideOnNarrow: true, label: t('settings.userManagement.tableHeaders.email'), render: (u) => u.email },
       {
         id: 'created',
+        hideOnNarrow: true,
         label: t('settings.userManagement.tableHeaders.createdAt'),
         mono: true,
         width: 140,
@@ -111,7 +112,7 @@ export default function UsersSection() {
       },
     ];
     if (perUserWatch) {
-      cols.push({ id: 'watch', label: t('settings.userManagement.tableHeaders.watchDirectory'), render: watchCell });
+      cols.push({ id: 'watch', hideOnNarrow: true, label: t('settings.userManagement.tableHeaders.watchDirectory'), render: watchCell });
     }
     cols.push({ id: 'actions', label: t('settings.userManagement.tableHeaders.actions'), width: perUserWatch ? 200 : 110, render: actions });
     return cols;

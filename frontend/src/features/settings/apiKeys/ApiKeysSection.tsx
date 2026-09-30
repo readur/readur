@@ -34,6 +34,7 @@ export default function ApiKeysSection() {
       { id: 'name', label: t('settings.apiKeys.name', 'Name'), render: (k) => k.name },
       {
         id: 'prefix',
+        hideOnNarrow: true,
         label: t('settings.apiKeys.prefix', 'Prefix'),
         width: 150,
         render: (k) => <span className={styles.prefix}>{k.key_prefix}…</span>,
@@ -60,14 +61,15 @@ export default function ApiKeysSection() {
             </Tag>
           ),
       },
-      { id: 'lastUsed', label: t('settings.apiKeys.lastUsed', 'Last used'), mono: true, render: (k) => formatDate(k.last_used_at) },
+      { id: 'lastUsed', hideOnNarrow: true, label: t('settings.apiKeys.lastUsed', 'Last used'), mono: true, render: (k) => formatDate(k.last_used_at) },
       {
         id: 'expires',
+        hideOnNarrow: true,
         label: t('settings.apiKeys.expires', 'Expires'),
         mono: true,
         render: (k) => (k.expires_at ? formatDate(k.expires_at) : t('settings.apiKeys.never', 'Never')),
       },
-      { id: 'created', label: t('settings.apiKeys.created', 'Created'), mono: true, render: (k) => formatDate(k.created_at) },
+      { id: 'created', hideOnNarrow: true, label: t('settings.apiKeys.created', 'Created'), mono: true, render: (k) => formatDate(k.created_at) },
       {
         id: 'actions',
         label: t('settings.userManagement.tableHeaders.actions'),
