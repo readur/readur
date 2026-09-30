@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State},
-    http::{StatusCode, header::CONTENT_TYPE},
+    http::StatusCode,
     response::{Json, Response},
     body::Body,
     routing::{get, post, delete},
@@ -130,7 +130,7 @@ pub async fn create_shared_link(
         })?;
 
     let base_url = get_base_url(&state);
-    debug!("Created shared link for document {}: {}", document.id, token);
+    debug!("Created shared link {} for document {}", link.id, document.id);
 
     Ok(Json(SharedLinkResponse::from_shared_link(link, &base_url)))
 }
@@ -315,69 +315,7 @@ pub async fn download_shared_document(
     Path(token): Path<String>,
     Json(payload): Json<PasswordPayload>,
 ) -> Result<Response<Body>, SharedLinkError> {
-    // Rate limit public access per IP (general limit + password-specific limit if password provided)
-    let client_ip = client_ip.or_unspecified();
-    if let Err(retry_after) = state.rate_limiters.shared_link_public.check(&client_ip).await {
-        warn!("Rate limited shared link download from {}", client_ip);
-        return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
-    }
-    if payload.password.is_some() {
-        if let Err(retry_after) = state.rate_limiters.shared_link_password.check(&client_ip).await {
-            warn!("Rate limited shared link password attempt via download from {}", client_ip);
-            return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
-        }
-    }
-
-    let link = state
-        .db
-        .get_shared_link_by_token(&token)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch shared link: {}", e);
-            SharedLinkError::InternalError { message: "Failed to access shared link".into() }
-        })?
-        .ok_or(SharedLinkError::NotFound)?;
-
-    validate_shared_link(&link)?;
-    verify_password_if_required(&link, payload.password.as_deref())?;
-
-    // Increment view count
-    let _ = state.db.increment_shared_link_view_count(link.id).await;
-
-    let document = state
-        .db
-        .get_document_by_id_unfiltered(link.document_id)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch document: {}", e);
-            SharedLinkError::InternalError { message: "Failed to access shared document".into() }
-        })?
-        .ok_or(SharedLinkError::DocumentNotFound)?;
-
-    let file_data = state
-        .file_service
-        .read_file(&document.file_path)
-        .await
-        .map_err(|e| {
-            error!("Failed to read document file: {}", e);
-            SharedLinkError::InternalError { message: "Failed to read document file".into() }
-        })?;
-
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header(CONTENT_TYPE, &document.mime_type)
-        .header(
-            "Content-Disposition",
-            format!("attachment; filename=\"{}\"", crate::utils::security::content_disposition_filename(&document.original_filename)),
-        )
-        .header("Content-Length", file_data.len().to_string())
-        .body(Body::from(file_data))
-        .map_err(|e| {
-            error!("Failed to build response: {}", e);
-            SharedLinkError::InternalError { message: "Failed to serve document".into() }
-        })?;
-
-    Ok(response)
+    serve_shared_document(&state, client_ip, &token, payload, false).await
 }
 
 pub async fn view_shared_document(
@@ -386,22 +324,32 @@ pub async fn view_shared_document(
     Path(token): Path<String>,
     Json(payload): Json<PasswordPayload>,
 ) -> Result<Response<Body>, SharedLinkError> {
+    serve_shared_document(&state, client_ip, &token, payload, true).await
+}
+
+async fn serve_shared_document(
+    state: &Arc<AppState>,
+    client_ip: crate::utils::client_ip::ClientIp,
+    token: &str,
+    payload: PasswordPayload,
+    prefer_inline: bool,
+) -> Result<Response<Body>, SharedLinkError> {
     // Rate limit public access per IP (general limit + password-specific limit if password provided)
     let client_ip = client_ip.or_unspecified();
     if let Err(retry_after) = state.rate_limiters.shared_link_public.check(&client_ip).await {
-        warn!("Rate limited shared link view from {}", client_ip);
+        warn!("Rate limited shared link access from {}", client_ip);
         return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
     }
     if payload.password.is_some() {
         if let Err(retry_after) = state.rate_limiters.shared_link_password.check(&client_ip).await {
-            warn!("Rate limited shared link password attempt via view from {}", client_ip);
+            warn!("Rate limited shared link password attempt from {}", client_ip);
             return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
         }
     }
 
     let link = state
         .db
-        .get_shared_link_by_token(&token)
+        .get_shared_link_by_token(token)
         .await
         .map_err(|e| {
             error!("Failed to fetch shared link: {}", e);
@@ -412,8 +360,13 @@ pub async fn view_shared_document(
     validate_shared_link(&link)?;
     verify_password_if_required(&link, payload.password.as_deref())?;
 
-    // Increment view count
-    let _ = state.db.increment_shared_link_view_count(link.id).await;
+    let consumed = state.db.consume_shared_link_view(link.id).await.map_err(|e| {
+        error!("Failed to record shared link view: {}", e);
+        SharedLinkError::InternalError { message: "Failed to access shared link".into() }
+    })?;
+    if !consumed {
+        return Err(SharedLinkError::MaxViewsReached);
+    }
 
     let document = state
         .db
@@ -434,21 +387,16 @@ pub async fn view_shared_document(
             SharedLinkError::InternalError { message: "Failed to read document file".into() }
         })?;
 
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header(CONTENT_TYPE, &document.mime_type)
-        .header(
-            "Content-Disposition",
-            format!("inline; filename=\"{}\"", crate::utils::security::content_disposition_filename(&document.original_filename)),
-        )
-        .header("Content-Length", file_data.len().to_string())
-        .body(Body::from(file_data))
-        .map_err(|e| {
-            error!("Failed to build response: {}", e);
-            SharedLinkError::InternalError { message: "Failed to serve document".into() }
-        })?;
-
-    Ok(response)
+    crate::http_security::user_content_response(
+        &document.mime_type,
+        &document.original_filename,
+        prefer_inline,
+        file_data,
+    )
+    .map_err(|e| {
+        error!("Failed to build response: {}", e);
+        SharedLinkError::InternalError { message: "Failed to serve document".into() }
+    })
 }
 
 fn verify_password_if_required(

@@ -63,6 +63,22 @@ pub fn user_content_headers(
     headers
 }
 
+/// A 200 response carrying a user-uploaded file with [`user_content_headers`].
+pub fn user_content_response(
+    mime_type: &str,
+    original_filename: &str,
+    prefer_inline: bool,
+    data: Vec<u8>,
+) -> Result<axum::response::Response, axum::http::Error> {
+    let mut builder = axum::response::Response::builder().status(axum::http::StatusCode::OK);
+    for (name, value) in user_content_headers(mime_type, original_filename, prefer_inline) {
+        builder = builder.header(name, value);
+    }
+    builder
+        .header(header::CONTENT_LENGTH, data.len())
+        .body(axum::body::Body::from(data))
+}
+
 /// Cross-origin requests are denied unless origins are listed in
 /// `CORS_ALLOWED_ORIGINS`. The bundled frontend is same-origin and needs none.
 pub fn cors_layer(config: &Config) -> CorsLayer {
