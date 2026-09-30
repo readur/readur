@@ -1571,5 +1571,77 @@
     "warning": "CHECK",
     "error": "ERROR",
     "disabled": "OFF"
+  },
+  "shell": {
+    "skipToContent": "Skip to content",
+    "home": "Readur home",
+    "loading": "Loading",
+    "nav": {
+      "label": "Main",
+      "tabBar": "Tab bar",
+      "board": "Board",
+      "library": "Library",
+      "intake": "Intake",
+      "settings": "Settings"
+    },
+    "search": {
+      "open": "Search documents",
+      "placeholder": "Search documents…"
+    },
+    "palette": {
+      "navigation": "Go to",
+      "documents": "Documents",
+      "recent": "Recent searches",
+      "showAll": "Show all results for “{{query}}”"
+    },
+    "synced": {
+      "justNow": "synced just now",
+      "minutes": "synced {{count}}m ago",
+      "hours": "synced {{count}}h ago",
+      "days": "synced {{count}}d ago"
+    },
+    "alerts": {
+      "label": "Notifications",
+      "labelUnread": "Notifications, {{count}} unread",
+      "unread": "{{count}} unread",
+      "close": "Close notifications",
+      "dismiss": "Dismiss {{title}}",
+      "new": "New",
+      "type": {
+        "success": "Success",
+        "error": "Error",
+        "warning": "Warning",
+        "info": "Info"
+      }
+    },
+    "language": {
+      "label": "Change language"
+    },
+    "theme": {
+      "toDark": "Switch to dark mode",
+      "toLight": "Switch to light mode"
+    },
+    "user": {
+      "menu": "Account menu",
+      "settings": "Settings",
+      "apiDocs": "API documentation",
+      "logout": "Log out"
+    },
+    "intake": {
+      "title": "Intake",
+      "sections": "Intake sections",
+      "upload": "Upload",
+      "connections": "Connections",
+      "watch": "Watch folder",
+      "attention": "Needs attention",
+      "ignored": "Ignored files"
+    },
+    "settings": {
+      "title": "Settings",
+      "sections": "Settings sections",
+      "general": "General",
+      "labels": "Labels",
+      "debug": "Debug"
+    }
   }
 }

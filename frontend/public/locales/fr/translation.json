@@ -1551,5 +1551,77 @@
     "warning": "À VÉRIFIER",
     "error": "ERREUR",
     "disabled": "DÉSACTIVÉ"
+  },
+  "shell": {
+    "skipToContent": "Aller au contenu",
+    "home": "Accueil Readur",
+    "loading": "Chargement",
+    "nav": {
+      "label": "Principale",
+      "tabBar": "Barre d’onglets",
+      "board": "Tableau",
+      "library": "Bibliothèque",
+      "intake": "Entrée",
+      "settings": "Paramètres"
+    },
+    "search": {
+      "open": "Rechercher des documents",
+      "placeholder": "Rechercher des documents…"
+    },
+    "palette": {
+      "navigation": "Aller à",
+      "documents": "Documents",
+      "recent": "Recherches récentes",
+      "showAll": "Afficher tous les résultats pour « {{query}} »"
+    },
+    "synced": {
+      "justNow": "synchronisé à l’instant",
+      "minutes": "synchronisé il y a {{count}} min",
+      "hours": "synchronisé il y a {{count}} h",
+      "days": "synchronisé il y a {{count}} j"
+    },
+    "alerts": {
+      "label": "Notifications",
+      "labelUnread": "Notifications, {{count}} non lues",
+      "unread": "{{count}} non lues",
+      "close": "Fermer les notifications",
+      "dismiss": "Ignorer {{title}}",
+      "new": "Nouveau",
+      "type": {
+        "success": "Succès",
+        "error": "Erreur",
+        "warning": "Avertissement",
+        "info": "Info"
+      }
+    },
+    "language": {
+      "label": "Changer de langue"
+    },
+    "theme": {
+      "toDark": "Passer en mode sombre",
+      "toLight": "Passer en mode clair"
+    },
+    "user": {
+      "menu": "Menu du compte",
+      "settings": "Paramètres",
+      "apiDocs": "Documentation de l’API",
+      "logout": "Se déconnecter"
+    },
+    "intake": {
+      "title": "Entrée",
+      "sections": "Sections d’entrée",
+      "upload": "Importer",
+      "connections": "Connexions",
+      "watch": "Dossier surveillé",
+      "attention": "À traiter",
+      "ignored": "Fichiers ignorés"
+    },
+    "settings": {
+      "title": "Paramètres",
+      "sections": "Sections des paramètres",
+      "general": "Général",
+      "labels": "Étiquettes",
+      "debug": "Débogage"
+    }
   }
 }

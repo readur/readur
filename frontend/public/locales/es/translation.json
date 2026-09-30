@@ -1551,5 +1551,77 @@
     "warning": "REVISAR",
     "error": "ERROR",
     "disabled": "DESACTIVADO"
+  },
+  "shell": {
+    "skipToContent": "Saltar al contenido",
+    "home": "Inicio de Readur",
+    "loading": "Cargando",
+    "nav": {
+      "label": "Principal",
+      "tabBar": "Barra de pestañas",
+      "board": "Tablero",
+      "library": "Biblioteca",
+      "intake": "Entrada",
+      "settings": "Configuración"
+    },
+    "search": {
+      "open": "Buscar documentos",
+      "placeholder": "Buscar documentos…"
+    },
+    "palette": {
+      "navigation": "Ir a",
+      "documents": "Documentos",
+      "recent": "Búsquedas recientes",
+      "showAll": "Ver todos los resultados de «{{query}}»"
+    },
+    "synced": {
+      "justNow": "sincronizado ahora",
+      "minutes": "sincronizado hace {{count}} min",
+      "hours": "sincronizado hace {{count}} h",
+      "days": "sincronizado hace {{count}} d"
+    },
+    "alerts": {
+      "label": "Notificaciones",
+      "labelUnread": "Notificaciones, {{count}} sin leer",
+      "unread": "{{count}} sin leer",
+      "close": "Cerrar notificaciones",
+      "dismiss": "Descartar {{title}}",
+      "new": "Nuevo",
+      "type": {
+        "success": "Éxito",
+        "error": "Error",
+        "warning": "Advertencia",
+        "info": "Información"
+      }
+    },
+    "language": {
+      "label": "Cambiar idioma"
+    },
+    "theme": {
+      "toDark": "Cambiar a modo oscuro",
+      "toLight": "Cambiar a modo claro"
+    },
+    "user": {
+      "menu": "Menú de la cuenta",
+      "settings": "Configuración",
+      "apiDocs": "Documentación de la API",
+      "logout": "Cerrar sesión"
+    },
+    "intake": {
+      "title": "Entrada",
+      "sections": "Secciones de entrada",
+      "upload": "Subir",
+      "connections": "Conexiones",
+      "watch": "Carpeta vigilada",
+      "attention": "Requiere atención",
+      "ignored": "Archivos ignorados"
+    },
+    "settings": {
+      "title": "Configuración",
+      "sections": "Secciones de configuración",
+      "general": "General",
+      "labels": "Etiquetas",
+      "debug": "Depuración"
+    }
   }
 }

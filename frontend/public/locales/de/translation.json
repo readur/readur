@@ -1551,5 +1551,77 @@
     "warning": "PRÜFEN",
     "error": "FEHLER",
     "disabled": "AUS"
+  },
+  "shell": {
+    "skipToContent": "Zum Inhalt springen",
+    "home": "Readur Startseite",
+    "loading": "Wird geladen",
+    "nav": {
+      "label": "Hauptnavigation",
+      "tabBar": "Tab-Leiste",
+      "board": "Übersicht",
+      "library": "Bibliothek",
+      "intake": "Eingang",
+      "settings": "Einstellungen"
+    },
+    "search": {
+      "open": "Dokumente durchsuchen",
+      "placeholder": "Dokumente durchsuchen…"
+    },
+    "palette": {
+      "navigation": "Gehe zu",
+      "documents": "Dokumente",
+      "recent": "Letzte Suchen",
+      "showAll": "Alle Ergebnisse für „{{query}}“ anzeigen"
+    },
+    "synced": {
+      "justNow": "gerade synchronisiert",
+      "minutes": "vor {{count}} Min. synchronisiert",
+      "hours": "vor {{count}} Std. synchronisiert",
+      "days": "vor {{count}} T. synchronisiert"
+    },
+    "alerts": {
+      "label": "Benachrichtigungen",
+      "labelUnread": "Benachrichtigungen, {{count}} ungelesen",
+      "unread": "{{count}} ungelesen",
+      "close": "Benachrichtigungen schließen",
+      "dismiss": "{{title}} verwerfen",
+      "new": "Neu",
+      "type": {
+        "success": "Erfolg",
+        "error": "Fehler",
+        "warning": "Warnung",
+        "info": "Info"
+      }
+    },
+    "language": {
+      "label": "Sprache ändern"
+    },
+    "theme": {
+      "toDark": "Zum dunklen Modus wechseln",
+      "toLight": "Zum hellen Modus wechseln"
+    },
+    "user": {
+      "menu": "Kontomenü",
+      "settings": "Einstellungen",
+      "apiDocs": "API-Dokumentation",
+      "logout": "Abmelden"
+    },
+    "intake": {
+      "title": "Eingang",
+      "sections": "Eingangsbereiche",
+      "upload": "Hochladen",
+      "connections": "Verbindungen",
+      "watch": "Überwachter Ordner",
+      "attention": "Handlungsbedarf",
+      "ignored": "Ignorierte Dateien"
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "sections": "Einstellungsbereiche",
+      "general": "Allgemein",
+      "labels": "Labels",
+      "debug": "Debug"
+    }
   }
 }
