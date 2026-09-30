@@ -15,6 +15,42 @@
 [data-hue="7"] { --lane: var(--src-7); --lane-soft: var(--src-7-soft); }
 [data-hue="8"] { --lane: var(--src-8); --lane-soft: var(--src-8-soft); }
 
+/* Header: on phones the add action stays beside the greeting as a labelled icon button. */
+
+.addLink {
+  gap: var(--s-2);
+}
+
+@media (max-width: 599px) {
+  .header {
+    flex-wrap: nowrap;
+    align-items: flex-start;
+  }
+
+  .header > :first-child {
+    flex: 1 1 auto;
+  }
+
+  .header > :last-child {
+    flex: none;
+  }
+
+  .addLink {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .addLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 /* Status line under the greeting */
 
 .status {
@@ -261,9 +297,9 @@
 }
 
 .laneCount {
-  font-family: var(--font-data);
-  font-variant-numeric: tabular-nums;
   font-size: var(--fs-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
 
@@ -356,10 +392,10 @@
 }
 
 .bar[data-zero] {
-  height: 2px;
+  height: 3px;
   border-radius: 1px;
-  background: var(--line-strong);
-  opacity: 0.45;
+  background: var(--lane-soft);
+  opacity: 1;
 }
 
 @keyframes rise {
@@ -548,13 +584,18 @@
   font-weight: 600;
 }
 
+/* One row: 6 tiles from 1200px, 4 below, a scrolling row on phones. */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: var(--s-5) var(--s-4);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--s-4);
   margin: 0;
   padding: var(--s-2) var(--s-5) var(--s-5);
   list-style: none;
+}
+
+.card:nth-child(n + 7) {
+  display: none;
 }
 
 .card {
@@ -580,11 +621,17 @@
   transition: box-shadow var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
 }
 
-/* Pages are portrait: a 3:4 frame fits them without wide bands. */
+/* 4:3 and filled from the top: the top of a page (letterhead, title) is what identifies it. */
 .cardThumb > span:first-child {
   display: flex;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 4 / 3;
+  padding: 0;
   background: var(--surface-sunken);
+}
+
+.cardThumb img {
+  object-fit: cover;
+  object-position: top center;
 }
 
 .cardLink:hover .cardThumb {
@@ -596,10 +643,12 @@
   position: absolute;
   top: var(--s-2);
   left: var(--s-2);
+  box-shadow: var(--shadow-1);
 }
 
 .card[data-changed] .cardThumb > span:first-child {
   border-color: var(--new-fill);
+  box-shadow: 0 0 0 1px var(--new-fill);
 }
 
 .cardName {
@@ -637,6 +686,16 @@
   margin-left: auto;
 }
 
+@media (max-width: 1199px) {
+  .cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .card:nth-child(n + 5) {
+    display: none;
+  }
+}
+
 /* Narrow screens: a lane stacks into name + health, then the strip, then its figures. */
 
 @media (max-width: 899px) {
@@ -668,11 +727,6 @@
     padding-right: var(--s-4);
   }
 
-  .cards {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    padding-left: var(--s-4);
-    padding-right: var(--s-4);
-  }
 
   .details {
     margin-left: 0;
@@ -698,15 +752,26 @@
     content: none;
   }
 
-  /* Six thumbnails are enough to see what arrived without pushing the sources off the page. */
-  .card:nth-child(n + 7) {
+  /* A row that scrolls sideways, about two and a half tiles in view, snapping to each tile. */
+  .cards {
+    display: flex;
+    gap: var(--s-3);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--s-4);
+    padding: var(--s-2) var(--s-4) var(--s-4);
+    scrollbar-width: thin;
+  }
+
+  .cardSource {
     display: none;
+  }
+
+  .cards > .card {
+    display: flex;
+    flex: 0 0 calc((100% - 2 * var(--s-3)) / 2.6);
+    scroll-snap-align: start;
   }
 }
 
-@media (max-width: 479px) {
-  .cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s-4) var(--s-3);
-  }
-}

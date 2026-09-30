@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import { PageHeader } from '../shell';
+import { Add } from '../../ui/icons';
 import { fetchArrivals, weekTotal } from './arrivals';
 import { fetchFailedOcr, fetchQueueFigures, POLL_MS } from './data';
 import { JustArrived } from './JustArrived';
@@ -50,13 +51,15 @@ export default function Home() {
   return (
     <>
       <PageHeader
+        className={styles.header}
         title={greeting}
         meta={<StatusLine week={week} queue={stats.data} failed={failed.data} />}
         actions={
           <>
             <MarkAllSeen kinds={HOME_KINDS} />
-            <Link className={styles.primaryLink} to="/intake?section=upload">
-              {t('board.addDocuments', 'Add documents')}
+            <Link className={`${styles.primaryLink} ${styles.addLink}`} to="/intake?section=upload">
+              <Add fontSize={18} aria-hidden="true" />
+              <span className={styles.addLabel}>{t('board.addDocuments', 'Add documents')}</span>
             </Link>
           </>
         }

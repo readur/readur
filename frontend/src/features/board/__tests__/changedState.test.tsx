@@ -28,7 +28,7 @@ import { LibraryTable } from '../../library/LibraryTable';
 import { ChangedTag as IntakeTag } from '../../intake/shared/parts';
 import { BULK_THRESHOLD, syncDocuments } from '../litFeeders';
 import { LIT_SHOWN_CAP, isLit, isShownLit, markLit, useAcknowledgeOnLeave } from '../litStore';
-import { doc, renderPage, resetBoardState } from './homeTestUtils';
+import { doc, renderPage, resetBoardState, seenUpToNow } from './homeTestUtils';
 
 function serve(documents = [doc('d1'), doc('d2')], total = documents.length) {
   m.documentService.listWithPagination.mockResolvedValue({ data: { documents, pagination: { total } } });
@@ -54,6 +54,7 @@ const settle = () => act(async () => {});
 
 beforeEach(() => {
   resetBoardState();
+  seenUpToNow();
   vi.clearAllMocks();
   serve();
 });
@@ -208,7 +209,8 @@ describe('changed state: first run and bulk imports', () => {
     expect(isShownLit('document', 'd15')).toBe(true);
   });
 
-  it(`a bulk import of more than ${BULK_THRESHOLD} lights no rows, only an "N new documents" summary`, async () => {
+  it(`a bulk import of more than ${BULK_THRESHOLD} flags no document on its own: one summary, its tiles shown as new with it`, async () => {
+    resetBoardState();
     const now = Date.now();
     const old = new Date(now - 3600_000).toISOString();
     syncDocuments([doc('a', { created_at: old })], undefined, 1);
@@ -223,11 +225,15 @@ describe('changed state: first run and bulk imports', () => {
       'href',
       '/documents?sort=created_at&order=desc',
     );
-    const lit = within(within(arrivals).getByRole('list'))
-      .getAllByRole('listitem')
-      .filter((r) => r.getAttribute('data-changed') === 'true');
-    expect(lit).toHaveLength(0);
+    const tiles = within(within(arrivals).getByRole('list')).getAllByRole('listitem');
+    for (const tile of tiles) {
+      expect(tile).toHaveAttribute('data-changed', 'true');
+      expect(within(tile).getByText('New')).toBeInTheDocument();
+    }
     fresh.forEach((d) => expect(isLit('document', d.id)).toBe(false));
+    // Seeing the summary clears it, and the tiles with it.
+    await userEvent.setup().click(within(summary).getByRole('link', { name: 'Open in Library, newest first' }));
+    await waitFor(() => expect(within(arrivals).queryByText('New')).not.toBeInTheDocument());
   });
 
   it(`a small batch (${BULK_THRESHOLD} or fewer) marks its items as New`, async () => {

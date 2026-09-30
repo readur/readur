@@ -125,18 +125,34 @@ describe('ranking and the cap', () => {
   const busy = [1, 2, 1, 3, 1, 2, 1, 1, 2, 1, 1, 2, 1];
   const keys = (ls: SourceArrivals[]) => ls.map((l) => l.key);
 
-  it('puts problems first, then the most arrivals in the window, then the latest arrival', () => {
+  it('orders by arrivals in the window, then by the latest arrival', () => {
     const lanes = [
       lane('small', [1, 0], { last_arrival_at: hoursAgo(10) }),
       lane('upload', [5, 5]),
-      lane('broken', [0, 0], { status: 'error', last_arrival_at: null }),
-      lane('quiet', [...busy, 0], { last_arrival_at: hoursAgo(40) }),
       lane('older', [0, 1], { last_arrival_at: hoursAgo(5) }),
       lane('newer', [0, 1], { last_arrival_at: hoursAgo(1) }),
-      lane('warn', [0, 0], { status: 'warning', last_arrival_at: null }),
+      lane('none', [0, 0], { last_arrival_at: null }),
     ].map(asLane);
-    expect(keys(rankLanes(lanes, NOW))).toEqual(['quiet', 'broken', 'warn', 'upload', 'newer', 'older', 'small']);
+    expect(keys(rankLanes(lanes))).toEqual(['upload', 'newer', 'older', 'small', 'none']);
     expect(windowTotal(lanes[1])).toBe(10);
+  });
+
+  it('guarantees problem lanes a slot, replacing the least active, but keeps activity order', () => {
+    const lanes = [
+      ...Array.from({ length: 6 }, (_, i) => lane(`a${i}`, [0, i + 1])),
+      lane('broken', [0, 0], { status: 'error', last_arrival_at: null }),
+      lane('quiet', [...busy, 0], { last_arrival_at: hoursAgo(40) }),
+    ].map(asLane);
+    // quiet has 18 arrivals in the window: it is the most active anyway.
+    expect(keys(groupLanes(lanes, NOW).shown)).toEqual(['quiet', 'a5', 'a4', 'a3', 'broken']);
+  });
+
+  it('fills every slot with problems when there are more problems than slots', () => {
+    const lanes = [
+      lane('busy', [9, 9]),
+      ...Array.from({ length: 6 }, (_, i) => lane(`e${i}`, [0, 0], { status: 'error', last_arrival_at: hoursAgo(i + 1) })),
+    ].map(asLane);
+    expect(keys(groupLanes(lanes, NOW).shown)).toEqual(['e0', 'e1', 'e2', 'e3', 'e4']);
   });
 
   it(`shows every lane when there are ${LANE_CAP} or fewer`, () => {
@@ -149,7 +165,7 @@ describe('ranking and the cap', () => {
     const active = Array.from({ length: 6 }, (_, i) => asLane(lane(`a${i}`, [0, i + 1])));
     const broken = asLane(lane('broken', [0, 0], { status: 'error', last_arrival_at: null }));
     const { shown, hidden } = groupLanes([...silent, ...active, broken], NOW);
-    expect(keys(shown)).toEqual(['broken', 'a5', 'a4', 'a3', 'a2']);
+    expect(keys(shown)).toEqual(['a5', 'a4', 'a3', 'a2', 'broken']);
     expect(hidden).toBe(202);
   });
 

@@ -6,7 +6,7 @@ import { DocumentThumbnail } from '../document/DocumentThumbnail';
 import type { SourceArrivals } from './arrivals';
 import { fetchRecent, POLL_MS } from './data';
 import { formatAge, formatCount } from './format';
-import { clearBulkArrivals, syncDocuments, useBulkArrivals } from './litFeeders';
+import { clearBulkArrivals, isBulkArrival, syncDocuments, useBulkArrivals } from './litFeeders';
 import { acknowledge, useAcknowledgeOnLeave, useLitCount, useShownLit } from './litStore';
 import { ChangedTag, Region, RegionError } from './Region';
 import { documentLane, type LaneKind } from './sourceTint';
@@ -43,7 +43,11 @@ interface CardProps {
 function Card({ doc, sourceName, now }: CardProps) {
   const { i18n } = useTranslation();
   const lane = documentLane(doc);
-  const { lit, reason } = useShownLit('document', doc.id);
+  const shown = useShownLit('document', doc.id);
+  // Part of a pending bulk import: new with the summary, though not flagged on its own.
+  const bulk = useBulkArrivals() > 0 && isBulkArrival(doc.id);
+  const lit = shown.lit || bulk;
+  const reason = shown.lit ? shown.reason : 'new';
   const name = docName(doc);
   return (
     <li className={styles.card} data-changed={lit || undefined}>
@@ -79,7 +83,8 @@ export function JustArrived({ lanes, now }: JustArrivedProps) {
   const bulk = useBulkArrivals();
 
   useEffect(() => {
-    if (data) syncDocuments(data.documents, undefined, data.total);
+    // On a first visit (nothing seen yet) the last day's arrivals count as new.
+    if (data) syncDocuments(data.documents, Date.now() - DAY_MS, data.total);
   }, [data]);
 
   // Items (and a bulk summary) seen flagged during this visit are acknowledged when the user leaves.
@@ -138,7 +143,7 @@ export function JustArrived({ lanes, now }: JustArrivedProps) {
               </Link>
             </p>
           ) : null}
-          <ul className={styles.cards} aria-label={title}>
+          <ul className={styles.cards} aria-label={title} data-count={data.documents.length}>
             {data.documents.map((d) => {
               const lane = documentLane(d);
               return (

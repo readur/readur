@@ -6,7 +6,7 @@ import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { AuthContext } from '../../../contexts/AuthContext';
 import type { UserRole } from '../../../types/generated';
 import { acknowledgeAll, flushLit } from '../litStore';
-import { resetDocumentBaseline } from '../litFeeders';
+import { resetDocumentBaseline, syncDocuments } from '../litFeeders';
 
 // No resources: every string shows its English default, with interpolation.
 if (!i18n.isInitialized) {
@@ -47,6 +47,14 @@ export function resetBoardState(): void {
   acknowledgeAll();
   flushLit();
   resetDocumentBaseline();
+}
+
+/**
+ * A returning visitor: everything created more than a second ago has been seen, so only later
+ * arrivals are new (without this, a first visit counts the last day's arrivals as new).
+ */
+export function seenUpToNow(): void {
+  syncDocuments([{ id: '__seen', created_at: new Date(Date.now() - 1000).toISOString() }]);
 }
 
 export function LocationProbe() {

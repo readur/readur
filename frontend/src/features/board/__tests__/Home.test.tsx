@@ -20,7 +20,7 @@ vi.mock('../../../services/api', () => ({
 import Home, { HomePage } from '../index';
 import { ToastProvider } from '../../../ui';
 import { isLit, markLit } from '../litStore';
-import { doc, lane, renderPage, resetBoardState } from './homeTestUtils';
+import { doc, lane, renderPage, resetBoardState, seenUpToNow } from './homeTestUtils';
 import type { UserRole } from '../../../types/generated';
 
 const STATS = { pending: 12, processing: 4, completed_today: 41, oldest_pending_minutes: 130 };
@@ -83,6 +83,7 @@ async function renderHome(role: UserRole = 'admin') {
 
 beforeEach(() => {
   resetBoardState();
+  seenUpToNow();
   vi.clearAllMocks();
   serve();
 });
@@ -249,7 +250,8 @@ describe('Home', () => {
       ];
       await renderHome();
       const shown = within(screen.getByRole('list', { name: 'Coming in' })).getAllByRole('link');
-      expect(shown.map((a) => a.textContent)).toEqual(['Broken share', 'Active 5', 'Active 4', 'Active 3', 'Active 2']);
+      // The five most active, in activity order; the broken source takes the least active slot.
+      expect(shown.map((a) => a.textContent)).toEqual(['Active 5', 'Active 4', 'Active 3', 'Active 2', 'Broken share']);
       expect(within(region('Coming in')).getByRole('link', { name: /^192 more sources/ })).toHaveAttribute(
         'href',
         '/intake?section=connections',
@@ -442,6 +444,17 @@ describe('Home', () => {
       await user.click(within(card('d1.pdf')).getByRole('link'));
       expect(loc()).toBe('/documents/d1');
       expect(isLit('document', 'd1')).toBe(false);
+    });
+
+    it('on a first visit, marks the last day\'s arrivals as new', async () => {
+      resetBoardState();
+      m.documentService.listWithPagination.mockResolvedValue({
+        data: { documents: [doc('d1'), doc('old', { created_at: '2026-01-01T00:00:00Z' })], pagination: { total: 2 } },
+      });
+      renderPage(<Home />);
+      await screen.findByText('old.pdf');
+      await waitFor(() => expect(within(card('d1.pdf')).getByText('New')).toBeInTheDocument());
+      expect(within(card('old.pdf')).queryByText('New')).not.toBeInTheDocument();
     });
 
     it('polls every 15 seconds and marks new documents and finished OCR', async () => {

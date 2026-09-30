@@ -86,6 +86,14 @@ export function useBulkArrivals(): number {
   );
 }
 
+/**
+ * Whether a document is one of the pending bulk arrivals: it is shown as new (with the summary)
+ * without being flagged on its own.
+ */
+export function isBulkArrival(id: string): boolean {
+  return readBulk() > 0 && quiet.has(id);
+}
+
 /** Forgets what was seen (tests, sign-out). */
 export function resetDocumentBaseline(): void {
   seen.clear();

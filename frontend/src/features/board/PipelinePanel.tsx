@@ -82,7 +82,7 @@ function ProcessingLine({ stats }: { stats: Resource<QueueFigures | null> }) {
       </span>
       <p className={styles.lineText}>
         {t('home.pipeline.doneToday', '{{done}} done today', { count: q.completedToday, done: n(q.completedToday) })}
-        {!idle && q.oldestPendingMinutes !== null ? (
+        {!idle && q.oldestPendingMinutes !== null && q.oldestPendingMinutes >= 1 ? (
           <span className={styles.lineNote}>
             {t('home.pipeline.oldest', 'oldest waiting {{wait}}', { wait: formatMinutes(q.oldestPendingMinutes) })}
           </span>

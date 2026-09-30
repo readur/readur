@@ -90,16 +90,13 @@ export function windowTotal(lane: SourceArrivals): number {
 const lastAt = (lane: SourceArrivals) => (lane.last_arrival_at ? Date.parse(lane.last_arrival_at) || 0 : 0);
 
 /**
- * Problems first, then the busiest lanes in the window, then the most recent arrival. Uploads
- * and the watch folder compete in the same order; ties keep the server's order.
+ * Most active first: the most arrivals in the window, then the most recent arrival. Uploads and
+ * the watch folder compete in the same order; ties keep the server's order.
  */
-export function rankLanes(lanes: readonly SourceArrivals[], now?: number): SourceArrivals[] {
+export function rankLanes(lanes: readonly SourceArrivals[]): SourceArrivals[] {
   return lanes
-    .map((lane, index) => ({ lane, index, problem: isProblem(lane, now), total: windowTotal(lane), last: lastAt(lane) }))
-    .sort(
-      (a, b) =>
-        Number(b.problem) - Number(a.problem) || b.total - a.total || b.last - a.last || a.index - b.index,
-    )
+    .map((lane, index) => ({ lane, index, total: windowTotal(lane), last: lastAt(lane) }))
+    .sort((a, b) => b.total - a.total || b.last - a.last || a.index - b.index)
     .map((r) => r.lane);
 }
 
@@ -107,22 +104,36 @@ export function rankLanes(lanes: readonly SourceArrivals[], now?: number): Sourc
 export const LANE_CAP = 5;
 
 export interface LaneGroups {
-  /** The most active lanes, shown on Home. */
+  /** The lanes shown on Home, most active first. */
   shown: SourceArrivals[];
   /** How many other lanes there are (listed in Intake, not on Home). */
   hidden: number;
 }
 
 /**
- * The lanes Home shows: the {@link LANE_CAP} most active, in {@link rankLanes} order, so a lane
- * with a problem always makes the cut ahead of a merely busy one. With more lanes than the cap,
- * a lane with no arrivals in the window and no problem never takes a slot, so hundreds of unused
- * sources never crowd out the ones that are working.
+ * The {@link LANE_CAP} most active lanes, in activity order. A lane with a problem (error,
+ * warning, quiet) is guaranteed a slot: one outside the top takes the place of the least active
+ * lane without a problem. With more lanes than the cap, a lane with no arrivals in the window and
+ * no problem never takes a slot, so hundreds of unused sources never crowd out working ones.
  */
 export function groupLanes(lanes: readonly SourceArrivals[], now?: number, cap: number = LANE_CAP): LaneGroups {
-  const ranked = rankLanes(lanes, now);
+  const ranked = rankLanes(lanes);
   const pool = ranked.length <= cap ? ranked : ranked.filter((l) => windowTotal(l) > 0 || isProblem(l, now));
-  const shown = pool.slice(0, cap);
+  const top = pool.slice(0, cap);
+  for (const lane of pool.slice(cap)) {
+    if (!isProblem(lane, now)) continue;
+    let at = -1;
+    for (let i = top.length - 1; i >= 0; i -= 1) {
+      if (!isProblem(top[i], now)) {
+        at = i;
+        break;
+      }
+    }
+    if (at < 0) break;
+    top.splice(at, 1);
+    top.push(lane);
+  }
+  const shown = rankLanes(top);
   return { shown, hidden: ranked.length - shown.length };
 }
 
