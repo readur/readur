@@ -1029,7 +1029,7 @@ const DebugPage: React.FC = () => {
                       <Typography variant="subtitle1" gutterBottom>Processed Image (OCR Input)</Typography>
                       <AuthenticatedImage
                         load={() => documentService.getProcessedImage(debugInfo.document_id)}
-                        alt="Processed image for OCR"
+                        resourceKey={debugInfo.document_id} alt="Processed image for OCR"
                         unavailableText="Processed image not available"
                       />
                     </Paper>
