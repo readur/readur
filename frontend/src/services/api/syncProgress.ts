@@ -1,24 +1,6 @@
-import type { WebSocketMessage } from './types'
+export type { SyncProgressInfo } from '../../types/generated'
 
-export interface SyncProgressInfo {
-  source_id: string
-  phase: string
-  phase_description: string
-  elapsed_time_secs: number
-  directories_found: number
-  directories_processed: number
-  files_found: number
-  files_processed: number
-  bytes_processed: number
-  processing_rate_files_per_sec: number
-  files_progress_percent: number
-  estimated_time_remaining_secs?: number
-  current_directory: string
-  current_file?: string
-  errors: number
-  warnings: number
-  is_active: boolean
-}
+import type { WebSocketMessage } from './types'
 
 export class SyncProgressWebSocket {
   private ws: WebSocket | null = null;

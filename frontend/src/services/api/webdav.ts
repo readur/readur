@@ -1,4 +1,24 @@
 import { sourceErrorService } from './sourceErrors'
+import type {
+  ExcludeFailureRequest,
+  RetryFailureRequest,
+  ScanFailureStatsResponse as WebDAVScanFailureStats,
+  WebDAVScanFailureSeverity,
+  WebDAVScanFailureType,
+} from '../../types/generated'
+
+export type {
+  ExcludeFailureRequest,
+  RetryFailureRequest,
+  ScanFailureStatsResponse as WebDAVScanFailureStats,
+  WebDAVScanFailureSeverity,
+  WebDAVScanFailureType,
+} from '../../types/generated'
+
+// TODO(ts-rs): WebDAVScanFailure / WebDAVFailureDiagnostics / WebDAVScanFailuresResponse are
+// client-side view models built by webdavService from SourceScanFailure (see the
+// TODO in sourceErrors.ts), not the wire shape of WebDAVScanFailureResponse (which
+// is `T | null` where these are `?: T`). Switching would need a runtime change.
 
 // WebDAV Scan Failure Types
 export interface WebDAVScanFailure {
@@ -19,25 +39,6 @@ export interface WebDAVScanFailure {
   diagnostic_summary: WebDAVFailureDiagnostics
 }
 
-export type WebDAVScanFailureType =
-  | 'timeout'
-  | 'path_too_long'
-  | 'permission_denied'
-  | 'invalid_characters'
-  | 'network_error'
-  | 'server_error'
-  | 'xml_parse_error'
-  | 'too_many_items'
-  | 'depth_limit'
-  | 'size_limit'
-  | 'unknown'
-
-export type WebDAVScanFailureSeverity =
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'critical'
-
 export interface WebDAVFailureDiagnostics {
   path_length?: number
   directory_depth?: number
@@ -50,29 +51,9 @@ export interface WebDAVFailureDiagnostics {
   user_action_required: boolean
 }
 
-export interface WebDAVScanFailureStats {
-  active_failures: number
-  resolved_failures: number
-  excluded_directories: number
-  critical_failures: number
-  high_failures: number
-  medium_failures: number
-  low_failures: number
-  ready_for_retry: number
-}
-
 export interface WebDAVScanFailuresResponse {
   failures: WebDAVScanFailure[]
   stats: WebDAVScanFailureStats
-}
-
-export interface RetryFailureRequest {
-  notes?: string
-}
-
-export interface ExcludeFailureRequest {
-  notes?: string
-  permanent: boolean
 }
 
 // WebDAV Scan Failures Service (Backward Compatibility)

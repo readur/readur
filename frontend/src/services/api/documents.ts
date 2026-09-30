@@ -1,4 +1,11 @@
 import api from './client'
+import type {
+  DocumentOcrResponse,
+  DocumentPaginationInfo,
+  DocumentResponse,
+  PaginatedDocumentsResponse,
+} from '../../types/generated'
+import { serializeFilterParams, type DocumentListParams } from './filterParams'
 import type { BulkOcrRetryRequest, BulkOcrRetryResponse } from './ocr'
 import type { SearchFacetsResponse, SearchRequest, SearchResponse } from './search'
 import type {
@@ -7,65 +14,31 @@ import type {
   OcrRetryStatsResponse,
 } from './types'
 
-export interface Document {
-  id: string
-  filename: string
-  original_filename: string
-  file_path: string
-  file_size: number
-  mime_type: string
-  tags: string[]
-  created_at: string
-  updated_at: string
-  user_id: string
-  username?: string
-  file_hash?: string
-  original_created_at?: string
-  original_modified_at?: string
-  source_path?: string
-  source_type?: string
-  source_id?: string
-  file_permissions?: number
-  file_owner?: string
-  file_group?: string
-  source_metadata?: Record<string, any>
-  has_ocr_text: boolean
-  ocr_confidence?: number
-  ocr_word_count?: number
-  ocr_processing_time_ms?: number
-  ocr_status?: string
-  ocr_progress_current?: number
-  ocr_progress_total?: number
-  ocr_error?: string
-  ocr_failure_reason?: string
-  ocr_retry_count?: number
-  ocr_completed_at?: string
-}
-
 export interface PaginatedResponse<T> {
   documents: T[]
-  pagination: {
-    total: number
-    limit: number
-    offset: number
-    has_more: boolean
-  }
+  pagination: DocumentPaginationInfo
 }
 
-export interface OcrResponse {
-  document_id: string
-  filename: string
-  has_ocr_text: boolean
-  ocr_text?: string
-  ocr_confidence?: number
-  ocr_word_count?: number
-  ocr_processing_time_ms?: number
-  ocr_status?: string
+// TODO(ts-rs): the backend does not send these fields (ocr_error, ocr_failure_reason,
+// ocr_retry_count, ocr_completed_at, ocr_word_count). They are kept as optional
+// extras only so legacy readers (ActivityTab, OcrTextTab, DocumentDetailsHeader)
+// keep compiling; they are always undefined at runtime. Drop them, and the
+// intersections below, once those readers are rewritten.
+interface LegacyDocumentFields {
   ocr_error?: string
   ocr_failure_reason?: string
   ocr_retry_count?: number
   ocr_completed_at?: string
 }
+
+interface LegacyOcrResponseFields {
+  ocr_error?: string
+  ocr_word_count?: number
+  ocr_completed_at?: string
+}
+
+export type Document = DocumentResponse & LegacyDocumentFields
+export type OcrResponse = DocumentOcrResponse & LegacyOcrResponseFields
 
 export const documentService = {
   upload: (file: File, languages?: string[]) => {
@@ -99,6 +72,18 @@ export const documentService = {
     }
     return api.get<{documents: Document[], pagination: {total: number, limit: number, offset: number, has_more: boolean}}>('/documents', {
       params,
+    })
+  },
+
+  /**
+   * Server-side sorted and filtered list (GET /documents). List filters
+   * (`label_ids`, `source_ids`, `mime_types`, `source_types`, `tags`) accept
+   * arrays and are sent comma-separated; `created_from` / `created_to` are
+   * sent as ISO strings. Unset values are omitted.
+   */
+  listFiltered: (params: DocumentListParams = {}) => {
+    return api.get<PaginatedDocumentsResponse>('/documents', {
+      params: serializeFilterParams(params),
     })
   },
 

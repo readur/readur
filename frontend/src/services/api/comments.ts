@@ -1,43 +1,19 @@
 import api from './client'
+import type {
+  CommentThread,
+  CommentWithAuthor,
+  CreateCommentRequest,
+  UpdateCommentRequest,
+} from '../../types/generated'
+
+export type {
+  CommentThread,
+  CommentWithAuthor,
+  CreateCommentRequest,
+  UpdateCommentRequest,
+} from '../../types/generated'
 
 // ─── Comments Service ────────────────────────────────────────────────────
-
-export interface CommentWithAuthor {
-  id: string
-  document_id: string
-  user_id: string
-  parent_id: string | null
-  content: string
-  is_edited: boolean
-  created_at: string
-  updated_at: string
-  username: string
-  user_role: string
-}
-
-export interface CommentThread {
-  id: string
-  document_id: string
-  user_id: string
-  parent_id: string | null
-  content: string
-  is_edited: boolean
-  created_at: string
-  updated_at: string
-  username: string
-  user_role: string
-  reply_count: number
-  replies: CommentWithAuthor[]
-}
-
-export interface CreateCommentRequest {
-  content: string
-  parent_id?: string
-}
-
-export interface UpdateCommentRequest {
-  content: string
-}
 
 export const commentsService = {
   list: (documentId: string, limit = 50, offset = 0) => {

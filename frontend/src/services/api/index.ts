@@ -11,6 +11,7 @@ export type { ApiErrorResponse, AxiosErrorWithCode, ErrorCode } from '../errors'
 
 export * from './documents'
 export * from './search'
+export * from './filterParams'
 export * from './ocr'
 export * from './queue'
 export * from './syncProgress'

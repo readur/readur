@@ -37,7 +37,8 @@ function Dashboard() {
 
     try {
       const response = await documentService.search({ query })
-      setSearchResults(response.data.documents)
+      // EnhancedDocument is a slimmer projection than Document; list rows only use the shared fields.
+      setSearchResults(response.data.documents as unknown as Document[])
     } catch (error) {
       console.error('Search failed:', error)
     }

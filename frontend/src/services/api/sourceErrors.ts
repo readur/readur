@@ -1,9 +1,19 @@
 import api from './client'
 import type { ExcludeFailureRequest, RetryFailureRequest, WebDAVScanFailureType } from './webdav'
 import type { SourceExcludeResponse, SourceRetryResponse } from './types'
+import type { SourceType } from '../../types/generated'
+
+export type { SourceType } from '../../types/generated'
 
 // Generic Source Error Types (New System)
-export type SourceType = 'webdav' | 's3' | 'local_folder'
+//
+// TODO(ts-rs): SourceErrorType, SourceErrorSeverity, SourceScanFailure and
+// SourceScanFailureStats are kept hand-written on purpose. The generated
+// SourceErrorType/SourceErrorSeverity are PascalCase on the wire (the Rust enums
+// have no serde rename; task-2b concern 1 - needs a backend/frontend decision),
+// and SourceScanFailureResponse has a different shape (by_source_type, diagnostic_summary,
+// no diagnostic_data/status_code). webdavService and the failure UI depend on the
+// hand-written shape, so switching would change runtime behaviour.
 
 export type SourceErrorType = WebDAVScanFailureType | 's3_access_denied' | 's3_bucket_not_found' | 's3_invalid_credentials' | 's3_network_error' | 'local_permission_denied' | 'local_path_not_found' | 'local_disk_full' | 'local_io_error'
 

@@ -1,35 +1,16 @@
 import axios from 'axios'
 import api from './client'
+import type {
+  CreateSharedLinkRequest,
+  SharedDocumentMetadata,
+  SharedLinkResponse as SharedLinkData,
+} from '../../types/generated'
 
-export interface SharedLinkData {
-  id: string
-  document_id: string
-  token: string
-  url: string
-  has_password: boolean
-  expires_at: string | null
-  max_views: number | null
-  view_count: number
-  is_expired: boolean
-  is_revoked: boolean
-  created_at: string
-}
-
-export interface CreateSharedLinkRequest {
-  document_id: string
-  password?: string
-  expires_at?: string
-  max_views?: number
-}
-
-export interface SharedDocumentMetadata {
-  filename: string
-  original_filename: string
-  file_size: number
-  mime_type: string
-  requires_password: boolean
-  created_at: string
-}
+export type {
+  CreateSharedLinkRequest,
+  SharedDocumentMetadata,
+  SharedLinkResponse as SharedLinkData,
+} from '../../types/generated'
 
 export const sharedLinksService = {
   create: (request: CreateSharedLinkRequest) => {
