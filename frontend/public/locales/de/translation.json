@@ -130,7 +130,14 @@
     "sources": "Quellen",
     "watchFolder": "Überwachter Ordner",
     "documentManagement": "Dokumentenverwaltung",
-    "ignoredFiles": "Ignorierte Dateien"
+    "ignoredFiles": "Ignorierte Dateien",
+    "settings": "Einstellungen",
+    "debug": "Debug",
+    "sections": {
+      "library": "Bibliothek",
+      "ingest": "Import",
+      "system": "System"
+    }
   },
   "dashboard": {
     "greeting": "Hier ist eine Übersicht über Ihre Dokumente für heute.",
@@ -164,7 +171,13 @@
       "title": "Aktuelle Dokumente",
       "viewAll": "Alle anzeigen",
       "noDocuments": "Noch keine Dokumente",
-      "uploadFirst": "Laden Sie Ihr erstes Dokument hoch, um zu beginnen"
+      "uploadFirst": "Laden Sie Ihr erstes Dokument hoch, um zu beginnen",
+      "columns": {
+        "document": "Dokument",
+        "size": "Größe",
+        "added": "Hinzugefügt",
+        "status": "Status"
+      }
     },
     "quickActions": {
       "title": "Schnellaktionen",
@@ -534,6 +547,12 @@
         "deleting": "Wird gelöscht...",
         "delete": "Dokument löschen"
       }
+    },
+    "tabs": {
+      "preview": "Vorschau",
+      "ocrText": "OCR-Text",
+      "details": "Details",
+      "activity": "Aktivität"
     }
   },
   "ignoredFiles": {
@@ -1231,7 +1250,8 @@
       "systemDelete": "System-Labels können nicht gelöscht werden. Nur benutzererstellte Labels können entfernt werden.",
       "invalidName": "Label-Name enthält ungültige Zeichen. Bitte verwenden Sie nur Buchstaben, Zahlen und einfache Satzzeichen.",
       "invalidColor": "Ungültiges Farbformat. Bitte verwenden Sie eine gültige Hex-Farbe wie #0969da.",
-      "maxLabelsReached": "Maximale Anzahl von Labels erreicht. Bitte löschen Sie einige Labels, bevor Sie neue erstellen."
+      "maxLabelsReached": "Maximale Anzahl von Labels erreicht. Bitte löschen Sie einige Labels, bevor Sie neue erstellen.",
+      "commaNotAllowed": "Label-Namen dürfen keine Kommas enthalten."
     },
     "colors": {
       "blue": "Blau",

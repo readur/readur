@@ -130,7 +130,14 @@
     "sources": "Sources",
     "watchFolder": "Dossier surveillé",
     "documentManagement": "Gestion des documents",
-    "ignoredFiles": "Fichiers ignorés"
+    "ignoredFiles": "Fichiers ignorés",
+    "settings": "Paramètres",
+    "debug": "Débogage",
+    "sections": {
+      "library": "Bibliothèque",
+      "ingest": "Import",
+      "system": "Système"
+    }
   },
   "dashboard": {
     "greeting": "Voici ce qui se passe avec vos documents aujourd'hui.",
@@ -164,7 +171,13 @@
       "title": "Documents récents",
       "viewAll": "Tout afficher",
       "noDocuments": "Aucun document pour le moment",
-      "uploadFirst": "Chargez votre premier document pour commencer"
+      "uploadFirst": "Chargez votre premier document pour commencer",
+      "columns": {
+        "document": "Document",
+        "size": "Taille",
+        "added": "Ajouté",
+        "status": "Statut"
+      }
     },
     "quickActions": {
       "title": "Actions rapides",
@@ -534,6 +547,12 @@
         "deleting": "Suppression...",
         "delete": "Supprimer le document"
       }
+    },
+    "tabs": {
+      "preview": "Aperçu",
+      "ocrText": "Texte OCR",
+      "details": "Détails",
+      "activity": "Activité"
     }
   },
   "ignoredFiles": {
@@ -1231,7 +1250,8 @@
       "systemDelete": "Les étiquettes système ne peuvent pas être supprimées. Seules les étiquettes créées par l'utilisateur peuvent être supprimées.",
       "invalidName": "Le nom de l'étiquette contient des caractères invalides. Veuillez utiliser uniquement des lettres, des chiffres et une ponctuation de base.",
       "invalidColor": "Format de couleur invalide. Veuillez utiliser une couleur hexadécimale valide comme #0969da.",
-      "maxLabelsReached": "Nombre maximal d'étiquettes atteint. Veuillez supprimer certaines étiquettes avant d'en créer de nouvelles."
+      "maxLabelsReached": "Nombre maximal d'étiquettes atteint. Veuillez supprimer certaines étiquettes avant d'en créer de nouvelles.",
+      "commaNotAllowed": "Les noms d'étiquettes ne peuvent pas contenir de virgules."
     },
     "colors": {
       "blue": "Bleu",

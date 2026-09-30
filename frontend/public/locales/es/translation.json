@@ -130,7 +130,14 @@
     "sources": "Fuentes",
     "watchFolder": "Carpeta Vigilada",
     "documentManagement": "Gestión de Documentos",
-    "ignoredFiles": "Archivos Ignorados"
+    "ignoredFiles": "Archivos Ignorados",
+    "settings": "Configuración",
+    "debug": "Depuración",
+    "sections": {
+      "library": "Biblioteca",
+      "ingest": "Ingesta",
+      "system": "Sistema"
+    }
   },
   "dashboard": {
     "greeting": "Esto es lo que está pasando con tus documentos hoy.",
@@ -164,7 +171,13 @@
       "title": "Documentos Recientes",
       "viewAll": "Ver Todos",
       "noDocuments": "Aún no hay documentos",
-      "uploadFirst": "Sube tu primer documento para comenzar"
+      "uploadFirst": "Sube tu primer documento para comenzar",
+      "columns": {
+        "document": "Documento",
+        "size": "Tamaño",
+        "added": "Añadido",
+        "status": "Estado"
+      }
     },
     "quickActions": {
       "title": "Acciones Rápidas",
@@ -534,6 +547,12 @@
         "deleting": "Eliminando...",
         "delete": "Eliminar Documento"
       }
+    },
+    "tabs": {
+      "preview": "Vista previa",
+      "ocrText": "Texto OCR",
+      "details": "Detalles",
+      "activity": "Actividad"
     }
   },
   "documentManagement": {
@@ -1132,7 +1151,8 @@
       "systemDelete": "Las etiquetas del sistema no se pueden eliminar. Solo se pueden eliminar las etiquetas creadas por el usuario.",
       "invalidName": "El nombre de la etiqueta contiene caracteres inválidos. Por favor usa solo letras, números y puntuación básica.",
       "invalidColor": "Formato de color inválido. Por favor usa un color hexadecimal válido como #0969da.",
-      "maxLabelsReached": "Se alcanzó el número máximo de etiquetas. Por favor elimina algunas etiquetas antes de crear nuevas."
+      "maxLabelsReached": "Se alcanzó el número máximo de etiquetas. Por favor elimina algunas etiquetas antes de crear nuevas.",
+      "commaNotAllowed": "Los nombres de las etiquetas no pueden contener comas."
     },
     "colors": {
       "blue": "Azul",

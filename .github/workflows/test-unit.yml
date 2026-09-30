@@ -56,6 +56,9 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Check generated TypeScript bindings are up to date
+        run: scripts/check-ts-bindings.sh
+
       - name: Run Rust unit tests - lib only
         run: |
           cargo test --lib --no-fail-fast
@@ -93,5 +96,37 @@ jobs:
       - name: Run type checking
         run: npm run type-check
 
-      - name: Run frontend unit tests
-        run: npm run test:unit
+      - name: Run type checking (test files)
+        run: npm run type-check:test
+
+      - name: Run frontend unit tests with coverage
+        run: npm run test:unit:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: warn
+          retention-days: 14
+
+  repo-ratchets:
+    name: File length and locale parity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+
+      - name: File-length ratchet
+        run: node scripts/check-file-length.mjs
+
+      - name: Locale parity
+        run: node scripts/check-locale-parity.mjs
+
