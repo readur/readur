@@ -246,6 +246,20 @@
   font-weight: 600;
 }
 
+.idle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
 [data-theme="dark"] .quiet {
   color: var(--bg);
 }
@@ -329,7 +343,8 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-sm);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
+  line-height: 1;
 }
 
 .line[data-tone="ok"] .lineMark {
@@ -529,7 +544,7 @@
   font-size: var(--fs-md);
   font-weight: 500;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }

@@ -39,13 +39,16 @@ export function weekTotal(lanes: readonly SourceArrivals[]): number {
   return lanes.reduce((sum, lane) => sum + lane.days.slice(-7).reduce((s, d) => s + d.count, 0), 0);
 }
 
-export type LaneHealth = 'quiet' | 'error' | 'syncing' | 'off' | 'healthy';
+export type LaneHealth = 'quiet' | 'error' | 'syncing' | 'off' | 'idle' | 'healthy';
 
 export function laneHealth(lane: SourceArrivals, now?: number): LaneHealth {
   if (!lane.enabled) return 'off';
   if (lane.status === 'error') return 'error';
   if (isQuiet(lane, now)) return 'quiet';
   if (lane.status === 'syncing') return 'syncing';
+  // Uploads and the watch folder have no status of their own: without a single arrival there is
+  // nothing to call healthy.
+  if (lane.status === null && !lane.last_arrival_at) return 'idle';
   return 'healthy';
 }
 

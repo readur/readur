@@ -9,7 +9,7 @@ import { Region, RegionError } from './Region';
 import type { Resource } from './useResource';
 import styles from './Home.module.css';
 
-const MARK: Record<Exclude<LaneHealth, 'quiet'>, StatusState> = {
+const MARK: Record<Exclude<LaneHealth, 'quiet' | 'idle'>, StatusState> = {
   healthy: 'healthy',
   syncing: 'syncing',
   error: 'error',
@@ -23,6 +23,14 @@ function Health({ health }: { health: LaneHealth }) {
       <span className={styles.quiet}>
         <span aria-hidden="true">◆</span>
         {t('home.lanes.quiet', 'Quiet')}
+      </span>
+    );
+  }
+  if (health === 'idle') {
+    return (
+      <span className={styles.idle}>
+        <span aria-hidden="true">○</span>
+        {t('home.lanes.idle', 'Idle')}
       </span>
     );
   }
@@ -66,7 +74,7 @@ function Lane({ lane, now }: { lane: SourceArrivals; now: number }) {
           <Link className={styles.laneLink} to={laneHref(lane)}>
             {lane.name}
           </Link>
-          <span className={styles.laneKind}>{kindLabel(lane.kind)}</span>
+          {kindLabel(lane.kind) !== lane.name ? <span className={styles.laneKind}>{kindLabel(lane.kind)}</span> : null}
         </span>
       </div>
       <ArrivalBars days={lane.days} hue={hue} />

@@ -52,6 +52,8 @@ describe('laneHealth', () => {
     expect(laneHealth(asLane(lane('s', [1, 1, 1, 0], { status: 'syncing', last_arrival_at: hoursAgo(48) })), NOW)).toBe('quiet');
     expect(laneHealth(asLane(lane('s', [1], { status: 'syncing' })))).toBe('syncing');
     expect(laneHealth(asLane(lane('upload', [1])))).toBe('healthy');
+    expect(laneHealth(asLane(lane('watch', [0])))).toBe('idle');
+    expect(laneHealth(asLane(lane('s', [0], { last_arrival_at: null })))).toBe('healthy');
   });
 });
 

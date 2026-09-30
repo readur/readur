@@ -156,6 +156,9 @@ describe('Home', () => {
       expect(within(watch).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('href', '/intake?section=watch');
       expect(within(watch).getByText('Nothing yet')).toBeInTheDocument();
       expect(within(watch).getByRole('img', { name: 'Nothing in the last 14 days' })).toBeInTheDocument();
+      // A lane that never received anything is idle, not healthy; its kind is not repeated under its name.
+      expect(within(watch).getByText('Idle')).toBeInTheDocument();
+      expect(within(watch).getAllByText('Watch folder')).toHaveLength(1);
     });
 
     it('flags a lane that usually receives documents but has gone quiet', async () => {

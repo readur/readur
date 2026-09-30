@@ -33,10 +33,11 @@ const PATTERNS: readonly Pattern[] = [
   },
   {
     id: 'encrypted',
-    test: /EncryptedPdfError|password[- ]protected|is encrypted/i,
+    test: /EncryptedPdfError|file is encrypted|password required/i,
     key: 'failure.encrypted',
     fallback: 'The PDF is password-protected',
   },
+  // Before the generic patterns: its advice text mentions memory, malformed and password-protected files.
   { id: 'ocr', test: /OCR failed for (PDF )?'/i, key: 'failure.ocr', fallback: 'OCR failed' },
   { id: 'timeout', test: /timed? ?out|timeout/i, key: 'failure.timeout', fallback: 'OCR took too long and was stopped' },
   {

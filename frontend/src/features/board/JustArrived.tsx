@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { Fragment, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, Skeleton, SourceDot } from '../../ui';
@@ -15,6 +15,16 @@ import { useResource } from './useResource';
 import styles from './Home.module.css';
 
 const DAY_MS = 24 * 3600 * 1000;
+
+/** A file name with break chances after _ - . so long names wrap between words, not mid-word. */
+function breakable(name: string) {
+  return name.split(/(?<=[_\-.])/).map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 ? <wbr /> : null}
+      {part}
+    </Fragment>
+  ));
+}
 
 /** "5 min ago" within a day, otherwise the date. */
 function arrivedLabel(iso: string | undefined, locale: string, now: number): string {
@@ -43,7 +53,7 @@ function Card({ doc, sourceName, now }: CardProps) {
           {lit ? <ChangedTag reason={reason} className={styles.cardTag} /> : null}
         </span>
         <span className={styles.cardName} title={name}>
-          {name}
+          {breakable(name)}
         </span>
       </Link>
       <span className={styles.cardMeta}>

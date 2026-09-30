@@ -21,6 +21,11 @@ describe('humanizeFailureReason', () => {
     expect(out.detail).toContain('/app/uploads/documents/8d5ce300.pdf');
   });
 
+  it('does not read the advice text of an OCR failure as the cause', () => {
+    const advice = `${OCR_PATH}\n4. Unsupported PDF format - ensure the PDF is not password-protected or malformed`;
+    expect(humanizeFailureReason(advice).summary).toBe('OCR failed');
+  });
+
   it.each([
     ['EncryptedPdfError: input file is encrypted', 'The PDF is password-protected'],
     ['Tesseract timed out after 300s', 'OCR took too long and was stopped'],
