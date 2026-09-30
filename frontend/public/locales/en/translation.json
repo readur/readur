@@ -77,7 +77,8 @@
       "loginFailed": "Failed to log in. Please check your credentials.",
       "accountDisabledOrPending": "This account is disabled or awaiting administrator approval",
       "tooManyAttempts": "Too many sign-in attempts. Please try again later.",
-      "tooManyAttemptsRetry": "Too many sign-in attempts. Please try again in {{seconds}} seconds."
+      "tooManyAttemptsRetry": "Too many sign-in attempts. Please try again in {{seconds}} seconds.",
+      "logoutIncomplete": "You are signed out on this device, but the server could not be reached. Your previous session may stay valid until it expires."
     },
     "createAccountLink": "Don't have an account? Request one",
     "oidcCallback": {

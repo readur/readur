@@ -1,6 +1,11 @@
 import { describe, test, expect, vi } from 'vitest';
 import axios from 'axios';
-import { AUTH_LOGOUT_EVENT, installSessionInterceptor, shouldResetSessionOn401 } from '../authEvents';
+import {
+  AUTH_LOGOUT_EVENT,
+  installSessionInterceptor,
+  isCurrentSessionToken,
+  shouldResetSessionOn401,
+} from '../authEvents';
 import { isSafeInlineMime, previewSandbox } from '../contentSafety';
 
 describe('shouldResetSessionOn401', () => {
@@ -30,6 +35,7 @@ describe('session interceptor', () => {
   };
 
   test('clears the session when an authenticated request is rejected', async () => {
+    vi.mocked(localStorage.getItem).mockReturnValue('stale');
     const api = createApi();
     const listener = vi.fn();
     window.addEventListener(AUTH_LOGOUT_EVENT, listener);
@@ -41,6 +47,43 @@ describe('session interceptor', () => {
     expect(localStorage.removeItem).toHaveBeenCalledWith('token');
     expect(listener).toHaveBeenCalledTimes(1);
     window.removeEventListener(AUTH_LOGOUT_EVENT, listener);
+  });
+
+  test('keeps a newer session when a request with an older token is rejected', async () => {
+    vi.mocked(localStorage.getItem).mockReturnValue('fresh');
+    const api = createApi();
+    const listener = vi.fn();
+    window.addEventListener(AUTH_LOGOUT_EVENT, listener);
+
+    await expect(
+      api.get('/documents', { headers: { Authorization: 'Bearer stale' } })
+    ).rejects.toBeDefined();
+
+    expect(localStorage.removeItem).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener(AUTH_LOGOUT_EVENT, listener);
+  });
+
+  test('ignores rejected requests sent without a token', async () => {
+    vi.mocked(localStorage.getItem).mockReturnValue('current');
+    const api = createApi();
+    const listener = vi.fn();
+    window.addEventListener(AUTH_LOGOUT_EVENT, listener);
+
+    await expect(api.get('/documents')).rejects.toBeDefined();
+
+    expect(localStorage.removeItem).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener(AUTH_LOGOUT_EVENT, listener);
+  });
+
+  test('isCurrentSessionToken compares against the stored token', () => {
+    vi.mocked(localStorage.getItem).mockReturnValue('abc');
+    expect(isCurrentSessionToken('Bearer abc')).toBe(true);
+    expect(isCurrentSessionToken('Bearer other')).toBe(false);
+    expect(isCurrentSessionToken(undefined)).toBe(false);
+    vi.mocked(localStorage.getItem).mockReturnValue(null);
+    expect(isCurrentSessionToken('Bearer abc')).toBe(false);
   });
 
   test('does not clear the session on a failed login', async () => {

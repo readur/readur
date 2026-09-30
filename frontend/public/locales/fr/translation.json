@@ -74,7 +74,8 @@
       "oidcAuthFailed": "L'authentification OIDC a échoué. Veuillez vérifier avec votre administrateur.",
       "oidcNotConfigured": "OIDC n'est pas configuré sur ce serveur. Veuillez utiliser la connexion par nom d'utilisateur/mot de passe.",
       "oidcInitFailed": "Échec de l'initialisation de la connexion OIDC. Veuillez réessayer.",
-      "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants."
+      "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants.",
+      "logoutIncomplete": "Vous êtes déconnecté sur cet appareil, mais le serveur n'a pas pu être joint. Votre session précédente peut rester valide jusqu'à son expiration."
     },
     "oidcCallback": {
       "errors": {

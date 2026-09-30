@@ -20,6 +20,13 @@ export interface LoginResponse {
   user: User
 }
 
+/**
+ * Non-blocking notices about the session, shown on the sign-in page.
+ * `logoutIncomplete`: signed out locally, but the server could not be told to
+ * end the session, so the old token may stay valid until it expires.
+ */
+export type SessionNotice = 'logoutIncomplete'
+
 export interface RegisterResult {
   /** True when the account was created but must be approved by an administrator before signing in. */
   pendingApproval: boolean
@@ -35,6 +42,8 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   /** Store a session issued by the server (e.g. after the OIDC code exchange). */
   completeLogin: (session: LoginResponse) => void
+  sessionNotice: SessionNotice | null
+  dismissSessionNotice: () => void
 }
 
 export const isAdmin = (user: { role?: string } | null | undefined): boolean =>
@@ -45,6 +54,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sessionNotice, setSessionNotice] = useState<SessionNotice | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -71,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const storeSession = ({ token, user: userData }: LoginResponse) => {
     localStorage.setItem('token', token)
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    setSessionNotice(null)
     setUser(userData)
   }
 
@@ -78,8 +89,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await api.get('/auth/me')
       setUser(response.data)
-    } catch (error) {
-      clearSession()
+    } catch (error: any) {
+      // Only a rejected token ends the session. Network errors and server
+      // failures keep the stored token so a reload can restore the session.
+      if (error?.response?.status === 401) {
+        clearSession()
+      } else {
+        console.error('Could not load the signed-in user:', error)
+      }
     } finally {
       setLoading(false)
     }
@@ -106,12 +123,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearSession()
     if (token) {
       try {
-        // Best effort: revoke all server-side sessions for this user.
+        // Revoke all server-side sessions for this user. Local state is
+        // already cleared, so a failure here does not block signing out.
         await api.post('/auth/logout', undefined, {
           headers: { Authorization: `Bearer ${token}` },
         })
-      } catch {
-        // Ignore: local state is already cleared.
+      } catch (error) {
+        console.warn('Signed out locally, but the server did not confirm the logout:', error)
+        setSessionNotice('logoutIncomplete')
       }
     }
   }
@@ -132,6 +151,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     changePassword,
     completeLogin: storeSession,
+    sessionNotice,
+    dismissSessionNotice: () => setSessionNotice(null),
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

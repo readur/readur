@@ -56,7 +56,7 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [oidcLoading, setOidcLoading] = useState<boolean>(false);
-  const { login } = useAuth();
+  const { login, sessionNotice, dismissSessionNotice } = useAuth();
   const navigate = useNavigate();
   const { mode } = useTheme();
   const theme = useMuiTheme();
@@ -278,6 +278,15 @@ const Login: React.FC = () => {
                   >
                     {t('auth.signInToAccount')}
                   </Typography>
+
+                  {sessionNotice === 'logoutIncomplete' && (
+                    <Alert severity="warning" onClose={dismissSessionNotice} sx={{ mb: 3, borderRadius: 2 }}>
+                      {t(
+                        'auth.errors.logoutIncomplete',
+                        'You are signed out on this device, but the server could not be reached. Your previous session may stay valid until it expires.'
+                      )}
+                    </Alert>
+                  )}
 
                   {error && (
                     <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>

@@ -74,7 +74,8 @@
       "oidcAuthFailed": "La autenticación OIDC falló. Por favor consulta con tu administrador.",
       "oidcNotConfigured": "OIDC no está configurado en este servidor. Por favor usa inicio de sesión con nombre de usuario/contraseña.",
       "oidcInitFailed": "Falló el inicio de sesión OIDC. Por favor intenta de nuevo.",
-      "loginFailed": "Falló el inicio de sesión. Por favor verifica tus credenciales."
+      "loginFailed": "Falló el inicio de sesión. Por favor verifica tus credenciales.",
+      "logoutIncomplete": "Has cerrado sesión en este dispositivo, pero no se pudo contactar con el servidor. Tu sesión anterior puede seguir siendo válida hasta que caduque."
     },
     "oidcCallback": {
       "errors": {

@@ -74,7 +74,8 @@
       "oidcAuthFailed": "OIDC-Authentifizierung fehlgeschlagen. Bitte wenden Sie sich an Ihren Administrator.",
       "oidcNotConfigured": "OIDC ist auf diesem Server nicht konfiguriert. Bitte verwenden Sie die Benutzername/Passwort-Anmeldung.",
       "oidcInitFailed": "OIDC-Anmeldung konnte nicht initialisiert werden. Bitte versuchen Sie es erneut.",
-      "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten."
+      "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten.",
+      "logoutIncomplete": "Sie sind auf diesem Gerät abgemeldet, aber der Server war nicht erreichbar. Ihre bisherige Sitzung kann bis zu ihrem Ablauf gültig bleiben."
     },
     "oidcCallback": {
       "errors": {

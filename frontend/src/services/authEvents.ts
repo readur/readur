@@ -25,10 +25,21 @@ export function shouldResetSessionOn401(url: string | undefined): boolean {
 }
 
 /**
+ * True when the rejected request was sent with the session that is still
+ * stored. A 401 for an older token (e.g. a request that was in flight while
+ * the user signed in again) must not end the newer session.
+ */
+export function isCurrentSessionToken(authHeader: unknown): boolean {
+  const token = localStorage.getItem('token')
+  return typeof authHeader === 'string' && !!token && authHeader === `Bearer ${token}`
+}
+
+/**
  * When an authenticated request is rejected with 401 the session has expired
  * or been revoked (logout elsewhere, password change, account disabled).
  * Clear the stored token and signal AuthContext so the app returns to /login.
- * 401s from the credential-checking auth endpoints are left to their callers.
+ * 401s from the credential-checking auth endpoints are left to their callers,
+ * and so are 401s for a token other than the one currently stored.
  */
 const instrumented = new WeakSet<object>()
 
@@ -41,7 +52,11 @@ export function installSessionInterceptor(instance: AxiosInstance): void {
       const status = error?.response?.status
       const config = error?.config
       const authHeader = config?.headers?.Authorization ?? config?.headers?.authorization
-      if (status === 401 && authHeader && shouldResetSessionOn401(config?.url)) {
+      if (
+        status === 401 &&
+        shouldResetSessionOn401(config?.url) &&
+        isCurrentSessionToken(authHeader)
+      ) {
         localStorage.removeItem('token')
         delete instance.defaults.headers.common['Authorization']
         if (typeof window !== 'undefined') {
