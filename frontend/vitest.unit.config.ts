@@ -30,6 +30,13 @@ export default defineConfig({
         'src/main.tsx',
       ],
       reporter: ['text-summary', 'json-summary', 'html'],
+      // Floors from docs/redesign/coverage-baseline.json (afterUpgrade, v8).
+      thresholds: {
+        statements: 39,
+        branches: 67,
+        functions: 37,
+        lines: 39,
+      },
     },
   },
   server: {

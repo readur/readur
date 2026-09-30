@@ -17,6 +17,7 @@ export const makeDocument = (overrides: Partial<Document> = {}): Document => ({
   file_size: 2_097_152,
   mime_type: 'application/pdf',
   tags: [],
+  labels: [],
   created_at: '2025-06-15T10:00:00Z',
   updated_at: '2025-06-15T10:05:00Z',
   user_id: 'user-1',
@@ -30,7 +31,7 @@ export const makeDocument = (overrides: Partial<Document> = {}): Document => ({
 });
 
 export const makeOcr = (overrides: Partial<OcrResponse> = {}): OcrResponse => ({
-  document_id: 'doc-1',
+  id: 'doc-1',
   filename: 'invoice.pdf',
   has_ocr_text: true,
   ocr_text: 'Invoice 42\nTotal due: 120 EUR\nPay the invoice by Friday.',
@@ -38,6 +39,8 @@ export const makeOcr = (overrides: Partial<OcrResponse> = {}): OcrResponse => ({
   ocr_word_count: 290,
   ocr_processing_time_ms: 1500,
   ocr_status: 'completed',
+  detected_language: null,
+  pages_processed: null,
   ...overrides,
 });
 

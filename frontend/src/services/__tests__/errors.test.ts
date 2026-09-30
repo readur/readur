@@ -57,7 +57,7 @@ describe('ErrorHelper', () => {
           status: 500
         },
         isAxiosError: true
-      };
+      } as AxiosErrorWithCode;
 
       const result = ErrorHelper.getErrorInfo(axiosError);
 
@@ -661,7 +661,7 @@ describe('ErrorHelper', () => {
     });
 
     test('should handle AxiosErrorWithCode interface correctly', () => {
-      const axiosError: AxiosErrorWithCode = {
+      const axiosError = {
         response: {
           data: {
             error: 'Axios error',

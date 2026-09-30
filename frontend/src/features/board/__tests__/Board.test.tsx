@@ -61,7 +61,7 @@ function serve() {
 }
 
 const region = (name: string) => screen.getByRole('region', { name });
-const loc = () => screen.getByRole('status', { name: 'location' }, { hidden: true }).textContent;
+const loc = () => screen.getByRole('status', { name: 'location', hidden: true }).textContent;
 
 async function renderBoard(role: UserRole = 'admin') {
   const view = renderPage(<Board />, role);
