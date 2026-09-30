@@ -1,0 +1,82 @@
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  min-height: 32px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.box {
+  flex: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--btn-fg);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.glyph {
+  display: none;
+  width: 12px;
+  height: 12px;
+}
+
+.checkbox[data-selected] .box,
+.checkbox[data-indeterminate] .box {
+  background: var(--btn-bg);
+}
+
+.checkbox[data-selected] .glyph,
+.checkbox[data-indeterminate] .glyph {
+  display: block;
+}
+
+.checkbox[data-indeterminate] .check,
+.checkbox:not([data-indeterminate]) .dash {
+  display: none;
+}
+
+.checkbox[data-focus-visible] .box {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.checkbox[data-invalid] .box {
+  border-color: var(--danger);
+}
+
+.checkbox[data-disabled] {
+  color: var(--fg-meta);
+  cursor: not-allowed;
+}
+
+.checkbox[data-disabled] .box {
+  border-color: var(--line);
+  background: var(--surface-2);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.description {
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.error {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+}

@@ -1,0 +1,12 @@
+.popover {
+  box-sizing: border-box;
+  max-width: 360px;
+  padding: var(--s-3);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+}

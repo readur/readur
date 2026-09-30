@@ -1,0 +1,7 @@
+.iconButton {
+  padding: 0;
+  min-width: 32px;
+}
+.sm { width: 32px; height: 32px; }
+.md { width: 40px; height: 40px; }
+.glyph { display: inline-flex; }

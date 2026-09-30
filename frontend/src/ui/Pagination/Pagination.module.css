@@ -1,0 +1,49 @@
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3) var(--s-5);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+}
+
+.readout {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.size {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.sizeLabel {
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-meta);
+}
+
+.sizeSelect {
+  min-width: 80px;
+}
+
+.sizeSelect .trigger {
+  min-height: 32px;
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+}
