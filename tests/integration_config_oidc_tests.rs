@@ -73,7 +73,7 @@ mod tests {
             env::set_var("OIDC_ISSUER_URL", "https://provider.example.com");
             env::set_var("OIDC_REDIRECT_URI", "http://localhost:8000/auth/oidc/callback");
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
-            env::set_var("JWT_SECRET", "test-secret");
+            env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
 
             let config = Config::from_env().unwrap();
 
@@ -114,7 +114,7 @@ mod tests {
 
                 env::set_var("OIDC_ENABLED", value);
                 env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
-                env::set_var("JWT_SECRET", "test-secret");
+                env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
 
                 let config = Config::from_env().unwrap();
                 assert_eq!(config.oidc_enabled, expected, "Failed for value: {}", value);
@@ -130,7 +130,7 @@ mod tests {
             env::set_var("OIDC_CLIENT_ID", "test-client-id");
             // Missing OIDC_CLIENT_SECRET, OIDC_ISSUER_URL, OIDC_REDIRECT_URI
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
-            env::set_var("JWT_SECRET", "test-secret");
+            env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
 
             let config = Config::from_env().unwrap();
 
@@ -152,7 +152,7 @@ mod tests {
             env::set_var("OIDC_ISSUER_URL", "https://provider.example.com");
             env::set_var("OIDC_REDIRECT_URI", "http://localhost:8000/auth/oidc/callback");
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
-            env::set_var("JWT_SECRET", "test-secret");
+            env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
 
             let config = Config::from_env().unwrap();
 
@@ -173,7 +173,7 @@ mod tests {
             env::set_var("OIDC_ISSUER_URL", "");
             env::set_var("OIDC_REDIRECT_URI", "");
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
-            env::set_var("JWT_SECRET", "test-secret");
+            env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
 
             let config = Config::from_env().unwrap();
 
@@ -192,7 +192,7 @@ mod tests {
             // Test that validation warnings are properly formatted
             env::set_var("OIDC_ENABLED", "true");
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
-            env::set_var("JWT_SECRET", "test-secret");
+            env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
             // Missing required OIDC fields
 
             // This should succeed but show warnings
@@ -211,7 +211,7 @@ mod tests {
             env::set_var("OIDC_ISSUER_URL", "https://auth.example.com");
             env::set_var("OIDC_REDIRECT_URI", "https://myapp.com/auth/callback");
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
-            env::set_var("JWT_SECRET", "test-secret");
+            env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
 
             let config = Config::from_env().unwrap();
 
@@ -230,7 +230,7 @@ mod tests {
             env::set_var("OIDC_ENABLED", "true");
             env::set_var("OIDC_CLIENT_ID", "env-client-id");
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
-            env::set_var("JWT_SECRET", "test-secret");
+            env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
 
             let config = Config::from_env().unwrap();
 

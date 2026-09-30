@@ -32,7 +32,7 @@ struct AdminTestClient {
 impl AdminTestClient {
     async fn new() -> Self {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app().clone());
+        let auth_helper = ctx.auth_helper();
         Self {
             ctx,
             auth_helper,

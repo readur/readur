@@ -1,438 +1,523 @@
-mod tests {
-    use readur::models::{AuthProvider, CreateUser, UserRole};
-    use readur::test_helpers::create_test_config_with_db;
-    use axum::http::StatusCode;
-    use serde_json::json;
-    use tower::util::ServiceExt;
-    use wiremock::{matchers::{method, path, query_param, header}, Mock, MockServer, ResponseTemplate};
-    use std::sync::Arc;
-    use readur::{AppState, oidc::OidcClient};
-    use uuid;
+//! OIDC login flow tests against a mock identity provider.
+//!
+//! The provider signs ID tokens with HS256 keyed by the client secret, which
+//! the relying party accepts for confidential clients.
 
-    async fn create_test_app_simple() -> (axum::Router, ()) {
-        // Use TEST_DATABASE_URL directly, no containers
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .or_else(|_| std::env::var("DATABASE_URL"))
-            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+use axum::{body::Body, http::Request, http::StatusCode, Router};
+use base64ct::Encoding;
+use jsonwebtoken::{encode, EncodingKey, Header};
+use readur::models::{CreateUser, UserRole};
+use readur::oidc::OidcClient;
+use readur::test_utils::TestContext;
+use readur::AppState;
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tower::util::ServiceExt;
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
-        let mut config = create_test_config_with_db(&database_url);
-        config.server_address = "127.0.0.1:0".to_string();
-        config.jwt_secret = "test-secret".to_string();
-        config.upload_path = "./test-uploads".to_string();
-        config.watch_folder = "./test-watch".to_string();
+const CLIENT_ID: &str = "test-client-id";
+const CLIENT_SECRET: &str = "test-client-secret-with-enough-entropy";
+const REDIRECT_URI: &str = "http://localhost:8000/api/auth/oidc/callback";
+const STATE_COOKIE: &str = "readur_oidc_state";
 
-        let db = readur::db::Database::new(&config.database_url).await.unwrap();
+struct OidcTestApp {
+    app: Router,
+    state: Arc<AppState>,
+    provider: MockServer,
+    // Keeps the database container alive for the duration of the test.
+    _ctx: TestContext,
+}
 
-        // Retry migration up to 3 times to handle concurrent test execution
-        for attempt in 1..=3 {
-            match db.migrate().await {
-                Ok(_) => break,
-                Err(e) if attempt < 3 && e.to_string().contains("tuple concurrently updated") => {
-                    // Wait a bit and retry
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100 * attempt)).await;
-                    continue;
-                }
-                Err(e) => panic!("Migration failed after {} attempts: {}", attempt, e),
-            }
-        }
-        
-        // Create file service
-        let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
-        let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
-        let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
-        
-        let app = axum::Router::new()
-            .nest("/api/auth", readur::routes::auth::router())
-            .with_state(Arc::new(AppState {
-                db: db.clone(),
-                config,
-                file_service: file_service.clone(),
-                webdav_scheduler: None,
-                source_scheduler: None,
-                queue_service: Arc::new(readur::ocr::queue::OcrQueueService::new(
-                    db.clone(),
-                    db.pool.clone(),
-                    2,
-                    file_service.clone(),
-                    100,
-                    100,
-                    300,
-                )),
-                oidc_client: None,
-                sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
-                user_watch_service: None,
+async fn setup_with(configure: impl FnOnce(&mut readur::config::Config)) -> OidcTestApp {
+    let ctx = TestContext::new().await;
+    let provider = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/.well-known/openid-configuration"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "issuer": provider.uri(),
+            "authorization_endpoint": format!("{}/auth", provider.uri()),
+            "token_endpoint": format!("{}/token", provider.uri()),
+        })))
+        .mount(&provider)
+        .await;
+
+    let mut config = ctx.state.config.clone();
+    config.oidc_enabled = true;
+    config.oidc_client_id = Some(CLIENT_ID.to_string());
+    config.oidc_client_secret = Some(CLIENT_SECRET.to_string());
+    config.oidc_issuer_url = Some(provider.uri());
+    config.oidc_redirect_uri = Some(REDIRECT_URI.to_string());
+    config.oidc_auto_register = Some(true);
+    configure(&mut config);
+
+    let oidc_client = OidcClient::new(&config).await.expect("OIDC client should initialise");
+
+    let state = Arc::new(AppState {
+        db: ctx.state.db.clone(),
+        config,
+        file_service: ctx.state.file_service.clone(),
+        webdav_scheduler: None,
+        source_scheduler: None,
+        queue_service: ctx.state.queue_service.clone(),
+        oidc_client: Some(Arc::new(oidc_client)),
+        sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
+        user_watch_service: None,
         webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
-            }));
+    });
 
-        (app, ())
+    let app = Router::new()
+        .nest("/api/auth", readur::routes::auth::router())
+        .with_state(state.clone());
+
+    OidcTestApp { app, state, provider, _ctx: ctx }
+}
+
+async fn setup() -> OidcTestApp {
+    setup_with(|_| {}).await
+}
+
+/// Values the relying party put into the authorization request.
+struct LoginStart {
+    state: String,
+    nonce: String,
+    code_challenge: String,
+    cookie_value: String,
+}
+
+async fn send(app: &Router, request: Request<Body>) -> axum::response::Response {
+    app.clone().oneshot(request).await.unwrap()
+}
+
+async fn body_json(response: axum::response::Response) -> Value {
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+}
+
+fn location(response: &axum::response::Response) -> String {
+    response
+        .headers()
+        .get("location")
+        .expect("redirect should carry a Location header")
+        .to_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn start_login(t: &OidcTestApp) -> LoginStart {
+    let response = send(
+        &t.app,
+        Request::get("/api/auth/oidc/login").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert!(response.status().is_redirection(), "login should redirect, got {}", response.status());
+
+    let set_cookie = response
+        .headers()
+        .get("set-cookie")
+        .expect("login should set the state cookie")
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(set_cookie.starts_with(&format!("{}=", STATE_COOKIE)));
+    assert!(set_cookie.contains("HttpOnly"));
+    assert!(set_cookie.contains("SameSite=Lax"));
+    let cookie_value = set_cookie
+        .split(';')
+        .next()
+        .unwrap()
+        .split_once('=')
+        .unwrap()
+        .1
+        .to_string();
+
+    let url = url::Url::parse(&location(&response)).unwrap();
+    assert!(url.as_str().starts_with(&format!("{}/auth", t.provider.uri())));
+    let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
+    assert_eq!(params["client_id"], CLIENT_ID);
+    assert_eq!(params["response_type"], "code");
+    assert_eq!(params["redirect_uri"], REDIRECT_URI);
+    assert!(params["scope"].split(' ').any(|s| s == "openid"));
+    assert_eq!(params["code_challenge_method"], "S256");
+
+    LoginStart {
+        state: params["state"].clone(),
+        nonce: params["nonce"].clone(),
+        code_challenge: params["code_challenge"].clone(),
+        cookie_value,
     }
+}
 
-    async fn create_test_app_with_oidc() -> (axum::Router, MockServer) {
-        let mock_server = MockServer::start().await;
-        
-        // Mock OIDC discovery endpoint
-        let discovery_response = json!({
-            "issuer": mock_server.uri(),
-            "authorization_endpoint": format!("{}/auth", mock_server.uri()),
-            "token_endpoint": format!("{}/token", mock_server.uri()),
-            "userinfo_endpoint": format!("{}/userinfo", mock_server.uri())
-        });
-
-        Mock::given(method("GET"))
-            .and(path("/.well-known/openid-configuration"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(discovery_response))
-            .mount(&mock_server)
-            .await;
-
-        // Use TEST_DATABASE_URL directly, no containers
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .or_else(|_| std::env::var("DATABASE_URL"))
-            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-
-        // Update the app state to include OIDC client
-        let mut config = create_test_config_with_db(&database_url);
-        config.server_address = "127.0.0.1:0".to_string();
-        config.jwt_secret = "test-secret".to_string();
-        config.upload_path = "./test-uploads".to_string();
-        config.watch_folder = "./test-watch".to_string();
-        config.oidc_enabled = true;
-        config.oidc_client_id = Some("test-client-id".to_string());
-        config.oidc_client_secret = Some("test-client-secret".to_string());
-        config.oidc_issuer_url = Some(mock_server.uri());
-        config.oidc_redirect_uri = Some("http://localhost:8000/auth/oidc/callback".to_string());
-        config.oidc_auto_register = Some(true);
-        config.allow_local_auth = Some(true);
-
-        let oidc_client = match OidcClient::new(&config).await {
-            Ok(client) => Some(Arc::new(client)),
-            Err(e) => {
-                panic!("OIDC client creation failed: {}", e);
-            }
-        };
-        
-        // Connect to the database and run migrations with retry logic for concurrency
-        let db = readur::db::Database::new(&config.database_url).await.unwrap();
-        
-        // Retry migration up to 3 times to handle concurrent test execution
-        for attempt in 1..=3 {
-            match db.migrate().await {
-                Ok(_) => break,
-                Err(e) if attempt < 3 && e.to_string().contains("tuple concurrently updated") => {
-                    // Wait a bit and retry
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100 * attempt)).await;
-                    continue;
-                }
-                Err(e) => panic!("Migration failed after {} attempts: {}", attempt, e),
-            }
-        }
-        
-        // Create file service for OIDC app
-        let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
-        let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
-        let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
-        
-        // Create app with OIDC configuration
-        let app = axum::Router::new()
-            .nest("/api/auth", readur::routes::auth::router())
-            .with_state(Arc::new(AppState {
-                db: db.clone(),
-                config,
-                file_service: file_service.clone(),
-                webdav_scheduler: None,
-                source_scheduler: None,
-                queue_service: Arc::new(readur::ocr::queue::OcrQueueService::new(
-                    db.clone(),
-                    db.pool.clone(),
-                    2,
-                    file_service.clone(),
-                    100,
-                    100,
-                    300,
-                )),
-                oidc_client,
-                sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
-                user_watch_service: None,
-        webdav_metrics_collector: None,
-        rate_limiters: readur::rate_limit::RateLimiters::new(),
-            }));
-
-        (app, mock_server)
+fn id_token(t: &OidcTestApp, claims: Value) -> String {
+    let now = chrono::Utc::now().timestamp();
+    let mut full = json!({
+        "iss": t.provider.uri(),
+        "aud": CLIENT_ID,
+        "iat": now,
+        "exp": now + 300,
+    });
+    for (k, v) in claims.as_object().unwrap() {
+        full[k] = v.clone();
     }
+    encode(&Header::default(), &full, &EncodingKey::from_secret(CLIENT_SECRET.as_bytes())).unwrap()
+}
 
-    #[tokio::test]
-    async fn test_oidc_login_redirect() {
-        let (app, _mock_server) = create_test_app_with_oidc().await;
-
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri("/api/auth/oidc/login")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::SEE_OTHER);
-        
-        let location = response.headers().get("location").unwrap().to_str().unwrap();
-        assert!(location.contains("/auth"));
-        assert!(location.contains("client_id=test-client-id"));
-        assert!(location.contains("scope=openid"));
-    }
-
-    #[tokio::test]
-    async fn test_oidc_login_disabled() {
-        let (app, _container) = create_test_app_simple().await; // Regular app without OIDC
-
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri("/api/auth/oidc/login")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn test_oidc_callback_missing_code() {
-        let (app, _mock_server) = create_test_app_with_oidc().await;
-
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri("/api/auth/oidc/callback")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn test_oidc_callback_with_error() {
-        let (app, _mock_server) = create_test_app_with_oidc().await;
-
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri("/api/auth/oidc/callback?error=access_denied")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_oidc_callback_success_new_user() {
-        let (app, mock_server) = create_test_app_with_oidc().await;
-        
-        // Generate random identifiers to avoid test interference
-        let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-        let test_username = format!("oidcuser_{}", test_id);
-        let test_email = format!("oidc_{}@example.com", test_id);
-        let test_subject = format!("oidc-user-{}", test_id);
-        
-        // Clean up any existing test user to ensure test isolation
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .or_else(|_| std::env::var("DATABASE_URL"))
-            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-        let db = readur::db::Database::new(&database_url).await.unwrap();
-        
-        // Delete any existing user with the test username or OIDC subject
-        let _ = sqlx::query("DELETE FROM users WHERE username = $1 OR oidc_subject = $2")
-            .bind(&test_username)
-            .bind(&test_subject)
-            .execute(&db.pool)
-            .await;
-        
-
-        // Mock token exchange
-        let token_response = json!({
-            "access_token": "test-access-token",
+async fn mock_token_endpoint(t: &OidcTestApp, id_token: String) {
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "provider-access-token",
             "token_type": "Bearer",
-            "expires_in": 3600
-        });
+            "expires_in": 300,
+            "id_token": id_token,
+        })))
+        // One response per login so later mocks in the same test take over.
+        .up_to_n_times(1)
+        .mount(&t.provider)
+        .await;
+}
 
-        Mock::given(method("POST"))
-            .and(path("/token"))
-            .and(header("content-type", "application/x-www-form-urlencoded"))
-            .respond_with(ResponseTemplate::new(200)
-                .set_body_json(token_response)
-                .insert_header("content-type", "application/json"))
-            .mount(&mock_server)
-            .await;
-
-        // Mock user info
-        let user_info_response = json!({
-            "sub": test_subject,
-            "email": test_email,
-            "name": "OIDC User",
-            "preferred_username": test_username
-        });
-
-        Mock::given(method("GET"))
-            .and(path("/userinfo"))
-            .respond_with(ResponseTemplate::new(200)
-                .set_body_json(user_info_response)
-                .insert_header("content-type", "application/json"))
-            .mount(&mock_server)
-            .await;
-
-        // Add a small delay to make sure everything is set up
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri("/api/auth/oidc/callback?code=test-auth-code&state=test-state")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let status = response.status();
-
-        // Extract headers before consuming response
-        let headers = response.headers().clone();
-
-        if status != StatusCode::SEE_OTHER {
-            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-                .await
-                .unwrap();
-            let error_text = String::from_utf8_lossy(&body);
-            eprintln!("Response status: {}", status);
-            eprintln!("Response body: {}", error_text);
-
-            // Also check if we made the expected API calls to the mock server
-            eprintln!("Mock server received calls:");
-            let received_requests = mock_server.received_requests().await.unwrap();
-            for req in received_requests {
-                eprintln!("  {} {} - {}", req.method, req.url.path(), String::from_utf8_lossy(&req.body));
-            }
-
-            // Try to parse as JSON to see if there's a more detailed error message
-            if let Ok(error_json) = serde_json::from_slice::<serde_json::Value>(&body) {
-                eprintln!("Error JSON: {:#}", error_json);
-            }
-        }
-
-        // Expect a redirect (303 See Other) instead of JSON response
-        assert_eq!(status, StatusCode::SEE_OTHER);
-
-        // Extract the token from the Location header
-        let location = headers.get("location").unwrap().to_str().unwrap();
-        assert!(location.contains("/auth/callback?token="));
-
-        // Extract token from URL
-        let token_start = location.find("token=").unwrap() + 6;
-        let token = urlencoding::decode(&location[token_start..]).unwrap();
-
-        // Verify token is not empty
-        assert!(!token.is_empty());
-
-        // Verify user was created by checking database
-        let user = db.get_user_by_username(&test_username).await.unwrap().unwrap();
-        assert_eq!(user.username, test_username);
-        assert_eq!(user.email, test_email);
+async fn callback(t: &OidcTestApp, query: &str, cookie: Option<&str>) -> axum::response::Response {
+    let mut builder = Request::get(format!("/api/auth/oidc/callback?{}", query));
+    if let Some(cookie) = cookie {
+        builder = builder.header("cookie", format!("{}={}", STATE_COOKIE, cookie));
     }
+    send(&t.app, builder.body(Body::empty()).unwrap()).await
+}
 
-    #[tokio::test]
-    async fn test_oidc_callback_invalid_token() {
-        let (app, mock_server) = create_test_app_with_oidc().await;
+async fn exchange(t: &OidcTestApp, code: &str) -> axum::response::Response {
+    send(
+        &t.app,
+        Request::post("/api/auth/oidc/exchange")
+            .header("content-type", "application/json")
+            .body(Body::from(json!({ "code": code }).to_string()))
+            .unwrap(),
+    )
+    .await
+}
 
-        // Mock failed token exchange
-        Mock::given(method("POST"))
-            .and(path("/token"))
-            .respond_with(ResponseTemplate::new(400).set_body_json(json!({
-                "error": "invalid_grant"
-            })))
-            .mount(&mock_server)
-            .await;
+fn unique(prefix: &str) -> String {
+    format!("{}{}", prefix, &uuid::Uuid::new_v4().simple().to_string()[..10])
+}
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri("/api/auth/oidc/callback?code=invalid-auth-code")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+#[tokio::test]
+async fn login_redirect_sets_state_cookie_and_pkce() {
+    let t = setup().await;
+    let first = start_login(&t).await;
+    assert_eq!(first.cookie_value, first.state);
+    assert!(!first.nonce.is_empty());
+    assert!(!first.code_challenge.is_empty());
 
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
+    let second = start_login(&t).await;
+    assert_ne!(first.state, second.state);
+    assert_ne!(first.nonce, second.nonce);
+}
 
-    #[tokio::test]
-    async fn test_oidc_callback_invalid_user_info() {
-        let (app, mock_server) = create_test_app_with_oidc().await;
-        
-        // Generate random identifiers to avoid test interference
-        let test_id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-        let test_username = format!("oidcuser_{}", test_id);
-        let test_subject = format!("oidc-user-{}", test_id);
-        
-        // Clean up any existing test user to ensure test isolation
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .or_else(|_| std::env::var("DATABASE_URL"))
-            .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
-        let db = readur::db::Database::new(&database_url).await.unwrap();
-        
-        // Delete any existing user that might conflict
-        let _ = sqlx::query("DELETE FROM users WHERE username = $1 OR oidc_subject = $2")
-            .bind(&test_username)
-            .bind(&test_subject)
-            .execute(&db.pool)
-            .await;
+#[tokio::test]
+async fn login_without_oidc_configured_is_rejected() {
+    let ctx = TestContext::new().await;
+    let response = send(
+        &ctx.app,
+        Request::get("/api/auth/oidc/login").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
 
-        // Mock successful token exchange
-        let token_response = json!({
-            "access_token": "test-access-token",
+#[tokio::test]
+async fn callback_happy_path_creates_user_and_issues_single_use_code() {
+    let t = setup().await;
+    let login = start_login(&t).await;
+
+    let subject = unique("sub-");
+    let username = unique("oidcuser_");
+    let email = format!("{}@example.com", username);
+    mock_token_endpoint(
+        &t,
+        id_token(
+            &t,
+            json!({
+                "sub": subject,
+                "nonce": login.nonce,
+                "email": email,
+                "email_verified": true,
+                "preferred_username": username,
+            }),
+        ),
+    )
+    .await;
+
+    let response = callback(
+        &t,
+        &format!("code=provider-code&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
+    let status = response.status();
+    assert!(status.is_redirection(), "expected redirect, got {} {:?}", status, body_json(response).await);
+
+    // The state cookie is cleared on the way out.
+    let cleared = response.headers().get("set-cookie").unwrap().to_str().unwrap().to_string();
+    assert!(cleared.contains("Max-Age=0"));
+
+    let target = location(&response);
+    let prefix = "http://localhost:8000/auth/callback#code=";
+    assert!(target.starts_with(prefix), "unexpected redirect target {}", target);
+    let code = &target[prefix.len()..];
+    assert!(!code.is_empty());
+
+    // PKCE: the token request carried the verifier matching the challenge.
+    let requests = t.provider.received_requests().await.unwrap();
+    let token_request = requests.iter().find(|r| r.url.path() == "/token").unwrap();
+    let form: HashMap<String, String> = url::form_urlencoded::parse(&token_request.body).into_owned().collect();
+    assert_eq!(form["grant_type"], "authorization_code");
+    assert_eq!(form["code"], "provider-code");
+    let verifier = &form["code_verifier"];
+    let challenge = base64ct::Base64UrlUnpadded::encode_string(&Sha256::digest(verifier.as_bytes()));
+    assert_eq!(challenge, login.code_challenge);
+
+    // Redeem the handoff code for a session.
+    let response = exchange(&t, code).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    let token = body["token"].as_str().expect("exchange should return a token");
+    assert!(!token.is_empty());
+    assert_eq!(body["user"]["username"], username.as_str());
+
+    let me = send(
+        &t.app,
+        Request::get("/api/auth/me")
+            .header("authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(me.status(), StatusCode::OK);
+
+    // The code is single use.
+    let again = exchange(&t, code).await;
+    assert_eq!(again.status(), StatusCode::UNAUTHORIZED);
+
+    let user = t.state.db.get_user_by_username(&username).await.unwrap().unwrap();
+    assert_eq!(user.email, email);
+    assert_eq!(user.oidc_subject.as_deref(), Some(subject.as_str()));
+    assert_eq!(user.role, UserRole::User);
+
+    // The login state is single use as well.
+    let replay = callback(
+        &t,
+        &format!("code=provider-code&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
+    assert_eq!(replay.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn callback_requires_matching_state_cookie() {
+    let t = setup().await;
+    let login = start_login(&t).await;
+
+    let missing = callback(&t, &format!("code=c&state={}", login.state), None).await;
+    assert_eq!(missing.status(), StatusCode::BAD_REQUEST);
+
+    let other = start_login(&t).await;
+    let mismatched = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&other.cookie_value),
+    )
+    .await;
+    assert_eq!(mismatched.status(), StatusCode::BAD_REQUEST);
+
+    let no_state = callback(&t, "code=c", Some(&login.cookie_value)).await;
+    assert_eq!(no_state.status(), StatusCode::BAD_REQUEST);
+
+    let no_code = callback(&t, &format!("state={}", login.state), Some(&login.cookie_value)).await;
+    assert_eq!(no_code.status(), StatusCode::BAD_REQUEST);
+
+    // An unknown state is rejected even when cookie and query agree.
+    let unknown = callback(&t, "code=c&state=not-issued", Some("not-issued")).await;
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+
+    // None of the above reached the token endpoint.
+    let requests = t.provider.received_requests().await.unwrap();
+    assert!(requests.iter().all(|r| r.url.path() != "/token"));
+}
+
+#[tokio::test]
+async fn callback_rejects_wrong_nonce() {
+    let t = setup().await;
+    let login = start_login(&t).await;
+    let username = unique("nonceuser_");
+
+    mock_token_endpoint(
+        &t,
+        id_token(
+            &t,
+            json!({
+                "sub": unique("sub-"),
+                "nonce": "some-other-nonce",
+                "email": format!("{}@example.com", username),
+                "preferred_username": username,
+            }),
+        ),
+    )
+    .await;
+
+    let response = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert!(t.state.db.get_user_by_username(&username).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn callback_rejects_token_response_without_valid_id_token() {
+    let t = setup().await;
+
+    // No id_token at all.
+    let login = start_login(&t).await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "provider-access-token",
             "token_type": "Bearer",
-            "expires_in": 3600
-        });
+        })))
+        .up_to_n_times(1)
+        .mount(&t.provider)
+        .await;
+    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-        Mock::given(method("POST"))
-            .and(path("/token"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(token_response))
-            .mount(&mock_server)
-            .await;
+    // id_token for a different audience.
+    let login = start_login(&t).await;
+    mock_token_endpoint(
+        &t,
+        id_token(&t, json!({ "sub": unique("sub-"), "nonce": login.nonce, "aud": "someone-else" })),
+    )
+    .await;
+    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
 
-        // Mock failed user info
-        Mock::given(method("GET"))
-            .and(path("/userinfo"))
-            .respond_with(ResponseTemplate::new(401))
-            .mount(&mock_server)
-            .await;
+#[tokio::test]
+async fn callback_does_not_link_existing_local_account_by_default() {
+    let t = setup().await;
+    let username = unique("localuser_");
+    let email = format!("{}@example.com", username);
+    let local = t
+        .state
+        .db
+        .create_user(CreateUser {
+            username: username.clone(),
+            email: email.clone(),
+            password: "localpassword123".to_string(),
+            role: Some(UserRole::Admin),
+        })
+        .await
+        .unwrap();
 
-        let response = app
-            .oneshot(
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri("/api/auth/oidc/callback?code=test-auth-code")
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+    let login = start_login(&t).await;
+    mock_token_endpoint(
+        &t,
+        id_token(
+            &t,
+            json!({
+                "sub": unique("sub-"),
+                "nonce": login.nonce,
+                "email": email,
+                "email_verified": true,
+                "preferred_username": username,
+            }),
+        ),
+    )
+    .await;
 
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
+    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let after = t.state.db.get_user_by_id(local.id).await.unwrap().unwrap();
+    assert!(after.oidc_subject.is_none());
+    assert!(after.oidc_issuer.is_none());
+}
+
+#[tokio::test]
+async fn callback_links_verified_email_when_enabled() {
+    let t = setup_with(|c| c.security.oidc_link_existing_by_email = true).await;
+    let username = unique("linkuser_");
+    let email = format!("{}@example.com", username);
+    let local = t
+        .state
+        .db
+        .create_user(CreateUser {
+            username: username.clone(),
+            email: email.clone(),
+            password: "localpassword123".to_string(),
+            role: Some(UserRole::User),
+        })
+        .await
+        .unwrap();
+
+    // Unverified email is still not linked.
+    let login = start_login(&t).await;
+    mock_token_endpoint(
+        &t,
+        id_token(&t, json!({ "sub": unique("sub-"), "nonce": login.nonce, "email": email, "email_verified": false })),
+    )
+    .await;
+    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let subject = unique("sub-");
+    let login = start_login(&t).await;
+    mock_token_endpoint(
+        &t,
+        id_token(&t, json!({ "sub": subject, "nonce": login.nonce, "email": email, "email_verified": true })),
+    )
+    .await;
+    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    assert!(response.status().is_redirection(), "expected redirect, got {}", response.status());
+
+    let after = t.state.db.get_user_by_id(local.id).await.unwrap().unwrap();
+    assert_eq!(after.oidc_subject.as_deref(), Some(subject.as_str()));
+}
+
+#[tokio::test]
+async fn callback_provider_errors_are_unauthorized() {
+    let t = setup().await;
+
+    let login = start_login(&t).await;
+    let response = callback(
+        &t,
+        &format!("error=access_denied&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let login = start_login(&t).await;
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({ "error": "invalid_grant" })))
+        .mount(&t.provider)
+        .await;
+    let response = callback(&t, &format!("code=bad&state={}", login.state), Some(&login.cookie_value)).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn exchange_rejects_unknown_code() {
+    let t = setup().await;
+    let response = exchange(&t, "never-issued").await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

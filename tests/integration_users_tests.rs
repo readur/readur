@@ -15,7 +15,7 @@ mod tests {
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             // Create admin user using TestAuthHelper for unique credentials
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let admin = auth_helper.create_admin_user().await;
             let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
@@ -63,7 +63,7 @@ mod tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let admin = auth_helper.create_admin_user().await;
             let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
@@ -104,7 +104,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_user_via_api() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
@@ -151,7 +151,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Create admin user using TestAuthHelper for unique credentials
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
         
@@ -201,7 +201,7 @@ mod tests {
         let ctx = TestContext::new().await;
         
         // Create admin user using TestAuthHelper for unique credentials
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
         
@@ -239,7 +239,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_user() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
@@ -303,7 +303,7 @@ mod tests {
     #[tokio::test]
     async fn test_cannot_delete_self() {
         let ctx = TestContext::new().await;
-        let auth_helper = TestAuthHelper::new(ctx.app.clone());
+        let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, "adminpass123").await;
 
@@ -510,5 +510,161 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    async fn json_request(
+        ctx: &TestContext,
+        method: &str,
+        uri: &str,
+        token: &str,
+        body: Option<serde_json::Value>,
+    ) -> (StatusCode, serde_json::Value) {
+        let body = match body {
+            Some(b) => axum::body::Body::from(serde_json::to_vec(&b).unwrap()),
+            None => axum::body::Body::empty(),
+        };
+        let response = ctx.app.clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .header("Authorization", format!("Bearer {}", token))
+                    .header("Content-Type", "application/json")
+                    .body(body)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    }
+
+    #[tokio::test]
+    async fn test_admin_endpoints_reject_regular_users() {
+        let ctx = TestContext::new().await;
+        let auth_helper = ctx.auth_helper();
+        let user = auth_helper.create_test_user().await;
+        let token = auth_helper.login_user(&user.username, &user.password).await;
+
+        let (status, _) = json_request(&ctx, "GET", "/api/users", &token, None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        let (status, _) = json_request(
+            &ctx,
+            "PUT",
+            &format!("/api/users/{}", user.id()),
+            &token,
+            Some(json!({ "is_active": true })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_admin_create_user_validates_fields() {
+        let ctx = TestContext::new().await;
+        let auth_helper = ctx.auth_helper();
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
+
+        for body in [
+            json!({ "username": "../escape", "email": "ok@example.com", "password": "password123" }),
+            json!({ "username": "valid_name", "email": "not-an-email", "password": "password123" }),
+            json!({ "username": "valid_name", "email": "ok@example.com", "password": "short" }),
+        ] {
+            let (status, _) = json_request(&ctx, "POST", "/api/users", &token, Some(body.clone())).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "expected rejection for {}", body);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_admin_can_approve_and_deactivate_accounts() {
+        let ctx = TestContext::new().await;
+        let auth_helper = ctx.auth_helper();
+        let admin = auth_helper.create_admin_user().await;
+        let admin_token = auth_helper.login_user(&admin.username, &admin.password).await;
+
+        // An account awaiting approval, as created by self-registration.
+        let username = format!("pending_{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
+        let pending = ctx.state.db
+            .create_user_with_status(
+                CreateUser {
+                    username: username.clone(),
+                    email: format!("{}@example.com", username),
+                    password: "password123".to_string(),
+                    role: Some(UserRole::User),
+                },
+                false,
+            )
+            .await
+            .unwrap();
+
+        let (status, users) = json_request(&ctx, "GET", "/api/users", &admin_token, None).await;
+        assert_eq!(status, StatusCode::OK);
+        let listed = users.as_array().unwrap().iter()
+            .find(|u| u["username"] == username.as_str())
+            .expect("pending account should be listed");
+        assert_eq!(listed["is_active"], false);
+
+        let (status, updated) = json_request(
+            &ctx,
+            "PUT",
+            &format!("/api/users/{}", pending.id),
+            &admin_token,
+            Some(json!({ "is_active": true })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(updated["is_active"], true);
+
+        // Now the account can sign in; deactivating it revokes the session.
+        let user_token = auth_helper.login_user(&username, "password123").await;
+        let (status, _) = json_request(&ctx, "GET", "/api/auth/me", &user_token, None).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, _) = json_request(
+            &ctx,
+            "PUT",
+            &format!("/api/users/{}", pending.id),
+            &admin_token,
+            Some(json!({ "is_active": false })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = json_request(&ctx, "GET", "/api/auth/me", &user_token, None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_admin_cannot_deactivate_self_or_set_invalid_password() {
+        let ctx = TestContext::new().await;
+        let auth_helper = ctx.auth_helper();
+        let admin = auth_helper.create_admin_user().await;
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
+
+        let (status, _) = json_request(
+            &ctx,
+            "PUT",
+            &format!("/api/users/{}", admin.id()),
+            &token,
+            Some(json!({ "is_active": false })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        let (status, _) = json_request(
+            &ctx,
+            "PUT",
+            &format!("/api/users/{}", admin.id()),
+            &token,
+            Some(json!({ "password": "short" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        // Still active and the session still works.
+        let (status, _) = json_request(&ctx, "GET", "/api/auth/me", &token, None).await;
+        assert_eq!(status, StatusCode::OK);
     }
 }
