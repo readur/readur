@@ -1,33 +1,34 @@
-use utoipa::{OpenApi, Modify};
-use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, Http};
-use utoipa_swagger_ui::SwaggerUi;
 use axum::Router;
 use std::sync::Arc;
+use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
+use utoipa::{Modify, OpenApi};
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    models::{
-        CreateUser, LoginRequest, LoginResponse, UserResponse, UpdateUser,
-        DocumentResponse, SearchRequest, SearchResponse, EnhancedDocumentResponse,
-        SettingsResponse, UpdateSettings, SearchMode, SearchSnippet, HighlightRange,
-        DocumentSortField, SortOrder, DocumentFilters,
-        FacetItem, SearchFacetsResponse, Notification, NotificationSummary, CreateNotification,
-        Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
-        WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
-        ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery,
-        DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
-        BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse
-    },
     models::source::{
-        WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
+        WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVSyncStatus, WebDAVTestConnection,
+    },
+    models::{
+        BulkDeleteResponse, CreateNotification, CreateProcessedImage, CreateSource, CreateUser,
+        DocumentDuplicatesResponse, DocumentFilters, DocumentListResponse, DocumentOcrResponse,
+        DocumentOperationResponse, DocumentResponse, DocumentSortField, EnhancedDocumentResponse,
+        FacetItem, HighlightRange, IgnoredFileResponse, IgnoredFilesQuery, LocalFolderSourceConfig,
+        LoginRequest, LoginResponse, Notification, NotificationSummary, PaginationInfo,
+        ProcessedImage, S3SourceConfig, SearchFacetsResponse, SearchMode, SearchRequest,
+        SearchResponse, SearchSnippet, SettingsResponse, SortOrder, Source, SourceResponse,
+        SourceWithStats, UpdateSettings, UpdateSource, UpdateUser, UserResponse,
+        WebDAVSourceConfig,
     },
     routes::{
-        metrics::{
-            SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
-        },
+        documents::BulkDeleteRequest,
         labels::{
-            Label, CreateLabel, UpdateLabel, LabelAssignment, LabelQuery, BulkUpdateRequest as LabelBulkUpdateRequest
+            BulkUpdateRequest as LabelBulkUpdateRequest, CreateLabel, Label, LabelAssignment,
+            LabelQuery, UpdateLabel,
         },
-        documents::BulkDeleteRequest
+        metrics::{
+            DatabaseMetrics, DocumentMetrics, GeneralSystemMetrics, OcrMetrics, SystemMetrics,
+            UserMetrics,
+        },
     },
     AppState,
 };
@@ -124,7 +125,6 @@ use crate::{
         // OCR endpoints
         crate::routes::ocr::get_available_languages,
         crate::ocr::api::health_check,
-        crate::ocr::api::perform_ocr,
         // Ignored files endpoints
         crate::routes::ignored_files::list_ignored_files,
         crate::routes::ignored_files::get_ignored_file,
@@ -156,7 +156,7 @@ use crate::{
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
             // OCR schemas
             crate::routes::ocr::AvailableLanguagesResponse, crate::routes::ocr::LanguageInfo,
-            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse, crate::ocr::api::OcrRequest,
+            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse,
             // Sync progress schemas
             crate::services::sync_progress_tracker::SyncProgressInfo
         )
@@ -200,7 +200,7 @@ impl Modify for SecurityAddon {
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
                 "bearer_auth",
-                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer))
+                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
             )
         }
     }

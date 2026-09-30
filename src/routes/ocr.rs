@@ -1,20 +1,10 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-    routing::get,
-    Router,
-};
+use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
 use serde::Serialize;
 use std::sync::Arc;
-use utoipa::ToSchema;
 use ts_rs::TS;
+use utoipa::ToSchema;
 
-use crate::{
-    auth::AuthUser,
-    ocr::health::OcrHealthChecker,
-    AppState,
-};
+use crate::{auth::AuthUser, ocr::health::OcrHealthChecker, AppState};
 
 #[derive(Serialize, ToSchema, TS)]
 #[ts(export)]
@@ -34,7 +24,6 @@ pub struct LanguageInfo {
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(crate::ocr::api::health_check))
-        .route("/perform", axum::routing::post(crate::ocr::api::perform_ocr))
         .route("/languages", get(get_available_languages))
 }
 
@@ -61,7 +50,7 @@ async fn get_available_languages(
         .get_user_settings(auth_user.user.id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     let current_language = user_settings
         .map(|s| s.ocr_language)
         .unwrap_or_else(|| "eng".to_string());
@@ -172,5 +161,6 @@ fn get_language_display_name(code: &str) -> String {
             // For unknown codes, just return the code as-is
             code
         }
-    }.to_string()
+    }
+    .to_string()
 }

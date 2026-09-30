@@ -69,7 +69,6 @@ export type { NotificationSummary } from './NotificationSummary';
 export type { OcrErrorResponse } from './OcrErrorResponse';
 export type { OcrHealthResponse } from './OcrHealthResponse';
 export type { OcrMetrics } from './OcrMetrics';
-export type { OcrRequest } from './OcrRequest';
 export type { OcrRetryDocumentInfo } from './OcrRetryDocumentInfo';
 export type { OcrRetryFilter } from './OcrRetryFilter';
 export type { PaginatedDocumentsResponse } from './PaginatedDocumentsResponse';
