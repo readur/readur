@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button, EmptyState, Pagination, type Selection } from '../../ui';
 import { Add } from '../../ui/icons';
 import { acknowledge, useLitCount } from '../board/litStore';
+import { MarkAllSeen } from '../board/MarkAllSeen';
 import { PageHeader } from '../shell';
 import { BulkActions } from './BulkActions';
 import type { LibraryRow } from './data';
@@ -17,6 +18,7 @@ import { PAGE_SIZES, hasFilters, isSearch, useLibraryQuery } from './urlState';
 import styles from './Library.module.css';
 
 const EMPTY_SELECTION: Selection = new Set();
+const SEEN_KINDS = ['document'] as const;
 
 /** /documents: every document on one sortable, filterable board, with search and a detail panel. */
 export function Library() {
@@ -134,9 +136,12 @@ export function Library() {
           </span>
         }
         actions={
-          <Button variant="primary" icon={<Add fontSize="small" />} onPress={() => navigate('/intake?section=upload')}>
-            {t('library.add', 'Add documents')}
-          </Button>
+          <>
+            <MarkAllSeen kinds={SEEN_KINDS} />
+            <Button variant="primary" icon={<Add fontSize="small" />} onPress={() => navigate('/intake?section=upload')}>
+              {t('library.add', 'Add documents')}
+            </Button>
+          </>
         }
       />
       <FilterStrip

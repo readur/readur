@@ -104,8 +104,8 @@ describe('Library detail panel', () => {
       await waitFor(() => expect(value('Pages/OCR')).toHaveTextContent('2'));
       expect(within(facts).getByText('Language').nextElementSibling).toHaveTextContent('eng');
       expect(value('Confidence')).toHaveTextContent('91%');
-      expect(value('Added')).toHaveTextContent('2026');
-      expect(value('Updated')).toHaveTextContent('2026');
+      expect(value('Added')).toHaveTextContent(/^2026-\d\d-\d\d \d\d:\d\d$/);
+      expect(value('Updated')).toHaveTextContent(/^2026-\d\d-\d\d \d\d:\d\d$/);
     });
 
     test('shows the OCR status in the header', async () => {
@@ -337,6 +337,18 @@ describe('Library detail panel', () => {
       await waitFor(() => expect(within(rowFor(/lease\.pdf/)).queryByText('NEW')).not.toBeInTheDocument());
       expect(rowFor(/lease\.pdf/)).not.toHaveAttribute('data-changed');
       expect(within(rowFor(/photo\.png/)).getByText('CHANGED')).toBeInTheDocument();
+    });
+
+    test('"Mark all seen" appears with lit rows and clears them', async () => {
+      const user = userEvent.setup();
+      markLit('document', 'd2', 'new');
+      markLit('document', 'd3', 'changed');
+      renderLibrary();
+      await screen.findByRole('rowheader', { name: /lease\.pdf/ });
+      await user.click(screen.getByRole('button', { name: 'Mark all seen' }));
+      expect(isLit('document', 'd2')).toBe(false);
+      expect(isLit('document', 'd3')).toBe(false);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Mark all seen' })).not.toBeInTheDocument());
     });
 
     test('moving to a row with the arrows also clears its tag', async () => {
