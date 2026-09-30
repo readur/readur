@@ -317,9 +317,14 @@ Prometheus configuration:
 scrape_configs:
   - job_name: 'readur'
     static_configs:
-      - targets: ['readur:9090']
+      - targets: ['readur:8000']
     metrics_path: '/metrics'
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/readur-metrics-token  # same value as METRICS_TOKEN
 ```
+
+`/metrics` requires authentication. Set `METRICS_TOKEN` (at least 16 characters) on the Readur server for Prometheus to use; without it, only admin sessions and admin API keys are accepted.
 
 Key metrics to monitor:
 ```promql

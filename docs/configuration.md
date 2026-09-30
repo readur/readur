@@ -28,8 +28,28 @@ All application settings can be configured via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql://readur:readur@localhost/readur` | PostgreSQL connection string |
-| `JWT_SECRET` | `your-secret-key` | Secret key for JWT tokens ⚠️ **Change in production!** |
+| `JWT_SECRET` | _(none, required)_ | Secret used to sign JWT tokens. Must be at least 32 bytes and must not be a published example value; the server refuses to start otherwise. Generate with `openssl rand -hex 32` |
 | `SERVER_ADDRESS` | `0.0.0.0:8000` | Server bind address and port |
+
+### Security and Access Control
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `READUR_INSECURE_DEV_MODE` | `false` | Allows startup with a short or example `JWT_SECRET`. Throwaway local development and CI only; never in production |
+| `JWT_TTL_HOURS` | `12` | Lifetime of login tokens in hours (1-720) |
+| `ADMIN_USERNAME` | `admin` | Username of the initial admin account |
+| `ADMIN_EMAIL` | `<username>@localhost` | Email of the initial admin account |
+| `ADMIN_PASSWORD` | _(none)_ | Initial admin password (min 8 chars). If unset, a random 24-character password is generated and written to a file instead of the logs |
+| `ADMIN_PASSWORD_FILE` | `<parent of UPLOAD_PATH>/initial-admin-password` | Location of the generated admin password file (mode `0600`); `/app/initial-admin-password` in the Docker image |
+| `ALLOW_REGISTRATION` | `false` | Enables self-registration. New self-registered accounts are disabled until an administrator approves them in user management |
+| `LOCAL_SOURCE_ALLOWED_PATHS` | _(none)_ | Comma-separated directories local folder sources may use. When set, all local folder sources (including admins') must be inside one of them. When unset, only admins can create local folder sources |
+| `TRUSTED_PROXIES` | _(none)_ | Comma-separated IPs/CIDRs of reverse proxies whose `X-Forwarded-For` header is trusted for the client IP (rate limiting) |
+| `CORS_ALLOWED_ORIGINS` | _(none)_ | Comma-separated origins allowed for cross-origin requests. The bundled frontend is same-origin and needs none |
+| `METRICS_TOKEN` | _(none)_ | Bearer token (min 16 chars) for Prometheus scrapes of `/metrics`. Without it, `/metrics` requires an admin session or API key |
+| `PUBLIC_URL` | _(none)_ | Public base URL (e.g. `https://readur.example.com`) used for the OIDC redirect and shared links. OIDC falls back to the origin of `OIDC_REDIRECT_URI` |
+| `OIDC_LINK_EXISTING_BY_EMAIL` | `false` | Link an OIDC login to an existing local account with the same email, only when the IdP reports `email_verified` |
+
+See the [Configuration Reference](configuration-reference.md#security-and-access-control) for details.
 
 ### File Storage & Upload
 
@@ -106,7 +126,7 @@ BACKEND_PORT=8000
 ```env
 # Basic development setup
 DATABASE_URL=postgresql://readur:readur@localhost/readur
-JWT_SECRET=dev-secret-key-not-for-production
+JWT_SECRET=readur-local-development-only-jwt-secret-0123456789
 SERVER_ADDRESS=0.0.0.0:8000
 UPLOAD_PATH=./uploads
 WATCH_FOLDER=./watch
@@ -119,7 +139,7 @@ CONCURRENT_OCR_JOBS=2
 ```env
 # Core settings
 DATABASE_URL=postgresql://readur:secure_password@postgres:5432/readur
-JWT_SECRET=your-very-long-random-secret-key-generated-with-openssl
+JWT_SECRET=<output of: openssl rand -hex 32>
 SERVER_ADDRESS=0.0.0.0:8000
 
 # File handling
@@ -224,7 +244,7 @@ ALTER SYSTEM SET default_text_search_config = 'pg_catalog.english';
 
 ```bash
 # Generate secure JWT secret
-JWT_SECRET=$(openssl rand -base64 64)
+JWT_SECRET=$(openssl rand -hex 32)
 
 # Generate secure database password
 DB_PASSWORD=$(openssl rand -base64 32)
@@ -242,7 +262,7 @@ For a minimal production deployment, configure these essential variables:
 
 ```bash
 # Security (REQUIRED)
-JWT_SECRET=your-secure-random-key-here
+JWT_SECRET=<output of: openssl rand -hex 32>   # min 32 bytes; server will not start without it
 DATABASE_URL=postgresql://user:password@host:port/database
 
 # File Storage

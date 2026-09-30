@@ -83,6 +83,9 @@ Ready to try Readur? Here's the fastest way to get it running:
 git clone https://github.com/readur/readur.git
 cd readur
 
+# Set the required JWT secret (at least 32 bytes)
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+
 # Start all services
 docker-compose up -d
 
@@ -90,7 +93,7 @@ docker-compose up -d
 open http://localhost:8000
 ```
 
-Check the container logs (`docker compose logs readur`) for your auto-generated admin password - look for "READUR ADMIN USER CREATED" and save the password immediately. Log in with username `admin` and your generated password, then upload a document and watch Readur extract the text automatically.
+If you did not set `ADMIN_PASSWORD`, read the generated admin password with `docker compose exec readur cat /app/initial-admin-password` (it is not written to the logs). Log in with username `admin` and that password, change it, delete the file, then upload a document and watch Readur extract the text automatically.
 
 ## How People Use Readur
 

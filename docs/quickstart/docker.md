@@ -29,8 +29,9 @@ These commands download the Docker Compose file that defines all the services Re
 Open the `.env` file in your text editor and set up the minimal configuration needed to get started:
 
 ```bash
-# Generate a secure secret key for the application
-APP_SECRET_KEY=$(openssl rand -hex 32)
+# Required: JWT signing secret, at least 32 bytes.
+# Paste the output of `openssl rand -hex 32` here.
+JWT_SECRET=<output of: openssl rand -hex 32>
 
 # Set a secure database password
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
@@ -39,7 +40,7 @@ POSTGRES_PASSWORD=$(openssl rand -hex 16)
 ADMIN_PASSWORD=changeme123
 ```
 
-These are the only settings you need to change for a basic installation. The secret key secures your application sessions, the database password protects your PostgreSQL instance, and the admin password is what you'll use to log in. Everything else uses sensible defaults that work for testing and development.
+These are the only settings you need to change for a basic installation. `JWT_SECRET` signs login tokens and is required (the server will not start if it is missing, shorter than 32 bytes, or an example value), the database password protects your PostgreSQL instance, and the admin password is what you'll use to log in. Everything else uses sensible defaults that work for testing and development.
 
 ## Step 3: Start Readur
 

@@ -181,10 +181,17 @@ helm repo update
 helm install readur readur/readur \
   --set image.tag=latest \
   --set postgresql.auth.password=$DB_PASSWORD \
-  --set auth.jwtSecret=$JWT_SECRET \
   --set persistence.size=50Gi \
   --set ingress.enabled=true \
   --set ingress.hostname=readur.example.com
+```
+
+The chart creates a Secret named `<release>-auth` containing a random `JWT_SECRET` and a random initial `ADMIN_PASSWORD`. Both are kept across upgrades. To supply your own values, set `auth.jwtSecret` / `auth.adminPassword`, or point `auth.existingSecret` at a Secret that contains `JWT_SECRET` (at least 32 bytes) and optionally `ADMIN_PASSWORD`.
+
+Read the initial admin password:
+
+```bash
+kubectl get secret readur-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
 ```
 
 #### Using Raw Manifests
@@ -209,7 +216,7 @@ docker run -d \
   --name readur \
   -p 8000:8000 \
   -e DATABASE_URL=sqlite:///tmp/readur.db \
-  -e JWT_SECRET=dev-only-secret \
+  -e JWT_SECRET="$(openssl rand -hex 32)" \
   readur:latest
 
 # Access logs
@@ -227,12 +234,15 @@ docker logs -f readur
 
 2. **Login with Admin Credentials**
    - Username: `admin`
-   - Password: Check the container logs for your auto-generated password
+   - Password: the value of `ADMIN_PASSWORD`, or the generated password file
 
-   On first startup, Readur generates a secure admin password and displays it in the logs.
-   View the logs with `docker compose logs readur` and look for "READUR ADMIN USER CREATED".
+   If `ADMIN_PASSWORD` is not set, Readur generates a random password on first startup and writes it to `initial-admin-password` in the parent directory of `UPLOAD_PATH` (`/app/initial-admin-password` in the container, mode `0600`). It is not written to the logs; the log shows the file path. Read it with:
 
-   **Save this password immediately - it won't be shown again.**
+   ```bash
+   docker compose exec readur cat /app/initial-admin-password
+   ```
+
+   After signing in and changing the password, delete the file.
 
 3. **Resetting Admin Password**
    If you lose your password, reset it with:
@@ -487,7 +497,7 @@ deploy:
 Upload your first document:
 
 ```bash
-# 1. Login to get token (use your generated password from the logs)
+# 1. Login to get token (use ADMIN_PASSWORD or the generated password file)
 TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"YOUR_GENERATED_PASSWORD"}' | jq -r .token)

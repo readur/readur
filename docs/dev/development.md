@@ -62,8 +62,10 @@ cp .env.example .env.development
 
 # Edit with your settings
 DATABASE_URL=postgresql://readur_dev:dev_password@localhost/readur_dev
-JWT_SECRET=dev-secret-key
+JWT_SECRET=readur-local-development-only-jwt-secret-0123456789
 ```
+
+`JWT_SECRET` must be at least 32 bytes and must not be a published example value, or the server refuses to start. For throwaway local setups you can instead set `READUR_INSECURE_DEV_MODE=true` to allow a weak secret; never use it in production.
 
 **Run database migrations:** Apply database schema changes to your development database.
 ```bash

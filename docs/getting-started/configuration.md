@@ -22,8 +22,8 @@ These MUST be changed from defaults in production:
 JWT_SECRET=$(openssl rand -base64 32)
 DB_PASSWORD=$(openssl rand -base64 32)
 
-# CRITICAL: Always change JWT_SECRET from default!
-# Default values are insecure and should never be used in production
+# JWT_SECRET is required: the server refuses to start if it is unset,
+# shorter than 32 bytes, or a published example value
 
 # Set admin password
 ADMIN_PASSWORD=your_secure_password_here
@@ -318,6 +318,7 @@ HEALTH_CHECK_ENABLED=true
 HEALTH_CHECK_PATH=/health
 METRICS_ENABLED=true
 METRICS_PATH=/metrics
+METRICS_TOKEN=<output of: openssl rand -hex 24>  # bearer token for Prometheus; /metrics requires auth
 
 # Alerting thresholds
 ALERT_QUEUE_SIZE=100
@@ -452,7 +453,7 @@ WARNING: CONCURRENT_OCR_JOBS=8 but only 2 CPU cores available
 ### Security
 
 1. **Never commit secrets** - Use `.env` files and add to `.gitignore`
-2. **Change JWT_SECRET immediately** - Never use default values
+2. **Generate JWT_SECRET randomly** - e.g. `openssl rand -hex 32`; there is no default
 3. **Rotate secrets regularly** - Especially JWT_SECRET and API keys
 4. **Use strong passwords** - Minimum 16 characters for admin
 5. **Enable HTTPS** - Always in production

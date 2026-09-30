@@ -26,7 +26,7 @@ This guide explains how to configure OpenID Connect (OIDC) authentication for Re
 OIDC authentication in Readur provides:
 
 - **Single Sign-On (SSO)**: Users can sign in with existing corporate accounts
-- **Email-Based User Syncing**: Automatically link existing local users to OIDC by email
+- **Email-Based User Syncing**: Optionally link existing local users to OIDC by verified email (`OIDC_LINK_EXISTING_BY_EMAIL`)
 - **Flexible Auto-Registration**: Control whether new users can self-register via OIDC
 - **Centralized User Management**: User provisioning handled by your identity provider
 - **Enhanced Security**: No need to manage passwords in Readur
@@ -58,6 +58,10 @@ Configure OIDC by setting these environment variables:
 | `OIDC_REDIRECT_URI` | ✅ | Callback URL for your Readur instance | `https://readur.company.com/api/auth/oidc/callback` |
 | `OIDC_AUTO_REGISTER` | ❌ | Allow new users to self-register (default: `false`) | `true` or `false` |
 | `ALLOW_LOCAL_AUTH` | ❌ | Allow username/password authentication (default: `true`) | `true` or `false` |
+| `PUBLIC_URL` | ❌ | Public base URL of Readur, used for the post-login redirect back to the web UI. Defaults to the origin of `OIDC_REDIRECT_URI`. Request headers are not used to derive it | `https://readur.company.com` |
+| `OIDC_LINK_EXISTING_BY_EMAIL` | ❌ | Link an OIDC login to an existing local account with the same email (default: `false`). Only applies when the provider reports `email_verified: true` | `true` or `false` |
+
+After the provider redirects to `OIDC_REDIRECT_URI`, Readur sends the browser to `<PUBLIC_URL>/auth/callback#code=...`. The frontend exchanges this one-time code for a session token at `POST /api/auth/oidc/exchange`; the token itself is never placed in the URL.
 
 ### Example Configurations
 
@@ -101,6 +105,7 @@ services:
     environment:
       # Core settings
       DATABASE_URL: postgresql://readur:readur@postgres:5432/readur
+      JWT_SECRET: "${JWT_SECRET}"   # required; generate with: openssl rand -hex 32
       
       # OIDC configuration
       OIDC_ENABLED: "true"
@@ -109,6 +114,7 @@ services:
       OIDC_ISSUER_URL: "${OIDC_ISSUER_URL}"
       OIDC_REDIRECT_URI: "https://readur.company.com/api/auth/oidc/callback"
       OIDC_AUTO_REGISTER: "true"
+      PUBLIC_URL: "https://readur.company.com"
     ports:
       - "8000:8000"
 ```
@@ -329,6 +335,7 @@ services:
     image: ghcr.io/readur/readur:main
     environment:
       DATABASE_URL: postgresql://readur:readur@postgres:5432/readur
+      JWT_SECRET: "${JWT_SECRET}"   # required; generate with: openssl rand -hex 32
 
       # Authentik OIDC Configuration
       OIDC_ENABLED: "true"
@@ -337,6 +344,7 @@ services:
       OIDC_ISSUER_URL: "https://authentik.company.com/application/o/readur/"
       OIDC_REDIRECT_URI: "https://readur.company.com/api/auth/oidc/callback"
       OIDC_AUTO_REGISTER: "true"
+      PUBLIC_URL: "https://readur.company.com"
     ports:
       - "8000:8000"
     depends_on:
@@ -375,7 +383,7 @@ volumes:
 - **"Invalid client"**: Double-check the Client ID matches exactly (no extra spaces)
 - **"Redirect URI mismatch"**: Ensure the redirect URI in Authentik matches `OIDC_REDIRECT_URI` exactly
 - **Email not syncing**: Check that the `email` scope is enabled in your Authentik application
-- **Users not linking**: Verify emails match exactly between local users and Authentik user emails
+- **Users not linking**: Linking requires `OIDC_LINK_EXISTING_BY_EMAIL=true`, an exact email match, and the user's email being verified in Authentik (`email_verified: true`)
 
 ### Generic OIDC Provider
 
@@ -461,16 +469,20 @@ For returning users:
 
 ### Email-Based User Syncing
 
-Readur intelligently handles existing local users when they first log in via OIDC:
+Linking an OIDC identity to an existing local account by email is controlled by `OIDC_LINK_EXISTING_BY_EMAIL` (default: `false`).
 
-**Existing Local User with Matching Email**:
-- When an OIDC user logs in with an email that matches an existing local user
-- The OIDC identity is automatically linked to that existing account
+**When `OIDC_LINK_EXISTING_BY_EMAIL=false` (default)**:
+- An OIDC login whose email matches an existing account that is not already linked to that OIDC identity is rejected with HTTP 403
+- No duplicate account is created
+- An administrator can resolve this by changing or removing the existing account, or by enabling linking
+
+**When `OIDC_LINK_EXISTING_BY_EMAIL=true`**:
+- The OIDC identity is linked to the existing account only if the identity provider reports `email_verified: true` and the account is not already linked to another OIDC identity
 - User retains all their documents, settings, and permissions
 - The `auth_provider` field is updated to `oidc`
 - Future logins can use OIDC (password still works if set)
 
-**Example**: If you have a local user `john.doe@company.com`, and they log in via OIDC with the same email, their account is seamlessly upgraded to support OIDC authentication without creating a duplicate account.
+**Example**: With linking enabled, if you have a local user `john.doe@company.com` and they log in via OIDC with the same, verified email, their account is upgraded to support OIDC authentication without creating a duplicate account.
 
 ### Auto-Registration Control
 
@@ -488,7 +500,7 @@ The `OIDC_AUTO_REGISTER` setting controls whether new users can self-register:
 - Ideal for production environments requiring controlled access
 - Admin must pre-create users before they can use OIDC
 
-**Migration Strategy**: The default (`false`) is ideal for production. Have existing users log in to link accounts by email, then optionally enable `true` for new user auto-registration.
+**Migration Strategy**: The default (`false`) is ideal for production. To move existing local users to OIDC, set `OIDC_LINK_EXISTING_BY_EMAIL=true` and have them log in to link accounts by verified email, then optionally enable `OIDC_AUTO_REGISTER=true` for new user auto-registration.
 
 ### Disabling Local Authentication
 
@@ -499,7 +511,7 @@ For OIDC-only deployments, you can disable local username/password authenticatio
 - Local login endpoint returns HTTP 403 Forbidden
 - Only OIDC authentication is available
 - Perfect for enforcing SSO-only access
-- Existing local users can still be linked via email when they use OIDC
+- Existing local users can still be linked via verified email when they use OIDC, if `OIDC_LINK_EXISTING_BY_EMAIL=true`
 
 **Security Benefits**:
 - Single authentication method reduces attack surface
@@ -533,7 +545,7 @@ When both authentication methods are enabled (`ALLOW_LOCAL_AUTH=true`):
 - Local users can continue using username/password
 - OIDC users can have both OIDC and password authentication
 - Administrators can manage both types of users
-- Email-based automatic account linking prevents duplicate accounts
+- Email-based account linking (with `OIDC_LINK_EXISTING_BY_EMAIL=true`) avoids duplicate accounts
 - Users can choose their preferred login method
 
 ## Troubleshooting

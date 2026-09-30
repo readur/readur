@@ -33,7 +33,7 @@ Local authentication uses traditional username/password combinations stored secu
 
 Local authentication provides robust security through multiple layers of protection. **Secure Storage** ensures passwords are never stored in plain text, using bcrypt hashing with a cost factor of 12 to resist brute force attacks even if the database is compromised.
 
-Authentication sessions are managed through **JWT Tokens** with 24-hour validity periods and secure signing algorithms, providing stateless authentication that scales well. The system supports **User Registration** for self-service account creation when enabled, streamlining onboarding for open deployments.
+Authentication sessions are managed through **JWT Tokens** whose lifetime is set by `JWT_TTL_HOURS` (default 12 hours). Signing out (`POST /api/auth/logout`) revokes all of the user's sessions, and users can change their own password with `POST /api/auth/password`. The system supports **User Registration** for self-service account creation when `ALLOW_REGISTRATION=true` (default `false`); self-registered accounts require administrator approval before they can sign in.
 
 **Password Requirements** can be configured to enforce organizational policies, including minimum length, character complexity, and password history. Additionally, the system implements **Account Lockout** after failed login attempts and supports **Password Recovery** workflows via email.
 
@@ -42,13 +42,8 @@ Authentication sessions are managed through **JWT Tokens** with 24-hour validity
 1. **Admin Creation** (via Settings):
    Administrators can create new user accounts directly through the settings interface. Navigate to Settings → Users (admin access required), then click "Add User" to open the creation form. Enter the new user's username, email address, and initial password, then assign the appropriate role (Admin or User). The system will validate the information and create the account immediately.
 
-2. **Self Registration** (if enabled):
-   When self-registration is enabled, new users can create their own accounts by visiting the registration page. They'll need to provide a username, email address, and secure password. Accounts created through self-registration are automatically assigned the default User role for security, though administrators can promote them later if needed.
-
-2. **Self Registration** (if enabled):
-   - Visit the registration page
-   - Provide username, email, and password
-   - Account created with default User role
+2. **Self Registration** (if enabled with `ALLOW_REGISTRATION=true`; disabled by default):
+   New users can create their own accounts by visiting the registration page. They'll need to provide a username, email address, and secure password. Accounts created through self-registration are assigned the User role and are created **disabled**. An administrator approves an account by marking it active in Settings → Users (or `PUT /api/users/{id}` with `{"is_active": true}`); until then the user cannot sign in. Administrators can promote users to Admin later if needed.
 
 ### OIDC/SSO Authentication
 
@@ -84,7 +79,7 @@ See the [OIDC Setup Guide](oidc-setup.md) for detailed configuration instruction
 - ✅ Configure personal settings and preferences
 - ✅ Create and manage personal labels
 - ✅ Use OCR processing features
-- ✅ Access personal sources (WebDAV, local folders, S3)
+- ✅ Access personal sources (WebDAV, S3; local folders only within `LOCAL_SOURCE_ALLOWED_PATHS` when that is set)
 - ✅ View personal notifications
 - ❌ User management (cannot create/modify other users)
 - ❌ System-wide settings or configuration
@@ -103,8 +98,8 @@ See the [OIDC Setup Guide](oidc-setup.md) for detailed configuration instruction
 - ✅ **Security Management**: Token management, authentication settings
 
 **Default Admin Account:**
-- Username: `admin`
-- Password: Auto-generated on first startup (check container logs for "READUR ADMIN USER CREATED")
+- Username: from `ADMIN_USERNAME` (default `admin`); email from `ADMIN_EMAIL` (default `<username>@localhost`)
+- Password: `ADMIN_PASSWORD` if set; otherwise generated on first startup and written to `initial-admin-password` in the parent directory of `UPLOAD_PATH` (`/app/initial-admin-password` in Docker, mode `0600`, location configurable with `ADMIN_PASSWORD_FILE`). It is not written to the logs.
 
 ## Admin User Management
 
@@ -418,7 +413,7 @@ OIDC login failures often stem from configuration mismatches that can be systema
 
 JWT token issues often manifest as unexpected logouts or authentication errors. **Check system time** synchronization between all servers - even a few minutes of drift can cause token validation failures. Use NTP to maintain accurate time across your infrastructure.
 
-**JWT secret** configuration must be consistent across all application instances. Verify the JWT_SECRET environment variable is set correctly, contains a sufficiently random value, and hasn't been accidentally changed during deployment. The secret should be at least 32 characters long.
+**JWT secret** configuration must be consistent across all application instances. Verify the JWT_SECRET environment variable is set correctly, contains a sufficiently random value, and hasn't been accidentally changed during deployment. The secret must be at least 32 bytes long; the server refuses to start otherwise.
 
 **Token expiration** after 24 hours is by design for security. If users report frequent logouts before this time, check for token validation issues, server restarts clearing in-memory state, or client-side storage problems. **Browser storage** issues can be resolved by clearing localStorage and cookies, then logging in fresh. Check browser console for storage quota errors or security restrictions. Also investigate **Clock Skew** tolerance settings and verify **Token Signature** algorithms match between signing and validation.
 

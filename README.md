@@ -35,6 +35,9 @@ You can check our our docs at [docs.readur.app](https://docs.readur.app).
 git clone https://github.com/perfectra1n/readur
 cd readur
 
+# JWT_SECRET is required (at least 32 bytes); the server will not start without it
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+
 # Start all services
 docker compose up --build -d
 
@@ -43,24 +46,16 @@ open http://localhost:8000
 ```
 
 **Admin credentials:**
-- Username: `admin`
-- Password: Auto-generated on first run (check container logs)
+- Username: `admin` (override with `ADMIN_USERNAME`)
+- Password: the value of `ADMIN_PASSWORD` if set; otherwise generated on first run and written to a file
 
-On first startup, Readur generates a secure admin password and displays it in the logs:
-```
-==============================================
-  READUR ADMIN USER CREATED
-==============================================
+If `ADMIN_PASSWORD` is not set, Readur generates a random 24-character password on first startup and writes it to `initial-admin-password` in the parent directory of `UPLOAD_PATH` (`/app/initial-admin-password` in the Docker image), readable only by the server user. The password is not written to the logs; the log line shows the file path. Set `ADMIN_PASSWORD_FILE` to choose a different location.
 
-Username: admin
-Password: [your-generated-password]
-
-⚠️   SAVE THESE CREDENTIALS IMMEDIATELY!
-⚠️   This password will not be shown again.
-==============================================
+```bash
+docker compose exec readur cat /app/initial-admin-password
 ```
 
-View the logs with: `docker compose logs readur`
+Sign in, change the password, then delete the file.
 
 To reset the admin password later:
 ```bash

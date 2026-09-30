@@ -164,6 +164,11 @@ scrape_configs:
     static_configs:
       - targets: ['readur:8000']
     metrics_path: '/metrics'
+    # /metrics requires authentication. Set METRICS_TOKEN (min 16 chars) on
+    # Readur and put the same value in this file.
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/readur-metrics-token
 
   - job_name: 'node'
     static_configs:
@@ -546,8 +551,8 @@ ws.onmessage = (event) => {
 # Check Prometheus targets
 curl http://localhost:9090/api/v1/targets
 
-# Verify metrics endpoint
-curl http://localhost:8000/metrics
+# Verify metrics endpoint (requires METRICS_TOKEN or an admin token)
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8000/metrics
 
 # Check network connectivity
 docker network inspect monitoring

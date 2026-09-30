@@ -40,8 +40,9 @@ services:
       # POSTGRES_USER: readur
       # POSTGRES_PASSWORD: readur
 
-      # Security - CHANGE THIS in production
-      JWT_SECRET: your-secret-key-change-this
+      # Security - required, at least 32 bytes. Put JWT_SECRET=<output of: openssl rand -hex 32>
+      # in a .env file next to this compose file. The server will not start without it.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to a random 32+ byte value}
 
       # File paths
       UPLOAD_PATH: /app/uploads
