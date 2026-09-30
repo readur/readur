@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 // @ts-expect-error: a plain .mjs helper shared with the CLI check, without type declarations.
-import { PAIRS, blockVars, check, contrast, parseThemes } from '../../../../scripts/contrast-check.mjs';
+import { ACCENT_HUE_GAP, PAIRS, blockVars, check, contrast, hueFailures, hueOf, parseThemes } from '../../../../scripts/contrast-check.mjs';
 
 const css = readFileSync(resolve(__dirname, '../tokens.css'), 'utf8');
 const themes = parseThemes(css) as Record<'light' | 'dark', Record<string, string>>;
@@ -33,6 +33,23 @@ describe.each(['light', 'dark'] as const)('tokens contrast (%s)', (name) => {
 describe('contrast-check script', () => {
   it('reports no failures for the shipped tokens', () => {
     expect(check(css)).toEqual([]);
+  });
+
+  it('keeps every source hue away from the accent', () => {
+    expect(hueFailures(css)).toEqual([]);
+    expect(ACCENT_HUE_GAP).toBeGreaterThanOrEqual(25);
+  });
+
+  it('reports a source hue that sits on the accent', () => {
+    const blueSource = css.replace('--src-1: #107064;', '--src-1: #3767AD;');
+    expect(hueFailures(blueSource)).toEqual([expect.objectContaining({ theme: 'light', token: 'src-1' })]);
+  });
+
+  it('measures hue in degrees', () => {
+    expect(hueOf('#FF0000')).toBeCloseTo(0);
+    expect(hueOf('#00FF00')).toBeCloseTo(120);
+    expect(hueOf('#0000FF')).toBeCloseTo(240);
+    expect(hueOf('#808080')).toBe(0);
   });
 
   it('reports a failing pair', () => {

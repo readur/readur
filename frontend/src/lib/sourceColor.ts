@@ -1,7 +1,8 @@
 /**
- * A stable colour per document source. Uploads and the watch folder have fixed slots; every
- * configured source hashes its id into the remaining six, so the same source keeps the same hue
- * on every screen and across reloads.
+ * A stable colour per document source. Uploads (teal) and the watch folder (purple) have fixed
+ * slots; every configured source hashes its id into the remaining six, so the same source keeps
+ * the same hue on every screen and across reloads. No slot is blue: blue is the accent, and a
+ * source badge must not read as an action.
  */
 
 export type SourceKind = 'watch' | 'upload' | 'webdav' | 's3' | 'local' | 'local_folder';

@@ -1,5 +1,7 @@
 /* Design tokens: the only source of colour, type, space, shape and motion.
-   Colour traces to the logo: steel blue (accent), coral (new), amber (warn). */
+   Colour traces to the logo: steel blue (accent), coral (new), amber (warn).
+   Source hues (--src-1..8) stay at least 30° away from the accent's blue so a source badge
+   never reads as an action: teal, purple, green, olive, orange, rose, magenta, indigo. */
 
 :root,
 [data-theme="light"] {
@@ -28,22 +30,22 @@
   --danger: #B42318;
   --danger-soft: #FCE8E6;
   --danger-fg: #FFFFFF;
-  --src-1: #3767AD;
-  --src-2: #0E7771;
-  --src-3: #34772E;
-  --src-4: #7450B8;
-  --src-5: #B03C79;
-  --src-6: #A44E17;
-  --src-7: #15718F;
-  --src-8: #676714;
-  --src-1-soft: #E7EEF8;
-  --src-2-soft: #E0F2F0;
-  --src-3-soft: #E5F2E3;
-  --src-4-soft: #EFEAF8;
-  --src-5-soft: #F8E7F0;
-  --src-6-soft: #FBEBDF;
-  --src-7-soft: #E0F0F6;
-  --src-8-soft: #F0F0DC;
+  --src-1: #107064;
+  --src-2: #9636BC;
+  --src-3: #22732C;
+  --src-4: #5A6B13;
+  --src-5: #9A5111;
+  --src-6: #BA2859;
+  --src-7: #A83198;
+  --src-8: #6151CC;
+  --src-1-soft: #E3F7F4;
+  --src-2-soft: #F1E3F7;
+  --src-3-soft: #E3F7E6;
+  --src-4-soft: #F3F7E3;
+  --src-5-soft: #F7ECE3;
+  --src-6-soft: #F7E3EA;
+  --src-7-soft: #F7E3F4;
+  --src-8-soft: #E6E3F7;
   --selection: #C9DAF1;
   --scrollbar: #C3CAD3;
   --shadow-1: 0 1px 2px rgba(20, 26, 34, 0.05), 0 2px 8px rgba(20, 26, 34, 0.06);
@@ -77,22 +79,22 @@
   --danger: #F97066;
   --danger-soft: #3A1A18;
   --danger-fg: #0F1318;
-  --src-1: #80A9EA;
-  --src-2: #4FC2B8;
-  --src-3: #7DC46F;
-  --src-4: #B399F0;
-  --src-5: #EE88BD;
-  --src-6: #F29C60;
-  --src-7: #5EC1E4;
-  --src-8: #C2C257;
-  --src-1-soft: #1B2A40;
-  --src-2-soft: #12302D;
-  --src-3-soft: #1A2E17;
-  --src-4-soft: #2A2142;
-  --src-5-soft: #3A1B2C;
-  --src-6-soft: #3A2415;
-  --src-7-soft: #10303D;
-  --src-8-soft: #2E2E12;
+  --src-1: #36C0AD;
+  --src-2: #C79ED7;
+  --src-3: #66C072;
+  --src-4: #9EB739;
+  --src-5: #DBA16E;
+  --src-6: #DC9AB0;
+  --src-7: #D59ACD;
+  --src-8: #ADA7DA;
+  --src-1-soft: #173631;
+  --src-2-soft: #2D1736;
+  --src-3-soft: #17361B;
+  --src-4-soft: #2F3617;
+  --src-5-soft: #362517;
+  --src-6-soft: #361721;
+  --src-7-soft: #361731;
+  --src-8-soft: #1B1736;
   --selection: #27406A;
   --scrollbar: #3A4452;
   --shadow-1: none;
@@ -129,22 +131,22 @@
     --danger: #F97066;
     --danger-soft: #3A1A18;
     --danger-fg: #0F1318;
-    --src-1: #80A9EA;
-    --src-2: #4FC2B8;
-    --src-3: #7DC46F;
-    --src-4: #B399F0;
-    --src-5: #EE88BD;
-    --src-6: #F29C60;
-    --src-7: #5EC1E4;
-    --src-8: #C2C257;
-    --src-1-soft: #1B2A40;
-    --src-2-soft: #12302D;
-    --src-3-soft: #1A2E17;
-    --src-4-soft: #2A2142;
-    --src-5-soft: #3A1B2C;
-    --src-6-soft: #3A2415;
-    --src-7-soft: #10303D;
-    --src-8-soft: #2E2E12;
+    --src-1: #36C0AD;
+    --src-2: #C79ED7;
+    --src-3: #66C072;
+    --src-4: #9EB739;
+    --src-5: #DBA16E;
+    --src-6: #DC9AB0;
+    --src-7: #D59ACD;
+    --src-8: #ADA7DA;
+    --src-1-soft: #173631;
+    --src-2-soft: #2D1736;
+    --src-3-soft: #17361B;
+    --src-4-soft: #2F3617;
+    --src-5-soft: #362517;
+    --src-6-soft: #361721;
+    --src-7-soft: #361731;
+    --src-8-soft: #1B1736;
     --selection: #27406A;
     --scrollbar: #3A4452;
     --shadow-1: none;

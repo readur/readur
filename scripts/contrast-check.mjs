@@ -75,6 +75,34 @@ export const PAIRS = [
   ...['accent', 'line-strong', 'new-fill'].flatMap((fg) => ['bg', 'surface'].map((bg) => [fg, bg, 3])),
 ];
 
+/** Hue in degrees (0–360) of a #RRGGBB colour. */
+export function hueOf(hex) {
+  const h = hex.replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  if (d === 0) return 0;
+  const raw = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (raw * 60 + 360) % 360;
+}
+
+/** Source hues must stay this far (degrees) from the accent, so a source never reads as an action. */
+export const ACCENT_HUE_GAP = 25;
+
+/** Source hues too close to the accent's hue, per theme. */
+export function hueFailures(css = readFileSync(TOKENS_PATH, 'utf8')) {
+  const failures = [];
+  for (const [name, t] of Object.entries(parseThemes(css))) {
+    const accent = hueOf(t.accent);
+    for (const n of SOURCES) {
+      const diff = Math.abs(hueOf(t[`src-${n}`]) - accent);
+      const distance = Math.min(diff, 360 - diff);
+      if (distance < ACCENT_HUE_GAP) failures.push({ theme: name, token: `src-${n}`, distance });
+    }
+  }
+  return failures;
+}
+
 /** Every failing pair, per theme. */
 export function check(css = readFileSync(TOKENS_PATH, 'utf8')) {
   const themes = parseThemes(css);
@@ -94,8 +122,12 @@ export function check(css = readFileSync(TOKENS_PATH, 'utf8')) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const failures = check();
-  if (failures.length === 0) {
-    console.log(`contrast-check: ${PAIRS.length} pairs pass in light and dark`);
+  const hues = hueFailures();
+  for (const f of hues) {
+    console.error(`${f.theme}: --${f.token} is ${f.distance.toFixed(0)}° from the accent hue (needs ${ACCENT_HUE_GAP}°)`);
+  }
+  if (failures.length === 0 && hues.length === 0) {
+    console.log(`contrast-check: ${PAIRS.length} pairs pass in light and dark; source hues clear the accent`);
   } else {
     for (const f of failures) {
       console.error(

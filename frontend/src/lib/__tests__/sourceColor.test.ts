@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+// @ts-expect-error: plain .mjs helper without type declarations.
+import { hueOf, parseThemes } from '../../../../scripts/contrast-check.mjs';
 import { UPLOAD_SLOT, WATCH_SLOT, sourceColorVar, sourceHue } from '../sourceColor';
 
 describe('sourceHue', () => {
@@ -34,5 +38,22 @@ describe('sourceHue', () => {
 
   it('builds a var() reference', () => {
     expect(sourceColorVar(null, 'watch')).toBe('var(--src-2)');
+  });
+});
+
+describe('source hues against the accent', () => {
+  const themes = parseThemes(readFileSync(resolve(__dirname, '../../styles/tokens.css'), 'utf8')) as Record<
+    string,
+    Record<string, string>
+  >;
+  const gap = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+
+  it.each(['light', 'dark'])('gives uploads and the watch folder non-blue hues (%s)', (theme) => {
+    const t = themes[theme];
+    const accent = hueOf(t.accent) as number;
+    for (const slot of [UPLOAD_SLOT, WATCH_SLOT]) {
+      expect(gap(hueOf(t[`src-${slot}`]) as number, accent)).toBeGreaterThan(25);
+    }
+    expect(gap(hueOf(t[`src-${UPLOAD_SLOT}`]) as number, hueOf(t[`src-${WATCH_SLOT}`]) as number)).toBeGreaterThan(60);
   });
 });
