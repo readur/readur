@@ -150,6 +150,11 @@ description = "Report every function above the cognitive-complexity threshold in
 # `cognitive_complexity` is a nursery, allow-by-default lint, so `mise run
 # clippy` never sees it -- it is opted into here and in `complexity-check` only.
 #
+# `-A clippy::all` first: this gate measures complexity only, and must not be
+# failed by an unrelated deny-by-default clippy lint (there is at least one in
+# tests/ today, and `mise run clippy` is not a gate yet). Compile errors still
+# fail it. The trailing `-W` wins because later lint flags override earlier ones.
+#
 # clippy's output is captured and its exit status checked BEFORE any filtering:
 # piping clippy straight into grep discards its status, so a crate that does not
 # compile would print a short list (or "none") -- the most misleading possible
@@ -157,7 +162,7 @@ description = "Report every function above the cognitive-complexity threshold in
 run = '''
 set -eu
 echo "==> functions above the cognitive-complexity threshold (see clippy.toml)"
-OUT=$(cargo clippy --all-targets --all-features -q -- -W clippy::cognitive_complexity 2>&1) || {
+OUT=$(cargo clippy --all-targets --all-features -q -- -A clippy::all -W clippy::cognitive_complexity 2>&1) || {
   printf '%s\n' "$OUT" >&2
   echo "error: clippy failed to build the crate; this list would be missing" >&2
   echo "findings rather than reporting that there are none. Fix the build first." >&2
@@ -189,7 +194,7 @@ description = "Ratchet gate: count of over-threshold functions may not exceed BU
 run = '''
 set -eu
 BUDGET=999999 # PLACEHOLDER -- replace with the measured count before merge
-OUT=$(cargo clippy --all-targets --all-features -q -- -W clippy::cognitive_complexity 2>&1) || {
+OUT=$(cargo clippy --all-targets --all-features -q -- -A clippy::all -W clippy::cognitive_complexity 2>&1) || {
   printf '%s\n' "$OUT" >&2
   echo "error: clippy failed to build the crate; the complexity count would be meaningless." >&2
   exit 1
