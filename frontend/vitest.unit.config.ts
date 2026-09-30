@@ -30,12 +30,12 @@ export default defineConfig({
         'src/main.tsx',
       ],
       reporter: ['text-summary', 'json-summary', 'html'],
-      // Floors from docs/redesign/coverage-baseline.json (afterUpgrade, v8).
+      // Floor(measured) - 1 per metric. Thresholds only go up: raise them when coverage improves.
       thresholds: {
-        statements: 39,
-        branches: 67,
-        functions: 37,
-        lines: 39,
+        statements: 89,
+        branches: 85,
+        functions: 82,
+        lines: 89,
       },
     },
   },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import i18n from 'i18next';
 import './intakeTestUtils';
-import type { FailedDocumentRow } from '../../../services/api';
+import type { FailedDocumentRow, FailedOcrDocumentRow } from '../../../services/api';
 import {
   FAILURE_REASONS,
   FAILURE_STAGES,
@@ -18,6 +18,7 @@ import { failedDoc } from './intakeTestUtils';
 
 const t = i18n.t.bind(i18n);
 const row = (o: Record<string, unknown> = {}) => failedDoc('d1', o) as unknown as FailedDocumentRow;
+const ocrRow = (o: Record<string, unknown> = {}) => failedDoc('d1', o) as unknown as FailedOcrDocumentRow;
 
 describe('attention helpers (ported from DocumentManagementPage.patterns)', () => {
   it('reads the failure summary null-safely from any row shape', () => {
@@ -28,8 +29,8 @@ describe('attention helpers (ported from DocumentManagementPage.patterns)', () =
 
   it('falls back sensibly when optional values are missing', () => {
     expect(failedName(row({ original_filename: null }))).toBe('d1.pdf');
-    expect(canRetry(row())).toBe(true);
-    expect(canRetry(row({ can_retry: false }))).toBe(false);
+    expect(canRetry(ocrRow())).toBe(true);
+    expect(canRetry(ocrRow({ can_retry: false }))).toBe(false);
     expect(formatBytes(null)).toBe('0 B');
     expect(formatDateTime(null)).toBe('—');
     expect(formatRelative(undefined)).toBe('—');

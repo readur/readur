@@ -56,9 +56,6 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Check generated TypeScript bindings are up to date
-        run: scripts/check-ts-bindings.sh
-
       - name: Run Rust unit tests - lib only
         run: |
           cargo test --lib --no-fail-fast
@@ -70,6 +67,10 @@ jobs:
           cargo test --tests unit_tests --no-fail-fast
         env:
           RUST_BACKTRACE: 1
+
+      - name: Check generated TypeScript bindings are up to date
+        if: always()
+        run: scripts/check-ts-bindings.sh
 
   frontend-unit-tests:
     name: Frontend unit tests
@@ -129,4 +130,3 @@ jobs:
 
       - name: Locale parity
         run: node scripts/check-locale-parity.mjs
-
