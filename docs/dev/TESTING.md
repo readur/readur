@@ -153,7 +153,8 @@ cargo test --test integration_tests test_ocr_error_handling
 ```bash
 # Required for integration tests
 export DATABASE_URL="postgresql://user:password@localhost/readur_test"
-export JWT_SECRET="your-test-jwt-secret"
+export JWT_SECRET="readur-local-testing-only-jwt-secret-0123456789"  # published test value
+export READUR_INSECURE_DEV_MODE=true  # required to accept the test value above
 export RUST_BACKTRACE=1
 
 # Optional OCR configuration
@@ -511,13 +512,15 @@ jobs:
       run: cargo test --lib
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost/readur_test
-        JWT_SECRET: test-secret-key
+        JWT_SECRET: readur-ci-testing-only-jwt-secret-0123456789
+        READUR_INSECURE_DEV_MODE: "true"
     
     - name: Start Server
       run: cargo run &
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost/readur_test
-        JWT_SECRET: test-secret-key
+        JWT_SECRET: readur-ci-testing-only-jwt-secret-0123456789
+        READUR_INSECURE_DEV_MODE: "true"
     
     - name: Wait for Server Health
       run: |
@@ -530,7 +533,8 @@ jobs:
       run: cargo test --test integration_tests
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost/readur_test
-        JWT_SECRET: test-secret-key
+        JWT_SECRET: readur-ci-testing-only-jwt-secret-0123456789
+        READUR_INSECURE_DEV_MODE: "true"
 
   frontend-tests:
     runs-on: ubuntu-latest

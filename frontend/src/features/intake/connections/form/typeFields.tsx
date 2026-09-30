@@ -12,6 +12,7 @@ import {
   type FormErrors,
   type ServerType,
   type SourceFormData,
+  type StoredSecrets,
 } from './sourceFormModel';
 import styles from './SourceForm.module.css';
 
@@ -19,6 +20,18 @@ export interface TypeFieldsProps {
   form: SourceFormData;
   set: (patch: Partial<SourceFormData>) => void;
   errors: FormErrors;
+  /** Set when editing a saved connection: which secrets the server already holds. */
+  stored?: StoredSecrets;
+}
+
+/** Placeholder and hint for a secret field of a saved connection, whose value is never shown. */
+function useSecretHints(stored: StoredSecrets | undefined, isStored: boolean, storedText: string) {
+  const { t } = useTranslation();
+  if (!stored) return {};
+  return {
+    placeholder: t('sources.form.keepCurrentSecret', 'Leave blank to keep current'),
+    description: isStored ? storedText : undefined,
+  };
 }
 
 export function errorText(t: TFunction, code?: FormErrorCode): string | undefined {
@@ -53,9 +66,14 @@ const SERVER_URL_PLACEHOLDER: Record<ServerType, string> = {
   generic: 'https://webdav.example.com/dav/',
 };
 
-export function WebDAVFields({ form, set, errors }: TypeFieldsProps) {
+export function WebDAVFields({ form, set, errors, stored }: TypeFieldsProps) {
   const { t } = useTranslation();
   const err = useFieldError(errors);
+  const secretHints = useSecretHints(
+    stored,
+    Boolean(stored?.password),
+    t('sources.form.passwordStored', 'A password is stored for this source'),
+  );
   return (
     <fieldset className={styles.group}>
       <legend className={styles.legend}>{t('intake.form.webdav.title', 'WebDAV server')}</legend>
@@ -93,6 +111,7 @@ export function WebDAVFields({ form, set, errors }: TypeFieldsProps) {
           value={form.password}
           onChange={(password) => set({ password })}
           autoComplete="new-password"
+          {...secretHints}
         />
       </div>
     </fieldset>
@@ -126,9 +145,14 @@ export function LocalFolderFields({ form, set }: TypeFieldsProps) {
   );
 }
 
-export function S3Fields({ form, set, errors }: TypeFieldsProps) {
+export function S3Fields({ form, set, errors, stored }: TypeFieldsProps) {
   const { t } = useTranslation();
   const err = useFieldError(errors);
+  const secretHints = useSecretHints(
+    stored,
+    Boolean(stored?.secretAccessKey),
+    t('sources.form.secretStored', 'A secret is stored for this source'),
+  );
   return (
     <fieldset className={styles.group}>
       <legend className={styles.legend}>{t('intake.form.s3.title', 'S3-compatible storage')}</legend>
@@ -168,8 +192,9 @@ export function S3Fields({ form, set, errors }: TypeFieldsProps) {
           type="password"
           value={form.secret_access_key}
           onChange={(secret_access_key) => set({ secret_access_key })}
-          autoComplete="off"
-          isRequired
+          autoComplete="new-password"
+          isRequired={!stored?.secretAccessKey}
+          {...secretHints}
           {...err('secret_access_key')}
         />
       </div>

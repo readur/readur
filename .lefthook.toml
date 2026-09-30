@@ -1,0 +1,129 @@
+# readur git hooks (https://lefthook.dev). Installed by `mise install` (the
+# postinstall hook runs `lefthook install`), or by hand with `lefthook install`.
+# Entirely optional: CI does not depend on them.
+#
+# Philosophy: pre-commit hooks AUTO-FORMAT the staged files and re-stage what
+# they touched (`stage_fixed = true`), rather than failing the commit and making
+# you re-run a formatter by hand. Hooks run in parallel and are skipped during
+# merges and rebases. Skip one hook for one commit with e.g.
+# `LEFTHOOK_EXCLUDE=format-rust git commit ...`, or all of them with
+# `git commit --no-verify`.
+#
+# FORMAT ON TOUCH. The repo is not formatter-clean yet (neither rustfmt nor
+# oxfmt), so every formatter below is handed ONLY the staged files -- a
+# repo-wide `cargo fmt --all` here would rewrite hundreds of untouched files and
+# leave them unstaged. Once a one-time repo-wide `mise run fmt` commit lands,
+# `format-rust` can go back to `cargo fmt --all` and `fmt-check` can become a CI
+# gate (see .mise/config.toml).
+#
+# INVARIANT: the oxfmt exclude lists below MUST mirror .prettierignore. oxfmt
+# exits non-zero ("Expected at least one target file") when every file it is
+# handed is ignored, and lefthook patterns are root-anchored and do NOT read
+# .prettierignore -- so an ignored path must be kept out of oxfmt's argv here.
+
+# Put mise-managed tools (rustfmt, oxfmt, shellcheck, zizmor) on PATH even when
+# the committing shell never ran `mise activate` (GUI clients, bare shells).
+rc = "./.lefthookrc"
+
+[pre-commit]
+parallel = true
+skip = ["merge", "rebase"]
+
+# Only the staged files, and without following `mod foo;` into untouched child
+# modules -- see the script header.
+[pre-commit.commands.format-rust]
+glob = ["*.rs"]
+run = "scripts/format-staged-rust.sh {staged_files}"
+stage_fixed = true
+
+[pre-commit.commands.format-mise]
+glob = [".mise/config.toml"]
+run = "mise fmt"
+stage_fixed = true
+
+[pre-commit.commands.format-ts-js]
+glob = ["*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs"]
+exclude = ["docs/**"]
+run = "oxfmt {staged_files}"
+stage_fixed = true
+
+[pre-commit.commands.format-json]
+glob = ["*.json", "*.json5", "*.jsonc"]
+exclude = [
+  "package-lock.json",
+  "frontend/package-lock.json",
+  "grafana-dashboard.json",
+  "stress-test-metrics.json",
+  "frontend/public/locales/**",
+  "docs/**",
+]
+run = "oxfmt {staged_files}"
+stage_fixed = true
+
+[pre-commit.commands.format-markdown]
+glob = ["*.md", "*.markdown", "*.mdx"]
+# docs/ is the mkdocs site (admonitions and tabs depend on indentation).
+exclude = ["docs/**"]
+run = "oxfmt {staged_files}"
+stage_fixed = true
+
+[pre-commit.commands.format-yaml]
+glob = ["*.yaml", "*.yml"]
+exclude = [
+  # Go templates wearing a .yaml suffix; `helm lint` is what checks these.
+  "charts/*/templates/**",
+  "docs/**",
+]
+run = "oxfmt {staged_files}"
+stage_fixed = true
+
+# The mise config is owned by format-mise/mise-lock, and with `parallel = true`
+# a concurrent oxfmt rewrite of the same file would race them.
+[pre-commit.commands.format-toml]
+glob = ["*.toml"]
+exclude = [".mise/config.toml", ".mise/mise.lock", "Cargo.lock"]
+run = "oxfmt {staged_files}"
+stage_fixed = true
+
+# Keep .mise/mise.lock in step with edits to .mise/config.toml.
+[pre-commit.commands.mise-lock]
+glob = [".mise/config.toml"]
+run = "mise lock && git add .mise/mise.lock"
+
+# Severity is gated at `error` via SHELLCHECK_OPTS in .lefthookrc: the existing
+# scripts carry warning-level findings and shellcheck has no baseline mechanism.
+[pre-commit.commands.shellcheck]
+glob = ["*.sh"]
+run = "shellcheck {staged_files}"
+
+# High severity only, for the same reason: the existing workflows carry
+# lower-severity findings. `mise run workflow-lint` runs the full audit.
+[pre-commit.commands.zizmor]
+glob = [".github/workflows/*.{yml,yaml}", ".github/actions/**/action.{yml,yaml}"]
+run = "zizmor --offline --min-severity high {staged_files}"
+
+# Migrations are append-only history. sqlx records a checksum for every applied
+# migration (`sqlx::migrate!("./migrations")` in src/main.rs), so editing,
+# renaming or deleting one that has already been committed makes every existing
+# deployment refuse to start. Add a new migration instead. (A migration that
+# exists only on your unpushed branch can be amended with
+# `LEFTHOOK_EXCLUDE=no-edits-to-applied-migrations git commit ...`.)
+#
+# No glob, on purpose: lefthook's staged-file list omits deletions, so a
+# glob-gated hook would never fire for a deleted migration. The check is one
+# cheap `git diff` against the index.
+[pre-commit.commands.no-edits-to-applied-migrations]
+run = '''
+changed="$(git diff --cached --diff-filter=MDR --name-only -- migrations/)"
+if [ -n "$changed" ]; then
+  echo "error: already-committed migration(s) modified, renamed or deleted:" >&2
+  printf '  %s\n' $changed >&2
+  echo "Editing an applied migration changes its checksum and every deployed" >&2
+  echo "database will refuse to start. Add a new migration instead." >&2
+  exit 1
+fi
+'''
+
+# Deliberately NO file-length (`lines-check`) hook: under `parallel = true` it
+# would race the formatters above and count pre-format line numbers. It is a
+# one-second `mise run lines-check`, and CI runs it.

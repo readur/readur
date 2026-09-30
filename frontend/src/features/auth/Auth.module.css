@@ -174,3 +174,29 @@
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+
+/* Informational message with an optional dismiss button (session notices, pending approval). */
+.info {
+  display: flex;
+  gap: var(--s-2);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--s-3);
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+}
+
+.info > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.linkRow {
+  margin: 0;
+  text-align: center;
+}

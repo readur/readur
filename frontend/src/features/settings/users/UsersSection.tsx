@@ -8,6 +8,7 @@ import { Tag } from '../shared/Facts';
 import shared from '../shared/shared.module.css';
 import { useCurrentUserId } from '../shared/useIsAdmin';
 import { UserDialog } from './UserDialog';
+import { UserStatusCell } from './UserStatusCell';
 import { useUsers, type UserRow } from './useUsers';
 import { useWatchDirectories } from './useWatchDirectories';
 
@@ -20,7 +21,9 @@ export default function UsersSection() {
   const { t } = useTranslation();
   const currentUserId = useCurrentUserId();
   const perUserWatch = useContext(FeatureFlagsContext)?.flags.enablePerUserWatch ?? false;
-  const { users, isLoading, loadError, saveUser, deleteUser } = useUsers();
+  const { users, isLoading, loadError, saveUser, deleteUser, setUserActive } = useUsers();
+  const [statusBusy, setStatusBusy] = useState<string | null>(null);
+  const inactiveCount = users.filter((u) => u.is_active === false).length;
   const watch = useWatchDirectories(users, perUserWatch);
   const [editing, setEditing] = useState<{ user: UserRow | null } | null>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
@@ -111,13 +114,28 @@ export default function UsersSection() {
         render: (u) => formatDate(u.created_at),
       },
     ];
+    cols.push({
+      id: 'status',
+      label: t('settings.userManagement.tableHeaders.status', 'Status'),
+      render: (u) => (
+        <UserStatusCell
+          user={u}
+          isSelf={u.id === currentUserId}
+          isDisabled={statusBusy === u.id}
+          onChange={(active) => {
+            setStatusBusy(u.id);
+            void setUserActive(u, active).finally(() => setStatusBusy(null));
+          }}
+        />
+      ),
+    });
     if (perUserWatch) {
       cols.push({ id: 'watch', hideOnNarrow: true, label: t('settings.userManagement.tableHeaders.watchDirectory'), render: watchCell });
     }
     cols.push({ id: 'actions', label: t('settings.userManagement.tableHeaders.actions'), width: perUserWatch ? 200 : 110, render: actions });
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, perUserWatch, watch.dirs, watch.busy, currentUserId]);
+  }, [t, perUserWatch, watch.dirs, watch.busy, currentUserId, statusBusy]);
 
   const runConfirm = async () => {
     if (!confirm) return;
@@ -140,6 +158,14 @@ export default function UsersSection() {
         </Button>
       </div>
       {loadError ? <Notice tone="danger">{loadError}</Notice> : null}
+      {inactiveCount > 0 ? (
+        <Notice tone="warning">
+          {t('settings.userManagement.pendingApprovalNotice', {
+            count: inactiveCount,
+            defaultValue: '{{count}} account(s) are disabled or awaiting approval. Enable an account to let that user sign in.',
+          })}
+        </Notice>
+      ) : null}
       <BoardTable
         aria-label={t('settings.userManagement.title')}
         columns={columns}

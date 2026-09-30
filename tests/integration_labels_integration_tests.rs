@@ -35,23 +35,11 @@ impl TestClient {
     }
 
     async fn register_user(&mut self, username: &str, email: &str, password: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let response = self
-            .client
-            .post(&format!("{}/api/auth/register", self.base_url))
-            .json(&json!({
-                "username": username,
-                "email": email,
-                "password": password
-            }))
-            .send()
-            .await?;
-
-        if response.status().is_success() {
-            Ok(())
-        } else {
-            let error_text = response.text().await?;
-            Err(format!("Registration failed: {}", error_text).into())
-        }
+        // Create the account in the server's database
+        readur::test_utils::create_live_server_user(username, email, password, readur::models::UserRole::User)
+            .await
+            .map_err(|e| format!("Registration failed: {}", e))?;
+        Ok(())
     }
 
     async fn login(&mut self, username: &str, password: &str) -> Result<(), Box<dyn std::error::Error>> {

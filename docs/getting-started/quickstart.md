@@ -23,6 +23,10 @@ cd readur
 ### Step 2: Start Services
 
 ```bash
+# Optional: set your own JWT_SECRET (at least 32 bytes). When unset, a key is
+# generated on first start and stored in the database.
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+
 # Start with default configuration
 docker-compose up -d
 
@@ -41,9 +45,15 @@ http://localhost:8000
 
 Login with your admin credentials:
 - **Username**: `admin`
-- **Password**: Check the container logs for the auto-generated password
+- **Password**: the generated password stored in the container (or your `ADMIN_PASSWORD`, if you set one)
 
-On first startup, Readur generates a secure admin password and displays it in the logs. View the logs with `docker-compose logs` and look for the "READUR ADMIN USER CREATED" section. Save this password immediately - it won't be shown again.
+On first startup without `ADMIN_PASSWORD`, Readur generates a random admin password and writes it to `/app/uploads/.readur/initial-admin-password` inside the container (it is not written to the logs):
+
+```bash
+docker-compose exec readur cat /app/uploads/.readur/initial-admin-password
+```
+
+After signing in and changing the password, delete the file.
 
 ### Step 4: Upload Your First Document
 
@@ -56,7 +66,7 @@ Now you can test Readur's core functionality by uploading a document. Click the 
 If you prefer working with APIs or want to automate document uploads, you can use Readur's REST API. First, authenticate to get an access token:
 
 ```bash
-# Authenticate and get a session token (use your generated password from the logs)
+# Authenticate and get a session token (use your admin password)
 TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"YOUR_GENERATED_PASSWORD"}' | jq -r .token)

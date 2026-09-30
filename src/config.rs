@@ -3,6 +3,10 @@ use std::env;
 
 use crate::models::S3SourceConfig;
 
+mod parsing;
+use parsing::{env_flag, env_list, read_jwt_setting, normalize_cors_origin};
+pub use parsing::{validate_jwt_secret, DEFAULT_FILE_STABILITY_CHECK_MS, DEFAULT_WATCH_INTERVAL_SECONDS, MIN_JWT_SECRET_BYTES};
+
 /// S3 storage is enabled by S3_ENABLED=true or the documented STORAGE_BACKEND=s3.
 fn s3_storage_enabled(s3_enabled: Option<&str>, storage_backend: Option<&str>) -> bool {
     s3_enabled.map(|v| v.trim().eq_ignore_ascii_case("true")).unwrap_or(false)
@@ -10,7 +14,7 @@ fn s3_storage_enabled(s3_enabled: Option<&str>, storage_backend: Option<&str>) -
 }
 
 /// S3_FORCE_PATH_STYLE with documented legacy alias S3_PATH_STYLE.
-/// None (unset) means auto-detect.
+/// None (unset) means path-style for custom endpoints, virtual-hosted otherwise.
 fn parse_force_path_style(primary: Option<&str>, legacy: Option<&str>) -> Option<bool> {
     primary.or(legacy).map(|v| v.trim().eq_ignore_ascii_case("true"))
 }
@@ -58,24 +62,133 @@ pub struct Config {
 
     // Public URL for generating shared links
     pub public_url: Option<String>,
+
+    // Authentication / authorization hardening knobs
+    pub security: SecurityConfig,
 }
 
-/// Polling interval the watch-folder scanner uses when WATCH_INTERVAL_SECONDS is unset.
-pub const DEFAULT_WATCH_INTERVAL_SECONDS: u64 = 30;
-/// File-stability wait the watch-folder scanner uses when FILE_STABILITY_CHECK_MS is unset.
-pub const DEFAULT_FILE_STABILITY_CHECK_MS: u64 = 1000;
+/// Authentication and authorization settings. `Default` is the most
+/// restrictive configuration.
+#[derive(Clone)]
+pub struct SecurityConfig {
+    /// Allow unauthenticated self-registration (`ALLOW_REGISTRATION`).
+    pub allow_registration: bool,
+    /// Self-registered accounts start disabled until an admin enables them.
+    /// Always on in production; only test harnesses turn it off.
+    pub registration_requires_approval: bool,
+    /// Lifetime of issued session tokens (`JWT_TTL_HOURS`).
+    pub jwt_ttl_hours: i64,
+    /// Canonicalized roots under which local-folder sources may point
+    /// (`LOCAL_SOURCE_ALLOWED_PATHS`). Empty means admin-only, any path.
+    pub local_source_allowed_paths: Vec<std::path::PathBuf>,
+    /// Reverse proxies whose `X-Forwarded-For` is trusted (`TRUSTED_PROXIES`).
+    pub trusted_proxies: Vec<ipnet::IpNet>,
+    /// Origins allowed to make cross-origin requests (`CORS_ALLOWED_ORIGINS`).
+    pub cors_allowed_origins: Vec<String>,
+    /// Bearer token accepted on `/metrics` (`METRICS_TOKEN`).
+    pub metrics_token: Option<String>,
+    /// Link an OIDC identity to an existing local account with the same
+    /// verified email (`OIDC_LINK_EXISTING_BY_EMAIL`).
+    pub oidc_link_existing_by_email: bool,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            allow_registration: false,
+            registration_requires_approval: true,
+            jwt_ttl_hours: 12,
+            local_source_allowed_paths: Vec::new(),
+            trusted_proxies: Vec::new(),
+            cors_allowed_origins: Vec::new(),
+            metrics_token: None,
+            oidc_link_existing_by_email: false,
+        }
+    }
+}
+
+impl std::fmt::Debug for SecurityConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecurityConfig")
+            .field("allow_registration", &self.allow_registration)
+            .field("registration_requires_approval", &self.registration_requires_approval)
+            .field("jwt_ttl_hours", &self.jwt_ttl_hours)
+            .field("local_source_allowed_paths", &self.local_source_allowed_paths)
+            .field("trusted_proxies", &self.trusted_proxies)
+            .field("cors_allowed_origins", &self.cors_allowed_origins)
+            .field("metrics_token", &self.metrics_token.as_ref().map(|_| "***"))
+            .field("oidc_link_existing_by_email", &self.oidc_link_existing_by_email)
+            .finish()
+    }
+}
+
+impl SecurityConfig {
+    pub fn from_env() -> Result<Self> {
+        let defaults = Self::default();
+
+        let allow_registration = env_flag("ALLOW_REGISTRATION", defaults.allow_registration)?;
+        println!("🔑 ALLOW_REGISTRATION: {}", allow_registration);
+
+        let jwt_ttl_hours = match env::var("JWT_TTL_HOURS") {
+            Ok(v) => match v.trim().parse::<i64>() {
+                Ok(h) if (1..=24 * 30).contains(&h) => h,
+                _ => return Err(anyhow::anyhow!("JWT_TTL_HOURS must be an integer between 1 and 720")),
+            },
+            Err(_) => defaults.jwt_ttl_hours,
+        };
+        println!("🔑 JWT_TTL_HOURS: {}", jwt_ttl_hours);
+
+        let mut local_source_allowed_paths = Vec::new();
+        for raw in env_list("LOCAL_SOURCE_ALLOWED_PATHS") {
+            let canonical = std::path::Path::new(&raw).canonicalize().map_err(|e| {
+                anyhow::anyhow!("LOCAL_SOURCE_ALLOWED_PATHS entry '{}' is not accessible: {}", raw, e)
+            })?;
+            local_source_allowed_paths.push(canonical);
+        }
+        if local_source_allowed_paths.is_empty() {
+            println!("📂 LOCAL_SOURCE_ALLOWED_PATHS: not set (local folder sources are admin-only)");
+        } else {
+            println!("📂 LOCAL_SOURCE_ALLOWED_PATHS: {:?}", local_source_allowed_paths);
+        }
+
+        let proxy_setting = env::var("TRUSTED_PROXIES").ok();
+        let proxy_ranges = crate::utils::client_ip::parse_proxy_ranges(proxy_setting.as_deref())?;
+        println!("🌐 TRUSTED_PROXIES: {}", crate::utils::client_ip::describe_proxy_ranges(proxy_setting.as_deref()));
+
+        let cors_allowed_origins = env_list("CORS_ALLOWED_ORIGINS")
+            .iter()
+            .map(|origin| normalize_cors_origin(origin))
+            .collect::<Result<Vec<_>>>()?;
+        println!("🌐 CORS_ALLOWED_ORIGINS: {:?}", cors_allowed_origins);
+
+        let metrics_token = env::var("METRICS_TOKEN").ok().filter(|t| !t.trim().is_empty());
+        if let Some(token) = &metrics_token {
+            if token.len() < 16 {
+                return Err(anyhow::anyhow!("METRICS_TOKEN must be at least 16 characters"));
+            }
+        }
+        println!(
+            "📈 METRICS_TOKEN: {}",
+            if metrics_token.is_some() { "configured" } else { "not set (/metrics requires an admin session)" }
+        );
+
+        let oidc_link_existing_by_email =
+            env_flag("OIDC_LINK_EXISTING_BY_EMAIL", defaults.oidc_link_existing_by_email)?;
+
+        Ok(Self {
+            allow_registration,
+            registration_requires_approval: true,
+            jwt_ttl_hours,
+            local_source_allowed_paths,
+            trusted_proxies: proxy_ranges,
+            cors_allowed_origins,
+            metrics_token,
+            oidc_link_existing_by_email,
+        })
+    }
+}
 
 impl Config {
-    /// Seconds between watch-folder scans, as the watcher actually runs them.
-    pub fn effective_watch_interval_seconds(&self) -> u64 {
-        self.watch_interval_seconds.unwrap_or(DEFAULT_WATCH_INTERVAL_SECONDS)
-    }
-
-    /// Milliseconds a watched file must stay unchanged before it is ingested.
-    pub fn effective_file_stability_check_ms(&self) -> u64 {
-        self.file_stability_check_ms.unwrap_or(DEFAULT_FILE_STABILITY_CHECK_MS)
-    }
-
     pub fn from_env() -> Result<Self> {
         // Load .env file if present
         match dotenvy::dotenv() {
@@ -200,21 +313,7 @@ impl Config {
                     }
                 }
             },
-            jwt_secret: match env::var("JWT_SECRET") {
-                Ok(secret) => {
-                    if secret == "your-secret-key" {
-                        println!("⚠️  JWT_SECRET: Using default value (SECURITY RISK in production!)");
-                    } else {
-                        println!("✅ JWT_SECRET: ***hidden*** (loaded from env, {} chars)", secret.len());
-                    }
-                    secret
-                }
-                Err(_) => {
-                    let default_secret = "your-secret-key".to_string();
-                    println!("⚠️  JWT_SECRET: Using default value (SECURITY RISK - env var not set!)");
-                    default_secret
-                }
-            },
+            jwt_secret: read_jwt_setting()?,
             upload_path: match env::var("UPLOAD_PATH") {
                 Ok(path) => {
                     println!("✅ UPLOAD_PATH: {} (loaded from env)", path);
@@ -662,6 +761,7 @@ impl Config {
                 println!("✅ PUBLIC_URL: {} (loaded from env)", url);
                 url
             }),
+            security: SecurityConfig::from_env()?,
         };
 
         println!("\n🔍 CONFIGURATION VALIDATION:");
@@ -709,9 +809,6 @@ impl Config {
         // Warning checks
         println!("\n⚠️  CONFIGURATION WARNINGS:");
         println!("{}", "=".repeat(50));
-        if config.jwt_secret == "your-secret-key" {
-            println!("🚨 SECURITY WARNING: Using default JWT secret! Set JWT_SECRET environment variable in production!");
-        }
         if config.server_address.starts_with("0.0.0.0") {
             println!("🌍 INFO: Server will listen on all interfaces (0.0.0.0)");
         }
@@ -730,7 +827,7 @@ impl Config {
                 println!("❌ OIDC_CLIENT_ID is required when OIDC is enabled");
             }
             if config.oidc_client_secret.is_none() {
-                println!("❌ OIDC_CLIENT_SECRET is required when OIDC is enabled");
+                println!("ℹ️  OIDC_CLIENT_SECRET not set: using public-client (PKCE-only) flow");
             }
             if config.oidc_issuer_url.is_none() {
                 println!("❌ OIDC_ISSUER_URL is required when OIDC is enabled");
@@ -943,47 +1040,5 @@ impl Config {
 }
 
 #[cfg(test)]
-mod s3_env_tests {
-    use super::*;
-
-    #[test]
-    fn s3_enabled_by_s3_enabled_var() {
-        assert!(s3_storage_enabled(Some("true"), None));
-        assert!(s3_storage_enabled(Some("TRUE"), None));
-        assert!(!s3_storage_enabled(Some("false"), None));
-        assert!(!s3_storage_enabled(None, None));
-    }
-
-    #[test]
-    fn s3_enabled_by_storage_backend_alias() {
-        assert!(s3_storage_enabled(None, Some("s3")));
-        assert!(s3_storage_enabled(None, Some("S3")));
-        assert!(!s3_storage_enabled(None, Some("local")));
-    }
-
-    #[test]
-    fn force_path_style_parsing() {
-        assert_eq!(parse_force_path_style(Some("true"), None), Some(true));
-        assert_eq!(parse_force_path_style(Some("false"), None), Some(false));
-        // legacy documented alias S3_PATH_STYLE
-        assert_eq!(parse_force_path_style(None, Some("true")), Some(true));
-        // primary wins over legacy
-        assert_eq!(parse_force_path_style(Some("false"), Some("true")), Some(false));
-        // unset -> auto-detect
-        assert_eq!(parse_force_path_style(None, None), None);
-    }
-
-    #[test]
-    fn effective_watch_settings_fall_back_to_the_watcher_defaults() {
-        let mut config = crate::test_utils::TestConfigBuilder::default().build(String::new());
-        config.watch_interval_seconds = None;
-        config.file_stability_check_ms = None;
-        assert_eq!(config.effective_watch_interval_seconds(), DEFAULT_WATCH_INTERVAL_SECONDS);
-        assert_eq!(config.effective_file_stability_check_ms(), DEFAULT_FILE_STABILITY_CHECK_MS);
-
-        config.watch_interval_seconds = Some(5);
-        config.file_stability_check_ms = Some(250);
-        assert_eq!(config.effective_watch_interval_seconds(), 5);
-        assert_eq!(config.effective_file_stability_check_ms(), 250);
-    }
-}
+#[path = "config_tests.rs"]
+mod tests;

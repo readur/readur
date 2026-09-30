@@ -34,7 +34,7 @@ test.describe('Settings Management', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'General' })).toBeVisible();
 
     const nav = sectionNav(page);
-    for (const name of ['General', 'OCR', 'Users', 'Server', 'API keys', 'Labels', 'Debug', 'Appearance']) {
+    for (const name of ['General', 'Account', 'OCR', 'Users', 'Server', 'API keys', 'Labels', 'Debug', 'Appearance']) {
       await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
     }
     await expect(nav.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'page');

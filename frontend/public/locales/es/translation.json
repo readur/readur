@@ -74,7 +74,11 @@
       "oidcAuthFailed": "La autenticación OIDC falló. Por favor consulta con tu administrador.",
       "oidcNotConfigured": "OIDC no está configurado en este servidor. Por favor usa inicio de sesión con nombre de usuario/contraseña.",
       "oidcInitFailed": "Falló el inicio de sesión OIDC. Por favor intenta de nuevo.",
-      "loginFailed": "Falló el inicio de sesión. Por favor verifica tus credenciales."
+      "loginFailed": "Falló el inicio de sesión. Por favor verifica tus credenciales.",
+      "logoutIncomplete": "Has cerrado sesión en este dispositivo, pero no se pudo contactar con el servidor. Tu sesión anterior puede seguir siendo válida hasta que caduque.",
+      "accountDisabledOrPending": "Esta cuenta está desactivada o pendiente de aprobación por un administrador",
+      "tooManyAttempts": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo más tarde.",
+      "tooManyAttemptsRetry": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo en {{seconds}} segundos."
     },
     "login": {
       "wordmark": "Readur",
@@ -108,18 +112,23 @@
       "title": "Iniciando sesión…",
       "wait": "Un momento mientras terminamos de iniciar tu sesión.",
       "errorTitle": "Error al iniciar sesión",
-      "noToken": "El servidor no envió un token de acceso. Vuelve atrás e inténtalo de nuevo.",
-      "generic": "No se pudo completar el inicio de sesión. Inténtalo de nuevo.",
-      "back": "Volver a iniciar sesión",
+      "back": "Volver a iniciar sesión"
+    },
+    "oidcCallback": {
       "errors": {
-        "access_denied": "Acceso denegado. Pregunta a tu administrador si tienes acceso a Readur.",
-        "misconfigured": "El proveedor de SSO rechazó la solicitud. Pide a tu administrador que revise la configuración de SSO.",
-        "provider_unavailable": "El proveedor de SSO tuvo un problema. Inténtalo de nuevo en un momento.",
-        "login_required": "El proveedor de SSO necesita que inicies sesión de nuevo. Vuelve atrás e inténtalo otra vez."
-      },
-      "failedCode": "Falló el inicio de sesión con SSO (código: {{code}}). Inténtalo de nuevo o consulta con tu administrador.",
-      "failedGeneric": "Falló el inicio de sesión con SSO. Inténtalo de nuevo o consulta con tu administrador."
-    }
+        "account_disabled": "Esta cuenta está deshabilitada o pendiente de aprobación por un administrador.",
+        "auth_failed": "La autenticación con el proveedor de identidad falló. Por favor inicia sesión de nuevo.",
+        "invalidCode": "Este enlace de inicio de sesión no es válido o ha caducado. Por favor inicia sesión de nuevo.",
+        "invalid_state": "La solicitud de inicio de sesión no es válida o ha caducado. Por favor inicia sesión de nuevo.",
+        "missingCode": "No se recibió ningún código de autenticación del servidor.",
+        "no_account": "No hay ninguna cuenta disponible para esta identidad. Contacta a tu administrador.",
+        "provider_error": "El proveedor de identidad no completó el inicio de sesión. Por favor intenta de nuevo.",
+        "server_error": "Se produjo un error del servidor durante el inicio de sesión. Por favor intenta más tarde.",
+        "tooManyAttempts": "Demasiados intentos. Espera un momento e inicia sesión de nuevo.",
+        "unknown": "No se pudo iniciar sesión. Por favor inicia sesión de nuevo."
+      }
+    },
+    "createAccountLink": "¿No tienes una cuenta? Solicita una"
   },
   "navigation": {
     "dashboard": "Panel",
@@ -693,7 +702,8 @@
       "general": "General",
       "ocrSettings": "Configuración de OCR",
       "userManagement": "Gestión de Usuarios",
-      "serverConfiguration": "Configuración del Servidor"
+      "serverConfiguration": "Configuración del Servidor",
+      "account": "Cuenta"
     },
     "general": {
       "title": "Configuración General",
@@ -808,7 +818,8 @@
         "email": "Correo Electrónico",
         "createdAt": "Creado En",
         "watchDirectory": "Directorio de Vigilancia",
-        "actions": "Acciones"
+        "actions": "Acciones",
+        "status": "Estado"
       },
       "watchDirectory": {
         "statusActive": "Activo",
@@ -834,7 +845,15 @@
         "title": "Eliminar Directorio de Vigilancia",
         "message": "¿Estás seguro de que quieres eliminar el directorio de vigilancia para el usuario \"{{username}}\"? Esta acción no se puede deshacer y detendrá el monitoreo de su directorio para archivos nuevos.",
         "removeButton": "Eliminar Directorio"
-      }
+      },
+      "activeToggleLabel": "Cuenta activa para {{username}}",
+      "cannotDeactivateSelf": "No puedes desactivar tu propia cuenta",
+      "disableUser": "Desactivar cuenta",
+      "enableUser": "Activar cuenta",
+      "pendingApprovalNotice": "{{count}} cuenta(s) están desactivadas o pendientes de aprobación. Activa una cuenta para que esa persona pueda iniciar sesión.",
+      "roleAdmin": "Admin",
+      "statusActive": "Activa",
+      "statusPending": "Desactivada / pendiente de aprobación"
     },
     "serverConfiguration": {
       "title": "Configuración del Servidor (Solo Administrador)",
@@ -909,7 +928,10 @@
       "ocrResumeFailedGeneric": "Falló reanudar el procesamiento OCR",
       "serverConfigLoadFailed": "Se requiere acceso de administrador para ver la configuración del servidor",
       "serverConfigLoadFailedGeneric": "Falló la carga de configuración del servidor",
-      "settingsLoadFailed": "No se pudieron cargar los ajustes"
+      "settingsLoadFailed": "No se pudieron cargar los ajustes",
+      "cannotDeactivateSelf": "No puedes desactivar tu propia cuenta",
+      "userDisabled": "{{username}} se ha desactivado y se ha cerrado su sesión",
+      "userEnabled": "{{username}} ya puede iniciar sesión"
     },
     "adminOnly": {
       "title": "Solo administradores",
@@ -1025,7 +1047,8 @@
       "labels": "Etiquetas",
       "ocr": "OCR",
       "server": "Servidor",
-      "users": "Usuarios"
+      "users": "Usuarios",
+      "account": "Cuenta"
     },
     "summary": {
       "advanced": "ventana {{w}} · morfología {{m}} · ecualización {{h}} · guardar imágenes {{s}}",
@@ -1069,6 +1092,21 @@
       "odd": "Introduce un número impar.",
       "range": "Introduce un valor entre {{min}} y {{max}}.",
       "required": "Introduce un valor."
+    },
+    "account": {
+      "changePassword": "Cambiar contraseña",
+      "confirmNewPassword": "Confirmar nueva contraseña",
+      "currentPassword": "Contraseña actual",
+      "newPassword": "Nueva contraseña",
+      "passwordChangeFailed": "No se pudo cambiar la contraseña",
+      "passwordChanged": "Contraseña cambiada. Se cerraron tus otras sesiones.",
+      "passwordMismatch": "Las nuevas contraseñas no coinciden",
+      "passwordPolicy": "Al menos {{min}} caracteres",
+      "passwordTooLong": "La contraseña no puede superar los {{max}} bytes",
+      "title": "Cuenta",
+      "tooManyAttempts": "Demasiados intentos. Inténtalo de nuevo más tarde.",
+      "updatePassword": "Actualizar contraseña",
+      "wrongCurrentPassword": "La contraseña actual no es correcta"
     }
   },
   "labels": {
@@ -1530,14 +1568,20 @@
     },
     "actions": {
       "signup": "Registrarse",
-      "creating": "Creando cuenta..."
+      "creating": "Creando cuenta...",
+      "backToSignIn": "Volver a iniciar sesión"
     },
     "links": {
       "signin": "¿Ya tienes una cuenta? Inicia sesión"
     },
     "errors": {
-      "failed": "Falló el registro"
-    }
+      "failed": "Falló el registro",
+      "disabled": "El registro abierto está desactivado en este servidor.",
+      "passwordTooShort": "La contraseña debe tener al menos {{min}} caracteres",
+      "rateLimited": "Demasiados intentos de registro. Inténtalo de nuevo más tarde."
+    },
+    "passwordHint": "Al menos {{min}} caracteres",
+    "pendingApproval": "Cuenta creada. Un administrador debe aprobarla antes de que puedas iniciar sesión."
   },
   "sources": {
     "title": "Fuentes de Documentos",
@@ -1611,7 +1655,10 @@
       "sourceType": "Tipo de Fuente",
       "sourceEnabled": "Fuente Habilitada",
       "sourceEnabledHelper": "Habilitar esta fuente para sincronización",
-      "sourceNamePlaceholder": "Mi Servidor de Documentos"
+      "sourceNamePlaceholder": "Mi Servidor de Documentos",
+      "keepCurrentSecret": "Déjalo en blanco para conservar el valor actual",
+      "passwordStored": "Hay una contraseña guardada para esta fuente",
+      "secretStored": "Hay una clave secreta guardada para esta fuente"
     },
     "webdav": {
       "title": "Configuración WebDAV",

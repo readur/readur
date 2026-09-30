@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../../../ui';
 import { sourcesService, type SourceResponse } from '../../../services/api';
+import { buildTestConnectionRequest } from '../../../services/sourceConnectionTest';
+import type { TestConnectionRequest } from '../../../types/generated';
 import { ErrorCodes, hasCode, pickMessage, serverMessage, statusOf } from '../shared/errors';
 
 export type SourceAction = 'sync' | 'deepScan' | 'stop' | 'test' | 'validate' | 'toggle' | 'delete';
@@ -93,7 +95,11 @@ export function useSourceActions(onChanged: () => void, onDeleted?: (id: string)
   const test = (source: SourceResponse) =>
     run('test', async () => {
       try {
-        const res = await sourcesService.testConnection({ source_type: source.source_type, config: source.config });
+        // The saved config carries no secrets; the id lets the server test with the stored ones.
+        const config = (source.config && typeof source.config === 'object' ? source.config : {}) as Record<string, unknown>;
+        const res = await sourcesService.testConnection(
+          buildTestConnectionRequest(source.source_type, config, source) as TestConnectionRequest,
+        );
         const ok = Boolean(res.data?.success);
         toast.show({
           title: ok ? t('intake.form.test.ok', 'Connection successful') : t('intake.form.test.failed', 'Connection failed'),

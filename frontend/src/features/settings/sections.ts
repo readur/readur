@@ -1,4 +1,4 @@
-export type SectionId = 'general' | 'ocr' | 'users' | 'server' | 'api-keys' | 'labels' | 'debug' | 'appearance';
+export type SectionId = 'general' | 'account' | 'ocr' | 'users' | 'server' | 'api-keys' | 'labels' | 'debug' | 'appearance';
 
 /** A searchable entry: a group title or a single setting, pointing at the group that holds it. */
 export interface SearchEntry {
@@ -37,6 +37,15 @@ export const SECTIONS: readonly SectionDef[] = [
       e('storage', 'settings.general.storageManagement.retentionDays', 'Retention Days'),
       e('storage', 'settings.general.storageManagement.enableAutoCleanup', 'Enable Auto Cleanup'),
       e('storage', 'settings.general.storageManagement.enableCompression', 'Enable Compression'),
+    ],
+  },
+  {
+    id: 'account',
+    label: 'settings.sections.account',
+    fallback: 'Account',
+    entries: [
+      e('account', 'settings.account.changePassword', 'Change password'),
+      e('account', 'settings.account.currentPassword', 'Current password'),
     ],
   },
   {

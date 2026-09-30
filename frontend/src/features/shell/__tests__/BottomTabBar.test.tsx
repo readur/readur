@@ -7,6 +7,7 @@ import { NARROW, STANDALONE, installStorage, renderShell, setMedia } from './she
 
 vi.mock('../../../services/api', () => ({
   default: { get: vi.fn() },
+  api: { defaults: { headers: { common: {} } } },
   documentService: { enhancedSearch: vi.fn() },
 }));
 

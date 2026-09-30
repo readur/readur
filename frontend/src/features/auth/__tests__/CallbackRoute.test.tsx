@@ -2,117 +2,169 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CallbackRoute from '../CallbackRoute';
+import { OIDC_CALLBACK_ERROR_CODES } from '../authErrors';
 import { api } from '../../../services/api';
 import { renderAuth } from './authTestUtils';
 
-vi.mock('../../../services/api', () => ({ api: { defaults: { headers: { common: {} as Record<string, string> } } } }));
+vi.mock('../../../services/api', async () => {
+  const errors = await import('../../../services/errors');
+  return {
+    api: { post: vi.fn(), defaults: { headers: { common: {} as Record<string, string> } } },
+    ErrorHelper: errors.ErrorHelper,
+    ErrorCodes: errors.ErrorCodes,
+  };
+});
 
-const originalLocation = window.location;
-const originalStorage = window.localStorage;
-const hrefSetter = vi.fn();
-const replace = vi.fn();
-const store = new Map<string, string>();
-const headers = () => api.defaults.headers.common as Record<string, string>;
+const completeLogin = vi.fn();
+const setUrl = (url: string) => window.history.replaceState(null, '', url);
+
+const renderCallback = () =>
+  renderAuth({ path: '/auth/callback', element: <CallbackRoute />, auth: { completeLogin } });
 
 beforeEach(() => {
-  hrefSetter.mockReset();
-  replace.mockReset();
-  store.clear();
-  delete headers().Authorization;
-  Object.defineProperty(window, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, v),
-      removeItem: (k: string) => void store.delete(k),
-    },
-  });
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    value: {
-      ...originalLocation,
-      replace,
-      set href(v: string) {
-        hrefSetter(v);
-      },
-      get href() {
-        return 'http://localhost/auth/callback';
-      },
-    },
-  });
+  completeLogin.mockReset();
+  vi.mocked(api.post).mockReset();
+  vi.mocked(api.post).mockRejectedValue(new Error('unexpected request'));
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
-  Object.defineProperty(window, 'localStorage', { configurable: true, value: originalStorage });
+  setUrl('/');
 });
 
-const renderCallback = (search = '') =>
-  renderAuth({ path: '/auth/callback', element: <CallbackRoute />, entry: `/auth/callback${search}` });
-
 describe('CallbackRoute', () => {
-  it('module exports a component', () => {
-    expect(typeof CallbackRoute).toBe('function');
-  });
+  it('redeems the one-time code from the URL fragment, signs in and goes to /board', async () => {
+    const session = {
+      token: 'jwt-token',
+      user: { id: '1', username: 'alice', email: 'a@example.com', role: 'user' as const, is_active: true },
+    };
+    vi.mocked(api.post).mockResolvedValue({ data: session });
+    setUrl('/auth/callback#code=one-time-code');
 
-  it('stores the token, sets the auth header and goes to /board', async () => {
-    renderCallback('?token=abc123');
+    renderCallback();
     expect(screen.getByRole('heading', { level: 1, name: 'Signing you in…' })).toBeInTheDocument();
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/board'));
-    // Replaced, not pushed: the URL with the token does not stay in the history.
-    expect(hrefSetter).not.toHaveBeenCalled();
-    expect(store.get('token')).toBe('abc123');
-    expect(headers().Authorization).toBe('Bearer abc123');
+
+    expect(await screen.findByRole('status', { name: 'location' })).toHaveTextContent('/board');
+    expect(api.post).toHaveBeenCalledWith('/auth/oidc/exchange', { code: 'one-time-code' });
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(completeLogin).toHaveBeenCalledWith(session);
   });
 
-  it('shows the provider error with a way back to sign in', async () => {
+  it('strips the code from the address bar before exchanging it', async () => {
+    let hashDuringExchange: string | undefined;
+    vi.mocked(api.post).mockImplementation(async () => {
+      hashDuringExchange = window.location.hash;
+      return { data: { token: 't', user: {} } };
+    });
+    setUrl('/auth/callback#code=secret-code');
+
+    renderCallback();
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    expect(hashDuringExchange).toBe('');
+    expect(window.location.hash).toBe('');
+    expect(window.location.pathname).toBe('/auth/callback');
+  });
+
+  it('does not read a token from the query string', async () => {
+    setUrl('/auth/callback?token=legacy-token');
+
+    renderCallback();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No authentication code received');
+    expect(api.post).not.toHaveBeenCalled();
+    expect(completeLogin).not.toHaveBeenCalled();
+    expect(window.location.search).toBe('');
+  });
+
+  const expectedMessages: Record<string, RegExp> = {
+    provider_error: /identity provider did not complete the sign-in/i,
+    invalid_state: /sign-in request is invalid or has expired/i,
+    auth_failed: /Authentication with the identity provider failed/i,
+    no_account: /No account is available for this identity/i,
+    account_disabled: /disabled or awaiting administrator approval/i,
+    server_error: /server error occurred during sign-in/i,
+  };
+
+  it('covers every server error code', () => {
+    expect([...OIDC_CALLBACK_ERROR_CODES].sort()).toEqual(Object.keys(expectedMessages).sort());
+  });
+
+  it.each(Object.entries(expectedMessages))('maps the %s error code in the fragment to a fixed message', async (code, message) => {
+    setUrl(`/auth/callback#error=${code}`);
+
+    renderCallback();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('');
+  });
+
+  it('shows the error with a way back to sign in', async () => {
     const user = userEvent.setup();
-    renderCallback('?error=access_denied');
-    expect(await screen.findByRole('alert')).toHaveTextContent('Access was denied');
-    expect(hrefSetter).not.toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
+    setUrl('/auth/callback#error=auth_failed');
+    renderCallback();
+    await screen.findByRole('alert');
     await user.click(screen.getByRole('link', { name: 'Back to sign in' }));
     expect(await screen.findByRole('status', { name: 'location' })).toHaveTextContent('/login');
   });
 
-  it('maps other standard provider codes to fixed messages', async () => {
-    renderCallback('?error=server_error');
-    expect(await screen.findByRole('alert')).toHaveTextContent('The SSO provider had a problem');
-  });
+  it('never renders free text from the callback URL', async () => {
+    setUrl('/auth/callback?error=' + encodeURIComponent('Your account is locked, call 555-0100'));
 
-  it('shows an unknown plain code only as a code, never as free text', async () => {
-    renderCallback('?error=weird_thing');
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('SSO sign-in failed (code: weird_thing)');
-  });
-
-  it('never renders attacker-chosen text from the error param', async () => {
-    renderCallback('?error=' + encodeURIComponent('Your account is locked, call 555-0100'));
-    const alert = await screen.findByRole('alert');
-    expect(alert).not.toHaveTextContent('555-0100');
-    expect(alert).toHaveTextContent('SSO sign-in failed. Try again or ask your administrator.');
-  });
-
-  it('shows an error when no token arrives', async () => {
     renderCallback();
-    expect(await screen.findByRole('alert')).toHaveTextContent('did not send a sign-in token');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Sign-in failed. Please try logging in again.');
+    expect(alert).not.toHaveTextContent('555-0100');
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('shows an error when the code is invalid or expired', async () => {
+    vi.mocked(api.post).mockRejectedValue({ isAxiosError: true, response: { status: 401, data: { error: 'Invalid' } } });
+    setUrl('/auth/callback#code=stale');
+
+    renderCallback();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid or has expired/i);
+    expect(completeLogin).not.toHaveBeenCalled();
     expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login');
   });
 
-  it('shows an error when the token cannot be stored', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    Object.defineProperty(window, 'localStorage', {
-      configurable: true,
-      value: {
-        setItem: () => {
-          throw new Error('quota');
-        },
-      },
+  it('asks the user to wait after too many attempts', async () => {
+    vi.mocked(api.post).mockRejectedValue({ isAxiosError: true, response: { status: 429, data: {} } });
+    setUrl('/auth/callback#code=abc');
+
+    renderCallback();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts');
+  });
+
+  it('does not render the server message when the exchange fails unexpectedly', async () => {
+    vi.mocked(api.post).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 400, data: { error: 'Some server-provided text' } },
     });
-    renderCallback('?token=abc');
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not finish signing you in');
-    expect(hrefSetter).not.toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
-    spy.mockRestore();
+    setUrl('/auth/callback#code=abc');
+
+    renderCallback();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Sign-in failed. Please try logging in again.');
+    expect(alert).not.toHaveTextContent('Some server-provided text');
+  });
+
+  it('reports a server error during the exchange with a fixed message', async () => {
+    vi.mocked(api.post).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 500, data: { error: 'stack trace' } },
+    });
+    setUrl('/auth/callback#code=abc');
+
+    renderCallback();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('server error occurred during sign-in');
+    expect(alert).not.toHaveTextContent('stack trace');
   });
 });

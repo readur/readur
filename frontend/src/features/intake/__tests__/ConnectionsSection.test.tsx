@@ -202,6 +202,25 @@ describe('Connection details panel', () => {
     }
   });
 
+  it('tests a saved connection whose secret the server keeps, by its id', async () => {
+    const redacted = source('s1', {
+      name: 'Office cloud',
+      config: { server_url: 'https://cloud.example.com', username: 'ada', has_password: true, watch_folders: ['/Documents'] },
+    });
+    serveSources([redacted]);
+    const user = userEvent.setup();
+    renderIntake(<ConnectionsSection />);
+    const panel = await openRow(user, 'Office cloud');
+    expect(within(panel).getByText(/password set/)).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'Test connection' }));
+    await waitFor(() => expect(sourcesService.testConnection).toHaveBeenCalled());
+    expect(sourcesService.testConnection).toHaveBeenCalledWith({
+      source_type: 'webdav',
+      config: redacted.config,
+      source_id: 's1',
+    });
+  });
+
   it('explains an invalid configuration when testing the saved connection', async () => {
     sourcesService.testConnection.mockImplementation(() => Promise.reject(apiError(400, 'SOURCE_CONFIG_INVALID', 'bad')));
     const user = userEvent.setup();

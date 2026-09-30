@@ -57,7 +57,7 @@ export function sourceAuth(source: SourceResponse, passwordSet: string): string 
   const c = configOf(source);
   if (source.source_type === 'webdav') {
     const user = typeof c.username === 'string' ? c.username : '';
-    const hasPassword = typeof c.password === 'string' && c.password.length > 0;
+    const hasPassword = c.has_password === true || (typeof c.password === 'string' && c.password.length > 0);
     return [user || '—', hasPassword ? passwordSet : null].filter(Boolean).join(' · ');
   }
   if (source.source_type === 's3') {

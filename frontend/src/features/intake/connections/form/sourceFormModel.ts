@@ -3,6 +3,7 @@
  * source, the config/test payloads the backend expects, validation and the sync URL preview.
  */
 import type { JsonValue, SourceResponse, SourceType, TestConnectionRequest } from '../../../../types/generated';
+import { buildSourceConfig, buildTestConnectionRequest } from '../../../../services/sourceConnectionTest';
 
 export type ServerType = 'nextcloud' | 'owncloud' | 'generic';
 export type AddressingStyle = 'auto' | 'path' | 'vhost';
@@ -92,14 +93,15 @@ export function formFromSource(source: SourceResponse): SourceFormData {
     enabled: source.enabled,
     server_url: str(c.server_url),
     username: str(c.username),
-    password: str(c.password),
+    // Secrets are never returned by the API; blank keeps the stored value.
+    password: '',
     server_type: (['nextcloud', 'owncloud', 'generic'].includes(serverType) ? serverType : 'generic') as ServerType,
     recursive: c.recursive !== undefined ? Boolean(c.recursive) : true,
     follow_symlinks: Boolean(c.follow_symlinks),
     bucket_name: str(c.bucket_name),
     region: str(c.region, 'us-east-1') || 'us-east-1',
     access_key_id: str(c.access_key_id),
-    secret_access_key: str(c.secret_access_key),
+    secret_access_key: '',
     endpoint_url: str(c.endpoint_url),
     force_path_style: c.force_path_style === true ? 'path' : c.force_path_style === false ? 'vhost' : 'auto',
     prefix: str(c.prefix),
@@ -112,99 +114,61 @@ export function formFromSource(source: SourceResponse): SourceFormData {
   };
 }
 
-const pathStyleValue = (style: AddressingStyle): boolean | null =>
-  style === 'path' ? true : style === 'vhost' ? false : null;
+/** Which secrets the server holds for a saved connection (it reports only that one is set). */
+export interface StoredSecrets {
+  password: boolean;
+  secretAccessKey: boolean;
+}
+
+export const NO_STORED_SECRETS: StoredSecrets = { password: false, secretAccessKey: false };
+
+export function storedSecrets(source: SourceResponse | null | undefined): StoredSecrets {
+  if (!source) return NO_STORED_SECRETS;
+  const c = (source.config && typeof source.config === 'object' ? source.config : {}) as Config;
+  const isSet = (flag: unknown, value: unknown) => flag === true || (typeof value === 'string' && value.length > 0);
+  return {
+    password: source.source_type === 'webdav' && isSet(c.has_password, c.password),
+    secretAccessKey: source.source_type === 's3' && isSet(c.has_secret_access_key, c.secret_access_key),
+  };
+}
+
+const sanitizedInterval = (minutes: number): number =>
+  Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_INTERVAL;
 
 type ConfigOut = { [key: string]: JsonValue };
 
-/** The `config` object saved for the selected type. */
-export function buildConfig(f: SourceFormData): ConfigOut {
-  const common = {
-    watch_folders: f.watch_folders,
-    file_extensions: f.file_extensions,
-    auto_sync: f.auto_sync,
-    sync_interval_minutes: Number.isFinite(f.sync_interval_minutes) && f.sync_interval_minutes > 0
-      ? f.sync_interval_minutes
-      : DEFAULT_INTERVAL,
-  };
-  switch (f.source_type) {
-    case 'webdav':
-      return {
-        server_url: f.server_url,
-        username: f.username,
-        password: f.password,
-        ...common,
-        server_type: f.server_type,
-      };
-    case 'local_folder':
-      return { ...common, recursive: f.recursive, follow_symlinks: f.follow_symlinks };
-    case 's3':
-      return {
-        bucket_name: f.bucket_name,
-        region: f.region,
-        access_key_id: f.access_key_id,
-        secret_access_key: f.secret_access_key,
-        endpoint_url: f.endpoint_url,
-        force_path_style: pathStyleValue(f.force_path_style),
-        prefix: f.prefix,
-        ...common,
-      };
-    default:
-      return common;
-  }
+/**
+ * The `config` object saved for the selected type. With `omitBlankSecrets` (editing) a blank
+ * secret is left out, which the server reads as "keep the stored value".
+ */
+export function buildConfig(f: SourceFormData, { omitBlankSecrets = false }: { omitBlankSecrets?: boolean } = {}): ConfigOut {
+  return buildSourceConfig(
+    { ...f, sync_interval_minutes: sanitizedInterval(f.sync_interval_minutes) },
+    { omitBlankSecrets },
+  ) as ConfigOut;
 }
 
-/** Body of POST /sources/test/connection for the current form. */
-export function buildTestRequest(f: SourceFormData): TestConnectionRequest {
-  switch (f.source_type) {
-    case 'webdav':
-      return {
-        source_type: 'webdav',
-        config: {
-          server_url: f.server_url,
-          username: f.username,
-          password: f.password,
-          server_type: f.server_type,
-          watch_folders: f.watch_folders,
-          file_extensions: f.file_extensions,
-        },
-      };
-    case 'local_folder':
-      return {
-        source_type: 'local_folder',
-        config: {
-          watch_folders: f.watch_folders,
-          file_extensions: f.file_extensions,
-          recursive: f.recursive,
-          follow_symlinks: f.follow_symlinks,
-        },
-      };
-    case 's3':
-    default:
-      return {
-        source_type: 's3',
-        config: {
-          bucket_name: f.bucket_name,
-          region: f.region,
-          access_key_id: f.access_key_id,
-          secret_access_key: f.secret_access_key,
-          endpoint_url: f.endpoint_url,
-          force_path_style: pathStyleValue(f.force_path_style),
-          prefix: f.prefix,
-        },
-      };
-  }
+/**
+ * Body of POST /sources/test/connection for the current form. When editing with a blank secret
+ * the saved connection's id goes along, so the server tests with the stored secret.
+ */
+export function buildTestRequest(
+  f: SourceFormData,
+  existing?: Pick<SourceResponse, 'id' | 'source_type'> | null,
+): TestConnectionRequest {
+  const config = buildConfig(f);
+  return buildTestConnectionRequest(f.source_type, config, existing) as TestConnectionRequest;
 }
 
 /** Test connection needs the minimum to reach the server: the same rule the old form used. */
-export function canTestConnection(f: SourceFormData): boolean {
+export function canTestConnection(f: SourceFormData, stored: StoredSecrets = NO_STORED_SECRETS): boolean {
   switch (f.source_type) {
     case 'webdav':
       return Boolean(f.server_url && f.username);
     case 'local_folder':
       return f.watch_folders.length > 0;
     case 's3':
-      return Boolean(f.bucket_name && f.access_key_id && f.secret_access_key);
+      return Boolean(f.bucket_name && f.access_key_id && (f.secret_access_key || stored.secretAccessKey));
     default:
       return false;
   }
@@ -248,7 +212,7 @@ export function isValidInterval(minutes: number): boolean {
 }
 
 /** Everything that must hold before saving. Empty object means valid. */
-export function validateForm(f: SourceFormData): FormErrors {
+export function validateForm(f: SourceFormData, stored: StoredSecrets = NO_STORED_SECRETS): FormErrors {
   const errors: FormErrors = {};
   if (!f.name.trim()) errors.name = 'required';
   if (f.source_type === 'webdav') {
@@ -259,7 +223,7 @@ export function validateForm(f: SourceFormData): FormErrors {
   if (f.source_type === 's3') {
     if (!f.bucket_name.trim()) errors.bucket_name = 'required';
     if (!f.access_key_id.trim()) errors.access_key_id = 'required';
-    if (!f.secret_access_key) errors.secret_access_key = 'required';
+    if (!f.secret_access_key && !stored.secretAccessKey) errors.secret_access_key = 'required';
   }
   if (f.watch_folders.length === 0) errors.watch_folders = 'folderRequired';
   if (f.auto_sync && !isValidInterval(f.sync_interval_minutes)) errors.sync_interval_minutes = 'interval';

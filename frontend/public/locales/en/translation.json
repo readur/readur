@@ -74,7 +74,11 @@
       "oidcAuthFailed": "OIDC authentication failed. Please check with your administrator.",
       "oidcNotConfigured": "OIDC is not configured on this server. Please use username/password login.",
       "oidcInitFailed": "Failed to initiate OIDC login. Please try again.",
-      "loginFailed": "Failed to log in. Please check your credentials."
+      "loginFailed": "Failed to log in. Please check your credentials.",
+      "accountDisabledOrPending": "This account is disabled or awaiting administrator approval",
+      "logoutIncomplete": "You are signed out on this device, but the server could not be reached. Your previous session may stay valid until it expires.",
+      "tooManyAttempts": "Too many sign-in attempts. Please try again later.",
+      "tooManyAttemptsRetry": "Too many sign-in attempts. Please try again in {{seconds}} seconds."
     },
     "login": {
       "wordmark": "Readur",
@@ -108,17 +112,22 @@
       "title": "Signing you in…",
       "wait": "One moment while we finish signing you in.",
       "errorTitle": "Sign-in failed",
-      "noToken": "The server did not send a sign-in token. Go back and try again.",
-      "generic": "Could not finish signing you in. Try again.",
-      "back": "Back to sign in",
+      "back": "Back to sign in"
+    },
+    "createAccountLink": "Don't have an account? Request one",
+    "oidcCallback": {
       "errors": {
-        "access_denied": "Access was denied. Ask your administrator whether you have access to Readur.",
-        "misconfigured": "The SSO provider rejected the request. Ask your administrator to check the SSO setup.",
-        "provider_unavailable": "The SSO provider had a problem. Try again in a moment.",
-        "login_required": "The SSO provider needs you to sign in again. Go back and retry."
-      },
-      "failedCode": "SSO sign-in failed (code: {{code}}). Try again or ask your administrator.",
-      "failedGeneric": "SSO sign-in failed. Try again or ask your administrator."
+        "account_disabled": "This account is disabled or awaiting administrator approval.",
+        "auth_failed": "Authentication with the identity provider failed. Please try logging in again.",
+        "invalidCode": "This sign-in link is invalid or has expired. Please try logging in again.",
+        "invalid_state": "The sign-in request is invalid or has expired. Please try logging in again.",
+        "missingCode": "No authentication code received from server.",
+        "no_account": "No account is available for this identity. Contact your administrator.",
+        "provider_error": "The identity provider did not complete the sign-in. Please try again.",
+        "server_error": "A server error occurred during sign-in. Please try again later.",
+        "tooManyAttempts": "Too many attempts. Please wait a moment and try logging in again.",
+        "unknown": "Sign-in failed. Please try logging in again."
+      }
     }
   },
   "navigation": {
@@ -792,7 +801,8 @@
       "general": "General",
       "ocrSettings": "OCR Settings",
       "userManagement": "User Management",
-      "serverConfiguration": "Server Configuration"
+      "serverConfiguration": "Server Configuration",
+      "account": "Account"
     },
     "general": {
       "title": "General Settings",
@@ -907,7 +917,8 @@
         "email": "Email",
         "createdAt": "Created At",
         "watchDirectory": "Watch Directory",
-        "actions": "Actions"
+        "actions": "Actions",
+        "status": "Status"
       },
       "watchDirectory": {
         "statusActive": "Active",
@@ -933,7 +944,15 @@
         "title": "Remove Watch Directory",
         "message": "Are you sure you want to remove the watch directory for user \"{{username}}\"? This action cannot be undone and will stop monitoring their directory for new files.",
         "removeButton": "Remove Directory"
-      }
+      },
+      "activeToggleLabel": "Account active for {{username}}",
+      "cannotDeactivateSelf": "You cannot deactivate your own account",
+      "disableUser": "Disable account",
+      "enableUser": "Enable account",
+      "pendingApprovalNotice": "{{count}} account(s) are disabled or awaiting approval. Enable an account to let that user sign in.",
+      "roleAdmin": "Admin",
+      "statusActive": "Active",
+      "statusPending": "Disabled / pending approval"
     },
     "serverConfiguration": {
       "title": "Server Configuration (Admin Only)",
@@ -1008,7 +1027,10 @@
       "ocrResumeFailedGeneric": "Failed to resume OCR processing",
       "serverConfigLoadFailed": "Admin access required to view server configuration",
       "serverConfigLoadFailedGeneric": "Failed to load server configuration",
-      "settingsLoadFailed": "Failed to load settings"
+      "settingsLoadFailed": "Failed to load settings",
+      "cannotDeactivateSelf": "You cannot deactivate your own account",
+      "userDisabled": "{{username}} has been disabled and signed out",
+      "userEnabled": "{{username}} can now sign in"
     },
     "adminOnly": {
       "title": "Admins only",
@@ -1124,7 +1146,8 @@
       "labels": "Labels",
       "ocr": "OCR",
       "server": "Server",
-      "users": "Users"
+      "users": "Users",
+      "account": "Account"
     },
     "summary": {
       "advanced": "window {{w}} · morphology {{m}} · equalization {{h}} · save images {{s}}",
@@ -1168,6 +1191,21 @@
       "odd": "Enter an odd number.",
       "range": "Enter a value from {{min}} to {{max}}.",
       "required": "Enter a value."
+    },
+    "account": {
+      "changePassword": "Change password",
+      "confirmNewPassword": "Confirm new password",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "passwordChangeFailed": "Failed to change password",
+      "passwordChanged": "Password changed. Other sessions for your account have been signed out.",
+      "passwordMismatch": "The new passwords do not match",
+      "passwordPolicy": "At least {{min}} characters",
+      "title": "Account",
+      "tooManyAttempts": "Too many attempts. Please try again later.",
+      "updatePassword": "Update password",
+      "wrongCurrentPassword": "Current password is incorrect",
+      "passwordTooLong": "Password must be at most {{max}} bytes long"
     }
   },
   "labels": {
@@ -1319,14 +1357,20 @@
     },
     "actions": {
       "signup": "Sign up",
-      "creating": "Creating account..."
+      "creating": "Creating account...",
+      "backToSignIn": "Back to sign in"
     },
     "links": {
       "signin": "Already have an account? Sign in"
     },
     "errors": {
-      "failed": "Failed to register"
-    }
+      "failed": "Failed to register",
+      "disabled": "Self-registration is disabled on this server.",
+      "passwordTooShort": "Password must be at least {{min}} characters long",
+      "rateLimited": "Too many registration attempts. Please try again later."
+    },
+    "passwordHint": "At least {{min}} characters",
+    "pendingApproval": "Account created. An administrator must approve it before you can sign in."
   },
   "debug": {
     "title": "Document Processing Debug",
@@ -1611,7 +1655,10 @@
       "sourceType": "Source Type",
       "sourceEnabled": "Source Enabled",
       "sourceEnabledHelper": "Enable this source for syncing",
-      "sourceNamePlaceholder": "My Document Server"
+      "sourceNamePlaceholder": "My Document Server",
+      "keepCurrentSecret": "Leave blank to keep current",
+      "passwordStored": "A password is stored for this source",
+      "secretStored": "A secret is stored for this source"
     },
     "webdav": {
       "title": "WebDAV Configuration",

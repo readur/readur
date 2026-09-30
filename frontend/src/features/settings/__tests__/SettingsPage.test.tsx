@@ -67,7 +67,7 @@ describe('SettingsPage admin gating', () => {
     const names = within(nav())
       .getAllByRole('link')
       .map((a) => a.textContent);
-    expect(names).toEqual(['General', 'OCR', 'Users', 'Server', 'API keys', 'Labels', 'Debug', 'Appearance']);
+    expect(names).toEqual(['General', 'Account', 'OCR', 'Users', 'Server', 'API keys', 'Labels', 'Debug', 'Appearance']);
   });
 
   it('hides admin-only sections from other users', async () => {
@@ -76,7 +76,7 @@ describe('SettingsPage admin gating', () => {
     const names = within(nav())
       .getAllByRole('link')
       .map((a) => a.textContent);
-    expect(names).toEqual(['General', 'OCR', 'API keys', 'Labels', 'Appearance']);
+    expect(names).toEqual(['General', 'Account', 'OCR', 'API keys', 'Labels', 'Appearance']);
   });
 
   it.each(['users', 'server', 'debug'])('shows "Admins only" for /settings/%s to a non-admin', async (id) => {
@@ -146,7 +146,7 @@ describe('SettingsPage search', () => {
     const field = screen.getByRole('searchbox', { name: 'Search settings' });
     await user.type(field, 'appear');
     await user.keyboard('{Escape}');
-    expect(within(nav()).getAllByRole('link')).toHaveLength(8);
+    expect(within(nav()).getAllByRole('link')).toHaveLength(9);
   });
 });
 

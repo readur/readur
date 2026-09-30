@@ -1,3 +1,4 @@
+use crate::auth::AuthUser;
 use crate::ocr::error::OcrError;
 use crate::ocr::image_ocr::ImageOcrService;
 use crate::AppState;
@@ -29,13 +30,18 @@ pub struct OcrErrorResponse {
     get,
     path = "/api/ocr/health",
     tag = "ocr",
+    security(
+        ("bearer_auth" = [])
+    ),
     responses(
         (status = 200, description = "OCR service health status", body = OcrHealthResponse),
+        (status = 401, description = "Unauthorized"),
         (status = 500, description = "OCR service is unhealthy", body = OcrErrorResponse)
     )
 )]
 pub async fn health_check(
     State(state): State<Arc<AppState>>,
+    _auth_user: AuthUser,
 ) -> Result<Json<OcrHealthResponse>, (StatusCode, Json<OcrErrorResponse>)> {
     let service = ImageOcrService::new().with_timeout(state.config.ocr_timeout_seconds);
     let diagnostics = service.get_diagnostics().await;
@@ -52,12 +58,6 @@ pub async fn health_check(
         })),
         Err(errors) => {
             let error_messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
-
-            let _status_code = if errors.iter().any(|e| e.is_configuration_error()) {
-                StatusCode::SERVICE_UNAVAILABLE
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
 
             Ok(Json(OcrHealthResponse {
                 status: "unhealthy".to_string(),

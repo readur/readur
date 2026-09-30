@@ -68,7 +68,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=512m
+          --tmpfs /var/lib/postgresql:rw,noexec,nosuid,size=512m
 
     steps:
       - name: Free disk space
@@ -207,6 +207,12 @@ jobs:
         env:
           STRESS_LEVEL: ${{ github.event.inputs.stress_level || 'medium' }}
 
+      - name: Generate throwaway JWT secret
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "::add-mask::$secret"
+          echo "CI_JWT_SECRET=$secret" >> "$GITHUB_ENV"
+
       - name: Build readur with stress testing features
         run: |
           cargo build --release --features stress-testing
@@ -238,7 +244,7 @@ jobs:
           fi
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
-          JWT_SECRET: stress-test-secret
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch

@@ -13,6 +13,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: postgresql://readur:readur@localhost:5432/readur
+  # CI_JWT_SECRET is generated per run (see "Generate throwaway JWT secret").
+  # The server and test steps read the same value so tokens minted in tests
+  # verify on the server.
+  CI_ADMIN_PASSWORD: integration-ci-admin-password
 
 jobs:
   integration-tests:
@@ -87,6 +91,12 @@ jobs:
           [ -f .env.test ] && mv .env.test .env.test.backup || true
           echo "Removed local env files to ensure CI env vars take precedence"
 
+      - name: Generate throwaway JWT secret
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "::add-mask::$secret"
+          echo "CI_JWT_SECRET=$secret" >> "$GITHUB_ENV"
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -131,9 +141,9 @@ jobs:
           echo "Server started with PID: $(cat readur.pid)"
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
-          JWT_SECRET: test-secret-key
-          # Seeded admin; tests create further admins through it (public registration only creates standard users)
-          ADMIN_PASSWORD: test-admin-password
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: ${{ env.CI_ADMIN_PASSWORD }}
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch
@@ -242,8 +252,7 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           API_URL: http://localhost:8000
-          JWT_SECRET: test-secret-key
-          ADMIN_PASSWORD: test-admin-password
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch

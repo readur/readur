@@ -214,7 +214,7 @@ describe('LoginRoute errors', () => {
     renderLogin({
       login: failWith(
         new AxiosError('failed', 'ERR_BAD_REQUEST', undefined, undefined, {
-          status: 429,
+          status: 418,
           data: { message: 'SERVER-SECRET-DETAIL' },
           statusText: '',
           headers: {},
@@ -227,6 +227,41 @@ describe('LoginRoute errors', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Sign-in failed. Try again.');
     expect(alert).not.toHaveTextContent('SERVER-SECRET-DETAIL');
+  });
+
+  const rateLimited = (headers: Record<string, string> = {}) =>
+    new AxiosError('failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+      status: 429,
+      data: { error: 'SERVER-SECRET-DETAIL' },
+      statusText: '',
+      headers,
+      config: {} as never,
+    });
+
+  it('tells the user how long to wait after too many attempts', async () => {
+    const user = userEvent.setup();
+    renderLogin({ login: failWith(rateLimited({ 'retry-after': '42' })) });
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Too many sign-in attempts. Please try again in 42 seconds.');
+    expect(alert).not.toHaveTextContent('SERVER-SECRET-DETAIL');
+  });
+
+  it('asks to try later when the wait is unknown', async () => {
+    const user = userEvent.setup();
+    renderLogin({ login: failWith(rateLimited()) });
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many sign-in attempts. Please try again later.');
+  });
+
+  it('explains a disabled or unapproved account', async () => {
+    const user = userEvent.setup();
+    renderLogin({ login: failWith(httpError(403)) });
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('disabled or awaiting administrator approval');
   });
 
   it('explains an unreachable server in an alert', async () => {
@@ -249,6 +284,27 @@ describe('LoginRoute errors', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+});
+
+describe('LoginRoute session notice and registration', () => {
+  it('reports a sign-out the server did not confirm, and can dismiss it', async () => {
+    const dismissSessionNotice = vi.fn();
+    const user = userEvent.setup();
+    renderLogin({ auth: { sessionNotice: 'logoutIncomplete', dismissSessionNotice } });
+    expect(screen.getByText(/signed out on this device, but the server could not be reached/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(dismissSessionNotice).toHaveBeenCalled();
+  });
+
+  it('links to registration only when the server allows it', () => {
+    renderLogin({ flags: { allowRegistration: true } });
+    expect(screen.getByRole('link', { name: "Don't have an account? Request one" })).toHaveAttribute('href', '/register');
+  });
+
+  it('hides the registration link when local sign-in is off', () => {
+    renderLogin({ flags: { allowRegistration: true, allowLocalAuth: false, oidcEnabled: true } });
+    expect(screen.queryByRole('link', { name: /Request one/ })).not.toBeInTheDocument();
   });
 });
 

@@ -1,0 +1,21 @@
+# Read by oxfmt (`mise run fmt` / `fmt-check`). Keep in sync with the exclude
+# lists in .lefthook.toml: lefthook patterns are root-anchored and do NOT read
+# this file, and oxfmt exits non-zero when every file it is handed is ignored.
+
+# Lockfiles: owned by their package managers.
+package-lock.json
+frontend/package-lock.json
+Cargo.lock
+.mise/mise.lock
+
+# Helm templates are Go templates with a .yaml suffix, not YAML.
+charts/*/templates/
+
+# mkdocs site: admonitions and tabbed blocks rely on indentation a Markdown
+# formatter may rewrite.
+docs/
+
+# Generated / recorded artifacts.
+grafana-dashboard.json
+stress-test-metrics.json
+frontend/public/locales/

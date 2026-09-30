@@ -31,7 +31,9 @@ services:
       SERVER_PORT: 8000
 
       # Security
-      JWT_SECRET: dev-secret-key-change-in-production
+      # Optional: when empty, a signing key is generated and stored in the
+      # database on first start.
+      JWT_SECRET: ${JWT_SECRET:-}
 
       # File paths
       UPLOAD_PATH: /app/uploads

@@ -322,6 +322,32 @@ describe('SourceForm: saving', () => {
     expect(body).not.toHaveProperty('source_type');
   });
 
+  it('keeps a stored password when the field is left blank', async () => {
+    const user = userEvent.setup();
+    const saved = source('s1', {
+      config: { server_url: 'https://cloud.example.com', username: 'ada', has_password: true, server_type: 'nextcloud', watch_folders: ['/Documents'], file_extensions: ['pdf'], auto_sync: false, sync_interval_minutes: 60 },
+    });
+    renderForm(saved);
+    const password = screen.getByLabelText(/^password/i);
+    expect(password).toHaveValue('');
+    expect(password).toHaveAttribute('placeholder', 'Leave blank to keep current');
+    expect(screen.getByText('A password is stored for this source')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(sourcesService.update).toHaveBeenCalled());
+    expect(sourcesService.update.mock.calls[0][1].config).not.toHaveProperty('password');
+  });
+
+  it('tests a saved connection with its stored password', async () => {
+    sourcesService.testConnection.mockImplementation(() => ok({ success: true, message: 'ok' }));
+    const user = userEvent.setup();
+    renderForm(source('s1', {
+      config: { server_url: 'https://cloud.example.com', username: 'ada', has_password: true, watch_folders: ['/Documents'], file_extensions: ['pdf'] },
+    }));
+    await user.click(screen.getByRole('button', { name: 'Test connection' }));
+    await waitFor(() => expect(sourcesService.testConnection).toHaveBeenCalled());
+    expect(sourcesService.testConnection.mock.calls[0][0]).toMatchObject({ source_type: 'webdav', source_id: 's1' });
+  });
+
   it('keeps the dialog open and explains a duplicate name', async () => {
     sourcesService.create.mockImplementation(() => Promise.reject(apiError(409, 'SOURCE_DUPLICATE_NAME', 'dup')));
     const user = userEvent.setup();

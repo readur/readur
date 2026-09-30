@@ -9,6 +9,7 @@ import {
   isValidServerUrl,
   isValidInterval,
   normalizeExtension,
+  storedSecrets,
   validateForm,
 } from '../connections/form/sourceFormModel';
 import { source } from './intakeTestUtils';
@@ -56,7 +57,52 @@ describe('test connection payload (ported from SourcesPage.simple)', () => {
     expect(form.watch_folders).toEqual(['/Documents', '/Photos']);
     expect(form.file_extensions).toEqual(['pdf', 'jpg', 'png']);
     expect(form.server_type).toBe('nextcloud');
-    expect(form.password).toBe('pass');
+    // Secrets never come back from the API; a blank field keeps the stored one.
+    expect(form.password).toBe('');
+  });
+});
+
+describe('stored secrets of a saved connection', () => {
+  const webdav = asSource(
+    source('s1', { config: { server_url: 'https://dav.example', username: 'u', has_password: true, watch_folders: ['/D'] } }),
+  );
+  const s3 = asSource(
+    source('s2', {
+      source_type: 's3',
+      config: { bucket_name: 'b', access_key_id: 'AK', has_secret_access_key: true, watch_folders: ['docs/'] },
+    }),
+  );
+
+  it('reads the flags the server reports instead of the secrets', () => {
+    expect(storedSecrets(webdav)).toEqual({ password: true, secretAccessKey: false });
+    expect(storedSecrets(s3)).toEqual({ password: false, secretAccessKey: true });
+    expect(storedSecrets(null)).toEqual({ password: false, secretAccessKey: false });
+  });
+
+  it('tests an edited connection with the stored secret by sending its id', () => {
+    const req = buildTestRequest({ ...formFromSource(webdav), password: '' }, webdav);
+    expect(req.source_id).toBe('s1');
+    expect((req.config as Record<string, unknown>).password).toBe('');
+  });
+
+  it('tests with a newly typed secret without the id', () => {
+    const req = buildTestRequest({ ...formFromSource(webdav), password: 'new' }, webdav);
+    expect(req.source_id).toBeUndefined();
+    expect((req.config as Record<string, unknown>).password).toBe('new');
+  });
+
+  it('never saves a blank secret for an existing connection', () => {
+    expect(buildConfig(formFromSource(webdav), { omitBlankSecrets: true })).not.toHaveProperty('password');
+    expect(buildConfig(formFromSource(s3), { omitBlankSecrets: true })).not.toHaveProperty('secret_access_key');
+    expect(buildConfig({ ...formFromSource(webdav), password: 'p' }, { omitBlankSecrets: true }).password).toBe('p');
+  });
+
+  it('does not require the S3 secret again when one is stored', () => {
+    const form = { ...formFromSource(s3), name: 'x' };
+    expect(validateForm(form).secret_access_key).toBe('required');
+    expect(validateForm(form, storedSecrets(s3)).secret_access_key).toBeUndefined();
+    expect(canTestConnection(form)).toBe(false);
+    expect(canTestConnection(form, storedSecrets(s3))).toBe(true);
   });
 });
 

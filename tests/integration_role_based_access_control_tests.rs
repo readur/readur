@@ -16,7 +16,7 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{LoginRequest, LoginResponse, UserRole};
 use readur::routes::documents::types::PaginatedDocumentsResponse;
 
 fn get_base_url() -> String {
@@ -91,25 +91,22 @@ impl RBACTestClient {
                 (format!("{}_{}", username, retry_id), format!("retry_{}_{}", retry_id, email))
             };
             
-            let password = "rbacpassword123";
+            let password = &readur::test_utils::test_password();
             
-            // Register user
-            let user_data = CreateUser {
-                username: actual_username.clone(),
-                email: actual_email.clone(),
-                password: password.to_string(),
-                role: Some(role),
+            // Public registration never grants roles and new accounts await
+            // approval, so accounts are created in the server's database.
+            let error_text = match readur::test_utils::create_live_server_user(
+                &actual_username,
+                &actual_email,
+                password,
+                role,
+            )
+            .await
+            {
+                Ok(_) => return self.login_user(&actual_username, password).await,
+                Err(e) => e.to_string(),
             };
-            
-            let register_response = readur::test_utils::register_user_on_server(&self.client, &get_base_url(), &user_data).await?;
-            
-            if register_response.status().is_success() {
-                // Registration successful, now login
-                return self.login_user(&actual_username, password).await;
-            }
-            
-            let error_text = register_response.text().await?;
-            
+
             // If it's not a duplicate key error, fail immediately
             if !error_text.contains("duplicate key") && !error_text.contains("already exists") {
                 return Err(format!("Registration failed for {}: {}", actual_username, error_text).into());

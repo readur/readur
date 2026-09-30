@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DebugSection from '../debug/DebugSection';
+import { documentService } from '../../../services/api';
 import { apiMock, httpError, ok, renderSettings } from './settingsTestUtils';
 
 vi.mock('../../../services/api', async (importOriginal) => (await import('./apiMock')).mockApiModule(importOriginal));
@@ -101,6 +102,29 @@ describe('DebugSection', () => {
     expect(screen.getByText('Queue History')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'User Settings' }));
     expect(screen.getByText('OCR Settings')).toBeInTheDocument();
+  });
+
+  it('loads the original and processed images through the signed-in client', async () => {
+    const withImage = {
+      ...DEBUG_INFO,
+      pipeline_steps: DEBUG_INFO.pipeline_steps.map((step) =>
+        step.step === 3 ? { ...step, details: { ...step.details, has_processed_image: true } } : step,
+      ),
+    };
+    apiMock.get.mockResolvedValue(ok(withImage));
+    const view = vi.spyOn(documentService, 'view').mockResolvedValue({ data: new Blob(['%PDF']) } as never);
+    const processed = vi
+      .spyOn(documentService, 'getProcessedImage')
+      .mockRejectedValue(httpError(404));
+    const user = userEvent.setup();
+    render();
+    await user.click(screen.getByRole('tab', { name: 'Search Existing' }));
+    await user.type(screen.getByRole('textbox', { name: 'Document ID' }), 'doc-1{Enter}');
+    expect(await screen.findByRole('heading', { name: 'Processed Images' })).toBeInTheDocument();
+    await waitFor(() => expect(processed).toHaveBeenCalledWith('doc-1'));
+    expect(view).toHaveBeenCalledWith('doc-1');
+    expect(await screen.findByText('Processed image not available')).toBeInTheDocument();
+    expect(document.querySelector('[src^="/api/"]')).toBeNull();
   });
 
   it('handles missing optional data without crashing', async () => {

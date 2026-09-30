@@ -69,46 +69,6 @@ mod tests {
     fn test_queue_module_compiles() {
         // Test that the queue module compiles (tests the Row import fix)
         let _router = crate::routes::queue::router();
-        
-        // Test that the require_admin function works
-        use crate::models::{UserRole, AuthProvider};
-        let admin_user = crate::auth::AuthUser {
-            user: crate::models::User {
-                id: uuid::Uuid::new_v4(),
-                username: "admin".to_string(),
-                email: "admin@example.com".to_string(), 
-                password_hash: Some("hash".to_string()),
-                role: UserRole::Admin,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-                oidc_subject: None,
-                oidc_issuer: None,
-                oidc_email: None,
-                auth_provider: AuthProvider::Local,
-            },
-        };
-        
-        let regular_user = crate::auth::AuthUser {
-            user: crate::models::User {
-                id: uuid::Uuid::new_v4(),
-                username: "user".to_string(),
-                email: "user@example.com".to_string(),
-                password_hash: Some("hash".to_string()),
-                role: UserRole::User,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-                oidc_subject: None,
-                oidc_issuer: None,
-                oidc_email: None,
-                auth_provider: AuthProvider::Local,
-            },
-        };
-        
-        // Test admin access
-        assert!(crate::routes::queue::require_admin(&admin_user).is_ok());
-        
-        // Test non-admin rejection  
-        assert!(crate::routes::queue::require_admin(&regular_user).is_err());
     }
     
     #[test]

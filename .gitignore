@@ -11,6 +11,7 @@ frontend/dist/
 # Python
 venv/
 site/
+__pycache__/
 
 # Testing
 readur_uploads/

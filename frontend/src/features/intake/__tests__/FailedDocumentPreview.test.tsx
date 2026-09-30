@@ -47,6 +47,23 @@ describe('Failed document preview (ported from FailedDocumentViewer)', () => {
     expect(await screen.findByTitle('notes.txt')).toBeInTheDocument();
   });
 
+  it('shows markup files as plain text in a fully sandboxed frame', async () => {
+    let blobType: string | undefined;
+    createObjectURL.mockImplementation(((blob: Blob) => {
+      blobType = blob.type;
+      return 'blob:preview';
+    }) as never);
+    renderIntake(<FailedDocumentPreview {...props} mimeType="text/html" filename="page.html" />);
+    const frame = await screen.findByTitle('page.html');
+    expect(frame).toHaveAttribute('sandbox', '');
+    expect(blobType).toBe('text/plain');
+  });
+
+  it('leaves PDFs unsandboxed so the built-in viewer works', async () => {
+    renderIntake(<FailedDocumentPreview {...props} />);
+    expect(await screen.findByTitle('test-document.pdf')).not.toHaveAttribute('sandbox');
+  });
+
   it('names file types it cannot preview', async () => {
     renderIntake(<FailedDocumentPreview {...props} mimeType="application/zip" filename="bundle.zip" />);
     expect(await screen.findByText('No preview for this file type (application/zip)')).toBeInTheDocument();

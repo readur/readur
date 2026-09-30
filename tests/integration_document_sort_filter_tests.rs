@@ -243,7 +243,7 @@ struct Fixture {
 }
 
 async fn seed(ctx: &TestContext) -> Fixture {
-    let auth = TestAuthHelper::new(ctx.app.clone());
+    let auth = ctx.auth_helper();
     let user = auth.create_test_user().await;
     let other = auth.create_test_user().await;
     let admin = auth.create_admin_user().await;

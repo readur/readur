@@ -17,6 +17,7 @@ const Intake = lazy(() => import('../features/intake'));
 const Settings = lazy(() => import('../features/settings'));
 const Login = lazy(() => import('../features/auth/LoginRoute'));
 const Callback = lazy(() => import('../features/auth/CallbackRoute'));
+const Register = lazy(() => import('../features/auth/RegisterRoute'));
 
 export const HOME_PATH = '/board';
 
@@ -54,6 +55,10 @@ export function AppRoutes() {
       <Route
         path="/login"
         element={user ? <SignedInRedirect /> : <Public><Login /></Public>}
+      />
+      <Route
+        path="/register"
+        element={user ? <Navigate to={HOME_PATH} replace /> : <Public><Register /></Public>}
       />
       <Route path="/auth/callback" element={<Public><Callback /></Public>} />
       <Route path="/shared/:token" element={<Public><Shared /></Public>} />

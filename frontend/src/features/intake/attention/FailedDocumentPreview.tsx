@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '../../../ui';
+import { previewSandbox } from '../../../services/contentSafety';
 import { statusOf } from '../shared/errors';
 import { Notice } from '../shared/parts';
 import styles from './Attention.module.css';
@@ -29,7 +30,9 @@ export function FailedDocumentPreview({ id, filename, mimeType, load }: FailedDo
     load(id)
       .then((res) => {
         if (!alive) return;
-        objectUrl = window.URL.createObjectURL(new Blob([res.data], { type: mimeType }));
+        // Text is always shown as plain text so markup in the file is never interpreted.
+        const blobType = mimeType?.startsWith('text/') ? 'text/plain' : mimeType;
+        objectUrl = window.URL.createObjectURL(new Blob([res.data], { type: blobType }));
         setUrl(objectUrl);
       })
       .catch((err) => {
@@ -60,7 +63,7 @@ export function FailedDocumentPreview({ id, filename, mimeType, load }: FailedDo
   if (!url) return null;
   if (mimeType?.startsWith('image/')) return <img className={styles.previewImage} src={url} alt={filename} />;
   if (mimeType === 'application/pdf' || mimeType?.startsWith('text/')) {
-    return <iframe className={styles.previewFrame} src={url} title={filename} />;
+    return <iframe className={styles.previewFrame} src={url} title={filename} sandbox={previewSandbox(mimeType)} />;
   }
   return (
     <Notice title={t('intake.preview.unsupported', 'No preview for this file type ({{type}})', { type: mimeType || t('intake.preview.unknownType', 'unknown') })}>

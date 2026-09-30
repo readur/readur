@@ -12,7 +12,7 @@ mod tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let token = auth_helper.login_user(&user.username, "password123").await;
 
@@ -58,7 +58,7 @@ mod tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let token = auth_helper.login_user(&user.username, "password123").await;
 
@@ -177,7 +177,7 @@ mod tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
 
             // Create two users
             let user1 = auth_helper.create_test_user().await;
@@ -335,7 +335,7 @@ mod tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let token = auth_helper.login_user(&user.username, "password123").await;
 
@@ -457,7 +457,7 @@ mod tests {
 
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
 
             // Create a regular user (not admin)
             let user = auth_helper.create_test_user().await;
@@ -496,7 +496,7 @@ mod tests {
 
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
 
             // Create an admin user
             let admin = auth_helper.create_admin_user().await;
@@ -553,7 +553,7 @@ mod tests {
 
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
 
             // Create an admin user
             let admin = auth_helper.create_admin_user().await;
@@ -694,7 +694,7 @@ mod tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let token = auth_helper.login_user(&user.username, "password123").await;
 

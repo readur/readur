@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { documentService } from '../../../services/api';
+import { previewSandbox } from '../../../services/contentSafety';
 import { Skeleton } from '../../../ui';
 import { typeCodeOf } from '../../../lib/fileType';
 import { fileKind } from '../format';
@@ -73,7 +74,7 @@ export function DocumentViewer({ documentId, filename, mimeType, load }: Documen
   if (kind === 'pdf') {
     return (
       <div className={styles.frame}>
-        <iframe className={styles.pdf} src={view.url} title={filename} />
+        <iframe className={styles.pdf} src={view.url} title={filename} sandbox={previewSandbox(mimeType)} />
       </div>
     );
   }

@@ -27,6 +27,7 @@
 ```bash
 git clone <repo>
 cd readur
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env   # optional, min 32 bytes when set
 docker compose up --build -d
 # Access: http://localhost:8000
 ```
@@ -34,7 +35,7 @@ docker compose up --build -d
 ### Production
 ```bash
 # Generate secure secrets
-JWT_SECRET=$(openssl rand -base64 64)
+JWT_SECRET=$(openssl rand -hex 32)
 DB_PASSWORD=$(openssl rand -base64 32)
 
 # Create .env file
@@ -51,7 +52,7 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d
 
 ### Essential (Required for Production)
 ```bash
-JWT_SECRET=your-secure-random-key
+JWT_SECRET=<output of: openssl rand -hex 32>   # optional; min 32 bytes when set
 DATABASE_URL=postgresql://user:pass@host:port/db
 ```
 

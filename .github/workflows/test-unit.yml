@@ -129,7 +129,7 @@ jobs:
           node-version: "24"
 
       - name: File-length ratchet
-        run: node scripts/check-file-length.mjs
+        run: python3 scripts/lint-file-length.py
 
       - name: Locale parity
         run: node scripts/check-locale-parity.mjs

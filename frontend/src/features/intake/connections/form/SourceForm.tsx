@@ -15,6 +15,7 @@ import {
   defaultFolders,
   emptyForm,
   formFromSource,
+  storedSecrets,
   validateForm,
   type SourceFormData,
 } from './sourceFormModel';
@@ -52,7 +53,13 @@ export function SourceForm({ isOpen, onOpenChange, source, onSaved }: SourceForm
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, source?.id]);
 
-  const errors = useMemo(() => validateForm(form), [form]);
+  // Secrets the server already holds for this connection: a blank field keeps them.
+  const stored = useMemo(
+    () => storedSecrets(source && source.source_type === form.source_type ? source : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source?.id, source?.config, form.source_type],
+  );
+  const errors = useMemo(() => validateForm(form, stored), [form, stored]);
   const shownErrors = showErrors ? errors : {};
 
   const set = (patch: Partial<SourceFormData>) => {
@@ -69,7 +76,7 @@ export function SourceForm({ isOpen, onOpenChange, source, onSaved }: SourceForm
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await sourcesService.testConnection(buildTestRequest(form));
+      const res = await sourcesService.testConnection(buildTestRequest(form, source));
       if (res.data?.success) {
         setTestResult({ ok: true, message: res.data.message || t('intake.form.test.ok', 'Connection successful') });
       } else {
@@ -100,7 +107,7 @@ export function SourceForm({ isOpen, onOpenChange, source, onSaved }: SourceForm
     if (Object.keys(errors).length > 0) return;
     setSaving(true);
     try {
-      const config = buildConfig(form);
+      const config = buildConfig(form, { omitBlankSecrets: isEditing });
       const res = source
         ? await sourcesService.update(source.id, { name: form.name.trim(), enabled: form.enabled, config })
         : await sourcesService.create({ name: form.name.trim(), source_type: form.source_type, enabled: form.enabled, config });
@@ -146,7 +153,7 @@ export function SourceForm({ isOpen, onOpenChange, source, onSaved }: SourceForm
           <Button variant="ghost" onPress={() => onOpenChange(false)} isDisabled={saving}>
             {t('intake.actions.cancel', 'Cancel')}
           </Button>
-          <Button onPress={testConnection} isPending={testing} isDisabled={!canTestConnection(form)}>
+          <Button onPress={testConnection} isPending={testing} isDisabled={!canTestConnection(form, stored)}>
             {t('intake.form.test.button', 'Test connection')}
           </Button>
           <Button variant="primary" onPress={save} isPending={saving}>
@@ -181,7 +188,7 @@ export function SourceForm({ isOpen, onOpenChange, source, onSaved }: SourceForm
             ]}
           />
         ) : null}
-        <TypeFields form={form} set={set} errors={shownErrors} />
+        <TypeFields form={form} set={set} errors={shownErrors} stored={isEditing ? stored : undefined} />
         <CommonFields form={form} set={set} errors={shownErrors} />
         {source && form.source_type === 'webdav' && form.server_url && form.username && form.watch_folders.length > 0 ? (
           <CrawlEstimate sourceId={source.id} />

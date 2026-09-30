@@ -34,6 +34,8 @@ export interface RenderOptions {
    * Pass `null` to keep a `matchMedia` the test installed itself.
    */
   media?: Record<string, boolean> | null;
+  /** Extra auth context fields, e.g. `changePassword`. */
+  auth?: Record<string, unknown>;
 }
 
 export const REDUCED_MOTION = { '(prefers-reduced-motion: reduce)': true };
@@ -49,12 +51,23 @@ export function setMedia(queries: Record<string, boolean>) {
 /** Renders `ui` at `path` inside the providers a settings screen needs. */
 export function renderSettings(
   ui: ReactNode,
-  { path = '/settings', user = adminUser, perUserWatch = false, route = '/settings/:section?', media = REDUCED_MOTION }: RenderOptions = {},
+  { path = '/settings', user = adminUser, perUserWatch = false, route = '/settings/:section?', media = REDUCED_MOTION, auth: authExtra }: RenderOptions = {},
 ) {
   if (media) setMedia(media);
-  const auth = { user: user as never, loading: false, login: vi.fn(), register: vi.fn(), logout: vi.fn() };
+  const auth = {
+    user: user as never,
+    loading: false,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    changePassword: vi.fn(),
+    completeLogin: vi.fn(),
+    sessionNotice: null,
+    dismissSessionNotice: vi.fn(),
+    ...authExtra,
+  };
   const flags = {
-    flags: { allowLocalAuth: true, oidcEnabled: false, enablePerUserWatch: perUserWatch },
+    flags: { allowLocalAuth: true, allowRegistration: false, oidcEnabled: false, enablePerUserWatch: perUserWatch },
     loading: false,
     error: null,
   };

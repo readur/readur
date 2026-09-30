@@ -84,7 +84,7 @@ export function renderIntake(ui: ReactNode, { path = '/intake', role = 'admin', 
     logout: vi.fn(),
   };
   const flags = {
-    flags: { allowLocalAuth: true, oidcEnabled: false, enablePerUserWatch: perUserWatch },
+    flags: { allowLocalAuth: true, allowRegistration: false, oidcEnabled: false, enablePerUserWatch: perUserWatch },
     loading: false,
     error: null,
   };

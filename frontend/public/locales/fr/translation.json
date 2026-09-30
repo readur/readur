@@ -74,7 +74,11 @@
       "oidcAuthFailed": "L'authentification OIDC a échoué. Veuillez vérifier avec votre administrateur.",
       "oidcNotConfigured": "OIDC n'est pas configuré sur ce serveur. Veuillez utiliser la connexion par nom d'utilisateur/mot de passe.",
       "oidcInitFailed": "Échec de l'initialisation de la connexion OIDC. Veuillez réessayer.",
-      "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants."
+      "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants.",
+      "logoutIncomplete": "Vous êtes déconnecté sur cet appareil, mais le serveur n'a pas pu être joint. Votre session précédente peut rester valide jusqu'à son expiration.",
+      "accountDisabledOrPending": "Ce compte est désactivé ou en attente de validation par un administrateur",
+      "tooManyAttempts": "Trop de tentatives de connexion. Réessayez plus tard.",
+      "tooManyAttemptsRetry": "Trop de tentatives de connexion. Réessayez dans {{seconds}} secondes."
     },
     "login": {
       "wordmark": "Readur",
@@ -108,18 +112,23 @@
       "title": "Connexion en cours…",
       "wait": "Un instant, nous terminons votre connexion.",
       "errorTitle": "Échec de la connexion",
-      "noToken": "Le serveur n'a pas envoyé de jeton de connexion. Revenez en arrière et réessayez.",
-      "generic": "Impossible de terminer la connexion. Réessayez.",
-      "back": "Retour à la connexion",
+      "back": "Retour à la connexion"
+    },
+    "oidcCallback": {
       "errors": {
-        "access_denied": "Accès refusé. Demandez à votre administrateur si vous avez accès à Readur.",
-        "misconfigured": "Le fournisseur SSO a rejeté la demande. Demandez à votre administrateur de vérifier la configuration SSO.",
-        "provider_unavailable": "Le fournisseur SSO a rencontré un problème. Réessayez dans un instant.",
-        "login_required": "Le fournisseur SSO demande une nouvelle connexion. Revenez en arrière et réessayez."
-      },
-      "failedCode": "Échec de la connexion SSO (code : {{code}}). Réessayez ou contactez votre administrateur.",
-      "failedGeneric": "Échec de la connexion SSO. Réessayez ou contactez votre administrateur."
-    }
+        "account_disabled": "Ce compte est désactivé ou en attente d'approbation par un administrateur.",
+        "auth_failed": "L'authentification auprès du fournisseur d'identité a échoué. Veuillez vous reconnecter.",
+        "invalidCode": "Ce lien de connexion est invalide ou a expiré. Veuillez vous reconnecter.",
+        "invalid_state": "La demande de connexion est invalide ou a expiré. Veuillez vous reconnecter.",
+        "missingCode": "Aucun code d'authentification n'a été reçu du serveur.",
+        "no_account": "Aucun compte n'est disponible pour cette identité. Contactez votre administrateur.",
+        "provider_error": "Le fournisseur d'identité n'a pas terminé la connexion. Veuillez réessayer.",
+        "server_error": "Une erreur serveur est survenue pendant la connexion. Veuillez réessayer plus tard.",
+        "tooManyAttempts": "Trop de tentatives. Veuillez patienter un moment puis vous reconnecter.",
+        "unknown": "La connexion a échoué. Veuillez vous reconnecter."
+      }
+    },
+    "createAccountLink": "Pas encore de compte ? Demandez-en un"
   },
   "navigation": {
     "dashboard": "Tableau de bord",
@@ -792,7 +801,8 @@
       "general": "Général",
       "ocrSettings": "Paramètres OCR",
       "userManagement": "Gestion des utilisateurs",
-      "serverConfiguration": "Configuration du serveur"
+      "serverConfiguration": "Configuration du serveur",
+      "account": "Compte"
     },
     "general": {
       "title": "Paramètres généraux",
@@ -907,7 +917,8 @@
         "email": "E-mail",
         "createdAt": "Créé le",
         "watchDirectory": "Répertoire surveillé",
-        "actions": "Actions"
+        "actions": "Actions",
+        "status": "Statut"
       },
       "watchDirectory": {
         "statusActive": "Actif",
@@ -933,7 +944,15 @@
         "title": "Supprimer le répertoire surveillé",
         "message": "Êtes-vous sûr de vouloir supprimer le répertoire surveillé de l'utilisateur \"{{username}}\" ? Cette action ne peut pas être annulée et arrêtera la surveillance de leur répertoire pour les nouveaux fichiers.",
         "removeButton": "Supprimer le répertoire"
-      }
+      },
+      "activeToggleLabel": "Compte actif pour {{username}}",
+      "cannotDeactivateSelf": "Vous ne pouvez pas désactiver votre propre compte",
+      "disableUser": "Désactiver le compte",
+      "enableUser": "Activer le compte",
+      "pendingApprovalNotice": "{{count}} compte(s) sont désactivés ou en attente de validation. Activez un compte pour permettre à cette personne de se connecter.",
+      "roleAdmin": "Admin",
+      "statusActive": "Actif",
+      "statusPending": "Désactivé / en attente de validation"
     },
     "serverConfiguration": {
       "title": "Configuration du serveur (Administrateur uniquement)",
@@ -1008,7 +1027,10 @@
       "ocrResumeFailedGeneric": "Échec de la reprise du traitement OCR",
       "serverConfigLoadFailed": "Accès administrateur requis pour afficher la configuration du serveur",
       "serverConfigLoadFailedGeneric": "Échec du chargement de la configuration du serveur",
-      "settingsLoadFailed": "Impossible de charger les paramètres"
+      "settingsLoadFailed": "Impossible de charger les paramètres",
+      "cannotDeactivateSelf": "Vous ne pouvez pas désactiver votre propre compte",
+      "userDisabled": "{{username}} a été désactivé et déconnecté",
+      "userEnabled": "{{username}} peut maintenant se connecter"
     },
     "adminOnly": {
       "title": "Réservé aux administrateurs",
@@ -1124,7 +1146,8 @@
       "labels": "Étiquettes",
       "ocr": "OCR",
       "server": "Serveur",
-      "users": "Utilisateurs"
+      "users": "Utilisateurs",
+      "account": "Compte"
     },
     "summary": {
       "advanced": "fenêtre {{w}} · morphologie {{m}} · égalisation {{h}} · images {{s}}",
@@ -1168,6 +1191,21 @@
       "odd": "Saisissez un nombre impair.",
       "range": "Saisissez une valeur entre {{min}} et {{max}}.",
       "required": "Saisissez une valeur."
+    },
+    "account": {
+      "changePassword": "Changer le mot de passe",
+      "confirmNewPassword": "Confirmer le nouveau mot de passe",
+      "currentPassword": "Mot de passe actuel",
+      "newPassword": "Nouveau mot de passe",
+      "passwordChangeFailed": "Impossible de changer le mot de passe",
+      "passwordChanged": "Mot de passe modifié. Vos autres sessions ont été déconnectées.",
+      "passwordMismatch": "Les nouveaux mots de passe ne correspondent pas",
+      "passwordPolicy": "Au moins {{min}} caractères",
+      "passwordTooLong": "Le mot de passe ne doit pas dépasser {{max}} octets",
+      "title": "Compte",
+      "tooManyAttempts": "Trop de tentatives. Réessayez plus tard.",
+      "updatePassword": "Mettre à jour le mot de passe",
+      "wrongCurrentPassword": "Le mot de passe actuel est incorrect"
     }
   },
   "labels": {
@@ -1319,14 +1357,20 @@
     },
     "actions": {
       "signup": "S'inscrire",
-      "creating": "Création du compte..."
+      "creating": "Création du compte...",
+      "backToSignIn": "Retour à la connexion"
     },
     "links": {
       "signin": "Vous avez déjà un compte ? Se connecter"
     },
     "errors": {
-      "failed": "Échec de l'inscription"
-    }
+      "failed": "Échec de l'inscription",
+      "disabled": "L'inscription libre est désactivée sur ce serveur.",
+      "passwordTooShort": "Le mot de passe doit contenir au moins {{min}} caractères",
+      "rateLimited": "Trop de tentatives d'inscription. Réessayez plus tard."
+    },
+    "passwordHint": "Au moins {{min}} caractères",
+    "pendingApproval": "Compte créé. Un administrateur doit le valider avant que vous puissiez vous connecter."
   },
   "debug": {
     "title": "Débogage du traitement de documents",
@@ -1611,7 +1655,10 @@
       "sourceType": "Type de source",
       "sourceEnabled": "Source activée",
       "sourceEnabledHelper": "Activer cette source pour la synchronisation",
-      "sourceNamePlaceholder": "Mon serveur de documents"
+      "sourceNamePlaceholder": "Mon serveur de documents",
+      "keepCurrentSecret": "Laissez vide pour conserver la valeur actuelle",
+      "passwordStored": "Un mot de passe est enregistré pour cette source",
+      "secretStored": "Une clé secrète est enregistrée pour cette source"
     },
     "webdav": {
       "title": "Configuration WebDAV",

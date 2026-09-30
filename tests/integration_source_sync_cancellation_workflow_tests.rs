@@ -217,18 +217,7 @@ fn create_test_app(state: Arc<AppState>) -> Router {
 
 /// Create authorization header for test user
 fn create_auth_header(user: &User, jwt_secret: &str) -> String {
-    let claims = Claims {
-        sub: user.id,
-        username: user.username.clone(),
-        exp: (chrono::Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
-    };
-    
-    let token = jsonwebtoken::encode(
-        &jsonwebtoken::Header::default(),
-        &claims,
-        &jsonwebtoken::EncodingKey::from_secret(jwt_secret.as_ref()),
-    ).unwrap();
-    
+    let token = readur::auth::create_jwt(user, jwt_secret).unwrap();
     format!("Bearer {}", token)
 }
 

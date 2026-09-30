@@ -82,8 +82,32 @@ pub struct User {
     pub oidc_email: Option<String>,
     #[sqlx(try_from = "String")]
     pub auth_provider: AuthProvider,
+    /// Embedded in issued session tokens; bumping it revokes them all.
+    pub token_version: i32,
+    /// Deactivated users cannot authenticate by any method.
+    pub is_active: bool,
 }
 
+/// Body of the public self-registration endpoint. Deliberately separate from
+/// [`CreateUser`] so privileged fields (such as `role`) can never be supplied
+/// by an unauthenticated caller.
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct RegisterRequest {
+    pub username: String,
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+/// Admin-only account creation payload (also used internally).
 #[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
 #[ts(export, optional_fields)]
 pub struct CreateUser {
@@ -119,14 +143,23 @@ pub struct UserResponse {
     pub username: String,
     pub email: String,
     pub role: UserRole,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, ToSchema, TS)]
 #[ts(export, optional_fields)]
 pub struct UpdateUser {
     pub username: Option<String>,
     pub email: Option<String>,
     pub password: Option<String>,
+    /// Activate or deactivate the account (admin only).
+    #[serde(default)]
+    pub is_active: Option<bool>,
 }
 
 impl From<User> for UserResponse {
@@ -136,6 +169,7 @@ impl From<User> for UserResponse {
             username: user.username,
             email: user.email,
             role: user.role,
+            is_active: user.is_active,
         }
     }
 }

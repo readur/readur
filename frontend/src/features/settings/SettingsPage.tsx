@@ -7,10 +7,12 @@ import { PageHeader, useIsNarrow } from '../shell';
 import { DEFAULT_SECTION, findSection, SECTIONS, type SectionId } from './sections';
 import { SettingsNav } from './SettingsNav';
 import { useIsAdmin } from './shared/useIsAdmin';
+import { RequireAdmin } from '../../auth/RequireAdmin';
 import styles from './SettingsPage.module.css';
 
 const SECTION_COMPONENTS: Record<SectionId, LazyExoticComponent<ComponentType>> = {
   general: lazy(() => import('./general/GeneralSection')),
+  account: lazy(() => import('./account/AccountSection')),
   ocr: lazy(() => import('./ocr/OcrSection')),
   users: lazy(() => import('./users/UsersSection')),
   server: lazy(() => import('./server/ServerSection')),
@@ -34,7 +36,19 @@ export default function SettingsPage() {
   if (!section) return <Navigate to="/settings" replace />;
 
   const Section = SECTION_COMPONENTS[section.id];
-  const blocked = section.adminOnly && !isAdmin;
+  const content = (
+    <Suspense fallback={<Skeleton lines={4} label={t('common.status.loading', 'Loading...')} />}>
+      <Section />
+    </Suspense>
+  );
+  const adminOnly = (
+    <EmptyState
+      headingAs="h3"
+      icon={<Lock fontSize="inherit" />}
+      title={t('settings.adminOnly.title', 'Admins only')}
+      description={t('settings.adminOnly.description', 'Ask an administrator if you need to change these settings.')}
+    />
+  );
 
   return (
     <>
@@ -51,17 +65,10 @@ export default function SettingsPage() {
         </aside>
         <div className={styles.content}>
           <h2 className={styles.sectionTitle}>{t(section.label, section.fallback)}</h2>
-          {blocked ? (
-            <EmptyState
-              headingAs="h3"
-              icon={<Lock fontSize="inherit" />}
-              title={t('settings.adminOnly.title', 'Admins only')}
-              description={t('settings.adminOnly.description', 'Ask an administrator if you need to change these settings.')}
-            />
+          {section.adminOnly ? (
+            <RequireAdmin fallback={adminOnly}>{content}</RequireAdmin>
           ) : (
-            <Suspense fallback={<Skeleton lines={4} label={t('common.status.loading', 'Loading...')} />}>
-              <Section />
-            </Suspense>
+            content
           )}
         </div>
       </div>

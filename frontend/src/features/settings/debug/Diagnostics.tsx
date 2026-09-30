@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../ui';
+import { documentService } from '../../../services/api';
+import { AuthenticatedImage } from '../../document/AuthenticatedImage';
+import { DocumentViewer } from '../../document/reading/DocumentViewer';
 import { Facts, YesNo } from '../shared/Facts';
 import { Notice } from '../shared/Notice';
 import shared from '../shared/shared.module.css';
@@ -16,7 +19,6 @@ export function Diagnostics({ info }: { info: DebugInfo }) {
   const f = info.failed_document_info;
   const fa = info.file_analysis;
   const hasProcessedImage = (info.pipeline_steps || []).some((s) => s.step === 3 && s.details?.has_processed_image);
-  const [imageMissing, setImageMissing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const us = info.user_settings;
   const FD = 'debug.failedDocument';
@@ -116,24 +118,24 @@ export function Diagnostics({ info }: { info: DebugInfo }) {
           <div className={shared.grid2}>
             <figure className={styles.figure}>
               <figcaption className={shared.factsTitle}>{t('debug.processedImages.originalDocument')}</figcaption>
-              <iframe
-                title={t('debug.processedImages.originalDocument')}
-                src={`/api/documents/${info.document_id}/view`}
-                className={styles.frame}
-              />
+              <div className={styles.frame}>
+                <DocumentViewer
+                  documentId={info.document_id}
+                  filename={info.filename ?? t('debug.processedImages.originalDocument')}
+                  mimeType={fa?.mime_type || 'application/octet-stream'}
+                />
+              </div>
             </figure>
             <figure className={styles.figure}>
               <figcaption className={shared.factsTitle}>{t('debug.processedImages.processedImage')}</figcaption>
-              {imageMissing ? (
-                <p className={shared.meta}>{t('debug.processedImages.notAvailable')}</p>
-              ) : (
-                <img
-                  src={`/api/documents/${info.document_id}/processed/image`}
-                  alt={t('debug.processedImages.processedImage')}
-                  className={styles.previewImage}
-                  onError={() => setImageMissing(true)}
-                />
-              )}
+              <AuthenticatedImage
+                load={() => documentService.getProcessedImage(info.document_id)}
+                resourceKey={info.document_id}
+                alt={t('debug.processedImages.processedImage')}
+                unavailableText={t('debug.processedImages.notAvailable')}
+                className={styles.previewImage}
+                messageClassName={shared.meta}
+              />
             </figure>
           </div>
         </section>

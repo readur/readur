@@ -74,7 +74,11 @@
       "oidcAuthFailed": "OIDC-Authentifizierung fehlgeschlagen. Bitte wenden Sie sich an Ihren Administrator.",
       "oidcNotConfigured": "OIDC ist auf diesem Server nicht konfiguriert. Bitte verwenden Sie die Benutzername/Passwort-Anmeldung.",
       "oidcInitFailed": "OIDC-Anmeldung konnte nicht initialisiert werden. Bitte versuchen Sie es erneut.",
-      "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten."
+      "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten.",
+      "logoutIncomplete": "Sie sind auf diesem Gerät abgemeldet, aber der Server war nicht erreichbar. Ihre bisherige Sitzung kann bis zu ihrem Ablauf gültig bleiben.",
+      "accountDisabledOrPending": "Dieses Konto ist deaktiviert oder wartet auf die Freigabe durch einen Administrator",
+      "tooManyAttempts": "Zu viele Anmeldeversuche. Bitte versuchen Sie es später erneut.",
+      "tooManyAttemptsRetry": "Zu viele Anmeldeversuche. Bitte versuchen Sie es in {{seconds}} Sekunden erneut."
     },
     "login": {
       "wordmark": "Readur",
@@ -108,18 +112,23 @@
       "title": "Anmeldung läuft…",
       "wait": "Einen Moment, die Anmeldung wird abgeschlossen.",
       "errorTitle": "Anmeldung fehlgeschlagen",
-      "noToken": "Der Server hat kein Anmeldetoken gesendet. Gehen Sie zurück und versuchen Sie es erneut.",
-      "generic": "Die Anmeldung konnte nicht abgeschlossen werden. Versuchen Sie es erneut.",
-      "back": "Zurück zur Anmeldung",
+      "back": "Zurück zur Anmeldung"
+    },
+    "oidcCallback": {
       "errors": {
-        "access_denied": "Zugriff verweigert. Fragen Sie Ihre Administration, ob Sie Zugriff auf Readur haben.",
-        "misconfigured": "Der SSO-Anbieter hat die Anfrage abgelehnt. Bitten Sie Ihre Administration, die SSO-Einrichtung zu prüfen.",
-        "provider_unavailable": "Beim SSO-Anbieter ist ein Problem aufgetreten. Versuchen Sie es gleich noch einmal.",
-        "login_required": "Der SSO-Anbieter verlangt eine erneute Anmeldung. Gehen Sie zurück und versuchen Sie es erneut."
-      },
-      "failedCode": "SSO-Anmeldung fehlgeschlagen (Code: {{code}}). Versuchen Sie es erneut oder wenden Sie sich an Ihre Administration.",
-      "failedGeneric": "SSO-Anmeldung fehlgeschlagen. Versuchen Sie es erneut oder wenden Sie sich an Ihre Administration."
-    }
+        "account_disabled": "Dieses Konto ist deaktiviert oder wartet auf die Freigabe durch einen Administrator.",
+        "auth_failed": "Die Authentifizierung beim Identitätsanbieter ist fehlgeschlagen. Bitte melden Sie sich erneut an.",
+        "invalidCode": "Dieser Anmeldelink ist ungültig oder abgelaufen. Bitte melden Sie sich erneut an.",
+        "invalid_state": "Die Anmeldeanfrage ist ungültig oder abgelaufen. Bitte melden Sie sich erneut an.",
+        "missingCode": "Vom Server wurde kein Authentifizierungscode empfangen.",
+        "no_account": "Für diese Identität ist kein Konto verfügbar. Wenden Sie sich an Ihren Administrator.",
+        "provider_error": "Der Identitätsanbieter hat die Anmeldung nicht abgeschlossen. Bitte versuchen Sie es erneut.",
+        "server_error": "Bei der Anmeldung ist ein Serverfehler aufgetreten. Bitte versuchen Sie es später erneut.",
+        "tooManyAttempts": "Zu viele Versuche. Bitte warten Sie einen Moment und melden Sie sich erneut an.",
+        "unknown": "Die Anmeldung ist fehlgeschlagen. Bitte melden Sie sich erneut an."
+      }
+    },
+    "createAccountLink": "Noch kein Konto? Konto anfordern"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -792,7 +801,8 @@
       "general": "Allgemein",
       "ocrSettings": "OCR-Einstellungen",
       "userManagement": "Benutzerverwaltung",
-      "serverConfiguration": "Serverkonfiguration"
+      "serverConfiguration": "Serverkonfiguration",
+      "account": "Konto"
     },
     "general": {
       "title": "Allgemeine Einstellungen",
@@ -907,7 +917,8 @@
         "email": "E-Mail",
         "createdAt": "Erstellt am",
         "watchDirectory": "Überwachungsverzeichnis",
-        "actions": "Aktionen"
+        "actions": "Aktionen",
+        "status": "Status"
       },
       "watchDirectory": {
         "statusActive": "Aktiv",
@@ -933,7 +944,15 @@
         "title": "Überwachungsverzeichnis entfernen",
         "message": "Sind Sie sicher, dass Sie das Überwachungsverzeichnis für Benutzer \"{{username}}\" entfernen möchten? Diese Aktion kann nicht rückgängig gemacht werden und stoppt die Überwachung ihres Verzeichnisses auf neue Dateien.",
         "removeButton": "Verzeichnis entfernen"
-      }
+      },
+      "activeToggleLabel": "Konto aktiv für {{username}}",
+      "cannotDeactivateSelf": "Sie können Ihr eigenes Konto nicht deaktivieren",
+      "disableUser": "Konto deaktivieren",
+      "enableUser": "Konto aktivieren",
+      "pendingApprovalNotice": "{{count}} Konto/Konten sind deaktiviert oder warten auf Freigabe. Aktivieren Sie ein Konto, damit sich die Person anmelden kann.",
+      "roleAdmin": "Admin",
+      "statusActive": "Aktiv",
+      "statusPending": "Deaktiviert / Freigabe ausstehend"
     },
     "serverConfiguration": {
       "title": "Serverkonfiguration (Nur für Administratoren)",
@@ -1008,7 +1027,10 @@
       "ocrResumeFailedGeneric": "Fehler beim Fortsetzen der OCR-Verarbeitung",
       "serverConfigLoadFailed": "Administratorzugriff erforderlich, um Serverkonfiguration anzuzeigen",
       "serverConfigLoadFailedGeneric": "Fehler beim Laden der Serverkonfiguration",
-      "settingsLoadFailed": "Einstellungen konnten nicht geladen werden"
+      "settingsLoadFailed": "Einstellungen konnten nicht geladen werden",
+      "cannotDeactivateSelf": "Sie können Ihr eigenes Konto nicht deaktivieren",
+      "userDisabled": "{{username}} wurde deaktiviert und abgemeldet",
+      "userEnabled": "{{username}} kann sich jetzt anmelden"
     },
     "adminOnly": {
       "title": "Nur für Administratoren",
@@ -1124,7 +1146,8 @@
       "labels": "Labels",
       "ocr": "OCR",
       "server": "Server",
-      "users": "Benutzer"
+      "users": "Benutzer",
+      "account": "Konto"
     },
     "summary": {
       "advanced": "Fenster {{w}} · Morphologie {{m}} · Ausgleich {{h}} · Bilder speichern {{s}}",
@@ -1168,6 +1191,21 @@
       "odd": "Geben Sie eine ungerade Zahl ein.",
       "range": "Geben Sie einen Wert von {{min}} bis {{max}} ein.",
       "required": "Geben Sie einen Wert ein."
+    },
+    "account": {
+      "changePassword": "Passwort ändern",
+      "confirmNewPassword": "Neues Passwort bestätigen",
+      "currentPassword": "Aktuelles Passwort",
+      "newPassword": "Neues Passwort",
+      "passwordChangeFailed": "Das Passwort konnte nicht geändert werden",
+      "passwordChanged": "Passwort geändert. Ihre anderen Sitzungen wurden abgemeldet.",
+      "passwordMismatch": "Die neuen Passwörter stimmen nicht überein",
+      "passwordPolicy": "Mindestens {{min}} Zeichen",
+      "passwordTooLong": "Das Passwort darf höchstens {{max}} Bytes lang sein",
+      "title": "Konto",
+      "tooManyAttempts": "Zu viele Versuche. Bitte versuchen Sie es später erneut.",
+      "updatePassword": "Passwort aktualisieren",
+      "wrongCurrentPassword": "Das aktuelle Passwort ist falsch"
     }
   },
   "labels": {
@@ -1319,14 +1357,20 @@
     },
     "actions": {
       "signup": "Registrieren",
-      "creating": "Konto wird erstellt..."
+      "creating": "Konto wird erstellt...",
+      "backToSignIn": "Zurück zur Anmeldung"
     },
     "links": {
       "signin": "Haben Sie bereits ein Konto? Anmelden"
     },
     "errors": {
-      "failed": "Registrierung fehlgeschlagen"
-    }
+      "failed": "Registrierung fehlgeschlagen",
+      "disabled": "Die Selbstregistrierung ist auf diesem Server deaktiviert.",
+      "passwordTooShort": "Das Passwort muss mindestens {{min}} Zeichen lang sein",
+      "rateLimited": "Zu viele Registrierungsversuche. Bitte versuchen Sie es später erneut."
+    },
+    "passwordHint": "Mindestens {{min}} Zeichen",
+    "pendingApproval": "Konto erstellt. Ein Administrator muss es freigeben, bevor Sie sich anmelden können."
   },
   "debug": {
     "title": "Dokumentverarbeitung Debug",
@@ -1611,7 +1655,10 @@
       "sourceType": "Quellentyp",
       "sourceEnabled": "Quelle aktiviert",
       "sourceEnabledHelper": "Diese Quelle für Synchronisierung aktivieren",
-      "sourceNamePlaceholder": "Mein Dokumentserver"
+      "sourceNamePlaceholder": "Mein Dokumentserver",
+      "keepCurrentSecret": "Leer lassen, um den aktuellen Wert zu behalten",
+      "passwordStored": "Für diese Quelle ist ein Passwort gespeichert",
+      "secretStored": "Für diese Quelle ist ein geheimer Schlüssel gespeichert"
     },
     "webdav": {
       "title": "WebDAV-Konfiguration",

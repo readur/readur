@@ -2,4 +2,9 @@
 import type { SourceType } from "./SourceType";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type TestConnectionRequest = { source_type: SourceType, config: JsonValue, };
+export type TestConnectionRequest = { source_type: SourceType, config: JsonValue, 
+/**
+ * When editing an existing source, its ID: stored credentials fill in
+ * any secret the client leaves empty.
+ */
+source_id?: string, };

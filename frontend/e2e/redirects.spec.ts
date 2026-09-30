@@ -11,7 +11,7 @@ const LEGACY: { from: string; to: RegExp; heading: string }[] = [
   { from: '/ignored-files', to: /\/intake\?section=ignored$/, heading: 'Intake' },
   { from: '/labels', to: /\/settings\/labels$/, heading: 'Settings' },
   { from: '/debug', to: /\/settings\/debug$/, heading: 'Settings' },
-  { from: '/profile', to: /\/settings$/, heading: 'Settings' },
+  { from: '/profile', to: /\/settings\/account$/, heading: 'Settings' },
   { from: '/search', to: /\/documents$/, heading: 'Library' },
 ];
 

@@ -9,6 +9,8 @@ export interface UserRow {
   username: string;
   email: string;
   role?: string;
+  /** False while an account is disabled or awaiting approval. */
+  is_active?: boolean;
   created_at?: string;
 }
 
@@ -89,5 +91,24 @@ export function useUsers() {
     }
   };
 
-  return { users, isLoading, loadError, refresh, saveUser, deleteUser };
+  /** Enables or disables an account; disabling also signs that user out everywhere. */
+  const setUserActive = async (user: UserRow, active: boolean) => {
+    try {
+      await api.put(`/users/${user.id}`, { is_active: active });
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, is_active: active } : u)));
+      toast.show({
+        title: active
+          ? t('settings.messages.userEnabled', { username: user.username, defaultValue: '{{username}} can now sign in' })
+          : t('settings.messages.userDisabled', {
+              username: user.username,
+              defaultValue: '{{username}} has been disabled and signed out',
+            }),
+        tone: 'success',
+      });
+    } catch (error) {
+      toast.show({ title: userErrorMessage(error, t).message, tone: 'danger' });
+    }
+  };
+
+  return { users, isLoading, loadError, refresh, saveUser, deleteUser, setUserActive };
 }

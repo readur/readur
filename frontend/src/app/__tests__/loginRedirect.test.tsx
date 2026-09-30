@@ -55,7 +55,7 @@ describe('return to the requested route after sign-in', () => {
     render(
       <ThemeModeProvider>
         <FeatureFlagsContext.Provider
-          value={{ flags: { allowLocalAuth: true, oidcEnabled: false, enablePerUserWatch: false }, loading: false, error: null }}
+          value={{ flags: { allowLocalAuth: true, allowRegistration: false, oidcEnabled: false, enablePerUserWatch: false }, loading: false, error: null }}
         >
           <MemoryRouter initialEntries={[path]}>
             <StatefulAuth>

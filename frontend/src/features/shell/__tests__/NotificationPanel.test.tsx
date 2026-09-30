@@ -6,6 +6,7 @@ import { installStorage, renderShell, setMedia, type SeedNotification } from './
 
 vi.mock('../../../services/api', () => ({
   default: { get: vi.fn() },
+  api: { defaults: { headers: { common: {} } } },
   documentService: { enhancedSearch: vi.fn() },
 }));
 

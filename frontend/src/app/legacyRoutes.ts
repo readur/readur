@@ -14,7 +14,7 @@ export const LEGACY_ROUTES: readonly LegacyRoute[] = [
   { from: '/ignored-files', to: '/intake?section=ignored' },
   { from: '/labels', to: '/settings/labels' },
   { from: '/debug', to: '/settings/debug' },
-  { from: '/profile', to: '/settings' },
+  { from: '/profile', to: '/settings/account' },
 ];
 
 /**

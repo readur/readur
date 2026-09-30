@@ -15,31 +15,22 @@ Default authentication using Readur's built-in user management.
 ```bash
 # In .env file
 AUTH_METHOD=local
-ENABLE_REGISTRATION=false  # Disable public registration
+ALLOW_REGISTRATION=false  # Self-registration (default: false)
 REQUIRE_EMAIL_VERIFICATION=true
 PASSWORD_MIN_LENGTH=12
 PASSWORD_REQUIRE_SPECIAL=true
 PASSWORD_REQUIRE_NUMBERS=true
-SESSION_LIFETIME_HOURS=24
+JWT_TTL_HOURS=12  # Login token lifetime (1-720, default 12)
 ```
 
 #### User Management
 
 Create and manage users via the API:
 
-```bash
-# Create another admin user via API (requires an admin token)
-curl -X POST http://localhost:8000/api/users \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin2",
-    "email": "admin2@company.com",
-    "password": "SecurePass123!",
-    "role": "admin"
-  }'
+The initial admin account is created on first startup from `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` (default `<username>@localhost`) and `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, a random password is written to `initial-admin-password` in the `.readur` directory inside the upload directory (see `ADMIN_PASSWORD_FILE`) rather than to the logs.
 
-# Create regular user via API
+```bash
+# Create a user via the admin API
 curl -X POST http://localhost:8000/api/users \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
@@ -51,10 +42,12 @@ curl -X POST http://localhost:8000/api/users \
   }'
 
 # Users can also self-register if enabled:
-# Set ENABLE_REGISTRATION=true in environment
-# Self-registration (POST /api/auth/register) always creates a standard
-# user; any "role" in the request body is ignored.
+# Set ALLOW_REGISTRATION=true in environment
 ```
+
+When `ALLOW_REGISTRATION=true`, `POST /api/auth/register` creates accounts with the **User** role in a disabled state. An administrator approves an account by activating it in **Settings > User Management** (or `PUT /api/users/{id}` with `{"is_active": true}`); until then the account cannot sign in.
+
+Signed-in users can change their own password with `POST /api/auth/password`.
 
 ### OIDC/OAuth2 (Recommended)
 
@@ -73,7 +66,11 @@ OIDC_SCOPE=openid profile email
 OIDC_USER_CLAIM=email
 OIDC_GROUPS_CLAIM=groups
 OIDC_ADMIN_GROUP=readur-admins
+PUBLIC_URL=https://readur.company.com       # base URL for the post-login redirect
+OIDC_LINK_EXISTING_BY_EMAIL=false           # see below
 ```
+
+`PUBLIC_URL` sets the base URL Readur redirects to after login; if unset, the origin of `OIDC_REDIRECT_URI` is used. Request headers are not used to derive it. By default an OIDC login is not linked to an existing local account with the same email. Set `OIDC_LINK_EXISTING_BY_EMAIL=true` to link them; linking only happens when the identity provider reports `email_verified: true`. See [OIDC Setup](../oidc-setup.md) for details.
 
 #### Keycloak Integration
 
@@ -161,17 +158,20 @@ When using OIDC, role assignment happens at user creation/login time based on yo
 
 ## Session Management
 
-Readur uses stateless JWT tokens for authentication rather than server-side sessions. Tokens are valid for 24 hours from issuance. There are no refresh tokens — users must re-authenticate after token expiry.
+Readur uses JWT tokens for authentication. Tokens are valid for `JWT_TTL_HOURS` hours from issuance (default 12, allowed range 1-720). There are no refresh tokens — users must re-authenticate after token expiry. Logging out (`POST /api/auth/logout`) revokes all of the user's sessions, not only the current one.
 
 ```bash
 # JWT configuration
-JWT_SECRET=your-secure-random-secret-min-32-chars  # Required
+JWT_SECRET=<output of: openssl rand -hex 32>  # Optional, min 32 bytes when set
+JWT_TTL_HOURS=12                              # Optional
 ```
 
-Generate a secure JWT secret:
+The server refuses to start if `JWT_SECRET` is unset, shorter than 32 bytes, or a published example value. Generate a secret with:
 ```bash
 openssl rand -hex 32
 ```
+
+For throwaway local development only, `READUR_INSECURE_DEV_MODE=true` allows startup with a weak secret. Do not set it in production.
 
 Tokens are stored in the browser's `localStorage` and sent as `Authorization: Bearer <token>` headers on API requests.
 
@@ -321,8 +321,8 @@ docker-compose logs readur | grep -E "(auth|login|failed)" | tail -n 100
 docker-compose exec readur psql -U readur -d readur -c \
   "SELECT username, last_login, session_count FROM users WHERE last_login > NOW() - INTERVAL '24 hours';"
 
-# Monitor authentication metrics (if metrics endpoint enabled)
-curl http://localhost:8000/metrics | grep -E "(auth|login|session)"
+# Monitor authentication metrics (requires METRICS_TOKEN or an admin token)
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8000/metrics | grep -E "(auth|login|session)"
 ```
 
 ## Migration from Other Systems

@@ -12,9 +12,10 @@ use utoipa::ToSchema;
 use ts_rs::TS;
 
 use crate::{
-    auth::AuthUser,
+    auth::{AdminUser, AuthUser},
     errors::user::UserError,
     models::{CreateUser, UpdateUser, UserResponse, UserRole},
+    utils::security::{validate_account_username, validate_email, validate_password},
     AppState,
 };
 
@@ -42,11 +43,35 @@ pub struct UserWatchDirectoryOperationResponse {
     pub watch_directory_path: Option<String>,
 }
 
-fn require_admin(auth_user: &AuthUser) -> Result<(), UserError> {
-    if auth_user.user.role != UserRole::Admin {
-        Err(UserError::permission_denied("Admin access required"))
+/// Validate the account fields supplied to an admin create/update request.
+fn validate_account_fields(
+    username: Option<&str>,
+    email: Option<&str>,
+    password: Option<&str>,
+) -> Result<(), UserError> {
+    if let Some(username) = username {
+        validate_account_username(username)
+            .map_err(|reason| UserError::invalid_username(username, reason))?;
+    }
+    if let Some(email) = email {
+        validate_email(email).map_err(|_| UserError::invalid_email(email))?;
+    }
+    if let Some(password) = password {
+        validate_password(password).map_err(UserError::invalid_password)?;
+    }
+    Ok(())
+}
+
+fn map_user_write_error(e: anyhow::Error, id: Option<Uuid>) -> UserError {
+    let error_msg = e.to_string();
+    if error_msg.contains("username") && error_msg.contains("unique") {
+        UserError::duplicate_username(&error_msg)
+    } else if error_msg.contains("email") && error_msg.contains("unique") {
+        UserError::duplicate_email(&error_msg)
+    } else if let (Some(id), true) = (id, error_msg.contains("not found")) {
+        UserError::not_found_by_id(id)
     } else {
-        Ok(())
+        UserError::internal_server_error(format!("Failed to save user: {}", e))
     }
 }
 
@@ -81,10 +106,9 @@ pub fn router() -> Router<Arc<AppState>> {
     )
 )]
 async fn list_users(
-    auth_user: AuthUser,
+    _admin: AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<UserResponse>>, UserError> {
-    require_admin(&auth_user)?;
     let users = state
         .db
         .get_all_users()
@@ -114,11 +138,10 @@ async fn list_users(
     )
 )]
 async fn get_user(
-    auth_user: AuthUser,
+    _admin: AdminUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<UserResponse>, UserError> {
-    require_admin(&auth_user)?;
     let user = state
         .db
         .get_user_by_id(id)
@@ -146,26 +169,21 @@ async fn get_user(
     )
 )]
 async fn create_user(
-    auth_user: AuthUser,
+    _admin: AdminUser,
     State(state): State<Arc<AppState>>,
     Json(user_data): Json<CreateUser>,
 ) -> Result<Json<UserResponse>, UserError> {
-    require_admin(&auth_user)?;
-    
+    validate_account_fields(
+        Some(&user_data.username),
+        Some(&user_data.email),
+        Some(&user_data.password),
+    )?;
+
     let user = state
         .db
         .create_user(user_data)
         .await
-        .map_err(|e| {
-            let error_msg = e.to_string();
-            if error_msg.contains("username") && error_msg.contains("unique") {
-                UserError::duplicate_username(&error_msg)
-            } else if error_msg.contains("email") && error_msg.contains("unique") {
-                UserError::duplicate_email(&error_msg)
-            } else {
-                UserError::internal_server_error(format!("Failed to create user: {}", e))
-            }
-        })?;
+        .map_err(|e| map_user_write_error(e, None))?;
 
     Ok(Json(user.into()))
 }
@@ -190,29 +208,43 @@ async fn create_user(
     )
 )]
 async fn update_user(
-    auth_user: AuthUser,
+    admin: AdminUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(update_data): Json<UpdateUser>,
 ) -> Result<Json<UserResponse>, UserError> {
-    require_admin(&auth_user)?;
-    
+    let existing = state
+        .db
+        .get_user_by_id(id)
+        .await
+        .map_err(|e| UserError::internal_server_error(format!("Failed to fetch user: {}", e)))?
+        .ok_or_else(|| UserError::not_found_by_id(id))?;
+
+    // Only fields that actually change are validated, so accounts whose
+    // username or email predates the current rules stay editable.
+    validate_account_fields(
+        update_data.username.as_deref().filter(|u| *u != existing.username),
+        update_data.email.as_deref().filter(|e| *e != existing.email),
+        update_data.password.as_deref(),
+    )?;
+
+    // An admin disabling their own account would lock themselves out (and
+    // possibly leave the instance without an active admin).
+    if admin.user.id == id && update_data.is_active == Some(false) {
+        return Err(UserError::permission_denied("Cannot deactivate your own account"));
+    }
+
     let user = state
         .db
-        .update_user(id, update_data.username, update_data.email, update_data.password)
+        .update_user(
+            id,
+            update_data.username,
+            update_data.email,
+            update_data.password,
+            update_data.is_active,
+        )
         .await
-        .map_err(|e| {
-            let error_msg = e.to_string();
-            if error_msg.contains("username") && error_msg.contains("unique") {
-                UserError::duplicate_username(&error_msg)
-            } else if error_msg.contains("email") && error_msg.contains("unique") {
-                UserError::duplicate_email(&error_msg)
-            } else if error_msg.contains("not found") {
-                UserError::not_found_by_id(id)
-            } else {
-                UserError::internal_server_error(format!("Failed to update user: {}", e))
-            }
-        })?;
+        .map_err(|e| map_user_write_error(e, Some(id)))?;
 
     Ok(Json(user.into()))
 }
@@ -236,14 +268,12 @@ async fn update_user(
     )
 )]
 async fn delete_user(
-    auth_user: AuthUser,
+    admin: AdminUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, UserError> {
-    require_admin(&auth_user)?;
-    
     // Prevent users from deleting themselves
-    if auth_user.user.id == id {
+    if admin.user.id == id {
         return Err(UserError::delete_restricted(id, "Cannot delete your own account"));
     }
 
@@ -434,11 +464,10 @@ async fn create_user_watch_directory(
     )
 )]
 async fn delete_user_watch_directory(
-    auth_user: AuthUser,
+    _admin: AdminUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<UserWatchDirectoryOperationResponse>, UserError> {
-    require_admin(&auth_user)?; // Only admins can delete watch directories
     
     // Check if per-user watch is enabled
     if !state.config.enable_per_user_watch {

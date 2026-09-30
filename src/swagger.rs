@@ -131,6 +131,38 @@ use crate::{
         crate::routes::ignored_files::delete_ignored_file,
         crate::routes::ignored_files::bulk_delete_ignored_files,
         crate::routes::ignored_files::get_ignored_files_stats,
+        // Session endpoints
+        crate::routes::auth::get_auth_config,
+        crate::routes::auth::logout,
+        crate::routes::auth::change_password,
+        crate::routes::auth::oidc_exchange,
+        // OCR retry endpoints
+        crate::routes::documents_ocr_retry::bulk_retry_ocr,
+        crate::routes::documents_ocr_retry::get_document_retry_history,
+        crate::routes::documents_ocr_retry::get_ocr_retry_stats,
+        crate::routes::documents_ocr_retry::get_retry_recommendations,
+        crate::routes::documents::failed::get_failed_documents,
+        // Source error endpoints
+        crate::routes::source_errors::list_source_failures,
+        crate::routes::source_errors::get_failure_stats,
+        crate::routes::source_errors::get_retry_candidates,
+        crate::routes::source_errors::get_source_failure,
+        crate::routes::source_errors::retry_source_failure,
+        crate::routes::source_errors::exclude_source_failure,
+        crate::routes::source_errors::resolve_source_failure,
+        crate::routes::source_errors::list_source_type_failures,
+        crate::routes::source_errors::get_source_type_stats,
+        // WebDAV scan failure endpoints
+        crate::routes::webdav_scan_failures::list_scan_failures,
+        crate::routes::webdav_scan_failures::get_scan_failure,
+        crate::routes::webdav_scan_failures::retry_scan_failure,
+        crate::routes::webdav_scan_failures::exclude_scan_failure,
+        crate::routes::webdav_scan_failures::get_retry_candidates,
+        // Settings and user watch directories
+        crate::routes::settings::get_server_configuration,
+        crate::routes::users::get_user_watch_directory,
+        crate::routes::users::create_user_watch_directory,
+        crate::routes::users::delete_user_watch_directory,
         // Health check
         crate::health_check,
     ),

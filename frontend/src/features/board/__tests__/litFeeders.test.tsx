@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock('../../../services/api', () => ({
   default: {},
+  api: { defaults: { headers: { common: {} } } },
   documentService: m.documentService,
 }));
 

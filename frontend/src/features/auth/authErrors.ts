@@ -5,18 +5,41 @@ import { ErrorCodes, ErrorHelper } from '../../services/api';
 /** No HTTP response at all: server down, DNS, offline or CORS. */
 const isUnreachable = (err: unknown): boolean => axios.isAxiosError(err) && !err.response;
 
+const statusOf = (err: unknown): number | undefined =>
+  (err as { response?: { status?: number } } | null)?.response?.status;
+
+/** Seconds from a 429 response's `Retry-After` header, when it carries a positive number. */
+export function retryAfterSeconds(err: unknown): number | null {
+  const headers = (err as { response?: { headers?: Record<string, unknown> } } | null)?.response?.headers;
+  const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
+  const seconds = raw !== undefined ? parseInt(String(raw), 10) : NaN;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
 /** Maps a failed password sign-in to a message the user can act on. */
 export function loginErrorMessage(err: unknown, t: TFunction): string {
   const info = ErrorHelper.formatErrorForDisplay(err, false);
+  if (statusOf(err) === 429) {
+    const wait = retryAfterSeconds(err);
+    return wait
+      ? t('auth.errors.tooManyAttemptsRetry', {
+          seconds: wait,
+          defaultValue: 'Too many sign-in attempts. Please try again in {{seconds}} seconds.',
+        })
+      : t('auth.errors.tooManyAttempts', 'Too many sign-in attempts. Please try again later.');
+  }
+  if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
+    return t('auth.login.errors.accountDisabled', 'This account is disabled. Ask an administrator to re-enable it.');
+  }
+  if (statusOf(err) === 403) {
+    return t('auth.errors.accountDisabledOrPending', 'This account is disabled or awaiting administrator approval');
+  }
   if (
     ErrorHelper.isErrorCode(err, ErrorCodes.USER_INVALID_CREDENTIALS) ||
     ErrorHelper.isErrorCode(err, ErrorCodes.USER_NOT_FOUND) ||
     info.status === 401
   ) {
     return t('auth.login.errors.invalidCredentials', 'Wrong username or password. Check both and try again.');
-  }
-  if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_ACCOUNT_DISABLED)) {
-    return t('auth.login.errors.accountDisabled', 'This account is disabled. Ask an administrator to re-enable it.');
   }
   if (
     ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) ||
@@ -66,32 +89,53 @@ export function safeRedirect(from: unknown): string | null {
   return path;
 }
 
-const REJECTED = ['invalid_request', 'unauthorized_client', 'unsupported_response_type', 'invalid_scope'];
-const UNAVAILABLE = ['server_error', 'temporarily_unavailable'];
-const REAUTH = ['login_required', 'consent_required', 'interaction_required'];
-
 /**
- * Callback error text is never taken from the URL: standard OAuth2/OIDC codes get a fixed
- * message, anything else a generic one (with the code only if it looks like a plain code).
+ * Failure codes the server puts in the callback URL fragment. Only these are recognised; any
+ * other value (including free text) gets a generic message and is never rendered.
  */
+export const OIDC_CALLBACK_ERROR_CODES = [
+  'provider_error',
+  'invalid_state',
+  'auth_failed',
+  'no_account',
+  'account_disabled',
+  'server_error',
+] as const;
+
+type OidcCallbackErrorCode = (typeof OIDC_CALLBACK_ERROR_CODES)[number];
+
+const CALLBACK_FALLBACKS: Record<OidcCallbackErrorCode | 'unknown', string> = {
+  provider_error: 'The identity provider did not complete the sign-in. Please try again.',
+  invalid_state: 'The sign-in request is invalid or has expired. Please try logging in again.',
+  auth_failed: 'Authentication with the identity provider failed. Please try logging in again.',
+  no_account: 'No account is available for this identity. Contact your administrator.',
+  account_disabled: 'This account is disabled or awaiting administrator approval.',
+  server_error: 'A server error occurred during sign-in. Please try again later.',
+  unknown: 'Sign-in failed. Please try logging in again.',
+};
+
+const isKnownCallbackCode = (value: string): value is OidcCallbackErrorCode =>
+  (OIDC_CALLBACK_ERROR_CODES as readonly string[]).includes(value);
+
+/** Callback error text is never taken from the URL: known codes get a fixed message, anything else a generic one. */
 export function callbackErrorMessage(code: string, t: TFunction): string {
-  if (code === 'access_denied') {
-    return t('auth.callback.errors.access_denied', 'Access was denied. Ask your administrator whether you have access to Readur.');
+  const key = isKnownCallbackCode(code) ? code : 'unknown';
+  return t(`auth.oidcCallback.errors.${key}`, CALLBACK_FALLBACKS[key]);
+}
+
+/** Maps a failed exchange of the one-time sign-in code. Server-provided text is never shown. */
+export function exchangeErrorMessage(err: unknown, t: TFunction): string {
+  const status = statusOf(err);
+  if (status === 401) {
+    return t('auth.oidcCallback.errors.invalidCode', 'This sign-in link is invalid or has expired. Please try logging in again.');
   }
-  if (REJECTED.includes(code)) {
-    return t('auth.callback.errors.misconfigured', 'The SSO provider rejected the request. Ask your administrator to check the SSO setup.');
+  if (status === 429) {
+    return t('auth.oidcCallback.errors.tooManyAttempts', 'Too many attempts. Please wait a moment and try logging in again.');
   }
-  if (UNAVAILABLE.includes(code)) {
-    return t('auth.callback.errors.provider_unavailable', 'The SSO provider had a problem. Try again in a moment.');
+  const info = ErrorHelper.formatErrorForDisplay(err, false);
+  if (isUnreachable(err) || info.category === 'network') {
+    return t('auth.login.errors.unreachable', 'Cannot reach the server. Check your connection and try again.');
   }
-  if (REAUTH.includes(code)) {
-    return t('auth.callback.errors.login_required', 'The SSO provider needs you to sign in again. Go back and retry.');
-  }
-  if (/^[a-z_]{1,40}$/.test(code)) {
-    return t('auth.callback.failedCode', {
-      defaultValue: 'SSO sign-in failed (code: {{code}}). Try again or ask your administrator.',
-      code,
-    });
-  }
-  return t('auth.callback.failedGeneric', 'SSO sign-in failed. Try again or ask your administrator.');
+  if (info.category === 'server') return callbackErrorMessage('server_error', t);
+  return callbackErrorMessage('unknown', t);
 }

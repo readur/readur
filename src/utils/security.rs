@@ -255,9 +255,149 @@ pub fn generate_secure_password(length: usize) -> String {
         .collect()
 }
 
+/// Maximum password length in bytes. bcrypt only considers the first 72 bytes,
+/// so longer inputs would silently collide; reject them instead.
+pub const MAX_PASSWORD_BYTES: usize = 72;
+/// Minimum password length in characters.
+pub const MIN_PASSWORD_CHARS: usize = 8;
+
+/// Validate a username for a new or updated account.
+///
+/// Usernames end up in filesystem paths (per-user watch directories) and log
+/// lines, so they are restricted to a conservative character set.
+pub fn validate_account_username(username: &str) -> std::result::Result<(), &'static str> {
+    if username.is_empty() || username.chars().count() > 64 {
+        return Err("Username must be between 1 and 64 characters");
+    }
+    if username.starts_with('.') || username.contains("..") {
+        return Err("Username contains invalid characters");
+    }
+    if !username
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '@'))
+    {
+        return Err("Username may only contain letters, digits, '_', '-', '.' and '@'");
+    }
+    Ok(())
+}
+
+/// Minimal structural email validation (one '@', non-empty local and domain
+/// parts, no whitespace or control characters).
+pub fn validate_email(email: &str) -> std::result::Result<(), &'static str> {
+    if email.len() > 254 || email.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("Invalid email address");
+    }
+    match email.split_once('@') {
+        Some((local, domain)) if !local.is_empty() && !domain.is_empty() && !domain.contains('@') => Ok(()),
+        _ => Err("Invalid email address"),
+    }
+}
+
+/// Validate a password against the password policy.
+pub fn validate_password(password: &str) -> std::result::Result<(), &'static str> {
+    if password.chars().count() < MIN_PASSWORD_CHARS {
+        return Err("Password must be at least 8 characters");
+    }
+    if password.len() > MAX_PASSWORD_BYTES {
+        return Err("Password must be at most 72 bytes");
+    }
+    Ok(())
+}
+
+/// Compare two byte strings in time independent of where they differ.
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// Sanitize a filename for use in a `Content-Disposition` header.
+/// Strips characters that could enable header injection or path traversal.
+pub fn content_disposition_filename(name: &str) -> String {
+    let sanitized: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ' ') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(255)
+        .collect();
+    let result = sanitized.trim().to_string();
+    if result.is_empty() {
+        "download".to_string()
+    } else {
+        result
+    }
+}
+
+/// MIME types that browsers may execute as active content when rendered
+/// inline on our origin. These are always served as attachments.
+pub fn is_active_content_mime(mime: &str) -> bool {
+    let mime = mime.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    mime.is_empty()
+        || matches!(
+            mime.as_str(),
+            "text/html"
+                | "application/xhtml+xml"
+                | "image/svg+xml"
+                | "text/xml"
+                | "application/xml"
+                | "text/javascript"
+                | "application/javascript"
+                | "application/x-shockwave-flash"
+        )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_account_username_validation() {
+        assert!(validate_account_username("alice").is_ok());
+        assert!(validate_account_username("alice.smith@example").is_ok());
+        assert!(validate_account_username("").is_err());
+        assert!(validate_account_username("../etc").is_err());
+        assert!(validate_account_username("/abs").is_err());
+        assert!(validate_account_username(".hidden").is_err());
+        assert!(validate_account_username("a b").is_err());
+        assert!(validate_account_username(&"a".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn test_password_policy() {
+        assert!(validate_password(&"s".repeat(5)).is_err());
+        assert!(validate_password(&String::new()).is_err());
+        assert!(validate_password(&"l".repeat(10)).is_ok());
+        assert!(validate_password(&"x".repeat(73)).is_err());
+    }
+
+    #[test]
+    fn test_email_validation() {
+        assert!(validate_email("a@b.c").is_ok());
+        assert!(validate_email("nope").is_err());
+        assert!(validate_email("a@b@c").is_err());
+        assert!(validate_email("a @b.c").is_err());
+    }
+
+    #[test]
+    fn test_constant_time_eq() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"abcd"));
+    }
+
+    #[test]
+    fn test_active_content_mime() {
+        assert!(is_active_content_mime("text/html; charset=utf-8"));
+        assert!(is_active_content_mime("image/svg+xml"));
+        assert!(!is_active_content_mime("application/pdf"));
+        assert!(!is_active_content_mime("image/png"));
+    }
 
     #[test]
     fn test_validate_filename() {

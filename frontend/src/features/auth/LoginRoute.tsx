@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFeatureFlags } from '../../contexts/FeatureFlagsContext';
 import { Button, IconButton, Skeleton, TextField } from '../../ui';
-import { Visibility, VisibilityOff, Error as ErrorIcon } from '../../ui/icons';
+import { Close, Visibility, VisibilityOff, Error as ErrorIcon } from '../../ui/icons';
 import { AuthLayout } from './AuthLayout';
 import { loginErrorMessage, safeRedirect, ssoErrorMessage } from './authErrors';
 import pkg from '../../../package.json';
@@ -16,7 +16,7 @@ const OIDC_LOGIN_URL = '/api/auth/oidc/login';
 /** Public /login page. Field visibility follows the server's auth config. */
 export default function LoginRoute() {
   const { t } = useTranslation();
-  const { login } = useAuth();
+  const { login, sessionNotice, dismissSessionNotice } = useAuth();
   const { flags, loading } = useFeatureFlags();
   const navigate = useNavigate();
   const location = useLocation();
@@ -70,6 +70,23 @@ export default function LoginRoute() {
         <Skeleton lines={3} label={t('auth.login.loading', 'Loading sign-in options')} />
       ) : (
         <div className={styles.panel}>
+          {sessionNotice === 'logoutIncomplete' ? (
+            <div role="status" className={styles.info}>
+              <span>
+                {t(
+                  'auth.errors.logoutIncomplete',
+                  'You are signed out on this device, but the server could not be reached. Your previous session may stay valid until it expires.',
+                )}
+              </span>
+              <IconButton
+                size="sm"
+                label={t('common.actions.close', 'Close')}
+                icon={<Close fontSize="small" />}
+                onPress={dismissSessionNotice}
+              />
+            </div>
+          ) : null}
+
           {error ? (
             <p role="alert" className={styles.alert}>
               <ErrorIcon fontSize="small" aria-hidden="true" />
@@ -131,6 +148,14 @@ export default function LoginRoute() {
             <Button variant="secondary" onPress={onSso} isPending={ssoPending} isDisabled={pending}>
               {ssoPending ? t('auth.login.redirecting', 'Redirecting…') : t('auth.login.sso', 'Sign in with SSO')}
             </Button>
+          ) : null}
+
+          {flags.allowLocalAuth && flags.allowRegistration ? (
+            <p className={styles.linkRow}>
+              <Link to="/register" className={styles.backLink}>
+                {t('auth.createAccountLink', "Don't have an account? Request one")}
+              </Link>
+            </p>
           ) : null}
 
           {noMethods ? (

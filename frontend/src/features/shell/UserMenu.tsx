@@ -17,7 +17,7 @@ export function UserMenu() {
     if (key === 'settings') navigate('/settings');
     if (key === 'api-docs') window.open(API_DOCS_PATH, '_blank', 'noopener,noreferrer');
     if (key === 'logout') {
-      logout();
+      void logout();
       navigate('/login');
     }
   };

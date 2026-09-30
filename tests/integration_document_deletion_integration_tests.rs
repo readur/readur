@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use uuid::Uuid;
 
-use readur::models::{DocumentResponse, CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{DocumentResponse, LoginRequest, LoginResponse, UserRole};
 use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
@@ -57,19 +57,10 @@ impl DocumentDeletionTestClient {
     
     /// Register a new user and login to get auth token
     async fn register_and_login(&mut self, username: &str, email: &str, password: &str, role: Option<UserRole>) -> Result<String, Box<dyn std::error::Error>> {
-        // Register user
-        let user_data = CreateUser {
-            username: username.to_string(),
-            email: email.to_string(),
-            password: password.to_string(),
-            role: Some(role.unwrap_or(UserRole::User)),
-        };
-        
-        let register_response = readur::test_utils::register_user_on_server(&self.client, &get_base_url(), &user_data).await?;
-        
-        if !register_response.status().is_success() {
-            return Err(format!("Registration failed: {}", register_response.text().await?).into());
-        }
+        // Create the account in the server's database
+        readur::test_utils::create_live_server_user(username, email, password, role.unwrap_or(UserRole::User))
+            .await
+            .map_err(|e| format!("Registration failed: {}", e))?;
         
         // Login to get token
         let login_data = LoginRequest {

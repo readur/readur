@@ -153,7 +153,9 @@ describe('UsersSection', () => {
     const user = userEvent.setup();
     render(true);
     const grid = await screen.findByRole('grid', { name: 'User Management' });
-    expect(await within(grid).findByText('Active')).toBeInTheDocument();
+    expect(await within(grid).findByText('./user_watch/ada')).toBeInTheDocument();
+    // Two account statuses plus ada's watch directory.
+    expect(within(grid).getAllByText('Active')).toHaveLength(3);
     expect(within(grid).getByText('Not Created')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create watch directory for bob' }));
     expect(userWatchService.createUserWatchDirectory).toHaveBeenCalledWith('u2');
@@ -182,6 +184,46 @@ describe('UsersSection', () => {
     await screen.findByRole('grid', { name: 'User Management' });
     expect(screen.queryByRole('columnheader', { name: 'Watch Directory' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /watch directory/i })).not.toBeInTheDocument();
+  });
+
+  it('shows each account status and never lets an admin disable themselves', async () => {
+    render();
+    const grid = await screen.findByRole('grid', { name: 'User Management' });
+    expect(within(grid).getByRole('switch', { name: 'Account active for bob' })).toBeChecked();
+    expect(within(grid).getByRole('switch', { name: 'Account active for ada' })).toBeDisabled();
+    expect(within(grid).getByText('You cannot deactivate your own account')).toBeInTheDocument();
+  });
+
+  it('flags accounts that are disabled or awaiting approval', async () => {
+    apiMock.get.mockResolvedValue(ok([USERS[0], { ...USERS[1], is_active: false }]));
+    render();
+    const grid = await screen.findByRole('grid', { name: 'User Management' });
+    expect(within(grid).getByText('Disabled / pending approval')).toBeInTheDocument();
+    expect(within(grid).getByRole('switch', { name: 'Account active for bob' })).not.toBeChecked();
+    expect(screen.getByText(/1 account\(s\) are disabled or awaiting approval/)).toBeInTheDocument();
+  });
+
+  it('enables and disables an account', async () => {
+    const user = userEvent.setup();
+    render();
+    const grid = await screen.findByRole('grid', { name: 'User Management' });
+    await user.click(within(grid).getByRole('switch', { name: 'Account active for bob' }));
+    await waitFor(() => expect(apiMock.put).toHaveBeenCalledWith('/users/u2', { is_active: false }));
+    expect(await screen.findByText('bob has been disabled and signed out')).toBeInTheDocument();
+    expect(within(grid).getByRole('switch', { name: 'Account active for bob' })).not.toBeChecked();
+    await user.click(within(grid).getByRole('switch', { name: 'Account active for bob' }));
+    await waitFor(() => expect(apiMock.put).toHaveBeenCalledWith('/users/u2', { is_active: true }));
+    expect(await screen.findByText('bob can now sign in')).toBeInTheDocument();
+  });
+
+  it('keeps the status when the change fails', async () => {
+    apiMock.put.mockRejectedValue(httpError(500));
+    const user = userEvent.setup();
+    render();
+    const grid = await screen.findByRole('grid', { name: 'User Management' });
+    await user.click(within(grid).getByRole('switch', { name: 'Account active for bob' }));
+    await waitFor(() => expect(apiMock.put).toHaveBeenCalled());
+    expect(within(grid).getByRole('switch', { name: 'Account active for bob' })).toBeChecked();
   });
 
   it('shows an error when users fail to load', async () => {

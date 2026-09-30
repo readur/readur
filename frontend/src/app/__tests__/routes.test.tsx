@@ -10,6 +10,7 @@ import { LEGACY_ROUTES, mergeSearch } from '../legacyRoutes';
 
 vi.mock('../../services/api', () => ({
   default: { get: vi.fn() },
+  api: { defaults: { headers: { common: {} } } },
   documentService: { enhancedSearch: vi.fn() },
 }));
 
@@ -22,6 +23,7 @@ vi.mock('../../features/intake', async () => ({ default: (await import('./routeP
 vi.mock('../../features/settings', async () => ({ default: (await import('./routeProbe')).probe('settings') }));
 vi.mock('../../features/auth/LoginRoute', async () => ({ default: (await import('./routeProbe')).probe('login') }));
 vi.mock('../../features/auth/CallbackRoute', async () => ({ default: (await import('./routeProbe')).probe('callback') }));
+vi.mock('../../features/auth/RegisterRoute', async () => ({ default: (await import('./routeProbe')).probe('register') }));
 
 const user = { id: '1', username: 'ada', email: 'ada@example.com', role: 'admin' as const };
 
@@ -63,6 +65,7 @@ describe('legacy redirects', () => {
     '/settings': 'settings',
     '/settings/labels': 'settings',
     '/settings/debug': 'settings',
+    '/settings/account': 'settings',
   };
 
   it.each(LEGACY_ROUTES.map((r) => [r.from, r.to]))('%s redirects to %s', async (from, to) => {
@@ -143,9 +146,15 @@ describe('auth gating', () => {
     expect(await entry('board')).toBeInTheDocument();
   });
 
+  it('sends signed-in users away from /register', async () => {
+    renderAt('/register');
+    expect(await entry('board')).toBeInTheDocument();
+  });
+
   it.each([
     ['/shared/tok-1', 'shared'],
-    ['/auth/callback?code=x', 'callback'],
+    ['/auth/callback#code=x', 'callback'],
+    ['/register', 'register'],
   ])('%s is public and renders without the shell', async (path, name) => {
     renderAt(path, false);
     expect(await entry(name)).toBeInTheDocument();
