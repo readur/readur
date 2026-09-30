@@ -318,6 +318,27 @@
   }
 }
 
+/* Phones: label above the value, cells in two columns under the segment head; nothing wraps mid-figure. */
+@media (max-width: 479px) {
+  .figures {
+    display: grid;
+    flex: 1 1 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .figuresWrap {
+    flex-basis: 100%;
+  }
+
+  .figure {
+    min-width: 0;
+  }
+
+  .figure:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Bulk arrivals summary */
 
 .bulk {
