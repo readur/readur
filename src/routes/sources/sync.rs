@@ -13,7 +13,7 @@ use crate::{
     auth::AuthUser,
     models::SourceStatus,
     services::webdav::{SyncProgress, SyncPhase},
-    utils::outbound::validate_outbound_url,
+    utils::{client_ip::PeerIsTrustedProxy, outbound::validate_outbound_url},
     AppState,
 };
 
@@ -529,11 +529,12 @@ pub async fn sync_progress_websocket(
     ws: WebSocketUpgrade,
     Path(source_id): Path<Uuid>,
     headers: HeaderMap,
+    PeerIsTrustedProxy(via_trusted_proxy): PeerIsTrustedProxy,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, StatusCode> {
     // WebSocket handshakes are not subject to CORS, so the origin is
     // checked explicitly.
-    if !websocket_origin_allowed(&headers, &state.config) {
+    if !websocket_origin_allowed(&headers, via_trusted_proxy, &state.config) {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -681,8 +682,9 @@ async fn handle_websocket(mut socket: WebSocket, source_id: Uuid, state: Arc<App
 /// Non-browser clients usually send no `Origin`; those are allowed because
 /// they must still present a valid token. When an `Origin` is present it must
 /// match the request's own `Host`, the configured `PUBLIC_URL`, or one of
-/// `CORS_ALLOWED_ORIGINS`.
-fn websocket_origin_allowed(headers: &HeaderMap, config: &crate::config::Config) -> bool {
+/// `CORS_ALLOWED_ORIGINS` -- or, for requests relayed by a trusted proxy, the
+/// host the proxy reports in `X-Forwarded-Host` (with `X-Forwarded-Proto`).
+fn websocket_origin_allowed(headers: &HeaderMap, via_trusted_proxy: bool, config: &crate::config::Config) -> bool {
     let Some(origin) = headers.get(axum::http::header::ORIGIN) else {
         return true;
     };
@@ -702,6 +704,10 @@ fn websocket_origin_allowed(headers: &HeaderMap, config: &crate::config::Config)
         }
     }
 
+    if via_trusted_proxy && matches_forwarded_host(origin, headers) {
+        return true;
+    }
+
     let public_origin = config.public_url.as_deref().and_then(url_origin);
     if public_origin.is_some_and(|p| p.eq_ignore_ascii_case(origin)) {
         return true;
@@ -712,6 +718,28 @@ fn websocket_origin_allowed(headers: &HeaderMap, config: &crate::config::Config)
         .cors_allowed_origins
         .iter()
         .any(|allowed| allowed.trim_end_matches('/').eq_ignore_ascii_case(origin))
+}
+
+/// Whether `origin` is the public address a proxy reports in
+/// `X-Forwarded-Host`, with the scheme from `X-Forwarded-Proto` when given.
+/// Only meaningful for requests from a trusted proxy.
+fn matches_forwarded_host(origin: &str, headers: &HeaderMap) -> bool {
+    let first_entry = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(',').next())
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+    };
+    let Some(host) = first_entry("x-forwarded-host") else {
+        return false;
+    };
+    match (first_entry("x-forwarded-proto"), origin.split_once("://")) {
+        (Some(proto), _) => origin.eq_ignore_ascii_case(&format!("{}://{}", proto, host)),
+        (None, Some((_, authority))) => authority.eq_ignore_ascii_case(host),
+        (None, None) => false,
+    }
 }
 
 /// `scheme://host[:port]` of a URL, without path.
@@ -821,11 +849,46 @@ mod tests {
         config.public_url = Some("https://docs.example.com/app".to_string());
         config.security.cors_allowed_origins = vec!["http://localhost:5173".to_string()];
 
-        assert!(websocket_origin_allowed(&headers(None, "internal:8000"), &config));
-        assert!(websocket_origin_allowed(&headers(Some("http://internal:8000"), "internal:8000"), &config));
-        assert!(websocket_origin_allowed(&headers(Some("https://docs.example.com"), "internal:8000"), &config));
-        assert!(websocket_origin_allowed(&headers(Some("http://localhost:5173"), "internal:8000"), &config));
-        assert!(!websocket_origin_allowed(&headers(Some("https://other.example"), "internal:8000"), &config));
-        assert!(!websocket_origin_allowed(&headers(Some("null"), "internal:8000"), &config));
+        assert!(websocket_origin_allowed(&headers(None, "internal:8000"), false, &config));
+        assert!(websocket_origin_allowed(&headers(Some("http://internal:8000"), "internal:8000"), false, &config));
+        assert!(websocket_origin_allowed(&headers(Some("https://docs.example.com"), "internal:8000"), false, &config));
+        assert!(websocket_origin_allowed(&headers(Some("http://localhost:5173"), "internal:8000"), false, &config));
+        assert!(!websocket_origin_allowed(&headers(Some("https://other.example"), "internal:8000"), false, &config));
+        assert!(!websocket_origin_allowed(&headers(Some("null"), "internal:8000"), false, &config));
+    }
+
+    fn forwarded(origin: &str, host: &str, proto: Option<&str>) -> HeaderMap {
+        let mut h = headers(Some(origin), "readur:8000");
+        h.insert("x-forwarded-host", host.parse().unwrap());
+        if let Some(proto) = proto {
+            h.insert("x-forwarded-proto", proto.parse().unwrap());
+        }
+        h
+    }
+
+    #[test]
+    fn websocket_origin_matches_forwarded_host_only_from_trusted_proxies() {
+        let config = crate::test_helpers::create_test_config();
+        let behind_proxy = forwarded("https://readur.example.com", "readur.example.com", Some("https"));
+        assert!(websocket_origin_allowed(&behind_proxy, true, &config));
+        // The same headers from a peer that is not a trusted proxy are ignored.
+        assert!(!websocket_origin_allowed(&behind_proxy, false, &config));
+
+        // Without X-Forwarded-Proto the host[:port] alone is compared.
+        let no_proto = forwarded("https://readur.example.com:8443", "readur.example.com:8443", None);
+        assert!(websocket_origin_allowed(&no_proto, true, &config));
+        // The scheme must match when the proxy reports one.
+        let wrong_scheme = forwarded("http://readur.example.com", "readur.example.com", Some("https"));
+        assert!(!websocket_origin_allowed(&wrong_scheme, true, &config));
+        // A different host is still refused.
+        let other = forwarded("https://other.example", "readur.example.com", Some("https"));
+        assert!(!websocket_origin_allowed(&other, true, &config));
+        // The first entry of a proxy chain is the public address.
+        let chain = forwarded("https://readur.example.com", "readur.example.com, internal:8000", Some("https, http"));
+        assert!(websocket_origin_allowed(&chain, true, &config));
+        // Without X-Forwarded-Host nothing extra is accepted.
+        let mut no_host = headers(Some("https://readur.example.com"), "readur:8000");
+        no_host.insert("x-forwarded-proto", "https".parse().unwrap());
+        assert!(!websocket_origin_allowed(&no_host, true, &config));
     }
 }

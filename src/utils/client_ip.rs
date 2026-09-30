@@ -88,6 +88,24 @@ pub fn describe_trusted_proxies(setting: Option<&str>) -> String {
     }
 }
 
+/// Whether the TCP peer is a trusted reverse proxy (see `TRUSTED_PROXIES`),
+/// i.e. whether its forwarding headers may be believed. `false` when the
+/// server was not started with connection info.
+#[derive(Debug, Clone, Copy)]
+pub struct PeerIsTrustedProxy(pub bool);
+
+impl FromRequestParts<Arc<AppState>> for PeerIsTrustedProxy {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, state: &Arc<AppState>) -> Result<Self, Self::Rejection> {
+        let trusted = parts
+            .extensions
+            .get::<ConnectInfo<SocketAddr>>()
+            .is_some_and(|ConnectInfo(addr)| is_trusted(&addr.ip(), &state.config.security.trusted_proxies));
+        Ok(PeerIsTrustedProxy(trusted))
+    }
+}
+
 fn is_trusted(ip: &IpAddr, trusted: &[IpNet]) -> bool {
     trusted.iter().any(|net| net.contains(ip))
 }
