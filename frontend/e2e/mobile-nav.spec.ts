@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures/auth';
+import { TestHelpers } from './utils/test-helpers';
 
 /** Under 720px the top-bar navigation becomes a bottom tab bar. */
 test.describe('Mobile navigation', () => {
@@ -46,6 +47,38 @@ test.describe('Mobile navigation', () => {
     await page.goto('/board');
     await page.getByRole('button', { name: 'Search documents' }).tap();
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
+  });
+
+  test('the bulk action bar sits above the tab bar, which stays usable', async ({ dynamicUserPage: page }) => {
+    const helpers = new TestHelpers(page);
+    const name = `dock-${Math.random().toString(36).slice(2, 6)}.txt`;
+    await helpers.uploadBufferViaAPI(name, Buffer.from(`Dock check ${name} ${Math.random()}`), 'text/plain');
+
+    await page.goto('/documents');
+    const row = helpers.documentRows().filter({ hasText: name });
+    await row.getByRole('checkbox').check({ force: true });
+    const dock = page.getByRole('toolbar', { name: 'Bulk actions' });
+    await expect(dock).toBeVisible();
+
+    const nav = page.getByRole('navigation', { name: 'Main' });
+    const dockBox = (await dock.boundingBox())!;
+    const navBox = (await nav.boundingBox())!;
+    expect(dockBox.y + dockBox.height).toBeLessThanOrEqual(navBox.y);
+
+    // Every tab is still the topmost element at its centre, so taps reach it.
+    for (const link of await nav.getByRole('link').all()) {
+      const box = (await link.boundingBox())!;
+      const onTop = await link.evaluate(
+        (el, [x, y]) => {
+          const hit = document.elementFromPoint(x, y);
+          return hit !== null && (el === hit || el.contains(hit));
+        },
+        [box.x + box.width / 2, box.y + box.height / 2],
+      );
+      expect(onTop, `${await link.textContent()} is covered`).toBe(true);
+    }
+    await nav.getByRole('link', { name: 'Intake' }).tap();
+    await expect(page).toHaveURL(/\/intake/);
   });
 
   // Populated pages are covered in no-horizontal-overflow.spec.ts.

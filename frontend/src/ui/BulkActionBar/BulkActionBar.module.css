@@ -10,6 +10,13 @@
   pointer-events: none;
 }
 
+/* Phones: sit above the 56px bottom tab bar (and the home-indicator inset), never over it. */
+@media (max-width: 719px) {
+  .dock {
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px) + var(--s-3));
+  }
+}
+
 /* --btn-bg / --btn-fg are the ink pair; they invert in dark mode. */
 .bar {
   box-sizing: border-box;
