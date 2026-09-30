@@ -46,12 +46,38 @@ test.describe('Document Management', () => {
   test('should display document metadata', async ({ dynamicUserPage: page }) => {
     await openDocument(page);
 
+    // One facts line under the name: type, size, source, when it was added and the OCR score.
     const summary = page.getByRole('group', { name: 'Document summary' });
-    for (const term of ['Status', 'Type', 'Size', 'Source', 'Added', 'Confidence']) {
-      await expect(summary.getByRole('term').filter({ hasText: new RegExp(`^${term}$`) })).toBeVisible();
-    }
+    await expect(summary).toContainText('INDEXED');
     await expect(summary).toContainText('PNG');
     await expect(summary).toContainText(/KB/);
+    await expect(summary).toContainText('Upload');
+    await expect(summary).toContainText(/Added /);
+    await expect(summary).toContainText(/OCR \d+%/);
+    await expect(summary).not.toContainText('—');
+
+    // The rest sits behind the Details disclosure.
+    await page.getByRole('button', { name: 'Details' }).click();
+    await expect(page.getByRole('region', { name: 'Details' }).getByText('SHA-256')).toBeVisible();
+  });
+
+  test('should switch between document, side by side and text views', async ({ dynamicUserPage: page }) => {
+    await openDocument(page);
+    const views = page.getByRole('radiogroup', { name: 'View' });
+    await views.getByRole('radio', { name: 'Text' }).click();
+    await expect(page.getByRole('region', { name: 'Extracted text' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Document', exact: true })).toBeHidden();
+
+    // The choice is remembered on the next document visit.
+    await page.reload();
+    await expect(views.getByRole('radio', { name: 'Text' })).toBeChecked();
+    await views.getByRole('radio', { name: 'Document' }).click();
+    await expect(page.getByRole('region', { name: 'Document', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Extracted text' })).toBeHidden();
+
+    // The page itself does not scroll: the reading area fills the window.
+    const overflow = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 
   test('should allow document download', async ({ dynamicUserPage: page }) => {
