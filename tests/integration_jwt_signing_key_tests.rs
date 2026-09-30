@@ -1,5 +1,6 @@
 //! The JWT signing key stored in the database when JWT_SECRET is not set.
 
+use readur::auth::{create_jwt, verify_jwt};
 use readur::jwt_signing_key::{self, SigningKeyOrigin};
 use readur::test_utils::TestContext;
 
@@ -36,6 +37,28 @@ async fn jwt_secret_takes_precedence_over_the_stored_key() {
     let (key, origin) = jwt_signing_key::resolve(&ctx.state().db, configured).await.unwrap();
     assert_eq!(origin, SigningKeyOrigin::Environment);
     assert_eq!(key, configured);
+
+    let _ = ctx.cleanup_and_close().await;
+}
+
+#[tokio::test]
+async fn rotation_replaces_the_key_and_invalidates_tokens() {
+    let ctx = TestContext::new().await;
+    let db = &ctx.state().db;
+    let helper = ctx.auth_helper();
+    let test_user = helper.create_test_user().await;
+    let user = db.get_user_by_id(test_user.user_response.id).await.unwrap().unwrap();
+
+    let (old_key, _) = jwt_signing_key::resolve(db, "").await.unwrap();
+    let token = create_jwt(&user, &old_key).unwrap();
+    assert!(verify_jwt(&token, &old_key).is_ok());
+
+    readur::commands::rotate_jwt_secret(db, false).await.unwrap();
+    let (new_key, origin) = jwt_signing_key::resolve(db, "").await.unwrap();
+    assert_eq!(origin, SigningKeyOrigin::Database);
+    assert_ne!(old_key, new_key);
+    assert!(verify_jwt(&token, &new_key).is_err(), "tokens signed with the old key must not verify");
+    assert!(verify_jwt(&create_jwt(&user, &new_key).unwrap(), &new_key).is_ok());
 
     let _ = ctx.cleanup_and_close().await;
 }

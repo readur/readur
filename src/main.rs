@@ -32,6 +32,8 @@ enum Commands {
     Serve,
     /// Reset the admin user's password
     ResetAdminPassword,
+    /// Replace the JWT signing key stored in the database (signs out every session)
+    RotateJwtSecret,
 }
 
 /// Determines the correct path for static files based on the environment
@@ -110,6 +112,12 @@ async fn main() -> anyhow::Result<()> {
             // Run reset command
             commands::reset_admin_password(&db).await?;
 
+            return Ok(());
+        }
+        Some(Commands::RotateJwtSecret) => {
+            let config = Config::from_env()?;
+            let db = Database::new(&config.database_url).await?;
+            commands::rotate_jwt_secret(&db, !config.jwt_secret.is_empty()).await?;
             return Ok(());
         }
         Some(Commands::Serve) | None => {

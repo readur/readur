@@ -52,3 +52,11 @@ pub async fn resolve(db: &Database, configured: &str) -> Result<(String, Signing
     let origin = if inserted { SigningKeyOrigin::Generated } else { SigningKeyOrigin::Database };
     Ok((value, origin))
 }
+
+/// Replace the stored signing key with a new random one. Tokens signed with
+/// the previous key stop verifying once servers load the new key.
+pub async fn rotate(db: &Database) -> Result<()> {
+    db.replace_server_secret(STORED_KEY_NAME, &generate_key())
+        .await
+        .context("Failed to store a new JWT signing key (has the server been started once to apply migrations?)")
+}

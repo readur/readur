@@ -24,4 +24,17 @@ impl Database {
             .await?;
         Ok((value, inserted))
     }
+
+    /// Replace (or create) the stored secret `name`.
+    pub async fn replace_server_secret(&self, name: &str, value: &str) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO server_secrets (name, value) VALUES ($1, $2)
+             ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value, created_at = NOW()",
+        )
+        .bind(name)
+        .bind(value)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }
