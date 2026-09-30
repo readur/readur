@@ -9,5 +9,17 @@
   "functions": 42.94,
   "lines": 42.39,
   "include": ["src/**/*.{ts,tsx}"],
-  "exclude": ["**/*.test.{ts,tsx}", "src/test/**", "**/*.d.ts", "src/**/__tests__/**", "src/main.tsx"]
+  "exclude": ["**/*.test.{ts,tsx}", "src/test/**", "**/*.d.ts", "src/**/__tests__/**", "src/main.tsx"],
+  "afterUpgrade": {
+    "vitest": "3.2.7",
+    "coverageProvider": "@vitest/coverage-v8@3.2.7",
+    "measuredAt": "2026-09-30T02:58:00Z",
+    "testFiles": 56,
+    "tests": 646,
+    "statements": 39.14,
+    "branches": 67.22,
+    "functions": 37.65,
+    "lines": 39.14,
+    "note": "v8 counts differently from c8 (28704 vs 37273 statements), so numbers are not directly comparable to the top-level baseline; enforce future coverage gates against afterUpgrade (same tool). Values vary by about 0.1 pt between runs due to timing-dependent tests."
+  }
 }

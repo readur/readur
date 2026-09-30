@@ -4,12 +4,12 @@ import { BrowserRouter } from 'react-router-dom';
 import SearchPage from '../SearchPage';
 
 // Mock the document service
-const mockDocumentService = {
+const mockDocumentService = vi.hoisted(() => ({
   search: vi.fn().mockResolvedValue({ data: { documents: [], total: 0 } }),
   enhancedSearch: vi.fn().mockResolvedValue({ data: { documents: [], total: 0 } }),
   getFacets: vi.fn().mockResolvedValue({ data: { mime_types: [], tags: [] } }),
   download: vi.fn(),
-};
+}));
 
 vi.mock('../../services/api', () => ({
   documentService: mockDocumentService,

@@ -5,8 +5,10 @@ import { createComprehensiveAxiosMock, createComprehensiveApiMocks } from '../..
 vi.mock('axios', () => createComprehensiveAxiosMock());
 
 // Create mock functions for this specific test
-const mockGetRetryRecommendations = vi.fn();
-const mockBulkRetryOcr = vi.fn();
+const { mockGetRetryRecommendations, mockBulkRetryOcr } = vi.hoisted(() => ({
+  mockGetRetryRecommendations: vi.fn(),
+  mockBulkRetryOcr: vi.fn(),
+}));
 
 // Mock the API module with comprehensive mocking
 vi.mock('../../services/api', async () => {

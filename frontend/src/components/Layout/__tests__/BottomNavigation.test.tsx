@@ -6,9 +6,7 @@ import { renderWithPWA, renderWithProviders } from '../../../test/test-utils';
 import { setupPWAMode, resetPWAMocks } from '../../../test/pwa-test-utils';
 import { MemoryRouter } from 'react-router-dom';
 
-// Mock the usePWA hook
-vi.mock('../../../hooks/usePWA');
-
+// usePWA is intentionally NOT mocked: PWA mode is driven via window.matchMedia (see setupPWAMode)
 const mockNavigate = vi.fn();
 
 vi.mock('react-router-dom', async () => {

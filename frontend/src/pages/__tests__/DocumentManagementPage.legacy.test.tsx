@@ -1,12 +1,22 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import DocumentManagementPage from '../DocumentManagementPage';
 
 // Simple mock that just returns promises to avoid the component crashing
-vi.mock('../../services/api', () => ({
+vi.mock('../../services/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/api')>();
+  return {
+  // Keep the real ErrorHelper/ErrorCodes (pure helpers); stub only the network layer.
+  ErrorHelper: actual.ErrorHelper,
+  ErrorCodes: actual.ErrorCodes,
+  api: {
+    get: vi.fn(() => Promise.resolve({ data: { ignored_files: [], total: 0, stats: {} } })),
+    delete: vi.fn(() => Promise.resolve({ data: {} })),
+  },
+  queueService: {},
   documentService: {
-    getFailedOcrDocuments: () => Promise.resolve({
+    getFailedDocuments: () => Promise.resolve({
       data: {
         documents: [],
         pagination: { total: 0, limit: 25, offset: 0, has_more: false },
@@ -33,7 +43,8 @@ vi.mock('../../services/api', () => ({
       }
     })),
   },
-}));
+  };
+});
 
 const DocumentManagementPageWrapper = ({ children }: { children: React.ReactNode }) => {
   return <BrowserRouter>{children}</BrowserRouter>;
@@ -76,7 +87,7 @@ describe('DocumentManagementPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Refresh')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /refresh/i }).length).toBeGreaterThan(0);
     });
   });
 
@@ -121,10 +132,9 @@ describe('DocumentManagementPage - Low Confidence Deletion', () => {
       expect(tabs).toBeInTheDocument();
     });
 
-    // Check for Low Quality Manager tab
+    // The former "Low Quality Manager" tab was merged into the "Document Cleanup" tab
     await waitFor(() => {
-      const lowQualityTab = screen.getByText(/Low Quality Manager/i);
-      expect(lowQualityTab).toBeInTheDocument();
+      expect(screen.getByText('Document Cleanup')).toBeInTheDocument();
     });
   });
 
@@ -141,9 +151,8 @@ describe('DocumentManagementPage - Low Confidence Deletion', () => {
       expect(tabs).toBeInTheDocument();
     });
 
-    // Click on Low Quality Manager tab (third tab, index 2)
-    const lowQualityTab = screen.getByText(/Low Quality Manager/i);
-    lowQualityTab.click();
+    // Click on the Document Cleanup tab
+    fireEvent.click(screen.getByText('Document Cleanup'));
 
     // Wait for tab content to render
     await waitFor(() => {
@@ -159,11 +168,8 @@ describe('DocumentManagementPage - Low Confidence Deletion', () => {
       </DocumentManagementPageWrapper>
     );
 
-    // Navigate to Low Quality Manager tab
-    await waitFor(() => {
-      const lowQualityTab = screen.getByText(/Low Quality Manager/i);
-      lowQualityTab.click();
-    });
+    // Navigate to the Document Cleanup tab
+    fireEvent.click(await screen.findByText('Document Cleanup'));
 
     // Check for action buttons
     await waitFor(() => {
@@ -182,16 +188,13 @@ describe('DocumentManagementPage - Low Confidence Deletion', () => {
       </DocumentManagementPageWrapper>
     );
 
-    // Navigate to Low Quality Manager tab
-    await waitFor(() => {
-      const lowQualityTab = screen.getByText(/Low Quality Manager/i);
-      lowQualityTab.click();
-    });
+    // Navigate to the Document Cleanup tab
+    fireEvent.click(await screen.findByText('Document Cleanup'));
 
     // Check for informational content
     await waitFor(() => {
-      const alertTitle = screen.getByText(/Low Confidence Document Deletion/i);
-      const alertText = screen.getByText(/This tool allows you to delete documents/i);
+      const alertTitle = screen.getByText(/Document Cleanup Center/i);
+      const alertText = screen.getByText(/Clean up your document library by removing problematic documents/i);
       
       expect(alertTitle).toBeInTheDocument();
       expect(alertText).toBeInTheDocument();

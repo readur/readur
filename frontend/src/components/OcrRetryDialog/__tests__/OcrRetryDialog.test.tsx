@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import OcrRetryDialog from '../OcrRetryDialog';
+import { ocrService } from '../../../services/api';
 
 // Mock the API service completely to prevent network calls
 vi.mock('../../../services/api', () => ({
@@ -48,6 +49,9 @@ describe('OcrRetryDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(ocrService.getAvailableLanguages).mockResolvedValue({
+      data: { available_languages: [] },
+    } as any);
   });
 
   it('renders dialog when open is true', () => {

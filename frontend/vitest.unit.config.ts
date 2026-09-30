@@ -16,8 +16,21 @@ export default defineConfig({
       '**/cypress/**',
       '**/.{idea,git,cache,output,temp}/**',
       '**/e2e/**',
+      '**/*.e2e.test.{js,jsx,ts,tsx}',
       '**/*.integration.test.{js,jsx,ts,tsx}',
     ],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        '**/*.test.{ts,tsx}',
+        'src/test/**',
+        '**/*.d.ts',
+        'src/**/__tests__/**',
+        'src/main.tsx',
+      ],
+      reporter: ['text-summary', 'json-summary', 'html'],
+    },
   },
   server: {
     port: parseInt(CLIENT_PORT),
@@ -37,7 +50,7 @@ export default defineConfig({
           return
         }
         warn(warning)
-      }
-    }
+      },
+    },
   },
 })

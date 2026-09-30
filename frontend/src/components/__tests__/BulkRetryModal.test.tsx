@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { BulkRetryModal } from '../BulkRetryModal';
 
 // Create unique mock functions for this test file
-const mockBulkRetryOcr = vi.fn();
+const { mockBulkRetryOcr } = vi.hoisted(() => ({ mockBulkRetryOcr: vi.fn() }));
 
 // Mock the API module with a unique namespace
 vi.mock('../../services/api', () => ({

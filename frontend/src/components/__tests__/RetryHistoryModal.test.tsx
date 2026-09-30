@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { RetryHistoryModal } from '../RetryHistoryModal';
 
 // Create unique mock functions for this test file
-const mockGetDocumentRetryHistory = vi.fn();
+const { mockGetDocumentRetryHistory } = vi.hoisted(() => ({ mockGetDocumentRetryHistory: vi.fn() }));
 
 // Mock the API module with a unique namespace for this test
 vi.mock('../../services/api', () => ({
