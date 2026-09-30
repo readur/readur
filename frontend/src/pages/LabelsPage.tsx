@@ -30,9 +30,9 @@ import {
   FilterList as FilterIcon,
 } from '../design/icons';
 import { useNavigate } from 'react-router-dom';
-import Label, { type LabelData } from '../components/Labels/Label';
+import Label, { type LabelData } from '../features/labels/Label';
 import { PageHeader } from '../design/components';
-import LabelCreateDialog from '../components/Labels/LabelCreateDialog';
+import LabelCreateDialog from '../features/labels/LabelCreateDialog';
 import { useApi } from '../hooks/useApi';
 import { ErrorHelper, ErrorCodes } from '../services/api';
 

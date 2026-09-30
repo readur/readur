@@ -14,7 +14,7 @@ vi.mock('../../components/DocumentViewer', () => ({
   default: () => <div data-testid="document-viewer">Document Viewer</div>,
 }));
 
-vi.mock('../../components/Labels/LabelSelector', () => ({
+vi.mock('../../features/labels/LabelSelector', () => ({
   default: () => null,
 }));
 

@@ -32,8 +32,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api, ErrorHelper, ErrorCodes, ocrService } from '../../services/api';
 import { useNotifications } from '../../contexts/NotificationContext';
-import LabelSelector from '../Labels/LabelSelector';
-import { type LabelData } from '../Labels/Label';
+import LabelSelector from '../../features/labels/LabelSelector';
+import { type LabelData } from '../../features/labels/Label';
 import LanguageSelector from '../LanguageSelector';
 
 interface UploadedDocument {

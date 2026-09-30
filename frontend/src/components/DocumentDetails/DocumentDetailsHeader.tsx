@@ -24,7 +24,7 @@ import {
 } from '../../design/icons';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { type Document } from '../../services/api';
-import { type LabelData } from '../Labels/Label';
+import { type LabelData } from '../../features/labels/Label';
 
 interface DocumentDetailsHeaderProps {
   document: Document;

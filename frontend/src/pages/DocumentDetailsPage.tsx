@@ -21,8 +21,8 @@ import {
   Delete as DeleteIcon,
 } from '../design/icons';
 import { documentService, OcrResponse, type Document } from '../services/api';
-import LabelSelector from '../components/Labels/LabelSelector';
-import { type LabelData } from '../components/Labels/Label';
+import LabelSelector from '../features/labels/LabelSelector';
+import { type LabelData } from '../features/labels/Label';
 import { RetryHistoryModal } from '../components/RetryHistoryModal';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import api from '../services/api';
