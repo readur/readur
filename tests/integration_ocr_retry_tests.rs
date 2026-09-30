@@ -54,7 +54,7 @@ impl OcrRetryTestHelper {
             .as_nanos();
         let username = format!("ocr_retry_admin_{}_{}", test_id, nanos);
         let email = format!("ocr_retry_admin_{}@{}.example.com", test_id, nanos);
-        let password = "testpassword123";
+        let password = &readur::test_utils::test_password();
         
         // Create the admin account in the server's database
         readur::test_utils::create_live_server_user(&username, &email, password, UserRole::Admin)

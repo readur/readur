@@ -35,7 +35,7 @@ async fn create_test_user_with_token(client: &Client) -> Result<String, Box<dyn 
 async fn create_user_with_token(client: &Client, role: UserRole) -> Result<String, Box<dyn std::error::Error>> {
     let base_url = get_base_url();
     let username = format!("testuser_{}", uuid::Uuid::new_v4());
-    let password = "test_password123";
+    let password = &readur::test_utils::test_password();
 
     readur::test_utils::create_live_server_user(&username, &format!("{}@test.com", username), password, role).await?;
 

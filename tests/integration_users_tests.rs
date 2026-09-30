@@ -531,27 +531,28 @@ mod tests {
         let ctx = TestContext::new().await;
         let unique = uuid::Uuid::new_v4().simple().to_string();
         let username = format!("lockout_{}", &unique[..12]);
+        let password = readur::test_utils::test_password();
         ctx.state
             .db
             .create_user(CreateUser {
                 username: username.clone(),
                 email: format!("{}@example.com", username),
-                password: "correct-password-123".to_string(),
+                password: password.clone(),
                 role: Some(UserRole::User),
             })
             .await
             .unwrap();
 
         for _ in 0..10 {
-            assert_eq!(login_from(&ctx, "198.51.100.10", &username, "wrong").await, StatusCode::UNAUTHORIZED);
+            assert_eq!(login_from(&ctx, "198.51.100.10", &username, &readur::test_utils::test_password()).await, StatusCode::UNAUTHORIZED);
         }
         // The failing client is now limited for this account, even with the right password...
         assert_eq!(
-            login_from(&ctx, "198.51.100.10", &username.to_uppercase(), "correct-password-123").await,
+            login_from(&ctx, "198.51.100.10", &username.to_uppercase(), &password).await,
             StatusCode::TOO_MANY_REQUESTS
         );
         // ...while the account owner on another address can still sign in.
-        assert_eq!(login_from(&ctx, "203.0.113.20", &username, "correct-password-123").await, StatusCode::OK);
+        assert_eq!(login_from(&ctx, "203.0.113.20", &username, &password).await, StatusCode::OK);
     }
 
     async fn json_request(
@@ -629,12 +630,13 @@ mod tests {
 
         // An account awaiting approval, as created by self-registration.
         let username = format!("pending_{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
+        let password = readur::test_utils::test_password();
         let pending = ctx.state.db
             .create_user_with_status(
                 CreateUser {
                     username: username.clone(),
                     email: format!("{}@example.com", username),
-                    password: "password123".to_string(),
+                    password: password.clone(),
                     role: Some(UserRole::User),
                 },
                 false,
@@ -661,7 +663,7 @@ mod tests {
         assert_eq!(updated["is_active"], true);
 
         // Now the account can sign in; deactivating it revokes the session.
-        let user_token = auth_helper.login_user(&username, "password123").await;
+        let user_token = auth_helper.login_user(&username, &password).await;
         let (status, _) = json_request(&ctx, "GET", "/api/auth/me", &user_token, None).await;
         assert_eq!(status, StatusCode::OK);
 

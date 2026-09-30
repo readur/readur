@@ -21,12 +21,6 @@ use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 #[cfg(any(test, feature = "test-utils"))]
 use tower::util::ServiceExt;
-#[cfg(any(test, feature = "test-utils"))]
-use reqwest::{Response, StatusCode};
-#[cfg(any(test, feature = "test-utils"))]
-use std::sync::Mutex;
-#[cfg(any(test, feature = "test-utils"))]
-use std::collections::HashMap;
 
 /// Cleanup strategy for database cleanup operations
 #[cfg(any(test, feature = "test-utils"))]
@@ -1157,6 +1151,12 @@ pub fn live_server_database_url() -> String {
     std::env::var("TEST_DATABASE_URL")
         .or_else(|_| std::env::var("DATABASE_URL"))
         .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string())
+}
+
+/// Generate a fresh random password for a test account.
+#[cfg(any(test, feature = "test-utils"))]
+pub fn test_password() -> String {
+    format!("pw-{}", uuid::Uuid::new_v4().simple())
 }
 
 /// Create an active account directly in a live server's database.

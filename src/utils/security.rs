@@ -370,9 +370,9 @@ mod tests {
 
     #[test]
     fn test_password_policy() {
-        assert!(validate_password("short").is_err());
-        assert!(validate_password("").is_err());
-        assert!(validate_password("longenough").is_ok());
+        assert!(validate_password(&"s".repeat(5)).is_err());
+        assert!(validate_password(&String::new()).is_err());
+        assert!(validate_password(&"l".repeat(10)).is_ok());
         assert!(validate_password(&"x".repeat(73)).is_err());
     }
 

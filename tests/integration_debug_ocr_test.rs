@@ -40,16 +40,17 @@ async fn debug_ocr_content() {
         .as_millis();
     let username = format!("debug_test_{}", timestamp);
     let email = format!("debug_{}@test.com", timestamp);
+    let password = readur::test_utils::test_password();
     
     // Create the account in the server's database
-    readur::test_utils::create_live_server_user(&username, &email, "testpass123", readur::models::UserRole::User)
+    readur::test_utils::create_live_server_user(&username, &email, &password, readur::models::UserRole::User)
         .await
         .expect("Registration should work");
     
     // Login
     let login_data = LoginRequest {
         username: username.clone(),
-        password: "testpass123".to_string(),
+        password: password.clone(),
     };
     
     let login_response = client

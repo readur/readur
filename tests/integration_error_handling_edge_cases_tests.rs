@@ -60,7 +60,7 @@ impl ErrorHandlingTestClient {
         let random_suffix = uuid::Uuid::new_v4().to_string().replace("-", "")[..8].to_string();
         let username = format!("error_test_{}_{}_{}", role.to_string(), timestamp, random_suffix);
         let email = format!("error_test_{}@example.com", timestamp);
-        let password = "testpassword123";
+        let password = &readur::test_utils::test_password();
         
         // Create the account in the server's database
         readur::test_utils::create_live_server_user(&username, &email, password, role)
@@ -743,7 +743,7 @@ async fn test_database_constraint_violations() {
     readur::test_utils::create_live_server_user(
         &format!("original_user_{}", unique_suffix),
         &original_email,
-        "password123",
+        &readur::test_utils::test_password(),
         UserRole::User,
     )
     .await

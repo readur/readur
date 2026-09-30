@@ -52,7 +52,7 @@ impl OcrRetryRegressionTestHelper {
         // documents other tests leave on the shared server.
         let test_id = Uuid::new_v4().simple().to_string();
         let username = format!("test_ocr_retry_{}", &test_id[0..8]);
-        let password = "test_password_123";
+        let password = &readur::test_utils::test_password();
         let email = format!("{}@test.com", username);
 
         let user = readur::test_utils::create_live_server_user(&username, &email, password, UserRole::User)

@@ -159,7 +159,7 @@ impl FileProcessingTestClient {
         let random_suffix = uuid::Uuid::new_v4().to_string().replace("-", "")[..8].to_string();
         let username = format!("file_proc_test_{}_{}", timestamp, random_suffix);
         let email = format!("file_proc_test_{}@example.com", timestamp);
-        let password = "fileprocessingpassword123";
+        let password = &readur::test_utils::test_password();
         
         // Create the account in the server's database
         readur::test_utils::create_live_server_user(&username, &email, password, UserRole::User)

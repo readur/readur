@@ -60,7 +60,7 @@ impl OcrFailureCountingTestClient {
             .as_nanos();
         let username = format!("ocr_count_{}_{}_{}_{}", role.to_string(), test_id, nanos, Uuid::new_v4().simple());
         let email = format!("ocr_count_{}_{}@{}.example.com", test_id, nanos, Uuid::new_v4().simple());
-        let password = "testpassword123";
+        let password = &readur::test_utils::test_password();
         
         // Create the account in the server's database
         readur::test_utils::create_live_server_user(&username, &email, password, role)

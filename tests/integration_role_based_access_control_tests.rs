@@ -91,7 +91,7 @@ impl RBACTestClient {
                 (format!("{}_{}", username, retry_id), format!("retry_{}_{}", retry_id, email))
             };
             
-            let password = "rbacpassword123";
+            let password = &readur::test_utils::test_password();
             
             // Public registration never grants roles and new accounts await
             // approval, so accounts are created in the server's database.
