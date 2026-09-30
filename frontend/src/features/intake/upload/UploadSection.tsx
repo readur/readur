@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { BoardTable, Button, EmptyState, StatusMark, type BoardColumn, type StatusState } from '../../../ui';
 import LabelSelector from '../../labels/LabelSelector';
 import LanguageSelector from '../../../components/LanguageSelector';
-import { isLit, useLitCount } from '../../board/litStore';
+import { isShownLit, litReason, useLitCount } from '../../board/litStore';
 import { formatBytes } from '../shared/format';
 import { NameCell, Notice, ProgressCell, sharedStyles } from '../shared/parts';
 import { ACCEPT, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, MAX_FILE_SIZE_MB } from './uploadConfig';
@@ -52,7 +52,7 @@ export function UploadSection() {
       render: (i) => (
         <NameCell
           name={i.file.name}
-          tag={i.status === 'success' && i.documentId && isLit('document', i.documentId) ? 'new' : null}
+          tag={i.status === 'success' && i.documentId && isShownLit('document', i.documentId) ? litReason('document', i.documentId) : null}
         />
       ),
     },
@@ -163,7 +163,7 @@ export function UploadSection() {
         columns={columns}
         rows={queue.items}
         getRowId={(i) => i.id}
-        isRowLit={(i) => i.status === 'success' && Boolean(i.documentId) && isLit('document', i.documentId!)}
+        isRowLit={(i) => i.status === 'success' && Boolean(i.documentId) && isShownLit('document', i.documentId!)}
         onRowAction={(id) => {
           const item = queue.items.find((i) => i.id === id);
           if (item?.status === 'success' && item.documentId) navigate(`/documents/${item.documentId}`);

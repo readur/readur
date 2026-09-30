@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, Dialog } from '../../../ui';
 import { CheckCircle, Error as ErrorIcon, Info } from '../../../ui/icons';
 import type { LitReason } from '../../board/litStore';
+import { litTagOf } from '../../board/litTag';
 import styles from './Shared.module.css';
 
 export { styles as sharedStyles };
@@ -52,7 +53,7 @@ export function ChangedTag({ reason }: { reason?: LitReason | string }) {
   const { t } = useTranslation();
   return (
     <span className={styles.tag}>
-      {reason === 'new' ? t('intake.tag.new', 'New') : t('intake.tag.changed', 'Changed')}
+      {litTagOf(reason) === 'new' ? t('intake.tag.new', 'New') : t('intake.tag.changed', 'Changed')}
     </span>
   );
 }
