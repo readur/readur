@@ -24,6 +24,7 @@ mod tests {
             "OIDC_REDIRECT_URI",
             "DATABASE_URL",
             "JWT_SECRET",
+            "READUR_INSECURE_DEV_MODE",
         ].into_iter().map(|key| {
             (key.to_string(), env::var(key).ok())
         }).collect();
@@ -236,6 +237,28 @@ mod tests {
 
             assert!(config.oidc_enabled);
             assert_eq!(config.oidc_client_id.unwrap(), "env-client-id");
+        });
+    }
+
+    #[test]
+    fn test_jwt_secret_is_optional_but_validated_when_set() {
+        run_with_env_isolation(|| {
+            env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
+
+            // Unset or empty: the server falls back to the stored signing key.
+            let config = Config::from_env().unwrap();
+            assert!(config.jwt_secret.is_empty());
+            env::set_var("JWT_SECRET", "  ");
+            assert!(Config::from_env().unwrap().jwt_secret.is_empty());
+
+            // An explicit value must still be strong.
+            for weak in ["secret", "change-me", "too-short"] {
+                env::set_var("JWT_SECRET", weak);
+                assert!(Config::from_env().is_err(), "{weak} should be rejected");
+            }
+
+            env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
+            assert_eq!(Config::from_env().unwrap().jwt_secret, "config-test-jwt-secret-0123456789abcdef");
         });
     }
 }

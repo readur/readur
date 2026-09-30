@@ -122,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", "=".repeat(60));
     
     // Load and validate configuration with comprehensive logging
-    let config = match Config::from_env() {
+    let mut config = match Config::from_env() {
         Ok(cfg) => {
             println!("✅ Configuration loaded and validated successfully");
             cfg
@@ -359,7 +359,12 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     
-    // Seed admin user  
+    // Sign sessions with JWT_SECRET, or with the key stored in the database.
+    let (signing_key, origin) = readur::jwt_signing_key::resolve(&web_db, &config.jwt_secret).await?;
+    config.jwt_secret = signing_key;
+    println!("🔐 JWT signing key: {}", origin.describe());
+
+    // Seed admin user
     seed::seed_admin_user(&background_db, &config.upload_path).await?;
     
     // Reset any running WebDAV syncs from previous server instance using background DB

@@ -4,7 +4,7 @@ use std::env;
 use crate::models::S3SourceConfig;
 
 mod parsing;
-use parsing::{env_flag, env_list, normalize_cors_origin};
+use parsing::{env_flag, env_list, jwt_secret_from_env, normalize_cors_origin};
 pub use parsing::{validate_jwt_secret, MIN_JWT_SECRET_BYTES};
 
 /// S3 storage is enabled by S3_ENABLED=true or the documented STORAGE_BACKEND=s3.
@@ -313,25 +313,7 @@ impl Config {
                     }
                 }
             },
-            jwt_secret: {
-                let secret = env::var("JWT_SECRET").unwrap_or_default();
-                let insecure_dev_mode = env_flag("READUR_INSECURE_DEV_MODE", false)?;
-                match validate_jwt_secret(&secret) {
-                    Ok(()) => {
-                        println!("✅ JWT_SECRET: ***hidden*** (loaded from env, {} chars)", secret.len());
-                        secret
-                    }
-                    // Escape hatch for throwaway local/CI environments only.
-                    Err(e) if insecure_dev_mode && !secret.is_empty() => {
-                        println!("🚨 JWT_SECRET: {} (allowed because READUR_INSECURE_DEV_MODE=true — never use in production)", e);
-                        secret
-                    }
-                    Err(e) => {
-                        println!("❌ JWT_SECRET: {}", e);
-                        return Err(e);
-                    }
-                }
-            },
+            jwt_secret: jwt_secret_from_env()?,
             upload_path: match env::var("UPLOAD_PATH") {
                 Ok(path) => {
                     println!("✅ UPLOAD_PATH: {} (loaded from env)", path);

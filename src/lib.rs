@@ -12,6 +12,7 @@ pub mod monitoring;
 pub mod ocr;
 pub mod oidc;
 pub mod http_security;
+pub mod jwt_signing_key;
 pub mod routes;
 pub mod scheduling;
 pub mod seed;
