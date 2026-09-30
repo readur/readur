@@ -1520,5 +1520,23 @@
         "exampleFile": "Example File"
       }
     }
+  },
+  "ui": {
+    "clear": "Clear",
+    "close": "Close",
+    "showOptions": "Show options",
+    "notifications": "Notifications",
+    "pagination": {
+      "label": "Pagination",
+      "range": "{{start}}–{{end}} of {{total}}",
+      "pageSize": "Rows per page",
+      "previous": "Previous page",
+      "next": "Next page"
+    },
+    "toast": {
+      "info": "Info:",
+      "success": "Success:",
+      "danger": "Error:"
+    }
   }
 }

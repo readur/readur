@@ -1500,5 +1500,23 @@
         "exampleFile": "Archivo de ejemplo"
       }
     }
+  },
+  "ui": {
+    "clear": "Borrar",
+    "close": "Cerrar",
+    "showOptions": "Mostrar opciones",
+    "notifications": "Notificaciones",
+    "pagination": {
+      "label": "Paginación",
+      "range": "{{start}}–{{end}} de {{total}}",
+      "pageSize": "Filas por página",
+      "previous": "Página anterior",
+      "next": "Página siguiente"
+    },
+    "toast": {
+      "info": "Información:",
+      "success": "Correcto:",
+      "danger": "Error:"
+    }
   }
 }
