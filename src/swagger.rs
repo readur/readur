@@ -123,7 +123,6 @@ use crate::{
         // OCR endpoints
         crate::routes::ocr::get_available_languages,
         crate::ocr::api::health_check,
-        crate::ocr::api::perform_ocr,
         // Ignored files endpoints
         crate::routes::ignored_files::list_ignored_files,
         crate::routes::ignored_files::get_ignored_file,
@@ -154,7 +153,7 @@ use crate::{
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
             // OCR schemas
             crate::routes::ocr::AvailableLanguagesResponse, crate::routes::ocr::LanguageInfo,
-            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse, crate::ocr::api::OcrRequest,
+            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse,
             // Sync progress schemas
             crate::services::sync_progress_tracker::SyncProgressInfo
         )

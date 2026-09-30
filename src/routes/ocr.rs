@@ -31,7 +31,6 @@ pub struct LanguageInfo {
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(crate::ocr::api::health_check))
-        .route("/perform", axum::routing::post(crate::ocr::api::perform_ocr))
         .route("/languages", get(get_available_languages))
 }
 
