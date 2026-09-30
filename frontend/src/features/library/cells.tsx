@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StatusMark, Tooltip, TooltipTrigger } from '../../ui';
-import { useLit } from '../board/litStore';
+import { useShownLit } from '../board/litStore';
+import { litTagOf } from '../board/litTag';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
 import { Label } from '../labels';
 import { displayName, type LibraryRow } from './data';
@@ -11,11 +12,11 @@ import styles from './Library.module.css';
 /** NEW / CHANGED tag for rows that changed since the user last opened them. */
 export function ChangeTag({ id }: { id: string }) {
   const { t } = useTranslation();
-  const { lit, reason } = useLit('document', id);
+  const { lit, reason } = useShownLit('document', id);
   if (!lit) return null;
   return (
     <span className={styles.changeTag}>
-      {reason === 'new' ? t('library.tag.new', 'NEW') : t('library.tag.changed', 'CHANGED')}
+      {litTagOf(reason) === 'new' ? t('library.tag.new', 'NEW') : t('library.tag.changed', 'CHANGED')}
     </span>
   );
 }

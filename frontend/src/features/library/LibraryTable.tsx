@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BoardTable, type BoardColumn, type BoardSort, type Selection } from '../../ui';
-import { isLit } from '../board/litStore';
+import { isShownLit, useAcknowledgeOnLeave } from '../board/litStore';
 import { AddedCell, ChangeTag, LabelsCell, NameCell, StatusCell } from './cells';
 import type { LibraryRow } from './data';
 import { formatBytes, formatRelative } from './format';
@@ -101,8 +101,11 @@ export function LibraryTable({
 
   const isRowLit = useMemo(() => {
     void litVersion;
-    return (row: LibraryRow) => isLit('document', row.id);
+    return (row: LibraryRow) => isShownLit('document', row.id);
   }, [litVersion]);
+  // Rows seen lit during this visit are acknowledged when the user leaves the Library.
+  const rowIds = useMemo(() => rows.map(getRowId), [rows]);
+  useAcknowledgeOnLeave('document', rowIds);
 
   const renderRowDetail = showSnippets
     ? (row: LibraryRow) => {

@@ -23,6 +23,7 @@ vi.mock('../../../services/api', () => ({
 import Board from '../Board';
 import { ChangedTag as BoardTag } from '../Region';
 import { ChangeTag as LibraryTag } from '../../library/cells';
+import { LibraryTable } from '../../library/LibraryTable';
 import { ChangedTag as IntakeTag } from '../../intake/shared/parts';
 import { BULK_THRESHOLD, syncDocuments } from '../litFeeders';
 import { LIT_SHOWN_CAP, isLit, isShownLit, markLit, useAcknowledgeOnLeave } from '../litStore';
@@ -99,6 +100,38 @@ describe('changed state: acknowledge on leave', () => {
     await renderBoard();
     const again = await screen.findByRole('row', { name: /scan\.tiff/ });
     expect(again).not.toHaveAttribute('data-changed');
+  });
+
+  it('acknowledges the Library rows seen lit when the user leaves the Library', async () => {
+    markLit('document', 'L1', 'changed');
+    markLit('document', 'other', 'new');
+    const row = (id: string) =>
+      ({ id, filename: `${id}.pdf`, original_filename: `${id}.pdf`, mime_type: 'application/pdf', file_size: 1, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', labels: [], ocr_status: 'completed' }) as never;
+    const view = render(
+      <I18nextProvider i18n={i18n}>
+        <LibraryTable
+          rows={[row('L1'), row('L2')]}
+          sort={undefined}
+          onSortChange={() => {}}
+          selectedKeys={new Set()}
+          onSelectionChange={() => {}}
+          onOpen={() => {}}
+          sourceName={() => 'Upload'}
+          showSnippets={false}
+          compact={false}
+          isLoading={false}
+          emptyState={null}
+          litVersion={0}
+        />
+      </I18nextProvider>,
+    );
+    const lit = screen.getByRole('row', { name: /L1\.pdf/ });
+    expect(lit).toHaveAttribute('data-changed', 'true');
+    expect(within(lit).getByText('CHANGED')).toBeInTheDocument();
+    view.unmount();
+    await settle();
+    expect(isLit('document', 'L1')).toBe(false);
+    expect(isLit('document', 'other')).toBe(true);
   });
 
   it('survives the development double mount (StrictMode) without clearing rows early', async () => {
