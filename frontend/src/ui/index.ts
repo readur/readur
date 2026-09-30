@@ -17,6 +17,7 @@ export * from './Skeleton';
 export * from './Pagination';
 export * from './Kbd';
 export * from './ChangeTag';
+export * from './SourceDot';
 export * from './StatusMark';
 export * from './Pass';
 export * from './FilterChip';

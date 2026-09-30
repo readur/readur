@@ -33,6 +33,13 @@ describe('Button', () => {
     expect(onPress).not.toHaveBeenCalled();
   });
 
+  it.each(['primary', 'secondary', 'ghost', 'danger', 'danger-solid'] as const)('renders the %s variant with a class', (variant) => {
+    render(<Button variant={variant}>Act</Button>);
+    const cls = screen.getByRole('button', { name: 'Act' }).className;
+    expect(cls).not.toMatch(/undefined/);
+    expect(cls.split(' ').length).toBeGreaterThanOrEqual(3);
+  });
+
   it('does not activate when disabled', async () => {
     const onPress = vi.fn();
     const user = userEvent.setup();

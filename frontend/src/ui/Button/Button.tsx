@@ -3,7 +3,19 @@ import { Button as RACButton, type ButtonProps as RACButtonProps } from 'react-a
 import { cx } from '../shared/FieldParts';
 import styles from './Button.module.css';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+/**
+ * `primary` is the filled accent action; `secondary` a quiet filled surface; `ghost` has no
+ * chrome; `danger` is destructive text; `danger-solid` is the filled confirm inside a dialog.
+ */
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-solid';
+
+const VARIANT_CLASS: Record<ButtonVariant, string> = {
+  primary: styles.primary,
+  secondary: styles.secondary,
+  ghost: styles.ghost,
+  danger: styles.danger,
+  'danger-solid': styles.dangerSolid,
+};
 export type ButtonSize = 'sm' | 'md';
 
 export interface ButtonProps extends Omit<RACButtonProps, 'children' | 'className'> {
@@ -46,7 +58,7 @@ export function Button({
       {...rest}
       ref={setRef}
       isPending={isPending}
-      className={cx(styles.button, styles[variant], styles[size], className)}
+      className={cx(styles.button, VARIANT_CLASS[variant], styles[size], className)}
     >
       {isPending ? (
         <span className={styles.spinner} aria-hidden="true" />
