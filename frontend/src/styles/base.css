@@ -9,6 +9,13 @@
   color-scheme: dark;
 }
 
+/* Padding and borders count toward an element's width, so width: 100% never overflows. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html,
 body {
   margin: 0;

@@ -183,7 +183,7 @@
 
 .radio[data-selected] {
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--line-strong);
+  background: var(--accent-soft);
 }
 
 .radio[data-focus-visible] {
@@ -259,10 +259,11 @@
 
 .example {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s-3);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   width: 100%;
+  min-width: 0;
   min-height: 32px;
   padding: var(--s-1) var(--s-2);
   font: inherit;
@@ -286,12 +287,13 @@
 .exampleQuery {
   font-family: var(--font-data);
   font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
 }
 
 .exampleText {
   font-size: var(--fs-sm);
   color: var(--fg-meta);
-  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 /* Table cells */
