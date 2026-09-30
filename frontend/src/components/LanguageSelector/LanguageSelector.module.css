@@ -1,0 +1,139 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg);
+}
+
+.heading,
+.panelTitle {
+  margin: 0;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+
+.tags,
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: 32px;
+  padding: 0 var(--s-1) 0 var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.tag[data-primary] {
+  border-color: var(--line-strong);
+}
+
+.primaryNote {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.remove {
+  flex: none;
+}
+
+.empty,
+.meta {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.error {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--fs-sm);
+  color: var(--fg);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+}
+
+.trigger {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  max-height: 60vh;
+  overflow: auto;
+  padding: var(--s-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.options {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0;
+}
+
+.option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 40px;
+  padding: 0 var(--s-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.option:last-child {
+  border-bottom: 0;
+}
+
+.option[data-selected] {
+  background: var(--surface);
+}
+
+.primaryTag {
+  padding: 0 var(--s-2);
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--fg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.limit {
+  margin: 0;
+  padding-left: var(--s-3);
+  font-size: var(--fs-sm);
+  color: var(--fg);
+  border-left: 3px solid var(--line-strong);
+}
+
+.close {
+  align-self: flex-end;
+}

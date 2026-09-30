@@ -1,0 +1,43 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.switches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--s-4);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+}
+
+.help {
+  margin: 0;
+  max-width: 72ch;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--fg-2);
+}
+
+.warning {
+  margin: 0;
+  padding-left: var(--s-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--fg);
+  border-left: 3px solid var(--line-strong);
+}

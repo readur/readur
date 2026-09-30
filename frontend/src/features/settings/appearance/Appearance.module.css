@@ -1,0 +1,67 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.legend {
+  margin-bottom: var(--s-2);
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+
+.radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  min-height: 40px;
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--fs-md);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.radio[data-hovered] {
+  background: var(--surface-2);
+}
+
+.radio[data-selected] {
+  border-color: var(--line-strong);
+}
+
+.radio[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dot {
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.radio[data-selected] .dot {
+  border-width: 5px;
+}
+
+.radioLabel {
+  display: block;
+  font-weight: 600;
+}
+
+.radioHelp {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
