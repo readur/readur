@@ -200,6 +200,11 @@
   color: var(--danger);
 }
 
+.health-check {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
 .health-off {
   background: var(--surface-sunken);
   color: var(--fg-2);

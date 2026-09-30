@@ -1,9 +1,10 @@
 import { test, expect } from './fixtures/auth';
 
 /** Every pre-redesign URL lands on its new home (app/legacyRoutes.ts). */
-const LEGACY: { from: string; to: RegExp; heading: string }[] = [
-  { from: '/', to: /\/board$/, heading: 'Board' },
-  { from: '/dashboard', to: /\/board$/, heading: 'Board' },
+const LEGACY: { from: string; to: RegExp; heading: string | null }[] = [
+  { from: '/', to: /\/home$/, heading: null },
+  { from: '/board', to: /\/home$/, heading: null },
+  { from: '/dashboard', to: /\/home$/, heading: null },
   { from: '/upload', to: /\/intake\?section=upload$/, heading: 'Intake' },
   { from: '/sources', to: /\/intake\?section=connections$/, heading: 'Intake' },
   { from: '/watch', to: /\/intake\?section=watch$/, heading: 'Intake' },
@@ -12,7 +13,6 @@ const LEGACY: { from: string; to: RegExp; heading: string }[] = [
   { from: '/labels', to: /\/settings\/labels$/, heading: 'Settings' },
   { from: '/debug', to: /\/settings\/debug$/, heading: 'Settings' },
   { from: '/profile', to: /\/settings\/account$/, heading: 'Settings' },
-  { from: '/search', to: /\/documents$/, heading: 'Library' },
 ];
 
 test.describe('Legacy redirects', () => {
@@ -20,7 +20,8 @@ test.describe('Legacy redirects', () => {
     for (const { from, to, heading } of LEGACY) {
       await page.goto(from);
       await expect(page, `${from} should redirect`).toHaveURL(to);
-      await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+      const h1 = heading ? page.getByRole('heading', { level: 1, name: heading }) : page.getByRole('heading', { level: 1 });
+      await expect(h1).toBeVisible();
     }
   });
 
@@ -53,13 +54,18 @@ test.describe('Legacy redirects', () => {
     await expect(page).not.toHaveURL(/section=ignored/);
   });
 
-  test('old search URLs become Library searches', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/search?q=invoice');
-    await expect(page).toHaveURL(/\/documents\?q=invoice/);
-    await expect(page.getByRole('searchbox', { name: 'Search documents' })).toHaveValue('invoice');
-
+  test('/search is its own page and the old ?query= spelling becomes ?q=', async ({ dynamicAdminPage: page }) => {
     await page.goto('/search?query=receipt');
-    await expect(page).toHaveURL(/\/documents\?q=receipt/);
+    await expect(page).toHaveURL(/\/search\?q=receipt$/);
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Search' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  test('Library searches with ?q= still work', async ({ dynamicAdminPage: page }) => {
+    await page.goto('/documents?q=invoice');
+    await expect(page).toHaveURL(/\/documents\?q=invoice/);
   });
 
   test('signed-out visitors go to sign-in first', async ({ page }) => {

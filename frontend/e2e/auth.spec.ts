@@ -20,9 +20,9 @@ test.describe('Authentication', () => {
     const loginSuccess = await authHelper.loginUser(testUser.credentials);
     expect(loginSuccess).toBe(true);
 
-    // Sign-in lands on the Board.
-    await expect(page).toHaveURL(/\/board/, { timeout: TIMEOUTS.navigation });
-    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    // Sign-in lands on Home.
+    await expect(page).toHaveURL(/\/home/, { timeout: TIMEOUTS.navigation });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
   });
 
@@ -62,8 +62,8 @@ test.describe('Authentication', () => {
 
     await page.reload();
 
-    await expect(page).toHaveURL(/\/board/, { timeout: TIMEOUTS.navigation });
-    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    await expect(page).toHaveURL(/\/home/, { timeout: TIMEOUTS.navigation });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.getByLabel('Username')).toHaveCount(0);
   });
 

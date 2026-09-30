@@ -59,7 +59,7 @@ let cachedAdminToken: string | undefined;
 
 /**
  * Creates unique users per test through the admin users API and signs them in
- * through the sign-in page (`/login`: "Username", "Password", "Sign in" → `/board`).
+ * through the sign-in page (`/login`: "Username", "Password", "Sign in" → `/home`).
  */
 export class E2ETestAuthHelper {
   constructor(private page: Page) {}
@@ -120,7 +120,7 @@ export class E2ETestAuthHelper {
     }
   }
 
-  /** Sign in through the UI. Resolves true once the Board has rendered. */
+  /** Sign in through the UI. Resolves true once Home has rendered. */
   async loginUser(credentials: TestCredentials): Promise<boolean> {
     try {
       await this.page.goto('/login');
@@ -137,8 +137,8 @@ export class E2ETestAuthHelper {
       const response = await loginResponse;
       if (!response.ok()) throw new Error(`Login returned ${response.status()}`);
 
-      await this.page.waitForURL(/\/board/, { timeout: E2E_TIMEOUTS.navigation });
-      await expect(this.page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible({
+      await this.page.waitForURL(/\/home/, { timeout: E2E_TIMEOUTS.navigation });
+      await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible({
         timeout: E2E_TIMEOUTS.navigation,
       });
       return true;

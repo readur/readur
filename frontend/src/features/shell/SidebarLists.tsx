@@ -86,17 +86,23 @@ export function CollectionsList({ labels }: { labels: LabelResponse[] | null }) 
   );
 }
 
-type Health = 'syncing' | 'error' | 'off';
+type Health = 'syncing' | 'error' | 'check' | 'off';
 
-/** A word for anything other than healthy; healthy sources stay quiet. */
-export function sourceHealth(source: Pick<SourceResponse, 'enabled' | 'status'>): Health | null {
+/**
+ * A word for anything other than healthy (healthy sources stay quiet), in the same order as the
+ * connections list: off, syncing, error, then the last health check.
+ */
+export function sourceHealth(
+  source: Pick<SourceResponse, 'enabled' | 'status'> & { validation_status?: string | null },
+): Health | null {
   if (!source.enabled) return 'off';
-  if (source.status === 'error') return 'error';
   if (source.status === 'syncing') return 'syncing';
+  if (source.status === 'error' || source.validation_status === 'critical') return 'error';
+  if (source.validation_status === 'warning') return 'check';
   return null;
 }
 
-const HEALTH_FALLBACK: Record<Health, string> = { syncing: 'Syncing', error: 'Error', off: 'Off' };
+const HEALTH_FALLBACK: Record<Health, string> = { syncing: 'Syncing', error: 'Error', check: 'Check', off: 'Off' };
 
 export const sourcePath = (id: string) => `/intake?section=connections&source=${encodeURIComponent(id)}`;
 

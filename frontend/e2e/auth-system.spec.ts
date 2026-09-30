@@ -26,9 +26,9 @@ test.describe('E2E Auth System', () => {
     const loginSuccess = await authHelper.loginUser(testUser.credentials);
     expect(loginSuccess).toBe(true);
     
-    // Verify we're on the Board
-    await expect(page).toHaveURL(/\/board/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    // Verify we're on Home
+    await expect(page).toHaveURL(/\/home/);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     
   });
 
@@ -42,9 +42,9 @@ test.describe('E2E Auth System', () => {
     const loginSuccess = await authHelper.loginUser(testAdmin.credentials);
     expect(loginSuccess).toBe(true);
     
-    // Verify we're on the Board
-    await expect(page).toHaveURL(/\/board/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    // Verify we're on Home
+    await expect(page).toHaveURL(/\/home/);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     
   });
 
@@ -89,10 +89,10 @@ test.describe('E2E Auth System', () => {
   test('dynamic user should have user permissions', async ({ dynamicUserPage }) => {
     // The dynamicUserPage fixture should have created and logged in a regular user
     
-    // The Board works for every user (the legacy /dashboard URL redirects there)
+    // Home works for every user (the legacy /dashboard URL redirects there)
     await dynamicUserPage.goto('/dashboard');
-    await expect(dynamicUserPage).toHaveURL(/\/board/);
-    await expect(dynamicUserPage.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    await expect(dynamicUserPage).toHaveURL(/\/home/);
+    await expect(dynamicUserPage.getByRole('heading', { level: 1 })).toBeVisible();
 
     // Admin-only settings sections are hidden from regular users
     await dynamicUserPage.goto('/settings');

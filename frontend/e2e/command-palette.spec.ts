@@ -9,8 +9,8 @@ test.describe('Command palette', () => {
   const input = (page: Page) => palette(page).getByRole('searchbox', { name: 'Search' });
 
   test('opens with the keyboard shortcut and closes with Esc', async ({ dynamicUserPage: page }) => {
-    await page.goto('/board');
-    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    await page.goto('/home');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     await page.keyboard.press('ControlOrMeta+k');
     await expect(palette(page)).toBeVisible();
@@ -18,7 +18,7 @@ test.describe('Command palette', () => {
 
     // With nothing typed it offers the destinations
     const goTo = palette(page).getByRole('group', { name: 'Go to' });
-    for (const d of ['Board', 'Library', 'Intake', 'Settings']) {
+    for (const d of ['Home', 'Search', 'Library', 'Intake', 'Settings']) {
       await expect(goTo.getByRole('menuitem', { name: d, exact: true })).toBeVisible();
     }
 
@@ -26,8 +26,8 @@ test.describe('Command palette', () => {
     await expect(palette(page)).toBeHidden();
   });
 
-  test('opens from the search field in the top bar', async ({ dynamicUserPage: page }) => {
-    await page.goto('/board');
+  test('opens from the quick-find field in the sidebar', async ({ dynamicUserPage: page }) => {
+    await page.goto('/home');
     const trigger = page.getByRole('button', { name: 'Search documents' });
     await expect(trigger).toHaveAttribute('aria-keyshortcuts', /K/i);
     await trigger.click();
@@ -39,8 +39,8 @@ test.describe('Command palette', () => {
     const id = await helpers.uploadDocumentViaAPI(TEST_FILES.test1);
     await helpers.waitForOCRComplete(id);
 
-    await page.goto('/board');
-    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    await page.goto('/home');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await page.keyboard.press('ControlOrMeta+k');
     await input(page).fill('some text from text');
 
@@ -61,8 +61,8 @@ test.describe('Command palette', () => {
   });
 
   test('Enter on a destination navigates there', async ({ dynamicUserPage: page }) => {
-    await page.goto('/board');
-    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+    await page.goto('/home');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await page.keyboard.press('ControlOrMeta+k');
     await input(page).fill('connections');
 
@@ -73,13 +73,13 @@ test.describe('Command palette', () => {
     await expect(palette(page)).toBeHidden();
   });
 
-  test('"Show all results" opens the Library search', async ({ dynamicUserPage: page }) => {
-    await page.goto('/board');
-    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
+  test('"Show all results" opens the Search page', async ({ dynamicUserPage: page }) => {
+    await page.goto('/home');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await page.keyboard.press('ControlOrMeta+k');
     await input(page).fill('quarterly');
     await palette(page).getByRole('menuitem', { name: /Show all results for “quarterly”/ }).click();
-    await expect(page).toHaveURL(/\/documents\?q=quarterly/);
-    await expect(page.getByRole('searchbox', { name: 'Search documents' })).toHaveValue('quarterly');
+    await expect(page).toHaveURL(/\/search\?q=quarterly/);
+    await expect(page.getByRole('searchbox').first()).toHaveValue('quarterly');
   });
 });

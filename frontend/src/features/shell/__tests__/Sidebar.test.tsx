@@ -122,7 +122,7 @@ describe('sources', () => {
   it('lists uploads, the watch folder and each source by name with a health word', async () => {
     mockedGet.mockResolvedValue({
       data: [
-        source('s2', 'Scanner inbox', { source_type: 'local_folder' }),
+        source('s2', 'Scanner inbox', { source_type: 'local_folder', validation_status: 'warning' }),
         source('s1', 'Nextcloud', { status: 'error' }),
         source('s3', 'Archive bucket', { source_type: 's3', enabled: false }),
       ],
@@ -135,7 +135,7 @@ describe('sources', () => {
       'Watch folder',
       'Archive bucketOff',
       'NextcloudError',
-      'Scanner inbox',
+      'Scanner inboxCheck',
     ]);
     expect(links[0]).toHaveAttribute('href', '/intake?section=upload');
     expect(links[1]).toHaveAttribute('href', '/intake?section=watch');
@@ -171,6 +171,9 @@ describe('sources', () => {
     expect(sourceHealth({ enabled: true, status: 'syncing' })).toBe('syncing');
     expect(sourceHealth({ enabled: true, status: 'error' })).toBe('error');
     expect(sourceHealth({ enabled: false, status: 'error' })).toBe('off');
+    expect(sourceHealth({ enabled: true, status: 'idle', validation_status: 'warning' })).toBe('check');
+    expect(sourceHealth({ enabled: true, status: 'idle', validation_status: 'critical' })).toBe('error');
+    expect(sourceHealth({ enabled: true, status: 'syncing', validation_status: 'critical' })).toBe('syncing');
   });
 });
 

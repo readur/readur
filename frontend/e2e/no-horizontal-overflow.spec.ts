@@ -44,7 +44,7 @@ test.describe('No horizontal overflow at 390px', () => {
     await helpers.waitForOCRComplete(readable);
     expect((await helpers.waitForOCRComplete(broken)).ocr_status).toBe('failed');
 
-    await visit(page, '/board', async (p) => {
+    await visit(page, '/home', async (p) => {
       await expect(p.getByText(LONG_NAME).first()).toBeVisible({ timeout: TIMEOUTS.medium });
     });
 

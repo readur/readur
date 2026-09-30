@@ -36,13 +36,14 @@ html {
   color: var(--fg);
 }
 
-a {
+/* Zero specificity, so any class on a link wins in every state. */
+:where(a) {
   color: var(--accent);
   text-underline-offset: 0.2em;
   text-decoration-thickness: 1px;
 }
 
-a:hover {
+:where(a:hover) {
   color: var(--accent-hover);
 }
 
