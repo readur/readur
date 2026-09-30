@@ -24,7 +24,9 @@ const FILES_TO_SCAN = [
   'frontend/src/pages/DocumentManagementPage.tsx',
   'frontend/src/pages/IgnoredFilesPage.tsx',
   'frontend/src/pages/SourcesPage.tsx',
-  'frontend/src/pages/DebugPage.tsx',
+  'frontend/src/features/settings/debug/useDebugSession.ts',
+  'frontend/src/features/settings/debug/DebugPanels.tsx',
+  'frontend/src/features/settings/debug/Diagnostics.tsx',
 ];
 
 // Matches string literals that look like API paths. We limit to paths that
