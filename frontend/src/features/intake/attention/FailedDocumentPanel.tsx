@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Pass, PassCell, SlideOver, StatusMark, useToast } from '../../../ui';
-import { documentService, ocrService, type FailedDocumentRow } from '../../../services/api';
+import { documentService, ocrService, type FailedOcrDocumentRow } from '../../../services/api';
 import { RetryHistoryList } from '../../../components/RetryHistoryModal';
 import { RetryRecommendations } from '../../../components/RetryRecommendations';
 import LanguageSelector from '../../../components/LanguageSelector';
@@ -9,22 +9,21 @@ import { acknowledge } from '../../board/litStore';
 import { categoryOf, ErrorCodes, hasCode, serverMessage } from '../shared/errors';
 import { formatBytes, formatDateTime } from '../shared/format';
 import { sharedStyles } from '../shared/parts';
-import { attentionIdOfDocument } from '../shared/seenEvents';
 import { FailedDocumentPreview } from './FailedDocumentPreview';
-import { canRetry, confidenceText, failedName, failureSummary, reasonLabel, stageLabel } from './failureLabels';
+import { attentionKeyOf, canRetry, failedName, ocrFailureSummary, reasonLabel } from './failureLabels';
 
 export interface FailedDocumentPanelProps {
-  document: FailedDocumentRow | null;
+  document: FailedOcrDocumentRow | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
 }
 
-/** Why a document failed, what it looked like, its retry history, and a retry. */
+/** Why a document's OCR failed, what it looks like, its retry history, and a retry. */
 export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onChanged }: FailedDocumentPanelProps) {
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const ids = { preview: useId(), history: useId(), recommend: useId(), error: useId() };
+  const ids = { preview: useId(), history: useId(), error: useId() };
   const [retrying, setRetrying] = useState(false);
   const [languages, setLanguages] = useState<string[]>([]);
   const [primary, setPrimary] = useState<string | undefined>(undefined);
@@ -32,7 +31,6 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
   if (!doc) return null;
   const lng = i18n.language;
   const name = failedName(doc);
-  const confidence = confidenceText(doc.ocr_confidence);
 
   const retry = async () => {
     setRetrying(true);
@@ -46,7 +44,7 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
         toast.show({ title: t('intake.attention.retryFailed', 'Could not retry OCR'), description: data.message, tone: 'danger' });
         return;
       }
-      acknowledge('attention', attentionIdOfDocument(doc.id));
+      acknowledge('attention', attentionKeyOf(doc));
       toast.show({
         title: t('intake.attention.retryStarted', 'OCR retry queued'),
         description:
@@ -84,7 +82,7 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
       <Button
         variant="ghost"
         onPress={() => {
-          acknowledge('attention', attentionIdOfDocument(doc.id));
+          acknowledge('attention', attentionKeyOf(doc));
           onOpenChange(false);
         }}
       >
@@ -98,46 +96,40 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
       <div className={sharedStyles.stack}>
         <StatusMark state="failed" />
         <Pass aria-label={t('intake.attention.failure', 'Failure')}>
-          <PassCell label={t('intake.attention.col.reason', 'Reason')}>{failureSummary(t, doc)}</PassCell>
-          <PassCell label={t('intake.attention.col.stage', 'Stage')}>{stageLabel(t, doc.failure_stage)}</PassCell>
+          <PassCell label={t('intake.attention.col.reason', 'Reason')}>{ocrFailureSummary(t, doc)}</PassCell>
           <PassCell label={t('intake.attention.col.retries', 'Retries')} mono>{String(doc.retry_count ?? 0)}</PassCell>
         </Pass>
         <Pass aria-label={t('intake.attention.file', 'File')}>
           <PassCell label={t('intake.attention.size', 'Size')} mono>{formatBytes(doc.file_size, 2)}</PassCell>
           <PassCell label={t('intake.attention.type', 'Type')} mono>{doc.mime_type || '—'}</PassCell>
-          <PassCell label={t('intake.attention.source', 'Source')}>{doc.ingestion_source || '—'}</PassCell>
         </Pass>
         <Pass aria-label={t('intake.attention.dates', 'Dates')}>
           <PassCell label={t('intake.attention.created', 'Added')} mono>{formatDateTime(doc.created_at, lng)}</PassCell>
           <PassCell label={t('intake.attention.lastRetry', 'Last retry')} mono>
-            {doc.last_retry_at ? formatDateTime(doc.last_retry_at, lng) : t('intake.attention.noRetries', 'none yet')}
+            {doc.last_attempt_at ? formatDateTime(doc.last_attempt_at, lng) : t('intake.attention.noRetries', 'none yet')}
           </PassCell>
           <PassCell label={t('intake.attention.updated', 'Updated')} mono>{formatDateTime(doc.updated_at, lng)}</PassCell>
         </Pass>
-        {doc.failure_reason === 'low_ocr_confidence' ? (
-          <Pass aria-label={t('intake.attention.ocrResult', 'OCR result')}>
-            <PassCell label={t('intake.attention.confidence', 'Confidence')} mono>{confidence ?? '—'}</PassCell>
-            <PassCell label={t('intake.attention.words', 'Words')} mono>
-              {typeof doc.ocr_word_count === 'number' ? String(doc.ocr_word_count) : '—'}
-            </PassCell>
-          </Pass>
-        ) : null}
 
         <section className={sharedStyles.stack} aria-labelledby={ids.error}>
           <h3 id={ids.error} className={sharedStyles.heading}>{t('intake.attention.errorMessage', 'Error message')}</h3>
           <pre className={sharedStyles.codeBlock}>
-            {doc.error_message || t('intake.attention.noErrorMessage', 'No error message was recorded.')}
+            {doc.ocr_error || t('intake.attention.noErrorMessage', 'No error message was recorded.')}
           </pre>
-          <p className={sharedStyles.meta}>{t('intake.attention.reasonCode', 'Reason code: {{code}}', { code: reasonLabel(t, doc.failure_reason) })}</p>
+          {doc.ocr_failure_reason ? (
+            <p className={sharedStyles.meta}>
+              {t('intake.attention.reasonCode', 'Reason code: {{code}}', { code: reasonLabel(t, doc.ocr_failure_reason) })}
+            </p>
+          ) : null}
         </section>
 
-        {doc.tags.length > 0 ? (
+        {doc.tags?.length > 0 ? (
           <p className={sharedStyles.meta}>{t('intake.attention.tags', 'Tags: {{tags}}', { tags: doc.tags.join(', ') })}</p>
         ) : null}
 
         <section className={sharedStyles.stack} aria-labelledby={ids.preview}>
           <h3 id={ids.preview} className={sharedStyles.heading}>{t('intake.attention.preview', 'File')}</h3>
-          <FailedDocumentPreview failedDocumentId={doc.id} filename={name} mimeType={doc.mime_type ?? ''} />
+          <FailedDocumentPreview id={doc.id} filename={name} mimeType={doc.mime_type ?? ''} load={documentService.view} />
         </section>
 
         <section className={sharedStyles.stack} aria-label={t('intake.attention.retryLanguages', 'Retry with languages')}>

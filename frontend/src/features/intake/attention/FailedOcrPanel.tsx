@@ -6,34 +6,34 @@ import {
   Button,
   EmptyState,
   Pagination,
-  Select,
-  SelectItem,
   StatusMark,
   useToast,
   type BoardColumn,
   type Selection,
 } from '../../../ui';
-import { documentService, ocrService, type BulkOcrRetryResponse, type FailedDocumentRow } from '../../../services/api';
+import { documentService, type BulkOcrRetryResponse, type FailedOcrDocumentRow } from '../../../services/api';
 import { BulkRetryModal } from '../../../components/BulkRetryModal';
 import { acknowledge, isLit, useLitCount } from '../../board/litStore';
 import { serverMessage } from '../shared/errors';
 import { formatRelative } from '../shared/format';
 import { ConfirmDialog, NameCell, Notice, sharedStyles } from '../shared/parts';
-import { attentionIdOfDocument, DOCUMENT_EVENTS_KEY, flagNewFailures } from '../shared/seenEvents';
+import { DOCUMENT_EVENTS_KEY, flagNewFailures } from '../shared/seenEvents';
 import { useLoader } from '../shared/useLoader';
 import { FailedDocumentPanel } from './FailedDocumentPanel';
-import { FAILURE_REASONS, FAILURE_STAGES, failedName, failureSummary, reasonLabel, stageLabel } from './failureLabels';
+import { attentionKeyOf, failedName, ocrFailureSummary } from './failureLabels';
+import { ImportFailuresPanel } from './ImportFailuresPanel';
+import { outcomeOf, toneOf } from './outcome';
 
 export const FAILED_PAGE_SIZE = 25;
-const ALL = 'all';
 
-/** Documents whose import or OCR failed. Each row opens its details; selected rows can be retried. */
+/**
+ * Documents whose OCR failed (real documents, so every action works on them), then a
+ * read-only list of other import failures.
+ */
 export function FailedOcrPanel() {
   const { t, i18n } = useTranslation();
   const toast = useToast();
   useLitCount('attention');
-  const [stage, setStage] = useState(ALL);
-  const [reason, setReason] = useState(ALL);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(FAILED_PAGE_SIZE);
   const [selected, setSelected] = useState<Selection>(new Set());
@@ -43,51 +43,48 @@ export function FailedOcrPanel() {
   const [deleting, setDeleting] = useState(false);
 
   const failed = useLoader(
-    async () =>
-      (
-        await ocrService.listFailedDocuments({
-          limit: pageSize,
-          offset: (page - 1) * pageSize,
-          stage: stage === ALL ? undefined : stage,
-          reason: reason === ALL ? undefined : reason,
-        })
-      ).data,
-    [page, pageSize, stage, reason],
+    async () => (await documentService.getFailedOcrDocuments(pageSize, (page - 1) * pageSize)).data,
+    [page, pageSize],
   );
   const docs = failed.data?.documents ?? [];
   const total = failed.data?.pagination?.total ?? docs.length;
-  const selectedIds = selected === 'all' ? docs.map((d) => d.id) : docs.filter((d) => selected.has(d.id)).map((d) => d.id);
+  const selectedDocs = selected === 'all' ? docs : docs.filter((d) => selected.has(d.id));
+  const selectedIds = selectedDocs.map((d) => d.id);
   const open = docs.find((d) => d.id === openId) ?? null;
 
   useEffect(() => {
     flagNewFailures(
       DOCUMENT_EVENTS_KEY,
       'attention',
-      docs.map((d) => ({ id: attentionIdOfDocument(d.id), eventKey: `${d.id}@${d.updated_at}` })),
+      docs.map((d) => ({ id: attentionKeyOf(d), eventKey: attentionKeyOf(d) })),
     );
   }, [docs]);
 
-  const litOf = (d: FailedDocumentRow) => isLit('attention', attentionIdOfDocument(d.id));
+  const litOf = (d: FailedOcrDocumentRow) => isLit('attention', attentionKeyOf(d));
+  const ackAll = (list: FailedOcrDocumentRow[]) => list.forEach((d) => acknowledge('attention', attentionKeyOf(d)));
 
-  const columns: BoardColumn<FailedDocumentRow>[] = [
+  const columns: BoardColumn<FailedOcrDocumentRow>[] = [
     { id: 'name', label: t('intake.attention.col.name', 'Name'), render: (d) => <NameCell name={failedName(d)} tag={litOf(d) ? 'changed' : null} /> },
     { id: 'status', label: t('intake.attention.col.status', 'Status'), width: 110, render: () => <StatusMark state="failed" size="sm" /> },
-    { id: 'reason', label: t('intake.attention.col.reason', 'Reason'), width: 200, render: (d) => failureSummary(t, d) },
-    { id: 'stage', label: t('intake.attention.col.stage', 'Stage'), width: 110, render: (d) => stageLabel(t, d.failure_stage) },
+    { id: 'reason', label: t('intake.attention.col.reason', 'Reason'), width: 220, render: (d) => ocrFailureSummary(t, d) },
     { id: 'retries', label: t('intake.attention.col.retries', 'Retries'), align: 'end', width: 90, render: (d) => String(d.retry_count ?? 0) },
     { id: 'failed', label: t('intake.attention.col.failed', 'Failed'), mono: true, width: 130, render: (d) => formatRelative(d.updated_at, i18n.language) },
   ];
 
   const onRetried = (result: BulkOcrRetryResponse) => {
+    const outcome = outcomeOf(result.queued_count, result.matched_count);
     toast.show({
       title: t('intake.attention.retryQueued', '{{queued}} of {{matched}} documents queued', {
         queued: result.queued_count,
         matched: result.matched_count,
       }),
-      description: t('intake.attention.retryEta', 'About {{minutes}} min', { minutes: Math.round(result.estimated_total_time_minutes) }),
-      tone: 'success',
+      description:
+        outcome === 'all'
+          ? undefined
+          : t('intake.attention.retryPartial', 'Some documents were not queued. Check them and try again.'),
+      tone: toneOf(outcome),
     });
-    selectedIds.forEach((id) => acknowledge('attention', attentionIdOfDocument(id)));
+    if (outcome === 'all') ackAll(selectedDocs);
     setSelected(new Set());
     void failed.reload();
   };
@@ -95,11 +92,23 @@ export function FailedOcrPanel() {
   const deleteSelected = async () => {
     setDeleting(true);
     try {
-      await documentService.bulkDelete(selectedIds);
-      selectedIds.forEach((id) => acknowledge('attention', attentionIdOfDocument(id)));
-      toast.show({ title: t('intake.attention.deleted', '{{count}} documents deleted', { count: selectedIds.length }), tone: 'success' });
-      setSelected(new Set());
-      setConfirmDelete(false);
+      const res = await documentService.bulkDelete(selectedIds);
+      const deleted = (res.data as { deleted_count?: number } | undefined)?.deleted_count;
+      const outcome = outcomeOf(deleted, selectedIds.length);
+      if (outcome === 'none') {
+        toast.show({ title: t('intake.attention.deleteNone', 'No documents were deleted'), tone: 'danger' });
+      } else {
+        toast.show({
+          title: t('intake.attention.deletedOf', '{{deleted}} of {{requested}} documents deleted', {
+            deleted,
+            requested: selectedIds.length,
+          }),
+          tone: toneOf(outcome),
+        });
+        ackAll(selectedDocs);
+        setSelected(new Set());
+        setConfirmDelete(false);
+      }
       await failed.reload();
     } catch (error) {
       toast.show({ title: t('intake.attention.deleteFailed', 'Could not delete the documents'), description: serverMessage(error), tone: 'danger' });
@@ -108,37 +117,12 @@ export function FailedOcrPanel() {
     }
   };
 
-  const resetPage = () => {
-    setPage(1);
-    setSelected(new Set());
-  };
-
   return (
     <div className={sharedStyles.section}>
       <div className={sharedStyles.toolbar}>
-        <Select label={t('intake.attention.stageFilter', 'Stage')} selectedKey={stage} onSelectionChange={(k) => { setStage(String(k)); resetPage(); }}>
-          <SelectItem id={ALL}>{t('intake.attention.allStages', 'All stages')}</SelectItem>
-          {FAILURE_STAGES.map((s) => (
-            <SelectItem key={s} id={s}>{stageLabel(t, s)}</SelectItem>
-          ))}
-        </Select>
-        <Select label={t('intake.attention.reasonFilter', 'Reason')} selectedKey={reason} onSelectionChange={(k) => { setReason(String(k)); resetPage(); }}>
-          <SelectItem id={ALL}>{t('intake.attention.allReasons', 'All reasons')}</SelectItem>
-          {FAILURE_REASONS.map((r) => (
-            <SelectItem key={r} id={r}>{reasonLabel(t, r)}</SelectItem>
-          ))}
-        </Select>
-        <Button
-          variant="ghost"
-          isDisabled={stage === ALL && reason === ALL}
-          onPress={() => {
-            setStage(ALL);
-            setReason(ALL);
-            resetPage();
-          }}
-        >
-          {t('intake.attention.clearFilters', 'Clear filters')}
-        </Button>
+        <p className={sharedStyles.lead}>
+          {t('intake.attention.ocrLead', 'Documents whose text could not be read. Open one for details, or select several to retry or delete.')}
+        </p>
         <div className={sharedStyles.toolbarEnd}>
           <Button onPress={() => void failed.reload()}>{t('intake.actions.refresh', 'Refresh')}</Button>
           <Button variant="primary" onPress={() => setRetryOpen(true)} isDisabled={total === 0}>
@@ -161,11 +145,12 @@ export function FailedOcrPanel() {
           selectedKeys={selected}
           onSelectionChange={setSelected}
           onRowAction={(id) => {
-            acknowledge('attention', attentionIdOfDocument(id));
+            const doc = docs.find((d) => d.id === id);
+            if (doc) acknowledge('attention', attentionKeyOf(doc));
             setOpenId(id);
           }}
           isRowLit={litOf}
-          renderRowDetail={(d) => (d.error_message ? d.error_message : null)}
+          renderRowDetail={(d) => d.ocr_error || null}
           isLoading={failed.isLoading}
           emptyState={
             <EmptyState
@@ -180,6 +165,8 @@ export function FailedOcrPanel() {
       {total > pageSize ? (
         <Pagination page={page} pageSize={pageSize} total={total} onChange={(p, size) => { setPage(p); setPageSize(size); setSelected(new Set()); }} />
       ) : null}
+
+      <ImportFailuresPanel />
 
       <BulkActionBar
         count={selectedIds.length}

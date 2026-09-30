@@ -50,6 +50,3 @@ export function flagNewFailures(
   if (added > 0) write(storageKey, seen);
   return added;
 }
-
-/** Attention id of a failed document; the Board uses the same key. */
-export const attentionIdOfDocument = (documentId: string) => `document:${documentId}`;

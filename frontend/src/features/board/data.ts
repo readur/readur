@@ -28,9 +28,29 @@ export async function fetchArrivals(): Promise<ArrivalsPage> {
   return { documents, total };
 }
 
+type FailedOcrRow = FailedOcrDocument & {
+  ocr_failure_reason?: string | null;
+  ocr_error?: string | null;
+  failure_category?: string;
+  last_attempt_at?: string | null;
+};
+
+/**
+ * Documents whose OCR failed (GET /documents/failed/ocr). Their ids are real document ids, so
+ * Retry works on them. The rows are mapped onto the strip's shape (reason, message, last try).
+ */
 export async function fetchFailedOcr(): Promise<FailedOcrDocument[]> {
   const res = await documentService.getFailedOcrDocuments(10);
-  return asArray<FailedOcrDocument>(res.data, 'documents');
+  return asArray<FailedOcrRow>(res.data, 'documents').map((d) => ({
+    id: d.id,
+    filename: d.filename,
+    original_filename: d.original_filename,
+    failure_reason: d.failure_reason ?? d.ocr_failure_reason ?? d.failure_category,
+    error_message: d.error_message ?? d.ocr_error ?? null,
+    created_at: d.created_at,
+    updated_at: d.updated_at,
+    last_retry_at: d.last_retry_at ?? d.last_attempt_at ?? null,
+  }));
 }
 
 export async function fetchSources(): Promise<BoardSource[]> {

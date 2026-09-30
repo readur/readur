@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ocrService, queueService, sourcesService } from '../../services/api';
+import { documentService, queueService, sourcesService } from '../../services/api';
 
 export interface IntakeSummary {
   connections: number | null;
@@ -23,14 +23,14 @@ export function useIntakeSummary(refreshKey: unknown): IntakeSummary {
     let alive = true;
     void Promise.all([
       settle(sourcesService.list()),
-      settle(ocrService.listFailedDocuments({ limit: 1, offset: 0 })),
+      settle(documentService.getFailedOcrDocuments(1, 0)),
       settle(queueService.getStats()),
     ]).then(([sources, failed, stats]) => {
       if (!alive) return;
       setSummary({
         connections: Array.isArray(sources?.data) ? sources.data.length : null,
         attention:
-          failed?.data?.statistics?.total_failed ?? failed?.data?.pagination?.total ?? null,
+          failed?.data?.pagination?.total ?? failed?.data?.statistics?.total_failed ?? null,
         processing: stats?.data ? (stats.data.pending_count ?? 0) + (stats.data.processing_count ?? 0) : null,
       });
     });

@@ -17,15 +17,18 @@ export interface ListFieldProps {
   normalize?: (value: string) => string;
   /** Returns an error message for a value that may not be added. */
   check?: (value: string) => string | null;
+  /** Returns advice about a value that is added anyway (shown as a note, never blocks). */
+  advise?: (value: string) => string | null;
   /** Error for the list as a whole (e.g. empty). */
   listError?: string | null;
 }
 
 /** A list of values with an input and an Add button, shown as removable chips. */
-export function ListField({ label, description, placeholder, items, onChange, normalize, check, listError }: ListFieldProps) {
+export function ListField({ label, description, placeholder, items, onChange, normalize, check, advise, listError }: ListFieldProps) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [advice, setAdvice] = useState<string | null>(null);
   const value = normalize ? normalize(draft) : draft.trim();
 
   const add = () => {
@@ -40,6 +43,7 @@ export function ListField({ label, description, placeholder, items, onChange, no
       return;
     }
     onChange([...items, value]);
+    setAdvice(advise?.(value) ?? null);
     setDraft('');
     setError(null);
   };
@@ -71,6 +75,9 @@ export function ListField({ label, description, placeholder, items, onChange, no
           {t('intake.form.add', 'Add')}
         </Button>
       </div>
+      <p className={styles.hint} role="status">
+        {advice}
+      </p>
       <ChipList
         items={items}
         label={label}

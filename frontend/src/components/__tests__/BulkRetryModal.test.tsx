@@ -148,4 +148,49 @@ describe('BulkRetryModal', () => {
     await user.click(screen.getByRole('button', { name: 'Preview' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('boom');
   });
+
+  test('shows an error and stays open when the retry queued nothing', async () => {
+    mockBulkRetryOcr.mockResolvedValueOnce({
+      data: { success: true, queued_count: 0, matched_count: 5, documents: [], estimated_total_time_minutes: 1, message: '' },
+    });
+    mockBulkRetryOcr.mockResolvedValueOnce({
+      data: { success: true, queued_count: 0, matched_count: 5, documents: [], estimated_total_time_minutes: 1, message: '' },
+    });
+    const user = userEvent.setup();
+    render(<BulkRetryModal {...mockProps} />);
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+    await user.click(await screen.findByRole('button', { name: 'Retry 5 documents' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No documents were queued');
+    expect(mockProps.onSuccess).not.toHaveBeenCalled();
+    expect(mockProps.onClose).not.toHaveBeenCalled();
+  });
+
+  test('retries with languages per document, reports only real queues and no time estimate', async () => {
+    mockRetryWithLanguage.mockResolvedValueOnce({ data: { success: true } }).mockResolvedValueOnce({ data: { success: false } });
+    const user = userEvent.setup();
+    render(<BulkRetryModal {...mockProps} selectedDocumentIds={['a', 'b']} />);
+    await user.click(await screen.findByRole('button', { name: /languages/i }));
+    await user.click(await screen.findByRole('checkbox', { name: /German/ }));
+    await user.click(screen.getByLabelText('Override processing priority'));
+    expect(screen.getByRole('note')).toHaveTextContent('does not apply when retrying with chosen languages');
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+    await user.click(await screen.findByRole('button', { name: 'Retry 5 documents' }));
+    expect(mockRetryWithLanguage).toHaveBeenCalledWith('a', undefined, ['deu']);
+    expect(mockRetryWithLanguage).toHaveBeenCalledWith('b', undefined, ['deu']);
+    expect(mockProps.onSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ queued_count: 1, matched_count: 2, estimated_total_time_minutes: 0 }),
+    );
+  });
+
+  test('stays open with an error when no language retry was accepted', async () => {
+    mockRetryWithLanguage.mockRejectedValue(new Error('nope'));
+    const user = userEvent.setup();
+    render(<BulkRetryModal {...mockProps} selectedDocumentIds={['a']} />);
+    await user.click(await screen.findByRole('button', { name: /languages/i }));
+    await user.click(await screen.findByRole('checkbox', { name: /German/ }));
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+    await user.click(await screen.findByRole('button', { name: 'Retry 5 documents' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No documents were queued');
+    expect(mockProps.onSuccess).not.toHaveBeenCalled();
+  });
 });

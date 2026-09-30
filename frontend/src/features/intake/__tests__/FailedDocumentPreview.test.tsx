@@ -7,7 +7,7 @@ import { FailedDocumentPreview } from '../attention/FailedDocumentPreview';
 import { apiError, ocrService, ok, serveDefaults } from './intakeMocks';
 import { renderIntake, resetIntakeState } from './intakeTestUtils';
 
-const props = { failedDocumentId: 'f1', filename: 'test-document.pdf', mimeType: 'application/pdf' };
+const props = { id: 'f1', filename: 'test-document.pdf', mimeType: 'application/pdf', load: (id: string) => ocrService.viewFailedDocument(id) };
 const createObjectURL = vi.fn(() => 'blob:preview');
 const revokeObjectURL = vi.fn();
 
@@ -24,6 +24,13 @@ afterEach(() => {
 });
 
 describe('Failed document preview (ported from FailedDocumentViewer)', () => {
+  it('loads through the loader it is given (document view for real documents)', async () => {
+    const load = vi.fn(() => ok(new Blob(['x'])));
+    renderIntake(<FailedDocumentPreview {...props} id="doc-1" load={load} />);
+    expect(await screen.findByTitle('test-document.pdf')).toBeInTheDocument();
+    expect(load).toHaveBeenCalledWith('doc-1');
+  });
+
   it('loads the stored file of the failed document', async () => {
     renderIntake(<FailedDocumentPreview {...props} />);
     expect(await screen.findByTitle('test-document.pdf')).toHaveAttribute('src', 'blob:preview');

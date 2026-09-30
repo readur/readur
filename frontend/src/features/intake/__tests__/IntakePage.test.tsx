@@ -10,8 +10,8 @@ vi.mock('../ignored/IgnoredSection', () => ({ IgnoredSection: () => <p>ignored s
 vi.mock('../../../services/api', async () => (await import('./intakeMocks')).apiModule);
 
 import IntakePage, { parseSection } from '../IntakePage';
-import { failedList, renderIntake, resetIntakeState, settle, source, failedDoc } from './intakeTestUtils';
-import { ocrService, ok, queueService, serveDefaults, sourcesService } from './intakeMocks';
+import { ocrDoc, ocrList, renderIntake, resetIntakeState, settle, source } from './intakeTestUtils';
+import { documentService, ok, queueService, serveDefaults, sourcesService } from './intakeMocks';
 
 const location = () => screen.getByRole('status', { name: 'location', hidden: true }).textContent;
 
@@ -19,7 +19,7 @@ beforeEach(() => {
   resetIntakeState();
   serveDefaults();
   sourcesService.list.mockImplementation(() => ok([source('a'), source('b'), source('c')]));
-  ocrService.listFailedDocuments.mockImplementation(() => ok(failedList([failedDoc('f1'), failedDoc('f2')])));
+  documentService.getFailedOcrDocuments.mockImplementation(() => ok(ocrList([ocrDoc('f1'), ocrDoc('f2')])));
   queueService.getStats.mockImplementation(() => ok({ pending_count: 10, processing_count: 4, failed_count: 0, completed_today: 1 }));
 });
 
@@ -92,7 +92,7 @@ describe('Intake page', () => {
   });
 
   it('shows no badge and keeps the rest of the header when a count fails', async () => {
-    ocrService.listFailedDocuments.mockImplementation(() => Promise.reject(new Error('down')));
+    documentService.getFailedOcrDocuments.mockImplementation(() => Promise.reject(new Error('down')));
     renderIntake(<IntakePage />);
     await settle();
     expect(await screen.findByText('3 connections · 14 processing')).toBeInTheDocument();

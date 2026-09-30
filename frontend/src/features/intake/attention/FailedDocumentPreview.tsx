@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '../../../ui';
-import { ocrService } from '../../../services/api';
 import { statusOf } from '../shared/errors';
 import { Notice } from '../shared/parts';
 import styles from './Attention.module.css';
 
 export interface FailedDocumentPreviewProps {
-  failedDocumentId: string;
+  id: string;
   filename: string;
   mimeType: string;
+  /** Fetches the file as a blob: the document view for documents, the record view for failed imports. */
+  load: (id: string) => Promise<{ data: Blob }>;
 }
 
 /** The stored file of a failed document: images and PDFs inline, text in a frame, others named. */
-export function FailedDocumentPreview({ failedDocumentId, filename, mimeType }: FailedDocumentPreviewProps) {
+export function FailedDocumentPreview({ id, filename, mimeType, load }: FailedDocumentPreviewProps) {
   const { t } = useTranslation();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<'missing' | 'failed' | null>(null);
@@ -25,8 +26,7 @@ export function FailedDocumentPreview({ failedDocumentId, filename, mimeType }: 
     setLoading(true);
     setError(null);
     setUrl(null);
-    ocrService
-      .viewFailedDocument(failedDocumentId)
+    load(id)
       .then((res) => {
         if (!alive) return;
         objectUrl = window.URL.createObjectURL(new Blob([res.data], { type: mimeType }));
@@ -40,7 +40,7 @@ export function FailedDocumentPreview({ failedDocumentId, filename, mimeType }: 
       alive = false;
       if (objectUrl) window.URL.revokeObjectURL(objectUrl);
     };
-  }, [failedDocumentId, mimeType]);
+  }, [id, mimeType, load]);
 
   if (loading) return <Skeleton height={200} label={t('intake.preview.loading', 'Loading preview')} />;
   if (error) {

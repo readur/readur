@@ -186,3 +186,34 @@ export function failedList(docs: unknown[]) {
     statistics: { total_failed: docs.length, by_stage: {}, by_reason: {} },
   };
 }
+
+/** Row of GET /documents/failed/ocr: a real document whose OCR failed. */
+export function ocrDoc(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    filename: `${id}.pdf`,
+    original_filename: `${id}.pdf`,
+    file_size: 1024,
+    mime_type: 'application/pdf',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-02T00:00:00Z',
+    tags: [],
+    ocr_status: 'failed',
+    ocr_error: 'Tesseract timed out',
+    ocr_failure_reason: 'ocr_timeout',
+    ocr_completed_at: null,
+    retry_count: 1,
+    last_attempt_at: null,
+    can_retry: true,
+    failure_category: 'Timeout',
+    ...overrides,
+  };
+}
+
+export function ocrList(docs: unknown[]) {
+  return {
+    documents: docs,
+    pagination: { total: docs.length, limit: 25, offset: 0, has_more: false },
+    statistics: { total_failed: docs.length, failure_categories: [] },
+  };
+}

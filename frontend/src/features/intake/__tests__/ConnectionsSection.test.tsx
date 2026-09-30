@@ -202,6 +202,15 @@ describe('Connection details panel', () => {
     }
   });
 
+  it('explains an invalid configuration when testing the saved connection', async () => {
+    sourcesService.testConnection.mockImplementation(() => Promise.reject(apiError(400, 'SOURCE_CONFIG_INVALID', 'bad')));
+    const user = userEvent.setup();
+    renderIntake(<ConnectionsSection />);
+    const panel = await openRow(user, 'Office cloud');
+    await user.click(within(panel).getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText('Some settings are invalid. Check the values and try again.')).toBeInTheDocument();
+  });
+
   it('offers Stop sync instead of Sync now while syncing', async () => {
     serveSources([source('s1', { name: 'Office cloud', status: 'syncing' })]);
     const user = userEvent.setup();

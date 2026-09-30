@@ -107,15 +107,33 @@ describe('SourceForm: validation', () => {
     expect(sourcesService.create).not.toHaveBeenCalled();
   });
 
-  it('rejects a server URL without http:// or https://', async () => {
+  it('rejects a server URL with another scheme (the backend refuses it too)', async () => {
     const user = userEvent.setup();
     renderForm();
     await user.type(field(/^name/i), 'x');
     await user.type(field(/server url/i), 'ftp://example.com');
     await user.type(field(/username/i), 'u');
     await user.click(screen.getByRole('button', { name: 'Add connection' }));
-    expect(await screen.findByText('Enter a URL starting with http:// or https://')).toBeInTheDocument();
+    expect(await screen.findByText('Enter a server address such as cloud.example.com or https://cloud.example.com')).toBeInTheDocument();
     expect(sourcesService.create).not.toHaveBeenCalled();
+  });
+
+  it('accepts a bare host, which the backend completes with https://', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await user.type(field(/^name/i), 'Home NAS');
+    await user.type(field(/server url/i), 'nas.example.com');
+    await user.type(field(/username/i), 'u');
+    await user.click(screen.getByRole('button', { name: 'Add connection' }));
+    await waitFor(() => expect(sourcesService.create).toHaveBeenCalled());
+    expect(sourcesService.create.mock.calls[0][0].config.server_url).toBe('nas.example.com');
+  });
+
+  it('still saves an existing connection stored without a scheme', async () => {
+    const user = userEvent.setup();
+    renderForm(source('s1', { config: { ...source('s1').config, server_url: 'cloud.example.com' } }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(sourcesService.update).toHaveBeenCalled());
   });
 
   it('requires bucket and both keys for S3', async () => {
@@ -196,12 +214,18 @@ describe('SourceForm: folders and file types (ported from WebDAVTab)', () => {
     expect(screen.getByRole('button', { name: 'Add to Folders to monitor' })).toBeDisabled();
   });
 
-  it('rejects a relative WebDAV folder path', async () => {
+  it('adds a relative WebDAV folder path but recommends an absolute one', async () => {
     const user = userEvent.setup();
     renderForm();
     await user.type(field(/folders to monitor/i), 'relative/path');
     await user.click(screen.getByRole('button', { name: 'Add to Folders to monitor' }));
-    expect(screen.getByText('Use an absolute path starting with “/”')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Folders to monitor' })).getByText('relative/path')).toBeInTheDocument();
+    expect(screen.getByText('“relative/path” is a relative path. Absolute paths starting with “/” are recommended.')).toBeInTheDocument();
+  });
+
+  it('uses new-password autocomplete for the WebDAV password', () => {
+    renderForm();
+    expect(screen.getByLabelText(/^password/i)).toHaveAttribute('autocomplete', 'new-password');
   });
 
   it('adds file extensions without a leading dot', async () => {

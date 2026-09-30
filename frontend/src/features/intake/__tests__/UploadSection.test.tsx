@@ -141,6 +141,51 @@ describe('Add documents: upload board', () => {
     await waitFor(() => expect(isLit('document', 'doc-7')).toBe(true));
   });
 
+  it('falls back to the server message for errors without a known code', async () => {
+    api.post.mockImplementationOnce(() => Promise.reject(apiError(400, undefined, 'Filename contains invalid characters')));
+    const user = userEvent.setup();
+    renderIntake(<UploadSection />);
+    await settle();
+    const grid = await addFiles(user, [pdf('a.pdf')]);
+    await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
+    await waitFor(() => expect(within(grid).getByRole('row', { name: /a\.pdf/ })).toHaveTextContent('Filename contains invalid characters'));
+  });
+
+  it('says why labels are missing when they cannot be loaded', async () => {
+    api.get.mockImplementation(() => Promise.reject(apiError(500)));
+    renderIntake(<UploadSection />);
+    expect(await screen.findByText('Labels could not be loaded. You can still upload without them.')).toBeInTheDocument();
+  });
+
+  it('does not upload twice or count a failure when a row is retried during "Upload all"', async () => {
+    const releases: Array<() => void> = [];
+    api.post.mockImplementation(() => Promise.reject(apiError(400, undefined, 'boom')));
+    const user = userEvent.setup();
+    renderIntake(<UploadSection />);
+    await settle();
+    const grid = await addFiles(user, [pdf('a.pdf'), pdf('b.pdf'), pdf('c.pdf'), pdf('d.pdf')]);
+    await user.click(screen.getByRole('button', { name: 'Upload all (4)' }));
+    const rowD = within(grid).getByRole('row', { name: /d\.pdf/ });
+    await waitFor(() => expect(rowD).toHaveTextContent('boom'));
+    expect(api.post).toHaveBeenCalledTimes(4);
+
+    // Second batch: the first three hang, so d.pdf waits in the queue.
+    api.post.mockImplementation(
+      () => new Promise((resolve) => releases.push(() => resolve({ data: { id: `doc-${releases.length}` } }))),
+    );
+    await user.click(screen.getByRole('button', { name: 'Upload all (4)' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(7));
+    // Retry d.pdf from its row while the batch is still busy; it succeeds.
+    api.post.mockImplementationOnce(() => ok({ id: 'doc-d' }));
+    await user.click(within(rowD).getByRole('button', { name: 'Retry d.pdf' }));
+    await waitFor(() => expect(isLit('document', 'doc-d')).toBe(true));
+    releases.forEach((r) => r());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload all (0)' })).toBeDisabled());
+    await settle();
+    expect(api.post).toHaveBeenCalledTimes(8);
+    expect(rowD).not.toHaveTextContent(/failed/i);
+  });
+
   it('removes a pending file and clears finished ones', async () => {
     const user = userEvent.setup();
     renderIntake(<UploadSection />);

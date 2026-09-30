@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Switch } from '../../../../ui';
 import { IntervalField, ListField } from './fields';
 import { errorText, type TypeFieldsProps } from './typeFields';
-import { MAX_INTERVAL, MIN_INTERVAL, needsAbsolutePath, normalizeExtension } from './sourceFormModel';
+import { MAX_INTERVAL, MIN_INTERVAL, normalizeExtension, prefersAbsolutePath } from './sourceFormModel';
 import { UrlPreview } from './UrlPreview';
 import styles from './SourceForm.module.css';
 
@@ -47,9 +47,9 @@ export function CommonFields({ form, set, errors }: TypeFieldsProps) {
           placeholder={folderCopy.placeholder}
           items={form.watch_folders}
           onChange={(watch_folders) => set({ watch_folders })}
-          check={(value) =>
-            needsAbsolutePath(type) && !value.startsWith('/')
-              ? t('intake.form.errors.absolute', 'Use an absolute path starting with “/”')
+          advise={(value) =>
+            prefersAbsolutePath(type) && !value.startsWith('/')
+              ? t('intake.form.relativeWarning', '“{{value}}” is a relative path. Absolute paths starting with “/” are recommended.', { value })
               : null
           }
           listError={errorText(t, errors.watch_folders)}

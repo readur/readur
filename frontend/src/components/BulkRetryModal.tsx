@@ -99,6 +99,8 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
     changeFilter(key, current.includes(value) ? current.filter((v) => v !== value) : [...current, value]);
   };
 
+  const withLanguages = mode === 'specific' && languages.length > 0;
+
   const buildRequest = (previewOnly: boolean): BulkOcrRetryRequest => {
     const request: BulkOcrRetryRequest = { mode, preview_only: previewOnly };
     if (mode === 'specific') request.document_ids = selectedDocumentIds;
@@ -145,19 +147,24 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
     }
   };
 
-  /** Selected documents with chosen languages are retried one by one with those languages. */
+  /**
+   * Selected documents with chosen languages are retried one by one with those languages. The
+   * per-document endpoint takes no priority and returns no time estimate, so neither is reported.
+   */
   const retryWithLanguages = async (): Promise<BulkOcrRetryResponse> => {
     const results = await Promise.allSettled(
       selectedDocumentIds.map((id) => ocrService.retryWithLanguage(id, undefined, languages)),
     );
-    const queued = results.filter((r) => r.status === 'fulfilled').length;
+    const queued = results.filter(
+      (r) => r.status === 'fulfilled' && (r.value?.data as { success?: boolean } | undefined)?.success !== false,
+    ).length;
     return {
       success: queued > 0,
       message: '',
       queued_count: queued,
       matched_count: selectedDocumentIds.length,
       documents: [],
-      estimated_total_time_minutes: preview?.estimated_total_time_minutes ?? 0,
+      estimated_total_time_minutes: 0,
     };
   };
 
@@ -165,10 +172,14 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
     setLoading(true);
     setError(null);
     try {
-      const result =
-        mode === 'specific' && languages.length > 0
-          ? await retryWithLanguages()
-          : (await documentService.bulkRetryOcr(buildRequest(false))).data;
+      const result = withLanguages
+        ? await retryWithLanguages()
+        : (await documentService.bulkRetryOcr(buildRequest(false))).data;
+      if (!result || !result.queued_count) {
+        // A 200 that queued nothing is not a success: keep the dialog open and say so.
+        setError(t('intake.bulkRetry.errors.noneQueued', 'No documents were queued, so nothing will be retried.'));
+        return;
+      }
       onSuccess(result);
       onClose();
     } catch (err) {
@@ -319,6 +330,14 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
             isSelected={usePriority}
             onChange={setUsePriority}
           />
+          {usePriority && withLanguages ? (
+            <p className={styles.muted} role="note">
+              {t(
+                'intake.bulkRetry.priorityNotWithLanguages',
+                'The priority override does not apply when retrying with chosen languages; those retries use the normal priority.',
+              )}
+            </p>
+          ) : null}
           {usePriority ? (
             <Slider className={styles.slider} minValue={1} maxValue={20} value={priority} onChange={(v) => setPriority(v as number)}>
               <div className={styles.headRow}>

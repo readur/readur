@@ -44,6 +44,8 @@ export const ocrService = {
 };
 
 export const documentService = {
+  getFailedOcrDocuments: fn(),
+  view: fn(),
   retryOcr: fn(),
   bulkRetryOcr: fn(),
   bulkDelete: fn(),
@@ -137,11 +139,17 @@ export function serveDefaults(): void {
     ok({ documents: [], pagination: { total: 0, limit: 25, offset: 0, total_pages: 0 }, statistics: { total_failed: 0, by_stage: {}, by_reason: {} } }),
   );
   ocrService.viewFailedDocument.mockImplementation(() => Promise.reject(apiError(404)));
+  documentService.getFailedOcrDocuments.mockImplementation(() =>
+    ok({ documents: [], pagination: { total: 0, limit: 25, offset: 0, has_more: false }, statistics: { total_failed: 0, failure_categories: [] } }),
+  );
+  documentService.view.mockImplementation(() => Promise.reject(apiError(404)));
   documentService.retryOcr.mockImplementation(() => ok({ success: true, estimated_wait_minutes: 2 }));
   documentService.bulkRetryOcr.mockImplementation(() =>
     ok({ success: true, message: 'ok', queued_count: 2, matched_count: 2, documents: [], estimated_total_time_minutes: 1 }),
   );
-  documentService.bulkDelete.mockImplementation(() => ok({}));
+  documentService.bulkDelete.mockImplementation((ids: string[]) =>
+    ok({ deleted_count: ids.length, failed_count: 0, deleted_documents: ids, failed_documents: [] }),
+  );
   documentService.getRetryRecommendations.mockImplementation(() => ok({ recommendations: [], total_recommendations: 0 }));
   documentService.getDocumentRetryHistory.mockImplementation(() => ok({ document_id: 'x', retry_history: [], total_retries: 0 }));
   documentService.getDuplicates.mockImplementation(() =>

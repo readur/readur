@@ -123,7 +123,9 @@ export function buildConfig(f: SourceFormData): ConfigOut {
     watch_folders: f.watch_folders,
     file_extensions: f.file_extensions,
     auto_sync: f.auto_sync,
-    sync_interval_minutes: f.sync_interval_minutes,
+    sync_interval_minutes: Number.isFinite(f.sync_interval_minutes) && f.sync_interval_minutes > 0
+      ? f.sync_interval_minutes
+      : DEFAULT_INTERVAL,
   };
   switch (f.source_type) {
     case 'webdav':
@@ -226,14 +228,19 @@ export type FormErrorCode =
 
 export type FormErrors = Partial<Record<FieldKey, FormErrorCode>>;
 
-export function isHttpUrl(value: string): boolean {
-  const v = value.trim();
-  if (!/^https?:\/\//i.test(v)) return false;
-  try {
-    return Boolean(new URL(v).host);
-  } catch {
-    return false;
-  }
+/**
+ * Mirrors the backend WebDAV URL check (src/services/webdav/config.rs, normalize_server_url):
+ * a bare host is fine (https:// is assumed), but after dropping an http(s):// scheme there must
+ * be a host, no second "://" (so ftp://… is rejected), and no leading "/".
+ */
+export function isValidServerUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || /\s/.test(trimmed)) return false;
+  const rest = trimmed.replace(/^https?:\/\//i, '');
+  if (!rest) return false;
+  if (rest.includes('://')) return false;
+  if (rest.startsWith('/')) return false;
+  return true;
 }
 
 export function isValidInterval(minutes: number): boolean {
@@ -246,7 +253,7 @@ export function validateForm(f: SourceFormData): FormErrors {
   if (!f.name.trim()) errors.name = 'required';
   if (f.source_type === 'webdav') {
     if (!f.server_url.trim()) errors.server_url = 'required';
-    else if (!isHttpUrl(f.server_url)) errors.server_url = 'url';
+    else if (!isValidServerUrl(f.server_url)) errors.server_url = 'url';
     if (!f.username.trim()) errors.username = 'required';
   }
   if (f.source_type === 's3') {
@@ -259,8 +266,11 @@ export function validateForm(f: SourceFormData): FormErrors {
   return errors;
 }
 
-/** Folder paths for WebDAV and local folders must be absolute; S3 prefixes are free-form. */
-export function needsAbsolutePath(type: SourceType): boolean {
+/**
+ * Absolute folder paths are recommended for WebDAV and local folders (the backend accepts
+ * relative ones, so the form only advises); S3 prefixes are free-form.
+ */
+export function prefersAbsolutePath(type: SourceType): boolean {
   return type === 'webdav' || type === 'local_folder';
 }
 

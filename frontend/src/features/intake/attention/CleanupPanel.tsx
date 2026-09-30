@@ -56,7 +56,7 @@ export function CleanupPanel() {
                 count: res.queued_count,
                 minutes: Math.ceil(res.estimated_total_time_minutes),
               })
-            : t('intake.cleanup.retryAllNone', 'No documents needed a retry'),
+            : t('intake.cleanup.retryAllNone', 'No failed documents to retry'),
         tone: res.queued_count > 0 ? 'success' : 'info',
       });
       setConfirm(null);
@@ -117,13 +117,13 @@ export function CleanupPanel() {
       </section>
 
       <section className={styles.action} aria-labelledby={ids.retry}>
-        <h3 id={ids.retry} className={sharedStyles.heading}>{t('intake.cleanup.retryAllTitle', 'Retry OCR for all documents')}</h3>
+        <h3 id={ids.retry} className={sharedStyles.heading}>{t('intake.cleanup.retryAllTitle', 'Retry OCR for all failed documents')}</h3>
         <p className={sharedStyles.lead}>
-          {t('intake.cleanup.retryAllBody', 'Runs OCR again for every document in the library, including ones that already succeeded. This can take a long time.')}
+          {t('intake.cleanup.retryAllBody', 'Queues OCR again for every document whose OCR failed. Documents that were read successfully are not touched. With many failures this can take a long time.')}
         </p>
         <div>
           <Button onPress={() => setConfirm('retryAll')} isPending={pending === 'retryAll'}>
-            {t('intake.cleanup.retryAllButton', 'Retry all documents')}
+            {t('intake.cleanup.retryAllButton', 'Retry all failed documents')}
           </Button>
         </div>
       </section>
@@ -152,12 +152,12 @@ export function CleanupPanel() {
         isOpen={confirm === 'retryAll'}
         onOpenChange={(open) => !open && setConfirm(null)}
         tone="primary"
-        title={t('intake.cleanup.confirmRetryAll', 'Retry OCR for every document?')}
-        confirmLabel={t('intake.cleanup.retryAllButton', 'Retry all documents')}
+        title={t('intake.cleanup.confirmRetryAll', 'Retry OCR for every failed document?')}
+        confirmLabel={t('intake.cleanup.retryAllButton', 'Retry all failed documents')}
         isPending={pending === 'retryAll'}
         onConfirm={retryAll}
       >
-        <p>{t('intake.cleanup.retryAllBody', 'Runs OCR again for every document in the library, including ones that already succeeded. This can take a long time.')}</p>
+        <p>{t('intake.cleanup.retryAllBody', 'Queues OCR again for every document whose OCR failed. Documents that were read successfully are not touched. With many failures this can take a long time.')}</p>
       </ConfirmDialog>
       <ConfirmDialog
         isOpen={confirm === 'requeue'}

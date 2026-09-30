@@ -26,7 +26,7 @@ export function errorText(t: TFunction, code?: FormErrorCode): string | undefine
     case 'required':
       return t('intake.form.errors.required', 'Required');
     case 'url':
-      return t('intake.form.errors.url', 'Enter a URL starting with http:// or https://');
+      return t('intake.form.errors.url', 'Enter a server address such as cloud.example.com or https://cloud.example.com');
     case 'folderRequired':
       return t('intake.form.errors.folderRequired', 'Add at least one folder');
     case 'interval':
@@ -92,7 +92,7 @@ export function WebDAVFields({ form, set, errors }: TypeFieldsProps) {
           type="password"
           value={form.password}
           onChange={(password) => set({ password })}
-          autoComplete="current-password"
+          autoComplete="new-password"
         />
       </div>
     </fieldset>

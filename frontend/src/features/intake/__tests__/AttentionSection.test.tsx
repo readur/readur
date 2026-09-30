@@ -58,7 +58,7 @@ describe('Needs attention: segmented filter (ported from DocumentManagementPage)
       await show(user, name);
     }
     expect(within(segments()).getByRole('radio', { name: 'Cleanup' })).toBeChecked();
-    expect(screen.getByRole('heading', { name: 'Retry OCR for all documents' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Retry OCR for all failed documents' })).toBeInTheDocument();
   });
 
   it('offers a refresh on the failed view', async () => {
@@ -189,10 +189,10 @@ describe('Needs attention: cleanup (each action behind a confirmation)', () => {
   it('retries every document only after confirmation', async () => {
     const user = userEvent.setup();
     renderIntake(<AttentionSection />, { path: '/intake?view=cleanup' });
-    await user.click(screen.getByRole('button', { name: 'Retry all documents' }));
-    const confirm = screen.getByRole('alertdialog', { name: 'Retry OCR for every document?' });
+    await user.click(screen.getByRole('button', { name: 'Retry all failed documents' }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Retry OCR for every failed document?' });
     expect(documentService.bulkRetryOcr).not.toHaveBeenCalled();
-    await user.click(within(confirm).getByRole('button', { name: 'Retry all documents' }));
+    await user.click(within(confirm).getByRole('button', { name: 'Retry all failed documents' }));
     await waitFor(() => expect(documentService.bulkRetryOcr).toHaveBeenCalledWith({ mode: 'all', preview_only: false }));
   });
 

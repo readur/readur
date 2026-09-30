@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api, ocrService } from '../../../services/api';
 import type { LabelData } from '../../labels/Label';
-import { ErrorCodes, hasCode, serverMessage } from '../shared/errors';
+import { categoryOf, ErrorCodes, hasCode, serverMessage } from '../shared/errors';
 
 type NewLabel = Omit<LabelData, 'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'>;
 
@@ -12,6 +12,7 @@ export function useUploadOptions() {
   const [selectedLabels, setSelectedLabels] = useState<LabelData[]>([]);
   const [availableLabels, setAvailableLabels] = useState<LabelData[]>([]);
   const [labelsLoading, setLabelsLoading] = useState(true);
+  const [labelsError, setLabelsError] = useState<string | null>(null);
   const [languages, setLanguages] = useState<string[]>([]);
   const [primaryLanguage, setPrimaryLanguage] = useState('');
 
@@ -22,8 +23,18 @@ export function useUploadOptions() {
       .then((res) => {
         if (alive && Array.isArray(res?.data)) setAvailableLabels(res.data);
       })
-      .catch(() => {
-        /* labels are optional for uploading */
+      .catch((error) => {
+        // Labels are optional for uploading, but say why the picker is empty.
+        if (!alive) return;
+        if (hasCode(error, ErrorCodes.USER_SESSION_EXPIRED) || hasCode(error, ErrorCodes.USER_TOKEN_EXPIRED)) {
+          setLabelsError(t('intake.upload.errors.session', 'Your session expired. Sign in again.'));
+        } else if (hasCode(error, ErrorCodes.USER_PERMISSION_DENIED)) {
+          setLabelsError(t('intake.upload.labelsPermission', 'You are not allowed to see labels.'));
+        } else if (categoryOf(error) === 'network') {
+          setLabelsError(t('intake.upload.labelsNetwork', 'Labels could not be loaded because of a network error.'));
+        } else {
+          setLabelsError(t('intake.upload.labelsFailed', 'Labels could not be loaded. You can still upload without them.'));
+        }
       })
       .finally(() => alive && setLabelsLoading(false));
     ocrService
@@ -64,6 +75,7 @@ export function useUploadOptions() {
     setSelectedLabels,
     availableLabels,
     labelsLoading,
+    labelsError,
     createLabel,
     languages,
     primaryLanguage,

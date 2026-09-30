@@ -4,7 +4,7 @@ import type { FileRejection } from 'react-dropzone';
 import { api } from '../../../services/api';
 import { useNotifications } from '../../../contexts/NotificationContext';
 import { markLit } from '../../board/litStore';
-import { categoryOf, ErrorCodes, hasCode } from '../shared/errors';
+import { categoryOf, ErrorCodes, hasCode, serverMessage } from '../shared/errors';
 import { MAX_CONCURRENT_UPLOADS } from './uploadConfig';
 
 export type UploadStatus = 'pending' | 'uploading' | 'success' | 'error';
@@ -72,12 +72,12 @@ export function useUploadQueue(getOptions: () => UploadOptions, onUploaded?: (do
     const category = categoryOf(error);
     if (category === 'network') return t('intake.upload.errors.network', 'Network error. Check your connection.');
     if (category === 'server') return t('intake.upload.errors.server', 'The server had a problem. Try again.');
-    return t('intake.upload.errors.generic', 'Upload failed');
+    return serverMessage(error) ?? t('intake.upload.errors.generic', 'Upload failed');
   };
 
-  /** Resolves true on success. Never rejects. */
-  const uploadOne = async (item: UploadItem): Promise<boolean> => {
-    if (inFlight.current.has(item.id)) return false;
+  /** Never rejects. 'skipped' means the file is already uploading (e.g. a row Retry during a batch). */
+  const uploadOne = async (item: UploadItem): Promise<'ok' | 'failed' | 'skipped'> => {
+    if (inFlight.current.has(item.id)) return 'skipped';
     inFlight.current.add(item.id);
     const { labelIds, languages } = getOptions();
     const form = new FormData();
@@ -99,10 +99,10 @@ export function useUploadQueue(getOptions: () => UploadOptions, onUploaded?: (do
         markLit('document', documentId, 'new');
         onUploaded?.(documentId);
       }
-      return true;
+      return 'ok';
     } catch (error) {
       patch(item.id, { status: 'error', progress: 0, error: messageFor(error) });
-      return false;
+      return 'failed';
     } finally {
       inFlight.current.delete(item.id);
     }
@@ -117,14 +117,21 @@ export function useUploadQueue(getOptions: () => UploadOptions, onUploaded?: (do
     const results: { name: string; success: boolean }[] = [];
     const worker = async () => {
       for (let item = queue.shift(); item; item = queue.shift()) {
-        const success = await uploadOne(item);
-        results.push({ name: item.file.name, success });
+        const current = itemsRef.current.find((i) => i.id === item.id);
+        const stillWaiting = current && (current.status === 'pending' || current.status === 'error');
+        const outcome = stillWaiting ? await uploadOne(item) : 'skipped';
+        if (outcome === 'skipped') {
+          // Removed, or already uploaded/uploading through a row Retry, which reports itself.
+          setBatch((b) => ({ ...b, total: Math.max(0, b.total - 1) }));
+          continue;
+        }
+        results.push({ name: item.file.name, success: outcome === 'ok' });
         setBatch((b) => ({ ...b, done: b.done + 1 }));
       }
     };
     await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_UPLOADS, queue.length) }, worker));
     const failures = results.filter((r) => !r.success).length;
-    addBatchNotification(failures === 0 ? 'success' : failures === results.length ? 'error' : 'warning', 'upload', results);
+    if (results.length > 0) addBatchNotification(failures === 0 ? 'success' : failures === results.length ? 'error' : 'warning', 'upload', results);
     setUploading(false);
   };
 

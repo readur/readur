@@ -6,7 +6,7 @@ import {
   defaultFolders,
   emptyForm,
   formFromSource,
-  isHttpUrl,
+  isValidServerUrl,
   isValidInterval,
   normalizeExtension,
   validateForm,
@@ -61,20 +61,20 @@ describe('test connection payload (ported from SourcesPage.simple)', () => {
 });
 
 describe('field validation (ported from WebDAVTab "WebDAV Data Validation")', () => {
-  it('accepts http(s) server URLs and rejects anything else', () => {
-    for (const url of ['https://cloud.example.com', 'http://localhost:8080', 'https://subdomain.example.com/path']) {
-      expect(isHttpUrl(url)).toBe(true);
+  it('accepts http(s) URLs and bare hosts like the backend, and rejects anything else', () => {
+    for (const url of ['https://cloud.example.com', 'http://localhost:8080', 'https://subdomain.example.com/path', 'cloud.example.com', 'nas.local:8443/dav']) {
+      expect(isValidServerUrl(url)).toBe(true);
     }
-    for (const url of ['not-a-url', 'ftp://example.com', '']) {
-      expect(isHttpUrl(url)).toBe(false);
+    for (const url of ['ftp://example.com', '', '   ', '/relative/path', 'https://', 'https:///dav', 'http://a://b', 'has space.com']) {
+      expect(isValidServerUrl(url)).toBe(false);
     }
   });
 
-  it('requires absolute folder paths for WebDAV and local folders only', async () => {
-    const { needsAbsolutePath } = await import('../connections/form/sourceFormModel');
-    expect(needsAbsolutePath('webdav')).toBe(true);
-    expect(needsAbsolutePath('local_folder')).toBe(true);
-    expect(needsAbsolutePath('s3')).toBe(false);
+  it('recommends absolute folder paths for WebDAV and local folders only', async () => {
+    const { prefersAbsolutePath } = await import('../connections/form/sourceFormModel');
+    expect(prefersAbsolutePath('webdav')).toBe(true);
+    expect(prefersAbsolutePath('local_folder')).toBe(true);
+    expect(prefersAbsolutePath('s3')).toBe(false);
   });
 
   it('normalizes extensions by trimming and dropping a leading dot', () => {
@@ -151,6 +151,12 @@ describe('source form model', () => {
       secret_access_key: 'required',
     });
     expect(validateForm({ ...emptyForm('local_folder'), name: 'x' })).toEqual({});
+  });
+
+  it('never saves a non-number interval: it falls back to 60 minutes', () => {
+    const form = { ...emptyForm('local_folder'), sync_interval_minutes: Number.NaN };
+    expect(buildConfig(form).sync_interval_minutes).toBe(60);
+    expect(buildConfig({ ...form, sync_interval_minutes: 30 }).sync_interval_minutes).toBe(30);
   });
 
   it('only checks the interval when automatic sync is on', () => {

@@ -142,6 +142,7 @@ export function UploadSection() {
               size="medium"
               disabled={options.labelsLoading}
             />
+            {options.labelsError ? <Notice tone="danger">{options.labelsError}</Notice> : null}
           </div>
         </div>
       </section>

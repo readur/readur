@@ -258,6 +258,35 @@ describe('Board', () => {
       await waitFor(() => expect(screen.queryByRole('row', { name: /scan\.tiff/ })).not.toBeInTheDocument());
     });
 
+    it('retries with the real document id from the failed-OCR list', async () => {
+      const user = userEvent.setup();
+      m.documentService.getFailedOcrDocuments.mockResolvedValue({
+        data: {
+          documents: [
+            {
+              id: 'doc-real-7',
+              filename: 'invoice.pdf',
+              original_filename: 'invoice.pdf',
+              ocr_status: 'failed',
+              ocr_failure_reason: 'ocr_timeout',
+              ocr_error: 'Tesseract timed out',
+              failure_category: 'Timeout',
+              can_retry: true,
+              retry_count: 1,
+              last_attempt_at: null,
+            },
+          ],
+          pagination: { total: 1, limit: 10, offset: 0, has_more: false },
+        },
+      });
+      await renderBoard();
+      const row = await screen.findByRole('row', { name: /invoice\.pdf/ });
+      expect(within(row).getByText('Tesseract timed out')).toBeInTheDocument();
+      await user.click(within(row).getByRole('button', { name: 'Retry invoice.pdf' }));
+      expect(m.documentService.retryOcr).toHaveBeenCalledWith('doc-real-7');
+      expect(m.documentService.getFailedOcrDocuments).toHaveBeenCalledWith(10);
+    });
+
     it('dismiss acknowledges the row, removes it and keeps it removed after a reload', async () => {
       const user = userEvent.setup();
       m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [{ id: 'f1', filename: 'scan.tiff', failure_reason: 'x' }] } });

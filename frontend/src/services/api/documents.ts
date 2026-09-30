@@ -37,6 +37,33 @@ interface LegacyOcrResponseFields {
   ocr_completed_at?: string
 }
 
+/** One row of GET /documents/failed/ocr: a real document whose OCR failed. */
+export interface FailedOcrDocumentRow {
+  id: string
+  filename: string
+  original_filename: string
+  file_size: number
+  mime_type: string
+  created_at: string
+  updated_at: string
+  tags: string[]
+  ocr_status: string | null
+  ocr_error: string | null
+  ocr_failure_reason: string | null
+  ocr_completed_at: string | null
+  retry_count: number
+  last_attempt_at: string | null
+  can_retry: boolean
+  /** Human-readable category computed from the failure reason and error. */
+  failure_category: string
+}
+
+export interface FailedOcrDocumentsResponse {
+  documents: FailedOcrDocumentRow[]
+  pagination: { total: number; limit: number; offset: number; has_more: boolean }
+  statistics: { total_failed: number; failure_categories: unknown }
+}
+
 export type Document = DocumentResponse & LegacyDocumentFields
 export type OcrResponse = DocumentOcrResponse & LegacyOcrResponseFields
 
@@ -162,9 +189,15 @@ export const documentService = {
     return api.get<DocumentRetryHistoryResponse>(`/documents/${id}/ocr/retry/history`)
   },
 
+  /**
+   * Documents whose OCR failed (GET /documents/failed/ocr). Rows carry the real
+   * `documents.id`, so every per-document action (retry, delete, download,
+   * retry history) can use them. `/documents/failed` returns failed-import
+   * records instead, whose ids are not document ids.
+   */
   getFailedOcrDocuments: (limit = 50, offset = 0) => {
-    return api.get(`/documents/failed`, {
-      params: { stage: 'ocr', limit, offset },
+    return api.get<FailedOcrDocumentsResponse>(`/documents/failed/ocr`, {
+      params: { limit, offset },
     })
   },
 

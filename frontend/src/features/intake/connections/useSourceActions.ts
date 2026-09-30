@@ -109,6 +109,7 @@ export function useSourceActions(onChanged: () => void, onDeleted?: (id: string)
               [ErrorCodes.SOURCE_CONNECTION_FAILED, t('intake.form.test.unreachable', 'Could not reach the server. Check the URL and your network.')],
               [ErrorCodes.SOURCE_AUTH_FAILED, t('intake.form.test.auth', 'Sign-in failed. Check the username and password.')],
               [ErrorCodes.SOURCE_INVALID_PATH, t('intake.form.test.path', 'A folder path is invalid or not accessible.')],
+              [ErrorCodes.SOURCE_CONFIG_INVALID, t('intake.form.test.config', 'Some settings are invalid. Check the values and try again.')],
               [ErrorCodes.SOURCE_NETWORK_TIMEOUT, t('intake.form.test.timeout', 'The connection timed out. The server may be slow or unreachable.')],
             ],
             t('intake.form.test.error', 'Could not test the connection'),
