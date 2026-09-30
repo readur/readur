@@ -16,21 +16,23 @@ export interface LitState {
 export const LIT_STORAGE_KEY = 'readur.lit.v1';
 export const LIT_CAP = 2000;
 /**
- * How many entries of one kind are shown lit at once: the newest ones. Older entries stay stored
- * (and come back once newer ones are seen), so a bulk import can never light hundreds of rows.
+ * How many entries of one kind are flagged at once: the ones whose items are newest. Older
+ * entries stay stored (and come back once newer ones are seen), so a bulk import can never flag
+ * hundreds of rows.
  */
 export const LIT_SHOWN_CAP = 25;
 
 const KINDS: readonly string[] = ['document', 'source', 'attention'];
 const REASONS: readonly string[] = ['new', 'changed', 'failed'];
 
-/** One persisted entry: [kind, id, reason, markedAt]. */
+/** One persisted entry: [kind, id, reason, at] (the item's own time, or when it was marked). */
 type StoredEntry = [LitKind, string, LitReason, number];
 
 interface Entry {
   kind: LitKind;
   id: string;
   reason: LitReason;
+  /** The item's own time (ms) when the caller gave one, otherwise when it was marked. */
   at: number;
 }
 
@@ -56,15 +58,19 @@ function isStoredEntry(v: unknown): v is StoredEntry {
 }
 
 export interface LitStore {
-  markLit(kind: LitKind, id: string, reason: LitReason): void;
+  /**
+   * Marks an item as changed. `at` is the item's own time in ms (when it failed, arrived…); it
+   * ranks the entry for the shown cap. Without it, the time of marking is used.
+   */
+  markLit(kind: LitKind, id: string, reason: LitReason, at?: number): void;
   acknowledge(kind: LitKind, id: string): void;
   acknowledgeAll(kind?: LitKind): void;
   isLit(kind: LitKind, id: string): boolean;
   reasonOf(kind: LitKind, id: string): LitReason | undefined;
   count(kind?: LitKind): number;
-  /** Lit and among the newest {@link LIT_SHOWN_CAP} entries of its kind. */
+  /** Marked, and among the {@link LIT_SHOWN_CAP} newest entries of its kind (by `at`). */
   isShown(kind: LitKind, id: string): boolean;
-  /** The reason of a shown entry; undefined when not lit or beyond the shown cap. */
+  /** The reason of a shown entry; undefined when not marked or beyond the shown cap. */
   shownReason(kind: LitKind, id: string): LitReason | undefined;
   /** Number of shown entries of one kind (at most {@link LIT_SHOWN_CAP}). */
   shownCount(kind: LitKind): number;
@@ -131,10 +137,11 @@ export function createLitStore(): LitStore {
   const shownOf = (kind: LitKind): Set<string> => {
     if (!shown) {
       const next = new Map<LitKind, Set<string>>();
-      // Walk newest first so each kind keeps its newest entries.
-      const all = Array.from(load().entries());
-      for (let i = all.length - 1; i >= 0; i -= 1) {
-        const [key, e] = all[i];
+      // Rank by each item's own time, newest first, so marking an older page of a list after a
+      // newer one never pushes the newer items out; ties go to the entry marked last.
+      const all = Array.from(load().entries()).map(([key, e], order) => ({ key, e, order }));
+      all.sort((a, b) => b.e.at - a.e.at || b.order - a.order);
+      for (const { key, e } of all) {
         let set = next.get(e.kind);
         if (!set) {
           set = new Set();
@@ -167,12 +174,19 @@ export function createLitStore(): LitStore {
   };
 
   return {
-    markLit(kind, id, reason) {
+    markLit(kind, id, reason, at) {
       const map = load();
       const key = keyOf(kind, id);
-      if (map.get(key)?.reason === reason) return;
+      const time = at !== undefined && Number.isFinite(at) ? at : undefined;
+      const existing = map.get(key);
+      if (existing?.reason === reason) {
+        if (time === undefined || existing.at === time) return;
+        existing.at = time;
+        commit(map);
+        return;
+      }
       map.delete(key);
-      map.set(key, { kind, id, reason, at: Date.now() });
+      map.set(key, { kind, id, reason, at: time ?? Date.now() });
       trim(map);
       commit(map);
     },
@@ -230,14 +244,14 @@ export function createLitStore(): LitStore {
 
 const store = createLitStore();
 
-export const markLit = (kind: LitKind, id: string, reason: LitReason): void =>
-  store.markLit(kind, id, reason);
+export const markLit = (kind: LitKind, id: string, reason: LitReason, at?: number): void =>
+  store.markLit(kind, id, reason, at);
 export const acknowledge = (kind: LitKind, id: string): void => store.acknowledge(kind, id);
 export const acknowledgeAll = (kind?: LitKind): void => store.acknowledgeAll(kind);
 export const isLit = (kind: LitKind, id: string): boolean => store.isLit(kind, id);
-/** Why an entry is lit (undefined when it is not). */
+/** Why an entry is marked (undefined when it is not). */
 export const litReason = (kind: LitKind, id: string): LitReason | undefined => store.reasonOf(kind, id);
-/** Whether a row should be drawn lit: marked, and among the newest entries of its kind. */
+/** Whether a row should be flagged: marked, and among the newest entries of its kind. */
 export const isShownLit = (kind: LitKind, id: string): boolean => store.isShown(kind, id);
 /** Writes pending changes to localStorage immediately. */
 export const flushLit = (): void => store.flush();
@@ -271,7 +285,7 @@ export function useShownLit(kind: LitKind, id: string): LitState {
   return useMemo(() => (reason ? { lit: true, reason } : { lit: false }), [reason]);
 }
 
-/** Number of rows of one kind currently drawn lit (at most LIT_SHOWN_CAP). */
+/** Number of rows of one kind currently flagged (at most LIT_SHOWN_CAP). */
 export function useShownLitCount(kind: LitKind): number {
   return useSyncExternalStore(
     store.subscribe,
@@ -281,9 +295,9 @@ export function useShownLitCount(kind: LitKind): number {
 }
 
 /**
- * Acknowledge-on-leave for a board. Every row in `ids` that is drawn lit while the board is on
- * screen is remembered, and all of them are acknowledged when the board unmounts (the user
- * leaves the page) or the page is hidden. A lit row therefore stays lit for the whole visit in
+ * Acknowledge-on-leave for a page. Every row in `ids` that is flagged while the page is on
+ * screen is remembered, and all of them are acknowledged when the page unmounts (the user
+ * leaves it) or the tab is hidden. A flagged row therefore stays flagged for the whole visit in
  * which it is first seen, and is clear on the next one.
  */
 export function useAcknowledgeOnLeave(kind: LitKind, ids: readonly string[], onLeave?: () => void): void {

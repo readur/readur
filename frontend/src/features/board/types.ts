@@ -43,6 +43,8 @@ export interface AttentionItem {
   name: string;
   reason: string;
   at?: string;
+  /** When this failure happened (the time in `key`); ranks the item among flagged rows. */
+  occurredAt?: string;
   state: StatusState;
 }
 

@@ -56,7 +56,11 @@ export function FailedOcrPanel() {
     flagNewFailures(
       DOCUMENT_EVENTS_KEY,
       'attention',
-      docs.map((d) => ({ id: attentionKeyOf(d), eventKey: attentionKeyOf(d) })),
+      docs.map((d) => ({
+        id: attentionKeyOf(d),
+        eventKey: attentionKeyOf(d),
+        at: d.last_attempt_at || d.updated_at || d.created_at,
+      })),
     );
   }, [docs]);
 

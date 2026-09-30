@@ -287,4 +287,37 @@ describe('litStore', () => {
     expect(result.current).toEqual({ lit: false });
     expect(lit.litReason('document', 'old')).toBe('changed');
   });
+
+  it('ranks shown entries by item time, so paging through a newest-first list keeps page 1', async () => {
+    const lit = await loadModule();
+    const T = Date.parse('2026-09-30T12:00:00Z');
+    const minute = 60_000;
+    // Page 1 of a newest-first list: the 25 newest failures, marked newest first.
+    for (let i = 0; i < 25; i += 1) lit.markLit('attention', `p1-${i}`, 'failed', T - i * minute);
+    // Page 2: older failures, marked afterwards.
+    for (let i = 0; i < 25; i += 1) lit.markLit('attention', `p2-${i}`, 'failed', T - (25 + i) * minute);
+    expect(lit.isShownLit('attention', 'p1-0')).toBe(true);
+    expect(lit.isShownLit('attention', 'p1-24')).toBe(true);
+    expect(lit.isShownLit('attention', 'p2-0')).toBe(false);
+    // The older page is still stored and surfaces once page 1 is seen.
+    lit.acknowledgeAll('attention');
+    for (let i = 0; i < 25; i += 1) lit.markLit('attention', `p2-${i}`, 'failed', T - (25 + i) * minute);
+    expect(lit.isShownLit('attention', 'p2-0')).toBe(true);
+  });
+
+  it('keeps the item time across a reload and still ranks entries without one by marking time', async () => {
+    let lit = await loadModule();
+    const old = Date.parse('2020-01-01T00:00:00Z');
+    lit.markLit('document', 'aged', 'failed', old);
+    for (let i = 0; i < lit.LIT_SHOWN_CAP; i += 1) lit.markLit('document', `now${i}`, 'new');
+    lit.flushLit();
+    lit = await loadModule();
+    expect(lit.isLit('document', 'aged')).toBe(true);
+    expect(lit.isShownLit('document', 'aged')).toBe(false);
+    expect(lit.isShownLit('document', 'now0')).toBe(true);
+    // A newer item time for an entry already marked with the same reason re-ranks it.
+    lit.markLit('document', 'aged', 'failed', Date.now() + 60_000);
+    expect(lit.isShownLit('document', 'aged')).toBe(true);
+    expect(lit.isShownLit('document', 'now0')).toBe(false);
+  });
 });

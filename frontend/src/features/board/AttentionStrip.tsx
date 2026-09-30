@@ -22,19 +22,24 @@ export interface AttentionStripProps {
 const occurrenceKey = (base: string, occurrence?: string | null) => (occurrence ? `${base}@${occurrence}` : base);
 
 export function buildAttentionItems(failed: FailedOcrDocument[], sources: BoardSource[]): AttentionItem[] {
-  const docs = failed.map<AttentionItem>((d) => ({
-    key: occurrenceKey(`document:${d.id}`, d.last_retry_at || d.updated_at || d.created_at),
-    kind: 'document',
-    id: d.id,
-    name: docName(d),
-    reason: d.error_message || humanizeReason(d.failure_reason),
-    at: d.created_at,
-    state: 'failed',
-  }));
+  const docs = failed.map<AttentionItem>((d) => {
+    const occurredAt = d.last_retry_at || d.updated_at || d.created_at;
+    return {
+      key: occurrenceKey(`document:${d.id}`, occurredAt),
+      occurredAt,
+      kind: 'document',
+      id: d.id,
+      name: docName(d),
+      reason: d.error_message || humanizeReason(d.failure_reason),
+      at: d.created_at,
+      state: 'failed',
+    };
+  });
   const bad = sources
     .filter((s) => s.enabled !== false && s.status === 'error')
     .map<AttentionItem>((s) => ({
       key: occurrenceKey(`source:${s.id}`, s.last_error_at),
+      occurredAt: s.last_error_at ?? undefined,
       kind: 'source',
       id: s.id,
       name: s.name,
@@ -69,15 +74,15 @@ export function AttentionStrip({ failed, sources }: AttentionStripProps) {
 
   useLitCount('attention'); // re-render when a row is marked or acknowledged
   // Each failure occurrence is flagged once, in the same event log Intake › Needs attention uses,
-  // so it is lit on both surfaces until seen on either, and never re-lit after that.
+  // so it is flagged on both surfaces until seen on either, and never flagged again after that.
   useEffect(() => {
     flagNewFailures(
       DOCUMENT_EVENTS_KEY,
       'attention',
-      items.map((i) => ({ id: i.key, eventKey: i.key })),
+      items.map((i) => ({ id: i.key, eventKey: i.key, at: i.occurredAt })),
     );
   }, [items]);
-  // Rows seen lit during this visit are acknowledged when the user leaves the Board.
+  // Rows seen flagged during this visit are acknowledged when the user leaves the Board.
   useAcknowledgeOnLeave(
     'attention',
     items.map((i) => i.key),

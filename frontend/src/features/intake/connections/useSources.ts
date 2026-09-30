@@ -33,6 +33,7 @@ export function useSources() {
       sources.filter(isFailing).map((s: SourceResponse) => ({
         id: s.id,
         eventKey: `${s.id}@${s.last_error_at ?? s.updated_at}`,
+        at: s.last_error_at ?? s.updated_at,
       })),
     );
   }, [sources]);
