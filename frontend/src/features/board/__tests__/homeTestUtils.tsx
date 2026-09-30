@@ -69,7 +69,7 @@ export function renderPage(page: ReactNode, role: UserRole = 'admin') {
   };
   return render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={['/board']}>
+      <MemoryRouter initialEntries={['/home']}>
         <AuthContext.Provider value={auth as never}>
           <Routes>
             <Route
@@ -87,6 +87,31 @@ export function renderPage(page: ReactNode, role: UserRole = 'admin') {
     </I18nextProvider>,
   );
 }
+
+const DAY_MS = 24 * 3600 * 1000;
+
+/** A lane of arrivals ending today, one count per day (oldest first). */
+export const lane = (key: string, counts: number[], over: Record<string, unknown> = {}) => {
+  const now = Date.now();
+  const days = counts.map((count, i) => ({
+    date: new Date(now - (counts.length - 1 - i) * DAY_MS).toISOString().slice(0, 10),
+    count,
+  }));
+  const today = counts[counts.length - 1] ?? 0;
+  const fixed = key === 'upload' || key === 'watch';
+  return {
+    key,
+    source_id: fixed ? null : key,
+    kind: fixed ? key : 'webdav',
+    name: key,
+    days,
+    today,
+    last_arrival_at: today > 0 ? new Date(now - 2 * 60_000).toISOString() : null,
+    enabled: true,
+    status: fixed ? null : 'idle',
+    ...over,
+  };
+};
 
 export const doc = (id: string, over: Record<string, unknown> = {}) => ({
   id,

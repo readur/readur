@@ -15,7 +15,7 @@ import { NotificationProvider, useNotifications } from '../../../contexts/Notifi
 import { resetDocumentBaseline, syncDocuments, useLitFeeders } from '../litFeeders';
 import { BULK_ARRIVALS_KEY, BULK_THRESHOLD } from '../litFeeders';
 import { isLit, litReason, useLit } from '../litStore';
-import { doc, resetBoardState } from './boardTestUtils';
+import { doc, resetBoardState } from './homeTestUtils';
 
 type AddFn = ReturnType<typeof useNotifications>['addNotification'];
 let add: AddFn;

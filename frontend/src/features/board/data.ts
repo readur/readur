@@ -1,17 +1,14 @@
-import api, { documentService, queueService } from '../../services/api';
-import type { BoardDocument, BoardSource, FailedOcrDocument } from './types';
+import { documentService, queueService } from '../../services/api';
+import type { BoardDocument, FailedOcrDocument } from './types';
 
 export const POLL_MS = 15_000;
 
-export interface ArrivalsPage {
+/** How many of the newest documents Home shows. */
+export const RECENT_COUNT = 12;
+
+export interface RecentPage {
   documents: BoardDocument[];
   total: number;
-}
-
-export interface LibraryTotals {
-  documents: number;
-  storageBytes: number;
-  withOcr: number;
 }
 
 const asArray = <T,>(data: unknown, key: string): T[] => {
@@ -20,9 +17,9 @@ const asArray = <T,>(data: unknown, key: string): T[] => {
   return Array.isArray(inner) ? (inner as T[]) : [];
 };
 
-/** The 10 newest documents plus the library total. */
-export async function fetchArrivals(): Promise<ArrivalsPage> {
-  const res = await documentService.listWithPagination(10, 0);
+/** The newest documents plus the library total. */
+export async function fetchRecent(): Promise<RecentPage> {
+  const res = await documentService.listWithPagination(RECENT_COUNT, 0);
   const documents = asArray<BoardDocument>(res.data, 'documents');
   const total = (res.data as { pagination?: { total?: number } })?.pagination?.total ?? documents.length;
   return { documents, total };
@@ -36,18 +33,18 @@ type FailedOcrRow = FailedOcrDocument & {
 };
 
 export interface FailedOcrPage {
-  /** The newest failed documents (at most ten). */
+  /** The newest failed documents (at most {@link FAILED_SAMPLE}). */
   documents: FailedOcrDocument[];
-  /** Every document whose OCR failed: the Board's FAILED figure, so it matches the list. */
+  /** Every document whose OCR failed. */
   total: number;
 }
 
-/**
- * Documents whose OCR failed (GET /documents/failed/ocr). Their ids are real document ids, so
- * Retry works on them. The rows are mapped onto the strip's shape (reason, message, last try).
- */
+/** How many of the newest failures are read to name their causes. */
+export const FAILED_SAMPLE = 50;
+
+/** Documents whose OCR failed (GET /documents/failed/ocr), newest first. */
 export async function fetchFailedOcr(): Promise<FailedOcrPage> {
-  const res = await documentService.getFailedOcrDocuments(10);
+  const res = await documentService.getFailedOcrDocuments(FAILED_SAMPLE);
   const rows = asArray<FailedOcrRow>(res.data, 'documents');
   const total = (res.data as { pagination?: { total?: number } } | undefined)?.pagination?.total ?? rows.length;
   const documents = rows.map<FailedOcrDocument>((d) => ({
@@ -63,7 +60,7 @@ export async function fetchFailedOcr(): Promise<FailedOcrPage> {
   return { documents, total };
 }
 
-/** OCR queue figures. `failed` is deliberately absent: the Board counts failed documents instead. */
+/** OCR queue figures. `failed` is deliberately absent: Home counts failed documents instead. */
 export interface QueueFigures {
   pending: number;
   processing: number;
@@ -91,31 +88,5 @@ export async function fetchQueueFigures(): Promise<QueueFigures | null> {
   } catch (error) {
     if ((error as { response?: { status?: number } })?.response?.status === 403) return null;
     throw error;
-  }
-}
-
-export async function fetchSources(): Promise<BoardSource[]> {
-  const res = await api.get('/sources');
-  return asArray<BoardSource>(res.data, 'sources');
-}
-
-export async function fetchTotals(): Promise<LibraryTotals> {
-  const res = await api.get('/metrics');
-  const d = res.data?.documents;
-  if (!d) throw new Error('metrics unavailable');
-  return {
-    documents: d.total_documents ?? 0,
-    storageBytes: d.total_storage_bytes ?? 0,
-    withOcr: d.documents_with_ocr ?? 0,
-  };
-}
-
-/** Number of labels, or null when the labels call fails (the cell then shows a dash). */
-export async function fetchLabelCount(): Promise<number | null> {
-  try {
-    const res = await api.get('/labels?include_counts=false');
-    return asArray(res.data, 'labels').length;
-  } catch {
-    return null;
   }
 }

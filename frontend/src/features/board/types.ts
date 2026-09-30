@@ -1,6 +1,4 @@
-import type { StatusState } from '../../ui';
-
-/** The fields of a document the Board reads. */
+/** The fields of a document Home reads. */
 export interface BoardDocument {
   id: string;
   filename?: string;
@@ -9,19 +7,11 @@ export interface BoardDocument {
   mime_type?: string;
   created_at?: string;
   has_ocr_text?: boolean;
-  ocr_status?: string;
+  ocr_status?: string | null;
   ocr_progress_current?: number;
   ocr_progress_total?: number;
-}
-
-export interface BoardSource {
-  id: string;
-  name: string;
-  enabled?: boolean;
-  status?: string;
-  last_sync_at?: string | null;
-  last_error?: string | null;
-  last_error_at?: string | null;
+  source_id?: string | null;
+  source_type?: string | null;
 }
 
 export interface FailedOcrDocument {
@@ -35,42 +25,5 @@ export interface FailedOcrDocument {
   last_retry_at?: string | null;
 }
 
-/** One row of the "Needs attention" strip. */
-export interface AttentionItem {
-  key: string;
-  kind: 'document' | 'source';
-  id: string;
-  name: string;
-  reason: string;
-  at?: string;
-  /** When this failure happened (the time in `key`); ranks the item among flagged rows. */
-  occurredAt?: string;
-  state: StatusState;
-}
-
 export const docName = (d: { original_filename?: string | null; filename?: string }): string =>
   d.original_filename || d.filename || '';
-
-/** Document row state as shown by the status mark. */
-export function documentState(d: BoardDocument): StatusState {
-  switch (d.ocr_status) {
-    case 'completed':
-      return 'completed';
-    case 'failed':
-      return 'failed';
-    case 'processing':
-      return 'processing';
-    case 'pending':
-    case 'queued':
-      return 'pending';
-    default:
-      return d.has_ocr_text ? 'completed' : 'pending';
-  }
-}
-
-export function sourceState(s: BoardSource): StatusState {
-  if (s.enabled === false) return 'disabled';
-  if (s.status === 'error') return 'error';
-  if (s.status === 'syncing') return 'syncing';
-  return 'healthy';
-}

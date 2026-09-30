@@ -13,7 +13,7 @@ import { litReason, markLit } from './litStore';
 import type { BoardDocument } from './types';
 
 /** id -> last seen ocr_status of the newest documents. */
-const seen = new Map<string, string | undefined>();
+const seen = new Map<string, string | null | undefined>();
 let baselined = false;
 /** Newest document creation time (server clock, ms) already accounted for; persisted across reloads. */
 let lastSeen: number | undefined;

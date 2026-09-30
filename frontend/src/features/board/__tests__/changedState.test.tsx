@@ -7,9 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   api: { get: vi.fn() },
-  documentService: { listWithPagination: vi.fn(), getFailedOcrDocuments: vi.fn(), retryOcr: vi.fn() },
+  documentService: { listWithPagination: vi.fn(), getFailedOcrDocuments: vi.fn(), getThumbnail: vi.fn() },
   queueService: { getStats: vi.fn(), getOcrStatus: vi.fn(), pauseOcr: vi.fn(), resumeOcr: vi.fn() },
-  sourcesService: { triggerSync: vi.fn() },
 }));
 
 vi.mock('../../../services/api', () => ({
@@ -17,37 +16,38 @@ vi.mock('../../../services/api', () => ({
   api: m.api,
   documentService: m.documentService,
   queueService: m.queueService,
-  sourcesService: m.sourcesService,
 }));
 
-import Board from '../Board';
+import Home from '../Home';
 import { ChangeTag } from '../../../ui';
-import { ChangedTag as BoardTag } from '../Region';
+import { ChangedTag as HomeTag } from '../Region';
 import { ChangeTag as LibraryTag } from '../../library/cells';
 import { LibraryTable } from '../../library/LibraryTable';
 import { ChangedTag as IntakeTag } from '../../intake/shared/parts';
 import { BULK_THRESHOLD, syncDocuments } from '../litFeeders';
 import { LIT_SHOWN_CAP, isLit, isShownLit, markLit, useAcknowledgeOnLeave } from '../litStore';
-import { doc, renderPage, resetBoardState } from './boardTestUtils';
+import { doc, renderPage, resetBoardState } from './homeTestUtils';
 
 function serve(documents = [doc('d1'), doc('d2')], total = documents.length) {
   m.documentService.listWithPagination.mockResolvedValue({ data: { documents, pagination: { total } } });
   m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [] } });
+  m.documentService.getThumbnail.mockRejectedValue(new Error('none'));
   m.queueService.getStats.mockResolvedValue({ data: { pending: 4, processing: 1, failed: 99, completed_today: 8, oldest_pending_minutes: 3 } });
   m.queueService.getOcrStatus.mockResolvedValue({ data: { is_paused: false, status: 'running' } });
   m.api.get.mockImplementation((url: string) => {
-    if (url === '/sources') return Promise.resolve({ data: [] });
-    if (url === '/metrics') return Promise.resolve({ data: { documents: { total_documents: 2, total_storage_bytes: 4096, documents_with_ocr: 2 } } });
-    if (url.startsWith('/labels')) return Promise.resolve({ data: [] });
+    if (url === '/sources/arrivals') return Promise.resolve({ data: [] });
     return Promise.reject(new Error(`unexpected ${url}`));
   });
 }
 
-async function renderBoard() {
-  const view = renderPage(<Board />);
+async function renderHome() {
+  const view = renderPage(<Home />);
   await screen.findByText('d1.pdf');
   return view;
 }
+
+/** The Just arrived card of a document. */
+const card = (name: string) => screen.getByText(name).closest('li') as HTMLElement;
 
 /** Lets the deferred acknowledge-on-leave (a microtask after unmount) run. */
 const settle = () => act(async () => {});
@@ -63,44 +63,27 @@ afterEach(() => {
 });
 
 describe('changed state: acknowledge on leave', () => {
-  it('keeps a lit row lit for the whole visit and acknowledges it when the user leaves the Board', async () => {
+  it('keeps a new item marked for the whole visit and acknowledges it when the user leaves Home', async () => {
     markLit('document', 'd1', 'new');
-    const view = await renderBoard();
-    expect(screen.getByRole('row', { name: /d1\.pdf/ })).toHaveAttribute('data-changed', 'true');
+    const view = await renderHome();
+    expect(card('d1.pdf')).toHaveAttribute('data-changed', 'true');
     // Still flagged for the rest of the visit.
     await settle();
     expect(isLit('document', 'd1')).toBe(true);
-    expect(screen.getByRole('row', { name: /d1\.pdf/ })).toHaveAttribute('data-changed', 'true');
+    expect(card('d1.pdf')).toHaveAttribute('data-changed', 'true');
     view.unmount();
     await settle();
     expect(isLit('document', 'd1')).toBe(false);
   });
 
-  it('only acknowledges rows that were on screen and lit, not other lit documents', async () => {
+  it('only acknowledges items that were on screen and marked, not other marked documents', async () => {
     markLit('document', 'd1', 'changed');
     markLit('document', 'elsewhere', 'new');
-    const view = await renderBoard();
+    const view = await renderHome();
     view.unmount();
     await settle();
     expect(isLit('document', 'd1')).toBe(false);
     expect(isLit('document', 'elsewhere')).toBe(true);
-  });
-
-  it('acknowledges seen Needs attention rows on leave, and a seen failure is not lit again next visit', async () => {
-    const failedAt = '2026-01-01T10:00:00Z';
-    m.documentService.getFailedOcrDocuments.mockResolvedValue({
-      data: { documents: [{ id: 'f1', filename: 'scan.tiff', failure_reason: 'x', updated_at: failedAt }], pagination: { total: 1 } },
-    });
-    const first = await renderBoard();
-    const row = await screen.findByRole('row', { name: /scan\.tiff/ });
-    expect(row).toHaveAttribute('data-changed', 'true');
-    first.unmount();
-    await settle();
-    expect(isLit('attention', `document:f1@${failedAt}`)).toBe(false);
-
-    await renderBoard();
-    const again = await screen.findByRole('row', { name: /scan\.tiff/ });
-    expect(again).not.toHaveAttribute('data-changed');
   });
 
   it('acknowledges the Library rows seen lit when the user leaves the Library', async () => {
@@ -153,20 +136,20 @@ describe('changed state: acknowledge on leave', () => {
     expect(isLit('document', 'x')).toBe(false);
   });
 
-  it('offers "Mark all seen" while lit rows show, and it clears them', async () => {
+  it('offers "Mark all seen" while marked items show, and it clears them', async () => {
     const user = userEvent.setup();
     markLit('document', 'd1', 'new');
-    await renderBoard();
+    await renderHome();
     await user.click(screen.getByRole('button', { name: 'Mark all seen' }));
     expect(isLit('document', 'd1')).toBe(false);
-    await waitFor(() => expect(screen.getByRole('row', { name: /d1\.pdf/ })).not.toHaveAttribute('data-changed'));
+    await waitFor(() => expect(card('d1.pdf')).not.toHaveAttribute('data-changed'));
     expect(screen.queryByRole('button', { name: 'Mark all seen' })).not.toBeInTheDocument();
   });
 
   it('moves focus to the page heading when "Mark all seen" removes itself', async () => {
     const user = userEvent.setup();
     markLit('document', 'd1', 'new');
-    await renderBoard();
+    await renderHome();
     screen.getByRole('button', { name: 'Mark all seen' }).focus();
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Mark all seen' })).not.toBeInTheDocument());
@@ -174,7 +157,7 @@ describe('changed state: acknowledge on leave', () => {
   });
 
   it('has no "Mark all seen" when nothing is lit', async () => {
-    await renderBoard();
+    await renderHome();
     expect(screen.queryByRole('button', { name: 'Mark all seen' })).not.toBeInTheDocument();
   });
 });
@@ -185,7 +168,7 @@ describe('changed state: one vocabulary', () => {
   function renderTags(reason: 'new' | 'changed' | 'failed') {
     markLit('document', 'x', reason);
     // Each surface's tag rendered on its own, read as the text it shows.
-    return [<BoardTag key="board" reason={reason} />, <LibraryTag key="library" id="x" />, <IntakeTag key="intake" reason={reason} />].map(
+    return [<HomeTag key="board" reason={reason} />, <LibraryTag key="library" id="x" />, <IntakeTag key="intake" reason={reason} />].map(
       (tag) => word(render(<I18nextProvider i18n={i18n}>{tag}</I18nextProvider>).container),
     );
   }
@@ -194,32 +177,24 @@ describe('changed state: one vocabulary', () => {
     ['new', 'NEW'],
     ['changed', 'CHANGED'],
     ['failed', 'CHANGED'],
-  ] as const)('the same %s event reads %s on the Board, the Library and Intake', (reason, expected) => {
+  ] as const)('the same %s event reads %s on Home, the Library and Intake', (reason, expected) => {
     expect(renderTags(reason)).toEqual([expected, expected, expected]);
   });
 
-  it('draws the tag with one shared style on the Board, the Library and Intake', () => {
+  it('draws the tag with one shared style on Home, the Library and Intake', () => {
     markLit('document', 'x', 'new');
     const shared = render(<ChangeTag>New</ChangeTag>).container.firstElementChild!.className;
-    const classes = [<BoardTag key="board" reason="new" />, <LibraryTag key="library" id="x" />, <IntakeTag key="intake" reason="new" />].map(
+    const classes = [<HomeTag key="board" reason="new" />, <LibraryTag key="library" id="x" />, <IntakeTag key="intake" reason="new" />].map(
       (tag) => render(<I18nextProvider i18n={i18n}>{tag}</I18nextProvider>).container.firstElementChild!.className.split(' '),
     );
     for (const list of classes) expect(list).toContain(shared);
   });
 
-  it('a failed document reads CHANGED in Recently added and in Needs attention alike', async () => {
-    const failedAt = '2026-01-01T10:00:00Z';
+  it('a failed document reads Changed in Just arrived', async () => {
     markLit('document', 'd1', 'failed');
     serve([doc('d1', { ocr_status: 'failed', has_ocr_text: false })]);
-    m.documentService.getFailedOcrDocuments.mockResolvedValue({
-      data: { documents: [{ id: 'd1', filename: 'd1.pdf', failure_reason: 'x', updated_at: failedAt }], pagination: { total: 1 } },
-    });
-    renderPage(<Board />);
-    const attention = await screen.findByRole('region', { name: 'Needs attention' });
-    const arrivals = screen.getByRole('region', { name: 'Recently added' });
-    await within(arrivals).findByText('d1.pdf');
-    expect(within(within(attention).getByRole('row', { name: /d1\.pdf/ })).getByText('Changed')).toBeInTheDocument();
-    expect(within(within(arrivals).getByRole('row', { name: /d1\.pdf/ })).getByText('Changed')).toBeInTheDocument();
+    await renderHome();
+    expect(within(card('d1.pdf')).getByText('Changed')).toBeInTheDocument();
   });
 });
 
@@ -239,51 +214,40 @@ describe('changed state: first run and bulk imports', () => {
     syncDocuments([doc('a', { created_at: old })], undefined, 1);
     const fresh = Array.from({ length: 10 }, (_, i) => doc(`n${i}`, { created_at: new Date(now - i * 1000).toISOString() }));
     serve(fresh, 121);
-    renderPage(<Board />);
+    renderPage(<Home />);
     await screen.findByText('n0.pdf');
-    const arrivals = screen.getByRole('region', { name: 'Recently added' });
+    const arrivals = screen.getByRole('region', { name: 'Just arrived' });
     const summary = await within(arrivals).findByRole('status');
     expect(summary).toHaveTextContent('120 new documents');
     expect(within(summary).getByRole('link', { name: 'Open in Library, newest first' })).toHaveAttribute(
       'href',
       '/documents?sort=created_at&order=desc',
     );
-    const lit = within(arrivals)
-      .getAllByRole('row')
+    const lit = within(within(arrivals).getByRole('list'))
+      .getAllByRole('listitem')
       .filter((r) => r.getAttribute('data-changed') === 'true');
     expect(lit).toHaveLength(0);
     fresh.forEach((d) => expect(isLit('document', d.id)).toBe(false));
   });
 
-  it(`a small batch (${BULK_THRESHOLD} or fewer) lights its rows as NEW`, async () => {
+  it(`a small batch (${BULK_THRESHOLD} or fewer) marks its items as New`, async () => {
     const now = Date.now();
     syncDocuments([doc('a', { created_at: new Date(now - 3600_000).toISOString() })], undefined, 1);
     serve([doc('d1', { created_at: new Date(now).toISOString() }), doc('a')], 2);
-    await renderBoard();
-    const row = await screen.findByRole('row', { name: /d1\.pdf/ });
-    expect(row).toHaveAttribute('data-changed', 'true');
-    expect(within(row).getByText('New')).toBeInTheDocument();
+    await renderHome();
+    await waitFor(() => expect(card('d1.pdf')).toHaveAttribute('data-changed', 'true'));
+    expect(within(card('d1.pdf')).getByText('New')).toBeInTheDocument();
     expect(screen.queryByText(/new documents/)).not.toBeInTheDocument();
   });
 });
 
-describe('Board truth: queue figures', () => {
-  it('reads the queue stats the server actually sends (pending / processing)', async () => {
-    await renderBoard();
-    const group = await within(screen.getByRole('region', { name: 'Processing' })).findByRole('group', { name: 'Processing' });
-    const value = (label: string) => within(group).getByText(label).closest('div')?.querySelector('dd')?.textContent;
-    expect(value('Pending')).toBe('4');
-    expect(value('Processing')).toBe('1');
-    // The queue's 99 failed jobs are not shown: FAILED is the failed-documents count.
-    expect(value('Failed')).toBe('0');
-  });
-
-  it('shows dashes, not an error, when the queue figures are admin-only', async () => {
-    m.queueService.getStats.mockRejectedValue({ response: { status: 403 } });
-    await renderBoard();
+describe('Home truth: queue figures', () => {
+  it('reads the queue stats the server actually sends (pending / processing), not its failed jobs', async () => {
+    await renderHome();
     const processing = screen.getByRole('region', { name: 'Processing' });
-    const group = await within(processing).findByRole('group', { name: 'Processing' });
-    expect(within(processing).queryByRole('alert')).not.toBeInTheDocument();
-    expect(within(group).getByText('Pending').closest('div')?.querySelector('dd')?.textContent).toBe('—');
+    expect(await within(processing).findByText('Processing 1 · pending 4')).toBeInTheDocument();
+    // The queue's 99 failed jobs are not shown: the failures line counts failed documents.
+    expect(within(processing).queryByText(/99/)).not.toBeInTheDocument();
+    expect(within(processing).getByText('No failed documents')).toBeInTheDocument();
   });
 });
