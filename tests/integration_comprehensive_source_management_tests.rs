@@ -493,7 +493,8 @@ async fn test_s3_source_operations() {
 async fn test_local_folder_source_operations() {
     let mut client = SourceTestClient::new();
     
-    client.register_and_login(UserRole::User).await
+    // Local folder sources are admin-only unless LOCAL_SOURCE_ALLOWED_PATHS is set.
+    client.register_and_login(UserRole::Admin).await
         .expect("Failed to register and login");
     
     // Create Local Folder source
@@ -509,7 +510,9 @@ async fn test_local_folder_source_operations() {
     assert_eq!(source["config"]["recursive"], true);
     assert_eq!(source["config"]["sync_interval_minutes"], 30);
     
-    // Update with different path and settings
+    // Update with different path and settings; watch folders must exist.
+    std::fs::create_dir_all("/tmp/updated_documents").ok();
+    std::fs::create_dir_all("/tmp/more_documents").ok();
     let updates = json!({
         "name": "Updated Local Folder",
         "enabled": true,
@@ -711,7 +714,8 @@ async fn test_source_error_handling() {
 async fn test_all_source_types_comprehensive() {
     let mut client = SourceTestClient::new();
     
-    client.register_and_login(UserRole::User).await
+    // Local folder sources are admin-only unless LOCAL_SOURCE_ALLOWED_PATHS is set.
+    client.register_and_login(UserRole::Admin).await
         .expect("Failed to register and login");
     
     // Create all three source types

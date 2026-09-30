@@ -14,6 +14,7 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 struct OcrRetryRegressionTestHelper {
     client: Client,
     token: String,
+    user_id: Uuid,
 }
 
 impl OcrRetryRegressionTestHelper {
@@ -46,15 +47,17 @@ impl OcrRetryRegressionTestHelper {
             }
         }
         
-        // Create and login as admin user
+        // Create and login as a regular user: bulk retry is scoped to the
+        // caller's own documents, so the counts below are not affected by
+        // documents other tests leave on the shared server.
         let test_id = Uuid::new_v4().simple().to_string();
-        let username = format!("test_admin_{}", &test_id[0..8]);
+        let username = format!("test_ocr_retry_{}", &test_id[0..8]);
         let password = "test_password_123";
         let email = format!("{}@test.com", username);
 
-        readur::test_utils::create_live_server_user(&username, &email, password, UserRole::Admin)
+        let user = readur::test_utils::create_live_server_user(&username, &email, password, UserRole::User)
             .await
-            .map_err(|e| format!("Failed to create admin user: {}", e))?;
+            .map_err(|e| format!("Failed to create test user: {}", e))?;
 
         let login_request = LoginRequest {
             username: username.clone(),
@@ -77,39 +80,39 @@ impl OcrRetryRegressionTestHelper {
         let login_data: LoginResponse = login_response.json().await?;
         let token = login_data.token;
 
-        Ok(Self { client, token })
+        Ok(Self { client, token, user_id: user.id })
     }
 
     async fn create_test_document(&self, filename: &str, ocr_status: &str) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>> {
-        // Create a document directly in the database via API
-        let document_data = json!({
-            "filename": filename,
-            "original_filename": filename,
-            "mime_type": "application/pdf",
-            "file_size": 1024,
-            "ocr_status": ocr_status
-        });
-
-        let response = self.client
-            .post(&format!("{}/api/internal/test/documents", get_base_url()))
-            .header("Authorization", format!("Bearer {}", self.token))
-            .json(&document_data)
-            .timeout(TIMEOUT)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("Failed to create test document with status {}: {}", status, error_text).into());
+        // There is no API for creating a document with a chosen OCR status, so
+        // insert it directly into the running server's database.
+        let mut document = readur::test_utils::document_helpers::create_test_document(self.user_id);
+        document.filename = filename.to_string();
+        document.original_filename = filename.to_string();
+        document.file_path = format!("/tmp/{}_{}", document.id, filename);
+        document.file_hash = Some(document.id.simple().to_string());
+        document.ocr_status = Some(ocr_status.to_string());
+        if ocr_status != "completed" {
+            document.ocr_text = None;
+            document.ocr_confidence = None;
+            document.ocr_word_count = None;
+            document.ocr_processing_time_ms = None;
+            document.ocr_completed_at = None;
+        }
+        if ocr_status == "failed" {
+            document.ocr_error = Some("simulated OCR failure".to_string());
+            document.ocr_failure_reason = Some("other".to_string());
         }
 
-        let response_data: Value = response.json().await?;
-        let doc_id_str = response_data["id"].as_str()
-            .ok_or("Document ID not found in response")?;
-        let doc_id = Uuid::parse_str(doc_id_str)?;
-        
-        Ok(doc_id)
+        let db = readur::db::Database::new_with_pool_config(
+            &readur::test_utils::live_server_database_url(),
+            2,
+            0,
+        )
+        .await?;
+        let created = db.create_document(document).await;
+        db.close().await;
+        Ok(created?.id)
     }
 
     async fn get_bulk_retry_preview(&self, mode: &str) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
