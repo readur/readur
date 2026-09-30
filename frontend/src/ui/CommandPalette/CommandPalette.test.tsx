@@ -195,4 +195,25 @@ describe('useCommandPaletteShortcut', () => {
     await user.keyboard('/');
     expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
   });
+
+  it('leaves / alone while another dialog is open', async () => {
+    const open = vi.fn();
+    function WithDialog() {
+      useCommandPaletteShortcut(open);
+      return (
+        <div role="dialog" aria-label="Delete document">
+          <button>Keep</button>
+        </div>
+      );
+    }
+    const user = userEvent.setup();
+    render(<WithDialog />);
+    act(() => screen.getByRole('button', { name: 'Keep' }).focus());
+    await user.keyboard('/');
+    act(() => (document.activeElement as HTMLElement).blur());
+    await user.keyboard('/');
+    expect(open).not.toHaveBeenCalled();
+    await user.keyboard('{Control>}k{/Control}');
+    expect(open).toHaveBeenCalledTimes(1);
+  });
 });

@@ -24,8 +24,14 @@ const readSaved = (): ThemeModeName | null => {
   }
 };
 
+/** The theme the pre-paint script in index.html already applied, if any. */
+const readPainted = (): ThemeModeName | null => {
+  const v = typeof document !== 'undefined' ? document.documentElement.dataset.theme : undefined;
+  return v === 'light' || v === 'dark' ? v : null;
+};
+
 const initialMode = (): ThemeModeName =>
-  readSaved() ?? (getMql(DARK_QUERY)?.matches ? 'dark' : 'light');
+  readPainted() ?? readSaved() ?? (getMql(DARK_QUERY)?.matches ? 'dark' : 'light');
 
 const subscribe = (mql: MediaQueryList | null, fn: (e: MediaQueryListEvent) => void) => {
   if (!mql || typeof mql.addEventListener !== 'function') return () => {};
@@ -75,4 +81,3 @@ export const ThemeModeProvider: React.FC<{ children: ReactNode }> = ({ children 
   return <ThemeModeContext.Provider value={value}>{children}</ThemeModeContext.Provider>;
 };
 
-export { ThemeModeProvider as ThemeProvider };

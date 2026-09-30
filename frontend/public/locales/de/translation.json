@@ -1783,8 +1783,9 @@
     },
     "bulk": {
       "label": "Sammelaktionen",
-      "selected": "ausgewählt",
-      "clear": "Auswahl aufheben"
+      "clear": "Auswahl aufheben",
+      "count_one": "<n>{{count}}</n> <w>ausgewählt</w>",
+      "count_other": "<n>{{count}}</n> <w>ausgewählt</w>"
     },
     "commandPalette": {
       "label": "Befehlspalette",
@@ -3005,7 +3006,8 @@
         "processing": "Die Datei konnte nicht verarbeitet werden.",
         "server": "Beim Server ist ein Problem aufgetreten. Versuchen Sie es erneut.",
         "session": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an.",
-        "tooLarge": "Die Datei ist zu groß."
+        "tooLarge": "Die Datei ist zu groß.",
+        "labels": "Hochgeladen, aber die Labels konnten nicht hinzugefügt werden."
       },
       "labelDuplicate": "Ein Label mit diesem Namen existiert bereits.",
       "labelFailed": "Das Label konnte nicht erstellt werden.",

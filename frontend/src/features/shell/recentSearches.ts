@@ -23,3 +23,12 @@ export function saveRecentSearch(query: string): void {
     /* storage unavailable: nothing to remember */
   }
 }
+
+/** Forgets every recent search (sign-out). */
+export function clearRecentSearches(): void {
+  try {
+    window.localStorage.removeItem(RECENT_SEARCHES_KEY);
+  } catch {
+    /* storage unavailable: nothing stored */
+  }
+}

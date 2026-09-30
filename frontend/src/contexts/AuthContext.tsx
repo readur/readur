@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api } from '../services/api'
+import { clearUserState } from '../auth/clearUserState'
 import type { UserRole } from '../types/generated'
 
 export { isAdmin } from '../auth/roles'
@@ -62,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = () => {
+    clearUserState()
     localStorage.removeItem('token')
     delete api.defaults.headers.common['Authorization']
     setUser(null)

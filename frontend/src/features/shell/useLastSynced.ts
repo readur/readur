@@ -19,27 +19,39 @@ export function latestSync(sources: unknown): Date | null {
 }
 
 /**
- * Fetches the sources list on mount and once a minute, and returns the most recent sync time.
- * Returns null while loading, on error, or when there are no synced sources.
+ * Fetches the sources list on mount and once a minute while the tab is visible (and once when it
+ * becomes visible again), and returns the most recent sync time. Returns null while loading, on
+ * error, or when there are no synced sources.
  */
 export function useLastSynced(): Date | null {
   const [last, setLast] = useState<Date | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const hidden = () => typeof document !== 'undefined' && document.hidden;
     const load = async () => {
       try {
         const res = await api.get('/sources');
-        if (!cancelled) setLast(latestSync(res?.data));
+        if (cancelled) return;
+        const next = latestSync(res?.data);
+        // Same time as before: keep the old Date so nothing re-renders.
+        setLast((prev) => (prev?.getTime() === next?.getTime() ? prev : next));
       } catch {
         /* keep the previous value: a failed poll is not a reason to hide the readout */
       }
     };
     void load();
-    const timer = window.setInterval(load, SYNC_POLL_MS);
+    const timer = window.setInterval(() => {
+      if (!hidden()) void load();
+    }, SYNC_POLL_MS);
+    const onVisibility = () => {
+      if (!hidden()) void load();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 

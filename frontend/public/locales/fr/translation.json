@@ -1783,8 +1783,9 @@
     },
     "bulk": {
       "label": "Actions groupées",
-      "selected": "sélectionnés",
-      "clear": "Effacer la sélection"
+      "clear": "Effacer la sélection",
+      "count_one": "<n>{{count}}</n> <w>sélectionné</w>",
+      "count_other": "<n>{{count}}</n> <w>sélectionnés</w>"
     },
     "commandPalette": {
       "label": "Palette de commandes",
@@ -3005,7 +3006,8 @@
         "processing": "Le fichier n’a pas pu être traité.",
         "server": "Le serveur a rencontré un problème. Réessayez.",
         "session": "Votre session a expiré. Reconnectez-vous.",
-        "tooLarge": "Le fichier est trop volumineux."
+        "tooLarge": "Le fichier est trop volumineux.",
+        "labels": "Importé, mais les étiquettes n'ont pas pu être ajoutées."
       },
       "labelDuplicate": "Une étiquette portant ce nom existe déjà.",
       "labelFailed": "Impossible de créer l’étiquette.",

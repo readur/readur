@@ -11,7 +11,8 @@ export interface Resource<T> {
 /**
  * Loads `fetcher` on mount and, with `intervalMs`, again on a timer while the tab is visible
  * (and once when it becomes visible again). A failed refresh keeps the last data but reports the
- * error. `fetcher` is read through a ref, so an inline function is fine.
+ * error. Only the latest request's response is applied, so a slow older one never overwrites
+ * newer data. `fetcher` is read through a ref, so an inline function is fine.
  */
 export function useResource<T>(fetcher: () => Promise<T>, intervalMs?: number): Resource<T> {
   const [state, setState] = useState<{ data?: T; loading: boolean; error: unknown }>({
@@ -21,12 +22,16 @@ export function useResource<T>(fetcher: () => Promise<T>, intervalMs?: number): 
   const fetchRef = useRef(fetcher);
   fetchRef.current = fetcher;
   const alive = useRef(true);
+  /** Number of the latest request; an older response arriving later is ignored. */
+  const latest = useRef(0);
 
   const run = useCallback(() => {
+    const seq = ++latest.current;
+    const current = () => alive.current && seq === latest.current;
     fetchRef
       .current()
-      .then((data) => alive.current && setState({ data, loading: false, error: undefined }))
-      .catch((error) => alive.current && setState((s) => ({ data: s.data, loading: false, error })));
+      .then((data) => current() && setState({ data, loading: false, error: undefined }))
+      .catch((error) => current() && setState((s) => ({ data: s.data, loading: false, error })));
   }, []);
 
   useEffect(() => {

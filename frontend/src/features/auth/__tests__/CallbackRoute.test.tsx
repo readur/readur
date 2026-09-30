@@ -10,11 +10,13 @@ vi.mock('../../../services/api', () => ({ api: { defaults: { headers: { common: 
 const originalLocation = window.location;
 const originalStorage = window.localStorage;
 const hrefSetter = vi.fn();
+const replace = vi.fn();
 const store = new Map<string, string>();
 const headers = () => api.defaults.headers.common as Record<string, string>;
 
 beforeEach(() => {
   hrefSetter.mockReset();
+  replace.mockReset();
   store.clear();
   delete headers().Authorization;
   Object.defineProperty(window, 'localStorage', {
@@ -29,6 +31,7 @@ beforeEach(() => {
     configurable: true,
     value: {
       ...originalLocation,
+      replace,
       set href(v: string) {
         hrefSetter(v);
       },
@@ -55,7 +58,9 @@ describe('CallbackRoute', () => {
   it('stores the token, sets the auth header and goes to /board', async () => {
     renderCallback('?token=abc123');
     expect(screen.getByRole('heading', { level: 1, name: 'Signing you in…' })).toBeInTheDocument();
-    await waitFor(() => expect(hrefSetter).toHaveBeenCalledWith('/board'));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/board'));
+    // Replaced, not pushed: the URL with the token does not stay in the history.
+    expect(hrefSetter).not.toHaveBeenCalled();
     expect(store.get('token')).toBe('abc123');
     expect(headers().Authorization).toBe('Bearer abc123');
   });
@@ -65,6 +70,7 @@ describe('CallbackRoute', () => {
     renderCallback('?error=access_denied');
     expect(await screen.findByRole('alert')).toHaveTextContent('Access was denied');
     expect(hrefSetter).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
     await user.click(screen.getByRole('link', { name: 'Back to sign in' }));
     expect(await screen.findByRole('status', { name: 'location' })).toHaveTextContent('/login');
   });
@@ -106,6 +112,7 @@ describe('CallbackRoute', () => {
     renderCallback('?token=abc');
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not finish signing you in');
     expect(hrefSetter).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 });

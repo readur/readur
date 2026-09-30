@@ -1783,8 +1783,9 @@
     },
     "bulk": {
       "label": "Bulk actions",
-      "selected": "selected",
-      "clear": "Clear selection"
+      "clear": "Clear selection",
+      "count_one": "<n>{{count}}</n> <w>selected</w>",
+      "count_other": "<n>{{count}}</n> <w>selected</w>"
     },
     "commandPalette": {
       "label": "Command palette",
@@ -3005,7 +3006,8 @@
         "processing": "The file could not be processed.",
         "server": "The server had a problem. Try again.",
         "session": "Your session expired. Sign in again.",
-        "tooLarge": "The file is too large."
+        "tooLarge": "The file is too large.",
+        "labels": "Uploaded, but the labels could not be added."
       },
       "labelDuplicate": "A label with this name already exists.",
       "labelFailed": "Could not create the label.",

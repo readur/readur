@@ -43,6 +43,31 @@
   --scrim: rgba(11, 13, 16, 0.5);
 }
 
+/* Before the theme is known (no data-theme yet), follow the system setting so a
+   dark system never paints a light page first. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --ground: #0B0D10;
+    --surface: #15191E;
+    --surface-2: #1C2127;
+    --line: #262B31;
+    --line-strong: #E8EAED;
+    --fg: #E8EAED;
+    --fg-2: #B5BBC2;
+    --fg-meta: #9AA0A6;
+    --signal: #FFD400;
+    --signal-ink: #0B0D10;
+    --danger: #F97066;
+    --danger-bg: #2A1414;
+    --ok: #4ADE80;
+    --focus: #FFD400;
+    --btn-bg: #E8EAED;
+    --btn-fg: #0B0D10;
+    --shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.6);
+    --scrim: rgba(11, 13, 16, 0.5);
+  }
+}
+
 :root {
   /* Layers: the shell sits below every overlay; the palette is topmost. */
   --z-shell: 1100;

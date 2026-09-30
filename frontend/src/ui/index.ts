@@ -24,3 +24,4 @@ export * from './SlideOver';
 export * from './CommandPalette';
 export * from './BulkActionBar';
 export * from './motion';
+export { focusPageHeading } from './shared/focusPageHeading';

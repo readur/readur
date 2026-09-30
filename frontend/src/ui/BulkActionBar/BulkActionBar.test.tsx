@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import i18next from 'i18next';
+import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { BulkActionBar } from './BulkActionBar';
 
 function setup(count = 3) {
@@ -67,5 +70,39 @@ describe('BulkActionBar', () => {
   it('accepts a custom accessible name', () => {
     render(<BulkActionBar aria-label="Document actions" count={1} actions={[]} onClear={() => {}} />);
     expect(screen.getByRole('toolbar', { name: 'Document actions' })).toBeInTheDocument();
+  });
+
+  it('renders the count as one translated sentence, in the order the language uses', async () => {
+    const i18n = i18next.createInstance();
+    await i18n.use(initReactI18next).init({
+      lng: 'xx',
+      resources: { xx: { translation: { ui: { bulk: { count_one: '<w>Picked:</w> <n>{{count}}</n> file', count_other: '<w>Picked:</w> <n>{{count}}</n> files' } } } } },
+      interpolation: { escapeValue: false },
+    });
+    render(
+      <I18nextProvider i18n={i18n}>
+        <BulkActionBar count={2} actions={[]} onClear={() => {}} />
+      </I18nextProvider>,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Picked: 2 files');
+    expect(screen.getByRole('toolbar')).toHaveTextContent('Picked: 2 files');
+  });
+
+  it('moves focus to the page heading when "Clear selection" removes the bar', async () => {
+    const user = userEvent.setup();
+    function Page() {
+      const [count, setCount] = useState(2);
+      return (
+        <main>
+          <h1>Documents</h1>
+          <BulkActionBar count={count} actions={[]} onClear={() => setCount(0)} />
+        </main>
+      );
+    }
+    render(<Page />);
+    screen.getByRole('button', { name: 'Clear selection' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Documents' })).toHaveFocus();
   });
 });

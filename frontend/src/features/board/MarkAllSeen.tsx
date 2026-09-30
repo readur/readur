@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../ui';
+import { Button, focusPageHeading } from '../../ui';
 import { clearBulkArrivals, useBulkArrivals } from './litFeeders';
 import { acknowledgeAll, useShownLitCount, type LitKind } from './litStore';
 
@@ -30,6 +30,8 @@ export function MarkAllSeen({ kinds }: MarkAllSeenProps) {
       onPress={() => {
         kinds.forEach((kind) => acknowledgeAll(kind));
         if (withDocuments) clearBulkArrivals();
+        // This button goes away once nothing is unseen; keep focus on the page.
+        focusPageHeading();
       }}
     >
       {t('board.markAllSeen', 'Mark all seen')}

@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { Toolbar } from 'react-aria-components';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { Button } from '../Button';
 import { Close } from '../icons';
 import { cx } from '../shared/FieldParts';
+import { focusPageHeading } from '../shared/focusPageHeading';
 import styles from './BulkActionBar.module.css';
 
 export interface BulkAction {
@@ -30,11 +31,19 @@ export interface BulkActionBarProps {
  */
 export function BulkActionBar({ count, actions, onClear, className, 'aria-label': ariaLabel }: BulkActionBarProps) {
   const { t } = useTranslation();
-  const selectedWord = t('ui.bulk.selected', { defaultValue: 'selected', count });
+  // One sentence per language, so translators can order the number and the word freely.
+  const countText = (
+    <Trans
+      i18nKey="ui.bulk.count"
+      count={count}
+      defaults="<n>{{count}}</n> <w>selected</w>"
+      components={{ n: <span className={styles.number} />, w: <span className={styles.word} /> }}
+    />
+  );
   return (
     <>
       <span className="visually-hidden" role="status" aria-live="polite">
-        {count > 0 ? `${count} ${selectedWord}` : ''}
+        {count > 0 ? countText : ''}
       </span>
       {count > 0 ? (
         <div className={cx(styles.dock, className)}>
@@ -42,10 +51,7 @@ export function BulkActionBar({ count, actions, onClear, className, 'aria-label'
             className={styles.bar}
             aria-label={ariaLabel ?? t('ui.bulk.label', { defaultValue: 'Bulk actions' })}
           >
-            <span className={styles.count}>
-              <span className={styles.number}>{count}</span>{' '}
-              <span className={styles.word}>{selectedWord}</span>
-            </span>
+            <span className={styles.count}>{countText}</span>
             <span className={styles.actions}>
               {actions.map((action) => (
                 <Button
@@ -69,7 +75,11 @@ export function BulkActionBar({ count, actions, onClear, className, 'aria-label'
                   <Close fontSize="inherit" />
                 </span>
               }
-              onPress={onClear}
+              onPress={() => {
+                onClear();
+                // The bar goes away with the selection; keep focus on the page.
+                focusPageHeading();
+              }}
             >
               {t('ui.bulk.clear', { defaultValue: 'Clear selection' })}
             </Button>

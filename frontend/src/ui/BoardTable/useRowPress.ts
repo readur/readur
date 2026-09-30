@@ -61,6 +61,8 @@ export function useRowPress(
         if (key === null) return;
         e.preventDefault();
         e.stopPropagation();
+        // A held Enter repeats; open the row once.
+        if (e.repeat) return;
         actionRef.current?.(key);
       },
     };

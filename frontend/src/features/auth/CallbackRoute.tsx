@@ -28,8 +28,9 @@ export default function CallbackRoute() {
     try {
       localStorage.setItem('token', token);
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      // Full load so the auth context restores the session from the stored token.
-      window.location.href = HOME_PATH;
+      // Full load so the auth context restores the session from the stored token. Replace, so the
+      // URL carrying the token does not stay in the history.
+      window.location.replace(HOME_PATH);
     } catch (err) {
       console.error('OIDC callback error:', err);
       setError(t('auth.callback.generic', 'Could not finish signing you in. Try again.'));

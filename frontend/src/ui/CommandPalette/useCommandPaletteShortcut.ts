@@ -7,8 +7,17 @@ function isTyping(target: EventTarget | null): boolean {
   return Boolean(target.closest(TYPING));
 }
 
+const DIALOG = '[role="dialog"], [role="alertdialog"]';
+
+/** True when a dialog is open (or focus is inside one): `/` then belongs to that dialog. */
+function inDialog(target: EventTarget | null): boolean {
+  if (target instanceof Element && target.closest(DIALOG)) return true;
+  return typeof document !== 'undefined' && document.querySelector(DIALOG) !== null;
+}
+
 /**
- * Binds ⌘K / Ctrl+K anywhere, and `/` when focus is not in a text field, to `open`.
+ * Binds ⌘K / Ctrl+K anywhere, and `/` when focus is not in a text field and no dialog is open,
+ * to `open`.
  */
 export function useCommandPaletteShortcut(open: () => void): void {
   const openRef = useRef(open);
@@ -23,7 +32,7 @@ export function useCommandPaletteShortcut(open: () => void): void {
         openRef.current();
         return;
       }
-      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping(e.target)) {
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping(e.target) && !inDialog(e.target)) {
         e.preventDefault();
         openRef.current();
       }

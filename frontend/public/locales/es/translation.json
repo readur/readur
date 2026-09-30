@@ -1783,8 +1783,9 @@
     },
     "bulk": {
       "label": "Acciones en lote",
-      "selected": "seleccionados",
-      "clear": "Borrar selección"
+      "clear": "Borrar selección",
+      "count_one": "<n>{{count}}</n> <w>seleccionado</w>",
+      "count_other": "<n>{{count}}</n> <w>seleccionados</w>"
     },
     "commandPalette": {
       "label": "Paleta de comandos",
@@ -3005,7 +3006,8 @@
         "processing": "No se pudo procesar el archivo.",
         "server": "El servidor tuvo un problema. Inténtalo de nuevo.",
         "session": "Tu sesión ha caducado. Inicia sesión de nuevo.",
-        "tooLarge": "El archivo es demasiado grande."
+        "tooLarge": "El archivo es demasiado grande.",
+        "labels": "Se subió, pero no se pudieron añadir las etiquetas."
       },
       "labelDuplicate": "Ya existe una etiqueta con este nombre.",
       "labelFailed": "No se pudo crear la etiqueta.",

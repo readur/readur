@@ -58,3 +58,17 @@ describe.each(Object.keys(themes))('tokens contrast (%s)', (name) => {
     expect(contrast(t.focus, t[bg])).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('tokens before the theme is set', () => {
+  it('a dark system gets the dark tokens until data-theme is set', () => {
+    const media = css.indexOf('@media (prefers-color-scheme: dark)');
+    expect(media).toBeGreaterThan(-1);
+    const selector = css.indexOf(':root:not([data-theme])', media);
+    expect(selector).toBeGreaterThan(media);
+    const open = css.indexOf('{', selector);
+    const close = css.indexOf('}', open);
+    const vars: Record<string, string> = {};
+    for (const m of css.slice(open + 1, close).matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) vars[m[1]] = m[2].trim();
+    expect(vars).toEqual(themes.dark);
+  });
+});

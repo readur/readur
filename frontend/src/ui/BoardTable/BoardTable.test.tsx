@@ -124,6 +124,17 @@ describe('BoardTable', () => {
     expect(onRowAction).toHaveBeenLastCalledWith('c');
   });
 
+  it('opens a row once when Enter is held down', async () => {
+    const onRowAction = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onRowAction={onRowAction} />);
+    await user.tab();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{Enter>3/}');
+    expect(onRowAction).toHaveBeenCalledTimes(1);
+    expect(onRowAction).toHaveBeenCalledWith('b');
+  });
+
   it('selects rows with Space and the checkbox, and all rows from the header', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();

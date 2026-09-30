@@ -77,6 +77,8 @@ export interface LitStore {
   subscribe(listener: () => void): () => void;
   /** Writes any pending change to storage now (writes are otherwise batched per tick). */
   flush(): void;
+  /** Drops the in-memory entries without writing them; the next read loads storage again. */
+  reset(): void;
 }
 
 /** Creates an isolated store. The app uses the module-level singleton below. */
@@ -239,6 +241,12 @@ export function createLitStore(): LitStore {
       };
     },
     flush,
+    reset() {
+      dirty = false;
+      entries = null;
+      shown = null;
+      listeners.forEach((l) => l());
+    },
   };
 }
 
@@ -255,6 +263,8 @@ export const litReason = (kind: LitKind, id: string): LitReason | undefined => s
 export const isShownLit = (kind: LitKind, id: string): boolean => store.isShown(kind, id);
 /** Writes pending changes to localStorage immediately. */
 export const flushLit = (): void => store.flush();
+/** Forgets the in-memory entries (sign-out); clear LIT_STORAGE_KEY first to start empty. */
+export const resetLit = (): void => store.reset();
 
 /** Whether one item is currently marked as changed, and why. */
 export function useLit(kind: LitKind, id: string): LitState {

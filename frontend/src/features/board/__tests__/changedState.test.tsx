@@ -162,6 +162,16 @@ describe('changed state: acknowledge on leave', () => {
     expect(screen.queryByRole('button', { name: 'Mark all seen' })).not.toBeInTheDocument();
   });
 
+  it('moves focus to the page heading when "Mark all seen" removes itself', async () => {
+    const user = userEvent.setup();
+    markLit('document', 'd1', 'new');
+    await renderBoard();
+    screen.getByRole('button', { name: 'Mark all seen' }).focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Mark all seen' })).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
+  });
+
   it('has no "Mark all seen" when nothing is lit', async () => {
     await renderBoard();
     expect(screen.queryByRole('button', { name: 'Mark all seen' })).not.toBeInTheDocument();

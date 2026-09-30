@@ -1,6 +1,8 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ThemeModeProvider } from '../ThemeProvider';
 import { useThemeMode } from '../useThemeMode';
 
@@ -110,6 +112,59 @@ describe('ThemeModeProvider', () => {
     act(() => screen.getByText('toggle').click()); // saves 'light'
     fire(DARK, true);
     expect(screen.getByTestId('mode').textContent).toBe('light');
+  });
+
+  it('keeps the theme the pre-paint script already set', () => {
+    installMatchMedia({ [DARK]: false });
+    document.documentElement.dataset.theme = 'dark';
+    mount();
+    expect(screen.getByTestId('mode').textContent).toBe('dark');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+
+  describe('pre-paint script in index.html', () => {
+    const html = readFileSync(resolve(__dirname, '../../../index.html'), 'utf8');
+    const inline = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
+    const run = () => new Function(inline)();
+
+    it('runs before the app bundle', () => {
+      expect(inline).not.toBe('');
+      expect(html.indexOf('<script>')).toBeLessThan(html.indexOf('src="/src/main.tsx"'));
+    });
+
+    it('applies the saved theme', () => {
+      installMatchMedia({ [DARK]: true });
+      localStorage.setItem('themeMode', 'light');
+      run();
+      expect(document.documentElement.dataset.theme).toBe('light');
+    });
+
+    it('falls back to the system preference, and the provider agrees', () => {
+      installMatchMedia({ [DARK]: true });
+      run();
+      expect(document.documentElement.dataset.theme).toBe('dark');
+      mount();
+      expect(screen.getByTestId('mode').textContent).toBe('dark');
+    });
+
+    it('still sets a theme when storage throws', () => {
+      installMatchMedia({ [DARK]: false });
+      localStorage.setItem('themeMode', 'dark');
+      const saved = Object.getOwnPropertyDescriptor(window, 'localStorage');
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        get: () => {
+          throw new Error('blocked');
+        },
+      });
+      try {
+        run();
+      } finally {
+        if (saved) Object.defineProperty(window, 'localStorage', saved);
+        else delete (window as { localStorage?: Storage }).localStorage;
+      }
+      expect(document.documentElement.dataset.theme).toBe('light');
+    });
   });
 
   it('reflects prefers-reduced-motion live', () => {
