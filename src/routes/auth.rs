@@ -191,23 +191,20 @@ async fn login(
         return json_error(StatusCode::FORBIDDEN, "Local login is disabled");
     }
 
-    let limiters = &state.rate_limiters;
-    let username_key = login_data.username.to_lowercase();
-    let account_key = (username_key.clone(), rate_limit_ip(client_ip));
-    for check in [
-        limiters.login_failures_by_account_ip.peek(&account_key).await,
-        limiters.login_failures_by_username.peek(&username_key).await,
-        limiters.login_failures_by_ip.peek(&account_key.1).await,
-    ] {
-        if let Err(retry_after) = check {
-            return rate_limited(retry_after);
-        }
-    }
+    let attempt = match state
+        .rate_limiters
+        .reserve_password_attempt(&login_data.username, rate_limit_ip(client_ip), true)
+        .await
+    {
+        Ok(attempt) => attempt,
+        Err(retry_after) => return rate_limited(retry_after),
+    };
 
     let user = match state.db.get_user_by_username(&login_data.username).await {
         Ok(user) => user,
         Err(e) => {
             tracing::error!("Database error during login: {}", e);
+            attempt.succeeded(&state.rate_limiters).await;
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
         }
     };
@@ -221,13 +218,10 @@ async fn login(
 
     let user = match (user, password_ok) {
         (Some(user), true) => user,
-        _ => {
-            limiters.login_failures_by_account_ip.record(&account_key).await;
-            limiters.login_failures_by_username.record(&username_key).await;
-            limiters.login_failures_by_ip.record(&account_key.1).await;
-            return json_error(StatusCode::UNAUTHORIZED, "Invalid username or password");
-        }
+        // A failed attempt stays counted.
+        _ => return json_error(StatusCode::UNAUTHORIZED, "Invalid username or password"),
     };
+    attempt.succeeded(&state.rate_limiters).await;
 
     if !user.is_active {
         return json_error(
@@ -283,23 +277,18 @@ async fn change_password(
         return json_error(StatusCode::BAD_REQUEST, "This account does not use a local password");
     };
 
-    let limiters = &state.rate_limiters;
-    let username_key = user.username.to_lowercase();
-    let account_key = (username_key.clone(), rate_limit_ip(client_ip));
-    for check in [
-        limiters.login_failures_by_account_ip.peek(&account_key).await,
-        limiters.login_failures_by_username.peek(&username_key).await,
-    ] {
-        if let Err(retry_after) = check {
-            return rate_limited(retry_after);
-        }
-    }
-
+    let attempt = match state
+        .rate_limiters
+        .reserve_password_attempt(&user.username, rate_limit_ip(client_ip), false)
+        .await
+    {
+        Ok(attempt) => attempt,
+        Err(retry_after) => return rate_limited(retry_after),
+    };
     if !bcrypt::verify(&request.current_password, current_hash).unwrap_or(false) {
-        limiters.login_failures_by_account_ip.record(&account_key).await;
-        limiters.login_failures_by_username.record(&username_key).await;
         return json_error(StatusCode::UNAUTHORIZED, "Current password is incorrect");
     }
+    attempt.succeeded(&state.rate_limiters).await;
 
     if let Err(message) = validate_password(&request.new_password) {
         return json_error(StatusCode::BAD_REQUEST, message);
