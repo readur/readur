@@ -76,7 +76,7 @@ export function ArrivalsPanel() {
     [t, i18n.language],
   );
 
-  const title = t('board.arrivals.title', 'Arrivals');
+  const title = t('board.arrivals.title', 'Recently added');
   const add = (
     <Link className={styles.linkButton} to="/intake?section=upload">
       {t('board.addDocuments', 'Add documents')}

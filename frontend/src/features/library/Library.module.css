@@ -290,19 +290,9 @@
   font-weight: 500;
 }
 
+/* The tag's look comes from ui/ChangeTag; this class only places it (see the narrow layout below). */
 .changeTag {
   flex: none;
-  padding: 0 var(--s-1);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  line-height: 18px;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--signal-ink);
-  background: var(--signal);
-  border-radius: 2px;
 }
 
 /*

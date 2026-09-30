@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--s-4);
-  background: color-mix(in srgb, var(--fg) 50%, transparent);
+  background: var(--scrim);
 }
 
 .modal {

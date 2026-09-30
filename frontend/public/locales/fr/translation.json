@@ -1920,7 +1920,7 @@
       "error": "Certains éléments à traiter n’ont pas pu être chargés."
     },
     "arrivals": {
-      "title": "Arrivées",
+      "title": "Ajouts récents",
       "library": "Ouvrir la bibliothèque",
       "error": "Les documents récents n’ont pas pu être chargés.",
       "empty": "Aucun document pour l’instant",
@@ -2181,7 +2181,6 @@
       "wrongPassword": "Ce mot de passe est incorrect. Réessayez.",
       "verifyFailed": "Impossible de vérifier le mot de passe. Réessayez.",
       "downloadFailed": "Impossible de télécharger le fichier. Réessayez.",
-      "kicker": "Document partagé",
       "loading": "Chargement du document partagé",
       "expiredTitle": "Ce lien a expiré",
       "unavailableTitle": "Ce lien n’est pas disponible",

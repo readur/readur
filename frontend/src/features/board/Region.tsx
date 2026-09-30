@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../ui';
+import { Button, ChangeTag } from '../../ui';
 import { cx } from '../../ui/shared/FieldParts';
 import { litTagOf } from './litTag';
 import styles from './Board.module.css';
@@ -57,8 +57,6 @@ export function RegionError({ message, onRetry }: RegionErrorProps) {
 export function ChangedTag({ reason }: { reason?: string }) {
   const { t } = useTranslation();
   return (
-    <span className={styles.tag}>
-      {litTagOf(reason) === 'new' ? t('board.tag.new', 'New') : t('board.tag.changed', 'Changed')}
-    </span>
+    <ChangeTag>{litTagOf(reason) === 'new' ? t('board.tag.new', 'New') : t('board.tag.changed', 'Changed')}</ChangeTag>
   );
 }

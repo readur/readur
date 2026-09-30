@@ -29,7 +29,7 @@ test.describe('Board', () => {
       await expect(processing.getByRole('term').filter({ hasText: new RegExp(`^${term}$`) })).toBeVisible();
     }
 
-    await expect(page.getByRole('region', { name: 'Arrivals' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Recently added' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Connections' })).toBeVisible();
   });
 
@@ -38,7 +38,7 @@ test.describe('Board', () => {
 
     const main = page.getByRole('main');
     await expect(main.getByRole('link', { name: 'Add documents' }).first()).toHaveAttribute('href', '/intake?section=upload');
-    await expect(page.getByRole('region', { name: 'Arrivals' }).getByRole('link', { name: 'Open library' })).toHaveAttribute(
+    await expect(page.getByRole('region', { name: 'Recently added' }).getByRole('link', { name: 'Open library' })).toHaveAttribute(
       'href',
       '/documents',
     );
@@ -65,7 +65,7 @@ test.describe('Board', () => {
     await helpers.uploadDocumentViaAPI(TEST_FILES.test2);
 
     await page.goto('/board');
-    const arrivals = page.getByRole('region', { name: 'Arrivals' });
+    const arrivals = page.getByRole('region', { name: 'Recently added' });
     await expect(arrivals.getByRole('row', { name: /test2\.jpg/ })).toBeVisible({ timeout: 20000 });
 
     await arrivals.getByRole('row', { name: /test2\.jpg/ }).click();

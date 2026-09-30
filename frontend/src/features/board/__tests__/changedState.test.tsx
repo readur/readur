@@ -21,6 +21,7 @@ vi.mock('../../../services/api', () => ({
 }));
 
 import Board from '../Board';
+import { ChangeTag } from '../../../ui';
 import { ChangedTag as BoardTag } from '../Region';
 import { ChangeTag as LibraryTag } from '../../library/cells';
 import { LibraryTable } from '../../library/LibraryTable';
@@ -197,7 +198,16 @@ describe('changed state: one vocabulary', () => {
     expect(renderTags(reason)).toEqual([expected, expected, expected]);
   });
 
-  it('a failed document reads CHANGED in Arrivals and in Needs attention alike', async () => {
+  it('draws the tag with one shared style on the Board, the Library and Intake', () => {
+    markLit('document', 'x', 'new');
+    const shared = render(<ChangeTag>New</ChangeTag>).container.firstElementChild!.className;
+    const classes = [<BoardTag key="board" reason="new" />, <LibraryTag key="library" id="x" />, <IntakeTag key="intake" reason="new" />].map(
+      (tag) => render(<I18nextProvider i18n={i18n}>{tag}</I18nextProvider>).container.firstElementChild!.className.split(' '),
+    );
+    for (const list of classes) expect(list).toContain(shared);
+  });
+
+  it('a failed document reads CHANGED in Recently added and in Needs attention alike', async () => {
     const failedAt = '2026-01-01T10:00:00Z';
     markLit('document', 'd1', 'failed');
     serve([doc('d1', { ocr_status: 'failed', has_ocr_text: false })]);
@@ -206,7 +216,7 @@ describe('changed state: one vocabulary', () => {
     });
     renderPage(<Board />);
     const attention = await screen.findByRole('region', { name: 'Needs attention' });
-    const arrivals = screen.getByRole('region', { name: 'Arrivals' });
+    const arrivals = screen.getByRole('region', { name: 'Recently added' });
     await within(arrivals).findByText('d1.pdf');
     expect(within(within(attention).getByRole('row', { name: /d1\.pdf/ })).getByText('Changed')).toBeInTheDocument();
     expect(within(within(arrivals).getByRole('row', { name: /d1\.pdf/ })).getByText('Changed')).toBeInTheDocument();
@@ -231,7 +241,7 @@ describe('changed state: first run and bulk imports', () => {
     serve(fresh, 121);
     renderPage(<Board />);
     await screen.findByText('n0.pdf');
-    const arrivals = screen.getByRole('region', { name: 'Arrivals' });
+    const arrivals = screen.getByRole('region', { name: 'Recently added' });
     const summary = await within(arrivals).findByRole('status');
     expect(summary).toHaveTextContent('120 new documents');
     expect(within(summary).getByRole('link', { name: 'Open in Library, newest first' })).toHaveAttribute(

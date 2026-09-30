@@ -1920,7 +1920,7 @@
       "error": "Some items that need attention could not be loaded."
     },
     "arrivals": {
-      "title": "Arrivals",
+      "title": "Recently added",
       "library": "Open library",
       "error": "Recent documents could not be loaded.",
       "empty": "No documents yet",
@@ -2181,7 +2181,6 @@
       "wrongPassword": "That password is not right. Try again.",
       "verifyFailed": "Couldn't check the password. Try again.",
       "downloadFailed": "Couldn't download the file. Try again.",
-      "kicker": "Shared document",
       "loading": "Loading shared document",
       "expiredTitle": "This link has expired",
       "unavailableTitle": "This link is not available",

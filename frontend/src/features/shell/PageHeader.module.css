@@ -17,17 +17,6 @@
   min-width: 0;
 }
 
-.kicker {
-  margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--fg-meta);
-}
-
 .titleRow {
   display: flex;
   align-items: baseline;

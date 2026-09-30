@@ -42,7 +42,8 @@ describe('shared document page', () => {
     m.sharedLinksPublicService.getMetadata.mockReturnValue(new Promise(() => {}));
     renderShared();
     expect(screen.getByRole('banner')).toHaveTextContent('READUR');
-    expect(screen.getByRole('banner')).toHaveTextContent('Shared document');
+    // Wordmark only: no label above or beside it.
+    expect(screen.getByRole('banner')).not.toHaveTextContent('Shared document');
     expect(screen.getByRole('status', { name: 'Loading shared document' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });

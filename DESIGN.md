@@ -189,7 +189,7 @@ Readur reads like a live departure board for documents. Every surface is a board
 
 The palette is ink on cool paper by day and pale type on a night board after dark, with a single signal yellow and a red kept for failure. Depth is flat: hairlines and tonal steps separate things, and shadows appear only on elements that float above the page. Density is high but calm. Rows are 40px (32px compact), labels are small and tracked, and whitespace comes from a 4px module rather than from padded cards. The system turns down the stat-card-grid SaaS dashboard with an indigo accent. Figures sit in strips and tables, never in isolated tiles.
 
-The metaphor words (departure board, pass, lit, gate, boarding) belong to design documents and code comments only. User copy says what things are: "Needs attention", "Mark all seen", "New", "Changed", "Indexed", "Failed". The shipped navigation tab "Board" and the region title "Arrivals" are the only exceptions, and neither should become a precedent for more metaphor in copy.
+The metaphor words (departure board, pass, lit, gate, boarding) belong to design documents and code comments only. User copy says what things are: "Needs attention", "Mark all seen", "New", "Changed", "Indexed", "Failed". The shipped navigation tab "Board" is the only exception (its newest-documents region is titled "Recently added"), and it should not become a precedent for more metaphor in copy.
 
 **Key Characteristics:**
 - Condensed, uppercase, tracked Archivo for every label, head, tab, and button. Normal-width Archivo for reading text.
@@ -283,7 +283,7 @@ Stacking uses named layers, and nothing invents its own z-index: shell 1100 < do
 
 ## Shapes
 
-Corners are small and consistent: 4px on every button, field, chip, table container, region, pass, overlay, key cap, and label tag. The NEW / CHANGED tag in library rows and search-match highlights use a tighter 2px. Label colour swatches are 8px squares with a 2px radius. Circles are reserved for things that are round by function: the spinner, radio and status dots, and the 16px count badge on the alerts bell. Borders are always 1px. The heavier strokes are the 2px active-tab underline, the 2px bottom edge on key caps, and the 3px signal edge bar. Segmented surfaces (passes, board strips) draw their dividers as 1px gaps over the line colour, so hairlines stay continuous however the cells reflow.
+Corners are small and consistent: 4px on every button, field, chip, table container, region, pass, overlay, key cap, and label tag. The NEW / CHANGED tag (one shared style on every surface) and search-match highlights use a tighter 2px. Label colour swatches are 8px squares with a 2px radius. Circles are reserved for things that are round by function: the spinner, radio and status dots, and the 16px count badge on the alerts bell. Borders are always 1px. The heavier strokes are the 2px active-tab underline, the 2px bottom edge on key caps, and the 3px signal edge bar. Segmented surfaces (passes, board strips) draw their dividers as 1px gaps over the line colour, so hairlines stay continuous however the cells reflow.
 
 ## Components
 

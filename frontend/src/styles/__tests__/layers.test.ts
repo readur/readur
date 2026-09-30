@@ -70,3 +70,12 @@ describe('layer scale', () => {
     }
   });
 });
+
+describe('backdrops', () => {
+  it('every overlay backdrop uses the --scrim token', () => {
+    for (const f of ['ui/Dialog/Dialog.module.css', 'ui/SlideOver/SlideOver.module.css', 'ui/CommandPalette/CommandPalette.module.css']) {
+      const block = read(f).match(/(?:^|\n)\.overlay\s*\{([^}]*)\}/)?.[1] ?? '';
+      expect(block, f).toMatch(/background:\s*var\(--scrim\);/);
+    }
+  });
+});

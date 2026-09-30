@@ -111,7 +111,6 @@ export function SharedDocumentPage() {
           <img src="/readur-64.png" alt="" width={20} height={20} />
           READUR
         </span>
-        <span className={styles.kicker}>{t('document.shared.kicker', 'Shared document')}</span>
       </header>
 
       <main className={styles.main}>

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Dialog } from '../../../ui';
+import { Button, ChangeTag, Dialog } from '../../../ui';
 import { CheckCircle, Error as ErrorIcon, Info } from '../../../ui/icons';
 import type { LitReason } from '../../board/litStore';
 import { litTagOf } from '../../board/litTag';
@@ -52,9 +52,7 @@ export function Notice({ tone = 'info', title, children, live }: NoticeProps) {
 export function ChangedTag({ reason }: { reason?: LitReason | string }) {
   const { t } = useTranslation();
   return (
-    <span className={styles.tag}>
-      {litTagOf(reason) === 'new' ? t('intake.tag.new', 'New') : t('intake.tag.changed', 'Changed')}
-    </span>
+    <ChangeTag>{litTagOf(reason) === 'new' ? t('intake.tag.new', 'New') : t('intake.tag.changed', 'Changed')}</ChangeTag>
   );
 }
 

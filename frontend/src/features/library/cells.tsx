@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StatusMark, Tooltip, TooltipTrigger } from '../../ui';
+import { ChangeTag as Tag, StatusMark, Tooltip, TooltipTrigger } from '../../ui';
 import { useShownLit } from '../board/litStore';
 import { litTagOf } from '../board/litTag';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
@@ -15,9 +15,9 @@ export function ChangeTag({ id }: { id: string }) {
   const { lit, reason } = useShownLit('document', id);
   if (!lit) return null;
   return (
-    <span className={styles.changeTag}>
+    <Tag className={styles.changeTag}>
       {litTagOf(reason) === 'new' ? t('library.tag.new', 'NEW') : t('library.tag.changed', 'CHANGED')}
-    </span>
+    </Tag>
   );
 }
 

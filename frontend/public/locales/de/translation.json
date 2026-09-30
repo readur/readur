@@ -1920,7 +1920,7 @@
       "error": "Einige Einträge, die Aufmerksamkeit erfordern, konnten nicht geladen werden."
     },
     "arrivals": {
-      "title": "Neueingänge",
+      "title": "Zuletzt hinzugefügt",
       "library": "Bibliothek öffnen",
       "error": "Die neuesten Dokumente konnten nicht geladen werden.",
       "empty": "Noch keine Dokumente",
@@ -2181,7 +2181,6 @@
       "wrongPassword": "Das Passwort ist nicht richtig. Versuche es erneut.",
       "verifyFailed": "Passwort konnte nicht geprüft werden. Versuche es erneut.",
       "downloadFailed": "Datei konnte nicht heruntergeladen werden. Versuche es erneut.",
-      "kicker": "Geteiltes Dokument",
       "loading": "Geteiltes Dokument wird geladen",
       "expiredTitle": "Dieser Link ist abgelaufen",
       "unavailableTitle": "Dieser Link ist nicht verfügbar",

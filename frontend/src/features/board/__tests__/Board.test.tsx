@@ -86,7 +86,7 @@ describe('Board', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1, name: 'Board' })).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Add documents' })[0]).toHaveAttribute('href', '/intake?section=upload');
-    expect(await screen.findByRole('region', { name: 'Arrivals' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Recently added' })).toBeInTheDocument();
     expect(region('Processing')).toBeInTheDocument();
     expect(region('Connections')).toBeInTheDocument();
     expect(region('Library')).toBeInTheDocument();
@@ -117,10 +117,10 @@ describe('Board', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Board' })).toBeInTheDocument();
   });
 
-  describe('Arrivals', () => {
+  describe('Recently added', () => {
     it('lists the newest documents with type, status, size and age', async () => {
       await renderBoard();
-      const table = within(region('Arrivals')).getByRole('grid', { name: 'Arrivals' });
+      const table = within(region('Recently added')).getByRole('grid', { name: 'Recently added' });
       expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(
         expect.arrayContaining(['Name', 'Type', 'Status', 'Size', 'Added']),
       );
@@ -209,7 +209,7 @@ describe('Board', () => {
     it('shows the empty state with a call to action for an empty library', async () => {
       m.documentService.listWithPagination.mockResolvedValue({ data: { documents: [], pagination: { total: 0 } } });
       renderPage(<Board />);
-      const arrivals = await screen.findByRole('region', { name: 'Arrivals' });
+      const arrivals = await screen.findByRole('region', { name: 'Recently added' });
       expect(await within(arrivals).findByText('No documents yet')).toBeInTheDocument();
       expect(within(arrivals).getByRole('link', { name: 'Add documents' })).toHaveAttribute('href', '/intake?section=upload');
     });
@@ -218,7 +218,7 @@ describe('Board', () => {
       const user = userEvent.setup();
       m.documentService.listWithPagination.mockRejectedValue(new Error('boom'));
       renderPage(<Board />);
-      const arrivals = await screen.findByRole('region', { name: 'Arrivals' });
+      const arrivals = await screen.findByRole('region', { name: 'Recently added' });
       const alert = await within(arrivals).findByRole('alert');
       expect(alert).toHaveTextContent('Recent documents could not be loaded.');
       // The rest of the page is still there.

@@ -4,8 +4,6 @@ import styles from './PageHeader.module.css';
 export interface PageHeaderProps {
   /** The page's single h1. */
   title: ReactNode;
-  /** Small condensed label above the title. */
-  kicker?: ReactNode;
   /** Controls aligned to the right of the title. */
   actions?: ReactNode;
   /** Secondary line under the title (counts, dates, status). */
@@ -18,11 +16,10 @@ export interface PageHeaderProps {
 }
 
 /** Page title block: condensed display h1 with a hairline rule under it and actions on the right. */
-export function PageHeader({ title, kicker, actions, meta, figure, headingId, className }: PageHeaderProps) {
+export function PageHeader({ title, actions, meta, figure, headingId, className }: PageHeaderProps) {
   return (
     <div className={className ? `${styles.header} ${className}` : styles.header}>
       <div className={styles.titles}>
-        {kicker ? <p className={styles.kicker}>{kicker}</p> : null}
         <div className={styles.titleRow}>
           <h1 id={headingId} className={styles.title}>
             {title}

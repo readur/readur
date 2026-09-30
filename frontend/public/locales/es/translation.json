@@ -1920,7 +1920,7 @@
       "error": "No se pudieron cargar algunos elementos que requieren atención."
     },
     "arrivals": {
-      "title": "Recibidos",
+      "title": "Añadidos recientemente",
       "library": "Abrir biblioteca",
       "error": "No se pudieron cargar los documentos recientes.",
       "empty": "Aún no hay documentos",
@@ -2181,7 +2181,6 @@
       "wrongPassword": "La contraseña no es correcta. Inténtalo de nuevo.",
       "verifyFailed": "No se pudo comprobar la contraseña. Inténtalo de nuevo.",
       "downloadFailed": "No se pudo descargar el archivo. Inténtalo de nuevo.",
-      "kicker": "Documento compartido",
       "loading": "Cargando documento compartido",
       "expiredTitle": "Este enlace ha caducado",
       "unavailableTitle": "Este enlace no está disponible",
