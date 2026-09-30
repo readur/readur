@@ -76,12 +76,49 @@ fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
+/// Re-apply owner-only permissions to a generated password file that has not
+/// been deleted yet. Deployment tooling may recursively change modes on the
+/// upload volume (for example a `chmod -R` in an init container), so this
+/// runs on every start for as long as the file exists. The parent directory
+/// is tightened too when it is the default `.readur` directory. Symlinks are
+/// left alone.
+#[cfg(unix)]
+pub fn restrict_password_file_permissions(path: &Path, restrict_parent: bool) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let is_regular = |p: &Path| std::fs::symlink_metadata(p).map(|m| m.file_type().is_file()).unwrap_or(false);
+    let is_dir = |p: &Path| std::fs::symlink_metadata(p).map(|m| m.file_type().is_dir()).unwrap_or(false);
+    if !is_regular(path) {
+        return;
+    }
+    let mut targets = vec![(path, 0o600)];
+    if let Some(dir) = path.parent().filter(|d| restrict_parent && is_dir(d)) {
+        targets.push((dir, 0o700));
+    }
+    for (target, mode) in targets {
+        if let Err(e) = std::fs::set_permissions(target, std::fs::Permissions::from_mode(mode)) {
+            warn!("Failed to restrict permissions of {}: {}", target.display(), e);
+        }
+    }
+    warn!(
+        "The generated admin password file {} still exists; delete it once you have signed in and changed the password",
+        path.display()
+    );
+}
+
+#[cfg(not(unix))]
+pub fn restrict_password_file_permissions(_path: &Path, _restrict_parent: bool) {}
+
 /// Create the initial admin account if it does not exist.
 ///
 /// The password comes from `ADMIN_PASSWORD`. When that is unset a random
 /// password is generated and written to [`initial_admin_password_path`]
 /// (mode 0600); it is never printed or logged.
 pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
+    let password_path = initial_admin_password_path(upload_path);
+    let default_dir = Path::new(upload_path).join(INITIAL_ADMIN_PASSWORD_DIR);
+    restrict_password_file_permissions(&password_path, password_path.parent() == Some(default_dir.as_path()));
+
     let admin_username = env::var("ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
     let admin_email = admin_email(&admin_username);
 
@@ -106,7 +143,7 @@ pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
         }
         Err(_) => {
             let pwd = generate_secure_password(24);
-            let path = initial_admin_password_path(upload_path);
+            let path = password_path;
             // Persist before creating the account so a failure here never
             // leaves an admin whose password nobody knows.
             write_secret_file(&path, &pwd).with_context(|| {
@@ -154,4 +191,52 @@ pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn mode(path: &Path) -> u32 {
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn leftover_password_file_permissions_are_restricted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join(INITIAL_ADMIN_PASSWORD_DIR);
+        let file = dir.join(INITIAL_ADMIN_PASSWORD_FILE);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&file, "generated\n").unwrap();
+        // What a recursive `chmod -R 755` on the upload volume leaves behind.
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        restrict_password_file_permissions(&file, true);
+        assert_eq!(mode(&file), 0o600);
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "generated\n");
+    }
+
+    #[test]
+    fn custom_location_parent_and_symlinks_are_left_alone() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("admin-password");
+        std::fs::write(&file, "generated\n").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::set_permissions(tmp.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        restrict_password_file_permissions(&file, false);
+        assert_eq!(mode(&file), 0o600);
+        assert_eq!(mode(tmp.path()), 0o755);
+
+        let target = tmp.path().join("target");
+        std::fs::write(&target, "other\n").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        restrict_password_file_permissions(&link, false);
+        assert_eq!(mode(&target), 0o644);
+    }
 }

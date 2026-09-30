@@ -12,7 +12,9 @@ controllers:
           - |
             echo "Fixing permissions for Readur directories, this may take some time..."
             chown -R 1000:1000 /app/uploads /app/watch
-            chmod -R 755 /app/uploads /app/watch
+            # uploads/.readur holds owner-only files (e.g. a generated admin
+            # password); keep their modes.
+            find /app/uploads /app/watch -path /app/uploads/.readur -prune -o -exec chmod 755 {} +
             echo "Permissions fixed successfully"
         securityContext:
           runAsUser: 0
