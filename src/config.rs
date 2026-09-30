@@ -159,7 +159,7 @@ impl SecurityConfig {
                 .map_err(|_| anyhow::anyhow!("TRUSTED_PROXIES entry '{}' is not an IP or CIDR", raw))?;
             trusted_proxies.push(net);
         }
-        println!("🌐 TRUSTED_PROXIES: {:?}", trusted_proxies);
+        println!("🌐 TRUSTED_PROXIES: {} range(s) configured", trusted_proxies.len());
 
         let cors_allowed_origins = env_list("CORS_ALLOWED_ORIGINS")
             .iter()
