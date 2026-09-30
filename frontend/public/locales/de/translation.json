@@ -1889,7 +1889,8 @@
       "justNow": "gerade synchronisiert",
       "minutes": "vor {{count}} Min. synchronisiert",
       "hours": "vor {{count}} Std. synchronisiert",
-      "days": "vor {{count}} T. synchronisiert"
+      "days": "vor {{count}} T. synchronisiert",
+      "at": "synchronisiert {{when}}"
     },
     "alerts": {
       "label": "Benachrichtigungen",
@@ -2374,7 +2375,11 @@
       "share": "Teilen",
       "text": "Text",
       "textFailed": "Der Text konnte nicht geladen werden.",
-      "title": "Dokument"
+      "title": "Dokument",
+      "pages_one": "1 Seite",
+      "pages_other": "{{count}} Seiten",
+      "added": "Hinzugefügt {{date}}",
+      "ocr": "OCR {{value}} %"
     },
     "empty": {
       "clearFilters": "Filter zurücksetzen",
@@ -2922,7 +2927,9 @@
         "serverUrl": "Server-URL",
         "title": "WebDAV-Server",
         "username": "Benutzername"
-      }
+      },
+      "localAdminOnly": "Nur ein Administrator kann lokale Ordner hinzufügen.",
+      "localAdminOnlyHint": "Sie können es trotzdem versuchen: Der Server erlaubt möglicherweise bestimmte Ordner für alle."
     },
     "ignored": {
       "allReasons": "Alle Gründe",
@@ -3249,7 +3256,12 @@
       "notFound": "Ordner oder Bucket nicht gefunden. Prüfen Sie Adresse und Pfad.",
       "tls": "Dem Sicherheitszertifikat des Servers wird nicht vertraut.",
       "unreachable": "Der Server ist nicht erreichbar. Prüfen Sie die Adresse und ob er online ist.",
-      "server": "Der Server meldet einen Fehler. Versuchen Sie es in einigen Minuten erneut."
+      "server": "Der Server meldet einen Fehler. Versuchen Sie es in einigen Minuten erneut.",
+      "emptySyncs": "Die letzten Synchronisierungen fanden keine neuen Dateien. Prüfen Sie den Ordnerpfad."
+    },
+    "connectionAdvice": {
+      "connectivity": "Prüfen Sie Serveradresse, Anmeldung und Netzwerk.",
+      "noContent": "Falls neue Dateien erwartet werden, prüfen Sie den Ordnerpfad und ob der Server erreichbar ist."
     }
   },
   "failure": {

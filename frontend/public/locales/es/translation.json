@@ -1889,7 +1889,8 @@
       "justNow": "sincronizado ahora",
       "minutes": "sincronizado hace {{count}} min",
       "hours": "sincronizado hace {{count}} h",
-      "days": "sincronizado hace {{count}} d"
+      "days": "sincronizado hace {{count}} d",
+      "at": "sincronizado {{when}}"
     },
     "alerts": {
       "label": "Notificaciones",
@@ -2374,7 +2375,11 @@
       "share": "Compartir",
       "text": "Texto",
       "textFailed": "No se pudo cargar el texto.",
-      "title": "Documento"
+      "title": "Documento",
+      "pages_one": "1 página",
+      "pages_other": "{{count}} páginas",
+      "added": "Añadido {{date}}",
+      "ocr": "OCR {{value}} %"
     },
     "empty": {
       "clearFilters": "Quitar filtros",
@@ -2922,7 +2927,9 @@
         "serverUrl": "URL del servidor",
         "title": "Servidor WebDAV",
         "username": "Usuario"
-      }
+      },
+      "localAdminOnly": "Solo un administrador puede añadir carpetas locales.",
+      "localAdminOnlyHint": "Aun así puede intentarlo: el servidor puede permitir carpetas concretas para todos."
     },
     "ignored": {
       "allReasons": "Todos los motivos",
@@ -3249,7 +3256,12 @@
       "notFound": "No se encontró la carpeta o el bucket. Revise la dirección y la ruta.",
       "tls": "El certificado de seguridad del servidor no es de confianza.",
       "unreachable": "No se puede acceder al servidor. Revise la dirección y que esté en línea.",
-      "server": "El servidor informó de un error. Inténtelo de nuevo en unos minutos."
+      "server": "El servidor informó de un error. Inténtelo de nuevo en unos minutos.",
+      "emptySyncs": "Las últimas sincronizaciones no encontraron archivos nuevos. Revise la ruta de la carpeta."
+    },
+    "connectionAdvice": {
+      "connectivity": "Revise la dirección del servidor, el inicio de sesión y la red.",
+      "noContent": "Si espera archivos nuevos, revise la ruta de la carpeta y que el servidor esté accesible."
     }
   },
   "failure": {

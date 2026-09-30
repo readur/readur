@@ -1889,7 +1889,8 @@
       "justNow": "synchronisé à l’instant",
       "minutes": "synchronisé il y a {{count}} min",
       "hours": "synchronisé il y a {{count}} h",
-      "days": "synchronisé il y a {{count}} j"
+      "days": "synchronisé il y a {{count}} j",
+      "at": "synchronisé {{when}}"
     },
     "alerts": {
       "label": "Notifications",
@@ -2374,7 +2375,11 @@
       "share": "Partager",
       "text": "Texte",
       "textFailed": "Le texte n’a pas pu être chargé.",
-      "title": "Document"
+      "title": "Document",
+      "pages_one": "1 page",
+      "pages_other": "{{count}} pages",
+      "added": "Ajouté le {{date}}",
+      "ocr": "OCR {{value}} %"
     },
     "empty": {
       "clearFilters": "Effacer les filtres",
@@ -2922,7 +2927,9 @@
         "serverUrl": "URL du serveur",
         "title": "Serveur WebDAV",
         "username": "Nom d’utilisateur"
-      }
+      },
+      "localAdminOnly": "Seul un administrateur peut ajouter des dossiers locaux.",
+      "localAdminOnlyHint": "Vous pouvez quand même essayer : le serveur peut autoriser certains dossiers pour tous."
     },
     "ignored": {
       "allReasons": "Tous les motifs",
@@ -3249,7 +3256,12 @@
       "notFound": "Le dossier ou le bucket est introuvable. Vérifiez l'adresse et le chemin.",
       "tls": "Le certificat de sécurité du serveur n'est pas approuvé.",
       "unreachable": "Impossible de joindre le serveur. Vérifiez l'adresse et qu'il est en ligne.",
-      "server": "Le serveur a signalé une erreur. Réessayez dans quelques minutes."
+      "server": "Le serveur a signalé une erreur. Réessayez dans quelques minutes.",
+      "emptySyncs": "Les dernières synchronisations n’ont trouvé aucun nouveau fichier. Vérifiez le chemin du dossier."
+    },
+    "connectionAdvice": {
+      "connectivity": "Vérifiez l’adresse du serveur, la connexion et le réseau.",
+      "noContent": "Si de nouveaux fichiers sont attendus, vérifiez le chemin du dossier et que le serveur est joignable."
     }
   },
   "failure": {

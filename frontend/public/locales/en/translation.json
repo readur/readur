@@ -1889,7 +1889,8 @@
       "justNow": "synced just now",
       "minutes": "synced {{count}}m ago",
       "hours": "synced {{count}}h ago",
-      "days": "synced {{count}}d ago"
+      "days": "synced {{count}}d ago",
+      "at": "synced {{when}}"
     },
     "alerts": {
       "label": "Notifications",
@@ -2374,7 +2375,11 @@
       "share": "Share",
       "text": "Text",
       "textFailed": "The text could not be loaded.",
-      "title": "Document"
+      "title": "Document",
+      "pages_one": "1 page",
+      "pages_other": "{{count}} pages",
+      "added": "Added {{date}}",
+      "ocr": "OCR {{value}}%"
     },
     "empty": {
       "clearFilters": "Clear filters",
@@ -2922,7 +2927,9 @@
         "serverUrl": "Server URL",
         "title": "WebDAV server",
         "username": "Username"
-      }
+      },
+      "localAdminOnly": "Only an administrator can add local folders.",
+      "localAdminOnlyHint": "You can still try: the server may allow specific folders for everyone."
     },
     "ignored": {
       "allReasons": "All reasons",
@@ -3249,7 +3256,12 @@
       "notFound": "The folder or bucket wasn't found. Check the address and path.",
       "tls": "The server's security certificate isn't trusted.",
       "unreachable": "Can't reach the server. Check the address and that it is online.",
-      "server": "The server reported an error. Try again in a few minutes."
+      "server": "The server reported an error. Try again in a few minutes.",
+      "emptySyncs": "Recent syncs found no new files. Check the folder path."
+    },
+    "connectionAdvice": {
+      "connectivity": "Check the server address, the sign-in and the network.",
+      "noContent": "If new files are expected, check the folder path and that the server is reachable."
     }
   },
   "failure": {
