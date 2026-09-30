@@ -147,7 +147,35 @@ describe('document page: summary strip', () => {
     await title();
     await waitFor(() => expect(cell('Pages')).toHaveTextContent('12'));
     expect(cell('Language')).toHaveTextContent('DEU');
-    expect(cell('Source')).toHaveTextContent('WEB DAV');
+    expect(cell('Source')).toHaveTextContent('WebDAV');
+  });
+
+  it('derives TYPE from the MIME type like the Library does, e.g. DOCX, never a generic "File"', async () => {
+    load(
+      makeDocument({
+        mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        source_type: 'web_upload',
+      }),
+    );
+    renderPage();
+    await title();
+    expect(cell('Type')).toHaveTextContent('DOCX');
+    expect(cell('Type')).not.toHaveTextContent('File');
+    expect(cell('Source')).toHaveTextContent('Upload');
+  });
+
+  it('falls back to the file extension when the MIME type is generic', async () => {
+    load(makeDocument({ mime_type: 'application/octet-stream', filename: 'minutes.odt', original_filename: 'minutes.odt' }));
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'minutes.odt' });
+    expect(cell('Type')).toHaveTextContent('ODT');
+  });
+
+  it('shows ADDED as a short fixed-width stamp', async () => {
+    load();
+    renderPage();
+    await title();
+    expect(cell('Added').textContent).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
   });
 
   it.each([

@@ -49,6 +49,49 @@ export function formatDateTime(value: string | null | undefined, lng?: string): 
   });
 }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * Short, fixed-width timestamp for mono cells: `2026-09-29 11:04` in the user's time zone.
+ * Used by the document pass and the Library slideout (ADDED / UPDATED).
+ */
+export function formatStamp(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Where a document came from, as a short readable word. Unknown types are tidied, not shouted. */
+export function sourceLabel(
+  sourceType: string | null | undefined,
+  t: (key: string, fallback: string) => string,
+): string {
+  const type = (sourceType ?? '').trim().toLowerCase();
+  switch (type) {
+    case '':
+    case 'upload':
+    case 'web_upload':
+    case 'direct_upload':
+    case 'api_upload':
+      return t('document.pass.uploaded', 'Upload');
+    case 'webdav':
+    case 'web_dav':
+      return 'WebDAV';
+    case 's3':
+      return 'S3';
+    case 'local':
+    case 'local_folder':
+      return t('document.source.localFolder', 'Local folder');
+    case 'batch_ingest':
+      return t('document.source.batch', 'Batch import');
+    default: {
+      const words = type.replace(/[_-]+/g, ' ');
+      return words.charAt(0).toUpperCase() + words.slice(1);
+    }
+  }
+}
+
 export function formatNumber(value: number, lng?: string): string {
   return value.toLocaleString(lng);
 }

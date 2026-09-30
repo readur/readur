@@ -3,7 +3,8 @@ import type { LabelData } from '../labels';
 import type { Document, OcrResponse } from '../../services/api';
 import { IconButton, Pass, PassCell, StatusMark } from '../../ui';
 import { Edit } from '../../ui/icons';
-import { fileTypeCode, fileKind, formatBytes, formatDate, ocrState, type OcrExtras } from './format';
+import { typeCodeOf } from './fileType';
+import { formatBytes, formatStamp, ocrState, sourceLabel, type OcrExtras } from './format';
 import styles from './DocumentPass.module.css';
 
 export interface DocumentPassProps {
@@ -16,7 +17,7 @@ export interface DocumentPassProps {
 
 /** The document's key facts as one segmented strip under the page title. */
 export function DocumentPass({ document: doc, ocr, labels, isEditingLabels, onEditLabels }: DocumentPassProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const extras = (ocr ?? {}) as OcrExtras;
   const state = ocrState(doc.ocr_status);
   const total = doc.ocr_progress_total ?? 0;
@@ -24,19 +25,10 @@ export function DocumentPass({ document: doc, ocr, labels, isEditingLabels, onEd
   const hasProgress = state === 'processing' && total > 0;
   const percent = hasProgress ? Math.round((Math.min(current, total) / total) * 100) : 0;
 
-  const kind = fileKind(doc.mime_type);
-  const type =
-    fileTypeCode(doc.mime_type) ??
-    (kind === 'image'
-      ? t('document.type.image', 'Image')
-      : kind === 'text'
-        ? t('document.type.text', 'Text')
-        : t('document.type.other', 'File'));
+  const type = typeCodeOf(doc.mime_type, doc.original_filename || doc.filename);
   const pages = extras.pages_processed ?? (total > 0 ? total : null);
   const confidence = ocr?.ocr_confidence ?? doc.ocr_confidence;
-  const source = doc.source_type
-    ? doc.source_type.replace(/_/g, ' ').toUpperCase()
-    : t('document.pass.uploaded', 'Upload');
+  const source = sourceLabel(doc.source_type, (key, fallback) => t(key, fallback));
 
   return (
     <Pass variant="header" aria-label={t('document.pass.label', 'Document summary')} className={styles.strip}>
@@ -60,8 +52,8 @@ export function DocumentPass({ document: doc, ocr, labels, isEditingLabels, onEd
       <PassCell label={t('document.pass.type', 'Type')} mono>{type}</PassCell>
       <PassCell label={t('document.pass.pages', 'Pages')} mono>{pages ?? '—'}</PassCell>
       <PassCell label={t('document.pass.size', 'Size')} mono>{formatBytes(doc.file_size)}</PassCell>
-      <PassCell label={t('document.pass.source', 'Source')}>{source}</PassCell>
-      <PassCell label={t('document.pass.added', 'Added')} mono>{formatDate(doc.created_at, i18n.language)}</PassCell>
+      <PassCell label={t('document.pass.source', 'Source')} mono>{source}</PassCell>
+      <PassCell label={t('document.pass.added', 'Added')} mono>{formatStamp(doc.created_at)}</PassCell>
       <PassCell label={t('document.pass.language', 'Language')} mono>
         {extras.detected_language ? extras.detected_language.toUpperCase() : '—'}
       </PassCell>

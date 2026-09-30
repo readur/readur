@@ -51,18 +51,26 @@
   color: var(--fg-meta);
 }
 
-/* Between phone and wide desktop, nine cells in one row get too tight: wrap them into a grid. */
-@container (min-width: 480px) and (max-width: 1099px) {
-  .strip > dl {
-    grid-auto-flow: row;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 1px;
-    background: var(--line);
-    overflow: hidden;
-  }
+/*
+ * Cells are sized to their values, never to an equal share: a date or a source name is never cut
+ * to "Sep 29…". The cells run as one line and wrap as a line when it is too narrow; each grows to
+ * fill its row, so the 1px gaps over the line colour draw the hairlines between them.
+ */
+.strip > dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--line);
+  overflow: hidden;
+}
 
-  .strip > dl > div:nth-child(n) {
-    border-left: 0;
-    background: var(--surface);
-  }
+.strip > dl > div:nth-child(n) {
+  flex: 1 0 auto;
+  border: 0;
+  background: var(--surface);
+}
+
+/* Labels take whatever room is left on their line, and at least enough for a few tags. */
+.strip > dl > div:last-child {
+  flex: 999 1 240px;
 }
