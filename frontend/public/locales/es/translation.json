@@ -1667,5 +1667,72 @@
       "labels": "Etiquetas",
       "debug": "Depuración"
     }
+  },
+  "board": {
+    "title": "Panel",
+    "addDocuments": "Añadir documentos",
+    "retry": "Reintentar",
+    "viewAll": "Ver todo",
+    "loading": "Cargando",
+    "tag": {
+      "new": "Nuevo",
+      "changed": "Cambiado"
+    },
+    "col": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "status": "Estado",
+      "size": "Tamaño",
+      "added": "Añadido",
+      "reason": "Motivo",
+      "age": "Antigüedad",
+      "actions": "Acciones"
+    },
+    "attention": {
+      "title": "Requiere atención",
+      "dismiss": "Descartar",
+      "dismissNamed": "Descartar {{name}}",
+      "retryNamed": "Reintentar {{name}}",
+      "retryQueued": "Reintento iniciado",
+      "retryFailed": "No se pudo reintentar",
+      "error": "No se pudieron cargar algunos elementos que requieren atención."
+    },
+    "arrivals": {
+      "title": "Recibidos",
+      "library": "Abrir biblioteca",
+      "error": "No se pudieron cargar los documentos recientes.",
+      "empty": "Aún no hay documentos",
+      "emptyHint": "Los documentos que añadas aparecerán aquí a medida que lleguen."
+    },
+    "processing": {
+      "title": "Procesamiento",
+      "pending": "Pendientes",
+      "processing": "En proceso",
+      "failed": "Fallidos",
+      "doneToday": "Hechos hoy",
+      "oldestWait": "Espera más larga",
+      "error": "No se pudo cargar la cola de OCR.",
+      "statusError": "No se pudo cargar el estado del OCR.",
+      "ocr": "OCR",
+      "pause": "Pausar OCR",
+      "resume": "Reanudar OCR",
+      "pauseFailed": "No se pudo pausar el OCR",
+      "resumeFailed": "No se pudo reanudar el OCR"
+    },
+    "connections": {
+      "title": "Conexiones",
+      "manage": "Gestionar",
+      "error": "No se pudieron cargar las conexiones.",
+      "empty": "Sin conexiones",
+      "add": "Añadir conexión"
+    },
+    "totals": {
+      "title": "Biblioteca",
+      "documents": "Documentos",
+      "storage": "Almacenamiento",
+      "indexed": "Indexado",
+      "labels": "Etiquetas",
+      "error": "No se pudieron cargar los totales de la biblioteca."
+    }
   }
 }

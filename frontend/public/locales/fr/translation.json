@@ -1667,5 +1667,72 @@
       "labels": "Étiquettes",
       "debug": "Débogage"
     }
+  },
+  "board": {
+    "title": "Tableau de bord",
+    "addDocuments": "Ajouter des documents",
+    "retry": "Réessayer",
+    "viewAll": "Tout afficher",
+    "loading": "Chargement",
+    "tag": {
+      "new": "Nouveau",
+      "changed": "Modifié"
+    },
+    "col": {
+      "name": "Nom",
+      "type": "Type",
+      "status": "Statut",
+      "size": "Taille",
+      "added": "Ajouté",
+      "reason": "Motif",
+      "age": "Âge",
+      "actions": "Actions"
+    },
+    "attention": {
+      "title": "À traiter",
+      "dismiss": "Ignorer",
+      "dismissNamed": "Ignorer {{name}}",
+      "retryNamed": "Réessayer {{name}}",
+      "retryQueued": "Nouvel essai lancé",
+      "retryFailed": "Impossible de réessayer",
+      "error": "Certains éléments à traiter n’ont pas pu être chargés."
+    },
+    "arrivals": {
+      "title": "Arrivées",
+      "library": "Ouvrir la bibliothèque",
+      "error": "Les documents récents n’ont pas pu être chargés.",
+      "empty": "Aucun document pour l’instant",
+      "emptyHint": "Les documents ajoutés apparaissent ici dès leur arrivée."
+    },
+    "processing": {
+      "title": "Traitement",
+      "pending": "En attente",
+      "processing": "En cours",
+      "failed": "Échecs",
+      "doneToday": "Terminés aujourd’hui",
+      "oldestWait": "Attente la plus longue",
+      "error": "La file OCR n’a pas pu être chargée.",
+      "statusError": "L’état de l’OCR n’a pas pu être chargé.",
+      "ocr": "OCR",
+      "pause": "Suspendre l’OCR",
+      "resume": "Reprendre l’OCR",
+      "pauseFailed": "Impossible de suspendre l’OCR",
+      "resumeFailed": "Impossible de reprendre l’OCR"
+    },
+    "connections": {
+      "title": "Connexions",
+      "manage": "Gérer",
+      "error": "Les connexions n’ont pas pu être chargées.",
+      "empty": "Aucune connexion",
+      "add": "Ajouter une connexion"
+    },
+    "totals": {
+      "title": "Bibliothèque",
+      "documents": "Documents",
+      "storage": "Stockage",
+      "indexed": "Indexé",
+      "labels": "Étiquettes",
+      "error": "Les totaux de la bibliothèque n’ont pas pu être chargés."
+    }
   }
 }

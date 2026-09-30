@@ -1667,5 +1667,72 @@
       "labels": "Labels",
       "debug": "Debug"
     }
+  },
+  "board": {
+    "title": "Übersicht",
+    "addDocuments": "Dokumente hinzufügen",
+    "retry": "Erneut versuchen",
+    "viewAll": "Alle anzeigen",
+    "loading": "Wird geladen",
+    "tag": {
+      "new": "Neu",
+      "changed": "Geändert"
+    },
+    "col": {
+      "name": "Name",
+      "type": "Typ",
+      "status": "Status",
+      "size": "Größe",
+      "added": "Hinzugefügt",
+      "reason": "Grund",
+      "age": "Alter",
+      "actions": "Aktionen"
+    },
+    "attention": {
+      "title": "Erfordert Aufmerksamkeit",
+      "dismiss": "Ausblenden",
+      "dismissNamed": "{{name}} ausblenden",
+      "retryNamed": "{{name}} erneut versuchen",
+      "retryQueued": "Neuer Versuch gestartet",
+      "retryFailed": "Erneuter Versuch fehlgeschlagen",
+      "error": "Einige Einträge, die Aufmerksamkeit erfordern, konnten nicht geladen werden."
+    },
+    "arrivals": {
+      "title": "Neueingänge",
+      "library": "Bibliothek öffnen",
+      "error": "Die neuesten Dokumente konnten nicht geladen werden.",
+      "empty": "Noch keine Dokumente",
+      "emptyHint": "Hinzugefügte Dokumente erscheinen hier, sobald sie eintreffen."
+    },
+    "processing": {
+      "title": "Verarbeitung",
+      "pending": "Ausstehend",
+      "processing": "In Arbeit",
+      "failed": "Fehlgeschlagen",
+      "doneToday": "Heute erledigt",
+      "oldestWait": "Längste Wartezeit",
+      "error": "Die OCR-Warteschlange konnte nicht geladen werden.",
+      "statusError": "Der OCR-Status konnte nicht geladen werden.",
+      "ocr": "OCR",
+      "pause": "OCR pausieren",
+      "resume": "OCR fortsetzen",
+      "pauseFailed": "OCR konnte nicht pausiert werden",
+      "resumeFailed": "OCR konnte nicht fortgesetzt werden"
+    },
+    "connections": {
+      "title": "Verbindungen",
+      "manage": "Verwalten",
+      "error": "Verbindungen konnten nicht geladen werden.",
+      "empty": "Keine Verbindungen",
+      "add": "Verbindung hinzufügen"
+    },
+    "totals": {
+      "title": "Bibliothek",
+      "documents": "Dokumente",
+      "storage": "Speicher",
+      "indexed": "Indexiert",
+      "labels": "Labels",
+      "error": "Die Bibliothekssummen konnten nicht geladen werden."
+    }
   }
 }

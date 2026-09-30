@@ -1687,5 +1687,72 @@
       "labels": "Labels",
       "debug": "Debug"
     }
+  },
+  "board": {
+    "title": "Board",
+    "addDocuments": "Add documents",
+    "retry": "Retry",
+    "viewAll": "View all",
+    "loading": "Loading",
+    "tag": {
+      "new": "New",
+      "changed": "Changed"
+    },
+    "col": {
+      "name": "Name",
+      "type": "Type",
+      "status": "Status",
+      "size": "Size",
+      "added": "Added",
+      "reason": "Reason",
+      "age": "Age",
+      "actions": "Actions"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "dismiss": "Dismiss",
+      "dismissNamed": "Dismiss {{name}}",
+      "retryNamed": "Retry {{name}}",
+      "retryQueued": "Retry started",
+      "retryFailed": "Could not retry",
+      "error": "Some items that need attention could not be loaded."
+    },
+    "arrivals": {
+      "title": "Arrivals",
+      "library": "Open library",
+      "error": "Recent documents could not be loaded.",
+      "empty": "No documents yet",
+      "emptyHint": "Documents you add appear here as they arrive."
+    },
+    "processing": {
+      "title": "Processing",
+      "pending": "Pending",
+      "processing": "Processing",
+      "failed": "Failed",
+      "doneToday": "Done today",
+      "oldestWait": "Oldest wait",
+      "error": "The OCR queue could not be loaded.",
+      "statusError": "The OCR state could not be loaded.",
+      "ocr": "OCR",
+      "pause": "Pause OCR",
+      "resume": "Resume OCR",
+      "pauseFailed": "Could not pause OCR",
+      "resumeFailed": "Could not resume OCR"
+    },
+    "connections": {
+      "title": "Connections",
+      "manage": "Manage",
+      "error": "Connections could not be loaded.",
+      "empty": "No connections",
+      "add": "Add connection"
+    },
+    "totals": {
+      "title": "Library",
+      "documents": "Documents",
+      "storage": "Storage",
+      "indexed": "Indexed",
+      "labels": "Labels",
+      "error": "Library totals could not be loaded."
+    }
   }
 }
