@@ -23,7 +23,7 @@
   font-family: var(--font-ui);
   margin: 0;
   min-width: 0;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--fg);
   overflow-wrap: anywhere;

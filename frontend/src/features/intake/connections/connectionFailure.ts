@@ -29,7 +29,7 @@ const PATTERNS: readonly Pattern[] = [
     fallback: "The server's security certificate isn't trusted.",
   },
   {
-    test: /connection refused|could not connect|failed to connect|dns|name or service not known|no route|unreachable|enotfound|error sending request|timed? ?out|timeout/i,
+    test: /connection refused|could not connect|failed to connect|dns|could not be resolved|name or service not known|no route|unreachable|enotfound|error sending request|timed? ?out|timeout/i,
     key: 'intake.connectionFailure.unreachable',
     fallback: "Can't reach the server. Check the address and that it is online.",
   },

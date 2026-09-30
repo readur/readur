@@ -62,8 +62,7 @@ describe('Failed OCR board', () => {
     expect(documentService.getFailedOcrDocuments).toHaveBeenCalledWith(25, 0);
     const row = within(grid).getByRole('row', { name: /scan1\.pdf/ });
     expect(row).toHaveTextContent(/failed/i);
-    expect(row).toHaveTextContent('Timeout');
-    expect(row).toHaveAccessibleDescription('Tesseract timed out');
+    expect(row).toHaveTextContent('OCR took too long and was stopped');
   });
 
   it('marks new failures, with a tag, until the row is opened', async () => {

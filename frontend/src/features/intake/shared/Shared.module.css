@@ -313,6 +313,10 @@
   color: var(--danger);
 }
 
+.nameSub[data-tone='warning'] {
+  color: var(--warn);
+}
+
 .dotName {
   display: flex;
   align-items: center;

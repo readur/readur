@@ -5,6 +5,8 @@ import {
   isFailing,
   maskSecret,
   nextSyncAt,
+  problemOf,
+  validationIssues,
   sourceAuth,
   sourceLocation,
   sourceState,
@@ -93,5 +95,32 @@ describe('source error enums (PascalCase on the wire)', () => {
     expect(errorSourceTypeOf('webdav')).toBe('WebDAV');
     expect(errorSourceTypeOf('s3')).toBe('S3');
     expect(errorSourceTypeOf('local_folder')).toBe('Local');
+  });
+});
+
+describe('connection health findings', () => {
+  const issues = JSON.stringify([
+    { message: 'The server host could not be resolved', recommendation: 'Check the address', severity: 'warning', type: 'connectivity' },
+  ]);
+
+  it('reads the JSON the server stores, and tolerates junk', () => {
+    expect(validationIssues(s({ validation_issues: issues }))).toEqual([
+      { message: 'The server host could not be resolved', recommendation: 'Check the address', severity: 'warning' },
+    ]);
+    expect(validationIssues(s({ validation_issues: 'not json' }))).toEqual([]);
+    expect(validationIssues(s({ validation_issues: null }))).toEqual([]);
+    expect(validationIssues(s({ validation_issues: JSON.stringify([{ nope: 1 }, 4]) }))).toEqual([]);
+  });
+
+  it('explains an unhealthy connection in one line', () => {
+    expect(problemOf(s({ status: 'error', last_error: '401 Unauthorized' }))).toEqual({ text: '401 Unauthorized', tone: 'danger' });
+    expect(problemOf(s({ validation_status: 'warning', validation_issues: issues }))).toEqual({
+      text: 'The server host could not be resolved',
+      tone: 'warning',
+    });
+    expect(problemOf(s({ validation_status: 'critical', validation_issues: issues }))?.tone).toBe('danger');
+    expect(problemOf(s({ validation_status: 'healthy', validation_issues: issues }))).toBeNull();
+    expect(problemOf(s({ enabled: false, status: 'error', last_error: 'x' }))).toBeNull();
+    expect(problemOf(s())).toBeNull();
   });
 });

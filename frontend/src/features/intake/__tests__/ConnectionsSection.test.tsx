@@ -448,6 +448,25 @@ describe('Connections health and deep links', () => {
     expect(within(grid).getByRole('row', { name: /Office cloud/ })).not.toHaveTextContent(/refused the sign-in/i);
   });
 
+  it('lists a health warning under the name and its recommendation in the panel', async () => {
+    const user = userEvent.setup();
+    serveSources([
+      source('w1', {
+        name: 'Office cloud',
+        validation_status: 'warning',
+        validation_issues: JSON.stringify([
+          { message: 'The server host could not be resolved', recommendation: 'Check server URL and network', severity: 'warning' },
+        ]),
+      }),
+    ]);
+    renderIntake(<ConnectionsSection />);
+    const grid = await board();
+    expect(within(grid).getByText(/Can't reach the server/)).toBeInTheDocument();
+    const panel = await openRow(user, 'Office cloud');
+    expect(within(panel).getByRole('heading', { name: 'Health check' })).toBeInTheDocument();
+    expect(within(panel).getByText('Check server URL and network')).toBeInTheDocument();
+  });
+
   it('opens the connection named by ?source= and drops the param on close', async () => {
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />, { path: '/intake?section=connections&source=s2' });

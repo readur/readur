@@ -15,6 +15,7 @@ import { documentService, type BulkOcrRetryResponse, type FailedOcrDocumentRow }
 import { BulkRetryModal } from '../../../components/BulkRetryModal';
 import { acknowledge, isShownLit, litReason, useLitCount } from '../../board/litStore';
 import { serverMessage } from '../shared/errors';
+import { HumanReason } from '../shared/HumanReason';
 import { formatRelative } from '../shared/format';
 import { ConfirmDialog, NameCell, Notice, sharedStyles } from '../shared/parts';
 import { DOCUMENT_EVENTS_KEY, flagNewFailures } from '../shared/seenEvents';
@@ -70,7 +71,7 @@ export function FailedOcrPanel() {
   const columns: BoardColumn<FailedOcrDocumentRow>[] = [
     { id: 'name', label: t('intake.attention.col.name', 'Name'), render: (d) => <NameCell name={failedName(d)} tag={litOf(d) ? litReason('attention', attentionKeyOf(d)) : null} /> },
     { id: 'status', label: t('intake.attention.col.status', 'Status'), width: 110, render: () => <StatusMark state="failed" size="sm" /> },
-    { id: 'reason', hideOnNarrow: true, label: t('intake.attention.col.reason', 'Reason'), width: 220, render: (d) => ocrFailureSummary(t, d) },
+    { id: 'reason', hideOnNarrow: true, label: t('intake.attention.col.reason', 'Reason'), width: 220, render: (d) => (d.ocr_error ? <HumanReason raw={d.ocr_error} code={d.ocr_failure_reason} summaryOnly /> : ocrFailureSummary(t, d)) },
     { id: 'retries', hideOnNarrow: true, label: t('intake.attention.col.retries', 'Retries'), align: 'end', width: 90, render: (d) => String(d.retry_count ?? 0) },
     { id: 'failed', hideOnNarrow: true, label: t('intake.attention.col.failed', 'Failed'), mono: true, width: 130, render: (d) => formatRelative(d.updated_at, i18n.language) },
   ];
@@ -154,8 +155,7 @@ export function FailedOcrPanel() {
             setOpenId(id);
           }}
           isRowLit={litOf}
-          renderRowDetail={(d) => d.ocr_error || null}
-          isLoading={failed.isLoading}
+                    isLoading={failed.isLoading}
           emptyState={
             <EmptyState
               headingAs="h3"

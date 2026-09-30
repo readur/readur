@@ -22,6 +22,43 @@ export function sourceState(source: SourceResponse): StatusState {
   return 'healthy';
 }
 
+export interface ValidationIssue {
+  message: string;
+  recommendation: string;
+  severity: string;
+}
+
+/** The health check's findings; the server stores them as a JSON string. */
+export function validationIssues(source: SourceResponse): ValidationIssue[] {
+  let raw: unknown = (source as { validation_issues?: unknown }).validation_issues;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((i): i is Record<string, unknown> => Boolean(i) && typeof i === 'object' && typeof (i as { message?: unknown }).message === 'string')
+    .map((i) => ({
+      message: String(i.message),
+      recommendation: typeof i.recommendation === 'string' ? i.recommendation : '',
+      severity: typeof i.severity === 'string' ? i.severity : 'warning',
+    }));
+}
+
+/** The one line that explains why a connection is not healthy, or null when it is. */
+export function problemOf(source: SourceResponse): { text: string; tone: 'danger' | 'warning' } | null {
+  if (!source.enabled) return null;
+  if (source.status === 'error' && source.last_error) return { text: source.last_error, tone: 'danger' };
+  const first = validationIssues(source)[0];
+  if (first && (source.validation_status === 'critical' || source.validation_status === 'warning')) {
+    return { text: first.message, tone: source.validation_status === 'critical' ? 'danger' : 'warning' };
+  }
+  return null;
+}
+
 /** Rows that should be marked for the user: connections whose last sync failed. */
 export function isFailing(source: SourceResponse): boolean {
   return source.enabled && source.status === 'error';

@@ -15,7 +15,7 @@ import { sourceTypeLabel } from '../shared/sourceTypes';
 import { SourceForm } from './form/SourceForm';
 import { OcrControls } from './OcrControls';
 import { SourceDetailPanel } from './SourceDetailPanel';
-import { isFailing, nextSyncAt, sourceState } from './sourceModel';
+import { nextSyncAt, problemOf, sourceState } from './sourceModel';
 import { useSourceActions } from './useSourceActions';
 import { useSources } from './useSources';
 
@@ -78,9 +78,9 @@ export function ConnectionsSection() {
             <span className={sharedStyles.nameText}>{s.name}</span>
             {isLit('source', s.id) ? <ChangedTag reason="changed" /> : null}
           </span>
-          {isFailing(s) && s.last_error ? (
-            <span className={sharedStyles.nameSub}>
-              <HumanReason kind="connection" raw={s.last_error} summaryOnly />
+          {problemOf(s) ? (
+            <span className={sharedStyles.nameSub} data-tone={problemOf(s)?.tone}>
+              <HumanReason kind="connection" raw={problemOf(s)?.text} summaryOnly />
             </span>
           ) : null}
         </span>

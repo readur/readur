@@ -10,7 +10,7 @@ import { ConnectionDot } from './ConnectionDot';
 import { ignoredFilesHref, sourceTypeLabel } from '../shared/sourceTypes';
 import { SyncProgressDisplay } from '../sync/SyncProgressDisplay';
 import { RecentErrors } from './RecentErrors';
-import { listOf, nextSyncAt, sourceAuth, sourceLocation, sourceState, syncIntervalMinutes } from './sourceModel';
+import { listOf, nextSyncAt, sourceAuth, sourceLocation, sourceState, syncIntervalMinutes, validationIssues } from './sourceModel';
 import type { useSourceActions } from './useSourceActions';
 import styles from './Connections.module.css';
 
@@ -38,6 +38,7 @@ export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, action
   const folders = listOf(source, 'watch_folders');
   const extensions = listOf(source, 'file_extensions');
   const busy = actions.pending !== null;
+  const issues = validationIssues(source);
 
   const footer = (
     <div className={styles.actions}>
@@ -158,6 +159,22 @@ export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, action
                 <span className={sharedStyles.meta}> · {formatRelative(source.last_error_at, lng)}</span>
               ) : null}
             </Notice>
+          ) : null}
+
+          {issues.length > 0 ? (
+            <section className={sharedStyles.stack} aria-labelledby={`${errorsHeadingId}-health`}>
+              <h3 id={`${errorsHeadingId}-health`} className={sharedStyles.heading}>
+                {t('intake.detail.healthFindings', 'Health check')}
+              </h3>
+              <ul className={styles.issueList}>
+                {issues.map((issue, i) => (
+                  <li key={i} className={styles.issue}>
+                    <HumanReason kind="connection" raw={issue.message} />
+                    {issue.recommendation ? <span className={styles.issueFix}>{issue.recommendation}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
 
           <SyncProgressDisplay sourceId={source.id} sourceName={source.name} isVisible={syncing} />
