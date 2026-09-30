@@ -1537,6 +1537,39 @@
       "info": "Info:",
       "success": "Success:",
       "danger": "Error:"
+    },
+    "filterChip": {
+      "clear": "Clear {{label}} filter"
+    },
+    "bulk": {
+      "label": "Bulk actions",
+      "selected": "selected",
+      "clear": "Clear selection"
+    },
+    "commandPalette": {
+      "label": "Command palette",
+      "search": "Search",
+      "placeholder": "Search documents, labels, pages…",
+      "loading": "Searching…",
+      "noResults": "No results",
+      "results": "Results",
+      "hint": "Type to search"
+    },
+    "board": {
+      "loading": "Loading",
+      "empty": "Nothing to show"
     }
+  },
+  "status": {
+    "pending": "PENDING",
+    "processing": "OCR",
+    "processingProgress": "OCR {{current}}/{{total}}",
+    "completed": "INDEXED",
+    "failed": "FAILED",
+    "healthy": "HEALTHY",
+    "syncing": "SYNCING",
+    "warning": "CHECK",
+    "error": "ERROR",
+    "disabled": "OFF"
   }
 }

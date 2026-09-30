@@ -1517,6 +1517,39 @@
       "info": "Información:",
       "success": "Correcto:",
       "danger": "Error:"
+    },
+    "filterChip": {
+      "clear": "Quitar filtro {{label}}"
+    },
+    "bulk": {
+      "label": "Acciones en lote",
+      "selected": "seleccionados",
+      "clear": "Borrar selección"
+    },
+    "commandPalette": {
+      "label": "Paleta de comandos",
+      "search": "Buscar",
+      "placeholder": "Buscar documentos, etiquetas, páginas…",
+      "loading": "Buscando…",
+      "noResults": "Sin resultados",
+      "results": "Resultados",
+      "hint": "Escribe para buscar"
+    },
+    "board": {
+      "loading": "Cargando",
+      "empty": "Nada que mostrar"
     }
+  },
+  "status": {
+    "pending": "PENDIENTE",
+    "processing": "OCR",
+    "processingProgress": "OCR {{current}}/{{total}}",
+    "completed": "INDEXADO",
+    "failed": "FALLIDO",
+    "healthy": "CORRECTO",
+    "syncing": "SINCRONIZANDO",
+    "warning": "REVISAR",
+    "error": "ERROR",
+    "disabled": "DESACTIVADO"
   }
 }

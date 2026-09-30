@@ -1517,6 +1517,39 @@
       "info": "Info:",
       "success": "Erfolg:",
       "danger": "Fehler:"
+    },
+    "filterChip": {
+      "clear": "Filter {{label}} entfernen"
+    },
+    "bulk": {
+      "label": "Sammelaktionen",
+      "selected": "ausgewählt",
+      "clear": "Auswahl aufheben"
+    },
+    "commandPalette": {
+      "label": "Befehlspalette",
+      "search": "Suchen",
+      "placeholder": "Dokumente, Labels, Seiten durchsuchen…",
+      "loading": "Suche läuft…",
+      "noResults": "Keine Ergebnisse",
+      "results": "Ergebnisse",
+      "hint": "Tippen, um zu suchen"
+    },
+    "board": {
+      "loading": "Wird geladen",
+      "empty": "Nichts anzuzeigen"
     }
+  },
+  "status": {
+    "pending": "AUSSTEHEND",
+    "processing": "OCR",
+    "processingProgress": "OCR {{current}}/{{total}}",
+    "completed": "INDEXIERT",
+    "failed": "FEHLGESCHLAGEN",
+    "healthy": "INTAKT",
+    "syncing": "SYNCHRONISIERT",
+    "warning": "PRÜFEN",
+    "error": "FEHLER",
+    "disabled": "AUS"
   }
 }
