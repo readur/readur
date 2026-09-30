@@ -17,12 +17,14 @@ async function seedTextDocuments(helpers: TestHelpers, names: string[]): Promise
   return ids;
 }
 
-const rowNames = async (helpers: TestHelpers) =>
-  // The name span only: the row also holds the type-code thumbnail stub and a NEW/CHANGED tag.
-  helpers
-    .documentRows()
-    .getByRole('rowheader')
-    .evaluateAll((cells) => cells.map((cell) => (cell.querySelector('[class*="_name_"]') ?? cell).textContent?.trim() ?? ''));
+/**
+ * The seeded names in row order, read from each row header's text. The header also holds the
+ * type-code stub and a NEW/CHANGED tag, so each row is matched to the one seeded name it contains.
+ */
+const rowNames = async (helpers: TestHelpers, seeded: readonly string[]) => {
+  const texts = await helpers.documentRows().getByRole('rowheader').allTextContents();
+  return texts.map((text) => seeded.find((name) => text.includes(name)) ?? text.trim());
+};
 
 async function openLibrary(page: Page, query = '') {
   await page.goto(`/documents${query}`);
@@ -52,7 +54,7 @@ test.describe('Library', () => {
     }
     await expect(page).toHaveURL(/sort=filename&order=asc|order=asc.*sort=filename/);
     await expect(helpers.documentRows().first()).toContainText(names[0]);
-    expect(await rowNames(helpers)).toEqual(names.slice(0, 25));
+    expect(await rowNames(helpers, names)).toEqual(names.slice(0, 25));
 
     // The server sorts: page 2 holds the alphabetically last document
     await page.getByRole('navigation', { name: 'Pagination' }).getByRole('button', { name: 'Next page' }).click();
@@ -106,11 +108,12 @@ test.describe('Library', () => {
   test('should open the slideout on row click, walk with ↓ and close with Esc', async ({ dynamicUserPage: page }) => {
     const helpers = new TestHelpers(page);
     const run = Math.random().toString(36).slice(2, 6);
-    await seedTextDocuments(helpers, [`walk-a-${run}.txt`, `walk-b-${run}.txt`, `walk-c-${run}.txt`]);
+    const seeded = [`walk-a-${run}.txt`, `walk-b-${run}.txt`, `walk-c-${run}.txt`];
+    await seedTextDocuments(helpers, seeded);
 
     await openLibrary(page);
     await expect(helpers.documentRows()).toHaveCount(3);
-    const [first, second] = await rowNames(helpers);
+    const [first, second] = await rowNames(helpers, seeded);
 
     // A row click opens the detail panel for that document
     const firstRow = helpers.documentRows().filter({ hasText: first });

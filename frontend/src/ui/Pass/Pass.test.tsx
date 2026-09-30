@@ -72,6 +72,23 @@ describe('Pass', () => {
     expect(screen.getByRole('button', { name: 'next' })).toHaveFocus();
   });
 
+  it('sets a native title only when the value is actually cut off', () => {
+    const { rerender } = render(
+      <Pass>
+        <PassCell label="Name">short</PassCell>
+      </Pass>,
+    );
+    expect(screen.getByText('short')).not.toHaveAttribute('title');
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 300 });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 100 });
+    rerender(
+      <Pass>
+        <PassCell label="Name">a much longer value</PassCell>
+      </Pass>,
+    );
+    expect(screen.getByText('a much longer value')).toHaveAttribute('title', 'a much longer value');
+  });
+
   it('shows the full value in a tooltip when a value is truncated and focused', async () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 300 });
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 100 });

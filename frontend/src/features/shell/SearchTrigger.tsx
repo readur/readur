@@ -37,6 +37,7 @@ export function SearchTrigger({ onOpen, compact }: SearchTriggerProps) {
         icon={<Search fontSize="inherit" />}
         onPress={onOpen}
         ref={ref}
+        className={styles.toolIcon}
       />
     );
   }

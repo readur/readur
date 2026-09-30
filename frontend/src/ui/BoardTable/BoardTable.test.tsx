@@ -304,6 +304,10 @@ describe('BoardTable on a narrow screen', () => {
     expect(screen.getByRole('grid').style.minWidth).toBe('');
   });
 
+  /** The outermost element in `row` whose whole text is exactly `text`: one visible line. */
+  const visibleLine = (row: HTMLElement, text: string) =>
+    within(row).getAllByText((_, el) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim() === text)[0];
+
   it('folds the dropped columns into one unlabelled meta line, announced with labels', () => {
     setNarrow(true);
     const columns: BoardColumn<Doc>[] = [
@@ -313,9 +317,8 @@ describe('BoardTable on a narrow screen', () => {
     ];
     render(<Harness columns={columns} renderRowDetail={(d) => d.snippet} />);
     const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
-    const meta = alphaRow.querySelector('[class*="meta"]') as HTMLElement;
-    expect(meta).toHaveTextContent('3 · PDF');
-    expect(meta).not.toHaveTextContent('Pages');
+    // The visible line reads exactly "3 · PDF": values only, no "Pages"/"Type" labels.
+    expect(visibleLine(alphaRow, '3 · PDF')).toBeInTheDocument();
     expect(alphaRow).toHaveAccessibleDescription('Pages: 3; Type: PDF;');
     // The consumer's own detail is announced first; the folded fields follow it.
     const bravoRow = screen.getByRole('rowheader', { name: 'Bravo.pdf' }).closest('[role="row"]') as HTMLElement;
@@ -334,15 +337,14 @@ describe('BoardTable on a narrow screen', () => {
     ];
     render(<Harness columns={columns} renderRowTag={(d) => (d.isNew ? 'NEW' : null)} />);
     const bravoRow = screen.getByRole('rowheader', { name: 'Bravo.pdf' }).closest('[role="row"]') as HTMLElement;
-    const line = bravoRow.querySelector('[class*="foldLine"]') as HTMLElement;
-    expect(line).toHaveTextContent(/^NEWFAILED12 p$/);
+    const line = visibleLine(bravoRow, 'NEWFAILED12 p');
     // A column without a width is long text: its own clamped line, not part of the meta.
-    const text = bravoRow.querySelector('[class*="foldText"]') as HTMLElement;
-    expect(text).toHaveTextContent('Reason for Bravo.pdf');
+    const text = within(bravoRow).getByText('Reason for Bravo.pdf');
+    expect(line).not.toContainElement(text);
     expect(line).not.toHaveTextContent('Reason');
     // foldValue returning null leaves the value off the line but not out of the description.
     const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
-    expect(alphaRow.querySelector('[class*="foldLine"]')).toHaveTextContent(/^FAILED$/);
+    expect(visibleLine(alphaRow, 'FAILED')).toBeInTheDocument();
     expect(alphaRow).toHaveAccessibleDescription('State: FAILED; Reason: Reason for Alpha.pdf; Pages: 3;');
   });
 
@@ -355,7 +357,7 @@ describe('BoardTable on a narrow screen', () => {
     ];
     render(<Harness columns={columns} />);
     const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
-    expect(alphaRow.querySelector('[class*="foldLine"]')).toHaveTextContent('3 · Upload');
+    expect(visibleLine(alphaRow, '3 · Upload')).toBeInTheDocument();
     expect(alphaRow).toHaveAccessibleDescription('Source: Upload; Pages: 3;');
   });
 

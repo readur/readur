@@ -61,11 +61,19 @@ describe('document page: header', () => {
     expect(acknowledge).toHaveBeenCalledWith('document', 'doc-1');
   });
 
-  it('keeps the full filename in the title attribute and clamps the h1 to two lines', async () => {
+  it('puts the full filename in a title attribute once the h1 is clamped, and clamps it to two lines', async () => {
+    // A name that fits carries no title, so assistive tech does not hear it twice.
+    load();
+    const first = renderPage();
+    expect((await title()).querySelector('[title]')).toBeNull();
+    first.unmount();
+    // Clamped (content taller than the two-line box): the full name is in the title.
+    const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(120);
     load();
     renderPage();
     const h1 = await title();
     expect(h1.querySelector('[title="invoice.pdf"]')).not.toBeNull();
+    height.mockRestore();
     const css = readFileSync(resolve(__dirname, '../../../ui/Pass/Pass.module.css'), 'utf8');
     expect(css).toMatch(/\.clamp\s*\{[^}]*-webkit-line-clamp:\s*var\(--clamp-lines, 2\)[^}]*overflow-wrap:\s*anywhere/s);
     const header = readFileSync(resolve(__dirname, '../../shell/PageHeader.module.css'), 'utf8');

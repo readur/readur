@@ -33,10 +33,9 @@ describe('layer scale', () => {
     expect(layerOf('features/shell/AppShell.module.css', '.bottomBar')).toBe('var(--z-shell)');
   });
 
-  it('puts SlideOver, Dialog and Popover above the shell, Toast above them, the palette on top', () => {
+  it('puts SlideOver and Dialog above the shell, Toast above them, the palette on top', () => {
     expect(layerOf('ui/SlideOver/SlideOver.module.css', '.overlay')).toBe('var(--z-overlay)');
     expect(layerOf('ui/Dialog/Dialog.module.css', '.overlay')).toBe('var(--z-overlay)');
-    expect(layerOf('ui/Popover/Popover.module.css', '.popover')).toBe('var(--z-overlay)');
     expect(layerOf('ui/Toast/Toast.module.css', '.region')).toBe('var(--z-toast)');
     expect(layerOf('ui/CommandPalette/CommandPalette.module.css', '.overlay')).toBe('var(--z-palette)');
   });
@@ -45,6 +44,17 @@ describe('layer scale', () => {
     expect(layerOf('ui/BulkActionBar/BulkActionBar.module.css', '.dock')).toBe('var(--z-dock)');
     expect(scale('z-dock')).toBeGreaterThan(scale('z-shell'));
     expect(scale('z-dock')).toBeLessThan(scale('z-overlay'));
+  });
+
+  /*
+   * The one exception to the scale. React Aria positions every Popover (menus, selects, combo
+   * boxes, tooltips' popovers) with an inline `z-index: 100000`, which beats any stylesheet value,
+   * so Popover declares no z-index: a token there would be dead code that only looks like it
+   * follows the scale. 100000 sits above every token layer, which is what an anchored popup needs.
+   */
+  it('leaves Popover off the token scale: React Aria sets its z-index inline', () => {
+    expect(read('ui/Popover/Popover.module.css')).not.toMatch(/z-index/);
+    expect(scale('z-palette')).toBeLessThan(100000);
   });
 
   it('keeps raw z-index numbers out of the layered stylesheets', () => {

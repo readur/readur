@@ -66,7 +66,7 @@ describe('changed state: acknowledge on leave', () => {
     markLit('document', 'd1', 'new');
     const view = await renderBoard();
     expect(screen.getByRole('row', { name: /d1\.pdf/ })).toHaveAttribute('data-changed', 'true');
-    // Still lit for the rest of the visit.
+    // Still flagged for the rest of the visit.
     await settle();
     expect(isLit('document', 'd1')).toBe(true);
     expect(screen.getByRole('row', { name: /d1\.pdf/ })).toHaveAttribute('data-changed', 'true');
@@ -173,20 +173,10 @@ describe('changed state: one vocabulary', () => {
 
   function renderTags(reason: 'new' | 'changed' | 'failed') {
     markLit('document', 'x', reason);
-    render(
-      <I18nextProvider i18n={i18n}>
-        <span data-testid="board">
-          <BoardTag reason={reason} />
-        </span>
-        <span data-testid="library">
-          <LibraryTag id="x" />
-        </span>
-        <span data-testid="intake">
-          <IntakeTag reason={reason} />
-        </span>
-      </I18nextProvider>,
+    // Each surface's tag rendered on its own, read as the text it shows.
+    return [<BoardTag key="board" reason={reason} />, <LibraryTag key="library" id="x" />, <IntakeTag key="intake" reason={reason} />].map(
+      (tag) => word(render(<I18nextProvider i18n={i18n}>{tag}</I18nextProvider>).container),
     );
-    return ['board', 'library', 'intake'].map((id) => word(screen.getByTestId(id)));
   }
 
   it.each([
