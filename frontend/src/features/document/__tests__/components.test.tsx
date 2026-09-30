@@ -42,7 +42,9 @@ describe('DocumentViewer', () => {
     m.documentService.view.mockResolvedValue({ data: new Blob(['x']) });
     render(<DocumentViewer documentId="d1" filename="a.docx" mimeType="application/msword" />);
     expect(await screen.findByText('No preview for this file type')).toBeInTheDocument();
-    expect(screen.getByText(/application\/msword/)).toBeInTheDocument();
+    // Named by its short type code, as in every TYPE cell, not by the raw MIME type.
+    expect(screen.getByText(/^DOC files can’t be shown/)).toBeInTheDocument();
+    expect(screen.queryByText(/application\/msword/)).not.toBeInTheDocument();
   });
 
   it('reports a failed load', async () => {

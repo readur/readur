@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { documentService } from '../../../services/api';
 import { Skeleton } from '../../../ui';
+import { typeCodeOf } from '../fileType';
 import { fileKind } from '../format';
 import styles from './DocumentViewer.module.css';
 
@@ -90,7 +91,7 @@ export function DocumentViewer({ documentId, filename, mimeType, load }: Documen
       <p className={styles.messageTitle}>{t('document.viewer.unsupported', 'No preview for this file type')}</p>
       <p>
         {t('document.viewer.unsupportedHint', {
-          type: mimeType,
+          type: typeCodeOf(mimeType, filename),
           defaultValue: '{{type}} files can’t be shown in the browser. Download the file to open it.',
         })}
       </p>

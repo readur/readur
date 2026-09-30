@@ -82,9 +82,9 @@ export function sourceLabel(
       return 'S3';
     case 'local':
     case 'local_folder':
-      return t('document.source.localFolder', 'Local folder');
+      return t('document.pass.sourceLocalFolder', 'Local folder');
     case 'batch_ingest':
-      return t('document.source.batch', 'Batch import');
+      return t('document.pass.sourceBatch', 'Batch import');
     default: {
       const words = type.replace(/[_-]+/g, ' ');
       return words.charAt(0).toUpperCase() + words.slice(1);

@@ -1889,6 +1889,7 @@
     "addDocuments": "Añadir documentos",
     "retry": "Reintentar",
     "viewAll": "Ver todo",
+    "markAllSeen": "Marcar todo como visto",
     "loading": "Cargando",
     "tag": {
       "new": "Nuevo",
@@ -1918,7 +1919,10 @@
       "library": "Abrir biblioteca",
       "error": "No se pudieron cargar los documentos recientes.",
       "empty": "Aún no hay documentos",
-      "emptyHint": "Los documentos que añadas aparecerán aquí a medida que lleguen."
+      "emptyHint": "Los documentos que añadas aparecerán aquí a medida que lleguen.",
+      "bulkOne": "documento nuevo",
+      "bulkMany": "documentos nuevos",
+      "bulkOpen": "Abrir en la biblioteca, más recientes primero"
     },
     "processing": {
       "title": "Procesamiento",
@@ -2010,6 +2014,8 @@
     },
     "pass": {
       "uploaded": "Subida",
+      "sourceLocalFolder": "Carpeta local",
+      "sourceBatch": "Importación por lotes",
       "label": "Resumen del documento",
       "status": "Estado",
       "progress": "Progreso del OCR",

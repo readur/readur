@@ -1889,6 +1889,7 @@
     "addDocuments": "Dokumente hinzufügen",
     "retry": "Erneut versuchen",
     "viewAll": "Alle anzeigen",
+    "markAllSeen": "Alle als gesehen markieren",
     "loading": "Wird geladen",
     "tag": {
       "new": "Neu",
@@ -1918,7 +1919,10 @@
       "library": "Bibliothek öffnen",
       "error": "Die neuesten Dokumente konnten nicht geladen werden.",
       "empty": "Noch keine Dokumente",
-      "emptyHint": "Hinzugefügte Dokumente erscheinen hier, sobald sie eintreffen."
+      "emptyHint": "Hinzugefügte Dokumente erscheinen hier, sobald sie eintreffen.",
+      "bulkOne": "neues Dokument",
+      "bulkMany": "neue Dokumente",
+      "bulkOpen": "In der Bibliothek öffnen, neueste zuerst"
     },
     "processing": {
       "title": "Verarbeitung",
@@ -2010,6 +2014,8 @@
     },
     "pass": {
       "uploaded": "Upload",
+      "sourceLocalFolder": "Lokaler Ordner",
+      "sourceBatch": "Stapelimport",
       "label": "Dokumentübersicht",
       "status": "Status",
       "progress": "OCR-Fortschritt",

@@ -1889,6 +1889,7 @@
     "addDocuments": "Add documents",
     "retry": "Retry",
     "viewAll": "View all",
+    "markAllSeen": "Mark all seen",
     "loading": "Loading",
     "tag": {
       "new": "New",
@@ -1918,7 +1919,10 @@
       "library": "Open library",
       "error": "Recent documents could not be loaded.",
       "empty": "No documents yet",
-      "emptyHint": "Documents you add appear here as they arrive."
+      "emptyHint": "Documents you add appear here as they arrive.",
+      "bulkOne": "new document",
+      "bulkMany": "new documents",
+      "bulkOpen": "Open in Library, newest first"
     },
     "processing": {
       "title": "Processing",
@@ -2010,6 +2014,8 @@
     },
     "pass": {
       "uploaded": "Upload",
+      "sourceLocalFolder": "Local folder",
+      "sourceBatch": "Batch import",
       "label": "Document summary",
       "status": "Status",
       "progress": "OCR progress",
