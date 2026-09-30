@@ -7,6 +7,7 @@ import '@fontsource-variable/martian-mono/wght.css'
 import './index.css'
 import './styles/tokens.css'
 import './styles/base.css'
+import { ThemeModeProvider } from './theme/ThemeProvider'
 import { AuthProvider } from './contexts/AuthContext'
 import { FeatureFlagsProvider } from './contexts/FeatureFlagsContext'
 import './i18n/config'
@@ -14,6 +15,7 @@ import './i18n/config'
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Suspense fallback={<div>Loading...</div>}>
+      <ThemeModeProvider>
       <BrowserRouter>
         <AuthProvider>
           <FeatureFlagsProvider>
@@ -21,6 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           </FeatureFlagsProvider>
         </AuthProvider>
       </BrowserRouter>
+      </ThemeModeProvider>
     </Suspense>
   </React.StrictMode>,
 )

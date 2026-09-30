@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useMemo, ReactNode } from 'react';
 import { createTheme, Theme, ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import { PaletteMode } from '@mui/material';
 import { modernTokens } from '../theme';
+import { ThemeModeProvider } from '../theme/ThemeProvider';
+import { ThemeModeContext, useThemeMode } from '../theme/useThemeMode';
 import { fontStack, gradients, radii, shadows as designShadows } from '../design/tokens';
 
 interface ThemeContextType {
@@ -329,50 +331,27 @@ const createAppTheme = (mode: PaletteMode): Theme => {
   });
 };
 
-export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const [mode, setMode] = useState<PaletteMode>(() => {
-    const savedMode = localStorage.getItem('themeMode');
-    if (savedMode === 'light' || savedMode === 'dark') {
-      return savedMode;
-    }
-    // Default to system preference or light mode
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+const LegacyThemeBridge: React.FC<ThemeProviderProps> = ({ children }) => {
+  const { mode, toggle } = useThemeMode();
 
-  const toggleTheme = () => {
-    const newMode = mode === 'light' ? 'dark' : 'light';
-    setMode(newMode);
-    localStorage.setItem('themeMode', newMode);
-  };
-
-  const theme = createAppTheme(mode);
-  const glassEffect = createGlassEffect(mode);
-
-  // Sync `<html class="dark">` so CSS custom properties in
-  // design/global.css flip alongside the MUI palette.
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', mode === 'dark');
-  }, [mode]);
-
-  // Listen for system theme changes
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e: MediaQueryListEvent) => {
-      // Only update if user hasn't manually set a preference
-      if (!localStorage.getItem('themeMode')) {
-        setMode(e.matches ? 'dark' : 'light');
-      }
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
+  const theme = useMemo(() => createAppTheme(mode), [mode]);
+  const glassEffect = useMemo(() => createGlassEffect(mode), [mode]);
 
   return (
-    <ThemeContext.Provider value={{ mode, toggleTheme, modernTokens, glassEffect }}>
+    <ThemeContext.Provider value={{ mode, toggleTheme: toggle, modernTokens, glassEffect }}>
       <MuiThemeProvider theme={theme}>
         {children}
       </MuiThemeProvider>
     </ThemeContext.Provider>
   );
+};
+
+/**
+ * Legacy MUI theme provider. Mode state lives in the shared ThemeModeProvider;
+ * if none is mounted above (e.g. isolated tests) one is created here.
+ */
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
+  const existing = useContext(ThemeModeContext);
+  const bridge = <LegacyThemeBridge>{children}</LegacyThemeBridge>;
+  return existing ? bridge : <ThemeModeProvider>{bridge}</ThemeModeProvider>;
 };
