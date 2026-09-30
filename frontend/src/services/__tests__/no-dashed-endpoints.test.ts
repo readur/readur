@@ -11,14 +11,16 @@
  * with the correct method.
  */
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 
 const FILES_TO_SCAN = [
-  'frontend/src/services/api.ts',
+  ...readdirSync(join(REPO_ROOT, 'frontend/src/services/api'))
+    .filter((name) => name.endsWith('.ts'))
+    .map((name) => `frontend/src/services/api/${name}`),
   'frontend/src/pages/DocumentManagementPage.tsx',
   'frontend/src/pages/IgnoredFilesPage.tsx',
   'frontend/src/pages/SourcesPage.tsx',
