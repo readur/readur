@@ -27,6 +27,30 @@ export const E2E_TIMEOUTS = {
 } as const;
 
 /**
+ * Credentials of the admin account the server seeds at startup
+ * (ADMIN_USERNAME / ADMIN_PASSWORD). Test users are provisioned through this
+ * account because self-registration is disabled by default and, when enabled,
+ * produces accounts that must be approved before they can log in.
+ *
+ * E2E_ADMIN_USERNAME / E2E_ADMIN_PASSWORD take precedence so a local run can
+ * point at a differently-configured server without touching server env.
+ */
+export function getSeededAdminCredentials(): { username: string; password: string } {
+  const username = process.env.E2E_ADMIN_USERNAME || process.env.ADMIN_USERNAME || 'admin';
+  const password = process.env.E2E_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+  if (!password) {
+    throw new Error(
+      'E2E tests need the seeded admin password to provision users. ' +
+        'Set E2E_ADMIN_PASSWORD (or ADMIN_PASSWORD) to the value the server was started with.'
+    );
+  }
+  return { username, password };
+}
+
+// Cached per worker process; refreshed on 401 (e.g. after expiry or revocation).
+let cachedAdminToken: string | undefined;
+
+/**
  * E2E Test Auth Helper - Creates unique test users for each test run
  * Similar to the backend TestAuthHelper but for E2E browser tests
  */
@@ -34,38 +58,86 @@ export class E2ETestAuthHelper {
   constructor(private page: Page) {}
 
   /**
-   * Create a unique test user via API call
+   * Log in as the seeded admin via the API and return a Bearer token.
    */
-  async createTestUser(): Promise<E2ETestUser> {
+  async getSeededAdminToken(forceRefresh = false): Promise<string> {
+    if (cachedAdminToken && !forceRefresh) {
+      return cachedAdminToken;
+    }
+
+    const admin = getSeededAdminCredentials();
+    const response = await this.page.request.post('/api/auth/login', {
+      data: { username: admin.username, password: admin.password },
+      timeout: E2E_TIMEOUTS.api,
+    });
+
+    if (!response.ok()) {
+      const errorText = await response.text();
+      throw new Error(
+        `Seeded admin login failed for '${admin.username}'. Status: ${response.status()}, Body: ${errorText}`
+      );
+    }
+
+    const body = await response.json();
+    if (!body.token) {
+      throw new Error('No token received from seeded admin login');
+    }
+    cachedAdminToken = body.token as string;
+    return cachedAdminToken;
+  }
+
+  /**
+   * Send an admin-authenticated request, retrying once with a fresh token on 401.
+   */
+  private async adminRequest(method: 'post' | 'put', url: string, data: unknown) {
+    let token = await this.getSeededAdminToken();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await this.page.request[method](url, {
+        data,
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: E2E_TIMEOUTS.userCreation,
+      });
+      if (response.status() !== 401 || attempt === 1) {
+        return response;
+      }
+      token = await this.getSeededAdminToken(true);
+    }
+    throw new Error('unreachable');
+  }
+
+  /**
+   * Create an active account with the given role through the admin users API.
+   */
+  private async provisionUser(prefix: string, password: string, role: 'user' | 'admin'): Promise<E2ETestUser> {
     const uniqueId = this.generateUniqueId();
     const credentials: TestCredentials = {
-      username: `e2e_user_${uniqueId}`,
-      email: `e2e_user_${uniqueId}@test.com`,
-      password: 'testpass123'
+      username: `${prefix}_${uniqueId}`,
+      email: `${prefix}_${uniqueId}@test.com`,
+      password,
     };
 
+    const response = await this.adminRequest('post', '/api/users', {
+      username: credentials.username,
+      email: credentials.email,
+      password: credentials.password,
+      role,
+    });
+
+    if (!response.ok()) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create ${role} test user. Status: ${response.status()}, Body: ${errorText}`);
+    }
+
+    const userResponse: TestUserResponse = await response.json();
+    return { credentials, userResponse };
+  }
+
+  /**
+   * Create a unique regular test user via the admin users API
+   */
+  async createTestUser(): Promise<E2ETestUser> {
     try {
-      // Make API call to create user
-      const response = await this.page.request.post('/api/auth/register', {
-        data: {
-          username: credentials.username,
-          email: credentials.email,
-          password: credentials.password
-        },
-        timeout: E2E_TIMEOUTS.userCreation
-      });
-
-      if (!response.ok()) {
-        const errorText = await response.text();
-        throw new Error(`Failed to create dynamic test user. Status: ${response.status()}, Body: ${errorText}`);
-      }
-
-      const userResponse: TestUserResponse = await response.json();
-
-      return {
-        credentials,
-        userResponse,
-      };
+      return await this.provisionUser('e2e_user', 'testpass123', 'user');
     } catch (error) {
       console.error('❌ Failed to create E2E test user:', error);
       throw error;
@@ -73,43 +145,26 @@ export class E2ETestAuthHelper {
   }
 
   /**
-   * Create a unique admin user via API call
+   * Create a unique admin user via the admin users API
    */
   async createAdminUser(): Promise<E2ETestUser> {
-    const uniqueId = this.generateUniqueId();
-    const credentials: TestCredentials = {
-      username: `e2e_admin_${uniqueId}`,
-      email: `e2e_admin_${uniqueId}@test.com`,
-      password: 'adminpass123'
-    };
-
-
     try {
-      // Make API call to create admin user
-      const response = await this.page.request.post('/api/auth/register', {
-        data: {
-          username: credentials.username,
-          email: credentials.email,
-          password: credentials.password,
-          role: 'admin'
-        },
-        timeout: E2E_TIMEOUTS.userCreation
-      });
-
-      if (!response.ok()) {
-        const errorText = await response.text();
-        throw new Error(`Failed to create dynamic admin user. Status: ${response.status()}, Body: ${errorText}`);
-      }
-
-      const userResponse: TestUserResponse = await response.json();
-
-      return {
-        credentials,
-        userResponse,
-      };
+      return await this.provisionUser('e2e_admin', 'adminpass123', 'admin');
     } catch (error) {
       console.error('❌ Failed to create E2E admin user:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Activate an account (e.g. one created through self-registration, which
+   * starts out inactive until approved by an admin).
+   */
+  async approveUser(userId: string): Promise<void> {
+    const response = await this.adminRequest('put', `/api/users/${userId}`, { is_active: true });
+    if (!response.ok()) {
+      const errorText = await response.text();
+      throw new Error(`Failed to approve user ${userId}. Status: ${response.status()}, Body: ${errorText}`);
     }
   }
 
