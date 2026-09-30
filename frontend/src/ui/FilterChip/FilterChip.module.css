@@ -1,0 +1,98 @@
+.chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: stretch;
+  height: 28px;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.active {
+  background: var(--surface);
+  border-color: var(--line-strong);
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: 0 var(--s-2);
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  outline: none;
+}
+
+.trigger[data-hovered] {
+  background: var(--surface-2);
+}
+
+.trigger[data-focus-visible],
+.clear[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.label {
+  flex: none;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-meta);
+}
+
+.active .label {
+  color: var(--fg-2);
+}
+
+.value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+}
+
+.chevron,
+.clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.chevron {
+  color: var(--fg-meta);
+}
+
+.clear {
+  width: 26px;
+  padding: 0;
+  color: var(--fg-2);
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--line);
+  cursor: pointer;
+  outline: none;
+}
+
+.clear[data-hovered] {
+  color: var(--fg);
+  background: var(--surface-2);
+}
+
+.dialog {
+  outline: none;
+}

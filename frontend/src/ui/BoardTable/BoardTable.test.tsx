@@ -1,0 +1,191 @@
+import { useState } from 'react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { EmptyState } from '../EmptyState';
+import { BoardTable } from './BoardTable';
+import type { BoardColumn, BoardSort, BoardTableProps, Selection } from './types';
+
+interface Doc {
+  id: string;
+  name: string;
+  pages: number;
+  isNew?: boolean;
+  snippet?: string;
+}
+
+const DOCS: Doc[] = [
+  { id: 'a', name: 'Alpha.pdf', pages: 3 },
+  { id: 'b', name: 'Bravo.pdf', pages: 12, isNew: true, snippet: 'matched invoice total' },
+  { id: 'c', name: 'Charlie.pdf', pages: 1 },
+];
+
+const COLUMNS: BoardColumn<Doc>[] = [
+  { id: 'name', label: 'Name', sortable: true, render: (d) => d.name },
+  { id: 'pages', label: 'Pages', sortable: true, align: 'end', render: (d) => d.pages },
+  { id: 'type', label: 'Type', render: () => 'PDF' },
+];
+
+const getRowId = (d: Doc) => d.id;
+
+function Harness(props: Partial<BoardTableProps<Doc>> & { initialSort?: BoardSort; onSort?: (s: BoardSort) => void }) {
+  const { initialSort, onSort, ...rest } = props;
+  const [sort, setSort] = useState<BoardSort | undefined>(initialSort);
+  return (
+    <BoardTable<Doc>
+      aria-label="Documents"
+      columns={COLUMNS}
+      rows={DOCS}
+      getRowId={getRowId}
+      sort={sort}
+      onSortChange={(s) => {
+        onSort?.(s);
+        setSort(s);
+      }}
+      {...rest}
+    />
+  );
+}
+
+function SelectHarness({ onChange }: { onChange: (keys: Selection) => void }) {
+  const [keys, setKeys] = useState<Selection>(new Set());
+  return (
+    <Harness
+      selectionMode="multiple"
+      selectedKeys={keys}
+      onSelectionChange={(k) => {
+        onChange(k);
+        setKeys(k);
+      }}
+    />
+  );
+}
+
+const header = (name: string) => screen.getByRole('columnheader', { name });
+
+describe('BoardTable', () => {
+  it('renders a named grid with heads and rows', () => {
+    render(<Harness />);
+    const grid = screen.getByRole('grid', { name: 'Documents' });
+    expect(within(grid).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name▲', 'Pages▲', 'Type']);
+    expect(within(grid).getAllByRole('row')).toHaveLength(4);
+    expect(screen.getByRole('rowheader', { name: 'Alpha.pdf' })).toBeInTheDocument();
+  });
+
+  it('sorts by clicking a sortable head and toggles the direction', async () => {
+    const onSort = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSort={onSort} initialSort={{ column: 'name', direction: 'ascending' }} />);
+    expect(header('Name')).toHaveAttribute('aria-sort', 'ascending');
+    await user.click(header('Name'));
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'name', direction: 'descending' });
+    expect(header('Name')).toHaveAttribute('aria-sort', 'descending');
+    expect(header('Name')).toHaveTextContent('Name▼');
+    await user.click(header('Pages'));
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'pages', direction: 'ascending' });
+    expect(header('Pages')).toHaveAttribute('aria-sort', 'ascending');
+    expect(header('Name')).toHaveAttribute('aria-sort', 'none');
+  });
+
+  it('sorts from the keyboard with Enter on a head', async () => {
+    const onSort = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSort={onSort} initialSort={{ column: 'pages', direction: 'descending' }} />);
+    await user.tab();
+    // Focus lands in the grid; move up into the header row, then onto the Pages head.
+    await user.keyboard('{ArrowUp}');
+    await user.keyboard('{ArrowRight}');
+    expect(header('Pages')).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'pages', direction: 'ascending' });
+    expect(header('Pages')).toHaveAttribute('aria-sort', 'ascending');
+  });
+
+  it('does not sort non-sortable heads', async () => {
+    const onSort = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSort={onSort} />);
+    expect(header('Type')).not.toHaveAttribute('aria-sort');
+    await user.click(header('Type'));
+    expect(onSort).not.toHaveBeenCalled();
+  });
+
+  it('fires onRowAction on Enter and on click', async () => {
+    const onRowAction = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onRowAction={onRowAction} />);
+    await user.tab();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{Enter}');
+    expect(onRowAction).toHaveBeenLastCalledWith('b');
+    await user.click(screen.getByRole('rowheader', { name: 'Charlie.pdf' }));
+    expect(onRowAction).toHaveBeenLastCalledWith('c');
+  });
+
+  it('selects rows with Space and the checkbox, and all rows from the header', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<SelectHarness onChange={onChange} />);
+    const rows = screen.getAllByRole('row').slice(1);
+    await user.tab();
+    await user.keyboard(' ');
+    expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+    expect(within(rows[0]).getByRole('checkbox')).toBeChecked();
+
+    await user.click(within(rows[2]).getByRole('checkbox'));
+    expect(rows[2]).toHaveAttribute('aria-selected', 'true');
+    expect(rows[1]).toHaveAttribute('aria-selected', 'false');
+
+    const selectAll = screen.getByRole('checkbox', { name: /select all/i });
+    await user.click(selectAll);
+    expect(onChange).toHaveBeenLastCalledWith('all');
+    for (const row of rows) expect(row).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('has no checkbox column without multiple selection', () => {
+    render(<Harness />);
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('marks lit rows with data-lit', () => {
+    render(<Harness isRowLit={(d) => Boolean(d.isNew)} />);
+    const bravo = screen.getByRole('rowheader', { name: /Bravo\.pdf/ }).closest('[role="row"]');
+    const alpha = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]');
+    expect(bravo).toHaveAttribute('data-lit', 'true');
+    expect(alpha).not.toHaveAttribute('data-lit');
+    // Rows carry their id for the reorder animation.
+    expect(bravo).toHaveAttribute('data-flip-key', 'b');
+  });
+
+  it('renders a detail line inside the first cell', () => {
+    render(<Harness renderRowDetail={(d) => d.snippet} />);
+    const cell = screen.getByRole('rowheader', { name: /Bravo\.pdf/ });
+    expect(within(cell).getByText('matched invoice total')).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'Alpha.pdf' })).toHaveTextContent('Alpha.pdf');
+  });
+
+  it('renders the empty state when there are no rows', () => {
+    render(
+      <Harness rows={[]} emptyState={<EmptyState title="No documents yet" description="Upload a file to start." />} />,
+    );
+    expect(screen.getByRole('heading', { name: 'No documents yet' })).toBeInTheDocument();
+  });
+
+  it('renders loading rows while the first page loads', () => {
+    render(<Harness rows={[]} isLoading emptyState={<p>No documents yet</p>} />);
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByText('No documents yet')).not.toBeInTheDocument();
+  });
+
+  it('keeps rows visible and marks itself busy when reloading', () => {
+    const { container } = render(<Harness isLoading />);
+    expect(screen.getByRole('rowheader', { name: 'Alpha.pdf' })).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('uses the data face for numeric columns', () => {
+    render(<Harness />);
+    const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
+    expect(within(alphaRow).getByRole('gridcell', { name: '3' })).toBeInTheDocument();
+  });
+});

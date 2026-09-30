@@ -1,0 +1,73 @@
+.dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--s-5);
+  z-index: 90;
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--s-4);
+  pointer-events: none;
+}
+
+/* --btn-bg / --btn-fg are the ink pair; they invert in dark mode. */
+.bar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  max-width: 100%;
+  padding: var(--s-2) var(--s-3);
+  color: var(--btn-fg);
+  background: var(--btn-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+  pointer-events: auto;
+}
+
+.count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  padding-right: var(--s-2);
+  white-space: nowrap;
+}
+
+.number {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.word {
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+
+.actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.bar .clear {
+  color: var(--btn-fg);
+  background: transparent;
+  border-color: transparent;
+}
+
+.bar .clear[data-hovered] {
+  color: var(--btn-fg);
+  background: color-mix(in srgb, var(--btn-fg) 14%, transparent);
+}
+
+/* The focus token matches the ink bar in light mode, so rings on the bar use the bar's text colour. */
+.dock .bar [data-focus-visible] {
+  outline-color: var(--btn-fg);
+}

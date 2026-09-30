@@ -1,0 +1,132 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh var(--s-4) var(--s-4);
+  background: color-mix(in srgb, var(--signal-ink) 20%, transparent);
+}
+
+.modal {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 600px;
+  max-height: 70vh;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+}
+
+.dialog,
+.frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  outline: none;
+}
+
+.search {
+  padding: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.menu {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--s-1) 0 var(--s-2);
+  outline: none;
+}
+
+.section + .section {
+  border-top: 1px solid var(--line);
+}
+
+.heading {
+  padding: var(--s-2) var(--s-4) var(--s-1);
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-meta);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 40px;
+  padding: var(--s-1) var(--s-4);
+  cursor: pointer;
+  outline: none;
+  border-left: 3px solid transparent;
+}
+
+.item[data-focused],
+.item[data-hovered] {
+  background: var(--surface-2);
+}
+
+.item[data-focused] {
+  border-left-color: var(--line-strong);
+}
+
+.item[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--fg-2);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title,
+.subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  font-size: var(--fs-md);
+}
+
+.subtitle {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--s-5) var(--s-4);
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+  text-align: center;
+}

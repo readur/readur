@@ -1,0 +1,32 @@
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-width: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.glyph {
+  flex: none;
+  font-family: var(--font-data);
+  line-height: 1;
+}
+
+.word {
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sm { font-size: var(--fs-xs); }
+.md { font-size: var(--fs-sm); }
+
+.neutral { color: var(--fg-2); }
+.ok { color: var(--ok); }
+.danger { color: var(--danger); }

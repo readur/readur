@@ -1,0 +1,226 @@
+.container {
+  --row-height: 40px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.container[data-density='compact'] {
+  --row-height: 32px;
+}
+
+.container[aria-busy='true'] .body {
+  opacity: 0.6;
+}
+
+.table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg);
+  outline: none;
+}
+
+.table[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Head */
+
+.column {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 32px;
+  padding: 0 var(--s-3);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-meta);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-strong);
+  outline: none;
+}
+
+.column[data-allows-sorting] {
+  cursor: pointer;
+}
+
+.column[data-allows-sorting][data-hovered] {
+  color: var(--fg);
+}
+
+.column[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.columnInner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  max-width: 100%;
+}
+
+.columnLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sortMark {
+  flex: none;
+  font-size: 9px;
+  visibility: hidden;
+}
+
+.column[data-hovered] .sortMark,
+.sorted {
+  visibility: visible;
+}
+
+.sorted {
+  color: var(--fg);
+}
+
+.selectColumn,
+.selectCell {
+  width: 40px;
+  padding: 0 var(--s-2) 0 var(--s-3);
+}
+
+/* Rows */
+
+.row {
+  outline: none;
+  cursor: default;
+}
+
+.actionable .row {
+  cursor: pointer;
+}
+
+.row[data-hovered] > .cell {
+  background: var(--surface-2);
+}
+
+.row[data-selected] > .cell {
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 var(--line-strong), inset 0 -1px 0 var(--line-strong);
+}
+
+.row[data-focus-visible] > .cell {
+  box-shadow: inset 0 2px 0 var(--focus), inset 0 -2px 0 var(--focus);
+}
+
+.row[data-focus-visible] > .cell:first-child {
+  box-shadow: inset 2px 2px 0 var(--focus), inset 0 -2px 0 var(--focus);
+}
+
+.row[data-focus-visible] > .cell:last-child {
+  box-shadow: inset -2px 2px 0 var(--focus), inset 0 -2px 0 var(--focus);
+}
+
+.cell {
+  height: var(--row-height);
+  padding: 0 var(--s-3);
+  vertical-align: middle;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  outline: none;
+}
+
+.cell:first-child {
+  position: relative;
+}
+
+.row:last-child > .cell {
+  border-bottom: 0;
+}
+
+.cell[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* A changed row keeps its edge bar regardless of motion settings. */
+.lit > .cell:first-child::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--signal);
+  pointer-events: none;
+}
+
+.cellValue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hasDetail > .cell {
+  padding-top: var(--s-2);
+  padding-bottom: var(--s-2);
+  vertical-align: top;
+}
+
+.detail {
+  margin-top: var(--s-1);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--fg-2);
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.data {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+}
+
+.align-start { text-align: left; }
+.align-center { text-align: center; }
+.align-end { text-align: right; }
+
+/* Empty and loading */
+
+.empty {
+  padding: var(--s-6) var(--s-4);
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+}
+
+.loadingRow {
+  display: flex;
+  align-items: center;
+  height: var(--row-height);
+  padding: 0 var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.loadingRow:last-child {
+  border-bottom: 0;
+}
