@@ -293,11 +293,18 @@ describe('BoardTable on a narrow screen', () => {
     expect(headers).toContain('Pages');
     expect(headers).not.toContain('Type');
     expect(screen.getByRole('rowheader', { name: 'Alpha.pdf' })).toBeInTheDocument();
-    // Select column (40) + the flexible name column (160) + the 90px column
-    expect(screen.getByRole('grid')).toHaveStyle({ minWidth: '290px' });
   });
 
-  it('folds the dropped columns into the row detail, visible and announced', () => {
+  it('stacks rows instead of widening the table', () => {
+    setNarrow(true);
+    const { container } = render(<Harness columns={PRIORITY_COLUMNS} selectionMode="multiple" />);
+    expect(container.firstElementChild).toHaveAttribute('data-layout', 'stacked');
+    expect(container.firstElementChild).toHaveAttribute('data-selectable', 'true');
+    // No minimum width: nothing can push the page sideways.
+    expect(screen.getByRole('grid').style.minWidth).toBe('');
+  });
+
+  it('folds the dropped columns into one unlabelled meta line, announced with labels', () => {
     setNarrow(true);
     const columns: BoardColumn<Doc>[] = [
       { id: 'name', label: 'Name', render: (d) => d.name },
@@ -306,31 +313,63 @@ describe('BoardTable on a narrow screen', () => {
     ];
     render(<Harness columns={columns} renderRowDetail={(d) => d.snippet} />);
     const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
-    expect(within(alphaRow).getByText('Pages')).toBeVisible();
-    expect(within(alphaRow).getByText('PDF')).toBeVisible();
+    const meta = alphaRow.querySelector('[class*="meta"]') as HTMLElement;
+    expect(meta).toHaveTextContent('3 · PDF');
+    expect(meta).not.toHaveTextContent('Pages');
     expect(alphaRow).toHaveAccessibleDescription('Pages: 3; Type: PDF;');
-    // The consumer's own detail comes first; the folded fields follow it.
+    // The consumer's own detail is announced first; the folded fields follow it.
     const bravoRow = screen.getByRole('rowheader', { name: 'Bravo.pdf' }).closest('[role="row"]') as HTMLElement;
     expect(bravoRow).toHaveAccessibleDescription('matched invoice total Pages: 12; Type: PDF;');
     // Folded values stay out of the row header's name.
     expect(screen.getByRole('rowheader', { name: 'Alpha.pdf' })).toBeInTheDocument();
   });
 
-  it('counts pixel widths given as strings and ignores relative ones', () => {
+  it('leads the second line with the tag and marks, and gives long text its own line', () => {
     setNarrow(true);
     const columns: BoardColumn<Doc>[] = [
       { id: 'name', label: 'Name', render: (d) => d.name },
-      { id: 'type', label: 'Type', width: '120px', render: () => 'PDF' },
-      { id: 'pages', label: 'Pages', width: '20%', render: (d) => d.pages },
+      { id: 'state', label: 'State', width: 100, hideOnNarrow: true, fold: 'mark', render: () => 'FAILED' },
+      { id: 'reason', label: 'Reason', hideOnNarrow: true, render: (d) => `Reason for ${d.name}` },
+      { id: 'pages', label: 'Pages', width: 90, hideOnNarrow: true, render: (d) => d.pages, foldValue: (d) => (d.pages > 5 ? `${d.pages} p` : null) },
+    ];
+    render(<Harness columns={columns} renderRowTag={(d) => (d.isNew ? 'NEW' : null)} />);
+    const bravoRow = screen.getByRole('rowheader', { name: 'Bravo.pdf' }).closest('[role="row"]') as HTMLElement;
+    const line = bravoRow.querySelector('[class*="foldLine"]') as HTMLElement;
+    expect(line).toHaveTextContent(/^NEWFAILED12 p$/);
+    // A column without a width is long text: its own clamped line, not part of the meta.
+    const text = bravoRow.querySelector('[class*="foldText"]') as HTMLElement;
+    expect(text).toHaveTextContent('Reason for Bravo.pdf');
+    expect(line).not.toHaveTextContent('Reason');
+    // foldValue returning null leaves the value off the line but not out of the description.
+    const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
+    expect(alphaRow.querySelector('[class*="foldLine"]')).toHaveTextContent(/^FAILED$/);
+    expect(alphaRow).toHaveAccessibleDescription('State: FAILED; Reason: Reason for Alpha.pdf; Pages: 3;');
+  });
+
+  it('orders the meta line by foldOrder but announces fields in column order', () => {
+    setNarrow(true);
+    const columns: BoardColumn<Doc>[] = [
+      { id: 'name', label: 'Name', render: (d) => d.name },
+      { id: 'source', label: 'Source', width: 90, hideOnNarrow: true, foldOrder: 10, render: () => 'Upload' },
+      { id: 'pages', label: 'Pages', width: 90, hideOnNarrow: true, render: (d) => d.pages },
     ];
     render(<Harness columns={columns} />);
-    expect(screen.getByRole('grid')).toHaveStyle({ minWidth: '280px' });
+    const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
+    expect(alphaRow.querySelector('[class*="foldLine"]')).toHaveTextContent('3 · Upload');
+    expect(alphaRow).toHaveAccessibleDescription('Source: Upload; Pages: 3;');
+  });
+
+  it('shows the row tag only on a narrow screen', () => {
+    setNarrow(false);
+    render(<Harness renderRowTag={() => 'NEW'} />);
+    expect(screen.queryByText('NEW')).not.toBeInTheDocument();
   });
 
   it('keeps every column and sets no minimum width on a wide screen', () => {
     setNarrow(false);
-    render(<Harness columns={PRIORITY_COLUMNS} />);
+    const { container } = render(<Harness columns={PRIORITY_COLUMNS} />);
     expect(screen.getByRole('columnheader', { name: 'Type' })).toBeInTheDocument();
     expect(screen.getByRole('grid').style.minWidth).toBe('');
+    expect(container.firstElementChild).not.toHaveAttribute('data-layout');
   });
 });

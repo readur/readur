@@ -47,7 +47,7 @@ describe('Library', () => {
       renderLibrary();
       await loaded();
       const [first, second, third] = bodyRows();
-      expect(within(first).getByText('PDF')).toBeInTheDocument();
+      expect(within(first).getByRole('gridcell', { name: 'PDF' })).toBeInTheDocument();
       expect(within(first).getByText('INDEXED')).toBeInTheDocument();
       expect(within(first).getByText('Upload')).toBeInTheDocument();
       expect(within(first).getByText('Tax')).toBeInTheDocument();
@@ -57,7 +57,7 @@ describe('Library', () => {
       expect(await within(second).findByText('Office NAS')).toBeInTheDocument();
       expect(within(second).getByText('FAILED')).toBeInTheDocument();
       expect(within(third).getByText('OCR 3/12')).toBeInTheDocument();
-      expect(within(third).getByText('PNG')).toBeInTheDocument();
+      expect(within(third).getByRole('gridcell', { name: 'PNG' })).toBeInTheDocument();
     });
 
     test('gives the added date in full next to the relative time', async () => {

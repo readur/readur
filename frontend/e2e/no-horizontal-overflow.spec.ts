@@ -51,10 +51,35 @@ test.describe('No horizontal overflow at 390px', () => {
     await visit(page, '/documents', async () => {
       await expect(helpers.documentRows()).toHaveCount(2, { timeout: TIMEOUTS.medium });
     });
-    // Columns dropped on a phone fold into the row: still visible, and announced with the row.
+    // Columns dropped on a phone fold into the row: a visible mono meta line of values
+    // (PNG · 2.0 KB · 3 min ago · Upload), announced with their labels as the row's description.
     const row = helpers.documentRows().filter({ hasText: LONG_NAME });
-    await expect(row.getByText('Size:', { exact: true })).toBeVisible();
-    await expect(row).toHaveAccessibleDescription(/Type ?: PNG ?; Source ?: .+; Labels ?: .*; Size ?: .+; Added ?: .+;/);
+    await expect(row.getByText(/^PNG$/).filter({ visible: true })).toBeVisible();
+    await expect(row.getByText(/^\d+(\.\d+)? (B|KB|MB)$/).filter({ visible: true })).toBeVisible();
+    await expect(row).toHaveAccessibleDescription(/Type ?: PNG ?; Status ?: .+; Source ?: .+; Labels ?: .*; Size ?: .+; Added ?: .+;/);
+
+    // The stacked row stays compact, and the name gets the width: its first line shows a real
+    // stretch of the filename, not "t." or "tes…".
+    const rowBox = await row.boundingBox();
+    expect(rowBox!.height, 'Library row height at 390px').toBeLessThanOrEqual(80);
+    const firstLineChars = await row.getByText(LONG_NAME, { exact: true }).evaluate((el) => {
+      const text = el.firstChild;
+      if (!text || text.nodeType !== Node.TEXT_NODE) return 0;
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 1);
+      const top = range.getBoundingClientRect().top;
+      let count = 0;
+      for (let i = 0; i < (text.textContent ?? '').length; i += 1) {
+        range.setStart(text, i);
+        range.setEnd(text, i + 1);
+        const rect = range.getBoundingClientRect();
+        if (Math.abs(rect.top - top) > 2 || rect.width === 0) break;
+        count += 1;
+      }
+      return count;
+    });
+    expect(firstLineChars, 'characters on the first line of the name').toBeGreaterThanOrEqual(12);
 
     await visit(page, `/documents/${readable}`);
 

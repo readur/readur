@@ -18,10 +18,27 @@ export interface BoardColumn<T> {
   /** Marks the column that names the row for assistive tech. Defaults to the first column. */
   isRowHeader?: boolean;
   /**
-   * Low-priority column: dropped below 720px so the table fits a phone. The row-header column
-   * is always kept. Whatever still does not fit scrolls inside the table, never the page.
+   * Low-priority column: below 720px it leaves the column heads and folds into the row (see
+   * `fold`). The row-header column is always kept; other kept columns flow on their own line
+   * under it, so a phone never scrolls sideways.
    */
   hideOnNarrow?: boolean;
+  /**
+   * How a `hideOnNarrow` column shows inside the row on a phone:
+   * - `meta` joins the row's mono meta line (`DOC · 2.0 KB · 3 min ago`), unlabelled;
+   * - `mark` leads that line, unlabelled and unseparated (status marks);
+   * - `text` gets its own line clamped to two lines (a failure reason, a description).
+   * Defaults to `text` for columns without a width, `meta` otherwise. Every folded column is
+   * still announced with its label as part of the row's accessible description.
+   */
+  fold?: 'meta' | 'mark' | 'text';
+  /** Short value for the folded line on a phone; return null to leave it out. Defaults to `render`. */
+  foldValue?: (row: T) => ReactNode;
+  /**
+   * Position on the folded meta line (lower first; default: column order). The line ends in an
+   * ellipsis when it is too long, so put the values that matter most first.
+   */
+  foldOrder?: number;
   render: (row: T) => ReactNode;
 }
 
@@ -61,6 +78,12 @@ export interface BoardTableProps<T> {
    * accessible description (`aria-describedby`).
    */
   renderRowDetail?: (row: T) => ReactNode;
+  /**
+   * The row's NEW / CHANGED tag, for phones: shown at the start of the row's second line, ahead of
+   * the folded status and meta. It is visual only there (aria-hidden), so keep the tag in a cell
+   * for wide screens and assistive tech, and hide it visually on phones.
+   */
+  renderRowTag?: (row: T) => ReactNode;
   density?: 'comfortable' | 'compact';
   /** With no rows, shows skeleton rows. With rows, keeps them visible and marks the table busy. */
   isLoading?: boolean;

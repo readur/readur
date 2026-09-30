@@ -23,6 +23,11 @@
   --row-height: 32px;
 }
 
+/* A compact row that holds controls grows just enough to keep them inset from its hairlines. */
+.container[data-density='compact']:not([data-layout='stacked']) .row:has(.cell button:not([slot])) > .cell {
+  height: 36px;
+}
+
 .container[aria-busy='true'] .body {
   opacity: 0.6;
 }
@@ -111,6 +116,16 @@
 .selectCell {
   width: 40px;
   padding: 0 var(--s-2) 0 var(--s-3);
+}
+
+/*
+ * Controls inside a row are compact and inset from the hairlines: 28px tall in a 40px (or 32px
+ * compact) row, never the full row height.
+ */
+.cell button:not([slot]) {
+  height: 28px;
+  min-height: 0;
+  padding-block: 0;
 }
 
 /* Rows */
@@ -208,39 +223,50 @@
   -webkit-box-orient: vertical;
 }
 
-/* Columns dropped on a phone, folded under the first cell as label/value pairs. */
-.fields {
+/*
+ * Columns folded into a phone row: the tag and marks, then one mono meta line, then any long
+ * text. Values only; the labelled version is the row's (visually hidden) description.
+ */
+.foldLine {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-1) var(--s-3);
-}
-
-.detailText + .fields {
-  margin-top: var(--s-1);
-}
-
-.field {
-  display: inline-flex;
   align-items: baseline;
-  gap: var(--s-1);
+  gap: var(--s-2);
   min-width: 0;
-  max-width: 100%;
 }
 
-.fieldLabel {
+.foldMark {
+  display: inline-flex;
   flex: none;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
+  align-items: center;
+}
+
+.meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
   font-size: var(--fs-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
   color: var(--fg-meta);
 }
 
-.fieldValue {
-  min-width: 0;
+.metaSep {
+  color: var(--fg-meta);
+}
+
+.foldText {
+  margin-top: var(--s-1);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow-wrap: anywhere;
+}
+
+.foldLine + .detailText {
+  margin-top: var(--s-1);
 }
 
 .data {
@@ -274,4 +300,145 @@
 
 .loadingRow:last-child {
   border-bottom: 0;
+}
+
+/*
+ * Phones: each row stacks instead of squeezing columns. Line 1 is the checkbox and the name at
+ * the full remaining width (two lines at most); line 2 is the tag, status and mono meta; long
+ * text and any kept columns (actions) follow on their own lines. The table never scrolls sideways.
+ */
+.container[data-layout='stacked'] {
+  overflow-x: visible;
+}
+
+.container[data-layout='stacked'] .table,
+.container[data-layout='stacked'] .body,
+.container[data-layout='stacked'] .head {
+  display: block;
+  width: 100%;
+}
+
+.container[data-layout='stacked'] .head > * {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--surface-2);
+}
+
+.container[data-layout='stacked'] .column {
+  position: static;
+  display: flex;
+  align-items: center;
+  border-bottom: 0;
+}
+
+.container[data-layout='stacked'] .headerColumn {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto !important;
+}
+
+/* Heads of kept columns other than the name stay in the grid for assistive tech only. */
+.container[data-layout='stacked'] .column:not(.headerColumn, .selectColumn) {
+  position: absolute;
+  width: 1px !important;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.container[data-layout='stacked'] .row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: var(--s-2) 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.container[data-layout='stacked'][data-selectable='true'] .row {
+  padding-left: 40px;
+}
+
+.container[data-layout='stacked'] .row:last-child {
+  border-bottom: 0;
+}
+
+.container[data-layout='stacked'] .row > .cell {
+  box-sizing: border-box;
+  display: block;
+  flex: 0 1 auto;
+  max-width: 100%;
+  height: auto;
+  min-width: 0;
+  padding: var(--s-1) var(--s-3) 0;
+  text-align: left;
+  background: transparent;
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+.container[data-layout='stacked'] .row > .headerCell {
+  flex: 1 0 100%;
+  padding-top: 0;
+}
+
+/* The last kept column (usually the actions) sits at the end of its own line. */
+.container[data-layout='stacked'] .row > .cell:not(.headerCell, .selectCell):last-child {
+  margin-left: auto;
+}
+
+.container[data-layout='stacked'] .row > .selectCell {
+  position: absolute;
+  top: var(--s-2);
+  left: 0;
+  width: 40px;
+  padding: 0 0 0 var(--s-3);
+}
+
+.container[data-layout='stacked'] .headerCell > .cellValue {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 20px;
+}
+
+.container[data-layout='stacked'] .headerCell > .detail {
+  margin-top: 2px;
+}
+
+.container[data-layout='stacked'] .row[data-hovered],
+.container[data-layout='stacked'] .row[data-selected] {
+  background: var(--surface-2);
+}
+
+.container[data-layout='stacked'] .row[data-selected] {
+  box-shadow: inset 0 1px 0 var(--line-strong), inset 0 -1px 0 var(--line-strong);
+}
+
+.container[data-layout='stacked'] .row[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.container[data-layout='stacked'] .changed > .cell:first-child::before {
+  content: none;
+}
+
+.container[data-layout='stacked'] .changed::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--signal);
+  pointer-events: none;
 }

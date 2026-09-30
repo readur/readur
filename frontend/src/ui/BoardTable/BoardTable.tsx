@@ -1,4 +1,4 @@
-import { Fragment, useId, useMemo, useRef, type CSSProperties } from 'react';
+import { Fragment, useId, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import {
   Cell,
   Column,
@@ -21,13 +21,14 @@ import styles from './BoardTable.module.css';
 const SELECT_COLUMN = '__select';
 
 /**
- * React Aria's Row does not forward aria-describedby, so a ref links each row to its detail line.
- * The detail is aria-hidden inside the cell, which keeps it out of the row-header's name.
+ * React Aria's Row does not forward aria-describedby, so a ref links each row to its detail text.
+ * The detail is aria-hidden inside the cell, which keeps it out of the row-header's name; only
+ * the parts meant to be announced are referenced.
  */
-function describedBy(detailId: string | undefined) {
+function describedBy(ids: string[]) {
   return (el: HTMLElement | null) => {
     if (!el) return;
-    if (detailId) el.setAttribute('aria-describedby', detailId);
+    if (ids.length > 0) el.setAttribute('aria-describedby', ids.join(' '));
     else el.removeAttribute('aria-describedby');
   };
 }
@@ -41,55 +42,84 @@ function isData<T>(col: BoardColumn<T>) {
   return col.mono || col.align === 'end';
 }
 
-/** Columns without a width never shrink below this, so a crowded table scrolls instead. */
-const MIN_FLEX_COLUMN = 160;
-const SELECT_WIDTH = 40;
-
-/**
- * Fixed layout gives every width-less column whatever is left, which can be nothing. On a phone a
- * minimum table width keeps those columns readable; the container scrolls when the table is wider.
- */
-function minTableWidth<T>(columns: BoardColumn<T>[], multiple: boolean): number {
-  let total = multiple ? SELECT_WIDTH : 0;
-  for (const col of columns) {
-    if (col.width === undefined) total += MIN_FLEX_COLUMN;
-    else if (typeof col.width === 'number') total += col.width;
-    else if (col.width.endsWith('px')) total += Number.parseFloat(col.width) || 0;
-  }
-  return total;
-}
-
 function columnName<T>(col: BoardColumn<T>): string | undefined {
   return col.textValue ?? (typeof col.label === 'string' ? col.label : undefined);
 }
 
+function foldKind<T>(col: BoardColumn<T>): 'meta' | 'mark' | 'text' {
+  return col.fold ?? (col.width === undefined ? 'text' : 'meta');
+}
+
+function isShown(value: ReactNode) {
+  return value !== null && value !== undefined && value !== false && value !== '';
+}
+
 /**
- * The columns dropped on a phone, as label/value pairs under the row's first cell. They are part
- * of the row's accessible description, so screen readers still hear them.
+ * The columns folded into a phone row. Visually: an optional tag and the marks, then one mono meta
+ * line joined with middots, then any long text clamped to two lines. None of that is announced;
+ * a visually hidden "Label: value;" list (`descId`) is the row's description instead.
  */
-function FoldedFields<T>({ columns, row }: { columns: BoardColumn<T>[]; row: T }) {
+function FoldedFields<T>({
+  columns,
+  row,
+  tag,
+  descId,
+}: {
+  columns: BoardColumn<T>[];
+  row: T;
+  tag: ReactNode;
+  descId: string;
+}) {
+  const marks: ReactNode[] = [];
+  const metas: ReactNode[] = [];
+  const texts: ReactNode[] = [];
+  const ordered = columns
+    .map((col, index) => ({ col, order: col.foldOrder ?? index }))
+    .sort((a, b) => a.order - b.order)
+    .map((entry) => entry.col);
+  for (const col of ordered) {
+    const value = col.foldValue ? col.foldValue(row) : col.render(row);
+    if (!isShown(value)) continue;
+    const kind = foldKind(col);
+    if (kind === 'mark') marks.push(<span key={col.id} className={styles.foldMark}>{value}</span>);
+    else if (kind === 'text') texts.push(<div key={col.id} className={styles.foldText}>{value}</div>);
+    else metas.push(<span key={col.id} className={styles.metaItem}>{value}</span>);
+  }
+  const hasLine = isShown(tag) || marks.length > 0 || metas.length > 0;
   return (
-    <span className={styles.fields}>
-      {columns.map((col) => {
-        const name = columnName(col);
-        // The whitespace text nodes separate the pairs in the announced description; the flex
-        // container does not render them.
-        return (
-          <Fragment key={col.id}>
-            <span className={styles.field}>
-              {name ? (
-                <span className={styles.fieldLabel}>
-                  {name}
-                  <span className="visually-hidden">:</span>
-                </span>
-              ) : null}{' '}
-              <span className={cx(styles.fieldValue, isData(col) && styles.data)}>{col.render(row)}</span>
-              <span className="visually-hidden">;</span>
-            </span>{' '}
-          </Fragment>
-        );
-      })}
-    </span>
+    <>
+      {hasLine ? (
+        <div className={styles.foldLine}>
+          {isShown(tag) ? <span className={styles.foldMark}>{tag}</span> : null}
+          {marks}
+          {metas.length > 0 ? (
+            <span className={styles.meta}>
+              {metas.map((m, i) => (
+                <Fragment key={i}>
+                  {i > 0 ? <span className={styles.metaSep}> · </span> : null}
+                  {m}
+                </Fragment>
+              ))}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {texts}
+      {columns.length > 0 ? (
+        <span id={descId} className="visually-hidden">
+          {columns.map((col) => {
+            const name = columnName(col);
+            // The whitespace text nodes separate the pairs in the announced description.
+            return (
+              <Fragment key={col.id}>
+                {name ? `${name}: ` : null}
+                {col.render(row)};{' '}
+              </Fragment>
+            );
+          })}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -113,6 +143,7 @@ export function BoardTable<T>({
   onRowAction,
   isRowLit,
   renderRowDetail,
+  renderRowTag,
   density = 'comfortable',
   isLoading = false,
   loadingRowCount = 8,
@@ -129,6 +160,7 @@ export function BoardTable<T>({
   const detailPrefix = useId();
 
   const multiple = selectionMode === 'multiple';
+  // On a phone every row stacks: the name gets the full width and the rest folds under it.
   const narrow = useIsNarrow();
   const headerId = (allColumns.find((c) => c.isRowHeader) ?? allColumns[0])?.id;
   const columns = useMemo(
@@ -152,6 +184,8 @@ export function BoardTable<T>({
       ref={containerRef}
       className={cx(styles.container, className)}
       data-density={density}
+      data-layout={narrow ? 'stacked' : undefined}
+      data-selectable={multiple ? 'true' : undefined}
       aria-busy={isLoading || undefined}
       {...pressHandlers}
     >
@@ -159,7 +193,6 @@ export function BoardTable<T>({
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
         className={cx(styles.table, onRowAction && styles.actionable)}
-        style={narrow ? { minWidth: `${minTableWidth(columns, multiple)}px` } : undefined}
         selectionMode={multiple ? 'multiple' : 'none'}
         selectionBehavior="toggle"
         selectedKeys={selectedKeys}
@@ -180,7 +213,7 @@ export function BoardTable<T>({
               isRowHeader={i === headerIndex}
               allowsSorting={Boolean(col.sortable)}
               textValue={columnName(col)}
-              className={cx(styles.column, styles[`align-${col.align ?? 'start'}`])}
+              className={cx(styles.column, styles[`align-${col.align ?? 'start'}`], i === headerIndex && styles.headerColumn)}
               style={widthStyle(col.width)}
             >
               {({ allowsSorting, sortDirection }) => (
@@ -212,14 +245,23 @@ export function BoardTable<T>({
                 const id = ids[rowIndex];
                 const changed = isRowLit?.(row) ?? false;
                 const custom = renderRowDetail?.(row);
+                const hasCustom = isShown(custom);
+                const tag = narrow ? renderRowTag?.(row) : null;
+                const hasFold = folded.length > 0 || isShown(tag);
+                const customId = hasCustom ? `${detailPrefix}-detail-${id}` : undefined;
+                const descId = folded.length > 0 ? `${detailPrefix}-fields-${id}` : undefined;
                 const detail =
-                  custom || folded.length > 0 ? (
+                  hasCustom || hasFold ? (
                     <>
-                      {custom ? <div className={styles.detailText}>{custom}</div> : null}
-                      {folded.length > 0 ? <FoldedFields columns={folded} row={row} /> : null}
+                      {hasFold ? <FoldedFields columns={folded} row={row} tag={tag} descId={descId ?? ''} /> : null}
+                      {hasCustom ? (
+                        <div id={customId} className={styles.detailText}>
+                          {custom}
+                        </div>
+                      ) : null}
                     </>
                   ) : null;
-                const detailId = detail ? `${detailPrefix}-detail-${id}` : undefined;
+                const described = [customId, descId].filter((x): x is string => Boolean(x));
                 return (
                   <Row
                     key={id}
@@ -227,7 +269,7 @@ export function BoardTable<T>({
                     className={cx(styles.row, changed && styles.changed, detail ? styles.hasDetail : undefined)}
                     data-changed={changed ? 'true' : undefined}
                     data-flip-key={id}
-                    ref={describedBy(detailId)}
+                    ref={describedBy(described)}
                   >
                     {multiple ? (
                       <Cell className={cx(styles.cell, styles.selectCell)} {...{ [SELECT_CELL_ATTR]: 'true' }}>
@@ -237,11 +279,16 @@ export function BoardTable<T>({
                     {columns.map((col, i) => (
                       <Cell
                         key={col.id}
-                        className={cx(styles.cell, styles[`align-${col.align ?? 'start'}`], isData(col) && styles.data)}
+                        className={cx(
+                          styles.cell,
+                          styles[`align-${col.align ?? 'start'}`],
+                          isData(col) && styles.data,
+                          i === headerIndex && styles.headerCell,
+                        )}
                       >
                         <div className={styles.cellValue}>{col.render(row)}</div>
-                        {i === 0 && detail ? (
-                          <div id={detailId} className={styles.detail} aria-hidden="true">
+                        {i === headerIndex && detail ? (
+                          <div className={styles.detail} aria-hidden="true">
                             {detail}
                           </div>
                         ) : null}
