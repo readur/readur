@@ -91,25 +91,52 @@ pub fn check_url_without_dns(url: &url::Url) -> Result<(), OutboundUrlError> {
 /// DNS resolver for clients that connect to user-configured servers. Blocked
 /// addresses are dropped from every lookup, so a host name that later
 /// resolves to a refused address cannot be reached even though it passed
-/// validation when the configuration was saved.
+/// validation when the configuration was saved. Implemented for both the
+/// reqwest client (WebDAV) and the AWS SDK HTTP client (S3).
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FilteringResolver;
+
+/// Resolve `host` and keep only permitted addresses; fails when none remain.
+async fn lookup_permitted(host: &str) -> std::io::Result<Vec<std::net::SocketAddr>> {
+    permitted_addrs(tokio::net::lookup_host((host, 0)).await?)
+}
+
+fn permitted_addrs(
+    resolved: impl IntoIterator<Item = std::net::SocketAddr>,
+) -> std::io::Result<Vec<std::net::SocketAddr>> {
+    let addrs: Vec<std::net::SocketAddr> = resolved
+        .into_iter()
+        .filter(|addr| !is_blocked_ip(&addr.ip()))
+        .collect();
+    if addrs.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            OutboundUrlError::BlockedDestination.to_string(),
+        ));
+    }
+    Ok(addrs)
+}
 
 impl reqwest::dns::Resolve for FilteringResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let host = name.as_str().to_string();
         Box::pin(async move {
-            let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host.as_str(), 0))
-                .await?
-                .filter(|addr| !is_blocked_ip(&addr.ip()))
-                .collect();
-            if addrs.is_empty() {
-                let err: Box<dyn std::error::Error + Send + Sync> =
-                    Box::new(std::io::Error::new(std::io::ErrorKind::PermissionDenied, OutboundUrlError::BlockedDestination.to_string()));
-                return Err(err);
-            }
+            let addrs = lookup_permitted(&host).await?;
             let iter: reqwest::dns::Addrs = Box::new(addrs.into_iter());
             Ok(iter)
+        })
+    }
+}
+
+#[cfg(feature = "s3")]
+impl aws_smithy_runtime_api::client::dns::ResolveDns for FilteringResolver {
+    fn resolve_dns<'a>(&'a self, name: &'a str) -> aws_smithy_runtime_api::client::dns::DnsFuture<'a> {
+        use aws_smithy_runtime_api::client::dns::{DnsFuture, ResolveDnsError};
+        DnsFuture::new(async move {
+            lookup_permitted(name)
+                .await
+                .map(|addrs| addrs.into_iter().map(|addr| addr.ip()).collect())
+                .map_err(ResolveDnsError::new)
         })
     }
 }
@@ -241,6 +268,25 @@ mod tests {
         let addrs: Vec<_> = FilteringResolver.resolve(name).await.unwrap().collect();
         assert!(!addrs.is_empty());
         assert!(addrs.iter().all(|a| !is_blocked_ip(&a.ip())));
+    }
+
+    #[test]
+    fn resolved_addresses_are_filtered() {
+        let sa = |s: &str| s.parse::<std::net::SocketAddr>().unwrap();
+        let kept = permitted_addrs([sa("169.254.169.254:0"), sa("192.168.1.10:0")]).unwrap();
+        assert_eq!(kept, vec![sa("192.168.1.10:0")]);
+        let err = permitted_addrs([sa("169.254.169.254:0"), sa("[fe80::1]:0")]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+    }
+
+    #[cfg(feature = "s3")]
+    #[tokio::test]
+    async fn sdk_resolver_keeps_permitted_addresses() {
+        use aws_smithy_runtime_api::client::dns::ResolveDns;
+        let addrs = FilteringResolver.resolve_dns("localhost").await.unwrap();
+        assert!(!addrs.is_empty());
+        assert!(addrs.iter().all(|ip| !is_blocked_ip(ip)));
+        assert!(FilteringResolver.resolve_dns("does-not-exist.invalid").await.is_err());
     }
 
     #[tokio::test]

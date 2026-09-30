@@ -141,7 +141,6 @@ BASELINE: dict[str, int] = {
     "frontend/src/services/api.ts": 1226,
     "src/scheduling/source_scheduler.rs": 1153,
     "src/config.rs": 1068,
-    "src/services/s3_service.rs": 1103,
     "frontend/src/pages/DocumentsPage.tsx": 1112,
     "frontend/src/pages/DebugPage.tsx": 1078,
     "tests/integration_ocrmypdf_strategy_validation_tests.rs": 1037,

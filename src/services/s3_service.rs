@@ -12,10 +12,6 @@ use tokio::io::AsyncReadExt;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
 #[cfg(feature = "s3")]
-use aws_credential_types::Credentials;
-#[cfg(feature = "s3")]
-use aws_types::region::Region as AwsRegion;
-#[cfg(feature = "s3")]
 use aws_sdk_s3::primitives::ByteStream;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::types::{CompletedPart, CompletedMultipartUpload};
@@ -56,31 +52,7 @@ impl S3Service {
             return Err(anyhow!("Secret access key is required"));
         }
 
-        // Create S3 client with custom configuration
-        let credentials = Credentials::new(
-            &config.access_key_id,
-            &config.secret_access_key,
-            None, // session token
-            None, // expiry
-            "readur-s3-source"
-        );
-
-        let region = if config.region.is_empty() {
-            "us-east-1".to_string()
-        } else {
-            config.region.clone()
-        };
-
-        let mut builder = aws_sdk_s3::config::Builder::new()
-            .region(AwsRegion::new(region))
-            .credentials_provider(credentials)
-            .behavior_version_latest()
-            .force_path_style(Self::use_path_style(&config));
-        if let Some(endpoint_url) = config.endpoint_url.as_deref().filter(|u| !u.is_empty()) {
-            info!("Using custom S3 endpoint: {}", endpoint_url);
-            builder = builder.endpoint_url(endpoint_url);
-        }
-        let client = Client::from_conf(builder.build());
+        let client = crate::services::s3_client::build_client(&config).await;
 
         Ok(Self {
             #[cfg(feature = "s3")]
@@ -90,42 +62,10 @@ impl S3Service {
         }
     }
 
-    fn custom_endpoint(config: &S3SourceConfig) -> Option<&str> {
-        config.endpoint_url.as_deref().filter(|u| !u.trim().is_empty())
-    }
-
-    /// Addressing style: true = path-style (http://endpoint/bucket/key),
-    /// false = virtual-hosted (http://bucket.endpoint/key).
-    fn use_path_style(config: &S3SourceConfig) -> bool {
-        match config.force_path_style {
-            Some(style) => style,
-            // Custom endpoints are S3-compatible services (MinIO, RustFS, ...)
-            // which almost always require path-style. Only the configured
-            // host is contacted, so it is the only one that needs checking.
-            None => Self::custom_endpoint(config).is_some(),
-        }
-    }
-
-    /// URLs this configuration will connect to that must pass outbound
-    /// destination checks. Empty when the default AWS endpoints are used.
-    /// With virtual-hosted addressing on a custom endpoint the bucket name
-    /// becomes part of the host name, so that host is included as well.
+    /// URLs to pass through the outbound destination checks before
+    /// connecting; see [`crate::services::s3_client::outbound_urls`].
     pub fn outbound_urls(config: &S3SourceConfig) -> Vec<String> {
-        let Some(endpoint) = Self::custom_endpoint(config) else {
-            return Vec::new();
-        };
-        let mut urls = vec![endpoint.trim().to_string()];
-        if !Self::use_path_style(config) {
-            if let Ok(mut url) = url::Url::parse(endpoint.trim()) {
-                if let Some(url::Host::Domain(host)) = url.host() {
-                    let virtual_host = format!("{}.{}", config.bucket_name, host);
-                    if url.set_host(Some(&virtual_host)).is_ok() {
-                        urls.push(url.to_string());
-                    }
-                }
-            }
-        }
-        urls
+        crate::services::s3_client::outbound_urls(config)
     }
 
     /// Discover files in a specific S3 prefix (folder)
@@ -1043,61 +983,5 @@ mod tests {
         assert_eq!(S3Service::get_mime_type("jpg"), "image/jpeg");
         assert_eq!(S3Service::get_mime_type("txt"), "text/plain");
         assert_eq!(S3Service::get_mime_type("unknown"), "application/octet-stream");
-    }
-
-    fn base_config() -> S3SourceConfig {
-        S3SourceConfig {
-            bucket_name: "b".to_string(),
-            region: "us-east-1".to_string(),
-            access_key_id: "k".to_string(),
-            secret_access_key: "s".to_string(),
-            endpoint_url: None,
-            force_path_style: None,
-            prefix: None,
-            watch_folders: vec![],
-            file_extensions: vec![],
-            auto_sync: false,
-            sync_interval_minutes: 0,
-        }
-    }
-
-    #[test]
-    fn addressing_style_explicit_wins() {
-        let mut cfg = base_config();
-        cfg.force_path_style = Some(true);
-        assert!(S3Service::use_path_style(&cfg));
-        cfg.force_path_style = Some(false);
-        cfg.endpoint_url = Some("http://minio:9000".to_string());
-        assert!(!S3Service::use_path_style(&cfg));
-    }
-
-    #[test]
-    fn addressing_style_custom_endpoint_defaults_to_path_style() {
-        let mut cfg = base_config();
-        cfg.endpoint_url = Some("http://minio:9000".to_string());
-        assert!(S3Service::use_path_style(&cfg));
-    }
-
-    #[test]
-    fn addressing_style_aws_default_without_endpoint() {
-        let cfg = base_config();
-        assert!(!S3Service::use_path_style(&cfg));
-        let mut cfg2 = base_config();
-        cfg2.endpoint_url = Some("".to_string()); // empty = unset
-        assert!(!S3Service::use_path_style(&cfg2));
-    }
-
-    #[test]
-    fn outbound_urls_cover_contacted_hosts() {
-        let mut cfg = base_config();
-        assert!(S3Service::outbound_urls(&cfg).is_empty());
-
-        cfg.endpoint_url = Some("http://minio.lan:9000".to_string());
-        assert_eq!(S3Service::outbound_urls(&cfg), vec!["http://minio.lan:9000".to_string()]);
-
-        cfg.force_path_style = Some(false);
-        let urls = S3Service::outbound_urls(&cfg);
-        assert_eq!(urls.len(), 2);
-        assert_eq!(urls[1], format!("http://{}.minio.lan:9000/", cfg.bucket_name));
     }
 }
