@@ -54,22 +54,22 @@ pub fn validate_jwt_secret(secret: &str) -> Result<()> {
 
 /// `JWT_SECRET`, validated. Empty when unset: the server then signs tokens
 /// with a key stored in the database (see `crate::jwt_signing_key`).
-pub(super) fn jwt_secret_from_env() -> Result<String> {
-    let secret = env::var("JWT_SECRET").unwrap_or_default();
-    if secret.trim().is_empty() {
+pub(super) fn read_jwt_setting() -> Result<String> {
+    let value = env::var("JWT_SECRET").unwrap_or_default();
+    if value.trim().is_empty() {
         println!("🔐 JWT_SECRET: not set (a signing key stored in the database is used)");
         return Ok(String::new());
     }
     let insecure_dev_mode = env_flag("READUR_INSECURE_DEV_MODE", false)?;
-    match validate_jwt_secret(&secret) {
+    match validate_jwt_secret(&value) {
         Ok(()) => {
             println!("✅ JWT_SECRET: set (loaded from env)");
-            Ok(secret)
+            Ok(value)
         }
         // Escape hatch for throwaway local/CI environments only.
         Err(e) if insecure_dev_mode => {
             println!("🚨 JWT_SECRET: {} (allowed because READUR_INSECURE_DEV_MODE=true — never use in production)", e);
-            Ok(secret)
+            Ok(value)
         }
         Err(e) => {
             println!("❌ JWT_SECRET: {}", e);

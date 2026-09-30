@@ -44,15 +44,15 @@ impl FromRequestParts<Arc<AppState>> for ClientIp {
 }
 
 /// Networks trusted as reverse proxies when `TRUSTED_PROXIES` is unset.
-pub const DEFAULT_TRUSTED_PROXIES: [&str; 6] =
+pub const DEFAULT_PROXY_RANGES: [&str; 6] =
     ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"];
 
 /// Parse the `TRUSTED_PROXIES` setting: `None` (unset) gives
-/// [`DEFAULT_TRUSTED_PROXIES`]; an empty value or `none` trusts nothing;
+/// [`DEFAULT_PROXY_RANGES`]; an empty value or `none` trusts nothing;
 /// otherwise a comma-separated list of IPs or CIDRs.
-pub fn parse_trusted_proxies(setting: Option<&str>) -> anyhow::Result<Vec<IpNet>> {
+pub fn parse_proxy_ranges(setting: Option<&str>) -> anyhow::Result<Vec<IpNet>> {
     let Some(setting) = setting else {
-        return Ok(DEFAULT_TRUSTED_PROXIES.iter().map(|net| net.parse().expect("valid default network")).collect());
+        return Ok(DEFAULT_PROXY_RANGES.iter().map(|net| net.parse().expect("valid default network")).collect());
     };
     if setting.trim().eq_ignore_ascii_case("none") {
         return Ok(Vec::new());
@@ -72,11 +72,11 @@ pub fn parse_trusted_proxies(setting: Option<&str>) -> anyhow::Result<Vec<IpNet>
 
 /// Startup log line for the `TRUSTED_PROXIES` setting. Reports only how
 /// many ranges apply, never the configured values.
-pub fn describe_trusted_proxies(setting: Option<&str>) -> String {
+pub fn describe_proxy_ranges(setting: Option<&str>) -> String {
     match setting {
         None => format!(
             "not set; trusting loopback and private networks ({} ranges). Set TRUSTED_PROXIES=none to trust no proxy",
-            DEFAULT_TRUSTED_PROXIES.len()
+            DEFAULT_PROXY_RANGES.len()
         ),
         Some(raw) if raw.trim().is_empty() || raw.trim().eq_ignore_ascii_case("none") => {
             "none; forwarding headers are ignored".to_string()
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn unset_setting_trusts_loopback_and_private_networks() {
-        let defaults = parse_trusted_proxies(None).unwrap();
+        let defaults = parse_proxy_ranges(None).unwrap();
         for ip in ["127.0.0.1", "::1", "10.1.2.3", "172.20.0.5", "192.168.1.1", "fd00::5"] {
             assert!(is_trusted(&ip.parse().unwrap(), &defaults), "{ip}");
         }
@@ -281,18 +281,18 @@ mod tests {
     #[test]
     fn none_or_empty_setting_trusts_nothing() {
         for setting in ["none", "NONE", " None ", "", "  "] {
-            assert!(parse_trusted_proxies(Some(setting)).unwrap().is_empty(), "{setting:?}");
-            assert_eq!(describe_trusted_proxies(Some(setting)), "none; forwarding headers are ignored");
+            assert!(parse_proxy_ranges(Some(setting)).unwrap().is_empty(), "{setting:?}");
+            assert_eq!(describe_proxy_ranges(Some(setting)), "none; forwarding headers are ignored");
         }
     }
 
     #[test]
     fn explicit_setting_is_parsed_and_counted() {
-        let nets = parse_trusted_proxies(Some("10.0.0.1, 172.16.0.0/12,")).unwrap();
+        let nets = parse_proxy_ranges(Some("10.0.0.1, 172.16.0.0/12,")).unwrap();
         assert_eq!(nets, vec!["10.0.0.1/32".parse::<IpNet>().unwrap(), "172.16.0.0/12".parse().unwrap()]);
-        assert_eq!(describe_trusted_proxies(Some("10.0.0.1, 172.16.0.0/12,")), "2 range(s) configured");
-        assert!(parse_trusted_proxies(Some("10.0.0.1,proxy.local")).is_err());
-        assert!(describe_trusted_proxies(None).contains("6 ranges"));
+        assert_eq!(describe_proxy_ranges(Some("10.0.0.1, 172.16.0.0/12,")), "2 range(s) configured");
+        assert!(parse_proxy_ranges(Some("10.0.0.1,proxy.local")).is_err());
+        assert!(describe_proxy_ranges(None).contains("6 ranges"));
     }
 
     #[test]

@@ -4,7 +4,7 @@ use std::env;
 use crate::models::S3SourceConfig;
 
 mod parsing;
-use parsing::{env_flag, env_list, jwt_secret_from_env, normalize_cors_origin};
+use parsing::{env_flag, env_list, read_jwt_setting, normalize_cors_origin};
 pub use parsing::{validate_jwt_secret, MIN_JWT_SECRET_BYTES};
 
 /// S3 storage is enabled by S3_ENABLED=true or the documented STORAGE_BACKEND=s3.
@@ -152,8 +152,8 @@ impl SecurityConfig {
         }
 
         let proxy_setting = env::var("TRUSTED_PROXIES").ok();
-        let trusted_proxies = crate::utils::client_ip::parse_trusted_proxies(proxy_setting.as_deref())?;
-        println!("🌐 TRUSTED_PROXIES: {}", crate::utils::client_ip::describe_trusted_proxies(proxy_setting.as_deref()));
+        let proxy_ranges = crate::utils::client_ip::parse_proxy_ranges(proxy_setting.as_deref())?;
+        println!("🌐 TRUSTED_PROXIES: {}", crate::utils::client_ip::describe_proxy_ranges(proxy_setting.as_deref()));
 
         let cors_allowed_origins = env_list("CORS_ALLOWED_ORIGINS")
             .iter()
@@ -180,7 +180,7 @@ impl SecurityConfig {
             registration_requires_approval: true,
             jwt_ttl_hours,
             local_source_allowed_paths,
-            trusted_proxies,
+            trusted_proxies: proxy_ranges,
             cors_allowed_origins,
             metrics_token,
             oidc_link_existing_by_email,
@@ -313,7 +313,7 @@ impl Config {
                     }
                 }
             },
-            jwt_secret: jwt_secret_from_env()?,
+            jwt_secret: read_jwt_setting()?,
             upload_path: match env::var("UPLOAD_PATH") {
                 Ok(path) => {
                     println!("✅ UPLOAD_PATH: {} (loaded from env)", path);

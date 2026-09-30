@@ -24,12 +24,13 @@ pub enum SigningKeyOrigin {
 }
 
 impl SigningKeyOrigin {
-    /// Startup log text. Never includes the key.
-    pub fn describe(self) -> &'static str {
+    /// Print where the key came from at startup. Only fixed text is printed,
+    /// never anything derived from the key.
+    pub fn log_startup(self) {
         match self {
-            SigningKeyOrigin::Environment => "from JWT_SECRET",
-            SigningKeyOrigin::Database => "loaded from database",
-            SigningKeyOrigin::Generated => "generated and stored in database",
+            SigningKeyOrigin::Environment => println!("🔐 JWT signing key: from JWT_SECRET"),
+            SigningKeyOrigin::Database => println!("🔐 JWT signing key: loaded from database"),
+            SigningKeyOrigin::Generated => println!("🔐 JWT signing key: generated and stored in database"),
         }
     }
 }
@@ -38,15 +39,12 @@ fn generate_key() -> String {
     crate::oidc::random_urlsafe(GENERATED_KEY_BYTES)
 }
 
-/// The signing key to use: `configured` (the validated `JWT_SECRET`) when it
-/// is non-empty, otherwise the key stored in the database, generating and
-/// storing one first if there is none. Requires the migrations to have run.
-pub async fn resolve(db: &Database, configured: &str) -> Result<(String, SigningKeyOrigin)> {
-    if !configured.is_empty() {
-        return Ok((configured.to_string(), SigningKeyOrigin::Environment));
-    }
+/// The key stored in the database, generating and storing one first if there
+/// is none. Used when `JWT_SECRET` is not set. Requires the migrations to
+/// have run.
+pub async fn load_or_generate(db: &Database) -> Result<(String, SigningKeyOrigin)> {
     let (value, inserted) = db
-        .get_or_insert_server_secret(STORED_KEY_NAME, &generate_key())
+        .server_value_or_insert(STORED_KEY_NAME, &generate_key())
         .await
         .context("Failed to load the stored JWT signing key")?;
     let origin = if inserted { SigningKeyOrigin::Generated } else { SigningKeyOrigin::Database };
@@ -56,7 +54,7 @@ pub async fn resolve(db: &Database, configured: &str) -> Result<(String, Signing
 /// Replace the stored signing key with a new random one. Tokens signed with
 /// the previous key stop verifying once servers load the new key.
 pub async fn rotate(db: &Database) -> Result<()> {
-    db.replace_server_secret(STORED_KEY_NAME, &generate_key())
+    db.replace_server_value(STORED_KEY_NAME, &generate_key())
         .await
         .context("Failed to store a new JWT signing key (has the server been started once to apply migrations?)")
 }

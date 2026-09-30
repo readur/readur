@@ -368,9 +368,14 @@ async fn main() -> anyhow::Result<()> {
     }
     
     // Sign sessions with JWT_SECRET, or with the key stored in the database.
-    let (signing_key, origin) = readur::jwt_signing_key::resolve(&web_db, &config.jwt_secret).await?;
-    config.jwt_secret = signing_key;
-    println!("🔐 JWT signing key: {}", origin.describe());
+    let origin = if config.jwt_secret.is_empty() {
+        let (stored, origin) = readur::jwt_signing_key::load_or_generate(&web_db).await?;
+        config.jwt_secret = stored;
+        origin
+    } else {
+        readur::jwt_signing_key::SigningKeyOrigin::Environment
+    };
+    origin.log_startup();
 
     // Seed admin user
     seed::seed_admin_user(&background_db, &config.upload_path).await?;

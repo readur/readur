@@ -8,7 +8,7 @@ impl Database {
     /// The stored secret `name`, storing `candidate` first if there is none.
     /// Concurrent callers all get the one value that was stored first. The
     /// flag is true when this call stored `candidate`.
-    pub async fn get_or_insert_server_secret(&self, name: &str, candidate: &str) -> Result<(String, bool)> {
+    pub async fn server_value_or_insert(&self, name: &str, candidate: &str) -> Result<(String, bool)> {
         let inserted = sqlx::query(
             "INSERT INTO server_secrets (name, value) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING",
         )
@@ -26,7 +26,7 @@ impl Database {
     }
 
     /// Replace (or create) the stored secret `name`.
-    pub async fn replace_server_secret(&self, name: &str, value: &str) -> Result<()> {
+    pub async fn replace_server_value(&self, name: &str, value: &str) -> Result<()> {
         sqlx::query(
             "INSERT INTO server_secrets (name, value) VALUES ($1, $2)
              ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value, created_at = NOW()",

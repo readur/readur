@@ -7,8 +7,8 @@ use crate::db::Database;
 /// Every session signed with the previous key stops working once the servers
 /// are restarted and load the new key. When `JWT_SECRET` is set it takes
 /// precedence and the stored key is not used, which is reported as a warning.
-pub async fn rotate_jwt_secret(db: &Database, jwt_secret_env_set: bool) -> Result<()> {
-    if jwt_secret_env_set {
+pub async fn rotate_jwt_secret(db: &Database, env_override_set: bool) -> Result<()> {
+    if env_override_set {
         println!("⚠️  JWT_SECRET is set; it takes precedence and the key stored in the database is not used.");
         println!("   To rotate it, change JWT_SECRET and restart the server.");
     }
