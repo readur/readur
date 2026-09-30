@@ -7,6 +7,7 @@ import { formatBytes, formatCount, formatRelative } from '../shared/format';
 import { HumanReason } from '../shared/HumanReason';
 import { ConfirmDialog, Notice, sharedStyles } from '../shared/parts';
 import { ConnectionDot } from './ConnectionDot';
+import { humanizeAdvice } from './connectionFailure';
 import { ignoredFilesHref, sourceTypeLabel } from '../shared/sourceTypes';
 import { SyncProgressDisplay } from '../sync/SyncProgressDisplay';
 import { RecentErrors } from './RecentErrors';
@@ -170,7 +171,7 @@ export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, action
                 {issues.map((issue, i) => (
                   <li key={i} className={styles.issue}>
                     <HumanReason kind="connection" raw={issue.message} />
-                    {issue.recommendation ? <span className={styles.issueFix}>{issue.recommendation}</span> : null}
+                    {issue.recommendation ? <span className={styles.issueFix}>{humanizeAdvice(issue.recommendation)}</span> : null}
                   </li>
                 ))}
               </ul>

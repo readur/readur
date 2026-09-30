@@ -50,7 +50,7 @@
   min-height: 40px;
   padding: 0 var(--s-3);
   font-size: var(--fs-md);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--fg-2);
   text-decoration: none;
   border-radius: var(--radius-sm);
@@ -69,6 +69,7 @@
 
 .link[aria-current='page'] {
   color: var(--accent);
+  font-weight: 600;
   background: var(--accent-soft);
 }
 

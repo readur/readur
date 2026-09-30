@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { humanizeConnectionFailure } from '../connections/connectionFailure';
+import { humanizeAdvice, humanizeConnectionFailure } from '../connections/connectionFailure';
 import { kindOfSourceType } from '../shared/sourceTypes';
 
 describe('humanizeConnectionFailure', () => {
@@ -9,6 +9,7 @@ describe('humanizeConnectionFailure', () => {
     ['NoSuchBucket: the bucket does not exist', /wasn't found/],
     ['error sending request: Connection refused (os error 111)', /Can't reach the server/],
     ['invalid peer certificate: UnknownIssuer', /certificate/],
+    ['High empty sync ratio: 100.0% of recent syncs found no files', /found no new files/],
     ['HTTP 503 Service Unavailable', /server reported an error/],
   ])('reads %s', (raw, summary) => {
     const human = humanizeConnectionFailure(raw);
@@ -29,5 +30,13 @@ describe('kindOfSourceType', () => {
     expect(kindOfSourceType('local_folder')).toBe('local');
     expect(kindOfSourceType('other')).toBeUndefined();
     expect(kindOfSourceType(null)).toBeUndefined();
+  });
+});
+
+describe('humanizeAdvice', () => {
+  it('rewrites known advice and keeps unknown advice as written', () => {
+    expect(humanizeAdvice('Check server URL, credentials, and network connectivity')).toMatch(/server address/);
+    expect(humanizeAdvice('This may indicate connectivity issues or that the source has no new content')).toMatch(/folder path/);
+    expect(humanizeAdvice('Try turning it off')).toBe('Try turning it off');
   });
 });

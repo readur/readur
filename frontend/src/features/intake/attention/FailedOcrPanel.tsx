@@ -13,7 +13,7 @@ import {
 } from '../../../ui';
 import { documentService, type BulkOcrRetryResponse, type FailedOcrDocumentRow } from '../../../services/api';
 import { BulkRetryModal } from '../../../components/BulkRetryModal';
-import { acknowledge, isShownLit, litReason, useLitCount } from '../../board/litStore';
+import { acknowledge, useLitCount } from '../../board/litStore';
 import { serverMessage } from '../shared/errors';
 import { HumanReason } from '../shared/HumanReason';
 import { formatRelative } from '../shared/format';
@@ -65,11 +65,10 @@ export function FailedOcrPanel() {
     );
   }, [docs]);
 
-  const litOf = (d: FailedOcrDocumentRow) => isShownLit('attention', attentionKeyOf(d));
   const ackAll = (list: FailedOcrDocumentRow[]) => list.forEach((d) => acknowledge('attention', attentionKeyOf(d)));
 
   const columns: BoardColumn<FailedOcrDocumentRow>[] = [
-    { id: 'name', label: t('intake.attention.col.name', 'Name'), render: (d) => <NameCell name={failedName(d)} tag={litOf(d) ? litReason('attention', attentionKeyOf(d)) : null} /> },
+    { id: 'name', label: t('intake.attention.col.name', 'Name'), render: (d) => <NameCell name={failedName(d)} /> },
     { id: 'status', label: t('intake.attention.col.status', 'Status'), width: 110, render: () => <StatusMark state="failed" size="sm" /> },
     { id: 'reason', hideOnNarrow: true, label: t('intake.attention.col.reason', 'Reason'), width: 220, render: (d) => (d.ocr_error ? <HumanReason raw={d.ocr_error} code={d.ocr_failure_reason} summaryOnly /> : ocrFailureSummary(t, d)) },
     { id: 'retries', hideOnNarrow: true, label: t('intake.attention.col.retries', 'Retries'), align: 'end', width: 90, render: (d) => String(d.retry_count ?? 0) },
@@ -154,7 +153,6 @@ export function FailedOcrPanel() {
             if (doc) acknowledge('attention', attentionKeyOf(doc));
             setOpenId(id);
           }}
-          isRowLit={litOf}
                     isLoading={failed.isLoading}
           emptyState={
             <EmptyState

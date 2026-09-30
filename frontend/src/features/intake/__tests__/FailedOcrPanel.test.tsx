@@ -65,13 +65,14 @@ describe('Failed OCR board', () => {
     expect(row).toHaveTextContent('OCR took too long and was stopped');
   });
 
-  it('marks new failures, with a tag, until the row is opened', async () => {
+  it('shows no New/Changed tag on failed rows, and still clears the marker when a row is opened', async () => {
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
     const row = within(grid).getByRole('row', { name: /scan1\.pdf/ });
-    expect(row).toHaveAttribute('data-changed', 'true');
-    expect(within(row).getByText('Changed')).toBeInTheDocument();
+    expect(row).not.toHaveAttribute('data-changed');
+    expect(within(row).queryByText('Changed')).not.toBeInTheDocument();
+    expect(within(row).queryByText('New')).not.toBeInTheDocument();
     expect(isLit('attention', KEY1)).toBe(true);
     await openDoc(user, 'scan1.pdf');
     expect(isLit('attention', KEY1)).toBe(false);

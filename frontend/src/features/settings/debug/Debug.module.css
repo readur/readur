@@ -89,13 +89,10 @@
 }
 
 .overall {
+  font-family: var(--font-ui);
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
 }
 
 .overall[data-state='completed'] > span,

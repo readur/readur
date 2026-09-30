@@ -66,7 +66,7 @@ export function SettingsNav({ sections, activeId, query, onQueryChange, isNarrow
   return (
     <nav className={styles.nav} aria-label={t('settings.nav.label', 'Settings sections')}>
       <SearchField
-        label={t('settings.nav.search', 'Search settings')}
+        aria-label={t('settings.nav.search', 'Search settings')}
         placeholder={t('settings.nav.searchPlaceholder', 'Filter by name')}
         value={query}
         onChange={onQueryChange}

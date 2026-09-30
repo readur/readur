@@ -1,3 +1,5 @@
+import { formatRelativeTime } from '../../../lib/relativeTime';
+
 /** Short, locale-aware formatting helpers for Intake. Results are meant for mono cells. */
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -29,24 +31,9 @@ export function formatMinutes(minutes?: number | null): string {
   return `${Math.floor(total / 60)}h ${total % 60}m`;
 }
 
-const STEPS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-  ['year', 365 * 24 * 3600],
-  ['month', 30 * 24 * 3600],
-  ['day', 24 * 3600],
-  ['hour', 3600],
-  ['minute', 60],
-];
-
 /** Relative time, past or future: "3 min. ago", "in 12 min." (narrow). Em dash when missing. */
 export function formatRelative(at?: string | number | null, locale?: string, now: number = Date.now()): string {
-  const time = typeof at === 'number' ? at : at ? Date.parse(at) : NaN;
-  if (Number.isNaN(time)) return '—';
-  const seconds = Math.round((time - now) / 1000);
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'always', style: 'narrow' });
-  for (const [unit, size] of STEPS) {
-    if (Math.abs(seconds) >= size) return rtf.format(Math.trunc(seconds / size), unit);
-  }
-  return rtf.format(seconds, 'second');
+  return formatRelativeTime(at, { locale, now });
 }
 
 /** "12 Mar 2026, 14:05" in the user's locale. Em dash when missing. */

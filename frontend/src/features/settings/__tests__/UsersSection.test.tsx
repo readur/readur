@@ -29,6 +29,14 @@ describe('UsersSection', () => {
     expect(apiMock.get).toHaveBeenCalledWith('/users');
   });
 
+  it('hides the created-at column when no user has a date', async () => {
+    apiMock.get.mockResolvedValue(ok(USERS.map((u) => ({ ...u, created_at: undefined }))));
+    render();
+    const grid = await screen.findByRole('grid', { name: 'User Management' });
+    await within(grid).findByText('bob');
+    expect(within(grid).queryByRole('columnheader', { name: /created/i })).not.toBeInTheDocument();
+  });
+
   it('validates the create form inline', async () => {
     const user = userEvent.setup();
     render();
@@ -154,8 +162,8 @@ describe('UsersSection', () => {
     render(true);
     const grid = await screen.findByRole('grid', { name: 'User Management' });
     expect(await within(grid).findByText('./user_watch/ada')).toBeInTheDocument();
-    // Two account statuses plus ada's watch directory.
-    expect(within(grid).getAllByText('Active')).toHaveLength(3);
+    // Account rows no longer repeat "Active"; only ada's watch directory says it.
+    expect(within(grid).getAllByText('Active')).toHaveLength(1);
     expect(within(grid).getByText('Not Created')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create watch directory for bob' }));
     expect(userWatchService.createUserWatchDirectory).toHaveBeenCalledWith('u2');

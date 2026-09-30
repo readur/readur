@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Button, Dialog, TextField, useToast } from '../../../../ui';
 import { sourcesService, type SourceResponse } from '../../../../services/api';
 import type { SourceType } from '../../../../types/generated';
-import { ErrorCodes, pickMessage } from '../../shared/errors';
+import { useAuth } from '../../../../contexts/AuthContext';
+import { isAdmin } from '../../../../auth/roles';
+import { ErrorCodes, pickMessage, statusOf } from '../../shared/errors';
 import { Notice } from '../../shared/parts';
 import { CommonFields } from './CommonFields';
 import { CrawlEstimate } from './CrawlEstimate';
@@ -36,6 +38,7 @@ type TestResult = { ok: boolean; message: string } | null;
 export function SourceForm({ isOpen, onOpenChange, source, onSaved }: SourceFormProps) {
   const { t } = useTranslation();
   const toast = useToast();
+  const { user } = useAuth();
   const isEditing = Boolean(source);
   const [form, setForm] = useState<SourceFormData>(() => (source ? formFromSource(source) : emptyForm()));
   const [showErrors, setShowErrors] = useState(false);
@@ -118,9 +121,12 @@ export function SourceForm({ isOpen, onOpenChange, source, onSaved }: SourceForm
       onSaved(res?.data);
       onOpenChange(false);
     } catch (error) {
+      const localRefused = statusOf(error) === 403 && form.source_type === 'local_folder';
       toast.show({
         title: t('intake.form.saveFailed', 'Could not save the connection'),
-        description: pickMessage(
+        description: localRefused
+          ? t('intake.form.localAdminOnly', 'Only an administrator can add local folders.')
+          : pickMessage(
           error,
           [
             [ErrorCodes.SOURCE_DUPLICATE_NAME, t('intake.form.errors.duplicateName', 'A connection with this name already exists.')],
@@ -187,6 +193,11 @@ export function SourceForm({ isOpen, onOpenChange, source, onSaved }: SourceForm
               { value: 's3', label: t('intake.form.typeS3Label', 'S3-compatible'), description: t('intake.form.typeS3', 'AWS S3, MinIO and other S3-compatible storage') },
             ]}
           />
+        ) : null}
+        {form.source_type === 'local_folder' && !isAdmin(user) ? (
+          <Notice tone="info" title={t('intake.form.localAdminOnly', 'Only an administrator can add local folders.')}>
+            {t('intake.form.localAdminOnlyHint', 'You can still try: the server may allow specific folders for everyone.')}
+          </Notice>
         ) : null}
         <TypeFields form={form} set={set} errors={shownErrors} stored={isEditing ? stored : undefined} />
         <CommonFields form={form} set={set} errors={shownErrors} />

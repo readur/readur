@@ -14,6 +14,11 @@ interface Pattern {
  */
 const PATTERNS: readonly Pattern[] = [
   {
+    test: /empty sync ratio|found no (new )?files/i,
+    key: 'intake.connectionFailure.emptySyncs',
+    fallback: 'Recent syncs found no new files. Check the folder path.',
+  },
+  {
     test: /\b401\b|\b403\b|unauthori[sz]ed|forbidden|access denied|invalid (credentials|access key)|authentication failed|login failed|signature.*does not match/i,
     key: 'intake.connectionFailure.auth',
     fallback: 'The server refused the sign-in. Check the username, password or keys.',
@@ -40,9 +45,30 @@ const PATTERNS: readonly Pattern[] = [
   },
 ];
 
+/** The health check's advice texts, in plain words. Unknown advice is shown as the server wrote it. */
+const ADVICE: readonly Pattern[] = [
+  {
+    test: /check server url, credentials/i,
+    key: 'intake.connectionAdvice.connectivity',
+    fallback: 'Check the server address, the sign-in and the network.',
+  },
+  {
+    test: /may indicate connectivity issues|no new content/i,
+    key: 'intake.connectionAdvice.noContent',
+    fallback: "If new files are expected, check the folder path and that the server is reachable.",
+  },
+];
+
 function tr(key: string, fallback: string): string {
   const value: unknown = i18n.isInitialized ? i18n.t(key, fallback) : fallback;
   return typeof value === 'string' && value ? value : fallback;
+}
+
+/** A health-check recommendation in plain words; the server's text when it isn't a known one. */
+export function humanizeAdvice(raw: string): string {
+  const text = (raw ?? '').trim();
+  const hit = ADVICE.find((p) => p.test.test(text));
+  return hit ? tr(hit.key, hit.fallback) : text;
 }
 
 /** A connection's last error in one plain sentence; the raw text stays as `detail`. */

@@ -386,3 +386,36 @@ describe('SourceForm: crawl estimate (ported from WebDAVTab)', () => {
     expect(screen.getByRole('grid', { name: 'Estimate by folder' })).toHaveTextContent('/Documents');
   });
 });
+
+describe('SourceForm: local folders for regular users', () => {
+  const renderAs = (role: 'admin' | 'user') =>
+    renderIntake(<SourceForm isOpen onOpenChange={onOpenChange} source={null} onSaved={onSaved} />, { role });
+
+  it('tells a regular user up front, without blocking the request', async () => {
+    const user = userEvent.setup();
+    renderAs('user');
+    expect(screen.queryByText('Only an administrator can add local folders.')).not.toBeInTheDocument();
+    await chooseType(user, /local folder/i);
+    expect(screen.getByText('Only an administrator can add local folders.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add connection' })).toBeEnabled();
+  });
+
+  it('says nothing to an administrator', async () => {
+    const user = userEvent.setup();
+    renderAs('admin');
+    await chooseType(user, /local folder/i);
+    expect(screen.queryByText('Only an administrator can add local folders.')).not.toBeInTheDocument();
+  });
+
+  it('names the reason when the server refuses with 403, and keeps the dialog open', async () => {
+    const user = userEvent.setup();
+    sourcesService.create.mockRejectedValue(apiError(403, undefined, 'Forbidden'));
+    renderAs('user');
+    await user.type(field(/^name/i), 'Scans');
+    await chooseType(user, /local folder/i);
+    await user.click(screen.getByRole('button', { name: 'Add connection' }));
+    await waitFor(() => expect(sourcesService.create).toHaveBeenCalled());
+    expect(await screen.findAllByText('Only an administrator can add local folders.')).toHaveLength(2);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+});

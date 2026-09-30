@@ -39,7 +39,8 @@ test.describe('Source Management', () => {
     const create = page.waitForResponse((r) => /\/api\/sources$/.test(r.url()) && r.request().method() === 'POST');
     await dialog.getByRole('button', { name: 'Add connection' }).click();
     expect((await create).status()).toBe(403);
-    await helpers.waitForToast(/Could not save the connection/);
+    const toast = await helpers.waitForToast(/Could not save the connection/);
+    await expect(toast).toContainText('Only an administrator can add local folders.');
     await expect(dialog).toBeVisible();
   });
 

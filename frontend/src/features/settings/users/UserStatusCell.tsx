@@ -29,11 +29,7 @@ export function UserStatusCell({ user, isSelf, isDisabled = false, onChange }: U
         onChange={onChange}
         isDisabled={isDisabled || isSelf}
       />
-      <Tag tone={active ? 'ok' : 'default'}>
-        {active
-          ? t('settings.userManagement.statusActive', 'Active')
-          : t('settings.userManagement.statusPending', 'Disabled / pending approval')}
-      </Tag>
+      {active ? null : <Tag>{t('settings.userManagement.statusPending', 'Disabled / pending approval')}</Tag>}
       {isAdminRole(user.role) ? <Tag>{t('settings.userManagement.roleAdmin', 'Admin')}</Tag> : null}
       {isSelf ? (
         <span className={shared.meta}>

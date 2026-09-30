@@ -53,15 +53,12 @@
 }
 
 .connectionWord {
+  font-family: var(--font-ui);
   display: inline-flex;
   align-items: center;
   gap: var(--s-1);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-2);
 }
 

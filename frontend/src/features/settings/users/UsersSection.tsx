@@ -105,15 +105,17 @@ export default function UsersSection() {
     const cols: BoardColumn<UserRow>[] = [
       { id: 'username', label: t('settings.userManagement.tableHeaders.username'), render: (u) => u.username },
       { id: 'email', hideOnNarrow: true, label: t('settings.userManagement.tableHeaders.email'), render: (u) => u.email },
-      {
+    ];
+    if (users.some((u) => u.created_at)) {
+      cols.splice(2, 0, {
         id: 'created',
         hideOnNarrow: true,
         label: t('settings.userManagement.tableHeaders.createdAt'),
         mono: true,
         width: 140,
         render: (u) => formatDate(u.created_at),
-      },
-    ];
+      });
+    }
     cols.push({
       id: 'status',
       label: t('settings.userManagement.tableHeaders.status', 'Status'),
@@ -135,7 +137,7 @@ export default function UsersSection() {
     cols.push({ id: 'actions', label: t('settings.userManagement.tableHeaders.actions'), width: perUserWatch ? 200 : 110, render: actions });
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, perUserWatch, watch.dirs, watch.busy, currentUserId, statusBusy]);
+  }, [t, users, perUserWatch, watch.dirs, watch.busy, currentUserId, statusBusy]);
 
   const runConfirm = async () => {
     if (!confirm) return;
