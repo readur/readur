@@ -31,7 +31,8 @@ services:
       SERVER_PORT: 8000
 
       # Security
-      JWT_SECRET: dev-secret-key-change-in-production
+      # Development only; production deployments must set their own random secret
+      JWT_SECRET: ${JWT_SECRET:-readur-local-development-only-jwt-secret-0123456789}
 
       # File paths
       UPLOAD_PATH: /app/uploads

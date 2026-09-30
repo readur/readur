@@ -30,7 +30,21 @@ controllers:
           repository: readur/readur
           tag: latest
           pullPolicy: IfNotPresent
-        
+
+        env:
+          JWT_SECRET:
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "readur.authSecretName" . }}
+                key: JWT_SECRET
+          # Only used when the admin account is first created.
+          ADMIN_PASSWORD:
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "readur.authSecretName" . }}
+                key: ADMIN_PASSWORD
+                optional: true
+
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000

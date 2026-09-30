@@ -360,7 +360,7 @@ async fn main() -> anyhow::Result<()> {
     }
     
     // Seed admin user  
-    seed::seed_admin_user(&background_db).await?;
+    seed::seed_admin_user(&background_db, &config.upload_path).await?;
     
     // Reset any running WebDAV syncs from previous server instance using background DB
     match background_db.reset_running_webdav_syncs().await {

@@ -3,6 +3,19 @@
 ## Refer there for more detail about the supported values.
 ## Any values that you find in the above `values.yaml` can be provided to this chart and are then rendered.
 
+## Credentials. By default the chart creates a Secret named `<release>-auth`
+## with a random JWT_SECRET (64 characters) and a random initial ADMIN_PASSWORD.
+## Both are generated once and preserved across upgrades. Read the admin
+## password with:
+##   kubectl get secret <release>-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
+auth:
+  # Use an existing Secret instead. It must contain the key JWT_SECRET (at
+  # least 32 bytes) and may contain ADMIN_PASSWORD.
+  existingSecret: ""
+  # Explicit values; leave empty to generate them.
+  jwtSecret: ""
+  adminPassword: ""
+
 controllers:
   main:
     containers:
@@ -35,6 +48,16 @@ controllers:
           # File Watching
           WATCH_INTERVAL_SECONDS: "30"
           FILE_STABILITY_CHECK_MS: "1000"
+
+          # Access control (see docs/configuration-reference.md)
+          # PUBLIC_URL: "https://readur.example.com"
+          # ALLOW_REGISTRATION: "false"          # new accounts still need admin approval
+          # JWT_TTL_HOURS: "12"
+          # LOCAL_SOURCE_ALLOWED_PATHS: "/app/watch"  # unset: local folder sources are admin-only
+          # TRUSTED_PROXIES: "10.0.0.0/8"         # ingress controller addresses
+          # CORS_ALLOWED_ORIGINS: ""
+          # METRICS_TOKEN: ""                     # bearer token for Prometheus scrapes of /metrics
+          # ADMIN_EMAIL: "admin@example.com"
 
 persistence:
   uploads:
