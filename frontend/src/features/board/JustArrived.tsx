@@ -1,16 +1,15 @@
 import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { EmptyState, Skeleton } from '../../ui';
+import { EmptyState, Skeleton, SourceDot } from '../../ui';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
 import type { SourceArrivals } from './arrivals';
 import { fetchRecent, POLL_MS } from './data';
 import { formatAge, formatCount } from './format';
-import { LaneDot } from './LaneDot';
 import { clearBulkArrivals, syncDocuments, useBulkArrivals } from './litFeeders';
 import { acknowledge, useAcknowledgeOnLeave, useLitCount, useShownLit } from './litStore';
 import { ChangedTag, Region, RegionError } from './Region';
-import { documentLane, sourceHue } from './sourceTint';
+import { documentLane, type LaneKind } from './sourceTint';
 import { docName, type BoardDocument } from './types';
 import { useResource } from './useResource';
 import styles from './Home.module.css';
@@ -28,12 +27,12 @@ function arrivedLabel(iso: string | undefined, locale: string, now: number): str
 interface CardProps {
   doc: BoardDocument;
   sourceName: string;
-  hue: number;
   now: number;
 }
 
-function Card({ doc, sourceName, hue, now }: CardProps) {
+function Card({ doc, sourceName, now }: CardProps) {
   const { i18n } = useTranslation();
+  const lane = documentLane(doc);
   const { lit, reason } = useShownLit('document', doc.id);
   const name = docName(doc);
   return (
@@ -48,7 +47,7 @@ function Card({ doc, sourceName, hue, now }: CardProps) {
         </span>
       </Link>
       <span className={styles.cardMeta}>
-        <LaneDot hue={hue} />
+        <SourceDot sourceId={lane.key} kind={lane.kind === 'source' ? undefined : lane.kind} size="sm" />
         <span className={styles.cardSource}>{sourceName}</span>
         <span className={styles.cardDate}>{arrivedLabel(doc.created_at, i18n.language, now)}</span>
       </span>
@@ -78,7 +77,7 @@ export function JustArrived({ lanes, now }: JustArrivedProps) {
   useAcknowledgeOnLeave('document', ids, bulk > 0 ? clearBulkArrivals : undefined);
 
   const names = useMemo(() => new Map((lanes ?? []).map((l) => [l.key, l.name])), [lanes]);
-  const nameOf = (key: string, kind: string) =>
+  const nameOf = (key: string, kind: LaneKind) =>
     names.get(key) ??
     (kind === 'watch'
       ? t('home.kind.watch', 'Watch folder')
@@ -138,7 +137,6 @@ export function JustArrived({ lanes, now }: JustArrivedProps) {
                   doc={d}
                   now={now}
                   sourceName={nameOf(lane.key, lane.kind)}
-                  hue={sourceHue(lane.key === 'upload' || lane.key === 'watch' ? null : lane.key, lane.kind).index}
                 />
               );
             })}

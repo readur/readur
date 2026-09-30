@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   api: { get: vi.fn() },
   documentService: { listWithPagination: vi.fn(), getFailedOcrDocuments: vi.fn(), getThumbnail: vi.fn() },
   queueService: { getStats: vi.fn(), getOcrStatus: vi.fn(), pauseOcr: vi.fn(), resumeOcr: vi.fn() },
+  sourceService: { getArrivals: vi.fn() },
 }));
 
 vi.mock('../../../services/api', () => ({
@@ -13,6 +14,7 @@ vi.mock('../../../services/api', () => ({
   api: m.api,
   documentService: m.documentService,
   queueService: m.queueService,
+  sourceService: m.sourceService,
 }));
 
 import Home, { HomePage } from '../index';
@@ -53,10 +55,9 @@ function serve() {
   m.queueService.getOcrStatus.mockResolvedValue({ data: { is_paused: false, status: 'running' } });
   m.queueService.pauseOcr.mockResolvedValue({ data: {} });
   m.queueService.resumeOcr.mockResolvedValue({ data: {} });
-  m.api.get.mockImplementation((url: string) => {
-    if (url === '/sources/arrivals') return lanes instanceof Error ? Promise.reject(lanes) : Promise.resolve({ data: lanes });
-    return Promise.reject(new Error(`unexpected ${url}`));
-  });
+  m.sourceService.getArrivals.mockImplementation(() =>
+    lanes instanceof Error ? Promise.reject(lanes) : Promise.resolve({ data: lanes }),
+  );
 }
 
 const region = (name: string) => screen.getByRole('region', { name });
@@ -135,7 +136,7 @@ describe('Home', () => {
     m.queueService.getStats.mockReturnValue(never);
     m.queueService.getOcrStatus.mockReturnValue(never);
     m.documentService.getFailedOcrDocuments.mockReturnValue(never);
-    m.api.get.mockReturnValue(never);
+    m.sourceService.getArrivals.mockReturnValue(never);
     renderPage(<Home />);
     expect(screen.getAllByRole('status', { name: 'Loading' }).length).toBeGreaterThanOrEqual(3);
   });
@@ -206,7 +207,7 @@ describe('Home', () => {
 
     it('asks the server for 14 days', async () => {
       await renderHome();
-      expect(m.api.get).toHaveBeenCalledWith('/sources/arrivals', { params: { days: 14 } });
+      expect(m.sourceService.getArrivals).toHaveBeenCalledWith(14);
     });
   });
 

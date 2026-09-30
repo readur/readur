@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ api: { get: vi.fn() } }));
-vi.mock('../../../services/api', () => ({ default: m.api, api: m.api, documentService: {} }));
+const m = vi.hoisted(() => ({ api: { get: vi.fn() }, sourceService: { getArrivals: vi.fn() } }));
+vi.mock('../../../services/api', () => ({ default: m.api, api: m.api, documentService: {}, sourceService: m.sourceService }));
 
 import { fetchArrivals, isQuiet, laneHealth, laneHref, median, weekTotal, type SourceArrivals } from '../arrivals';
-import { documentLane, sourceHue, tintKind } from '../sourceTint';
+import { documentLane } from '../sourceTint';
 import { lane } from './homeTestUtils';
 
 const NOW = Date.now();
@@ -66,39 +66,22 @@ describe('laneHref', () => {
 
 describe('fetchArrivals', () => {
   it('asks for the given number of days and returns the lanes', async () => {
-    m.api.get.mockResolvedValueOnce({ data: [{ key: 'upload' }] });
+    m.sourceService.getArrivals.mockResolvedValueOnce({ data: [{ key: 'upload' }] });
     await expect(fetchArrivals(7)).resolves.toEqual([{ key: 'upload' }]);
-    expect(m.api.get).toHaveBeenCalledWith('/sources/arrivals', { params: { days: 7 } });
+    expect(m.sourceService.getArrivals).toHaveBeenCalledWith(7);
   });
 
   it('returns no lanes for an unexpected body', async () => {
-    m.api.get.mockResolvedValueOnce({ data: { nope: true } });
+    m.sourceService.getArrivals.mockResolvedValueOnce({ data: { nope: true } });
     await expect(fetchArrivals()).resolves.toEqual([]);
   });
 });
 
-describe('source colours', () => {
-  it('gives uploads and the watch folder fixed slots, and sources a stable slot from 3 to 8', () => {
-    expect(sourceHue(null, 'upload')).toEqual({ varName: '--src-1', softVarName: '--src-1-soft', index: 1 });
-    expect(sourceHue(null, 'watch').index).toBe(2);
-    expect(sourceHue(null).index).toBe(1);
-    const a = sourceHue('0b5c-source', 'webdav').index;
-    expect(a).toBeGreaterThanOrEqual(3);
-    expect(a).toBeLessThanOrEqual(8);
-    expect(sourceHue('0b5c-source', 's3').index).toBe(a);
-  });
-
-  it('maps server kinds', () => {
-    expect(tintKind('local_folder')).toBe('local');
-    expect(tintKind('webdav')).toBe('webdav');
-    expect(tintKind('nope')).toBeUndefined();
-    expect(tintKind(null)).toBeUndefined();
-  });
-
+describe('documentLane', () => {
   it('finds the lane a document came from', () => {
-    expect(documentLane({ source_id: 's1', source_type: 'webdav' })).toEqual({ key: 's1', kind: 'webdav' });
-    expect(documentLane({ source_id: 's1', source_type: 'filesystem' })).toEqual({ key: 's1', kind: 'local' });
+    expect(documentLane({ source_id: 's1', source_type: 'webdav' })).toEqual({ key: 's1', kind: 'source' });
     expect(documentLane({ source_type: 'watch_folder' })).toEqual({ key: 'watch', kind: 'watch' });
+    expect(documentLane({ source_type: 'watch' })).toEqual({ key: 'watch', kind: 'watch' });
     expect(documentLane({ source_type: 'web_upload' })).toEqual({ key: 'upload', kind: 'upload' });
     expect(documentLane({})).toEqual({ key: 'upload', kind: 'upload' });
   });

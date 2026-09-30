@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { EmptyState, Skeleton, StatusMark, type StatusState } from '../../ui';
+import { EmptyState, Skeleton, SourceDot, StatusMark, type StatusState } from '../../ui';
+import { sourceHue } from '../../lib/sourceColor';
 import { ArrivalBars } from './ArrivalBars';
 import { laneHealth, laneHref, type LaneHealth, type SourceArrivals } from './arrivals';
 import { formatAge, formatCount } from './format';
-import { LaneDot } from './LaneDot';
 import { Region, RegionError } from './Region';
-import { sourceHue, tintKind } from './sourceTint';
 import type { Resource } from './useResource';
 import styles from './Home.module.css';
 
@@ -53,7 +52,7 @@ function useKindLabel() {
 function Lane({ lane, now }: { lane: SourceArrivals; now: number }) {
   const { t, i18n } = useTranslation();
   const kindLabel = useKindLabel();
-  const hue = sourceHue(lane.source_id, tintKind(lane.kind)).index;
+  const hue = sourceHue(lane.source_id ?? lane.key, lane.kind).index;
   const health = laneHealth(lane, now);
   const last = lane.last_arrival_at
     ? t('home.lanes.lastArrival', 'Last arrival {{age}}', { age: formatAge(lane.last_arrival_at, i18n.language, now) })
@@ -62,7 +61,7 @@ function Lane({ lane, now }: { lane: SourceArrivals; now: number }) {
   return (
     <li className={styles.lane} data-health={health}>
       <div className={styles.laneName}>
-        <LaneDot hue={hue} />
+        <SourceDot sourceId={lane.source_id ?? lane.key} kind={lane.kind} />
         <span className={styles.laneText}>
           <Link className={styles.laneLink} to={laneHref(lane)}>
             {lane.name}

@@ -2,32 +2,16 @@
  * Arrivals per ingestion lane (every source, the watch folder and uploads), and the rule that
  * flags a lane as quiet.
  */
-import api from '../../services/api';
+import { sourceService } from '../../services/api';
+import type { SourceArrivals } from '../../types/generated';
 
-/** Documents that arrived on one UTC day. Mirrors the server's `DayCount`. */
-export interface DayCount {
-  date: string;
-  count: number;
-}
-
-/** One lane of arrivals. Mirrors the server's `SourceArrivals`. */
-export interface SourceArrivals {
-  key: string;
-  source_id: string | null;
-  kind: string;
-  name: string;
-  days: DayCount[];
-  today: number;
-  last_arrival_at: string | null;
-  enabled: boolean;
-  status: string | null;
-}
+export type { DayCount, SourceArrivals } from '../../types/generated';
 
 export const ARRIVAL_DAYS = 14;
 const DAY_MS = 24 * 3600 * 1000;
 
 export async function fetchArrivals(days = ARRIVAL_DAYS): Promise<SourceArrivals[]> {
-  const res = await api.get<SourceArrivals[]>('/sources/arrivals', { params: { days } });
+  const res = await sourceService.getArrivals(days);
   return Array.isArray(res.data) ? res.data : [];
 }
 

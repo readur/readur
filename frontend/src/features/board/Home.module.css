@@ -250,14 +250,6 @@
   color: var(--bg);
 }
 
-.dot {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--lane, var(--fg-meta));
-}
-
 /* 14-day bar strip: the one authored moment, bars rise into place on load. */
 
 .bars {

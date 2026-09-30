@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   api: { get: vi.fn() },
   documentService: { listWithPagination: vi.fn(), getFailedOcrDocuments: vi.fn(), getThumbnail: vi.fn() },
   queueService: { getStats: vi.fn(), getOcrStatus: vi.fn(), pauseOcr: vi.fn(), resumeOcr: vi.fn() },
+  sourceService: { getArrivals: vi.fn() },
 }));
 
 vi.mock('../../../services/api', () => ({
@@ -16,6 +17,7 @@ vi.mock('../../../services/api', () => ({
   api: m.api,
   documentService: m.documentService,
   queueService: m.queueService,
+  sourceService: m.sourceService,
 }));
 
 import Home from '../Home';
@@ -34,10 +36,7 @@ function serve(documents = [doc('d1'), doc('d2')], total = documents.length) {
   m.documentService.getThumbnail.mockRejectedValue(new Error('none'));
   m.queueService.getStats.mockResolvedValue({ data: { pending: 4, processing: 1, failed: 99, completed_today: 8, oldest_pending_minutes: 3 } });
   m.queueService.getOcrStatus.mockResolvedValue({ data: { is_paused: false, status: 'running' } });
-  m.api.get.mockImplementation((url: string) => {
-    if (url === '/sources/arrivals') return Promise.resolve({ data: [] });
-    return Promise.reject(new Error(`unexpected ${url}`));
-  });
+  m.sourceService.getArrivals.mockResolvedValue({ data: [] });
 }
 
 async function renderHome() {
