@@ -512,6 +512,48 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
+    async fn login_from(ctx: &TestContext, ip: &str, username: &str, password: &str) -> StatusCode {
+        let addr: std::net::SocketAddr = format!("{}:40000", ip).parse().unwrap();
+        let mut request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/auth/login")
+            .header("Content-Type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&json!({"username": username, "password": password})).unwrap(),
+            ))
+            .unwrap();
+        request.extensions_mut().insert(axum::extract::ConnectInfo(addr));
+        ctx.app.clone().oneshot(request).await.unwrap().status()
+    }
+
+    #[tokio::test]
+    async fn test_failed_logins_from_one_client_do_not_lock_out_others() {
+        let ctx = TestContext::new().await;
+        let unique = uuid::Uuid::new_v4().simple().to_string();
+        let username = format!("lockout_{}", &unique[..12]);
+        ctx.state
+            .db
+            .create_user(CreateUser {
+                username: username.clone(),
+                email: format!("{}@example.com", username),
+                password: "correct-password-123".to_string(),
+                role: Some(UserRole::User),
+            })
+            .await
+            .unwrap();
+
+        for _ in 0..10 {
+            assert_eq!(login_from(&ctx, "198.51.100.10", &username, "wrong").await, StatusCode::UNAUTHORIZED);
+        }
+        // The failing client is now limited for this account, even with the right password...
+        assert_eq!(
+            login_from(&ctx, "198.51.100.10", &username.to_uppercase(), "correct-password-123").await,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+        // ...while the account owner on another address can still sign in.
+        assert_eq!(login_from(&ctx, "203.0.113.20", &username, "correct-password-123").await, StatusCode::OK);
+    }
+
     async fn json_request(
         ctx: &TestContext,
         method: &str,

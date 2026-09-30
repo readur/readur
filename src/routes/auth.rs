@@ -150,6 +150,16 @@ async fn get_auth_config(State(state): State<Arc<AppState>>) -> Json<AuthConfig>
     })
 }
 
+/// Address used to key per-client login limits. Requests without connection
+/// information (only in-process test harnesses) share a single placeholder
+/// address, so the limits still apply to them as one client.
+fn rate_limit_ip(client_ip: ClientIp) -> std::net::IpAddr {
+    if client_ip.0.is_none() {
+        tracing::debug!("Client address unknown; using placeholder address for rate limiting");
+    }
+    client_ip.or_unspecified()
+}
+
 /// A valid bcrypt hash of a random string, verified against when the user
 /// doesn't exist so response time does not reveal which usernames exist.
 fn dummy_password_hash() -> &'static str {
@@ -183,11 +193,13 @@ async fn login(
 
     let limiters = &state.rate_limiters;
     let username_key = login_data.username.to_lowercase();
-    if let Err(retry_after) = limiters.login_failures_by_username.peek(&username_key).await {
-        return rate_limited(retry_after);
-    }
-    if let Some(ip) = client_ip.0 {
-        if let Err(retry_after) = limiters.login_failures_by_ip.peek(&ip).await {
+    let account_key = (username_key.clone(), rate_limit_ip(client_ip));
+    for check in [
+        limiters.login_failures_by_account_ip.peek(&account_key).await,
+        limiters.login_failures_by_username.peek(&username_key).await,
+        limiters.login_failures_by_ip.peek(&account_key.1).await,
+    ] {
+        if let Err(retry_after) = check {
             return rate_limited(retry_after);
         }
     }
@@ -210,10 +222,9 @@ async fn login(
     let user = match (user, password_ok) {
         (Some(user), true) => user,
         _ => {
+            limiters.login_failures_by_account_ip.record(&account_key).await;
             limiters.login_failures_by_username.record(&username_key).await;
-            if let Some(ip) = client_ip.0 {
-                limiters.login_failures_by_ip.record(&ip).await;
-            }
+            limiters.login_failures_by_ip.record(&account_key.1).await;
             return json_error(StatusCode::UNAUTHORIZED, "Invalid username or password");
         }
     };
@@ -264,6 +275,7 @@ async fn logout(State(state): State<Arc<AppState>>, auth_user: AuthUser) -> Resp
 async fn change_password(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
+    client_ip: ClientIp,
     Json(request): Json<ChangePasswordRequest>,
 ) -> Response {
     let user = auth_user.user;
@@ -271,14 +283,21 @@ async fn change_password(
         return json_error(StatusCode::BAD_REQUEST, "This account does not use a local password");
     };
 
+    let limiters = &state.rate_limiters;
     let username_key = user.username.to_lowercase();
-    let limiter = &state.rate_limiters.login_failures_by_username;
-    if let Err(retry_after) = limiter.peek(&username_key).await {
-        return rate_limited(retry_after);
+    let account_key = (username_key.clone(), rate_limit_ip(client_ip));
+    for check in [
+        limiters.login_failures_by_account_ip.peek(&account_key).await,
+        limiters.login_failures_by_username.peek(&username_key).await,
+    ] {
+        if let Err(retry_after) = check {
+            return rate_limited(retry_after);
+        }
     }
 
     if !bcrypt::verify(&request.current_password, current_hash).unwrap_or(false) {
-        limiter.record(&username_key).await;
+        limiters.login_failures_by_account_ip.record(&account_key).await;
+        limiters.login_failures_by_username.record(&username_key).await;
         return json_error(StatusCode::UNAUTHORIZED, "Current password is incorrect");
     }
 
@@ -382,13 +401,19 @@ fn read_cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     responses(
         (status = 302, description = "Redirect to OIDC provider"),
         (status = 400, description = "OIDC not configured"),
+        (status = 429, description = "Too many login attempts from this client"),
         (status = 500, description = "Internal server error")
     )
 )]
-async fn oidc_login(State(state): State<Arc<AppState>>) -> Response {
+async fn oidc_login(State(state): State<Arc<AppState>>, client_ip: ClientIp) -> Response {
     let Some(oidc_client) = state.oidc_client.as_ref() else {
         return json_error(StatusCode::BAD_REQUEST, "OIDC is not configured");
     };
+
+    // Each login start stores pending state server-side.
+    if let Err(retry_after) = state.rate_limiters.auth_misc_by_ip.check(&rate_limit_ip(client_ip)).await {
+        return rate_limited(retry_after);
+    }
 
     let start = match oidc_client.begin_login() {
         Ok(start) => start,

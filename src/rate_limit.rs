@@ -94,21 +94,26 @@ pub struct RateLimiters {
     pub shared_link_creation: RateLimiter<Uuid>,
     /// User-based limiter for API key creation (10/hour per user)
     pub api_key_creation: RateLimiter<Uuid>,
-    /// Failed logins per (lowercased) username (10 per 15 min)
+    /// Failed logins per (lowercased username, client IP) pair (10 per 15 min)
+    pub login_failures_by_account_ip: RateLimiter<(String, IpAddr)>,
+    /// Failed logins per (lowercased) username from any address
+    /// (100 per 15 min). Kept well above the per-pair limit so failures
+    /// from other clients cannot easily lock an account.
     pub login_failures_by_username: RateLimiter<String>,
     /// Failed logins per client IP (50 per 15 min)
     pub login_failures_by_ip: RateLimiter<IpAddr>,
     /// Self-registrations per client IP (10/hour)
     pub registration_by_ip: RateLimiter<IpAddr>,
-    /// Session-bound auth endpoints (OIDC handoff exchange, password change),
-    /// per client IP (30/min)
+    /// Other auth endpoints (OIDC login start and handoff exchange), per
+    /// client IP (30/min)
     pub auth_misc_by_ip: RateLimiter<IpAddr>,
 }
 
 impl RateLimiters {
     pub fn new() -> Self {
         Self {
-            login_failures_by_username: RateLimiter::new(10, Duration::from_secs(900)),
+            login_failures_by_account_ip: RateLimiter::new(10, Duration::from_secs(900)),
+            login_failures_by_username: RateLimiter::new(100, Duration::from_secs(900)),
             login_failures_by_ip: RateLimiter::new(50, Duration::from_secs(900)),
             registration_by_ip: RateLimiter::new(10, Duration::from_secs(3600)),
             auth_misc_by_ip: RateLimiter::new(30, Duration::from_secs(60)),
@@ -127,6 +132,7 @@ impl RateLimiters {
         self.comment_creation.cleanup().await;
         self.shared_link_creation.cleanup().await;
         self.api_key_creation.cleanup().await;
+        self.login_failures_by_account_ip.cleanup().await;
         self.login_failures_by_username.cleanup().await;
         self.login_failures_by_ip.cleanup().await;
         self.registration_by_ip.cleanup().await;
