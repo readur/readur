@@ -81,7 +81,7 @@
 
 .sortMark {
   flex: none;
-  font-size: 9px;
+  font-size: var(--fs-xs);
   visibility: hidden;
 }
 
@@ -155,7 +155,7 @@
 }
 
 /* A changed row keeps its edge bar regardless of motion settings. */
-.lit > .cell:first-child::before {
+.changed > .cell:first-child::before {
   content: '';
   position: absolute;
   top: 0;

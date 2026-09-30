@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EmptyState } from '../EmptyState';
@@ -47,11 +47,12 @@ function Harness(props: Partial<BoardTableProps<Doc>> & { initialSort?: BoardSor
   );
 }
 
-function SelectHarness({ onChange }: { onChange: (keys: Selection) => void }) {
+function SelectHarness({ onChange, onRowAction }: { onChange: (keys: Selection) => void; onRowAction?: (id: string) => void }) {
   const [keys, setKeys] = useState<Selection>(new Set());
   return (
     <Harness
       selectionMode="multiple"
+      onRowAction={onRowAction}
       selectedKeys={keys}
       onSelectionChange={(k) => {
         onChange(k);
@@ -142,26 +143,102 @@ describe('BoardTable', () => {
     for (const row of rows) expect(row).toHaveAttribute('aria-selected', 'true');
   });
 
+  describe('while rows are selected', () => {
+    async function selectFirstRow(user: ReturnType<typeof userEvent.setup>) {
+      const rows = screen.getAllByRole('row').slice(1);
+      await user.click(within(rows[0]).getByRole('checkbox'));
+      expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+      return rows;
+    }
+
+    it('a click on another row opens it without changing the selection', async () => {
+      const onRowAction = vi.fn();
+      const onChange = vi.fn();
+      const user = userEvent.setup();
+      render(<SelectHarness onChange={onChange} onRowAction={onRowAction} />);
+      const rows = await selectFirstRow(user);
+      onChange.mockClear();
+      await user.click(screen.getByRole('rowheader', { name: 'Charlie.pdf' }));
+      expect(onRowAction).toHaveBeenCalledTimes(1);
+      expect(onRowAction).toHaveBeenCalledWith('c');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+      expect(rows[2]).toHaveAttribute('aria-selected', 'false');
+      // Clicking a non-header cell of a selected row also opens it and keeps it selected.
+      await user.click(within(rows[0]).getByRole('gridcell', { name: '3' }));
+      expect(onRowAction).toHaveBeenLastCalledWith('a');
+      expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('Enter on a row opens it without changing the selection', async () => {
+      const onRowAction = vi.fn();
+      const onChange = vi.fn();
+      const user = userEvent.setup();
+      render(<SelectHarness onChange={onChange} onRowAction={onRowAction} />);
+      const rows = await selectFirstRow(user);
+      onChange.mockClear();
+      act(() => rows[1].focus());
+      await user.keyboard('{Enter}');
+      expect(onRowAction).toHaveBeenCalledWith('b');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(rows[1]).toHaveAttribute('aria-selected', 'false');
+      expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('checkbox, Space and select-all still change the selection', async () => {
+      const onRowAction = vi.fn();
+      const onChange = vi.fn();
+      const user = userEvent.setup();
+      render(<SelectHarness onChange={onChange} onRowAction={onRowAction} />);
+      const rows = await selectFirstRow(user);
+      await user.click(within(rows[1]).getByRole('checkbox'));
+      expect(rows[1]).toHaveAttribute('aria-selected', 'true');
+      act(() => rows[2].focus());
+      await user.keyboard(' ');
+      expect(rows[2]).toHaveAttribute('aria-selected', 'true');
+      await user.keyboard(' ');
+      expect(rows[2]).toHaveAttribute('aria-selected', 'false');
+      await user.click(screen.getByRole('checkbox', { name: /select all/i }));
+      expect(onChange).toHaveBeenLastCalledWith('all');
+      for (const row of rows) expect(row).toHaveAttribute('aria-selected', 'true');
+      expect(onRowAction).not.toHaveBeenCalled();
+    });
+  });
+
+  it('a click on a row with no selection opens it and does not select it', async () => {
+    const onRowAction = vi.fn();
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<SelectHarness onChange={onChange} onRowAction={onRowAction} />);
+    await user.click(screen.getByRole('rowheader', { name: 'Bravo.pdf' }));
+    expect(onRowAction).toHaveBeenCalledWith('b');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('has no checkbox column without multiple selection', () => {
     render(<Harness />);
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
-  it('marks lit rows with data-lit', () => {
+  it('marks changed rows with data-changed', () => {
     render(<Harness isRowLit={(d) => Boolean(d.isNew)} />);
     const bravo = screen.getByRole('rowheader', { name: /Bravo\.pdf/ }).closest('[role="row"]');
     const alpha = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]');
-    expect(bravo).toHaveAttribute('data-lit', 'true');
-    expect(alpha).not.toHaveAttribute('data-lit');
+    expect(bravo).toHaveAttribute('data-changed', 'true');
+    expect(alpha).not.toHaveAttribute('data-changed');
+    expect(bravo).not.toHaveAttribute('data-lit');
     // Rows carry their id for the reorder animation.
     expect(bravo).toHaveAttribute('data-flip-key', 'b');
   });
 
-  it('renders a detail line inside the first cell', () => {
+  it('renders a detail line inside the first cell as the row description, not its name', () => {
     render(<Harness renderRowDetail={(d) => d.snippet} />);
-    const cell = screen.getByRole('rowheader', { name: /Bravo\.pdf/ });
+    const cell = screen.getByRole('rowheader', { name: 'Bravo.pdf' });
     expect(within(cell).getByText('matched invoice total')).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'Alpha.pdf' })).toHaveTextContent('Alpha.pdf');
+    const row = cell.closest('[role="row"]') as HTMLElement;
+    expect(row).toHaveAccessibleDescription('matched invoice total');
+    const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
+    expect(alphaRow).not.toHaveAttribute('aria-describedby');
   });
 
   it('renders the empty state when there are no rows', () => {

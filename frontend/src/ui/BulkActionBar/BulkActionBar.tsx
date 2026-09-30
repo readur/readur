@@ -24,35 +24,58 @@ export interface BulkActionBarProps {
   className?: string;
 }
 
-/** Floating toolbar for acting on a selection. Hidden when nothing is selected. */
+/**
+ * Floating toolbar for acting on a selection. The bar is hidden when nothing is selected, but its
+ * polite status region stays mounted so the first selection ("1 selected") is announced.
+ */
 export function BulkActionBar({ count, actions, onClear, className, 'aria-label': ariaLabel }: BulkActionBarProps) {
   const { t } = useTranslation();
-  if (count <= 0) return null;
+  const selectedWord = t('ui.bulk.selected', { defaultValue: 'selected', count });
   return (
-    <div className={cx(styles.dock, className)}>
-      <Toolbar className={styles.bar} aria-label={ariaLabel ?? t('ui.bulk.label', { defaultValue: 'Bulk actions' })}>
-        <span className={styles.count} role="status" aria-live="polite">
-          <span className={styles.number}>{count}</span>{' '}
-          <span className={styles.word}>{t('ui.bulk.selected', { defaultValue: 'selected', count })}</span>
-        </span>
-        <span className={styles.actions}>
-          {actions.map((action) => (
+    <>
+      <span className="visually-hidden" role="status" aria-live="polite">
+        {count > 0 ? `${count} ${selectedWord}` : ''}
+      </span>
+      {count > 0 ? (
+        <div className={cx(styles.dock, className)}>
+          <Toolbar
+            className={styles.bar}
+            aria-label={ariaLabel ?? t('ui.bulk.label', { defaultValue: 'Bulk actions' })}
+          >
+            <span className={styles.count}>
+              <span className={styles.number}>{count}</span>{' '}
+              <span className={styles.word}>{selectedWord}</span>
+            </span>
+            <span className={styles.actions}>
+              {actions.map((action) => (
+                <Button
+                  key={action.id}
+                  size="sm"
+                  variant={action.tone === 'danger' ? 'danger' : 'secondary'}
+                  icon={action.icon}
+                  isDisabled={action.isDisabled}
+                  onPress={action.onPress}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </span>
             <Button
-              key={action.id}
               size="sm"
-              variant={action.tone === 'danger' ? 'danger' : 'secondary'}
-              icon={action.icon}
-              isDisabled={action.isDisabled}
-              onPress={action.onPress}
+              variant="ghost"
+              className={styles.clear}
+              icon={
+                <span className={styles.clearIcon}>
+                  <Close fontSize="inherit" />
+                </span>
+              }
+              onPress={onClear}
             >
-              {action.label}
+              {t('ui.bulk.clear', { defaultValue: 'Clear selection' })}
             </Button>
-          ))}
-        </span>
-        <Button size="sm" variant="ghost" className={styles.clear} icon={<Close sx={{ fontSize: 16 }} />} onPress={onClear}>
-          {t('ui.bulk.clear', { defaultValue: 'Clear selection' })}
-        </Button>
-      </Toolbar>
-    </div>
+          </Toolbar>
+        </div>
+      ) : null}
+    </>
   );
 }

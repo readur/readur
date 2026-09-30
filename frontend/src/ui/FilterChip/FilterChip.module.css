@@ -77,6 +77,12 @@
   color: var(--fg-meta);
 }
 
+/* Icons size to 1em, so the type scale sets their size. */
+.chevron,
+.clear {
+  font-size: var(--fs-md);
+}
+
 .clear {
   width: 26px;
   padding: 0;

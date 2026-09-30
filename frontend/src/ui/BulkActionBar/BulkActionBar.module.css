@@ -50,6 +50,11 @@
   letter-spacing: var(--tracking-label);
 }
 
+.clearIcon {
+  display: inline-flex;
+  font-size: var(--fs-lg);
+}
+
 .actions {
   display: inline-flex;
   flex-wrap: wrap;

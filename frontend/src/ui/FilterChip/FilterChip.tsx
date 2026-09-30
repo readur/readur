@@ -38,7 +38,7 @@ export function FilterChip({ label, value, isActive, onPress, onClear, popover, 
       ) : null}
       {popover ? (
         <span className={styles.chevron} aria-hidden="true">
-          <ExpandMore sx={{ fontSize: 14 }} />
+          <ExpandMore fontSize="inherit" />
         </span>
       ) : null}
     </RACButton>
@@ -64,7 +64,7 @@ export function FilterChip({ label, value, isActive, onPress, onClear, popover, 
           onPress={onClear}
           aria-label={t('ui.filterChip.clear', { defaultValue: 'Clear {{label}} filter', label })}
         >
-          <Close sx={{ fontSize: 14 }} />
+          <Close fontSize="inherit" />
         </RACButton>
       ) : null}
     </span>

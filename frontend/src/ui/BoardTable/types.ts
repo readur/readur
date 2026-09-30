@@ -35,14 +35,26 @@ export interface BoardTableProps<T> {
   /** Controlled sort. Clicking a sortable head calls `onSortChange` with the toggled direction. */
   sort?: BoardSort;
   onSortChange?: (sort: BoardSort) => void;
+  /** `multiple` adds a checkbox column and a select-all checkbox. Space on a focused row toggles it. */
   selectionMode?: 'none' | 'multiple';
   selectedKeys?: Selection;
   onSelectionChange?: (keys: Selection) => void;
-  /** Fires on Enter or click on a row. */
+  /**
+   * Fires on click, tap or Enter on a row, including while other rows are selected. Presses on
+   * the checkbox cell and on controls rendered inside cells do not fire it.
+   */
   onRowAction?: (id: string) => void;
-  /** Rows that changed and still need the user's attention get an edge bar and `data-lit`. */
+  /**
+   * Rows that changed and still need the user's attention get a 3px edge bar and
+   * `data-changed="true"`. The bar is colour only, so the consumer must also render a visible
+   * NEW or CHANGED tag in one of the row's cells.
+   */
   isRowLit?: (row: T) => boolean;
-  /** Optional second line (for example a search snippet) under the row's first column. */
+  /**
+   * Optional second line (for example a search snippet) shown under the first column's value.
+   * It is hidden from the row-header cell's accessible name and exposed instead as the row's
+   * accessible description (`aria-describedby`).
+   */
   renderRowDetail?: (row: T) => ReactNode;
   density?: 'comfortable' | 'compact';
   /** With no rows, shows skeleton rows. With rows, keeps them visible and marks the table busy. */

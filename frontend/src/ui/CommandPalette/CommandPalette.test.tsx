@@ -67,6 +67,55 @@ describe('CommandPalette', () => {
     expect(queries.filter((q) => q === 'inv')).toHaveLength(1);
   });
 
+  it('does not query sources with an empty string unless they opt in', async () => {
+    const user = userEvent.setup();
+    const { sources, searchDocs } = makeSources(() => {});
+    const searchCommands = vi.fn(async () => [{ id: 'c1', title: 'Go to settings', onSelect: () => {} }]);
+    render(<Harness sources={[...sources, { id: 'commands', label: 'Commands', search: searchCommands, searchesEmpty: true }]} />);
+    await openPalette(user);
+    expect(await screen.findByRole('menuitem', { name: 'Go to settings' })).toBeInTheDocument();
+    expect(searchCommands).toHaveBeenCalledWith('');
+    expect(searchDocs).not.toHaveBeenCalled();
+  });
+
+  it('shows a hint and runs no search on open when no source opts in', async () => {
+    const user = userEvent.setup();
+    const { sources, searchDocs, searchLabels } = makeSources(() => {});
+    render(<Harness sources={sources} />);
+    await openPalette(user);
+    expect(await screen.findByText('Type to search')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 200));
+    expect(searchDocs).not.toHaveBeenCalled();
+    expect(searchLabels).not.toHaveBeenCalled();
+  });
+
+  it('does not select anything when Enter is pressed before the search resolves', async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness sources={makeSources(onSelect).sources} />);
+    await openPalette(user);
+    await user.keyboard('invoice{Enter}');
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+  });
+
+  it('hides results from an earlier query while the new one is searched', async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness sources={makeSources(onSelect).sources} />);
+    await openPalette(user);
+    await user.keyboard('invoice');
+    await screen.findByRole('menuitem', { name: 'Invoice March' });
+    await user.keyboard('x');
+    expect(screen.queryByRole('menuitem', { name: 'Invoice March' })).not.toBeInTheDocument();
+    expect(screen.getByText('Searching…', { selector: 'p' })).toBeInTheDocument();
+    await user.keyboard('{Enter}');
+    expect(onSelect).not.toHaveBeenCalled();
+    // Once the new query resolves, only its results are shown.
+    expect(await screen.findByRole('menuitem', { name: 'Invoices' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Invoice March' })).not.toBeInTheDocument();
+  });
+
   it('groups results under source headings', async () => {
     const user = userEvent.setup();
     render(<Harness sources={makeSources(() => {}).sources} />);

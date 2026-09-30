@@ -19,6 +19,7 @@
   --btn-bg: #0B0D10;
   --btn-fg: #FFFFFF;
   --shadow-overlay: 0 8px 24px rgba(11, 13, 16, 0.16);
+  --scrim: rgba(11, 13, 16, 0.2);
 }
 
 [data-theme="dark"] {
@@ -39,6 +40,7 @@
   --btn-bg: #E8EAED;
   --btn-fg: #0B0D10;
   --shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --scrim: rgba(11, 13, 16, 0.5);
 }
 
 :root {

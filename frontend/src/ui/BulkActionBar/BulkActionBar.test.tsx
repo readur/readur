@@ -24,7 +24,8 @@ describe('BulkActionBar', () => {
   it('renders a named toolbar with the count and actions', () => {
     setup(3);
     const bar = screen.getByRole('toolbar', { name: 'Bulk actions' });
-    expect(within(bar).getByRole('status')).toHaveTextContent('3 selected');
+    expect(bar).toHaveTextContent('3 selected');
+    expect(screen.getByRole('status')).toHaveTextContent('3 selected');
     expect(within(bar).getByRole('button', { name: 'Download' })).toBeInTheDocument();
     expect(within(bar).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
     expect(within(bar).getByRole('button', { name: 'Clear selection' })).toBeInTheDocument();
@@ -32,6 +33,20 @@ describe('BulkActionBar', () => {
 
   it('is hidden when nothing is selected', () => {
     setup(0);
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
+  });
+
+  it('keeps its live region mounted at zero so the first selection is announced', () => {
+    const props = { actions: [], onClear: () => {} };
+    const { rerender } = render(<BulkActionBar count={0} {...props} />);
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toBeEmptyDOMElement();
+    rerender(<BulkActionBar count={1} {...props} />);
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status).toHaveTextContent('1 selected');
+    rerender(<BulkActionBar count={0} {...props} />);
+    expect(screen.getByRole('status')).toBe(status);
     expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
   });
 

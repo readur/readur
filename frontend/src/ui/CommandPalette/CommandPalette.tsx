@@ -25,7 +25,8 @@ export interface CommandPaletteProps {
 
 /**
  * Centred search-anything dialog. Sources are queried with a 150ms debounce and results are
- * grouped by source. ↑/↓ move, Enter selects, Esc closes.
+ * grouped by source. ↑/↓ move, Enter selects, Esc closes. Only results for the text currently in
+ * the field are shown (and selectable); while they load, the list shows a loading state.
  */
 export function CommandPalette({ isOpen, onOpenChange, sources, placeholder }: CommandPaletteProps) {
   const { t } = useTranslation();
@@ -70,7 +71,9 @@ export function CommandPalette({ isOpen, onOpenChange, sources, placeholder }: C
                   <p className={styles.empty}>
                     {isLoading
                       ? t('ui.commandPalette.loading', 'Searching…')
-                      : t('ui.commandPalette.noResults', 'No results')}
+                      : query.trim() === ''
+                        ? t('ui.commandPalette.hint', 'Type to search')
+                        : t('ui.commandPalette.noResults', 'No results')}
                   </p>
                 )}
               >

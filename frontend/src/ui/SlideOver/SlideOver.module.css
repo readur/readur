@@ -5,7 +5,7 @@
   z-index: 100;
   display: flex;
   justify-content: flex-end;
-  background: color-mix(in srgb, var(--signal-ink) 20%, transparent);
+  background: var(--scrim);
 }
 
 .panel {
