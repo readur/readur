@@ -9,14 +9,15 @@ vi.mock('../../../services/api', () => ({
   default: { get: vi.fn() },
   api: { defaults: { headers: { common: {} } } },
   documentService: { enhancedSearch: vi.fn() },
+  labelService: { list: vi.fn(() => new Promise(() => {})) },
 }));
 
 const location = () => screen.getByRole('status', { name: 'location' });
 const DESTINATIONS = [
-  ['Board', '/board'],
+  ['Home', '/home'],
+  ['Search', '/search'],
   ['Library', '/documents'],
   ['Intake', '/intake'],
-  ['Settings', '/settings'],
 ] as const;
 
 beforeEach(() => {
@@ -30,10 +31,10 @@ describe('bottom tab bar visibility', () => {
     setMedia();
     renderShell();
     expect(screen.queryByRole('navigation', { name: 'Tab bar' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('navigation')).toHaveLength(1);
+    expect(screen.getAllByRole('navigation', { name: 'Main' })).toHaveLength(1);
   });
 
-  it('replaces the top-bar nav on a narrow screen', () => {
+  it('replaces the sidebar nav on a narrow screen', () => {
     setMedia(NARROW);
     renderShell();
     const navs = screen.getAllByRole('navigation');
@@ -81,7 +82,7 @@ describe('bottom tab bar items', () => {
 
   it.each(DESTINATIONS)('navigates to %s when pressed', async (name, href) => {
     const user = userEvent.setup();
-    renderShell({ path: name === 'Board' ? '/settings' : '/board' });
+    renderShell({ path: name === 'Home' ? '/settings' : '/home' });
     const bar = screen.getByRole('navigation', { name: 'Main' });
     await user.click(within(bar).getByRole('link', { name }));
     expect(location()).toHaveTextContent(href);
@@ -92,7 +93,7 @@ describe('bottom tab bar items', () => {
     renderShell({ path: '/intake?section=watch' });
     const bar = screen.getByRole('navigation', { name: 'Main' });
     expect(within(bar).getByRole('link', { name: 'Intake' })).toHaveAttribute('aria-current', 'page');
-    ['Board', 'Library', 'Settings'].forEach((name) =>
+    ['Home', 'Search', 'Library'].forEach((name) =>
       expect(within(bar).getByRole('link', { name })).not.toHaveAttribute('aria-current'),
     );
   });
@@ -111,7 +112,7 @@ describe('bottom tab bar items', () => {
 
   it('opens a link with Enter', async () => {
     const user = userEvent.setup();
-    renderShell({ path: '/board' });
+    renderShell({ path: '/home' });
     within(screen.getByRole('navigation', { name: 'Main' }))
       .getByRole('link', { name: 'Library' })
       .focus();

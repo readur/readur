@@ -10,7 +10,7 @@ import { loginErrorMessage, safeRedirect, ssoErrorMessage } from './authErrors';
 import pkg from '../../../package.json';
 import styles from './Auth.module.css';
 
-const HOME_PATH = '/board';
+const HOME_PATH = '/home';
 const OIDC_LOGIN_URL = '/api/auth/oidc/login';
 
 /** Public /login page. Field visibility follows the server's auth config. */

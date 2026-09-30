@@ -18,10 +18,11 @@ vi.mock('../../services/api', async () => {
     ErrorHelper: errors.ErrorHelper,
     ErrorCodes: errors.ErrorCodes,
     documentService: { enhancedSearch: vi.fn() },
+    labelService: { list: vi.fn(() => new Promise(() => {})) },
   };
 });
 
-vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('board') }));
+vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('home') }));
 vi.mock('../../features/library', async () => ({ default: (await import('./routeProbe')).probe('library') }));
 vi.mock('../../features/library/SearchRoute', async () => ({ default: (await import('./routeProbe')).probe('search') }));
 vi.mock('../../features/document', async () => ({ default: (await import('./routeProbe')).probe('document') }));
@@ -81,9 +82,9 @@ describe('return to the requested route after sign-in', () => {
     expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent('/documents?q=x');
   });
 
-  it('goes to /board when /login is visited directly', async () => {
+  it('goes to /home when /login is visited directly', async () => {
     renderAt('/login');
     await signIn();
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'board entry' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'home entry' })).toBeInTheDocument());
   });
 });

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { Dashboard, Description, Download, Settings } from '../../ui/icons';
+import { Download, Home, LibraryIcon, Search, Settings } from '../../ui/icons';
 
-export type DestinationId = 'board' | 'library' | 'intake' | 'settings';
+export type DestinationId = 'home' | 'search' | 'library' | 'intake' | 'settings';
 
 export interface Destination {
   id: DestinationId;
@@ -12,24 +12,39 @@ export interface Destination {
   icon: ReactNode;
   /** Path prefixes that make this destination the current one. */
   matches: string[];
+  /** Shown in the phone tab bar (Settings lives in the drawer instead). */
+  inTabBar: boolean;
 }
+
+export const HOME_PATH = '/home';
 
 export const DESTINATIONS: readonly Destination[] = [
   {
-    id: 'board',
-    labelKey: 'shell.nav.board',
-    fallback: 'Board',
-    path: '/board',
-    icon: <Dashboard fontSize="inherit" />,
-    matches: ['/board'],
+    id: 'home',
+    labelKey: 'shell.nav.home',
+    fallback: 'Home',
+    path: HOME_PATH,
+    icon: <Home fontSize="inherit" />,
+    matches: ['/home'],
+    inTabBar: true,
+  },
+  {
+    id: 'search',
+    labelKey: 'shell.nav.search',
+    fallback: 'Search',
+    path: '/search',
+    icon: <Search fontSize="inherit" />,
+    matches: ['/search'],
+    inTabBar: true,
   },
   {
     id: 'library',
     labelKey: 'shell.nav.library',
     fallback: 'Library',
     path: '/documents',
-    icon: <Description fontSize="inherit" />,
-    matches: ['/documents', '/search'],
+    icon: <LibraryIcon fontSize="inherit" />,
+    matches: ['/documents'],
+    inTabBar: true,
   },
   {
     id: 'intake',
@@ -38,6 +53,7 @@ export const DESTINATIONS: readonly Destination[] = [
     path: '/intake',
     icon: <Download fontSize="inherit" />,
     matches: ['/intake'],
+    inTabBar: true,
   },
   {
     id: 'settings',
@@ -46,6 +62,7 @@ export const DESTINATIONS: readonly Destination[] = [
     path: '/settings',
     icon: <Settings fontSize="inherit" />,
     matches: ['/settings'],
+    inTabBar: false,
   },
 ];
 

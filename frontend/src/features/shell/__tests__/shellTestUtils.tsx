@@ -36,7 +36,7 @@ export function installStorage(storage: Storage = new MemoryStorage()): Storage 
   return storage;
 }
 
-/** Media queries that should match, e.g. `{ '(max-width: 719px)': true }`. */
+/** Media queries that should match, e.g. `{ '(max-width: 899px)': true }`. */
 export function setMedia(queries: Record<string, boolean> = {}) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -45,7 +45,7 @@ export function setMedia(queries: Record<string, boolean> = {}) {
   });
 }
 
-export const NARROW = { '(max-width: 719px)': true };
+export const NARROW = { '(max-width: 899px)': true, '(max-width: 719px)': true };
 export const STANDALONE = { '(display-mode: standalone)': true };
 
 /** Renders the current location so tests can assert navigation by role. */
@@ -83,7 +83,7 @@ export interface RenderShellOptions {
   page?: ReactNode;
 }
 
-export function renderShell({ path = '/board', logout = vi.fn(), notifications = [], page }: RenderShellOptions = {}) {
+export function renderShell({ path = '/home', logout = vi.fn(), notifications = [], page }: RenderShellOptions = {}) {
   const auth = { user: testUser, loading: false, login: vi.fn(), register: vi.fn(), logout };
   const tree = (
     <ThemeModeProvider>

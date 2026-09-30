@@ -20,10 +20,11 @@ vi.mock('../../services/api', async () => {
     ErrorHelper: errors.ErrorHelper,
     ErrorCodes: errors.ErrorCodes,
     documentService: { enhancedSearch: vi.fn() },
+    labelService: { list: vi.fn(() => new Promise(() => {})) },
   };
 });
 
-vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('board') }));
+vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('home') }));
 vi.mock('../../features/library', async () => ({ default: (await import('./routeProbe')).probe('library') }));
 vi.mock('../../features/library/SearchRoute', async () => ({ default: (await import('./routeProbe')).probe('search') }));
 vi.mock('../../features/document', async () => ({ default: (await import('./routeProbe')).probe('document') }));
@@ -74,7 +75,7 @@ const signedIn = () => {
 };
 
 describe('sign-in with the real AuthProvider', () => {
-  it('returns to the requested route, not /board', async () => {
+  it('returns to the requested route, not /home', async () => {
     renderAt('/documents?q=x#top');
     expect(await screen.findByRole('heading', { level: 1, name: 'Sign in' })).toBeInTheDocument();
     await signIn();
@@ -85,10 +86,10 @@ describe('sign-in with the real AuthProvider', () => {
     expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent('/documents?q=x#top');
   });
 
-  it('goes to /board when /login is opened directly', async () => {
+  it('goes to /home when /login is opened directly', async () => {
     renderAt('/login');
     await signIn();
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'board entry' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'home entry' })).toBeInTheDocument());
   });
 
   it('sends a signed-in visitor on /login to the requested route', async () => {
@@ -101,6 +102,6 @@ describe('sign-in with the real AuthProvider', () => {
   it('ignores an off-site requested route for a signed-in visitor', async () => {
     signedIn();
     renderAt({ pathname: '/login', state: { from: '//evil.example' } });
-    expect(await screen.findByRole('heading', { name: 'board entry' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'home entry' })).toBeInTheDocument();
   });
 });

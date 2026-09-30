@@ -2,16 +2,19 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import i18n from 'i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import api, { documentService } from '../../../services/api';
+import api, { documentService, labelService } from '../../../services/api';
 import { installStorage, renderShell, setMedia } from './shellTestUtils';
 
 vi.mock('../../../services/api', () => ({
   default: { get: vi.fn() },
   api: { defaults: { headers: { common: {} } } },
   documentService: { enhancedSearch: vi.fn() },
+  labelService: { list: vi.fn() },
 }));
 
 const mockedGet = vi.mocked(api.get);
+const mockedLabels = vi.mocked(labelService.list);
+const sourcesCalls = () => mockedGet.mock.calls.filter(([url]) => url === '/sources').length;
 const mockedSearch = vi.mocked(documentService.enhancedSearch);
 
 const location = () => screen.getByRole('status', { name: 'location' });
@@ -23,6 +26,7 @@ beforeEach(() => {
   // Unresolved by default so the sync readout doesn't update outside act() in unrelated tests.
   mockedGet.mockReturnValue(new Promise(() => {}) as never);
   mockedSearch.mockResolvedValue({ data: { documents: [], total: 0 } } as never);
+  mockedLabels.mockReturnValue(new Promise(() => {}) as never);
 });
 
 afterEach(() => {
@@ -39,9 +43,17 @@ describe('AppShell layout', () => {
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main');
   });
 
-  it('renders the wordmark as a link to the board', () => {
+  it('renders the wordmark as a link home', () => {
     renderShell({ path: '/settings' });
-    expect(screen.getByRole('link', { name: 'Readur home' })).toHaveAttribute('href', '/board');
+    expect(screen.getByRole('link', { name: 'Readur home' })).toHaveAttribute('href', '/home');
+  });
+
+  it('puts the destinations, collections and sources in the sidebar', () => {
+    renderShell();
+    const banner = screen.getByRole('banner');
+    expect(within(banner).getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    expect(within(banner).getByRole('navigation', { name: 'Collections' })).toBeInTheDocument();
+    expect(within(banner).getByRole('navigation', { name: 'Sources' })).toBeInTheDocument();
   });
 
   it('renders the matched page inside main', () => {
@@ -51,19 +63,19 @@ describe('AppShell layout', () => {
 });
 
 describe('primary navigation', () => {
-  it('shows the four destinations in order', () => {
+  it('shows the five destinations in order', () => {
     renderShell();
     const nav = screen.getByRole('navigation', { name: 'Main' });
     const links = within(nav).getAllByRole('link');
-    expect(links.map((l) => l.textContent)).toEqual(['Board', 'Library', 'Intake', 'Settings']);
-    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/board', '/documents', '/intake', '/settings']);
+    expect(links.map((l) => l.textContent)).toEqual(['Home', 'Search', 'Library', 'Intake', 'Settings']);
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/home', '/search', '/documents', '/intake', '/settings']);
   });
 
   it.each([
-    ['/board', 'Board'],
+    ['/home', 'Home'],
     ['/documents', 'Library'],
     ['/documents/abc', 'Library'],
-    ['/search', 'Library'],
+    ['/search', 'Search'],
     ['/intake', 'Intake'],
     ['/settings/labels', 'Settings'],
   ])('marks the current destination for %s', (path, name) => {
@@ -78,12 +90,12 @@ describe('primary navigation', () => {
 
   it('moves aria-current when navigating', async () => {
     const user = userEvent.setup();
-    renderShell({ path: '/board' });
+    renderShell({ path: '/home' });
     const nav = screen.getByRole('navigation', { name: 'Main' });
     await user.click(within(nav).getByRole('link', { name: 'Intake' }));
     expect(location()).toHaveTextContent('/intake');
     expect(within(nav).getByRole('link', { name: 'Intake' })).toHaveAttribute('aria-current', 'page');
-    expect(within(nav).getByRole('link', { name: 'Board' })).not.toHaveAttribute('aria-current');
+    expect(within(nav).getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current');
   });
 });
 
@@ -112,7 +124,7 @@ describe('command palette', () => {
 
   it('lists destinations on open and navigates to the chosen one', async () => {
     const user = userEvent.setup();
-    renderShell({ path: '/board' });
+    renderShell({ path: '/home' });
     await user.click(screen.getByRole('button', { name: 'Search documents' }));
     const intake = await screen.findByRole('menuitem', { name: 'Intake' });
     await user.click(intake);
@@ -211,7 +223,7 @@ describe('user menu', () => {
   it('shows who is signed in and logs out', async () => {
     const user = userEvent.setup();
     const { auth } = renderShell({ path: '/documents' });
-    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByRole('button', { name: /^Account menu/ }));
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByText('ada')).toBeInTheDocument();
     expect(within(menu).getByText('ada@example.com')).toBeInTheDocument();
@@ -223,12 +235,12 @@ describe('user menu', () => {
   it('opens settings and the API docs in a new tab', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     const user = userEvent.setup();
-    renderShell({ path: '/board' });
-    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    renderShell({ path: '/home' });
+    await user.click(screen.getByRole('button', { name: /^Account menu/ }));
     await user.click(await screen.findByRole('menuitem', { name: 'API documentation' }));
     expect(open).toHaveBeenCalledWith('/swagger-ui', '_blank', 'noopener,noreferrer');
 
-    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByRole('button', { name: /^Account menu/ }));
     await user.click(await screen.findByRole('menuitem', { name: 'Settings' }));
     expect(location()).toHaveTextContent('/settings');
     open.mockRestore();
@@ -248,6 +260,7 @@ describe('synced readout', () => {
     renderShell();
     expect(await screen.findByText('synced 2m ago')).toBeInTheDocument();
     expect(mockedGet).toHaveBeenCalledWith('/sources');
+    expect(sourcesCalls()).toBe(1);
   });
 
   it('renders nothing when there are no sources', async () => {
@@ -263,10 +276,10 @@ describe('synced readout', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderShell();
     await act(async () => {});
-    expect(mockedGet).toHaveBeenCalledTimes(1);
+    expect(sourcesCalls()).toBe(1);
     await act(async () => {
       vi.advanceTimersByTime(60_000);
     });
-    expect(mockedGet).toHaveBeenCalledTimes(2);
+    expect(sourcesCalls()).toBe(2);
   });
 });

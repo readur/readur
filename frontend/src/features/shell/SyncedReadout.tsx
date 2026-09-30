@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { useLastSynced } from './useLastSynced';
-import styles from './AppShell.module.css';
+import styles from './Sidebar.module.css';
 
 const MINUTE = 60_000;
 
@@ -15,10 +14,9 @@ export function formatSynced(t: TFunction, at: Date, now: number): string {
   return t('shell.synced.days', { count: Math.floor(hours / 24), defaultValue: 'synced {{count}}d ago' });
 }
 
-/** Mono "synced 2m ago" readout. Renders nothing until some source has synced. */
-export function SyncedReadout() {
+/** "synced 2m ago" for the most recent sync across sources. Renders nothing until one has synced. */
+export function SyncedReadout({ last }: { last: Date | null }) {
   const { t } = useTranslation();
-  const last = useLastSynced();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {

@@ -15,7 +15,7 @@ export interface PageHeaderProps {
   className?: string;
 }
 
-/** Page title block: condensed display h1 with a hairline rule under it and actions on the right. */
+/** Page title block: a sentence-case h1 with an optional count, a meta line and actions on the right. */
 export function PageHeader({ title, actions, meta, figure, headingId, className }: PageHeaderProps) {
   return (
     <div className={className ? `${styles.header} ${className}` : styles.header}>

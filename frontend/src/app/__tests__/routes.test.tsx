@@ -6,15 +6,16 @@ import { AuthContext } from '../../contexts/AuthContext';
 import { ThemeModeProvider } from '../../theme/ThemeProvider';
 import { createResponsiveMatchMediaMock } from '../../test/pwa-test-utils';
 import { AppRoutes } from '../routes';
-import { LEGACY_ROUTES, mergeSearch } from '../legacyRoutes';
+import { LEGACY_ROUTES, mergeSearch, searchAliasTarget } from '../legacyRoutes';
 
 vi.mock('../../services/api', () => ({
   default: { get: vi.fn() },
   api: { defaults: { headers: { common: {} } } },
   documentService: { enhancedSearch: vi.fn() },
+  labelService: { list: vi.fn(() => new Promise(() => {})) },
 }));
 
-vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('board') }));
+vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('home') }));
 vi.mock('../../features/library', async () => ({ default: (await import('./routeProbe')).probe('library') }));
 vi.mock('../../features/library/SearchRoute', async () => ({ default: (await import('./routeProbe')).probe('search') }));
 vi.mock('../../features/document', async () => ({ default: (await import('./routeProbe')).probe('document') }));
@@ -55,12 +56,12 @@ beforeEach(() => {
 describe('legacy redirects', () => {
   it('covers every old URL', () => {
     expect(LEGACY_ROUTES.map((r) => r.from).sort()).toEqual(
-      ['/', '/dashboard', '/upload', '/sources', '/watch', '/documents/management', '/ignored-files', '/labels', '/debug', '/profile'].sort(),
+      ['/', '/board', '/dashboard', '/upload', '/sources', '/watch', '/documents/management', '/ignored-files', '/labels', '/debug', '/profile'].sort(),
     );
   });
 
   const expectedEntry: Record<string, string> = {
-    '/board': 'board',
+    '/home': 'home',
     '/intake': 'intake',
     '/settings': 'settings',
     '/settings/labels': 'settings',
@@ -102,7 +103,7 @@ describe('legacy redirects', () => {
 
 describe('destinations', () => {
   it.each([
-    ['/board', 'board'],
+    ['/home', 'home'],
     ['/documents', 'library'],
     ['/search?q=tax', 'search'],
     ['/intake?section=watch', 'intake'],
@@ -126,10 +127,16 @@ describe('destinations', () => {
     expect(screen.getByRole('status', { name: 'params' })).toHaveTextContent('"section":"labels"');
   });
 
-  it('sends unknown paths to the board', async () => {
+  it('sends unknown paths home', async () => {
     renderAt('/nope');
-    expect(await entry('board')).toBeInTheDocument();
-    expect(location().textContent).toBe('/board');
+    expect(await entry('home')).toBeInTheDocument();
+    expect(location().textContent).toBe('/home');
+  });
+
+  it('renames /search?query= to /search?q=, keeping other parameters', async () => {
+    renderAt('/search?query=shoulder&label=l1');
+    expect(await entry('search')).toBeInTheDocument();
+    expect(location().textContent).toBe('/search?q=shoulder&label=l1');
   });
 });
 
@@ -143,12 +150,12 @@ describe('auth gating', () => {
 
   it('sends signed-in users away from /login', async () => {
     renderAt('/login');
-    expect(await entry('board')).toBeInTheDocument();
+    expect(await entry('home')).toBeInTheDocument();
   });
 
   it('sends signed-in users away from /register', async () => {
     renderAt('/register');
-    expect(await entry('board')).toBeInTheDocument();
+    expect(await entry('home')).toBeInTheDocument();
   });
 
   it.each([
@@ -159,5 +166,21 @@ describe('auth gating', () => {
     renderAt(path, false);
     expect(await entry(name)).toBeInTheDocument();
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+  });
+});
+
+describe('searchAliasTarget', () => {
+  it('leaves a query string without `query` alone', () => {
+    expect(searchAliasTarget('?q=tax')).toBeNull();
+    expect(searchAliasTarget('')).toBeNull();
+  });
+
+  it('renames query to q and puts q first', () => {
+    expect(searchAliasTarget('?page=2&query=tax')).toBe('?q=tax&page=2');
+  });
+
+  it('lets an existing q win and drops an empty query', () => {
+    expect(searchAliasTarget('?query=old&q=new')).toBe('?q=new');
+    expect(searchAliasTarget('?query=')).toBe('');
   });
 });

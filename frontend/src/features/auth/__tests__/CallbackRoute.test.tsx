@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe('CallbackRoute', () => {
-  it('redeems the one-time code from the URL fragment, signs in and goes to /board', async () => {
+  it('redeems the one-time code from the URL fragment, signs in and goes to /home', async () => {
     const session = {
       token: 'jwt-token',
       user: { id: '1', username: 'alice', email: 'a@example.com', role: 'user' as const, is_active: true },
@@ -44,7 +44,7 @@ describe('CallbackRoute', () => {
     renderCallback();
     expect(screen.getByRole('heading', { level: 1, name: 'Signing you in…' })).toBeInTheDocument();
 
-    expect(await screen.findByRole('status', { name: 'location' })).toHaveTextContent('/board');
+    expect(await screen.findByRole('status', { name: 'location' })).toHaveTextContent('/home');
     expect(api.post).toHaveBeenCalledWith('/auth/oidc/exchange', { code: 'one-time-code' });
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(completeLogin).toHaveBeenCalledWith(session);

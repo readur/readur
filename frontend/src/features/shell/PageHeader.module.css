@@ -4,9 +4,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--s-3) var(--s-4);
-  padding-bottom: var(--s-3);
   margin-bottom: var(--s-5);
-  border-bottom: 1px solid var(--line);
 }
 
 .titles {
@@ -26,23 +24,21 @@
 }
 
 .figure {
-  font-family: var(--font-data);
+  font-size: var(--fs-lg);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-xl);
-  font-weight: 600;
   line-height: 1;
-  color: var(--fg);
+  color: var(--fg-meta);
 }
 
 .title {
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-display-stretch);
-  font-size: var(--fs-3xl);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.005em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: var(--fs-title);
+  font-weight: 650;
+  line-height: var(--lh-title);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
   color: var(--fg);
   min-width: 0;
   max-width: 100%;
@@ -51,9 +47,8 @@
 }
 
 .meta {
-  font-family: var(--font-data);
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-sm);
   color: var(--fg-2);
 }
 

@@ -10,7 +10,7 @@ import { AuthLayout } from './AuthLayout';
 import { MIN_PASSWORD_LENGTH, validateNewPassword } from './passwordPolicy';
 import styles from './Auth.module.css';
 
-const HOME_PATH = '/board';
+const HOME_PATH = '/home';
 
 /** Maps a failed registration to a fixed message. */
 export function registerErrorMessage(err: unknown, t: TFunction): string {

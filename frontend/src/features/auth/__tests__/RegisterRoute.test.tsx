@@ -63,13 +63,13 @@ describe('RegisterRoute', () => {
     expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login');
   });
 
-  it('goes to the board when the account is active straight away', async () => {
+  it('goes home when the account is active straight away', async () => {
     const register = vi.fn().mockResolvedValue({ pendingApproval: false, user: {} });
     const user = userEvent.setup();
     renderRegister({ auth: { register } });
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Sign up' }));
-    expect(await screen.findByRole('status', { name: 'location' })).toHaveTextContent('/board');
+    expect(await screen.findByRole('status', { name: 'location' })).toHaveTextContent('/home');
     expect(where()).toBeInTheDocument();
   });
 

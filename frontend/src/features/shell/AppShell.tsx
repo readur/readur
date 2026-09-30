@@ -1,21 +1,26 @@
-import { Suspense, useCallback, useState, type ReactNode } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CommandPalette, Skeleton, useCommandPaletteShortcut } from '../../ui';
+import { CommandPalette, IconButton, Skeleton, useCommandPaletteShortcut } from '../../ui';
+import { Menu } from '../../ui/icons';
 import { cx } from '../../ui/shared/FieldParts';
 import { useLitFeeders } from '../board/litFeeders';
 import { AlertsButton } from './AlertsButton';
-import { LanguageMenu } from './LanguageMenu';
+import { HOME_PATH } from './destinations';
+import { MobileDrawer } from './MobileDrawer';
 import { PrimaryNav } from './PrimaryNav';
 import { SearchTrigger } from './SearchTrigger';
-import { SyncedReadout } from './SyncedReadout';
-import { ThemeToggle } from './ThemeToggle';
-import { UserMenu } from './UserMenu';
-import { useIsNarrow, useMediaQuery } from './useMediaQuery';
+import { Sidebar } from './Sidebar';
+import { useCollections } from './useCollections';
+import { useLatestSync, useSourcesList } from './useLastSynced';
+import { useMediaQuery } from './useMediaQuery';
 import { usePaletteSources } from './usePaletteSources';
 import styles from './AppShell.module.css';
 
 const STANDALONE_QUERY = '(display-mode: standalone)';
+
+/** Below this width the sidebar becomes a drawer and the tab bar appears. */
+export const DRAWER_QUERY = '(max-width: 899px)';
 
 /** Installed-app mode (display-mode: standalone, or iOS home-screen). */
 function useIsStandalone(): boolean {
@@ -39,45 +44,67 @@ export interface AppShellProps {
   children?: ReactNode;
 }
 
-/** Top bar with the four destinations, search, sync readout, alerts and account; bottom tab bar on narrow screens. */
+/**
+ * Left sidebar with destinations, collections and sources; on narrow screens a slim top bar opens
+ * the same sidebar as a drawer and a tab bar holds the main destinations.
+ */
 export function AppShell({ children }: AppShellProps) {
   const { t } = useTranslation();
-  const isNarrow = useIsNarrow();
+  const { key: locationKey } = useLocation();
+  const isDrawerLayout = useMediaQuery(DRAWER_QUERY);
   const isStandalone = useIsStandalone();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const openPalette = useCallback(() => setPaletteOpen(true), []);
-  const sources = usePaletteSources();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const openPalette = useCallback(() => {
+    setDrawerOpen(false);
+    setPaletteOpen(true);
+  }, []);
+  const paletteSources = usePaletteSources();
+  const labels = useCollections();
+  const sources = useSourcesList();
+  const lastSynced = useLatestSync(sources);
   useCommandPaletteShortcut(openPalette);
   useLitFeeders();
 
+  // Following a link in the drawer closes it.
+  useEffect(() => setDrawerOpen(false), [locationKey]);
+  useEffect(() => {
+    if (!isDrawerLayout) setDrawerOpen(false);
+  }, [isDrawerLayout]);
+
   // The installed app always gets the tab bar (CSS still hides it on wide screens).
-  const showBottomBar = isNarrow || isStandalone;
-  const navLabel = t('shell.nav.label', 'Main');
+  const showBottomBar = isDrawerLayout || isStandalone;
+  const sidebar = (
+    <Sidebar onOpenPalette={openPalette} labels={labels} sources={sources} lastSynced={lastSynced} />
+  );
 
   return (
-    <div className={cx(styles.shell, showBottomBar && styles.withBottomBar)}>
+    <div className={cx(styles.shell, isDrawerLayout && styles.drawerLayout, showBottomBar && styles.withBottomBar)}>
       <a href="#main" className={styles.skipLink}>
         {t('shell.skipToContent', 'Skip to content')}
       </a>
-      <header className={styles.topBar}>
-        <Link to="/board" className={styles.wordmark} aria-label={t('shell.home', 'Readur home')}>
-          <img src="/readur-64.png" alt="" width={20} height={20} className={styles.logo} />
-          <span className={styles.wordmarkText} aria-hidden="true">
-            {t('common.appName', 'Readur')}
-          </span>
-        </Link>
-        {isNarrow ? null : <PrimaryNav variant="top" label={navLabel} />}
-        <div className={styles.search}>
-          <SearchTrigger onOpen={openPalette} compact={isNarrow} />
-        </div>
-        <div className={styles.tools}>
-          <SyncedReadout />
-          <AlertsButton />
-          <LanguageMenu />
-          <ThemeToggle />
-          <UserMenu />
-        </div>
-      </header>
+      {isDrawerLayout ? (
+        <header className={styles.mobileBar}>
+          <IconButton
+            label={t('shell.menu.open', 'Open menu')}
+            icon={<Menu fontSize="inherit" />}
+            onPress={() => setDrawerOpen(true)}
+            aria-expanded={drawerOpen}
+          />
+          <Link to={HOME_PATH} className={styles.wordmark} aria-label={t('shell.home', 'Readur home')}>
+            <img src="/readur-64.png" alt="" width={24} height={24} className={styles.logo} />
+            <span className={styles.wordmarkText} aria-hidden="true">
+              {t('common.appName', 'Readur')}
+            </span>
+          </Link>
+          <div className={styles.mobileTools}>
+            <SearchTrigger onOpen={openPalette} compact />
+            <AlertsButton />
+          </div>
+        </header>
+      ) : (
+        <header className={styles.sidebarFrame}>{sidebar}</header>
+      )}
 
       <main id="main" tabIndex={-1} className={styles.main}>
         <div className={styles.content}>
@@ -85,14 +112,23 @@ export function AppShell({ children }: AppShellProps) {
         </div>
       </main>
 
+      {isDrawerLayout ? (
+        <MobileDrawer isOpen={drawerOpen} onOpenChange={setDrawerOpen}>
+          {sidebar}
+        </MobileDrawer>
+      ) : null}
+
       {showBottomBar ? (
-        <PrimaryNav variant="bottom" label={isNarrow ? navLabel : t('shell.nav.tabBar', 'Tab bar')} />
+        <PrimaryNav
+          variant="bottom"
+          label={isDrawerLayout ? t('shell.nav.label', 'Main') : t('shell.nav.tabBar', 'Tab bar')}
+        />
       ) : null}
 
       <CommandPalette
         isOpen={paletteOpen}
         onOpenChange={setPaletteOpen}
-        sources={sources}
+        sources={paletteSources}
         placeholder={t('shell.search.placeholder', 'Search documents…')}
       />
     </div>

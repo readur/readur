@@ -7,7 +7,7 @@ import { callbackErrorMessage, exchangeErrorMessage } from './authErrors';
 import { AuthLayout } from './AuthLayout';
 import styles from './Auth.module.css';
 
-const HOME_PATH = '/board';
+const HOME_PATH = '/home';
 
 /**
  * Reads the one-time sign-in code (or a failure code) from the URL fragment

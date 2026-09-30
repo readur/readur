@@ -28,9 +28,14 @@ describe('layer scale', () => {
     expect(scale('z-toast')).toBeLessThan(scale('z-palette'));
   });
 
-  it('puts the app bar and tab bar on the shell layer', () => {
-    expect(layerOf('features/shell/AppShell.module.css', '.topBar')).toBe('var(--z-shell)');
+  it('puts the sidebar, the phone top bar and the tab bar on the shell layer', () => {
+    expect(layerOf('features/shell/AppShell.module.css', '.sidebarFrame')).toBe('var(--z-shell)');
+    expect(layerOf('features/shell/AppShell.module.css', '.mobileBar')).toBe('var(--z-shell)');
     expect(layerOf('features/shell/AppShell.module.css', '.bottomBar')).toBe('var(--z-shell)');
+  });
+
+  it('puts the phone drawer with the other overlays', () => {
+    expect(layerOf('features/shell/AppShell.module.css', '.drawerOverlay')).toBe('var(--z-overlay)');
   });
 
   it('puts SlideOver and Dialog above the shell, Toast above them, the palette on top', () => {
@@ -72,6 +77,11 @@ describe('layer scale', () => {
 });
 
 describe('backdrops', () => {
+  it('the phone drawer backdrop uses the --scrim token', () => {
+    const block = read('features/shell/AppShell.module.css').match(/(?:^|\n)\.drawerOverlay\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(block).toMatch(/background:\s*var\(--scrim\);/);
+  });
+
   it('every overlay backdrop uses the --scrim token', () => {
     for (const f of ['ui/Dialog/Dialog.module.css', 'ui/SlideOver/SlideOver.module.css', 'ui/CommandPalette/CommandPalette.module.css']) {
       const block = read(f).match(/(?:^|\n)\.overlay\s*\{([^}]*)\}/)?.[1] ?? '';

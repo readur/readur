@@ -107,14 +107,14 @@ describe('LoginRoute auth flags', () => {
 });
 
 describe('LoginRoute password sign-in', () => {
-  it('calls login with the credentials and goes to /board', async () => {
+  it('calls login with the credentials and goes to /home', async () => {
     const login = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderLogin({ login });
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(login).toHaveBeenCalledWith('ada', 'secret');
-    await waitFor(() => expect(where()).toHaveTextContent('/board'));
+    await waitFor(() => expect(where()).toHaveTextContent('/home'));
   });
 
   it('returns to the originally requested route after sign-in', async () => {
@@ -131,7 +131,7 @@ describe('LoginRoute password sign-in', () => {
     await waitFor(() => expect(where()).toHaveTextContent('/documents/42?tab=text'));
   });
 
-  it('ignores an off-site "from" and goes to /board', async () => {
+  it('ignores an off-site "from" and goes to /home', async () => {
     const user = userEvent.setup();
     renderLogin({
       login: vi.fn().mockResolvedValue(undefined),
@@ -139,7 +139,7 @@ describe('LoginRoute password sign-in', () => {
     });
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    await waitFor(() => expect(where()).toHaveTextContent('/board'));
+    await waitFor(() => expect(where()).toHaveTextContent('/home'));
   });
 
   it.each(['/\\evil.example', '/ok\nhttp://evil.example'])('ignores an unsafe "from" %j', async (from) => {
@@ -150,7 +150,7 @@ describe('LoginRoute password sign-in', () => {
     });
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    await waitFor(() => expect(where()).toHaveTextContent('/board'));
+    await waitFor(() => expect(where()).toHaveTextContent('/home'));
   });
 
   it('submits with Enter from the password field', async () => {
