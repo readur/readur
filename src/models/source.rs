@@ -685,8 +685,10 @@ pub fn merge_stored_secrets(
                     obj.insert((*field).to_string(), v.clone());
                 }
                 Some(_) => return Err(SecretReuseRefused),
+                // The typed configs require the field, so an unset secret
+                // (anonymous WebDAV, empty S3 secret) stays an empty string.
                 None => {
-                    obj.remove(*field);
+                    obj.insert((*field).to_string(), serde_json::Value::String(String::new()));
                 }
             }
         }
@@ -891,7 +893,30 @@ mod secret_tests {
             json!({"server_url": "https://other.example", "username": "v"}),
         )
         .unwrap();
-        assert!(merged.get("password").is_none());
+        assert_eq!(merged["password"], json!(""));
+    }
+
+    #[test]
+    fn merge_keeps_empty_secret_so_typed_config_still_parses() {
+        let stored = json!({
+            "server_url": "https://dav.example", "username": "", "password": "",
+            "watch_folders": ["/"], "file_extensions": [], "auto_sync": false,
+            "sync_interval_minutes": 60, "server_type": null
+        });
+        let merged = merge_stored_secrets(SourceType::WebDAV, &stored, stored.clone()).unwrap();
+        assert_eq!(merged["password"], json!(""));
+        serde_json::from_value::<WebDAVSourceConfig>(merged).expect("anonymous WebDAV config stays valid");
+
+        let s3 = json!({
+            "bucket_name": "b", "region": "us-east-1", "access_key_id": "", "secret_access_key": "",
+            "endpoint_url": null, "prefix": null, "watch_folders": [], "file_extensions": [],
+            "auto_sync": false, "sync_interval_minutes": 60
+        });
+        let mut incoming = s3.clone();
+        incoming.as_object_mut().unwrap().remove("secret_access_key");
+        let merged = merge_stored_secrets(SourceType::S3, &s3, incoming).unwrap();
+        assert_eq!(merged["secret_access_key"], json!(""));
+        serde_json::from_value::<S3SourceConfig>(merged).expect("S3 config with empty secret stays valid");
     }
 
     #[test]
