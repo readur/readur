@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { currentUrl, lastListParams, renderLibrary } from './libraryTestUtils';
 import { DOCS, apiClient, documentService, listResponse, searchService, setupLibraryMocks } from './serviceMocks';
@@ -312,6 +312,22 @@ describe('Library', () => {
       expect(await screen.findByRole('heading', { name: 'Documents could not be loaded' })).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Try again' }));
       expect(await loaded()).toBeInTheDocument();
+    });
+
+    test('ignores a slow earlier response that arrives after a newer one', async () => {
+      const user = userEvent.setup();
+      let resolveSlow!: (value: unknown) => void;
+      documentService.listFiltered
+        .mockImplementationOnce(() => new Promise((resolve) => (resolveSlow = resolve)))
+        .mockResolvedValueOnce(listResponse([DOCS[1]], 1));
+      renderLibrary();
+      await user.click(screen.getByRole('button', { name: 'Status' }));
+      await user.click(await screen.findByRole('radio', { name: 'Failed' }));
+      expect(await screen.findByRole('rowheader', { name: /lease\.pdf/ })).toBeInTheDocument();
+      await act(async () => resolveSlow(listResponse(DOCS, 3)));
+      expect(screen.queryByRole('rowheader', { name: /invoice-march/ })).not.toBeInTheDocument();
+      expect(bodyRows()).toHaveLength(1);
+      expect(screen.getByText('1 document')).toBeInTheDocument();
     });
 
     test('hides pagination when there is nothing to page', async () => {

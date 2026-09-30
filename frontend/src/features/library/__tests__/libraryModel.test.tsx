@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { HighlightedText, bestSnippet, matchRanges } from '../Highlight';
+import { HighlightedText, SnippetLine, bestSnippet, byteRangesToUtf16, matchRanges } from '../Highlight';
 import { NO_MIME_MATCH, groupOf, mimeTypesFor, shortType } from '../mime';
 import { DEFAULT_SIZE, parseQuery, toParams, type LibraryQuery } from '../urlState';
 import { formatBytes, formatRelative } from '../format';
@@ -98,6 +98,34 @@ describe('highlighting', () => {
   test('renders plain text without ranges', () => {
     render(<HighlightedText text="plain" ranges={[]} />);
     expect(screen.getByText('plain')).toBeInTheDocument();
+  });
+
+  test('maps backend UTF-8 byte offsets onto the text (German)', () => {
+    // "Größe der " is 10 characters but 12 bytes: ö and ß take two bytes each.
+    const text = 'Größe der Rechnung';
+    expect(byteRangesToUtf16(text, [{ start: 12, end: 20 }])).toEqual([{ start: 10, end: 18 }]);
+    const { container } = render(
+      <SnippetLine snippet={{ text, start_offset: 0, end_offset: 20, highlight_ranges: [{ start: 12, end: 20 }] }} />,
+    );
+    expect(container.querySelector('mark')).toHaveTextContent(/^Rechnung$/);
+  });
+
+  test('maps byte offsets past emoji and accented letters', () => {
+    // 📄 is 4 bytes / 2 UTF-16 units; "é" is 2 bytes / 1 unit.
+    const text = '📄 café total';
+    const start = new TextEncoder().encode('📄 café ').length;
+    const { container } = render(
+      <SnippetLine snippet={{ text, start_offset: 0, end_offset: 0, highlight_ranges: [{ start, end: start + 5 }] }} />,
+    );
+    expect(container.querySelector('mark')).toHaveTextContent(/^total$/);
+    expect(byteRangesToUtf16(text, [{ start: 5, end: 10 }])).toEqual([{ start: 3, end: 7 }]);
+  });
+
+  test('snaps offsets inside a character outwards and clamps out-of-range ones', () => {
+    // Byte 2 is inside "ö" (bytes 1-2): the start snaps back to it, the end forward past it.
+    expect(byteRangesToUtf16('Göt', [{ start: 2, end: 2 }])).toEqual([{ start: 1, end: 2 }]);
+    expect(byteRangesToUtf16('abc', [{ start: -3, end: 99 }])).toEqual([{ start: 0, end: 3 }]);
+    expect(byteRangesToUtf16('ascii only', [{ start: 6, end: 10 }])).toEqual([{ start: 6, end: 10 }]);
   });
 
   test('picks the snippet with the most matches', () => {

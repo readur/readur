@@ -93,6 +93,34 @@ describe('Library bulk actions', () => {
     expect(documentService.downloadFile).toHaveBeenNthCalledWith(2, 'd2', 'lease.pdf');
   });
 
+  test('Download ignores presses while running and reports the count', async () => {
+    const user = userEvent.setup();
+    let finishFirst!: () => void;
+    documentService.downloadFile
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (finishFirst = resolve)))
+      .mockResolvedValue(undefined);
+    renderLibrary();
+    await select(user, /invoice-march/, /lease\.pdf/);
+    await user.click(within(bar()).getByRole('button', { name: 'Download' }));
+    const busy = within(bar()).getByRole('button', { name: 'Downloading…' });
+    expect(busy).toBeDisabled();
+    await user.click(busy);
+    await act(async () => finishFirst());
+    expect(await screen.findByText('2 documents downloaded')).toBeInTheDocument();
+    expect(documentService.downloadFile).toHaveBeenCalledTimes(2);
+    expect(within(bar()).getByRole('button', { name: 'Download' })).toBeEnabled();
+  });
+
+  test('Download reports failures separately', async () => {
+    const user = userEvent.setup();
+    documentService.downloadFile.mockRejectedValueOnce(new Error('x')).mockResolvedValue(undefined);
+    renderLibrary();
+    await select(user, /invoice-march/, /lease\.pdf/);
+    await user.click(within(bar()).getByRole('button', { name: 'Download' }));
+    expect(await screen.findByText('1 download failed')).toBeInTheDocument();
+    expect(await screen.findByText('1 document downloaded')).toBeInTheDocument();
+  });
+
   test('Delete asks first; cancelling deletes nothing', async () => {
     const user = userEvent.setup();
     renderLibrary();

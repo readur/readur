@@ -1,9 +1,19 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { isLit, markLit } from '../../board/litStore';
 import { currentUrl, renderLibrary, settle } from './libraryTestUtils';
-import { DOCS, documentService, hit, labelService, searchResponse, searchService, setupLibraryMocks, sharedLinksService } from './serviceMocks';
+import {
+  DOCS,
+  documentService,
+  hit,
+  labelService,
+  listResponse,
+  searchResponse,
+  searchService,
+  setupLibraryMocks,
+  sharedLinksService,
+} from './serviceMocks';
 
 vi.mock('../../../services/api', async () => (await import('./serviceMocks')).apiModule());
 vi.mock('../../../services/api/labels', async () => (await import('./serviceMocks')).labelsModule());
@@ -165,6 +175,28 @@ describe('Library detail panel', () => {
       await settle();
     });
 
+    test('a late failure of an older save does not undo a newer one', async () => {
+      const user = userEvent.setup();
+      let rejectFirst!: (e: Error) => void;
+      labelService.setDocumentLabels
+        .mockImplementationOnce(() => new Promise((_, reject) => (rejectFirst = reject)))
+        .mockResolvedValueOnce({ data: {} });
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      const combo = within(panel()).getByRole('combobox', { name: 'Labels' });
+      await user.click(combo);
+      await user.click(await screen.findByRole('option', { name: /tax/i }));
+      await user.click(combo);
+      await user.click(await screen.findByRole('option', { name: /work/i }));
+      await waitFor(() => expect(labelService.setDocumentLabels).toHaveBeenLastCalledWith('d2', ['l-tax', 'l-work']));
+      expect(await screen.findByText('Labels saved')).toBeInTheDocument();
+      await act(async () => rejectFirst(new Error('late')));
+      expect(await screen.findByText('Could not save labels')).toBeInTheDocument();
+      const row = rowFor(/lease\.pdf/);
+      expect(within(row).getByText('Tax')).toBeInTheDocument();
+      expect(within(row).getByText('Work')).toBeInTheDocument();
+    });
+
     test('a failed save puts the labels back and says so', async () => {
       const user = userEvent.setup();
       labelService.setDocumentLabels.mockRejectedValue(new Error('nope'));
@@ -206,6 +238,19 @@ describe('Library detail panel', () => {
       expect(await screen.findByText('Text recognition queued again')).toBeInTheDocument();
     });
 
+    test('Retry OCR reloads the text instead of showing the cached copy', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await within(panel()).findByText(/120 EUR/);
+      const before = documentService.getOcrText.mock.calls.filter(([id]) => id === 'd2').length;
+      await user.click(within(panel()).getByRole('button', { name: 'Retry OCR' }));
+      await waitFor(() =>
+        expect(documentService.getOcrText.mock.calls.filter(([id]) => id === 'd2').length).toBe(before + 1),
+      );
+      await settle();
+    });
+
     test('Share opens the sharing dialog for the document', async () => {
       const user = userEvent.setup();
       renderLibrary();
@@ -239,6 +284,38 @@ describe('Library detail panel', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(documentService.listFiltered.mock.calls.length).toBeGreaterThan(1);
       await settle();
+    });
+  });
+
+  describe('deleted documents', () => {
+    test('bulk-deleting the open document closes the panel', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await screen.findByRole('rowheader', { name: /lease\.pdf/ });
+      await user.click(within(rowFor(/lease\.pdf/)).getByRole('checkbox'));
+      await openWithEnter(user, /lease\.pdf/);
+      // The bar sits behind the modal panel; press it without a pointer (as assistive tech can).
+      const bar = screen.getByRole('toolbar', { name: 'Bulk actions', hidden: true });
+      fireEvent.click(within(bar).getByRole('button', { name: 'Delete', hidden: true }));
+      const confirm = await screen.findByRole('alertdialog');
+      documentService.listFiltered.mockResolvedValue(listResponse([DOCS[0], DOCS[2]], 2));
+      await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(documentService.bulkDelete).toHaveBeenCalledWith(['d2']));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await settle();
+    });
+
+    test('the panel closes when its document drops out of the results', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      documentService.listFiltered.mockResolvedValue(listResponse([DOCS[0]], 1));
+      await user.click(within(panel()).getByRole('button', { name: 'Delete' }));
+      await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByRole('rowheader', { name: /lease\.pdf/ })).not.toBeInTheDocument());
+      await settle();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 

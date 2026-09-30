@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LabelCreateDialog from '../LabelCreateDialog';
 import { renderWithProviders } from '../../../test/test-utils';
@@ -177,7 +177,9 @@ describe('LabelCreateDialog', () => {
 
     test('moves between presets with the arrow keys', async () => {
       renderDialog();
-      within(colorGroup()).getByRole('radio', { name: 'Blue' }).focus();
+      const blue = within(colorGroup()).getByRole('radio', { name: 'Blue' });
+      act(() => blue.focus());
+      expect(blue).toHaveFocus();
       await user.keyboard('{ArrowRight}');
       expect(colorField()).toHaveValue('#d73a49');
     });

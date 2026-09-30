@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { documentService } from '../../services/api';
@@ -13,7 +13,7 @@ import { displayName, type LibraryRow } from './data';
 import { formatBytes, formatDateTime, ocrState } from './format';
 import { HighlightedText, matchRanges } from './Highlight';
 import { shortType } from './mime';
-import { useOcrExcerpt } from './useOcrExcerpt';
+import { useOcrExcerpt, type OcrExcerpt } from './useOcrExcerpt';
 import styles from './Library.module.css';
 
 interface DetailPanelProps {
@@ -30,10 +30,39 @@ interface DetailPanelProps {
   onDeleted: (id: string) => void;
 }
 
+/** Per-document label save bookkeeping, so a late failure cannot undo a newer save. */
+interface LabelSaves {
+  /** Sequence number of the newest save started for each document. */
+  latest: Map<string, number>;
+  /** Newest labels the server accepted for each document, and the save that set them. */
+  saved: Map<string, { seq: number; labels: LabelData[] }>;
+}
+
+/** State that outlives a single row: caches and save ordering, shared by body and actions. */
+interface PanelState {
+  ocrCache: Map<string, OcrExcerpt>;
+  ocrEpoch: number;
+  invalidateOcr: (id: string) => void;
+  labelSaves: LabelSaves;
+}
+
+type InnerProps = DetailPanelProps & { row: LibraryRow; panel: PanelState };
+
 /** Right-hand panel for one document: facts, preview, OCR excerpt, labels and actions. */
 export function DetailPanel(props: DetailPanelProps) {
   const { row, isOpen, onOpenChange, onNavigate } = props;
   const { t } = useTranslation();
+  const ocrCache = useRef(new Map<string, OcrExcerpt>());
+  const labelSaves = useRef<LabelSaves>({ latest: new Map(), saved: new Map() });
+  const [ocrEpoch, setOcrEpoch] = useState(0);
+  const invalidateOcr = useCallback((id: string) => {
+    ocrCache.current.delete(id);
+    setOcrEpoch((n) => n + 1);
+  }, []);
+  const panel = useMemo<PanelState>(
+    () => ({ ocrCache: ocrCache.current, ocrEpoch, invalidateOcr, labelSaves: labelSaves.current }),
+    [ocrEpoch, invalidateOcr],
+  );
   return (
     <SlideOver
       isOpen={isOpen && row !== null}
@@ -49,9 +78,9 @@ export function DetailPanel(props: DetailPanelProps) {
           t('library.detail.title', 'Document')
         )
       }
-      footer={row ? <DetailActions {...props} row={row} /> : null}
+      footer={row ? <DetailActions {...props} row={row} panel={panel} /> : null}
     >
-      {row ? <DetailBody {...props} row={row} /> : null}
+      {row ? <DetailBody {...props} row={row} panel={panel} /> : null}
     </SlideOver>
   );
 }
@@ -63,23 +92,30 @@ function DetailBody({
   availableLabels,
   onLabelCreated,
   onRowChange,
-}: DetailPanelProps & { row: LibraryRow }) {
+  panel,
+}: InnerProps) {
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const ocr = useOcrExcerpt(row.id);
+  const ocr = useOcrExcerpt(row.id, panel.ocrCache, panel.ocrEpoch);
   const excerpt = ocr.status === 'ready' ? ocr.excerpt : null;
   const confidence = row.ocr_confidence ?? excerpt?.confidence ?? null;
   const progress =
     row.ocr_progress_total && row.ocr_progress_total > 0 ? `${row.ocr_progress_current ?? 0}/${row.ocr_progress_total}` : null;
 
   const saveLabels = async (next: LabelData[]) => {
-    const previous = row.labels;
-    onRowChange(row.id, { labels: next });
+    const id = row.id;
+    const { latest, saved } = panel.labelSaves;
+    if (!saved.has(id)) saved.set(id, { seq: 0, labels: row.labels });
+    const seq = (latest.get(id) ?? 0) + 1;
+    latest.set(id, seq);
+    onRowChange(id, { labels: next });
     try {
-      await labelService.setDocumentLabels(row.id, next.map((l) => l.id));
+      await labelService.setDocumentLabels(id, next.map((l) => l.id));
+      if (seq > (saved.get(id)?.seq ?? 0)) saved.set(id, { seq, labels: next });
       toast.show({ title: t('library.detail.labelsSaved', 'Labels saved'), tone: 'success' });
     } catch {
-      onRowChange(row.id, { labels: previous });
+      // Only the newest save may roll back; an older failure must not undo a newer change.
+      if (latest.get(id) === seq) onRowChange(id, { labels: saved.get(id)?.labels ?? [] });
       toast.show({ title: t('library.detail.labelsFailed', 'Could not save labels'), tone: 'danger' });
     }
   };
@@ -158,7 +194,7 @@ function DetailBody({
   );
 }
 
-function DetailActions({ row, onRowChange, onDeleted }: DetailPanelProps & { row: LibraryRow }) {
+function DetailActions({ row, onRowChange, onDeleted, panel }: InnerProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toast = useToast();
@@ -183,6 +219,7 @@ function DetailActions({ row, onRowChange, onDeleted }: DetailPanelProps & { row
     try {
       await documentService.retryOcr(row.id);
       onRowChange(row.id, { ocr_status: 'pending' });
+      panel.invalidateOcr(row.id);
       toast.show({ title: t('library.detail.retryQueued', 'Text recognition queued again'), tone: 'success' });
     } catch {
       toast.show({ title: t('library.detail.retryFailed', 'Could not retry text recognition'), tone: 'danger' });

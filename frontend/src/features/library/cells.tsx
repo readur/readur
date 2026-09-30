@@ -24,7 +24,7 @@ export function NameCell({ row }: { row: LibraryRow }) {
   return (
     <span className={styles.nameCell}>
       <span className={styles.thumb}>
-        <DocumentThumbnail documentId={row.id} mimeType={row.mime_type} size="small" />
+        <DocumentThumbnail documentId={row.id} mimeType={row.mime_type} size="small" lazy />
       </span>
       <span className={styles.name}>{displayName(row)}</span>
       <ChangeTag id={row.id} />

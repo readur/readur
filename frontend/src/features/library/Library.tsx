@@ -47,6 +47,24 @@ export function Library() {
     setPanelOpen(true);
   }, []);
 
+  // A deleted document must not stay open (or reopen from the last-row fallback).
+  const closeIfDeleted = useCallback(
+    (ids: string[]) => {
+      if (openId && ids.includes(openId)) {
+        setPanelOpen(false);
+        setOpenId(null);
+        lastRow.current = null;
+      }
+    },
+    [openId],
+  );
+  // The same when the open document disappears from a fresh page of results.
+  useEffect(() => {
+    if (panelOpen && status === 'ready' && openId && !rows.some((r) => r.id === openId)) {
+      closeIfDeleted([openId]);
+    }
+  }, [panelOpen, status, openId, rows, closeIfDeleted]);
+
   const navigateRows = (direction: 'previous' | 'next') => {
     const index = rows.findIndex((r) => r.id === openId);
     if (index === -1) return;
@@ -111,7 +129,7 @@ export function Library() {
           <span aria-live="polite">
             {status === 'loading' && total === 0
               ? t('library.counting', 'Counting…')
-              : t('library.count', { count: total, formatted: formatCount(total, i18n.language), defaultValue: '{{formatted}} documents' })}
+              : t('library.count', { count: total, formatted: formatCount(total, i18n.language), defaultValue: '{{formatted}} documents', defaultValue_one: '{{formatted}} document' })}
           </span>
         }
         actions={
@@ -163,8 +181,8 @@ export function Library() {
         availableLabels={facets.labels}
         onLabelCreated={facets.addLabel}
         onRowChange={patchRow}
-        onDeleted={() => {
-          setPanelOpen(false);
+        onDeleted={(id) => {
+          closeIfDeleted([id]);
           reload();
         }}
       />
@@ -174,6 +192,7 @@ export function Library() {
         availableLabels={facets.labels}
         onLabelCreated={facets.addLabel}
         onChanged={reload}
+        onDeleted={closeIfDeleted}
       />
     </div>
   );

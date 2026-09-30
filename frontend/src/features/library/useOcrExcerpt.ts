@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { documentService, type OcrResponse } from '../../services/api';
 
 export const EXCERPT_LENGTH = 600;
@@ -25,16 +25,16 @@ function toExcerpt(ocr: OcrResponse): OcrExcerpt {
 }
 
 /**
- * The start of a document's OCR text plus OCR facts. Results are cached per document for the
- * life of the panel, so stepping back and forth with the arrow keys does not refetch.
+ * The start of a document's OCR text plus OCR facts. `cache` belongs to the caller (the panel)
+ * so stepping back and forth with the arrow keys does not refetch; after dropping an entry,
+ * bump `epoch` to load it again.
  */
-export function useOcrExcerpt(documentId: string | null): State {
-  const cache = useRef(new Map<string, OcrExcerpt>());
+export function useOcrExcerpt(documentId: string | null, cache: Map<string, OcrExcerpt>, epoch = 0): State {
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
     if (!documentId) return undefined;
-    const cached = cache.current.get(documentId);
+    const cached = cache.get(documentId);
     if (cached) {
       setState({ status: 'ready', excerpt: cached });
       return undefined;
@@ -45,7 +45,7 @@ export function useOcrExcerpt(documentId: string | null): State {
       .getOcrText(documentId)
       .then((res) => {
         const excerpt = toExcerpt(res.data);
-        cache.current.set(documentId, excerpt);
+        cache.set(documentId, excerpt);
         if (live) setState({ status: 'ready', excerpt });
       })
       .catch(() => {
@@ -54,7 +54,7 @@ export function useOcrExcerpt(documentId: string | null): State {
     return () => {
       live = false;
     };
-  }, [documentId]);
+  }, [documentId, cache, epoch]);
 
   return state;
 }

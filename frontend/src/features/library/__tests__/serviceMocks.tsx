@@ -11,6 +11,7 @@
 import { vi } from 'vitest';
 import type { DocumentResponse, EnhancedDocumentResponse, Label } from '../../../types/generated';
 import { acknowledgeAll, flushLit } from '../../board/litStore';
+import { resetThumbnailLoader } from '../../document/thumbnailLoader';
 
 export const documentService = {
   listFiltered: vi.fn(),
@@ -159,6 +160,7 @@ export function setupLibraryMocks() {
   Object.defineProperty(window, 'localStorage', { value: new MemoryStorage(), configurable: true, writable: true });
   acknowledgeAll();
   flushLit();
+  resetThumbnailLoader();
   documentService.listFiltered.mockResolvedValue(listResponse(DOCS, 3));
   documentService.getFacets.mockResolvedValue({
     data: { mime_types: [{ value: 'application/pdf', count: 2 }, { value: 'image/png', count: 1 }], tags: [] },

@@ -36,10 +36,51 @@ export function bestSnippet(snippets: readonly SearchSnippet[] | undefined): Sea
   return snippets.reduce((best, s) => (s.highlight_ranges.length > best.highlight_ranges.length ? s : best));
 }
 
+const encoder = new TextEncoder();
+
+/**
+ * The backend reports highlight ranges as UTF-8 byte offsets into the snippet, while JavaScript
+ * strings index UTF-16 code units, so the two differ as soon as the text has a non-ASCII letter.
+ * Maps each byte range onto the snippet text; an offset inside a character snaps outwards to
+ * that character's edge.
+ */
+export function byteRangesToUtf16(text: string, ranges: readonly Range[]): Range[] {
+  // byteStart[i] / utf16Start[i] are where the i-th code point begins; a final entry marks the end.
+  const byteStart: number[] = [];
+  const utf16Start: number[] = [];
+  let bytes = 0;
+  let units = 0;
+  for (const ch of text) {
+    byteStart.push(bytes);
+    utf16Start.push(units);
+    bytes += encoder.encode(ch).length;
+    units += ch.length;
+  }
+  byteStart.push(bytes);
+  utf16Start.push(units);
+
+  const toUnits = (offset: number, edge: 'start' | 'end') => {
+    if (offset <= 0) return 0;
+    if (offset >= bytes) return units;
+    // Last code point that begins at or before the offset.
+    let lo = 0;
+    let hi = byteStart.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (byteStart[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    const inside = byteStart[lo] !== offset;
+    return edge === 'end' && inside ? utf16Start[lo + 1] : utf16Start[lo];
+  };
+
+  return ranges.map((r) => ({ start: toUnits(r.start, 'start'), end: toUnits(r.end, 'end') }));
+}
+
 export function SnippetLine({ snippet }: { snippet: SearchSnippet }) {
   return (
     <span className={styles.snippet}>
-      <HighlightedText text={snippet.text} ranges={snippet.highlight_ranges} />
+      <HighlightedText text={snippet.text} ranges={byteRangesToUtf16(snippet.text, snippet.highlight_ranges)} />
     </span>
   );
 }
