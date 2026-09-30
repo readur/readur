@@ -1,0 +1,24 @@
+.createRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.types {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.steps {
+  margin: 0;
+  padding-inline-start: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--fg-2);
+}

@@ -1,0 +1,28 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-width: 0;
+}
+
+/* The tab row scrolls sideways on narrow screens instead of wrapping. */
+.tabScroller {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.tabList {
+  flex-wrap: nowrap;
+  min-width: max-content;
+}
+
+.panel {
+  padding-top: var(--s-4);
+  outline: none;
+}
+
+.panel[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

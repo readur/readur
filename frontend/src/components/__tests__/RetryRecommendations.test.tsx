@@ -113,4 +113,32 @@ describe('RetryRecommendations', () => {
       expect(screen.getByText(/No retry recommendations/)).toBeInTheDocument();
     });
   });
+
+  test('lists a recommendation with its rate, count and criteria', async () => {
+    render(<RetryRecommendations onRetrySuccess={mockProps.onRetrySuccess} />);
+    expect(await screen.findByText('Low Confidence Results')).toBeInTheDocument();
+    expect(screen.getByText('80% likely (high)')).toBeInTheDocument();
+    expect(screen.getByText('15 documents · low confidence')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Criteria' })).toHaveTextContent('low confidence');
+  });
+
+  test('retries with the recommendation filter and reports success', async () => {
+    const user = userEvent.setup();
+    render(<RetryRecommendations onRetrySuccess={mockProps.onRetrySuccess} />);
+    await user.click(await screen.findByRole('button', { name: 'Retry 15 documents' }));
+    await waitFor(() => expect(mockProps.onRetrySuccess).toHaveBeenCalled());
+    expect(mockBulkRetryOcr).toHaveBeenCalledWith({
+      mode: 'filter',
+      filter: sampleRecommendations[0].filter,
+      preview_only: false,
+    });
+  });
+
+  test('hands the recommendation to onRetryClick instead when given', async () => {
+    const user = userEvent.setup();
+    render(<RetryRecommendations {...mockProps} />);
+    await user.click(await screen.findByRole('button', { name: 'Retry 15 documents' }));
+    expect(mockProps.onRetryClick).toHaveBeenCalledWith(sampleRecommendations[0]);
+    expect(mockBulkRetryOcr).not.toHaveBeenCalled();
+  });
 });
