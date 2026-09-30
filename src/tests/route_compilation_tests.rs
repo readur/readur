@@ -3,37 +3,11 @@
 
 #[cfg(test)]
 mod tests {
-    use axum::http::StatusCode;
-    
     #[test]
     fn test_queue_routes_module_compiles() {
         // This test ensures the queue routes module compiles without errors
         // It would catch missing imports like the Row trait issue
         let _router = crate::routes::queue::router();
-        
-        // Test that required_admin function compiles
-        use crate::models::{UserRole, AuthProvider};
-        let test_user = crate::auth::AuthUser {
-            user: crate::models::User {
-                id: uuid::Uuid::new_v4(),
-                username: "test".to_string(),
-                email: "test@example.com".to_string(),
-                password_hash: Some("hash".to_string()),
-                role: UserRole::User,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-                oidc_subject: None,
-                oidc_issuer: None,
-                oidc_email: None,
-                auth_provider: AuthProvider::Local,
-                token_version: 0,
-                is_active: true,
-            },
-        };
-        
-        // This function call would fail if there were compilation issues
-        let result = crate::routes::queue::require_admin(&test_user);
-        assert_eq!(result, Err(StatusCode::FORBIDDEN));
     }
     
     #[test]

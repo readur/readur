@@ -6,11 +6,31 @@ use axum::{
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
+use serde::Deserialize;
+
 use crate::{
     auth::AuthUser,
+    models::UserRole,
     AppState,
 };
 use super::types::{BulkDeleteRequest, DeleteLowConfidenceRequest, BulkDeleteResponse};
+
+#[derive(Debug, Default, Deserialize, utoipa::IntoParams)]
+pub struct CleanupScopeQuery {
+    /// Admins only: apply the cleanup to every user's documents.
+    #[serde(default)]
+    pub all_users: bool,
+}
+
+/// Cleanup endpoints act on the caller's own documents. Admins may opt in to
+/// every user's documents with `?all_users=true`.
+fn cleanup_scope_role(auth_user: &AuthUser, scope: &CleanupScopeQuery) -> UserRole {
+    if scope.all_users && auth_user.user.role == UserRole::Admin {
+        UserRole::Admin
+    } else {
+        UserRole::User
+    }
+}
 
 /// Bulk delete multiple documents
 #[utoipa::path(
@@ -116,6 +136,7 @@ pub async fn bulk_delete_documents(
     security(
         ("bearer_auth" = [])
     ),
+    params(CleanupScopeQuery),
     request_body = DeleteLowConfidenceRequest,
     responses(
         (status = 200, description = "Low confidence delete results", body = BulkDeleteResponse),
@@ -127,8 +148,10 @@ pub async fn bulk_delete_documents(
 pub async fn delete_low_confidence_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
+    Query(scope): Query<CleanupScopeQuery>,
     Json(request): Json<DeleteLowConfidenceRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    let scope_role = cleanup_scope_role(&auth_user, &scope);
     if request.max_confidence < 0.0 || request.max_confidence > 100.0 {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -142,7 +165,7 @@ pub async fn delete_low_confidence_documents(
         .db
         .find_documents_by_confidence_threshold(
             auth_user.user.id,
-            auth_user.user.role,
+            scope_role,
             request.max_confidence,
             1000, // Limit to prevent excessive operations
             0,
@@ -187,7 +210,7 @@ pub async fn delete_low_confidence_documents(
 
     let (deleted_ids, failed_ids) = state
         .db
-        .bulk_delete_documents(&document_ids, auth_user.user.id, auth_user.user.role)
+        .bulk_delete_documents(&document_ids, auth_user.user.id, scope_role)
         .await
         .map_err(|e| {
             error!("Database error during low confidence bulk delete: {}", e);
@@ -234,6 +257,7 @@ pub async fn delete_low_confidence_documents(
     security(
         ("bearer_auth" = [])
     ),
+    params(CleanupScopeQuery),
     responses(
         (status = 200, description = "Failed OCR delete results"),
         (status = 401, description = "Unauthorized"),
@@ -243,7 +267,9 @@ pub async fn delete_low_confidence_documents(
 pub async fn delete_failed_ocr_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
+    Query(scope): Query<CleanupScopeQuery>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    let scope_role = cleanup_scope_role(&auth_user, &scope);
     info!("Finding documents with failed OCR");
 
     // Find documents with failed OCR
@@ -251,7 +277,7 @@ pub async fn delete_failed_ocr_documents(
         .db
         .find_failed_ocr_documents(
             auth_user.user.id,
-            auth_user.user.role,
+            scope_role,
             1000, // Limit to prevent excessive operations
             0,
         )
@@ -273,7 +299,7 @@ pub async fn delete_failed_ocr_documents(
 
     let (deleted_ids, failed_ids) = state
         .db
-        .bulk_delete_documents(&document_ids, auth_user.user.id, auth_user.user.role)
+        .bulk_delete_documents(&document_ids, auth_user.user.id, scope_role)
         .await
         .map_err(|e| {
             error!("Database error during failed OCR bulk delete: {}", e);
@@ -317,6 +343,10 @@ pub async fn get_cleanup_preview(
     auth_user: AuthUser,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    let scope = CleanupScopeQuery {
+        all_users: params.get("all_users").is_some_and(|v| v == "true"),
+    };
+    let scope_role = cleanup_scope_role(&auth_user, &scope);
     let max_confidence = params
         .get("max_confidence")
         .and_then(|s| s.parse::<f32>().ok())
@@ -335,7 +365,7 @@ pub async fn get_cleanup_preview(
         .db
         .find_documents_by_confidence_threshold(
             auth_user.user.id,
-            auth_user.user.role,
+            scope_role,
             max_confidence,
             100,
             0,
@@ -364,7 +394,7 @@ pub async fn get_cleanup_preview(
             .db
             .find_failed_ocr_documents(
                 auth_user.user.id,
-                auth_user.user.role,
+                scope_role,
                 100,
                 0,
             )
