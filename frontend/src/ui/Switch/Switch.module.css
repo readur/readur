@@ -16,10 +16,10 @@
   width: 36px;
   height: 20px;
   margin-top: 2px;
-  background: var(--surface);
+  background: var(--surface-sunken);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  transition: background-color var(--dur-1) var(--ease);
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
 }
 
 .thumb {
@@ -29,21 +29,22 @@
   width: 14px;
   height: 14px;
   background: var(--line-strong);
-  border-radius: 2px;
+  border-radius: 50%;
   transition: transform var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
 }
 
 .switch[data-selected] .track {
-  background: var(--btn-bg);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .switch[data-selected] .thumb {
   transform: translateX(16px);
-  background: var(--btn-fg);
+  background: var(--accent-fg);
 }
 
 .switch[data-focus-visible] .track {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

@@ -18,10 +18,10 @@
   width: 18px;
   height: 18px;
   margin-top: 1px;
-  color: var(--btn-fg);
+  color: var(--accent-fg);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  border-radius: 4px;
   transition: background-color var(--dur-1) var(--ease);
 }
 
@@ -33,7 +33,8 @@
 
 .checkbox[data-selected] .box,
 .checkbox[data-indeterminate] .box {
-  background: var(--btn-bg);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .checkbox[data-selected] .glyph,
@@ -47,7 +48,7 @@
 }
 
 .checkbox[data-focus-visible] .box {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

@@ -12,10 +12,10 @@ describe('ChangeTag', () => {
     expect(tag).toHaveClass('extra');
   });
 
-  it('uses the tight 2px corner and signal fill from tokens', () => {
+  it('is a coral pill from the new-signal tokens', () => {
     const css = readFileSync(resolve(__dirname, 'ChangeTag.module.css'), 'utf8');
-    expect(css).toMatch(/border-radius:\s*2px/);
-    expect(css).toMatch(/background:\s*var\(--signal\)/);
-    expect(css).toMatch(/color:\s*var\(--signal-ink\)/);
+    expect(css).toMatch(/border-radius:\s*var\(--radius-pill\)/);
+    expect(css).toMatch(/background:\s*var\(--new\)/);
+    expect(css).toMatch(/color:\s*var\(--new-fg\)/);
   });
 });

@@ -25,6 +25,17 @@ describe('StatusMark', () => {
     expect(container.textContent).toBe(`${glyph}${word}`);
   });
 
+  it.each([
+    ['completed', 'ok'],
+    ['processing', 'active'],
+    ['pending', 'neutral'],
+    ['failed', 'danger'],
+    ['warning', 'warn'],
+  ] as const)('tints %s as %s', (state, tone) => {
+    const { container } = render(<StatusMark state={state} />);
+    expect(container.firstElementChild).toHaveAttribute('data-tone', tone);
+  });
+
   it('renders known progress as OCR n/m', () => {
     render(<StatusMark state="processing" progress={{ current: 3, total: 12 }} />);
     expect(screen.getByText('OCR 3/12')).toBeInTheDocument();

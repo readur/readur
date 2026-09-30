@@ -6,7 +6,7 @@
   font-size: var(--fs-md);
   color: var(--fg);
   background: var(--surface);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow-overlay);
 }

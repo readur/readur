@@ -6,6 +6,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
 }
 
 /*
@@ -44,7 +45,7 @@
 }
 
 .table[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -54,7 +55,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  height: 32px;
+  height: 36px;
   padding: 0 var(--s-3);
   text-align: left;
   vertical-align: middle;
@@ -67,8 +68,16 @@
   letter-spacing: var(--tracking-label);
   color: var(--fg-meta);
   background: var(--surface-2);
-  border-bottom: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line);
   outline: none;
+}
+
+.column:first-child {
+  border-top-left-radius: var(--radius);
+}
+
+.column:last-child {
+  border-top-right-radius: var(--radius);
 }
 
 .column[data-allows-sorting] {
@@ -80,7 +89,7 @@
 }
 
 .column[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -109,7 +118,7 @@
 }
 
 .sorted {
-  color: var(--fg);
+  color: var(--accent);
 }
 
 .selectColumn,
@@ -143,21 +152,21 @@
   background: var(--surface-2);
 }
 
-.row[data-selected] > .cell {
-  background: var(--surface-2);
-  box-shadow: inset 0 1px 0 var(--line-strong), inset 0 -1px 0 var(--line-strong);
+.row[data-selected] > .cell,
+.row[data-selected][data-hovered] > .cell {
+  background: var(--accent-soft);
 }
 
 .row[data-focus-visible] > .cell {
-  box-shadow: inset 0 2px 0 var(--focus), inset 0 -2px 0 var(--focus);
+  box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
 }
 
 .row[data-focus-visible] > .cell:first-child {
-  box-shadow: inset 2px 2px 0 var(--focus), inset 0 -2px 0 var(--focus);
+  box-shadow: inset 2px 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
 }
 
 .row[data-focus-visible] > .cell:last-child {
-  box-shadow: inset -2px 2px 0 var(--focus), inset 0 -2px 0 var(--focus);
+  box-shadow: inset -2px 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
 }
 
 .cell {
@@ -178,19 +187,21 @@
 }
 
 .cell[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-/* A changed row keeps its edge bar regardless of motion settings. */
+/* A changed row carries a coral dot in its first cell's gutter (its tag carries the word). */
 .changed > .cell:first-child::before {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  background: var(--signal);
+  top: 50%;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--new-fill);
   pointer-events: none;
 }
 
@@ -246,9 +257,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--fg-meta);
 }
 
@@ -321,7 +331,7 @@
 .container[data-layout='stacked'] .head > * {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line);
   background: var(--surface-2);
 }
 
@@ -414,17 +424,16 @@
   margin-top: 2px;
 }
 
-.container[data-layout='stacked'] .row[data-hovered],
-.container[data-layout='stacked'] .row[data-selected] {
+.container[data-layout='stacked'] .row[data-hovered] {
   background: var(--surface-2);
 }
 
 .container[data-layout='stacked'] .row[data-selected] {
-  box-shadow: inset 0 1px 0 var(--line-strong), inset 0 -1px 0 var(--line-strong);
+  background: var(--accent-soft);
 }
 
 .container[data-layout='stacked'] .row[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -435,10 +444,11 @@
 .container[data-layout='stacked'] .changed::before {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  background: var(--signal);
+  top: 18px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--new-fill);
   pointer-events: none;
 }

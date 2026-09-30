@@ -1,6 +1,6 @@
 .page {
   min-height: 100vh;
-  background: var(--ground);
+  background: var(--bg);
   color: var(--fg);
   display: flex;
   align-items: center;
@@ -28,10 +28,8 @@
 
 .wordmark {
   font-family: var(--font-ui);
-  font-stretch: 75%;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   font-size: var(--fs-xl);
   line-height: 1;
 }
@@ -39,19 +37,18 @@
 .title {
   margin: 0;
   font-family: var(--font-ui);
-  font-stretch: 75%;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-size: var(--fs-2xl);
-  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  font-size: var(--fs-title);
+  line-height: var(--lh-title);
 }
 
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: var(--s-5);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: var(--s-6) var(--s-5);
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
@@ -85,10 +82,10 @@
   align-items: flex-start;
   margin: 0;
   padding: var(--s-3);
-  background: var(--danger-bg);
+  background: var(--danger-soft);
   color: var(--danger);
-  border: 1px solid var(--danger);
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-md);
   line-height: 1.45;
 }
@@ -106,10 +103,6 @@
   gap: var(--s-3);
   color: var(--fg-meta);
   font-family: var(--font-ui);
-  font-stretch: 75%;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   font-size: var(--fs-sm);
 }
 
@@ -123,10 +116,10 @@
 
 .footer {
   margin: 0;
-  font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-sm);
   color: var(--fg-meta);
+  text-align: center;
 }
 
 .status {
@@ -144,7 +137,7 @@
 
 .mark {
   font-family: var(--font-data);
-  color: var(--fg);
+  color: var(--accent);
   animation: pulse var(--dur-2) var(--ease) infinite alternate;
 }
 
@@ -164,14 +157,14 @@
 }
 
 .backLink {
-  color: var(--fg);
+  color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
   font-size: var(--fs-md);
 }
 
 .backLink:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -182,11 +175,10 @@
   align-items: flex-start;
   margin: 0;
   padding: var(--s-3);
-  background: var(--surface-2);
+  background: var(--accent-soft);
   color: var(--fg);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-md);
   line-height: 1.45;
 }

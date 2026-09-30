@@ -9,12 +9,9 @@
 }
 
 .label {
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-sm);
+  font-family: var(--font-ui);
+  font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
   color: var(--fg-2);
 }
 
@@ -30,9 +27,9 @@
   font: inherit;
   color: var(--fg);
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  transition: border-color var(--dur-1) var(--ease);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
 
 textarea.control {
@@ -46,17 +43,22 @@ textarea.control {
 }
 
 .control:hover {
-  border-color: var(--line-strong);
+  border-color: var(--fg-meta);
 }
 
 .control:focus-visible,
 .control[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.control[data-focused] {
+  border-color: var(--accent);
 }
 
 .control[data-invalid] {
   border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
 }
 
 .control[data-disabled],

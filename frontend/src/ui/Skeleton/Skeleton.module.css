@@ -7,8 +7,8 @@
 .bar {
   display: block;
   max-width: 100%;
-  background: var(--surface-2);
-  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
   animation: pulse calc(var(--dur-2) * 8) var(--ease) infinite alternate;
 }
 

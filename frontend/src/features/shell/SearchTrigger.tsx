@@ -53,7 +53,7 @@ export function SearchTrigger({ onOpen, compact }: SearchTriggerProps) {
       <span className={styles.searchIcon} aria-hidden="true">
         <Search fontSize="inherit" />
       </span>
-      <span className={styles.searchText}>{t('shell.search.placeholder', 'Search documents…')}</span>
+      <span className={styles.searchText}>{t('shell.search.short', 'Quick find…')}</span>
       <Kbd aria-hidden="true" className={styles.searchKbd}>
         {mac ? '⌘K' : 'Ctrl K'}
       </Kbd>

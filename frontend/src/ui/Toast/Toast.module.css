@@ -18,7 +18,7 @@
 }
 
 .region[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -33,19 +33,19 @@
   font-size: var(--fs-md);
   color: var(--fg);
   background: var(--surface);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow-overlay);
   outline: none;
 }
 
 .toast[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 /* Tone shows in the icon (and the hidden prefix); danger also tints the whole toast. */
-.danger { border-color: var(--danger); background: var(--danger-bg); }
+.danger { border-color: transparent; background: var(--danger-soft); }
 
 .content {
   display: flex;
@@ -56,12 +56,7 @@
 }
 
 .title {
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-sm);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
 }
 
 .description {
@@ -79,7 +74,7 @@
   color: var(--fg-2);
   background: transparent;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -89,7 +84,7 @@
 }
 
 .close[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

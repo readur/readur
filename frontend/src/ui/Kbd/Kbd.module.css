@@ -13,5 +13,5 @@
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-bottom-width: 2px;
-  border-radius: var(--radius);
+  border-radius: 4px;
 }

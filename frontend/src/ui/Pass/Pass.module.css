@@ -11,6 +11,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
 }
 
 .cell {
@@ -86,7 +87,7 @@
 
 .truncate:focus-visible,
 .clamp:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import styles from './ChangeTag.module.css';
 
 export interface ChangeTagProps {
-  /** The translated word ("New", "Changed"); shown in condensed caps. */
+  /** The translated word ("New", "Changed"). */
   children: ReactNode;
   /** Extra class for layout by the surface that places the tag. */
   className?: string;

@@ -17,8 +17,8 @@
   flex-direction: column;
   background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
 }
 
@@ -35,18 +35,15 @@
 
 .title {
   margin: 0;
-  padding: var(--s-4) var(--s-5);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
+  padding: var(--s-5) var(--s-5) var(--s-2);
+  font-family: var(--font-ui);
   font-size: var(--fs-lg);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  border-bottom: 1px solid var(--line);
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .body {
-  padding: var(--s-5);
+  padding: var(--s-2) var(--s-5) var(--s-5);
   overflow: auto;
   font-family: var(--font-ui);
   font-size: var(--fs-md);
@@ -57,6 +54,5 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--s-2);
-  padding: var(--s-3) var(--s-5);
-  border-top: 1px solid var(--line);
+  padding: var(--s-3) var(--s-5) var(--s-5);
 }

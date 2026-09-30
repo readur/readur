@@ -6,6 +6,6 @@
   line-height: var(--lh-body);
   color: var(--surface);
   background: var(--fg);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-overlay);
 }

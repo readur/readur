@@ -1,15 +1,15 @@
 .tag {
   flex: none;
-  padding: 0 var(--s-1);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  font-family: var(--font-ui);
   font-size: var(--fs-xs);
-  font-weight: 600;
-  line-height: 18px;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
+  font-weight: 700;
+  line-height: 1;
   white-space: nowrap;
-  color: var(--signal-ink);
-  background: var(--signal);
-  border-radius: 2px;
+  color: var(--new-fg);
+  background: var(--new);
+  border-radius: var(--radius-pill);
 }

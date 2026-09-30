@@ -10,9 +10,8 @@
 }
 
 .readout {
-  font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   color: var(--fg-2);
 }
 
@@ -29,12 +28,7 @@
 }
 
 .sizeLabel {
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
+  font-size: var(--fs-md);
   color: var(--fg-meta);
 }
 
@@ -44,6 +38,6 @@
 
 .sizeSelect .trigger {
   min-height: 32px;
-  font-family: var(--font-data);
-  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
 }

@@ -5,7 +5,7 @@
   overflow: auto;
   background: var(--surface);
   color: var(--fg);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow-overlay);
 }
@@ -24,7 +24,7 @@
   font-family: var(--font-ui);
   font-size: var(--fs-md);
   color: var(--fg);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   outline: none;
 }
@@ -35,12 +35,13 @@
 }
 
 .option[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
 .option[data-selected] {
   font-weight: 600;
+  color: var(--accent);
 }
 
 .option[data-disabled] {
@@ -92,6 +93,6 @@
 }
 
 .groupButton[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }

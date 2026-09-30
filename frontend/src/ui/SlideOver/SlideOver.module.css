@@ -17,7 +17,7 @@
   height: 100%;
   color: var(--fg);
   background: var(--surface);
-  border-left: 1px solid var(--line-strong);
+  border-left: 1px solid var(--line);
   box-shadow: var(--shadow-overlay);
 }
 
@@ -75,12 +75,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
+  font-family: var(--font-ui);
   font-size: var(--fs-lg);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .body {

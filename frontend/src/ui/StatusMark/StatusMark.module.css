@@ -1,22 +1,26 @@
 .mark {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: var(--s-1);
+  gap: 5px;
   min-width: 0;
+  max-width: 100%;
+  padding: 0 var(--s-2);
   white-space: nowrap;
   line-height: 1;
+  border-radius: var(--radius-pill);
 }
 
 .glyph {
   flex: none;
-  font-family: var(--font-data);
+  font-size: 0.85em;
   line-height: 1;
 }
 
 .word {
   font-family: var(--font-label);
   font-stretch: var(--font-label-stretch);
-  font-weight: 600;
+  font-weight: 650;
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-variant-numeric: tabular-nums;
@@ -24,9 +28,11 @@
   text-overflow: ellipsis;
 }
 
-.sm { font-size: var(--fs-xs); }
-.md { font-size: var(--fs-sm); }
+.sm { height: 20px; font-size: var(--fs-xs); }
+.md { height: 22px; font-size: var(--fs-xs); }
 
-.neutral { color: var(--fg-2); }
-.ok { color: var(--ok); }
-.danger { color: var(--danger); }
+.neutral { color: var(--fg-2); background: var(--surface-sunken); }
+.active { color: var(--accent); background: var(--accent-soft); }
+.ok { color: var(--ok); background: var(--ok-soft); }
+.warn { color: var(--warn); background: var(--warn-soft); }
+.danger { color: var(--danger); background: var(--danger-soft); }
