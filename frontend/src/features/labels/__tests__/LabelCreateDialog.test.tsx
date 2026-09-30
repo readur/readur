@@ -239,8 +239,10 @@ describe('LabelCreateDialog', () => {
     test('sends the entered values', async () => {
       const onSubmit = vi.fn();
       renderDialog({ onSubmit });
-      await user.type(nameField(), 'Test Label');
-      await user.type(descriptionField(), 'Test description');
+      await user.click(nameField());
+      await user.paste('Test Label');
+      await user.click(descriptionField());
+      await user.paste('Test description');
       await user.click(submitButton());
       expect(onSubmit).toHaveBeenCalledWith({
         name: 'Test Label',
@@ -255,7 +257,7 @@ describe('LabelCreateDialog', () => {
       const onSubmit = vi.fn();
       renderDialog({ onSubmit, editingLabel });
       await user.clear(nameField());
-      await user.type(nameField(), 'Updated Label');
+      await user.paste('Updated Label');
       await user.click(submitButton('Update'));
       expect(onSubmit).toHaveBeenCalledWith({
         name: 'Updated Label',
@@ -269,7 +271,8 @@ describe('LabelCreateDialog', () => {
     test('sends only the name when nothing else is set', async () => {
       const onSubmit = vi.fn();
       renderDialog({ onSubmit });
-      await user.type(nameField(), 'Minimal Label');
+      await user.click(nameField());
+      await user.paste('Minimal Label');
       await user.click(submitButton());
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ name: 'Minimal Label', description: undefined }));
     });
