@@ -1091,7 +1091,8 @@
       "cancel": "Cancelar",
       "create": "Crear",
       "update": "Actualizar",
-      "saving": "Guardando..."
+      "saving": "Guardando...",
+      "previewName": "Vista previa de etiqueta"
     },
     "selector": {
       "placeholder": "Buscar o crear etiquetas...",
@@ -1100,7 +1101,9 @@
       "createLabel": "Crear etiqueta \"{{name}}\"",
       "noLabelsFound": "No se encontraron etiquetas",
       "noLabelsMatch": "No hay etiquetas que coincidan con \"{{query}}\"",
-      "noLabelsAvailable": "No hay etiquetas disponibles"
+      "noLabelsAvailable": "No hay etiquetas disponibles",
+      "label": "Etiquetas",
+      "selected": "Etiquetas seleccionadas"
     },
     "empty": {
       "title": "No se encontraron etiquetas",
@@ -1130,6 +1133,39 @@
       "invalidName": "El nombre de la etiqueta contiene caracteres inválidos. Por favor usa solo letras, números y puntuación básica.",
       "invalidColor": "Formato de color inválido. Por favor usa un color hexadecimal válido como #0969da.",
       "maxLabelsReached": "Se alcanzó el número máximo de etiquetas. Por favor elimina algunas etiquetas antes de crear nuevas."
+    },
+    "colors": {
+      "blue": "Azul",
+      "gray": "Gris",
+      "green": "Verde",
+      "indigo": "Índigo",
+      "orange": "Naranja",
+      "pink": "Rosa",
+      "purple": "Morado",
+      "red": "Rojo",
+      "teal": "Verde azulado",
+      "yellow": "Amarillo"
+    },
+    "icons": {
+      "archive": "Archivo",
+      "assignment": "Tarea",
+      "briefcase": "Maletín",
+      "bug": "Error",
+      "build": "Herramienta",
+      "document": "Documento",
+      "dollar": "Dinero",
+      "folder": "Carpeta",
+      "label": "Etiqueta",
+      "medical": "Médico",
+      "person": "Persona",
+      "receipt": "Recibo",
+      "scale": "Legal",
+      "schedule": "Agenda",
+      "star": "Estrella",
+      "work": "Trabajo"
+    },
+    "tag": {
+      "remove": "Quitar {{name}}"
     }
   },
   "notifications": {
@@ -2142,6 +2178,160 @@
       "label": "Vistas del documento",
       "text": "Texto",
       "details": "Detalles"
+    }
+  },
+  "library": {
+    "add": "Añadir documentos",
+    "added": {
+      "1y": "Último año",
+      "30d": "Últimos 30 días",
+      "7d": "Últimos 7 días",
+      "from": "Desde",
+      "order": "La fecha final es anterior a la inicial",
+      "to": "Hasta"
+    },
+    "bulk": {
+      "addLabel": "Añadir etiqueta",
+      "addLabelTitle": "Añadir etiquetas a {{count}} documentos",
+      "addLabelTitle_one": "Añadir etiquetas a 1 documento",
+      "apply": "Añadir etiquetas",
+      "delete": "Eliminar",
+      "deleteBody": "Se eliminarán los documentos y su texto. No se puede deshacer.",
+      "deleteFailed": "No se pudieron eliminar los documentos",
+      "deleteTitle": "¿Eliminar {{count}} documentos?",
+      "deleteTitle_one": "¿Eliminar 1 documento?",
+      "deleted": "{{count}} documentos eliminados",
+      "deleted_one": "1 documento eliminado",
+      "download": "Descargar",
+      "downloadFailed": "{{count}} descargas fallidas",
+      "downloadFailed_one": "1 descarga fallida",
+      "downloaded": "{{count}} documentos descargados",
+      "downloaded_one": "1 documento descargado",
+      "downloading": "Descargando…",
+      "labelFailed": "No se pudieron añadir las etiquetas",
+      "labelled": "Etiquetas añadidas a {{count}} documentos",
+      "labelled_one": "Etiquetas añadidas a 1 documento",
+      "retry": "Reintentar OCR"
+    },
+    "cancel": "Cancelar",
+    "columns": {
+      "added": "Añadido",
+      "labels": "Etiquetas",
+      "name": "Nombre",
+      "size": "Tamaño",
+      "source": "Origen",
+      "status": "Estado",
+      "type": "Tipo",
+      "updated": "Actualizado"
+    },
+    "compact": "Filas compactas",
+    "count": "{{formatted}} documentos",
+    "count_one": "{{formatted}} documento",
+    "counting": "Contando…",
+    "detail": {
+      "confidence": "Confianza",
+      "delete": "Eliminar",
+      "deleteBody": "Se eliminarán «{{name}}» y su texto. No se puede deshacer.",
+      "deleteFailed": "No se pudo eliminar el documento",
+      "deleteTitle": "¿Eliminar este documento?",
+      "deleted": "Documento eliminado",
+      "download": "Descargar",
+      "downloadFailed": "La descarga falló",
+      "facts": "Datos del documento",
+      "labelsFailed": "No se pudieron guardar las etiquetas",
+      "labelsSaved": "Etiquetas guardadas",
+      "language": "Idioma",
+      "loadingText": "Cargando texto",
+      "noText": "Todavía no se ha leído texto de este documento.",
+      "open": "Abrir",
+      "pagesOcr": "Páginas/OCR",
+      "retry": "Reintentar OCR",
+      "retryFailed": "No se pudo reintentar el reconocimiento de texto",
+      "retryQueued": "Reconocimiento de texto en cola de nuevo",
+      "share": "Compartir",
+      "text": "Texto",
+      "textFailed": "No se pudo cargar el texto.",
+      "title": "Documento"
+    },
+    "empty": {
+      "clearFilters": "Quitar filtros",
+      "error": "No se pudieron cargar los documentos",
+      "noMatches": "Sin resultados",
+      "noMatchesHint": "Nada coincide con la búsqueda y los filtros actuales.",
+      "none": "Aún no hay documentos",
+      "noneHint": "Sube archivos o conecta una carpeta para empezar tu biblioteca.",
+      "tooMany": "Demasiadas coincidencias: afina la búsqueda",
+      "tooManyHint": "Añade una palabra o un filtro para acotar los resultados."
+    },
+    "filters": {
+      "added": "Añadido",
+      "any": "Cualquiera",
+      "clearAll": "Quitar todo",
+      "findLabel": "Buscar una etiqueta",
+      "label": "Etiqueta",
+      "noLabelMatch": "Ninguna etiqueta coincide",
+      "noLabels": "Aún no hay etiquetas",
+      "region": "Buscar y filtrar",
+      "source": "Origen",
+      "status": "Estado",
+      "type": "Tipo"
+    },
+    "help": {
+      "boolean": "Operadores",
+      "booleanHint": "Usa & (y), | (o), ! (no)",
+      "exampleAnd": "Ambas palabras",
+      "exampleFuzzy": "Tolera errores de escritura",
+      "exampleNot": "Excluir una palabra",
+      "exampleOr": "Cualquiera de las palabras",
+      "examplePhrase": "Una frase exacta",
+      "exampleWord": "Documentos que mencionan una palabra",
+      "examples": "Prueba",
+      "fuzzy": "Escritura parecida",
+      "fuzzyHint": "También encuentra casi coincidencias y erratas",
+      "intro": "La búsqueda revisa los nombres de archivo y el texto leído de cada documento.",
+      "match": "Coincidencia",
+      "open": "Ayuda de búsqueda",
+      "phrase": "Frase exacta",
+      "phraseHint": "Las palabras aparecen juntas y en orden",
+      "simple": "Todas las palabras",
+      "simpleHint": "Cada palabra aparece en algún lugar",
+      "title": "Ayuda de búsqueda"
+    },
+    "labelsMore": "{{count}} más",
+    "retry": "Reintentar",
+    "search": {
+      "keepTyping": "Sigue escribiendo…",
+      "label": "Buscar documentos",
+      "placeholder": "Buscar nombres y texto…"
+    },
+    "sort": {
+      "asc": "{{field}}, ascendente",
+      "desc": "{{field}}, descendente",
+      "label": "Ordenar por",
+      "relevance": "Mejor coincidencia"
+    },
+    "source": {
+      "unknown": "Conexión",
+      "upload": "Subida"
+    },
+    "status": {
+      "completed": "Indexado",
+      "failed": "Fallido",
+      "pending": "Pendiente",
+      "processing": "Procesando"
+    },
+    "table": "Documentos",
+    "tag": {
+      "changed": "CAMBIADO",
+      "new": "NUEVO"
+    },
+    "title": "Biblioteca",
+    "type": {
+      "image": "Imágenes",
+      "office": "Office",
+      "other": "Otros",
+      "pdf": "PDF",
+      "text": "Texto"
     }
   }
 }

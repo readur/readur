@@ -1190,7 +1190,8 @@
       "cancel": "Abbrechen",
       "create": "Erstellen",
       "update": "Aktualisieren",
-      "saving": "Wird gespeichert..."
+      "saving": "Wird gespeichert...",
+      "previewName": "Label-Vorschau"
     },
     "selector": {
       "placeholder": "Labels suchen oder erstellen...",
@@ -1199,7 +1200,9 @@
       "createLabel": "Label \"{{name}}\" erstellen",
       "noLabelsFound": "Keine Labels gefunden",
       "noLabelsMatch": "Keine Labels entsprechen \"{{query}}\"",
-      "noLabelsAvailable": "Keine Labels verfügbar"
+      "noLabelsAvailable": "Keine Labels verfügbar",
+      "label": "Labels",
+      "selected": "Ausgewählte Labels"
     },
     "empty": {
       "title": "Keine Labels gefunden",
@@ -1229,6 +1232,39 @@
       "invalidName": "Label-Name enthält ungültige Zeichen. Bitte verwenden Sie nur Buchstaben, Zahlen und einfache Satzzeichen.",
       "invalidColor": "Ungültiges Farbformat. Bitte verwenden Sie eine gültige Hex-Farbe wie #0969da.",
       "maxLabelsReached": "Maximale Anzahl von Labels erreicht. Bitte löschen Sie einige Labels, bevor Sie neue erstellen."
+    },
+    "colors": {
+      "blue": "Blau",
+      "gray": "Grau",
+      "green": "Grün",
+      "indigo": "Indigo",
+      "orange": "Orange",
+      "pink": "Pink",
+      "purple": "Lila",
+      "red": "Rot",
+      "teal": "Türkis",
+      "yellow": "Gelb"
+    },
+    "icons": {
+      "archive": "Archiv",
+      "assignment": "Aufgabe",
+      "briefcase": "Aktentasche",
+      "bug": "Fehler",
+      "build": "Werkzeug",
+      "document": "Dokument",
+      "dollar": "Geld",
+      "folder": "Ordner",
+      "label": "Label",
+      "medical": "Medizin",
+      "person": "Person",
+      "receipt": "Beleg",
+      "scale": "Recht",
+      "schedule": "Termin",
+      "star": "Stern",
+      "work": "Arbeit"
+    },
+    "tag": {
+      "remove": "{{name}} entfernen"
     }
   },
   "notifications": {
@@ -2142,6 +2178,160 @@
       "label": "Dokumentansichten",
       "text": "Text",
       "details": "Details"
+    }
+  },
+  "library": {
+    "add": "Dokumente hinzufügen",
+    "added": {
+      "1y": "Letztes Jahr",
+      "30d": "Letzte 30 Tage",
+      "7d": "Letzte 7 Tage",
+      "from": "Von",
+      "order": "Das Enddatum liegt vor dem Startdatum",
+      "to": "Bis"
+    },
+    "bulk": {
+      "addLabel": "Label hinzufügen",
+      "addLabelTitle": "Labels zu {{count}} Dokumenten hinzufügen",
+      "addLabelTitle_one": "Labels zu 1 Dokument hinzufügen",
+      "apply": "Labels hinzufügen",
+      "delete": "Löschen",
+      "deleteBody": "Die Dokumente und ihr Text werden entfernt. Das lässt sich nicht rückgängig machen.",
+      "deleteFailed": "Die Dokumente konnten nicht gelöscht werden",
+      "deleteTitle": "{{count}} Dokumente löschen?",
+      "deleteTitle_one": "1 Dokument löschen?",
+      "deleted": "{{count}} Dokumente gelöscht",
+      "deleted_one": "1 Dokument gelöscht",
+      "download": "Herunterladen",
+      "downloadFailed": "{{count}} Downloads fehlgeschlagen",
+      "downloadFailed_one": "1 Download fehlgeschlagen",
+      "downloaded": "{{count}} Dokumente heruntergeladen",
+      "downloaded_one": "1 Dokument heruntergeladen",
+      "downloading": "Wird heruntergeladen…",
+      "labelFailed": "Die Labels konnten nicht hinzugefügt werden",
+      "labelled": "Labels zu {{count}} Dokumenten hinzugefügt",
+      "labelled_one": "Labels zu 1 Dokument hinzugefügt",
+      "retry": "OCR wiederholen"
+    },
+    "cancel": "Abbrechen",
+    "columns": {
+      "added": "Hinzugefügt",
+      "labels": "Labels",
+      "name": "Name",
+      "size": "Größe",
+      "source": "Quelle",
+      "status": "Status",
+      "type": "Typ",
+      "updated": "Geändert"
+    },
+    "compact": "Kompakte Zeilen",
+    "count": "{{formatted}} Dokumente",
+    "count_one": "{{formatted}} Dokument",
+    "counting": "Wird gezählt…",
+    "detail": {
+      "confidence": "Konfidenz",
+      "delete": "Löschen",
+      "deleteBody": "„{{name}}“ und sein Text werden entfernt. Das lässt sich nicht rückgängig machen.",
+      "deleteFailed": "Das Dokument konnte nicht gelöscht werden",
+      "deleteTitle": "Dieses Dokument löschen?",
+      "deleted": "Dokument gelöscht",
+      "download": "Herunterladen",
+      "downloadFailed": "Download fehlgeschlagen",
+      "facts": "Dokumentangaben",
+      "labelsFailed": "Labels konnten nicht gespeichert werden",
+      "labelsSaved": "Labels gespeichert",
+      "language": "Sprache",
+      "loadingText": "Text wird geladen",
+      "noText": "Aus diesem Dokument wurde noch kein Text gelesen.",
+      "open": "Öffnen",
+      "pagesOcr": "Seiten/OCR",
+      "retry": "OCR wiederholen",
+      "retryFailed": "Die Texterkennung konnte nicht wiederholt werden",
+      "retryQueued": "Texterkennung erneut eingereiht",
+      "share": "Teilen",
+      "text": "Text",
+      "textFailed": "Der Text konnte nicht geladen werden.",
+      "title": "Dokument"
+    },
+    "empty": {
+      "clearFilters": "Filter zurücksetzen",
+      "error": "Dokumente konnten nicht geladen werden",
+      "noMatches": "Keine Treffer",
+      "noMatchesHint": "Nichts passt zur aktuellen Suche und zu den Filtern.",
+      "none": "Noch keine Dokumente",
+      "noneHint": "Laden Sie Dateien hoch oder verbinden Sie einen Ordner, um Ihre Bibliothek zu beginnen.",
+      "tooMany": "Zu viele Treffer – verfeinern Sie die Suche",
+      "tooManyHint": "Fügen Sie ein Wort oder einen Filter hinzu, um die Ergebnisse einzugrenzen."
+    },
+    "filters": {
+      "added": "Hinzugefügt",
+      "any": "Alle",
+      "clearAll": "Alle zurücksetzen",
+      "findLabel": "Label suchen",
+      "label": "Label",
+      "noLabelMatch": "Keine passenden Labels",
+      "noLabels": "Noch keine Labels",
+      "region": "Suchen und filtern",
+      "source": "Quelle",
+      "status": "Status",
+      "type": "Typ"
+    },
+    "help": {
+      "boolean": "Operatoren",
+      "booleanHint": "Mit & (und), | (oder), ! (nicht)",
+      "exampleAnd": "Beide Wörter",
+      "exampleFuzzy": "Verzeiht Tippfehler",
+      "exampleNot": "Ein Wort ausschließen",
+      "exampleOr": "Eines der Wörter",
+      "examplePhrase": "Eine genaue Wortfolge",
+      "exampleWord": "Dokumente, die ein Wort enthalten",
+      "examples": "Ausprobieren",
+      "fuzzy": "Ähnliche Schreibweise",
+      "fuzzyHint": "Findet auch Beinahe-Treffer und Tippfehler",
+      "intro": "Die Suche durchsucht Dateinamen und den aus jedem Dokument gelesenen Text.",
+      "match": "Abgleich",
+      "open": "Suchhilfe",
+      "phrase": "Genaue Wortfolge",
+      "phraseHint": "Die Wörter stehen zusammen und in dieser Reihenfolge",
+      "simple": "Alle Wörter",
+      "simpleHint": "Jedes Wort kommt irgendwo vor",
+      "title": "Suchhilfe"
+    },
+    "labelsMore": "{{count}} weitere",
+    "retry": "Erneut versuchen",
+    "search": {
+      "keepTyping": "Weiter tippen…",
+      "label": "Dokumente durchsuchen",
+      "placeholder": "Namen und Text durchsuchen…"
+    },
+    "sort": {
+      "asc": "{{field}}, aufsteigend",
+      "desc": "{{field}}, absteigend",
+      "label": "Sortieren nach",
+      "relevance": "Beste Übereinstimmung"
+    },
+    "source": {
+      "unknown": "Verbindung",
+      "upload": "Upload"
+    },
+    "status": {
+      "completed": "Indiziert",
+      "failed": "Fehlgeschlagen",
+      "pending": "Ausstehend",
+      "processing": "In Bearbeitung"
+    },
+    "table": "Dokumente",
+    "tag": {
+      "changed": "GEÄNDERT",
+      "new": "NEU"
+    },
+    "title": "Bibliothek",
+    "type": {
+      "image": "Bilder",
+      "office": "Office",
+      "other": "Sonstige",
+      "pdf": "PDF",
+      "text": "Text"
     }
   }
 }

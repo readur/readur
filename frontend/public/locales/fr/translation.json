@@ -1190,7 +1190,8 @@
       "cancel": "Annuler",
       "create": "Créer",
       "update": "Mettre à jour",
-      "saving": "Enregistrement..."
+      "saving": "Enregistrement...",
+      "previewName": "Aperçu de l’étiquette"
     },
     "selector": {
       "placeholder": "Rechercher ou créer des étiquettes...",
@@ -1199,7 +1200,9 @@
       "createLabel": "Créer l'étiquette \"{{name}}\"",
       "noLabelsFound": "Aucune étiquette trouvée",
       "noLabelsMatch": "Aucune étiquette ne correspond à \"{{query}}\"",
-      "noLabelsAvailable": "Aucune étiquette disponible"
+      "noLabelsAvailable": "Aucune étiquette disponible",
+      "label": "Étiquettes",
+      "selected": "Étiquettes sélectionnées"
     },
     "empty": {
       "title": "Aucune étiquette trouvée",
@@ -1229,6 +1232,39 @@
       "invalidName": "Le nom de l'étiquette contient des caractères invalides. Veuillez utiliser uniquement des lettres, des chiffres et une ponctuation de base.",
       "invalidColor": "Format de couleur invalide. Veuillez utiliser une couleur hexadécimale valide comme #0969da.",
       "maxLabelsReached": "Nombre maximal d'étiquettes atteint. Veuillez supprimer certaines étiquettes avant d'en créer de nouvelles."
+    },
+    "colors": {
+      "blue": "Bleu",
+      "gray": "Gris",
+      "green": "Vert",
+      "indigo": "Indigo",
+      "orange": "Orange",
+      "pink": "Rose",
+      "purple": "Violet",
+      "red": "Rouge",
+      "teal": "Bleu canard",
+      "yellow": "Jaune"
+    },
+    "icons": {
+      "archive": "Archive",
+      "assignment": "Tâche",
+      "briefcase": "Porte-documents",
+      "bug": "Bogue",
+      "build": "Outil",
+      "document": "Document",
+      "dollar": "Argent",
+      "folder": "Dossier",
+      "label": "Étiquette",
+      "medical": "Médical",
+      "person": "Personne",
+      "receipt": "Reçu",
+      "scale": "Juridique",
+      "schedule": "Agenda",
+      "star": "Étoile",
+      "work": "Travail"
+    },
+    "tag": {
+      "remove": "Retirer {{name}}"
     }
   },
   "notifications": {
@@ -2142,6 +2178,160 @@
       "label": "Vues du document",
       "text": "Texte",
       "details": "Détails"
+    }
+  },
+  "library": {
+    "add": "Ajouter des documents",
+    "added": {
+      "1y": "Dernière année",
+      "30d": "30 derniers jours",
+      "7d": "7 derniers jours",
+      "from": "Du",
+      "order": "La date de fin précède la date de début",
+      "to": "Au"
+    },
+    "bulk": {
+      "addLabel": "Ajouter une étiquette",
+      "addLabelTitle": "Ajouter des étiquettes à {{count}} documents",
+      "addLabelTitle_one": "Ajouter des étiquettes à 1 document",
+      "apply": "Ajouter les étiquettes",
+      "delete": "Supprimer",
+      "deleteBody": "Les documents et leur texte seront supprimés. Action irréversible.",
+      "deleteFailed": "Impossible de supprimer les documents",
+      "deleteTitle": "Supprimer {{count}} documents ?",
+      "deleteTitle_one": "Supprimer 1 document ?",
+      "deleted": "{{count}} documents supprimés",
+      "deleted_one": "1 document supprimé",
+      "download": "Télécharger",
+      "downloadFailed": "{{count}} téléchargements ont échoué",
+      "downloadFailed_one": "1 téléchargement a échoué",
+      "downloaded": "{{count}} documents téléchargés",
+      "downloaded_one": "1 document téléchargé",
+      "downloading": "Téléchargement…",
+      "labelFailed": "Impossible d’ajouter les étiquettes",
+      "labelled": "Étiquettes ajoutées à {{count}} documents",
+      "labelled_one": "Étiquettes ajoutées à 1 document",
+      "retry": "Relancer l’OCR"
+    },
+    "cancel": "Annuler",
+    "columns": {
+      "added": "Ajouté",
+      "labels": "Étiquettes",
+      "name": "Nom",
+      "size": "Taille",
+      "source": "Source",
+      "status": "Statut",
+      "type": "Type",
+      "updated": "Modifié"
+    },
+    "compact": "Lignes compactes",
+    "count": "{{formatted}} documents",
+    "count_one": "{{formatted}} document",
+    "counting": "Comptage…",
+    "detail": {
+      "confidence": "Confiance",
+      "delete": "Supprimer",
+      "deleteBody": "« {{name}} » et son texte seront supprimés. Action irréversible.",
+      "deleteFailed": "Impossible de supprimer le document",
+      "deleteTitle": "Supprimer ce document ?",
+      "deleted": "Document supprimé",
+      "download": "Télécharger",
+      "downloadFailed": "Le téléchargement a échoué",
+      "facts": "Informations du document",
+      "labelsFailed": "Impossible d’enregistrer les étiquettes",
+      "labelsSaved": "Étiquettes enregistrées",
+      "language": "Langue",
+      "loadingText": "Chargement du texte",
+      "noText": "Aucun texte n’a encore été lu dans ce document.",
+      "open": "Ouvrir",
+      "pagesOcr": "Pages/OCR",
+      "retry": "Relancer l’OCR",
+      "retryFailed": "Impossible de relancer la reconnaissance de texte",
+      "retryQueued": "Reconnaissance de texte remise en file",
+      "share": "Partager",
+      "text": "Texte",
+      "textFailed": "Le texte n’a pas pu être chargé.",
+      "title": "Document"
+    },
+    "empty": {
+      "clearFilters": "Effacer les filtres",
+      "error": "Impossible de charger les documents",
+      "noMatches": "Aucun résultat",
+      "noMatchesHint": "Rien ne correspond à la recherche et aux filtres actuels.",
+      "none": "Pas encore de documents",
+      "noneHint": "Importez des fichiers ou connectez un dossier pour démarrer votre bibliothèque.",
+      "tooMany": "Trop de résultats — affinez votre recherche",
+      "tooManyHint": "Ajoutez un mot ou un filtre pour réduire les résultats."
+    },
+    "filters": {
+      "added": "Ajouté",
+      "any": "Tous",
+      "clearAll": "Tout effacer",
+      "findLabel": "Chercher une étiquette",
+      "label": "Étiquette",
+      "noLabelMatch": "Aucune étiquette correspondante",
+      "noLabels": "Pas encore d’étiquettes",
+      "region": "Rechercher et filtrer",
+      "source": "Source",
+      "status": "Statut",
+      "type": "Type"
+    },
+    "help": {
+      "boolean": "Opérateurs",
+      "booleanHint": "Utilisez & (et), | (ou), ! (sauf)",
+      "exampleAnd": "Les deux mots",
+      "exampleFuzzy": "Tolère les fautes de frappe",
+      "exampleNot": "Exclure un mot",
+      "exampleOr": "L’un ou l’autre mot",
+      "examplePhrase": "Une expression exacte",
+      "exampleWord": "Documents qui mentionnent un mot",
+      "examples": "Essayer",
+      "fuzzy": "Orthographe proche",
+      "fuzzyHint": "Trouve aussi les correspondances proches et les coquilles",
+      "intro": "La recherche porte sur les noms de fichiers et le texte lu dans chaque document.",
+      "match": "Correspondance",
+      "open": "Aide à la recherche",
+      "phrase": "Expression exacte",
+      "phraseHint": "Les mots se suivent, dans cet ordre",
+      "simple": "Tous les mots",
+      "simpleHint": "Chaque mot apparaît quelque part",
+      "title": "Aide à la recherche"
+    },
+    "labelsMore": "{{count}} de plus",
+    "retry": "Réessayer",
+    "search": {
+      "keepTyping": "Continuez à saisir…",
+      "label": "Rechercher des documents",
+      "placeholder": "Rechercher noms et texte…"
+    },
+    "sort": {
+      "asc": "{{field}}, croissant",
+      "desc": "{{field}}, décroissant",
+      "label": "Trier par",
+      "relevance": "Meilleure correspondance"
+    },
+    "source": {
+      "unknown": "Connexion",
+      "upload": "Import"
+    },
+    "status": {
+      "completed": "Indexé",
+      "failed": "Échec",
+      "pending": "En attente",
+      "processing": "En cours"
+    },
+    "table": "Documents",
+    "tag": {
+      "changed": "MODIFIÉ",
+      "new": "NOUVEAU"
+    },
+    "title": "Bibliothèque",
+    "type": {
+      "image": "Images",
+      "office": "Bureautique",
+      "other": "Autres",
+      "pdf": "PDF",
+      "text": "Texte"
     }
   }
 }

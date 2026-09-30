@@ -1209,7 +1209,8 @@
       "cancel": "Cancel",
       "create": "Create",
       "update": "Update",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "previewName": "Label Preview"
     },
     "selector": {
       "placeholder": "Search or create labels...",
@@ -1218,7 +1219,9 @@
       "createLabel": "Create label \"{{name}}\"",
       "noLabelsFound": "No labels found",
       "noLabelsMatch": "No labels match \"{{query}}\"",
-      "noLabelsAvailable": "No labels available"
+      "noLabelsAvailable": "No labels available",
+      "label": "Labels",
+      "selected": "Selected labels"
     },
     "empty": {
       "title": "No labels found",
@@ -1249,6 +1252,39 @@
       "commaNotAllowed": "Label names cannot contain commas.",
       "invalidColor": "Invalid color format. Please use a valid hex color like #0969da.",
       "maxLabelsReached": "Maximum number of labels reached. Please delete some labels before creating new ones."
+    },
+    "colors": {
+      "blue": "Blue",
+      "gray": "Gray",
+      "green": "Green",
+      "indigo": "Indigo",
+      "orange": "Orange",
+      "pink": "Pink",
+      "purple": "Purple",
+      "red": "Red",
+      "teal": "Teal",
+      "yellow": "Yellow"
+    },
+    "icons": {
+      "archive": "Archive",
+      "assignment": "Assignment",
+      "briefcase": "Briefcase",
+      "bug": "Bug",
+      "build": "Build",
+      "document": "Document",
+      "dollar": "Money",
+      "folder": "Folder",
+      "label": "Label",
+      "medical": "Medical",
+      "person": "Person",
+      "receipt": "Receipt",
+      "scale": "Legal",
+      "schedule": "Schedule",
+      "star": "Star",
+      "work": "Work"
+    },
+    "tag": {
+      "remove": "Remove {{name}}"
     }
   },
   "notifications": {
@@ -2162,6 +2198,160 @@
       "label": "Document views",
       "text": "Text",
       "details": "Details"
+    }
+  },
+  "library": {
+    "add": "Add documents",
+    "added": {
+      "1y": "Last year",
+      "30d": "Last 30 days",
+      "7d": "Last 7 days",
+      "from": "From",
+      "order": "The end date is before the start date",
+      "to": "To"
+    },
+    "bulk": {
+      "addLabel": "Add label",
+      "addLabelTitle": "Add labels to {{count}} documents",
+      "addLabelTitle_one": "Add labels to 1 document",
+      "apply": "Add labels",
+      "delete": "Delete",
+      "deleteBody": "The documents and their text will be removed. This cannot be undone.",
+      "deleteFailed": "Could not delete the documents",
+      "deleteTitle": "Delete {{count}} documents?",
+      "deleteTitle_one": "Delete 1 document?",
+      "deleted": "{{count}} documents deleted",
+      "deleted_one": "1 document deleted",
+      "download": "Download",
+      "downloadFailed": "{{count}} downloads failed",
+      "downloadFailed_one": "1 download failed",
+      "downloaded": "{{count}} documents downloaded",
+      "downloaded_one": "1 document downloaded",
+      "downloading": "Downloading…",
+      "labelFailed": "Could not add the labels",
+      "labelled": "Labels added to {{count}} documents",
+      "labelled_one": "Labels added to 1 document",
+      "retry": "Retry OCR"
+    },
+    "cancel": "Cancel",
+    "columns": {
+      "added": "Added",
+      "labels": "Labels",
+      "name": "Name",
+      "size": "Size",
+      "source": "Source",
+      "status": "Status",
+      "type": "Type",
+      "updated": "Updated"
+    },
+    "compact": "Compact rows",
+    "count": "{{formatted}} documents",
+    "count_one": "{{formatted}} document",
+    "counting": "Counting…",
+    "detail": {
+      "confidence": "Confidence",
+      "delete": "Delete",
+      "deleteBody": "“{{name}}” and its text will be removed. This cannot be undone.",
+      "deleteFailed": "Could not delete the document",
+      "deleteTitle": "Delete this document?",
+      "deleted": "Document deleted",
+      "download": "Download",
+      "downloadFailed": "Download failed",
+      "facts": "Document facts",
+      "labelsFailed": "Could not save labels",
+      "labelsSaved": "Labels saved",
+      "language": "Language",
+      "loadingText": "Loading text",
+      "noText": "No text has been read from this document yet.",
+      "open": "Open",
+      "pagesOcr": "Pages/OCR",
+      "retry": "Retry OCR",
+      "retryFailed": "Could not retry text recognition",
+      "retryQueued": "Text recognition queued again",
+      "share": "Share",
+      "text": "Text",
+      "textFailed": "The text could not be loaded.",
+      "title": "Document"
+    },
+    "empty": {
+      "clearFilters": "Clear filters",
+      "error": "Documents could not be loaded",
+      "noMatches": "No matches",
+      "noMatchesHint": "Nothing fits the current search and filters.",
+      "none": "No documents yet",
+      "noneHint": "Upload files or connect a folder to start your library.",
+      "tooMany": "Too many matches — refine your search",
+      "tooManyHint": "Add a word or a filter to narrow the results."
+    },
+    "filters": {
+      "added": "Added",
+      "any": "Any",
+      "clearAll": "Clear all",
+      "findLabel": "Find a label",
+      "label": "Label",
+      "noLabelMatch": "No matching labels",
+      "noLabels": "No labels yet",
+      "region": "Search and filter",
+      "source": "Source",
+      "status": "Status",
+      "type": "Type"
+    },
+    "help": {
+      "boolean": "Operators",
+      "booleanHint": "Use & (and), | (or), ! (not)",
+      "exampleAnd": "Both words",
+      "exampleFuzzy": "Tolerates typos",
+      "exampleNot": "Leave a word out",
+      "exampleOr": "Either word",
+      "examplePhrase": "An exact phrase",
+      "exampleWord": "Documents that mention a word",
+      "examples": "Try",
+      "fuzzy": "Similar spelling",
+      "fuzzyHint": "Also finds near misses and typos",
+      "intro": "Search looks through file names and the text read from each document.",
+      "match": "Match",
+      "open": "Search help",
+      "phrase": "Exact phrase",
+      "phraseHint": "The words appear together, in order",
+      "simple": "All words",
+      "simpleHint": "Every word appears somewhere",
+      "title": "Search help"
+    },
+    "labelsMore": "{{count}} more",
+    "retry": "Try again",
+    "search": {
+      "keepTyping": "Keep typing…",
+      "label": "Search documents",
+      "placeholder": "Search names and text…"
+    },
+    "sort": {
+      "asc": "{{field}}, ascending",
+      "desc": "{{field}}, descending",
+      "label": "Sort by",
+      "relevance": "Best match"
+    },
+    "source": {
+      "unknown": "Connection",
+      "upload": "Upload"
+    },
+    "status": {
+      "completed": "Indexed",
+      "failed": "Failed",
+      "pending": "Pending",
+      "processing": "Processing"
+    },
+    "table": "Documents",
+    "tag": {
+      "changed": "CHANGED",
+      "new": "NEW"
+    },
+    "title": "Library",
+    "type": {
+      "image": "Images",
+      "office": "Office",
+      "other": "Other",
+      "pdf": "PDF",
+      "text": "Text"
     }
   }
 }
