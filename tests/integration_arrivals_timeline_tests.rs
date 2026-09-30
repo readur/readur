@@ -283,29 +283,30 @@ async fn arrivals_are_zero_filled_per_lane_and_scoped_like_documents() {
         "the last arrival may predate the window"
     );
 
-    // Admins see every source and every document, like GET /api/documents.
+    // Admins get lanes for their own sources only (the same set as
+    // GET /api/sources), but the watch and upload lanes count every user's
+    // documents, like GET /api/documents.
+    let admin_id = admin.user_response.id;
+    let inbox = create_source(&ctx, admin_id, "Admin inbox", "webdav").await;
+    insert(
+        &ctx,
+        Doc::new(admin_id, midnight).source(Some("source_sync"), Some(inbox)),
+    )
+    .await;
     let (status, lanes) = get(&ctx, "/api/sources/arrivals", Some(&admin_token)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         keys(&lanes),
-        vec![
-            nextcloud.to_string(),
-            others.to_string(),
-            scans.to_string(),
-            "watch".to_string(),
-            "upload".to_string()
-        ]
+        vec![inbox.to_string(), "watch".to_string(), "upload".to_string()],
+        "no lanes for other users' sources"
     );
-    assert_eq!(lane(&lanes, "upload")["today"], 4);
-    assert_eq!(lane(&lanes, &nextcloud.to_string())["today"], 2);
-    assert_eq!(lane(&lanes, &others.to_string())["today"], 1);
+    assert_eq!(lane(&lanes, &inbox.to_string())["today"], 1);
+    assert_eq!(lane(&lanes, "upload")["today"], 4, "both users' uploads");
+    assert_eq!(counts(lane(&lanes, "upload")).iter().sum::<i64>(), 5);
+    assert_eq!(counts(lane(&lanes, "watch"))[10], 1);
     assert_eq!(
         parse_time(&lane(&lanes, "watch")["last_arrival_at"]),
         days_ago(3)
-    );
-    assert_eq!(
-        lane(&lanes, &scans.to_string())["last_arrival_at"],
-        Value::Null
     );
 
     ctx.cleanup_and_close().await.ok();

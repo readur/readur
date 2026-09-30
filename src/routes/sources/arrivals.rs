@@ -17,9 +17,10 @@ use crate::{
     get,
     path = "/api/sources/arrivals",
     tag = "sources",
-    description = "Documents that arrived per UTC day for every visible source, plus the watch folder and uploads. \
-        Every lane is returned, zero-filled, even without arrivals. Admins see every source and document; \
-        users see their own.",
+    description = "Documents that arrived per UTC day for each of the caller's sources, plus the watch folder and uploads. \
+        Every lane is returned, zero-filled, even without arrivals. Source lanes are the caller's own \
+        sources (as in GET /api/sources), for admins too. The watch folder and upload lanes follow document \
+        visibility: admins count every user's documents, users their own.",
     security(
         ("bearer_auth" = [])
     ),

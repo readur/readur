@@ -7,7 +7,10 @@
 //! - uploads otherwise: `web_upload`, `direct_upload`, `batch_ingest`, NULL,
 //!   and documents whose source was deleted (`source_id` is `ON DELETE SET NULL`).
 //!
-//! Days are UTC calendar days.
+//! Source lanes are always the caller's own sources (as in `GET /api/sources`),
+//! for admins too; documents from other users' sources are not shown. The watch
+//! and upload lanes follow document visibility, so an admin's count every
+//! user's documents. Days are UTC calendar days.
 
 use std::collections::HashMap;
 
@@ -175,16 +178,14 @@ pub fn build_arrivals(
 }
 
 impl Database {
-    /// Sources visible to the caller: admins see every source (matching the
-    /// document list, where admins see every document), users their own.
-    async fn arrival_sources(&self, user_id: Uuid, role: UserRole) -> Result<Vec<ArrivalSource>> {
+    /// The caller's own sources, for admins too: the same set as
+    /// `GET /api/sources`, so every lane can be opened in Intake. Documents
+    /// from other users' sources get no lane.
+    async fn arrival_sources(&self, user_id: Uuid) -> Result<Vec<ArrivalSource>> {
         let mut query = QueryBuilder::<Postgres>::new(
-            "SELECT id, name, source_type, enabled, status FROM sources WHERE 1=1",
+            "SELECT id, name, source_type, enabled, status FROM sources WHERE user_id = ",
         );
-        if role != UserRole::Admin {
-            query.push(" AND user_id = ");
-            query.push_bind(user_id);
-        }
+        query.push_bind(user_id);
         query.push(" ORDER BY lower(name), id");
         let rows = query.build().fetch_all(&self.pool).await?;
         Ok(rows
@@ -234,7 +235,8 @@ impl Database {
     /// Newest arrival of all time per lane, as dayless groups. Each lookup is
     /// one probe of an expression index from
     /// `migrations/20260930000003_add_documents_arrivals_indexes.sql`: per
-    /// source, and per user for the watch and upload lanes. The lookups order
+    /// source of the caller, and per visible user for the watch and upload
+    /// lanes. The lookups order
     /// by `created_at AT TIME ZONE 'UTC'`, which only those indexes provide, so
     /// the planner can't walk `idx_documents_created_at_id` hunting for a quiet
     /// lane's newest row.
@@ -254,11 +256,8 @@ impl Database {
             query.push(" AND d.user_id = ");
             query.push_bind(user_id);
         }
-        query.push(" ORDER BY d.created_at AT TIME ZONE 'UTC' DESC LIMIT 1) la");
-        if is_user {
-            query.push(" WHERE s.user_id = ");
-            query.push_bind(user_id);
-        }
+        query.push(" ORDER BY d.created_at AT TIME ZONE 'UTC' DESC LIMIT 1) la WHERE s.user_id = ");
+        query.push_bind(user_id);
         for (is_watch, predicate) in LANE_PREDICATES {
             query.push(format!(
                 " UNION ALL SELECT NULL::uuid, {}, MAX(la.utc) AT TIME ZONE 'UTC' \
@@ -300,7 +299,7 @@ impl Database {
             .and_hms_opt(0, 0, 0)
             .expect("midnight is a valid time")
             .and_utc();
-        let sources = self.arrival_sources(user_id, role).await?;
+        let sources = self.arrival_sources(user_id).await?;
         let mut groups = self.arrival_window_groups(user_id, role, since).await?;
         groups.extend(self.arrival_last_groups(user_id, role).await?);
         Ok(build_arrivals(&sources, &groups, today, days))
