@@ -7,7 +7,7 @@
  * their import path:
  *
  *   - import { Menu, Dashboard } from './icons'
- *   + import { Menu, Dashboard } from '../design/icons'
+ *   + import { Menu, Dashboard } from '../ui/icons'
  *
  * Each exported icon is wrapped in `make()` so that MUI-style props
  * (`fontSize="small"`, `sx={{ fontSize: 18 }}`) translate into a Lucide
