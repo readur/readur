@@ -18,7 +18,11 @@ async function seedTextDocuments(helpers: TestHelpers, names: string[]): Promise
 }
 
 const rowNames = async (helpers: TestHelpers) =>
-  (await helpers.documentRows().getByRole('rowheader').allInnerTexts()).map((t) => t.split('\n')[0].trim());
+  // The name span only: the row also holds the type-code thumbnail stub and a NEW/CHANGED tag.
+  helpers
+    .documentRows()
+    .getByRole('rowheader')
+    .evaluateAll((cells) => cells.map((cell) => (cell.querySelector('[class*="_name_"]') ?? cell).textContent?.trim() ?? ''));
 
 async function openLibrary(page: Page, query = '') {
   await page.goto(`/documents${query}`);
