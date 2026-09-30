@@ -10,7 +10,9 @@ use std::sync::Arc;
 use crate::{
     auth::AuthUser,
     errors::search::SearchError,
-    models::{SearchRequest, SearchResponse, EnhancedDocumentResponse, SearchFacetsResponse},
+    models::{
+        EnhancedDocumentResponse, SearchFacetsResponse, SearchMode, SearchRequest, SearchResponse,
+    },
     AppState,
 };
 
@@ -51,20 +53,29 @@ async fn search_documents(
         return Err(SearchError::query_too_short(search_request.query.len(), 2));
     }
     if search_request.query.len() > 1000 {
-        return Err(SearchError::query_too_long(search_request.query.len(), 1000));
+        return Err(SearchError::query_too_long(
+            search_request.query.len(),
+            1000,
+        ));
     }
-    
+
     // Validate pagination
     let limit = search_request.limit.unwrap_or(25);
     let offset = search_request.offset.unwrap_or(0);
     if limit > 1000 || offset < 0 || limit <= 0 {
         return Err(SearchError::invalid_pagination(offset, limit));
     }
-    
-    // Get total count (without pagination) for proper pagination support
+
+    // Get total count (without pagination) for proper pagination support. The
+    // list below always matches in simple mode, so the count does too.
     let total = state
         .db
-        .count_search_documents(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .count_search_documents_in_mode(
+            auth_user.user.id,
+            auth_user.user.role.clone(),
+            &search_request,
+            &SearchMode::Simple,
+        )
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
 
@@ -148,13 +159,21 @@ async fn enhanced_search_documents(
     // Get total count (without pagination) for proper pagination support
     let total = state
         .db
-        .count_search_documents(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .count_search_documents(
+            auth_user.user.id,
+            auth_user.user.role.clone(),
+            &search_request,
+        )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let documents = state
         .db
-        .enhanced_search_documents_with_role(auth_user.user.id, auth_user.user.role, &search_request)
+        .enhanced_search_documents_with_role(
+            auth_user.user.id,
+            auth_user.user.role,
+            &search_request,
+        )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -173,23 +192,23 @@ async fn enhanced_search_documents(
 fn generate_search_suggestions(query: &str) -> Vec<String> {
     // Simple suggestion generation - could be enhanced with a proper suggestion system
     let mut suggestions = Vec::new();
-    
+
     if query.len() > 3 {
         // Common search variations
         suggestions.push(format!("\"{}\"", query)); // Exact phrase
-        
+
         // Add wildcard suggestions
         if !query.contains('*') {
             suggestions.push(format!("{}*", query));
         }
-        
+
         // Add similar terms (this would typically come from a thesaurus or ML model)
         if query.contains("document") {
             suggestions.push(query.replace("document", "file"));
             suggestions.push(query.replace("document", "paper"));
         }
     }
-    
+
     suggestions.into_iter().take(3).collect()
 }
 
@@ -213,7 +232,7 @@ async fn get_search_facets(
 ) -> Result<Json<SearchFacetsResponse>, StatusCode> {
     let user_id = auth_user.user.id;
     let user_role = auth_user.user.role;
-    
+
     // Get MIME type facets
     let mime_type_facets = state
         .db

@@ -626,6 +626,17 @@ async fn list_filters_counts_roles_and_progress() {
         assert_eq!(status, StatusCode::BAD_REQUEST, "{}", bad);
     }
 
+    // Filter values that parse but fail validation report a query error code,
+    // not an upload one
+    for bad in [
+        "ocr_status=done",
+        "created_from=2024-02-01T00:00:00Z&created_to=2024-01-01T00:00:00Z",
+    ] {
+        let (status, body) = get(&ctx, &format!("/api/documents?{}", bad), &fx.user_token).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{}", bad);
+        assert_eq!(body["error_code"], "INVALID_QUERY", "{} -> {}", bad, body);
+    }
+
     // Role isolation: users only see their own documents, admins see all
     let (other_ids, other_total) = walk_list(&ctx, &fx.other_token, "").await;
     assert_eq!(id_set(&other_ids), seed_ids(&fx.other_seeds));
@@ -888,6 +899,29 @@ async fn search_supports_sort_and_filters() {
     )
     .await;
     assert_eq!(body["total"], 5);
+
+    // The basic endpoint always matches in simple mode, so its total follows
+    // the list even when a search_mode is sent. In boolean mode this query
+    // matches every invoice document plus the holiday one; in simple mode it
+    // matches none.
+    let (status, body) = get(
+        &ctx,
+        "/api/search?query=invoice%20%7C%20holiday&search_mode=boolean&limit=50",
+        &fx.user_token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{}", body);
+    assert_eq!(body["total"], 0, "{}", body);
+    assert!(ids_of(&body["documents"]).is_empty());
+    let (status, body) = get(
+        &ctx,
+        "/api/search/enhanced?query=invoice%20%7C%20holiday&search_mode=boolean&limit=50",
+        &fx.user_token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{}", body);
+    assert_eq!(body["total"], 5, "{}", body);
+    assert_eq!(ids_of(&body["documents"]).len(), 5);
 
     ctx.cleanup_and_close().await.ok();
 }

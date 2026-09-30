@@ -1,14 +1,17 @@
 use anyhow::Result;
-use sqlx::{QueryBuilder, Postgres, Row};
+use sqlx::{Postgres, QueryBuilder, Row};
 use uuid::Uuid;
 
-use crate::models::{Document, UserRole, SearchRequest, SearchMode, SearchSnippet, HighlightRange, EnhancedDocumentResponse};
 use super::helpers::{
-    apply_document_filters, apply_pagination, apply_role_based_filter, apply_sort, find_word_boundary,
-    map_row_to_document_with_progress, DocumentWithProgress, DOCUMENT_FIELDS, OCR_PROGRESS_FIELDS,
-    OCR_PROGRESS_JOIN,
+    apply_document_filters, apply_pagination, apply_role_based_filter, apply_sort,
+    find_word_boundary, map_row_to_document_with_progress, DocumentWithProgress, DOCUMENT_FIELDS,
+    OCR_PROGRESS_FIELDS, OCR_PROGRESS_JOIN,
 };
 use crate::db::Database;
+use crate::models::{
+    Document, EnhancedDocumentResponse, HighlightRange, SearchMode, SearchRequest, SearchSnippet,
+    UserRole,
+};
 
 /// SQL expression building the tsquery (or similarity operand) for a search mode.
 fn tsquery_function(mode: &SearchMode) -> &'static str {
@@ -40,7 +43,11 @@ fn push_search_rank(query: &mut QueryBuilder<Postgres>, search_query: &str, mode
 }
 
 /// Appends the `AND <match>` condition for a non-empty search query.
-fn push_search_condition(query: &mut QueryBuilder<Postgres>, search_query: &str, mode: &SearchMode) {
+fn push_search_condition(
+    query: &mut QueryBuilder<Postgres>,
+    search_query: &str,
+    mode: &SearchMode,
+) {
     match mode {
         SearchMode::Fuzzy => {
             query.push(" AND similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
@@ -65,7 +72,11 @@ fn push_search_condition(query: &mut QueryBuilder<Postgres>, search_query: &str,
 impl Database {
     /// Performs basic document search with PostgreSQL full-text search.
     /// Only the user's own documents are searched; see `search_documents_with_role`.
-    pub async fn search_documents(&self, user_id: Uuid, search_request: &SearchRequest) -> Result<Vec<Document>> {
+    pub async fn search_documents(
+        &self,
+        user_id: Uuid,
+        search_request: &SearchRequest,
+    ) -> Result<Vec<Document>> {
         Ok(self
             .search_documents_with_role(user_id, UserRole::User, search_request)
             .await?
@@ -97,7 +108,12 @@ impl Database {
         }
 
         apply_document_filters(&mut query, &search_request.filters());
-        apply_sort(&mut query, search_request.sort_by, search_request.sort_order, false);
+        apply_sort(
+            &mut query,
+            search_request.sort_by,
+            search_request.sort_order,
+            false,
+        );
 
         let limit = search_request.limit.unwrap_or(25);
         let offset = search_request.offset.unwrap_or(0);
@@ -108,17 +124,30 @@ impl Database {
     }
 
     /// Enhanced search with snippets and ranking
-    pub async fn enhanced_search_documents(&self, user_id: Uuid, search_request: &SearchRequest) -> Result<Vec<EnhancedDocumentResponse>> {
-        self.enhanced_search_documents_with_role(user_id, UserRole::User, search_request).await
+    pub async fn enhanced_search_documents(
+        &self,
+        user_id: Uuid,
+        search_request: &SearchRequest,
+    ) -> Result<Vec<EnhancedDocumentResponse>> {
+        self.enhanced_search_documents_with_role(user_id, UserRole::User, search_request)
+            .await
     }
 
     /// Enhanced search with role-based access control, filters and sorting.
     /// Defaults to relevance order when no sort is given.
-    pub async fn enhanced_search_documents_with_role(&self, user_id: Uuid, user_role: UserRole, search_request: &SearchRequest) -> Result<Vec<EnhancedDocumentResponse>> {
+    pub async fn enhanced_search_documents_with_role(
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+        search_request: &SearchRequest,
+    ) -> Result<Vec<EnhancedDocumentResponse>> {
         let search_query = search_request.query.trim();
         let include_snippets = search_request.include_snippets.unwrap_or(true);
         let snippet_length = search_request.snippet_length.unwrap_or(200) as usize;
-        let mode = search_request.search_mode.as_ref().unwrap_or(&SearchMode::Simple);
+        let mode = search_request
+            .search_mode
+            .as_ref()
+            .unwrap_or(&SearchMode::Simple);
 
         let mut query = QueryBuilder::<Postgres>::new("SELECT ");
         query.push(DOCUMENT_FIELDS);
@@ -142,7 +171,12 @@ impl Database {
         }
 
         apply_document_filters(&mut query, &search_request.filters());
-        apply_sort(&mut query, search_request.sort_by, search_request.sort_order, !search_query.is_empty());
+        apply_sort(
+            &mut query,
+            search_request.sort_by,
+            search_request.sort_order,
+            !search_query.is_empty(),
+        );
 
         let limit = search_request.limit.unwrap_or(25);
         let offset = search_request.offset.unwrap_or(0);
@@ -156,7 +190,8 @@ impl Database {
             let search_rank: f32 = row.try_get("search_rank").unwrap_or(0.0);
 
             let snippets = if include_snippets && !search_query.is_empty() {
-                self.generate_snippets(&item.document, search_query, snippet_length).await
+                self.generate_snippets(&item.document, search_query, snippet_length)
+                    .await
             } else {
                 Vec::new()
             };
@@ -176,13 +211,19 @@ impl Database {
     }
 
     /// Batch-loads labels onto search results.
-    pub async fn attach_labels_to_search_results(&self, results: &mut [EnhancedDocumentResponse]) -> Result<()> {
+    pub async fn attach_labels_to_search_results(
+        &self,
+        results: &mut [EnhancedDocumentResponse],
+    ) -> Result<()> {
         if results.is_empty() {
             return Ok(());
         }
         let ids: Vec<Uuid> = results.iter().map(|r| r.id).collect();
-        let mut labels: std::collections::HashMap<Uuid, _> =
-            self.get_labels_for_documents(&ids).await?.into_iter().collect();
+        let mut labels: std::collections::HashMap<Uuid, _> = self
+            .get_labels_for_documents(&ids)
+            .await?
+            .into_iter()
+            .collect();
         for result in results.iter_mut() {
             if let Some(doc_labels) = labels.remove(&result.id) {
                 result.labels = doc_labels;
@@ -192,14 +233,19 @@ impl Database {
     }
 
     /// Generates search snippets with highlighted matches
-    pub async fn generate_snippets(&self, document: &Document, search_query: &str, snippet_length: usize) -> Vec<SearchSnippet> {
+    pub async fn generate_snippets(
+        &self,
+        document: &Document,
+        search_query: &str,
+        snippet_length: usize,
+    ) -> Vec<SearchSnippet> {
         let mut snippets = Vec::new();
         let search_terms: Vec<&str> = search_query.split_whitespace().collect();
 
         // Search in content and OCR text
         let texts = vec![
             ("content", document.content.as_deref().unwrap_or("")),
-            ("ocr_text", document.ocr_text.as_deref().unwrap_or(""))
+            ("ocr_text", document.ocr_text.as_deref().unwrap_or("")),
         ];
 
         for (_source, text) in texts {
@@ -214,7 +260,7 @@ impl Database {
 
                 while let Some(match_pos) = text_lower[start_pos..].find(&term_lower) {
                     let absolute_match_pos = start_pos + match_pos;
-                    
+
                     // Calculate snippet boundaries
                     let snippet_start = if absolute_match_pos >= snippet_length / 2 {
                         find_word_boundary(text, absolute_match_pos - snippet_length / 2, false)
@@ -232,7 +278,7 @@ impl Database {
                     };
 
                     let snippet_text = &text[snippet_start..snippet_end];
-                    
+
                     // Calculate highlight range relative to snippet
                     let highlight_start = absolute_match_pos - snippet_start;
                     let highlight_end = highlight_start + term.len();
@@ -250,7 +296,7 @@ impl Database {
                     });
 
                     start_pos = absolute_match_pos + term.len();
-                    
+
                     // Limit snippets per term
                     if snippets.len() >= 3 {
                         break;
@@ -264,10 +310,33 @@ impl Database {
         snippets
     }
 
-    /// Counts total matching documents for pagination (without applying LIMIT/OFFSET)
-    pub async fn count_search_documents(&self, user_id: Uuid, user_role: UserRole, search_request: &SearchRequest) -> Result<i64> {
+    /// Counts total matching documents for pagination (without applying LIMIT/OFFSET),
+    /// using the request's `search_mode` (simple when unset).
+    pub async fn count_search_documents(
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+        search_request: &SearchRequest,
+    ) -> Result<i64> {
+        let mode = search_request
+            .search_mode
+            .as_ref()
+            .unwrap_or(&SearchMode::Simple);
+        self.count_search_documents_in_mode(user_id, user_role, search_request, mode)
+            .await
+    }
+
+    /// Counts total matching documents in the given mode, ignoring the
+    /// request's `search_mode`. The basic search list always matches in simple
+    /// mode, so its count must too.
+    pub async fn count_search_documents_in_mode(
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+        search_request: &SearchRequest,
+        mode: &SearchMode,
+    ) -> Result<i64> {
         let search_query = search_request.query.trim();
-        let mode = search_request.search_mode.as_ref().unwrap_or(&SearchMode::Simple);
 
         let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM documents WHERE 1=1");
 
