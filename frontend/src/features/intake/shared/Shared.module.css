@@ -1,0 +1,269 @@
+/* Building blocks shared by every Intake section. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.toolbarEnd {
+  margin-inline-start: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+
+.lead {
+  margin: 0;
+  max-width: 72ch;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--fg-2);
+}
+
+.meta {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.mono {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+}
+
+.codeBlock {
+  margin: 0;
+  padding: var(--s-3);
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+
+/* Names in board rows: text plus an optional changed tag. */
+.name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.nameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  flex: none;
+  padding: 1px var(--s-1);
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  line-height: 1.3;
+  background: var(--signal);
+  color: var(--signal-ink);
+  border-radius: var(--radius);
+}
+
+.badge {
+  display: inline-block;
+  min-width: 18px;
+  margin-inline-start: var(--s-2);
+  padding: 0 var(--s-1);
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  text-align: center;
+  background: var(--signal);
+  color: var(--signal-ink);
+  border-radius: 999px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: 28px;
+  padding: 0 var(--s-1) 0 var(--s-2);
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-width: 100%;
+}
+
+.chipText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inline notices: an icon and a word carry the tone, never colour alone. */
+.notice {
+  display: flex;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.notice[data-tone='danger'] {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+.notice[data-tone='ok'] {
+  border-color: var(--ok);
+}
+
+.noticeIcon {
+  flex: none;
+  display: inline-flex;
+  font-size: var(--fs-lg);
+  line-height: 1;
+  padding-top: 2px;
+}
+
+.notice[data-tone='danger'] .noticeIcon {
+  color: var(--danger);
+}
+
+.notice[data-tone='ok'] .noticeIcon {
+  color: var(--ok);
+}
+
+.noticeBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.noticeTitle {
+  font-weight: 600;
+}
+
+.bar {
+  flex: 1;
+  min-width: 40px;
+  height: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: var(--fg);
+  transition: width var(--dur-2) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barFill {
+    transition: none;
+  }
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.progressValue {
+  flex: none;
+  min-width: 4ch;
+  text-align: end;
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-1);
+}
+
+.dangerText {
+  color: var(--danger);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

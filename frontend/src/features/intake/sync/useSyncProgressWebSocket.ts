@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { SyncProgressWebSocket, SyncProgressInfo, sourcesService } from '../services/api';
+import { SyncProgressWebSocket, SyncProgressInfo, sourcesService } from '../../../services/api';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error' | 'failed';
 

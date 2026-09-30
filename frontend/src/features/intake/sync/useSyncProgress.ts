@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { SyncProgressManager, SyncProgressState, ConnectionStatus, WebSocketSyncProgressManager } from '../services/syncProgress';
-import { SyncProgressInfo } from '../services/api';
+import { SyncProgressManager, SyncProgressState, ConnectionStatus, WebSocketSyncProgressManager } from '../../../services/syncProgress';
+import { SyncProgressInfo } from '../../../services/api';
 
 export interface UseSyncProgressOptions {
   sourceId: string;

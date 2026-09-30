@@ -1,0 +1,68 @@
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+  min-height: 220px;
+  padding: var(--s-6) var(--s-4);
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.drop[data-dragging='true'] {
+  background: var(--surface-2);
+  border-style: solid;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop {
+    transition: none;
+  }
+}
+
+.dropTitle {
+  margin: 0;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  line-height: var(--lh-display);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--fg);
+}
+
+.accepted {
+  margin: 0;
+  max-width: 64ch;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-5);
+}
+
+@media (max-width: 719px) {
+  .optionGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dropTitle {
+    font-size: var(--fs-xl);
+  }
+}

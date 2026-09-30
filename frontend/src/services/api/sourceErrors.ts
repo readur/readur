@@ -1,7 +1,7 @@
 import api from './client'
 import type { ExcludeFailureRequest, RetryFailureRequest, WebDAVScanFailureType } from './webdav'
 import type { SourceExcludeResponse, SourceRetryResponse } from './types'
-import type { SourceType } from '../../types/generated'
+import type { ListFailuresQuery, SourceScanFailureResponse, SourceType } from '../../types/generated'
 
 export type { SourceType } from '../../types/generated'
 
@@ -91,5 +91,13 @@ export const sourceErrorService = {
   // Get retry candidates
   getRetryCandidates: () => {
     return api.get<{ resources: string[], count: number }>('/source/errors/retry/candidates')
-  }
+  },
+
+  /**
+   * GET /source/errors with filters. The body is a plain array of the generated
+   * SourceScanFailureResponse; its enums are PascalCase on the wire (e.g. "Timeout", "High").
+   */
+  listFailures: (query: ListFailuresQuery = {}) => {
+    return api.get<SourceScanFailureResponse[]>('/source/errors', { params: query })
+  },
 }
