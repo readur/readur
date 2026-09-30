@@ -1849,16 +1849,16 @@
     }
   },
   "status": {
-    "pending": "EN ATTENTE",
+    "pending": "En attente",
     "processing": "OCR",
     "processingProgress": "OCR {{current}}/{{total}}",
-    "completed": "INDEXÉ",
-    "failed": "ÉCHEC",
-    "healthy": "OPÉRATIONNEL",
-    "syncing": "SYNCHRONISATION",
-    "warning": "À VÉRIFIER",
-    "error": "ERREUR",
-    "disabled": "DÉSACTIVÉ"
+    "completed": "Indexé",
+    "failed": "Échec",
+    "healthy": "Opérationnel",
+    "syncing": "Synchronisation",
+    "warning": "À vérifier",
+    "error": "Erreur",
+    "disabled": "Désactivé"
   },
   "shell": {
     "skipToContent": "Aller au contenu",
@@ -1870,11 +1870,14 @@
       "board": "Tableau",
       "library": "Bibliothèque",
       "intake": "Entrée",
-      "settings": "Paramètres"
+      "settings": "Paramètres",
+      "home": "Accueil",
+      "search": "Recherche"
     },
     "search": {
       "open": "Rechercher des documents",
-      "placeholder": "Rechercher des documents…"
+      "placeholder": "Rechercher des documents…",
+      "short": "Recherche rapide…"
     },
     "palette": {
       "navigation": "Aller à",
@@ -1913,7 +1916,8 @@
       "menu": "Menu du compte",
       "settings": "Paramètres",
       "apiDocs": "Documentation de l’API",
-      "logout": "Se déconnecter"
+      "logout": "Se déconnecter",
+      "menuFor": "Menu du compte, {{name}}"
     },
     "intake": {
       "title": "Entrée",
@@ -1930,6 +1934,27 @@
       "general": "Général",
       "labels": "Étiquettes",
       "debug": "Débogage"
+    },
+    "collections": {
+      "title": "Collections",
+      "empty": "Aucune collection pour l'instant",
+      "all": "Toutes les collections"
+    },
+    "sources": {
+      "title": "Sources",
+      "uploads": "Téléversements",
+      "watch": "Dossier surveillé",
+      "health": {
+        "syncing": "Synchro",
+        "error": "Erreur",
+        "check": "À vérifier",
+        "off": "Désactivé"
+      }
+    },
+    "menu": {
+      "label": "Menu",
+      "open": "Ouvrir le menu",
+      "close": "Fermer le menu"
     }
   },
   "board": {
@@ -2057,7 +2082,8 @@
       "editor": "Modifier les étiquettes",
       "placeholder": "Rechercher ou créer des étiquettes…",
       "cancel": "Annuler",
-      "save": "Enregistrer les étiquettes"
+      "save": "Enregistrer les étiquettes",
+      "add": "Ajouter une étiquette"
     },
     "type": {
       "image": "Image",
@@ -2195,7 +2221,10 @@
       "pending": "Le texte apparaîtra ici une fois l’OCR terminé.",
       "failed": "L’OCR n’a pas pu lire ce document.",
       "loadFailed": "Impossible de charger le texte extrait.",
-      "empty": "Aucun texte trouvé dans ce document."
+      "empty": "Aucun texte trouvé dans ce document.",
+      "displayOptions": "Options d’affichage du texte",
+      "copy": "Copier",
+      "failureDetail": "Afficher le message complet"
     },
     "comments": {
       "saveFailed": "Impossible d’enregistrer le commentaire. Réessayez.",
@@ -2242,7 +2271,9 @@
       "file": "Fichier",
       "expires": "Expire",
       "preview": "Afficher l’aperçu",
-      "previewHint": "Ouvrir l’aperçu compte comme une vue de ce lien."
+      "previewHint": "Ouvrir l’aperçu compte comme une vue de ce lien.",
+      "expiresOn": "Le lien expire le {{date}}",
+      "noExpiry": "Le lien n’expire jamais"
     },
     "viewer": {
       "loading": "Chargement de l’aperçu",
@@ -2255,6 +2286,18 @@
       "label": "Vues du document",
       "text": "Texte",
       "details": "Détails"
+    },
+    "meta": {
+      "pages_one": "{{count}} page",
+      "pages_other": "{{count}} pages",
+      "added": "Ajouté le {{date}}",
+      "ocr": "OCR {{value}} %"
+    },
+    "view": {
+      "label": "Affichage",
+      "document": "Document",
+      "split": "Côte à côte",
+      "text": "Texte"
     }
   },
   "library": {
@@ -2341,20 +2384,24 @@
       "none": "Pas encore de documents",
       "noneHint": "Importez des fichiers ou connectez un dossier pour démarrer votre bibliothèque.",
       "tooMany": "Trop de résultats — affinez votre recherche",
-      "tooManyHint": "Ajoutez un mot ou un filtre pour réduire les résultats."
+      "tooManyHint": "Ajoutez un mot ou un filtre pour réduire les résultats.",
+      "collection": "Rien dans « {{name}} » pour l’instant",
+      "collectionHint": "Cherchez des documents, cochez ceux qui vont ici et choisissez « Enregistrer comme collection ».",
+      "goSearch": "Aller à la recherche"
     },
     "filters": {
       "added": "Ajouté",
       "any": "Tous",
       "clearAll": "Tout effacer",
-      "findLabel": "Chercher une étiquette",
+      "findLabel": "Rechercher une collection",
       "label": "Étiquette",
-      "noLabelMatch": "Aucune étiquette correspondante",
-      "noLabels": "Pas encore d’étiquettes",
+      "noLabelMatch": "Aucune collection correspondante",
+      "noLabels": "Aucune collection pour l'instant",
       "region": "Rechercher et filtrer",
       "source": "Source",
       "status": "Statut",
-      "type": "Type"
+      "type": "Type",
+      "collection": "Collection"
     },
     "help": {
       "boolean": "Opérateurs",
@@ -2382,7 +2429,33 @@
     "search": {
       "keepTyping": "Continuez à saisir…",
       "label": "Rechercher des documents",
-      "placeholder": "Rechercher noms et texte…"
+      "placeholder": "Rechercher noms et texte…",
+      "allDates": "Afficher toutes les dates",
+      "allSelected_one": "Le seul résultat est sélectionné",
+      "allSelected_other": "Les {{formatted}} résultats sont sélectionnés",
+      "bestMatch": "Meilleurs résultats",
+      "bigPlaceholder": "Cherchez dans tous les documents par nom ou par les mots qu’ils contiennent",
+      "count_one": "1 document correspond à « {{q}} »",
+      "count_other": "{{formatted}} documents correspondent à « {{q}} »",
+      "counting": "Recherche…",
+      "error": "La recherche n’a pas abouti",
+      "everything": "Chercher dans tous les documents…",
+      "inRange": "en {{range}}",
+      "loading": "Recherche…",
+      "monthCount_one": "1 résultat",
+      "monthCount_other": "{{count}} résultats",
+      "nameMatch": "Correspond au nom du fichier",
+      "newest": "Plus récents d’abord",
+      "noMatchesHint": "Vérifiez l’orthographe, essayez moins de mots ou activez « Orthographe proche » dans l’aide à la recherche.",
+      "order": "Ordre",
+      "preview": "Aperçu de {{name}}",
+      "results": "Résultats",
+      "selectAll_one": "Sélectionner le seul résultat",
+      "selectAll_other": "Sélectionner les {{formatted}} résultats",
+      "selectPage": "Tout sélectionner sur cette page",
+      "startHint": "Readur cherche dans les noms de fichiers et dans chaque mot lu dans vos numérisations et PDF. Essayez un nom, un lieu ou un sujet, comme « épaule » ou « facture 2024 ».",
+      "startTitle": "Retrouvez tout dans vos documents",
+      "title": "Recherche"
     },
     "sort": {
       "asc": "{{field}}, croissant",
@@ -2392,7 +2465,8 @@
     },
     "source": {
       "unknown": "Connexion",
-      "upload": "Import"
+      "upload": "Import",
+      "watch": "Dossier surveillé"
     },
     "status": {
       "completed": "Indexé",
@@ -2402,8 +2476,8 @@
     },
     "table": "Documents",
     "tag": {
-      "changed": "MODIFIÉ",
-      "new": "NOUVEAU"
+      "changed": "Modifié",
+      "new": "Nouveau"
     },
     "title": "Bibliothèque",
     "type": {
@@ -2412,6 +2486,42 @@
       "other": "Autres",
       "pdf": "PDF",
       "text": "Texte"
+    },
+    "collection": {
+      "action": "Enregistrer comme collection",
+      "assignFailed": "La collection a été créée, mais les documents n’ont pas pu être ajoutés. Réessayez.",
+      "assignFailedExisting": "Les documents n’ont pas pu être ajoutés",
+      "color": "Couleur",
+      "createFailed": "La collection n’a pas pu être créée",
+      "existing": "Une collection existante",
+      "name": "Nom",
+      "nameRequired": "Donnez un nom à la collection",
+      "nameTaken": "Une collection porte déjà ce nom. Choisissez-la sous « Une collection existante ».",
+      "new": "Une nouvelle collection",
+      "pick": "Collection",
+      "pickPlaceholder": "Choisissez une collection",
+      "save": "Enregistrer",
+      "saved_one": "1 document enregistré dans « {{name}} »",
+      "saved_other": "{{count}} documents enregistrés dans « {{name}} »",
+      "target": "Enregistrer dans",
+      "title_one": "Enregistrer 1 document comme collection",
+      "title_other": "Enregistrer {{count}} documents comme collection"
+    },
+    "loading": "Chargement des documents",
+    "monthCount_one": "1 document",
+    "monthCount_other": "{{count}} documents",
+    "selectDocument": "Sélectionner {{name}}",
+    "timeline": {
+      "label": "Résultats par mois",
+      "month_one": "{{month}} : 1 résultat",
+      "month_other": "{{month}} : {{formatted}} résultats",
+      "span": "{{first}} – {{last}}"
+    },
+    "undated": "Sans date",
+    "view": {
+      "grid": "Grille",
+      "label": "Affichage",
+      "table": "Tableau"
     }
   },
   "intake": {
@@ -2661,7 +2771,8 @@
       "syncFailed": "Impossible de lancer la synchronisation",
       "syncStarted": "Synchronisation lancée",
       "syncStopped": "Synchronisation arrêtée",
-      "toggleFailed": "Impossible de modifier la connexion"
+      "toggleFailed": "Impossible de modifier la connexion",
+      "healthFindings": "Contrôle de santé"
     },
     "duplicates": {
       "col": {
@@ -3129,6 +3240,81 @@
       "systemInfo": "Le dossier du serveur est défini par votre administrateur et s’applique à tous.",
       "today": "Terminés aujourd’hui",
       "types": "Types de fichiers"
+    },
+    "reason": {
+      "details": "Détails techniques"
+    },
+    "connectionFailure": {
+      "auth": "Le serveur a refusé la connexion. Vérifiez l'identifiant, le mot de passe ou les clés.",
+      "notFound": "Le dossier ou le bucket est introuvable. Vérifiez l'adresse et le chemin.",
+      "tls": "Le certificat de sécurité du serveur n'est pas approuvé.",
+      "unreachable": "Impossible de joindre le serveur. Vérifiez l'adresse et qu'il est en ligne.",
+      "server": "Le serveur a signalé une erreur. Réessayez dans quelques minutes."
+    }
+  },
+  "failure": {
+    "damaged": "Le fichier semble endommagé",
+    "docTools": "Impossible de lire les fichiers .doc : installez antiword ou catdoc",
+    "encrypted": "Le PDF est protégé par un mot de passe",
+    "lowConfidence": "Le texte était trop flou pour être lu de façon fiable",
+    "memory": "Mémoire insuffisante pour lire le fichier",
+    "missing": "Le fichier est introuvable dans le stockage",
+    "ocr": "L'OCR a échoué",
+    "permission": "Readur n'a pas le droit d'ouvrir le fichier",
+    "timeout": "L'OCR a pris trop de temps et a été arrêtée",
+    "tooLarge": "Le fichier est trop volumineux",
+    "unsupported": "Ce type de fichier n'est pas pris en charge",
+    "unknown": "Une erreur s'est produite"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Bonjour, {{name}}",
+      "morningPlain": "Bonjour",
+      "afternoon": "Bon après-midi, {{name}}",
+      "afternoonPlain": "Bon après-midi",
+      "evening": "Bonsoir, {{name}}",
+      "eveningPlain": "Bonsoir"
+    },
+    "week": {
+      "count": "{{formatted}} arrivés cette semaine",
+      "none": "Rien n'est arrivé cette semaine"
+    },
+    "kind": {
+      "upload": "Envois web et API",
+      "watch": "Dossier surveillé",
+      "webdav": "WebDAV",
+      "s3": "S3",
+      "local": "Dossier local"
+    },
+    "lanes": {
+      "title": "Arrivées",
+      "manage": "Gérer les sources",
+      "error": "Les arrivées n'ont pas pu être chargées.",
+      "empty": "Aucune source pour l'instant",
+      "today": "aujourd'hui",
+      "lastArrival": "Dernière arrivée {{age}}",
+      "never": "Rien pour l'instant",
+      "quiet": "Calme",
+      "idle": "Inactif",
+      "uploads": "Envois",
+      "source": "Source",
+      "barsLabel": "{{total}} sur les {{days}} derniers jours, le plus le {{day}} ({{most}})",
+      "barsEmpty": "Rien sur les {{days}} derniers jours"
+    },
+    "pipeline": {
+      "title": "Traitement",
+      "idle": "Rien en attente",
+      "busy": "En traitement {{processing}} · en attente {{pending}}",
+      "paused": "L'OCR est en pause",
+      "failed": "{{formatted}} en échec",
+      "failedError": "Les documents en échec n'ont pas pu être chargés.",
+      "noFailures": "Aucun document en échec",
+      "review": "Examiner",
+      "showRecent": "Afficher les derniers échecs",
+      "rawError": "Texte de l'erreur"
+    },
+    "recent": {
+      "title": "Tout juste arrivés"
     }
   }
 }

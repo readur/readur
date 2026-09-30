@@ -1,5 +1,5 @@
 ---
-version: 1
+version: 2
 slug: "frontend-src"
 primary_target: "frontend/src"
 related_targets: []
@@ -7,41 +7,48 @@ related_targets: []
 
 ## Scope
 
-The whole Readur web app, all surfaces. Visitor mode: **Operate**.
+The whole Readur web app, every surface. Visitor mode: **Operate**, except the document reading view, which is **Read**.
 
-- **Audience:** self-hosters, plus non-technical office staff with one admin.
-- **Jobs:** (1) quickly find and sort imported documents; (2) bring documents in and check that connections are healthy.
-- **Constraints:** no runtime CDN, WCAG 2.2 AA, light and dark mode, 4 locales, no source file of 1000 lines or more.
-- **Memorable moment:** a lit row. Something changed (OCR finished, sync failed), and it stays marked until you've seen it.
-- **Unresolved:** none.
+- **Audience:** self-hosters, and non-technical office staff with one admin. Both sit on an archive of thousands of documents.
+- **Jobs:**
+  1. Confirm at a glance that documents are still flowing in from every source: watch folder, WebDAV, S3, local folders, uploads.
+  2. Find everything about one topic in a huge archive ("my wife's shoulder injury"), see it as a story over time, and keep it together as a collection.
+  3. Read a document and its OCR text comfortably.
+- **Constraints:** no runtime CDN, WCAG 2.2 AA, light and dark, 4 locales, no source file of 1000 lines or more.
+- **Memorable moment:** Home's source lanes, where each source's 14-day arrival strip shows in its own colour and a source that has gone quiet stands out in amber before anything errors.
+- **History:** v1 (the monochrome "departure board", all caps and hairlines) was rejected by the user as "very empty and plain … not just blacks and grays". Its IA, slideout, litStore and tests stay. Its visual world does not.
 
 ## Direction contract
 
-**THESIS:** Readur as a live departure board for paperwork. Documents are passes; the library and intake are boards you scan and sort; anything that changed stays lit until seen. Refuses the stat-card-grid SaaS dashboard with an indigo accent.
+**THESIS:** Readur is a calm, colourful archive you can read at a glance. Every colour carries a job:
+- blue for action;
+- coral for new;
+- amber for quiet or warning;
+- one hue per source;
+- your own label colours for collections.
+
+It refuses both the grey wireframe and the stat-tile SaaS dashboard.
 
 **OWN-WORLD:**
-- **Light:** ground #EEF0F2, surface #FFF, ink #0B0D10, fg-2 #3B424A, meta #5A6169.
-- **Night board:** ground #0B0D10, panel #15191E, hairline #262B31.
-- **Signals:** signal yellow #FFD400 appears only as a fill with ink text or as a 3px edge bar. Red is only for failed or destructive states.
-- **Type:** Archivo variable, condensed, uppercase and tracked for labels and column heads; normal width for body text. Martian Mono with tabular figures for every number.
-- **Structure:** passes are segmented cells with small uppercase labels above mono values. Every state is shape plus word (○ ◐ ■ ▲ ◆).
-- **Finish:** 1px hairlines, 4px radius, no gradients, shadows only on overlays.
+- **Palette from the logo** (`frontend/public/readur.png`): steel blue #4878B8 as the accent (deepened or lightened for AA), coral #F07048 for new, amber #F8A840 for warn.
+- **Source hues:** 8 source hues at matched lightness.
+- **Surfaces:** layered, with raised panels (soft offset shadow in light mode, surface steps in dark) over a tinted ground. Radii are 6px for controls, 8px for panels, 12px for overlays.
+- **Type:** Archivo at normal width. Sentence-case titles and filenames in their real case. Condensed caps only for table heads and tiny meta labels. Martian Mono only for numbers in dense data.
+- **Status:** tinted pills that keep shape plus word.
 
-**STORY:** A filer opens the Library, types, and sees matching passes with OCR snippets. They sort any column, open the slideout, and label or download without leaving the board. An admin opens Intake, reads connection health at a glance, clears lit failures in Needs attention, and drops new files in.
+**STORY:** You open Home and see every source's lane: its colour, 14-day arrivals, today's count, and the last arrival. One lane is amber "Quiet", so you click through to that connection. Then you search "shoulder" and get 138 matches, grouped by month, with a timeline showing they cluster in spring 2025. You tick eight results and save them as the collection "Shoulder '25". It appears in the sidebar. You open the MRI report and "shoulder" is already highlighted, match 1 of 7, in a readable text column beside a full-width PDF.
 
-**FIRST VIEWPORT (Library):**
-- **Header bar:** wordmark, the tabs Board / Library / Intake / Settings, the ⌘K search field, a mono "synced 2m ago" readout, alerts, and the user menu.
-- **Filter strip:** one row of facet chips (Type, Label, Status, Source, Added) plus sort.
-- **Board table:** full width, uppercase condensed heads NAME, TYPE, PAGES/OCR, SOURCE, LABELS, SIZE, ADDED; mono rows; lit rows have a yellow edge bar.
-- **Detail slideout:** a 440px panel from the right on row select, with ↑/↓ to move between rows and Esc to close.
-- **Primary action:** "Add documents" at the top right of the page.
+**FIRST VIEWPORT (Home):**
+- **Left sidebar:** logo; Home / Search / Library / Intake / Settings; Collections with colour dots; Sources with colour and health dots; utilities in the footer.
+- **Main area:**
+  - a greeting line with this week's count;
+  - source lanes;
+  - one processing line;
+  - one failures line with a Review action;
+  - "Just arrived" as real page thumbnails.
 
-**FORM:** Departure-board challenger (vernacular-ephemera-boarding-pass-and-gate-board), seed key 2e64ce3b, chosen over the assigned wayfinding direction by the user's steer. Raises taken from declined challengers:
-- **tensegrity:** distinct state shapes.
-- **Miura:** settings fold open from a summary.
-- **Ikeda:** tabular figures everywhere.
-- **Dumbar:** one module grid.
+**FORM:** the approved "warm it up" concept, recorded in `.superpowers/sdd/sorted-wondering-treasure/warmup-brief.md`, which is the binding token list and component rules.
 
-**SIGNATURE INTERACTION:** rows re-rank in place (FLIP) when sort or live updates change order. Lit rows keep the edge bar until acknowledged. Under reduced motion, changes happen instantly and the highlight persists.
+**SIGNATURE INTERACTION:** the arrival bars grow in once on Home (reduced motion: static). Opening a document from search lands on the first highlighted match.
 
-**FINISH:** unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+**FINISH:** unreviewed and undocumented is unfinished. The build ends with the finish review, the verdict, and DESIGN.md plus `.impeccable/design.json` rewritten for v2.

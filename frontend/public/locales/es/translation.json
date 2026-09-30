@@ -1849,16 +1849,16 @@
     }
   },
   "status": {
-    "pending": "PENDIENTE",
+    "pending": "Pendiente",
     "processing": "OCR",
     "processingProgress": "OCR {{current}}/{{total}}",
-    "completed": "INDEXADO",
-    "failed": "FALLIDO",
-    "healthy": "CORRECTO",
-    "syncing": "SINCRONIZANDO",
-    "warning": "REVISAR",
-    "error": "ERROR",
-    "disabled": "DESACTIVADO"
+    "completed": "Indexado",
+    "failed": "Fallido",
+    "healthy": "Correcto",
+    "syncing": "Sincronizando",
+    "warning": "Revisar",
+    "error": "Error",
+    "disabled": "Desactivado"
   },
   "shell": {
     "skipToContent": "Saltar al contenido",
@@ -1870,11 +1870,14 @@
       "board": "Tablero",
       "library": "Biblioteca",
       "intake": "Entrada",
-      "settings": "Configuración"
+      "settings": "Configuración",
+      "home": "Inicio",
+      "search": "Buscar"
     },
     "search": {
       "open": "Buscar documentos",
-      "placeholder": "Buscar documentos…"
+      "placeholder": "Buscar documentos…",
+      "short": "Búsqueda rápida…"
     },
     "palette": {
       "navigation": "Ir a",
@@ -1913,7 +1916,8 @@
       "menu": "Menú de la cuenta",
       "settings": "Configuración",
       "apiDocs": "Documentación de la API",
-      "logout": "Cerrar sesión"
+      "logout": "Cerrar sesión",
+      "menuFor": "Menú de la cuenta, {{name}}"
     },
     "intake": {
       "title": "Entrada",
@@ -1930,6 +1934,27 @@
       "general": "General",
       "labels": "Etiquetas",
       "debug": "Depuración"
+    },
+    "collections": {
+      "title": "Colecciones",
+      "empty": "Aún no hay colecciones",
+      "all": "Todas las colecciones"
+    },
+    "sources": {
+      "title": "Orígenes",
+      "uploads": "Subidas",
+      "watch": "Carpeta vigilada",
+      "health": {
+        "syncing": "Sincronizando",
+        "error": "Error",
+        "check": "Revisar",
+        "off": "Apagado"
+      }
+    },
+    "menu": {
+      "label": "Menú",
+      "open": "Abrir menú",
+      "close": "Cerrar menú"
     }
   },
   "board": {
@@ -2057,7 +2082,8 @@
       "editor": "Editar etiquetas",
       "placeholder": "Buscar o crear etiquetas…",
       "cancel": "Cancelar",
-      "save": "Guardar etiquetas"
+      "save": "Guardar etiquetas",
+      "add": "Añadir etiqueta"
     },
     "type": {
       "image": "Imagen",
@@ -2195,7 +2221,10 @@
       "pending": "El texto aparecerá aquí cuando termine el OCR.",
       "failed": "El OCR no pudo leer este documento.",
       "loadFailed": "No se pudo cargar el texto extraído.",
-      "empty": "No se encontró texto en este documento."
+      "empty": "No se encontró texto en este documento.",
+      "displayOptions": "Opciones de visualización del texto",
+      "copy": "Copiar",
+      "failureDetail": "Mostrar el mensaje completo"
     },
     "comments": {
       "saveFailed": "No se pudo guardar el comentario. Inténtalo de nuevo.",
@@ -2242,7 +2271,9 @@
       "file": "Archivo",
       "expires": "Caduca",
       "preview": "Mostrar vista previa",
-      "previewHint": "Abrir la vista previa cuenta como una vista de este enlace."
+      "previewHint": "Abrir la vista previa cuenta como una vista de este enlace.",
+      "expiresOn": "El enlace caduca el {{date}}",
+      "noExpiry": "El enlace no caduca"
     },
     "viewer": {
       "loading": "Cargando vista previa",
@@ -2255,6 +2286,18 @@
       "label": "Vistas del documento",
       "text": "Texto",
       "details": "Detalles"
+    },
+    "meta": {
+      "pages_one": "{{count}} página",
+      "pages_other": "{{count}} páginas",
+      "added": "Añadido {{date}}",
+      "ocr": "OCR {{value}} %"
+    },
+    "view": {
+      "label": "Vista",
+      "document": "Documento",
+      "split": "En paralelo",
+      "text": "Texto"
     }
   },
   "library": {
@@ -2341,20 +2384,24 @@
       "none": "Aún no hay documentos",
       "noneHint": "Sube archivos o conecta una carpeta para empezar tu biblioteca.",
       "tooMany": "Demasiadas coincidencias: afina la búsqueda",
-      "tooManyHint": "Añade una palabra o un filtro para acotar los resultados."
+      "tooManyHint": "Añade una palabra o un filtro para acotar los resultados.",
+      "collection": "Todavía no hay nada en «{{name}}»",
+      "collectionHint": "Busca documentos, marca los que van aquí y elige «Guardar como colección».",
+      "goSearch": "Ir a la búsqueda"
     },
     "filters": {
       "added": "Añadido",
       "any": "Cualquiera",
       "clearAll": "Quitar todo",
-      "findLabel": "Buscar una etiqueta",
+      "findLabel": "Buscar una colección",
       "label": "Etiqueta",
-      "noLabelMatch": "Ninguna etiqueta coincide",
-      "noLabels": "Aún no hay etiquetas",
+      "noLabelMatch": "No hay colecciones coincidentes",
+      "noLabels": "Aún no hay colecciones",
       "region": "Buscar y filtrar",
       "source": "Origen",
       "status": "Estado",
-      "type": "Tipo"
+      "type": "Tipo",
+      "collection": "Colección"
     },
     "help": {
       "boolean": "Operadores",
@@ -2382,7 +2429,33 @@
     "search": {
       "keepTyping": "Sigue escribiendo…",
       "label": "Buscar documentos",
-      "placeholder": "Buscar nombres y texto…"
+      "placeholder": "Buscar nombres y texto…",
+      "allDates": "Mostrar todas las fechas",
+      "allSelected_one": "La única coincidencia está seleccionada",
+      "allSelected_other": "Las {{formatted}} coincidencias están seleccionadas",
+      "bestMatch": "Más relevantes",
+      "bigPlaceholder": "Busca en todos los documentos por nombre o por las palabras que contienen",
+      "count_one": "1 documento coincide con «{{q}}»",
+      "count_other": "{{formatted}} documentos coinciden con «{{q}}»",
+      "counting": "Buscando…",
+      "error": "La búsqueda no se pudo completar",
+      "everything": "Buscar en todos los documentos…",
+      "inRange": "en {{range}}",
+      "loading": "Buscando…",
+      "monthCount_one": "1 resultado",
+      "monthCount_other": "{{count}} resultados",
+      "nameMatch": "Coincide en el nombre del archivo",
+      "newest": "Más recientes primero",
+      "noMatchesHint": "Revisa la ortografía, prueba con menos palabras o activa «Ortografía parecida» en la ayuda de búsqueda.",
+      "order": "Orden",
+      "preview": "Vista rápida de {{name}}",
+      "results": "Resultados",
+      "selectAll_one": "Seleccionar la única coincidencia",
+      "selectAll_other": "Seleccionar las {{formatted}} coincidencias",
+      "selectPage": "Seleccionar todo en esta página",
+      "startHint": "Readur busca en los nombres de archivo y en cada palabra leída de tus escaneos y PDF. Prueba con un nombre, un lugar o un tema, como «hombro» o «factura 2024».",
+      "startTitle": "Encuentra cualquier cosa en tus documentos",
+      "title": "Búsqueda"
     },
     "sort": {
       "asc": "{{field}}, ascendente",
@@ -2392,7 +2465,8 @@
     },
     "source": {
       "unknown": "Conexión",
-      "upload": "Subida"
+      "upload": "Subida",
+      "watch": "Carpeta vigilada"
     },
     "status": {
       "completed": "Indexado",
@@ -2402,8 +2476,8 @@
     },
     "table": "Documentos",
     "tag": {
-      "changed": "CAMBIADO",
-      "new": "NUEVO"
+      "changed": "Cambiado",
+      "new": "Nuevo"
     },
     "title": "Biblioteca",
     "type": {
@@ -2412,6 +2486,42 @@
       "other": "Otros",
       "pdf": "PDF",
       "text": "Texto"
+    },
+    "collection": {
+      "action": "Guardar como colección",
+      "assignFailed": "La colección se creó, pero no se pudieron añadir los documentos. Inténtalo de nuevo.",
+      "assignFailedExisting": "No se pudieron añadir los documentos",
+      "color": "Color",
+      "createFailed": "No se pudo crear la colección",
+      "existing": "Una colección existente",
+      "name": "Nombre",
+      "nameRequired": "Ponle un nombre a la colección",
+      "nameTaken": "Ya existe una colección con este nombre. Elígela en «Una colección existente».",
+      "new": "Una colección nueva",
+      "pick": "Colección",
+      "pickPlaceholder": "Elige una colección",
+      "save": "Guardar",
+      "saved_one": "1 documento guardado en «{{name}}»",
+      "saved_other": "{{count}} documentos guardados en «{{name}}»",
+      "target": "Guardar en",
+      "title_one": "Guardar 1 documento como colección",
+      "title_other": "Guardar {{count}} documentos como colección"
+    },
+    "loading": "Cargando documentos",
+    "monthCount_one": "1 documento",
+    "monthCount_other": "{{count}} documentos",
+    "selectDocument": "Seleccionar {{name}}",
+    "timeline": {
+      "label": "Coincidencias por mes",
+      "month_one": "{{month}}: 1 coincidencia",
+      "month_other": "{{month}}: {{formatted}} coincidencias",
+      "span": "{{first}} – {{last}}"
+    },
+    "undated": "Sin fecha",
+    "view": {
+      "grid": "Cuadrícula",
+      "label": "Vista",
+      "table": "Tabla"
     }
   },
   "intake": {
@@ -2661,7 +2771,8 @@
       "syncFailed": "No se pudo iniciar la sincronización",
       "syncStarted": "Sincronización iniciada",
       "syncStopped": "Sincronización detenida",
-      "toggleFailed": "No se pudo cambiar la conexión"
+      "toggleFailed": "No se pudo cambiar la conexión",
+      "healthFindings": "Comprobación de estado"
     },
     "duplicates": {
       "col": {
@@ -3129,6 +3240,81 @@
       "systemInfo": "La carpeta del servidor la configura tu administrador y se aplica a todos.",
       "today": "Hechos hoy",
       "types": "Tipos de archivo"
+    },
+    "reason": {
+      "details": "Detalles técnicos"
+    },
+    "connectionFailure": {
+      "auth": "El servidor rechazó el inicio de sesión. Revise el usuario, la contraseña o las claves.",
+      "notFound": "No se encontró la carpeta o el bucket. Revise la dirección y la ruta.",
+      "tls": "El certificado de seguridad del servidor no es de confianza.",
+      "unreachable": "No se puede acceder al servidor. Revise la dirección y que esté en línea.",
+      "server": "El servidor informó de un error. Inténtelo de nuevo en unos minutos."
+    }
+  },
+  "failure": {
+    "damaged": "El archivo parece dañado",
+    "docTools": "No se pueden leer archivos .doc: instala antiword o catdoc",
+    "encrypted": "El PDF está protegido con contraseña",
+    "lowConfidence": "El texto era demasiado confuso para leerlo con fiabilidad",
+    "memory": "Se agotó la memoria al leer el archivo",
+    "missing": "Falta el archivo en el almacenamiento",
+    "ocr": "Falló el OCR",
+    "permission": "Readur no tiene permiso para abrir el archivo",
+    "timeout": "El OCR tardó demasiado y se detuvo",
+    "tooLarge": "El archivo es demasiado grande",
+    "unsupported": "Este tipo de archivo no es compatible",
+    "unknown": "Algo salió mal"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Buenos días, {{name}}",
+      "morningPlain": "Buenos días",
+      "afternoon": "Buenas tardes, {{name}}",
+      "afternoonPlain": "Buenas tardes",
+      "evening": "Buenas noches, {{name}}",
+      "eveningPlain": "Buenas noches"
+    },
+    "week": {
+      "count": "{{formatted}} recibidos esta semana",
+      "none": "No ha llegado nada esta semana"
+    },
+    "kind": {
+      "upload": "Subidas web y por API",
+      "watch": "Carpeta vigilada",
+      "webdav": "WebDAV",
+      "s3": "S3",
+      "local": "Carpeta local"
+    },
+    "lanes": {
+      "title": "Entradas",
+      "manage": "Gestionar fuentes",
+      "error": "No se pudieron cargar las entradas.",
+      "empty": "Aún no hay fuentes",
+      "today": "hoy",
+      "lastArrival": "Última llegada {{age}}",
+      "never": "Nada todavía",
+      "quiet": "Sin actividad",
+      "idle": "Inactiva",
+      "uploads": "Subidas",
+      "source": "Fuente",
+      "barsLabel": "{{total}} en los últimos {{days}} días, la mayoría el {{day}} ({{most}})",
+      "barsEmpty": "Nada en los últimos {{days}} días"
+    },
+    "pipeline": {
+      "title": "Procesamiento",
+      "idle": "Nada en espera",
+      "busy": "Procesando {{processing}} · en espera {{pending}}",
+      "paused": "El OCR está en pausa",
+      "failed": "{{formatted}} con errores",
+      "failedError": "No se pudieron cargar los documentos con errores.",
+      "noFailures": "No hay documentos con errores",
+      "review": "Revisar",
+      "showRecent": "Mostrar los últimos errores",
+      "rawError": "Texto del error"
+    },
+    "recent": {
+      "title": "Recién llegados"
     }
   }
 }

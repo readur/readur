@@ -18,11 +18,8 @@
 }
 
 .word {
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
+  font-family: var(--font-ui);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1234,13 +1234,13 @@
       "deleteLabel": "Delete label"
     },
     "create": {
-      "title": "Create New Label",
-      "editTitle": "Edit Label",
-      "nameLabel": "Label Name",
+      "title": "Create a label",
+      "editTitle": "Edit label",
+      "nameLabel": "Name",
       "nameRequired": "Name is required",
       "descriptionLabel": "Description (optional)",
       "colorLabel": "Color",
-      "customColorLabel": "Custom Color (hex)",
+      "customColorLabel": "Custom color (hex)",
       "iconLabel": "Icon (optional)",
       "iconNone": "None",
       "previewLabel": "Preview",
@@ -1248,7 +1248,7 @@
       "create": "Create",
       "update": "Update",
       "saving": "Saving...",
-      "previewName": "Label Preview"
+      "previewName": "Label preview"
     },
     "selector": {
       "placeholder": "Search or create labels...",
@@ -1849,16 +1849,16 @@
     }
   },
   "status": {
-    "pending": "PENDING",
+    "pending": "Pending",
     "processing": "OCR",
     "processingProgress": "OCR {{current}}/{{total}}",
-    "completed": "INDEXED",
-    "failed": "FAILED",
-    "healthy": "HEALTHY",
-    "syncing": "SYNCING",
-    "warning": "CHECK",
-    "error": "ERROR",
-    "disabled": "OFF"
+    "completed": "Indexed",
+    "failed": "Failed",
+    "healthy": "Healthy",
+    "syncing": "Syncing",
+    "warning": "Check",
+    "error": "Error",
+    "disabled": "Off"
   },
   "shell": {
     "skipToContent": "Skip to content",
@@ -1870,11 +1870,14 @@
       "board": "Board",
       "library": "Library",
       "intake": "Intake",
-      "settings": "Settings"
+      "settings": "Settings",
+      "home": "Home",
+      "search": "Search"
     },
     "search": {
       "open": "Search documents",
-      "placeholder": "Search documents…"
+      "placeholder": "Search documents…",
+      "short": "Quick find…"
     },
     "palette": {
       "navigation": "Go to",
@@ -1913,7 +1916,8 @@
       "menu": "Account menu",
       "settings": "Settings",
       "apiDocs": "API documentation",
-      "logout": "Log out"
+      "logout": "Log out",
+      "menuFor": "Account menu, {{name}}"
     },
     "intake": {
       "title": "Intake",
@@ -1930,6 +1934,27 @@
       "general": "General",
       "labels": "Labels",
       "debug": "Debug"
+    },
+    "collections": {
+      "title": "Collections",
+      "empty": "No collections yet",
+      "all": "All collections"
+    },
+    "sources": {
+      "title": "Sources",
+      "uploads": "Uploads",
+      "watch": "Watch folder",
+      "health": {
+        "syncing": "Syncing",
+        "error": "Error",
+        "check": "Check",
+        "off": "Off"
+      }
+    },
+    "menu": {
+      "label": "Menu",
+      "open": "Open menu",
+      "close": "Close menu"
     }
   },
   "board": {
@@ -2057,7 +2082,8 @@
       "editor": "Edit labels",
       "placeholder": "Search or create labels…",
       "cancel": "Cancel",
-      "save": "Save labels"
+      "save": "Save labels",
+      "add": "Add label"
     },
     "type": {
       "image": "Image",
@@ -2195,7 +2221,10 @@
       "pending": "The text appears here when OCR finishes.",
       "failed": "OCR could not read this document.",
       "loadFailed": "Couldn't load the extracted text.",
-      "empty": "No text was found in this document."
+      "empty": "No text was found in this document.",
+      "displayOptions": "Text display options",
+      "copy": "Copy",
+      "failureDetail": "Show the full message"
     },
     "comments": {
       "saveFailed": "Couldn't save the comment. Try again.",
@@ -2242,7 +2271,9 @@
       "file": "File",
       "expires": "Expires",
       "preview": "Show preview",
-      "previewHint": "Opening the preview counts as a view of this link."
+      "previewHint": "Opening the preview counts as a view of this link.",
+      "expiresOn": "Link expires {{date}}",
+      "noExpiry": "Link never expires"
     },
     "viewer": {
       "loading": "Loading preview",
@@ -2255,6 +2286,18 @@
       "label": "Document views",
       "text": "Text",
       "details": "Details"
+    },
+    "meta": {
+      "pages_one": "{{count}} page",
+      "pages_other": "{{count}} pages",
+      "added": "Added {{date}}",
+      "ocr": "OCR {{value}}%"
+    },
+    "view": {
+      "label": "View",
+      "document": "Document",
+      "split": "Side by side",
+      "text": "Text"
     }
   },
   "library": {
@@ -2341,20 +2384,24 @@
       "none": "No documents yet",
       "noneHint": "Upload files or connect a folder to start your library.",
       "tooMany": "Too many matches — refine your search",
-      "tooManyHint": "Add a word or a filter to narrow the results."
+      "tooManyHint": "Add a word or a filter to narrow the results.",
+      "collection": "Nothing in “{{name}}” yet",
+      "collectionHint": "Search for documents, tick the ones that belong here and choose “Save as collection”.",
+      "goSearch": "Go to search"
     },
     "filters": {
       "added": "Added",
       "any": "Any",
       "clearAll": "Clear all",
-      "findLabel": "Find a label",
+      "findLabel": "Find a collection",
       "label": "Label",
-      "noLabelMatch": "No matching labels",
-      "noLabels": "No labels yet",
+      "noLabelMatch": "No matching collections",
+      "noLabels": "No collections yet",
       "region": "Search and filter",
       "source": "Source",
       "status": "Status",
-      "type": "Type"
+      "type": "Type",
+      "collection": "Collection"
     },
     "help": {
       "boolean": "Operators",
@@ -2382,7 +2429,33 @@
     "search": {
       "keepTyping": "Keep typing…",
       "label": "Search documents",
-      "placeholder": "Search names and text…"
+      "placeholder": "Search names and text…",
+      "allDates": "Show all dates",
+      "allSelected_one": "The 1 match is selected",
+      "allSelected_other": "All {{formatted}} matches are selected",
+      "bestMatch": "Best match",
+      "bigPlaceholder": "Search every document by name or by the words inside it",
+      "count_one": "1 document matches “{{q}}”",
+      "count_other": "{{formatted}} documents match “{{q}}”",
+      "counting": "Searching…",
+      "error": "The search did not go through",
+      "everything": "Search every document…",
+      "inRange": "in {{range}}",
+      "loading": "Searching…",
+      "monthCount_one": "1 result",
+      "monthCount_other": "{{count}} results",
+      "nameMatch": "Matched on the file name",
+      "newest": "Newest first",
+      "noMatchesHint": "Check the spelling, try fewer words, or switch on “Similar spelling” in search help.",
+      "order": "Order",
+      "preview": "Quick look at {{name}}",
+      "results": "Results",
+      "selectAll_one": "Select the 1 match",
+      "selectAll_other": "Select all {{formatted}} matches",
+      "selectPage": "Select all on this page",
+      "startHint": "Readur searches file names and every word read from your scans and PDFs. Try a name, a place or a topic, like “shoulder” or “invoice 2024”.",
+      "startTitle": "Find anything in your documents",
+      "title": "Search"
     },
     "sort": {
       "asc": "{{field}}, ascending",
@@ -2392,7 +2465,8 @@
     },
     "source": {
       "unknown": "Connection",
-      "upload": "Upload"
+      "upload": "Upload",
+      "watch": "Watch folder"
     },
     "status": {
       "completed": "Indexed",
@@ -2402,8 +2476,8 @@
     },
     "table": "Documents",
     "tag": {
-      "changed": "CHANGED",
-      "new": "NEW"
+      "changed": "Changed",
+      "new": "New"
     },
     "title": "Library",
     "type": {
@@ -2412,6 +2486,42 @@
       "other": "Other",
       "pdf": "PDF",
       "text": "Text"
+    },
+    "collection": {
+      "action": "Save as collection",
+      "assignFailed": "The collection was made, but the documents could not be added. Try again.",
+      "assignFailedExisting": "The documents could not be added",
+      "color": "Color",
+      "createFailed": "The collection could not be made",
+      "existing": "An existing collection",
+      "name": "Name",
+      "nameRequired": "Give the collection a name",
+      "nameTaken": "A collection with this name exists. Pick it under “An existing collection”.",
+      "new": "A new collection",
+      "pick": "Collection",
+      "pickPlaceholder": "Choose a collection",
+      "save": "Save",
+      "saved_one": "1 document saved to “{{name}}”",
+      "saved_other": "{{count}} documents saved to “{{name}}”",
+      "target": "Save to",
+      "title_one": "Save 1 document as a collection",
+      "title_other": "Save {{count}} documents as a collection"
+    },
+    "loading": "Loading documents",
+    "monthCount_one": "1 document",
+    "monthCount_other": "{{count}} documents",
+    "selectDocument": "Select {{name}}",
+    "timeline": {
+      "label": "Matches by month",
+      "month_one": "{{month}}: 1 match",
+      "month_other": "{{month}}: {{formatted}} matches",
+      "span": "{{first}} – {{last}}"
+    },
+    "undated": "Undated",
+    "view": {
+      "grid": "Grid",
+      "label": "Layout",
+      "table": "Table"
     }
   },
   "intake": {
@@ -2661,7 +2771,8 @@
       "syncFailed": "Could not start the sync",
       "syncStarted": "Sync started",
       "syncStopped": "Sync stopped",
-      "toggleFailed": "Could not change the connection"
+      "toggleFailed": "Could not change the connection",
+      "healthFindings": "Health check"
     },
     "duplicates": {
       "col": {
@@ -3129,6 +3240,81 @@
       "systemInfo": "The server folder is set by your administrator and applies to everyone.",
       "today": "Done today",
       "types": "File types"
+    },
+    "reason": {
+      "details": "Technical details"
+    },
+    "connectionFailure": {
+      "auth": "The server refused the sign-in. Check the username, password or keys.",
+      "notFound": "The folder or bucket wasn't found. Check the address and path.",
+      "tls": "The server's security certificate isn't trusted.",
+      "unreachable": "Can't reach the server. Check the address and that it is online.",
+      "server": "The server reported an error. Try again in a few minutes."
+    }
+  },
+  "failure": {
+    "damaged": "The file looks damaged",
+    "docTools": "Can't read .doc files: install antiword or catdoc",
+    "encrypted": "The PDF is password-protected",
+    "lowConfidence": "The text was too unclear to read reliably",
+    "memory": "Ran out of memory while reading the file",
+    "missing": "The file is missing from storage",
+    "ocr": "OCR failed",
+    "permission": "Readur isn't allowed to open the file",
+    "timeout": "OCR took too long and was stopped",
+    "tooLarge": "The file is too large",
+    "unsupported": "This file type isn't supported",
+    "unknown": "Something went wrong"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Good morning, {{name}}",
+      "morningPlain": "Good morning",
+      "afternoon": "Good afternoon, {{name}}",
+      "afternoonPlain": "Good afternoon",
+      "evening": "Good evening, {{name}}",
+      "eveningPlain": "Good evening"
+    },
+    "week": {
+      "count": "{{formatted}} arrived this week",
+      "none": "Nothing arrived this week"
+    },
+    "kind": {
+      "upload": "Web and API uploads",
+      "watch": "Watch folder",
+      "webdav": "WebDAV",
+      "s3": "S3",
+      "local": "Local folder"
+    },
+    "lanes": {
+      "title": "Coming in",
+      "manage": "Manage sources",
+      "error": "Arrivals could not be loaded.",
+      "empty": "No sources yet",
+      "today": "today",
+      "lastArrival": "Last arrival {{age}}",
+      "never": "Nothing yet",
+      "quiet": "Quiet",
+      "idle": "Idle",
+      "uploads": "Uploads",
+      "source": "Source",
+      "barsLabel": "{{total}} in the last {{days}} days, most on {{day}} ({{most}})",
+      "barsEmpty": "Nothing in the last {{days}} days"
+    },
+    "pipeline": {
+      "title": "Processing",
+      "idle": "Nothing waiting",
+      "busy": "Processing {{processing}} · pending {{pending}}",
+      "paused": "OCR is paused",
+      "failed": "{{formatted}} failed",
+      "failedError": "Failed documents could not be loaded.",
+      "noFailures": "No failed documents",
+      "review": "Review",
+      "showRecent": "Show the latest failures",
+      "rawError": "Error text"
+    },
+    "recent": {
+      "title": "Just arrived"
     }
   }
 }
