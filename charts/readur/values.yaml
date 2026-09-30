@@ -8,6 +8,15 @@
 ## Both are generated once and preserved across upgrades. Read the admin
 ## password with:
 ##   kubectl get secret <release>-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
+##
+## GitOps / `helm template`: preserving generated values relies on Helm's
+## `lookup` function, which only works when Helm talks to the cluster
+## (`helm install` / `helm upgrade`). Renderers that do not, such as
+## `helm template` and Argo CD, cannot see the existing Secret and generate
+## new random values on every render, which signs out all users and changes
+## the admin password. With those tools, set
+## `auth.existingSecret` to a Secret you manage (e.g. Sealed Secrets or
+## External Secrets), or set both `auth.jwtSecret` and `auth.adminPassword`.
 auth:
   # Use an existing Secret instead. It must contain the key JWT_SECRET (at
   # least 32 bytes) and may contain ADMIN_PASSWORD.

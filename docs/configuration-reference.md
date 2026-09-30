@@ -358,6 +358,8 @@ The Helm chart (`charts/readur`) manages `JWT_SECRET` and the initial `ADMIN_PAS
 | `auth.jwtSecret` | `""` | Explicit JWT secret; generated (64 characters) when empty |
 | `auth.adminPassword` | `""` | Explicit initial admin password; generated when empty |
 
+**GitOps / `helm template`:** keeping generated values across upgrades relies on Helm's `lookup` function, which only works when Helm talks to the cluster (`helm install` / `helm upgrade`). Renderers that do not, such as `helm template` and Argo CD, cannot see the existing Secret and would generate new random values on every render, signing out all users and changing the admin password. With these tools, set `auth.existingSecret` to a Secret you manage (for example with Sealed Secrets or External Secrets), or set both `auth.jwtSecret` and `auth.adminPassword` explicitly.
+
 ```bash
 # Read the initial admin password
 kubectl get secret <release>-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d

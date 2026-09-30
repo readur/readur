@@ -188,6 +188,8 @@ helm install readur readur/readur \
 
 The chart creates a Secret named `<release>-auth` containing a random `JWT_SECRET` and a random initial `ADMIN_PASSWORD`. Both are kept across upgrades. To supply your own values, set `auth.jwtSecret` / `auth.adminPassword`, or point `auth.existingSecret` at a Secret that contains `JWT_SECRET` (at least 32 bytes) and optionally `ADMIN_PASSWORD`.
 
+**GitOps / `helm template`:** keeping generated values across upgrades relies on Helm's `lookup` function, which only works when Helm talks to the cluster (`helm install` / `helm upgrade`). Renderers that do not, such as `helm template` and Argo CD, cannot see the existing Secret and would generate new random values on every render, signing out all users and changing the admin password. With these tools, set `auth.existingSecret` to a Secret you manage (for example with Sealed Secrets or External Secrets), or set both `auth.jwtSecret` and `auth.adminPassword` explicitly.
+
 Read the initial admin password:
 
 ```bash
