@@ -271,7 +271,7 @@ export class TestHelpers {
   async createTestSource(
     baseName: string,
     type: 'webdav' | 'local_folder' | 's3',
-    options?: { uniqueSuffix?: string; serverUrl?: string },
+    options?: { uniqueSuffix?: string; serverUrl?: string; watchFolder?: string },
   ): Promise<string> {
     const suffix = options?.uniqueSuffix || Math.random().toString(36).substring(7);
     const sourceName = `${baseName}_${Date.now()}_${suffix}`;
@@ -293,6 +293,15 @@ export class TestHelpers {
       await dialog.getByRole('textbox', { name: 'Secret access key' }).fill('test-secret-key');
     } else {
       await dialog.getByRole('radio', { name: /^Local folder/ }).check({ force: true });
+      if (options?.watchFolder) {
+        // Replace the placeholder folder with one that exists on the server
+        const folders = dialog.getByRole('list', { name: 'Directories to monitor' });
+        const remove = folders.getByRole('button', { name: /^Remove / });
+        while ((await remove.count()) > 0) await remove.first().click();
+        await dialog.getByRole('textbox', { name: 'Directories to monitor' }).fill(options.watchFolder);
+        await dialog.getByRole('button', { name: 'Add to Directories to monitor' }).click();
+        await expect(folders.getByText(options.watchFolder, { exact: true })).toBeVisible();
+      }
     }
 
     const create = this.page.waitForResponse(

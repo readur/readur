@@ -28,10 +28,19 @@ test.describe('Source Management', () => {
     await expect(page.getByRole('heading', { name: 'No connections yet' })).toBeVisible();
   });
 
-  test('should create a new local folder source', async ({ dynamicUserPage: page }) => {
-    const name = await helpers.createTestSource('Test Local Folder', 'local_folder');
-    await expect(helpers.connectionRow(name)).toContainText('Local folder');
-    await helpers.waitForToast(/Connection added/);
+  test('should refuse a local folder source for a regular user', async ({ dynamicUserPage: page }) => {
+    // A local folder reads the server's own disk, so only admins may add one unless
+    // LOCAL_SOURCE_ALLOWED_PATHS names folders users are allowed to watch.
+    await page.getByRole('button', { name: 'Add connection' }).first().click();
+    const dialog = addDialog(page);
+    await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill(helpers.uniqueName('Test Local Folder'));
+    await dialog.getByRole('radio', { name: /^Local folder/ }).check({ force: true });
+
+    const create = page.waitForResponse((r) => /\/api\/sources$/.test(r.url()) && r.request().method() === 'POST');
+    await dialog.getByRole('button', { name: 'Add connection' }).click();
+    expect((await create).status()).toBe(403);
+    await helpers.waitForToast(/Could not save the connection/);
+    await expect(dialog).toBeVisible();
   });
 
   test('should create a new WebDAV source', async ({ dynamicUserPage: page }) => {
@@ -117,7 +126,7 @@ test.describe('Source Management', () => {
     await page.reload();
 
     const panel = await helpers.openConnection(source.name);
-    await expect(panel).toContainText('SYNCING');
+    await expect(panel).toContainText('Syncing');
     const stop = page.waitForRequest((r) => r.url().includes(`/api/sources/${source.id}/sync/stop`) && r.method() === 'POST');
     await panel.getByRole('button', { name: 'Stop sync' }).click();
     await stop;
@@ -133,7 +142,7 @@ test.describe('Source Management', () => {
       await expect(grid.getByRole('columnheader', { name: col })).toBeVisible();
     }
     const row = helpers.connectionRow(source.name);
-    await expect(row).toContainText('HEALTHY');
+    await expect(row).toContainText('Healthy');
     await expect(row).toContainText('never');
 
     const panel = await helpers.openConnection(source.name);
@@ -164,8 +173,8 @@ test.describe('Source Management', () => {
     });
     await dialog.getByRole('button', { name: 'Test connection' }).click();
     await testCall;
-    // Nothing listens there, so the dialog reports a failure inline
-    await expect(dialog.getByText(/Connection failed|Could not reach the server|Could not test the connection|timed out/)).toBeVisible({
+    // Nothing listens there, so the dialog reports the server's coarse failure category inline
+    await expect(dialog.getByRole('alert')).toContainText(/Server is unreachable|Connection timed out/, {
       timeout: TIMEOUTS.long,
     });
   });
@@ -238,5 +247,16 @@ test.describe('Source Management', () => {
     await expect(page.getByRole('dialog', { name: source.name }).getByRole('group', { name: 'Schedule' })).toContainText('every 45 min', {
       timeout: TIMEOUTS.medium,
     });
+  });
+});
+
+test.describe('Source Management (admin)', () => {
+  test('should create a new local folder source', async ({ dynamicAdminPage: page }) => {
+    const helpers = new TestHelpers(page);
+    await helpers.openIntake('connections');
+    // Admins may watch any folder that exists on the server
+    const name = await helpers.createTestSource('Test Local Folder', 'local_folder', { watchFolder: '/tmp' });
+    await expect(helpers.connectionRow(name)).toContainText('Local folder');
+    await helpers.waitForToast(/Connection added/);
   });
 });

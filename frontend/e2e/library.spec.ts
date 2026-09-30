@@ -136,8 +136,10 @@ test.describe('Library', () => {
     // Esc closes it and returns focus to the row it was opened from
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    const focusedRowText = await page.evaluate(() => document.activeElement?.closest('[role="row"]')?.textContent ?? '');
-    expect(focusedRowText).toContain(first);
+    // React Aria restores focus one animation frame after the dialog unmounts, so poll for it
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.closest('[role="row"]')?.textContent ?? ''))
+      .toContain(first);
   });
 
   test('should open a document from the slideout', async ({ dynamicUserPage: page }) => {
