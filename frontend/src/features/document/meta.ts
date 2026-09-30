@@ -13,10 +13,12 @@ export function formatAdded(value: string | null | undefined, lng?: string): str
   return `${day} ${time}`;
 }
 
-/** Page count from whichever place knows it: the file's own metadata, OCR, or OCR progress. */
+/**
+ * Page count from OCR, which reads the pages one by one, or from OCR progress while it runs.
+ * `source_metadata.page_count` is not used: the server derives it by counting "/Type /Page" in
+ * the raw file, which also matches the "/Type /Pages" tree node, so a 1-page PDF reports 2.
+ */
 export function pageCount(doc: Document, ocr: OcrResponse | null): number | null {
-  const fromFile = (doc.source_metadata as { page_count?: unknown } | null | undefined)?.page_count;
-  if (typeof fromFile === 'number' && fromFile > 0) return fromFile;
   const fromOcr = (ocr as OcrExtras | null)?.pages_processed;
   if (typeof fromOcr === 'number' && fromOcr > 0) return fromOcr;
   const total = doc.ocr_progress_total ?? 0;

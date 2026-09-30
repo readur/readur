@@ -49,9 +49,10 @@ beforeEach(() => {
 
 describe('document page: facts line', () => {
   it('shows type, pages, size, source, added and OCR confidence on one line', async () => {
-    load(makeDocument({ source_metadata: { page_count: 2 } }));
+    load(makeDocument(), { ...makeOcr(), pages_processed: 2 } as ReturnType<typeof makeOcr>);
     renderPage();
     await title();
+    await waitFor(() => expect(facts()).toContain('2 pages'));
     expect(facts()).toEqual(['PDF', '2 pages', '2.0 MB', 'Upload', expect.stringMatching(/^Added .*2025/), 'OCR 96%']);
     expect(within(summary()).getByText('Indexed')).toBeInTheDocument();
   });
@@ -65,10 +66,23 @@ describe('document page: facts line', () => {
   });
 
   it('says "1 page" for a single page', async () => {
-    load(makeDocument({ source_metadata: { page_count: 1 } }));
+    load(makeDocument(), { ...makeOcr(), pages_processed: 1 } as ReturnType<typeof makeOcr>);
     renderPage();
     await title();
-    expect(facts()).toContain('1 page');
+    await waitFor(() => expect(facts()).toContain('1 page'));
+  });
+
+  it("ignores the server's file page count, which overstates PDFs", async () => {
+    // The server counts "/Type /Page" in the raw file, which also matches "/Type /Pages".
+    load(makeDocument({ source_metadata: { page_count: 2, pdf_version: '1.3' } }));
+    renderPage();
+    await title();
+    await screen.findByRole('region', { name: 'Extracted text' });
+    expect(facts().some((f) => /page/.test(f ?? ''))).toBe(false);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Details' }));
+    const details = screen.getByRole('region', { name: 'Details' });
+    expect(within(details).getByText('PDF version')).toBeInTheDocument();
+    expect(within(details).queryByText('Page count')).not.toBeInTheDocument();
   });
 
   it('shows the pages and language the OCR endpoint reports, and the sync source', async () => {

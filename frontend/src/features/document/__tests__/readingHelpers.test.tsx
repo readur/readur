@@ -75,8 +75,8 @@ describe('meta', () => {
     expect(formatAdded('not a date')).toBeNull();
   });
 
-  it('reads the page count from the file, then OCR, then OCR progress', () => {
-    expect(pageCount(makeDocument({ source_metadata: { page_count: 4 } }), makeOcr())).toBe(4);
+  it('reads the page count from OCR, then OCR progress, never from the file metadata', () => {
+    expect(pageCount(makeDocument({ source_metadata: { page_count: 4 } }), makeOcr())).toBeNull();
     expect(pageCount(makeDocument(), { ...makeOcr(), pages_processed: 3 } as ReturnType<typeof makeOcr>)).toBe(3);
     expect(pageCount(makeDocument({ ocr_progress_total: 7 }), null)).toBe(7);
     expect(pageCount(makeDocument(), null)).toBeNull();

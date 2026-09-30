@@ -10,6 +10,12 @@ export interface MetadataDisplayProps {
   compact?: boolean;
 }
 
+/**
+ * Keys the server fills with values that can't be trusted. `page_count` counts "/Type /Page" in
+ * the raw PDF, which also matches "/Type /Pages", so it overstates every PDF by one or more.
+ */
+const UNRELIABLE = new Set(['page_count']);
+
 const DATE_HINTS = ['date', 'time', 'created', 'modified'];
 
 const ACRONYMS = new Set(['pdf', 'id', 'url', 'exif', 'gps', 'dpi', 'iso', 'ocr', 'mime']);
@@ -60,7 +66,7 @@ function MetadataValue({ name, value }: { name: string; value: unknown }): React
 export function MetadataDisplay({ metadata, title, compact = false }: MetadataDisplayProps) {
   const { t } = useTranslation();
   if (!metadata || typeof metadata !== 'object') return null;
-  const entries = Object.entries(metadata as Record<string, unknown>);
+  const entries = Object.entries(metadata as Record<string, unknown>).filter(([key]) => !UNRELIABLE.has(key));
   if (entries.length === 0) return null;
   const heading = title ?? t('document.details.sourceMetadata', 'Source metadata');
 
