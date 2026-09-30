@@ -6,7 +6,7 @@
   position: fixed;
   right: calc(var(--s-4) + var(--toast-inset-right, 0px));
   bottom: calc(var(--s-4) + var(--toast-inset-bottom, 0px));
-  z-index: 200;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column-reverse;
   gap: var(--s-2);

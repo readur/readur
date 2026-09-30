@@ -215,7 +215,7 @@ describe('Add documents: upload board', () => {
     renderIntake(<UploadSection />);
     await settle();
     expect(screen.getByRole('heading', { name: 'Apply to these uploads' })).toBeInTheDocument();
-    expect(screen.getByText('OCR languages')).toBeInTheDocument();
+    expect(screen.getAllByText(/^OCR languages/i)).toHaveLength(1);
     expect(screen.getByText('Labels')).toBeInTheDocument();
   });
 });

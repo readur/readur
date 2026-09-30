@@ -44,11 +44,19 @@
 }
 
 :root {
+  /* Layers: the shell sits below every overlay; the palette is topmost. */
+  --z-shell: 1100;
+  --z-overlay: 1200;
+  --z-toast: 1300;
+  --z-palette: 1400;
+  --z-skip: 1500;
+
   /* Type (family names as declared by the @fontsource-variable packages) */
   --font-ui: "Archivo Variable", system-ui, sans-serif;
   --font-label: "Archivo Variable", system-ui, sans-serif;
   --font-data: "Martian Mono Variable", ui-monospace, monospace;
   --font-label-stretch: 75%;
+  --font-display-stretch: 68%;
   --tracking-label: 0.06em;
 
   --fs-xs: 11px;

@@ -26,4 +26,9 @@ describe('PageHeader', () => {
     expect(screen.getAllByRole('heading')).toHaveLength(1);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
+
+  it('shows one headline figure beside the title when given', () => {
+    render(<PageHeader title="Library" figure="660" />);
+    expect(screen.getByText('660')).toBeInTheDocument();
+  });
 });

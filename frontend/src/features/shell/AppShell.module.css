@@ -11,7 +11,7 @@
   position: absolute;
   top: var(--s-2);
   left: var(--s-2);
-  z-index: 1300;
+  z-index: var(--z-skip);
   padding: var(--s-2) var(--s-3);
   background: var(--btn-bg);
   color: var(--btn-fg);
@@ -30,7 +30,7 @@
 .topBar {
   position: sticky;
   top: 0;
-  z-index: 1100;
+  z-index: var(--z-shell);
   display: flex;
   align-items: center;
   gap: var(--s-4);
@@ -196,6 +196,10 @@
   flex-shrink: 0;
 }
 
+.tools button {
+  font-size: 20px;
+}
+
 .synced {
   margin-right: var(--s-2);
   font-family: var(--font-data);
@@ -295,7 +299,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1100;
+  z-index: var(--z-shell);
   background: var(--surface);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom, 0px);

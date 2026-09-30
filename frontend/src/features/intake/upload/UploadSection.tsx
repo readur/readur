@@ -124,7 +124,6 @@ export function UploadSection() {
         </h2>
         <div className={styles.optionGrid}>
           <div className={sharedStyles.stack}>
-            <span className={sharedStyles.heading}>{t('intake.upload.languages', 'OCR languages')}</span>
             <LanguageSelector
               selectedLanguages={options.languages}
               primaryLanguage={options.primaryLanguage}

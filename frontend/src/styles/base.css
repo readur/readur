@@ -11,6 +11,7 @@
 
 html,
 body {
+  margin: 0;
   background: var(--ground);
   color: var(--fg);
   font-family: var(--font-ui);

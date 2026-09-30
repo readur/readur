@@ -1,4 +1,5 @@
 .popover {
+  z-index: var(--z-overlay);
   box-sizing: border-box;
   max-width: 360px;
   padding: var(--s-3);

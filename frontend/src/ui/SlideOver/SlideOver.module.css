@@ -2,7 +2,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--z-overlay);
   display: flex;
   justify-content: flex-end;
   background: var(--scrim);

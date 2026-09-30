@@ -27,14 +27,31 @@
   color: var(--fg-meta);
 }
 
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-4);
+  min-width: 0;
+}
+
+.figure {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--fg);
+}
+
 .title {
   margin: 0;
   font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-2xl);
-  font-weight: 700;
-  line-height: var(--lh-display);
-  letter-spacing: 0.02em;
+  font-stretch: var(--font-display-stretch);
+  font-size: var(--fs-3xl);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.005em;
   text-transform: uppercase;
   color: var(--fg);
   overflow-wrap: anywhere;
