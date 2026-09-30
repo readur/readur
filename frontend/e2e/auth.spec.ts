@@ -84,10 +84,7 @@ test.describe('Authentication', () => {
     expect(loginCalled).toBe(false);
   });
 
-  // App bug (reported in the Task 13 report): after sign-in the login page navigates to
-  // `state.from`, then the `/login` route's own `<Navigate to="/board">` (rendered once the
-  // user is set) overrides it, so the visitor always ends on /board.
-  test.fixme('should return to the requested page after sign-in', async ({ page }) => {
+  test('should return to the requested page after sign-in', async ({ page }) => {
     const authHelper = new E2ETestAuthHelper(page);
     const testUser = await authHelper.createTestUser();
 
@@ -99,5 +96,8 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
     await expect(page).toHaveURL(/\/settings\/appearance/, { timeout: TIMEOUTS.navigation });
+    // And it stays there (the signed-in /login redirect must not fire afterwards).
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(/\/settings\/appearance/);
   });
 });

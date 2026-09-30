@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { AppShell, PageFallback } from '../features/shell';
+import { safeRedirect } from '../features/auth/authErrors';
 import { LegacyRedirect } from './LegacyRedirect';
 import { LEGACY_ROUTES } from './legacyRoutes';
 
@@ -35,13 +36,24 @@ function RequireUser() {
   );
 }
 
+/**
+ * A signed-in visitor on /login goes where they were headed (RequireUser's `state.from`),
+ * else home. Sign-in flips `user` before LoginRoute's own navigate runs, so this redirect
+ * must agree with it or it wins and drops the requested route.
+ */
+function SignedInRedirect() {
+  const location = useLocation();
+  const to = safeRedirect((location.state as { from?: unknown } | null)?.from) ?? HOME_PATH;
+  return <Navigate to={to} replace />;
+}
+
 export function AppRoutes() {
   const { user } = useAuth();
   return (
     <Routes>
       <Route
         path="/login"
-        element={user ? <Navigate to={HOME_PATH} replace /> : <Public><Login /></Public>}
+        element={user ? <SignedInRedirect /> : <Public><Login /></Public>}
       />
       <Route path="/auth/callback" element={<Public><Callback /></Public>} />
       <Route path="/shared/:token" element={<Public><Shared /></Public>} />
