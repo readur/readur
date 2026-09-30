@@ -116,8 +116,20 @@ pub struct EnhancedDocumentResponse {
     pub mime_type: String,
     /// Tags associated with the document
     pub tags: Vec<String>,
+    /// Labels associated with the document
+    #[serde(default)]
+    pub labels: Vec<crate::routes::labels::Label>,
     /// When the document was created
     pub created_at: DateTime<Utc>,
+    /// When the document was last updated
+    #[serde(default)]
+    pub updated_at: DateTime<Utc>,
+    /// UUID of the source the document was ingested from (null for direct uploads)
+    #[serde(default)]
+    pub source_id: Option<Uuid>,
+    /// Type of source the document was ingested from
+    #[serde(default)]
+    pub source_type: Option<String>,
     /// Whether OCR text has been extracted
     pub has_ocr_text: bool,
     /// OCR confidence score (0-100, higher is better)
@@ -128,10 +140,51 @@ pub struct EnhancedDocumentResponse {
     pub ocr_processing_time_ms: Option<i32>,
     /// Current status of OCR processing (pending, processing, completed, failed)
     pub ocr_status: Option<String>,
+    /// Current page being processed (present only while OCR is processing)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub ocr_progress_current: Option<i32>,
+    /// Total pages to process (present only while OCR is processing)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub ocr_progress_total: Option<i32>,
     /// Search relevance score (0-1, higher is more relevant)
     pub search_rank: Option<f32>,
     /// Text snippets showing search matches with highlights
     pub snippets: Vec<SearchSnippet>,
+}
+
+impl EnhancedDocumentResponse {
+    /// Builds a search result from a document. Labels start empty and are
+    /// batch-loaded by the caller.
+    pub fn from_document(
+        document: Document,
+        search_rank: Option<f32>,
+        snippets: Vec<SearchSnippet>,
+        ocr_progress_current: Option<i32>,
+        ocr_progress_total: Option<i32>,
+    ) -> Self {
+        Self {
+            id: document.id,
+            filename: document.filename,
+            original_filename: document.original_filename,
+            file_size: document.file_size,
+            mime_type: document.mime_type,
+            tags: document.tags,
+            labels: Vec::new(),
+            created_at: document.created_at,
+            updated_at: document.updated_at,
+            source_id: document.source_id,
+            source_type: document.source_type,
+            has_ocr_text: document.ocr_text.is_some(),
+            ocr_confidence: document.ocr_confidence,
+            ocr_word_count: document.ocr_word_count,
+            ocr_processing_time_ms: document.ocr_processing_time_ms,
+            ocr_status: document.ocr_status,
+            ocr_progress_current,
+            ocr_progress_total,
+            search_rank,
+            snippets,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

@@ -1,11 +1,58 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{ToSchema, IntoParams};
+use uuid::Uuid;
 
-#[derive(Deserialize, ToSchema, IntoParams)]
+use crate::models::search::{deserialize_comma_separated, deserialize_comma_separated_uuids};
+use crate::models::{DocumentFilters, DocumentSortField, SortOrder};
+
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct PaginationQuery {
+    /// Maximum number of documents to return (default: 25)
     pub limit: Option<i64>,
+    /// Number of documents to skip (default: 0)
     pub offset: Option<i64>,
+    /// Column to sort by (default: created_at)
+    pub sort_by: Option<DocumentSortField>,
+    /// Sort direction (default: desc)
+    pub sort_order: Option<SortOrder>,
+    /// Filter by OCR status: pending, processing, completed, failed
     pub ocr_status: Option<String>,
+    /// Filter by MIME types (comma-separated, matches any)
+    #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    pub mime_types: Option<Vec<String>>,
+    /// Filter by label IDs (comma-separated UUIDs, matches any)
+    #[serde(default, deserialize_with = "deserialize_comma_separated_uuids")]
+    pub label_ids: Option<Vec<Uuid>>,
+    /// Filter by label names (comma-separated, matches any)
+    #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    pub tags: Option<Vec<String>>,
+    /// Filter by source IDs (comma-separated UUIDs, matches any)
+    #[serde(default, deserialize_with = "deserialize_comma_separated_uuids")]
+    pub source_ids: Option<Vec<Uuid>>,
+    /// Filter by source types (comma-separated); `direct_upload` also matches documents without a source
+    #[serde(default, deserialize_with = "deserialize_comma_separated")]
+    pub source_types: Option<Vec<String>>,
+    /// Only documents created at or after this RFC 3339 timestamp
+    pub created_from: Option<DateTime<Utc>>,
+    /// Only documents created at or before this RFC 3339 timestamp
+    pub created_to: Option<DateTime<Utc>>,
+}
+
+impl PaginationQuery {
+    /// Collects the filter parameters of this query.
+    pub fn filters(&self) -> DocumentFilters {
+        DocumentFilters {
+            ocr_status: self.ocr_status.clone(),
+            mime_types: self.mime_types.clone(),
+            label_ids: self.label_ids.clone(),
+            tags: self.tags.clone(),
+            source_ids: self.source_ids.clone(),
+            source_types: self.source_types.clone(),
+            created_from: self.created_from,
+            created_to: self.created_to,
+        }
+    }
 }
 
 #[derive(Deserialize, ToSchema, IntoParams)]
@@ -90,7 +137,16 @@ impl Default for PaginationQuery {
         Self {
             limit: Some(25),
             offset: Some(0),
+            sort_by: None,
+            sort_order: None,
             ocr_status: None,
+            mime_types: None,
+            label_ids: None,
+            tags: None,
+            source_ids: None,
+            source_types: None,
+            created_from: None,
+            created_to: None,
         }
     }
 }
@@ -103,5 +159,53 @@ impl Default for FailedDocumentsQuery {
             stage: None,
             reason: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::extract::Query;
+    use axum::http::Uri;
+
+    fn parse(qs: &str) -> Result<PaginationQuery, String> {
+        let uri: Uri = format!("/api/documents?{}", qs).parse().unwrap();
+        Query::<PaginationQuery>::try_from_uri(&uri)
+            .map(|q| q.0)
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn parses_sort_and_filters() {
+        let label = Uuid::new_v4();
+        let q = parse(&format!(
+            "limit=2&offset=4&sort_by=filename&sort_order=asc&label_ids={}&source_types=direct_upload&ocr_status=failed",
+            label
+        ))
+        .unwrap();
+        assert_eq!(q.limit, Some(2));
+        assert_eq!(q.offset, Some(4));
+        assert_eq!(q.sort_by, Some(DocumentSortField::Filename));
+        assert_eq!(q.sort_order, Some(SortOrder::Asc));
+        let filters = q.filters();
+        assert_eq!(filters.label_ids, Some(vec![label]));
+        assert_eq!(filters.source_types, Some(vec!["direct_upload".to_string()]));
+        assert!(filters.validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_sort_values_and_bad_uuids() {
+        assert!(parse("sort_by=file_path").is_err());
+        assert!(parse("sort_by=id").is_err());
+        assert!(parse("sort_order=up").is_err());
+        assert!(parse("label_ids=nope").is_err());
+        assert!(parse("source_ids=00000000-0000-0000-0000-00000000000g").is_err());
+    }
+
+    #[test]
+    fn plain_pagination_still_parses() {
+        let q = parse("limit=10&offset=0").unwrap();
+        assert!(!q.filters().is_active());
+        assert_eq!(q.sort_by, None);
     }
 }

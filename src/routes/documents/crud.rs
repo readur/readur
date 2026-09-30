@@ -396,6 +396,7 @@ pub async fn get_document_by_id(
     params(PaginationQuery),
     responses(
         (status = 200, description = "Paginated list of documents", body = PaginatedDocumentsResponse),
+        (status = 400, description = "Invalid sort or filter parameter"),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
     )
@@ -404,88 +405,70 @@ pub async fn list_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Query(query): Query<PaginationQuery>,
-) -> Result<Json<PaginatedDocumentsResponse>, StatusCode> {
+) -> Result<Json<PaginatedDocumentsResponse>, DocumentError> {
     let limit = query.limit.unwrap_or(25);
     let offset = query.offset.unwrap_or(0);
 
-    // Get total count for pagination
-    let total_count = if let Some(ocr_status) = query.ocr_status.as_deref() {
-        state
-            .db
-            .count_documents_by_user_with_role_and_filter(
-                auth_user.user.id,
-                auth_user.user.role,
-                Some(ocr_status),
-            )
-            .await
-    } else {
-        state
-            .db
-            .count_documents_by_user_with_role(
-                auth_user.user.id,
-                auth_user.user.role,
-            )
-            .await
-    }
-    .map_err(|e| {
-        error!("Database error counting documents: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let filters = query.filters();
+    filters.validate().map_err(DocumentError::BadRequest)?;
 
-    let documents = if let Some(ocr_status) = query.ocr_status.as_deref() {
-        state
-            .db
-            .get_documents_by_user_with_role_and_filter(
-                auth_user.user.id,
-                auth_user.user.role,
-                Some(ocr_status),
-                limit,
-                offset,
-            )
-            .await
-    } else {
-        state
-            .db
-            .get_documents_by_user_with_role(
-                auth_user.user.id,
-                auth_user.user.role,
-                limit,
-                offset,
-            )
-            .await
-    }
-    .map_err(|e| {
-        error!("Database error listing documents: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    // Get total count for pagination
+    let total_count = state
+        .db
+        .count_documents_filtered(auth_user.user.id, auth_user.user.role, &filters)
+        .await
+        .map_err(|e| {
+            error!("Database error counting documents: {}", e);
+            DocumentError::InternalServerError("Failed to count documents".to_string())
+        })?;
+
+    let documents = state
+        .db
+        .list_documents_filtered(
+            auth_user.user.id,
+            auth_user.user.role,
+            &filters,
+            query.sort_by,
+            query.sort_order,
+            limit,
+            offset,
+        )
+        .await
+        .map_err(|e| {
+            error!("Database error listing documents: {}", e);
+            DocumentError::InternalServerError("Failed to list documents".to_string())
+        })?;
 
     // Get document IDs for batch label fetching
-    let document_ids: Vec<uuid::Uuid> = documents.iter().map(|d| d.id).collect();
-    
+    let document_ids: Vec<uuid::Uuid> = documents.iter().map(|d| d.document.id).collect();
+
     // Get labels for all documents in batch
-    let labels_map = if !document_ids.is_empty() {
+    let mut labels_map = if !document_ids.is_empty() {
         let labels = state
             .db
             .get_labels_for_documents(&document_ids)
             .await
             .map_err(|e| {
                 error!("Failed to get labels for documents: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
+                DocumentError::InternalServerError("Failed to load document labels".to_string())
             })?;
-        
+
         labels.into_iter().collect::<std::collections::HashMap<_, _>>()
     } else {
         std::collections::HashMap::new()
     };
 
-    // Convert to response format with labels
+    // Convert to response format with labels and OCR progress
     let responses: Vec<DocumentResponse> = documents
         .into_iter()
-        .map(|doc| {
-            let mut response = DocumentResponse::from(doc.clone());
-            if let Some(labels) = labels_map.get(&doc.id) {
-                response.labels = labels.clone();
+        .map(|item| {
+            let doc_id = item.document.id;
+            let mut response = DocumentResponse::from(item.document);
+            if let Some(labels) = labels_map.remove(&doc_id) {
+                response.labels = labels;
             }
+            response.ocr_progress_current = item.ocr_progress_current;
+            response.ocr_progress_total = item.ocr_progress_total;
             response
         })
         .collect();

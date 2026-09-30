@@ -3,52 +3,108 @@ use sqlx::{QueryBuilder, Postgres, Row};
 use uuid::Uuid;
 
 use crate::models::{Document, UserRole, SearchRequest, SearchMode, SearchSnippet, HighlightRange, EnhancedDocumentResponse};
-use super::helpers::{map_row_to_document, apply_role_based_filter, apply_pagination, find_word_boundary, DOCUMENT_FIELDS};
+use super::helpers::{
+    apply_document_filters, apply_pagination, apply_role_based_filter, apply_sort, find_word_boundary,
+    map_row_to_document_with_progress, DocumentWithProgress, DOCUMENT_FIELDS, OCR_PROGRESS_FIELDS,
+    OCR_PROGRESS_JOIN,
+};
 use crate::db::Database;
 
-impl Database {
-    /// Performs basic document search with PostgreSQL full-text search
-    pub async fn search_documents(&self, user_id: Uuid, search_request: &SearchRequest) -> Result<Vec<Document>> {
-        let mut query = QueryBuilder::<Postgres>::new("SELECT ");
-        query.push(DOCUMENT_FIELDS);
-        query.push(" FROM documents WHERE user_id = ");
-        query.push_bind(user_id);
+/// SQL expression building the tsquery (or similarity operand) for a search mode.
+fn tsquery_function(mode: &SearchMode) -> &'static str {
+    match mode {
+        SearchMode::Simple => "plainto_tsquery",
+        SearchMode::Phrase => "phraseto_tsquery",
+        SearchMode::Boolean => "to_tsquery",
+        // Fuzzy search does not use a tsquery
+        SearchMode::Fuzzy => "",
+    }
+}
 
-        // Add search conditions
-        if !search_request.query.trim().is_empty() {
-            query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ plainto_tsquery('english', ");
-            query.push_bind(&search_request.query);
-            query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ plainto_tsquery('english', ");
-            query.push_bind(&search_request.query);
+/// Appends the `, <rank> as search_rank` select column for a search query.
+fn push_search_rank(query: &mut QueryBuilder<Postgres>, search_query: &str, mode: &SearchMode) {
+    match mode {
+        SearchMode::Fuzzy => {
+            query.push(", similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
+            query.push_bind(search_query.to_string());
+            query.push(") as search_rank");
+        }
+        _ => {
+            query.push(", ts_rank(to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, '')), ");
+            query.push(tsquery_function(mode));
+            query.push("('english', ");
+            query.push_bind(search_query.to_string());
+            query.push(")) as search_rank");
+        }
+    }
+}
+
+/// Appends the `AND <match>` condition for a non-empty search query.
+fn push_search_condition(query: &mut QueryBuilder<Postgres>, search_query: &str, mode: &SearchMode) {
+    match mode {
+        SearchMode::Fuzzy => {
+            query.push(" AND similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
+            query.push_bind(search_query.to_string());
+            query.push(") > 0.3");
+        }
+        _ => {
+            let func = tsquery_function(mode);
+            query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ ");
+            query.push(func);
+            query.push("('english', ");
+            query.push_bind(search_query.to_string());
+            query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ ");
+            query.push(func);
+            query.push("('english', ");
+            query.push_bind(search_query.to_string());
             query.push("))");
         }
+    }
+}
 
-        // Add label filtering (tags param contains label names)
-        if let Some(ref tags) = search_request.tags {
-            if !tags.is_empty() {
-                query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
-                query.push_bind(tags);
-                query.push("))");
-            }
+impl Database {
+    /// Performs basic document search with PostgreSQL full-text search.
+    /// Only the user's own documents are searched; see `search_documents_with_role`.
+    pub async fn search_documents(&self, user_id: Uuid, search_request: &SearchRequest) -> Result<Vec<Document>> {
+        Ok(self
+            .search_documents_with_role(user_id, UserRole::User, search_request)
+            .await?
+            .into_iter()
+            .map(|d| d.document)
+            .collect())
+    }
+
+    /// Basic full-text search (simple mode) with role-based access, filters and sorting.
+    /// Defaults to newest first when no sort is given.
+    pub async fn search_documents_with_role(
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+        search_request: &SearchRequest,
+    ) -> Result<Vec<DocumentWithProgress>> {
+        let mut query = QueryBuilder::<Postgres>::new("SELECT ");
+        query.push(DOCUMENT_FIELDS);
+        query.push(OCR_PROGRESS_FIELDS);
+        query.push(" FROM documents");
+        query.push(OCR_PROGRESS_JOIN);
+        query.push(" WHERE 1=1");
+
+        apply_role_based_filter(&mut query, user_id, user_role);
+
+        let search_query = search_request.query.trim();
+        if !search_query.is_empty() {
+            push_search_condition(&mut query, search_query, &SearchMode::Simple);
         }
 
-        // Add MIME type filtering
-        if let Some(ref mime_types) = search_request.mime_types {
-            if !mime_types.is_empty() {
-                query.push(" AND mime_type = ANY(");
-                query.push_bind(mime_types);
-                query.push(")");
-            }
-        }
+        apply_document_filters(&mut query, &search_request.filters());
+        apply_sort(&mut query, search_request.sort_by, search_request.sort_order, false);
 
-        query.push(" ORDER BY created_at DESC");
-        
         let limit = search_request.limit.unwrap_or(25);
         let offset = search_request.offset.unwrap_or(0);
         apply_pagination(&mut query, limit, offset);
 
         let rows = query.build().fetch_all(&self.pool).await?;
-        Ok(rows.iter().map(map_row_to_document).collect())
+        Ok(rows.iter().map(map_row_to_document_with_progress).collect())
     }
 
     /// Enhanced search with snippets and ranking
@@ -56,98 +112,38 @@ impl Database {
         self.enhanced_search_documents_with_role(user_id, UserRole::User, search_request).await
     }
 
-    /// Enhanced search with role-based access control
+    /// Enhanced search with role-based access control, filters and sorting.
+    /// Defaults to relevance order when no sort is given.
     pub async fn enhanced_search_documents_with_role(&self, user_id: Uuid, user_role: UserRole, search_request: &SearchRequest) -> Result<Vec<EnhancedDocumentResponse>> {
         let search_query = search_request.query.trim();
         let include_snippets = search_request.include_snippets.unwrap_or(true);
         let snippet_length = search_request.snippet_length.unwrap_or(200) as usize;
+        let mode = search_request.search_mode.as_ref().unwrap_or(&SearchMode::Simple);
 
         let mut query = QueryBuilder::<Postgres>::new("SELECT ");
         query.push(DOCUMENT_FIELDS);
-        
+        query.push(OCR_PROGRESS_FIELDS);
+
         // Add search ranking if there's a query
         if !search_query.is_empty() {
-            match search_request.search_mode.as_ref().unwrap_or(&SearchMode::Simple) {
-                SearchMode::Simple => {
-                    query.push(", ts_rank(to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, '')), plainto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(")) as search_rank");
-                }
-                SearchMode::Phrase => {
-                    query.push(", ts_rank(to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, '')), phraseto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(")) as search_rank");
-                }
-                SearchMode::Boolean => {
-                    query.push(", ts_rank(to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, '')), to_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(")) as search_rank");
-                }
-                SearchMode::Fuzzy => {
-                    query.push(", similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
-                    query.push_bind(search_query);
-                    query.push(") as search_rank");
-                }
-            }
+            push_search_rank(&mut query, search_query, mode);
         } else {
             query.push(", 0.0 as search_rank");
         }
 
-        query.push(" FROM documents WHERE 1=1");
+        query.push(" FROM documents");
+        query.push(OCR_PROGRESS_JOIN);
+        query.push(" WHERE 1=1");
 
         apply_role_based_filter(&mut query, user_id, user_role);
 
-        // Add search conditions
         if !search_query.is_empty() {
-            match search_request.search_mode.as_ref().unwrap_or(&SearchMode::Simple) {
-                SearchMode::Simple => {
-                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ plainto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ plainto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push("))");
-                }
-                SearchMode::Phrase => {
-                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ phraseto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ phraseto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push("))");
-                }
-                SearchMode::Boolean => {
-                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ to_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ to_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push("))");
-                }
-                SearchMode::Fuzzy => {
-                    query.push(" AND similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
-                    query.push_bind(search_query);
-                    query.push(") > 0.3");
-                }
-            }
+            push_search_condition(&mut query, search_query, mode);
         }
 
-        // Add label filtering (tags param contains label names)
-        if let Some(ref tags) = search_request.tags {
-            if !tags.is_empty() {
-                query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
-                query.push_bind(tags);
-                query.push("))");
-            }
-        }
+        apply_document_filters(&mut query, &search_request.filters());
+        apply_sort(&mut query, search_request.sort_by, search_request.sort_order, !search_query.is_empty());
 
-        if let Some(ref mime_types) = search_request.mime_types {
-            if !mime_types.is_empty() {
-                query.push(" AND mime_type = ANY(");
-                query.push_bind(mime_types);
-                query.push(")");
-            }
-        }
-
-        query.push(" ORDER BY search_rank DESC, created_at DESC");
-        
         let limit = search_request.limit.unwrap_or(25);
         let offset = search_request.offset.unwrap_or(0);
         apply_pagination(&mut query, limit, offset);
@@ -156,34 +152,43 @@ impl Database {
 
         let mut results = Vec::new();
         for row in rows {
-            let document = map_row_to_document(&row);
+            let item = map_row_to_document_with_progress(&row);
             let search_rank: f32 = row.try_get("search_rank").unwrap_or(0.0);
 
             let snippets = if include_snippets && !search_query.is_empty() {
-                self.generate_snippets(&document, search_query, snippet_length).await
+                self.generate_snippets(&item.document, search_query, snippet_length).await
             } else {
                 Vec::new()
             };
 
-            results.push(EnhancedDocumentResponse {
-                id: document.id,
-                filename: document.filename,
-                original_filename: document.original_filename,
-                file_size: document.file_size,
-                mime_type: document.mime_type,
-                tags: document.tags,
-                created_at: document.created_at,
-                has_ocr_text: document.ocr_text.is_some(),
-                ocr_confidence: document.ocr_confidence,
-                ocr_word_count: document.ocr_word_count,
-                ocr_processing_time_ms: document.ocr_processing_time_ms,
-                ocr_status: document.ocr_status,
-                search_rank: Some(search_rank),
+            results.push(EnhancedDocumentResponse::from_document(
+                item.document,
+                Some(search_rank),
                 snippets,
-            });
+                item.ocr_progress_current,
+                item.ocr_progress_total,
+            ));
         }
 
+        self.attach_labels_to_search_results(&mut results).await?;
+
         Ok(results)
+    }
+
+    /// Batch-loads labels onto search results.
+    pub async fn attach_labels_to_search_results(&self, results: &mut [EnhancedDocumentResponse]) -> Result<()> {
+        if results.is_empty() {
+            return Ok(());
+        }
+        let ids: Vec<Uuid> = results.iter().map(|r| r.id).collect();
+        let mut labels: std::collections::HashMap<Uuid, _> =
+            self.get_labels_for_documents(&ids).await?.into_iter().collect();
+        for result in results.iter_mut() {
+            if let Some(doc_labels) = labels.remove(&result.id) {
+                result.labels = doc_labels;
+            }
+        }
+        Ok(())
     }
 
     /// Generates search snippets with highlighted matches
@@ -262,60 +267,17 @@ impl Database {
     /// Counts total matching documents for pagination (without applying LIMIT/OFFSET)
     pub async fn count_search_documents(&self, user_id: Uuid, user_role: UserRole, search_request: &SearchRequest) -> Result<i64> {
         let search_query = search_request.query.trim();
+        let mode = search_request.search_mode.as_ref().unwrap_or(&SearchMode::Simple);
 
         let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM documents WHERE 1=1");
 
         apply_role_based_filter(&mut query, user_id, user_role);
 
-        // Add search conditions (same as enhanced_search_documents_with_role)
         if !search_query.is_empty() {
-            match search_request.search_mode.as_ref().unwrap_or(&SearchMode::Simple) {
-                SearchMode::Simple => {
-                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ plainto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ plainto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push("))");
-                }
-                SearchMode::Phrase => {
-                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ phraseto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ phraseto_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push("))");
-                }
-                SearchMode::Boolean => {
-                    query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ to_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ to_tsquery('english', ");
-                    query.push_bind(search_query);
-                    query.push("))");
-                }
-                SearchMode::Fuzzy => {
-                    query.push(" AND similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
-                    query.push_bind(search_query);
-                    query.push(") > 0.3");
-                }
-            }
+            push_search_condition(&mut query, search_query, mode);
         }
 
-        // Add label filtering (tags param contains label names)
-        if let Some(ref tags) = search_request.tags {
-            if !tags.is_empty() {
-                query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
-                query.push_bind(tags);
-                query.push("))");
-            }
-        }
-
-        // Add MIME type filtering
-        if let Some(ref mime_types) = search_request.mime_types {
-            if !mime_types.is_empty() {
-                query.push(" AND mime_type = ANY(");
-                query.push_bind(mime_types);
-                query.push(")");
-            }
-        }
+        apply_document_filters(&mut query, &search_request.filters());
 
         let row: (i64,) = query.build_query_as().fetch_one(&self.pool).await?;
         Ok(row.0)
