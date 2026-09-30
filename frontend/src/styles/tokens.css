@@ -1,0 +1,85 @@
+/* Design tokens: the only source of colour, type, space, shape and motion. */
+
+:root,
+[data-theme="light"] {
+  --ground: #EEF0F2;
+  --surface: #FFFFFF;
+  --surface-2: #F6F7F8;
+  --line: #D5D9DE;
+  --line-strong: #0B0D10;
+  --fg: #0B0D10;
+  --fg-2: #3B424A;
+  --fg-meta: #5A6169;
+  --signal: #FFD400;
+  --signal-ink: #0B0D10;
+  --danger: #B42318;
+  --danger-bg: #FDECEA;
+  --ok: #1F7A3A;
+  --focus: #0B0D10;
+  --btn-bg: #0B0D10;
+  --btn-fg: #FFFFFF;
+  --shadow-overlay: 0 8px 24px rgba(11, 13, 16, 0.16);
+}
+
+[data-theme="dark"] {
+  --ground: #0B0D10;
+  --surface: #15191E;
+  --surface-2: #1C2127;
+  --line: #262B31;
+  --line-strong: #E8EAED;
+  --fg: #E8EAED;
+  --fg-2: #B5BBC2;
+  --fg-meta: #9AA0A6;
+  --signal: #FFD400;
+  --signal-ink: #0B0D10;
+  --danger: #F97066;
+  --danger-bg: #2A1414;
+  --ok: #4ADE80;
+  --focus: #FFD400;
+  --btn-bg: #E8EAED;
+  --btn-fg: #0B0D10;
+  --shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+:root {
+  /* Type (family names as declared by the @fontsource-variable packages) */
+  --font-ui: "Archivo Variable", system-ui, sans-serif;
+  --font-label: "Archivo Variable", system-ui, sans-serif;
+  --font-data: "Martian Mono Variable", ui-monospace, monospace;
+  --font-label-stretch: 75%;
+  --tracking-label: 0.06em;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 28px;
+  --fs-3xl: 40px;
+  --lh-body: 1.45;
+  --lh-display: 1.1;
+
+  /* Space (4px module) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  /* Shape */
+  --radius: 4px;
+
+  /* Motion */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+  }
+}
