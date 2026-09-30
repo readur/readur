@@ -59,6 +59,8 @@ export const documentService = {
 
 export const sourceErrorService = { listFailures: fn() };
 
+export const labelService = { bulkAssign: fn() };
+
 export const userWatchService = {
   getUserWatchDirectory: fn(),
   createUserWatchDirectory: fn(),
@@ -78,6 +80,7 @@ export const apiModule = {
   documentService,
   sourceErrorService,
   userWatchService,
+  labelService,
 };
 
 export const ignoredFilesModule = { ignoredFilesService };
@@ -107,6 +110,7 @@ export function serveDefaults(): void {
     return ok({});
   });
   api.post.mockImplementation(() => ok({ id: 'doc-new' }));
+  labelService.bulkAssign.mockImplementation(() => ok({}));
   sourcesService.list.mockImplementation(() => ok([]));
   sourcesService.create.mockImplementation(() => ok({ id: 'new' }));
   sourcesService.update.mockImplementation(() => ok({}));

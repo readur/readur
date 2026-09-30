@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FileRejection } from 'react-dropzone';
-import { api } from '../../../services/api';
+import { api, labelService } from '../../../services/api';
 import { useNotifications } from '../../../contexts/NotificationContext';
 import { markLit } from '../../board/litStore';
 import { categoryOf, ErrorCodes, hasCode, serverMessage } from '../shared/errors';
@@ -82,7 +82,6 @@ export function useUploadQueue(getOptions: () => UploadOptions, onUploaded?: (do
     const { labelIds, languages } = getOptions();
     const form = new FormData();
     form.append('file', item.file);
-    if (labelIds.length > 0) form.append('label_ids', JSON.stringify(labelIds));
     languages.forEach((lang, i) => form.append(`ocr_languages[${i}]`, lang));
 
     patch(item.id, { status: 'uploading', progress: 0, error: null });
@@ -98,6 +97,14 @@ export function useUploadQueue(getOptions: () => UploadOptions, onUploaded?: (do
       if (documentId) {
         markLit('document', documentId, 'new');
         onUploaded?.(documentId);
+        // The upload endpoint does not take labels; add them to the new document.
+        if (labelIds.length > 0) {
+          try {
+            await labelService.bulkAssign([documentId], labelIds, 'add');
+          } catch {
+            patch(item.id, { error: t('intake.upload.errors.labels', 'Uploaded, but the labels could not be added.') });
+          }
+        }
       }
       return 'ok';
     } catch (error) {

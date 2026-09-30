@@ -7,7 +7,7 @@ vi.mock('../../../services/api', async () => (await import('./intakeMocks')).api
 import { UploadSection } from '../upload/UploadSection';
 import { ACCEPTED_EXTENSIONS, MAX_FILE_SIZE } from '../upload/uploadConfig';
 import { isLit } from '../../board/litStore';
-import { api, apiError, ok, serveDefaults } from './intakeMocks';
+import { api, apiError, labelService, ok, serveDefaults } from './intakeMocks';
 import { renderIntake, resetIntakeState, settle } from './intakeTestUtils';
 
 const pdf = (name = 'invoice.pdf', size = 2048) => {
@@ -124,6 +124,48 @@ describe('Add documents: upload board', () => {
     expect(url).toBe('/documents');
     expect((form as FormData).get('ocr_languages[0]')).toBe('eng');
     expect((form as FormData).get('file')).toBeInstanceOf(File);
+  });
+
+  it('adds the chosen labels to each uploaded document', async () => {
+    const finance = { id: 'lbl-1', name: 'Finance', color: '#0969da', is_system: false, created_at: '', updated_at: '', document_count: 0, source_count: 0 };
+    api.get.mockImplementation((url: string) => (url.startsWith('/labels') ? ok([finance]) : ok({})));
+    api.post.mockImplementation(() => ok({ id: 'doc-l' }));
+    const user = userEvent.setup();
+    renderIntake(<UploadSection />);
+    await settle();
+    await user.click(screen.getByRole('combobox', { name: 'Labels' }));
+    await user.click(await screen.findByRole('option', { name: /Finance/ }));
+    const grid = await addFiles(user, [pdf('a.pdf')]);
+    await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
+    await waitFor(() => expect(labelService.bulkAssign).toHaveBeenCalledWith(['doc-l'], ['lbl-1'], 'add'));
+    expect(within(grid).getByRole('row', { name: /a\.pdf/ })).not.toHaveTextContent('labels could not be added');
+  });
+
+  it('says so when the upload worked but its labels could not be added', async () => {
+    const finance = { id: 'lbl-1', name: 'Finance', color: '#0969da', is_system: false, created_at: '', updated_at: '', document_count: 0, source_count: 0 };
+    api.get.mockImplementation((url: string) => (url.startsWith('/labels') ? ok([finance]) : ok({})));
+    api.post.mockImplementation(() => ok({ id: 'doc-l' }));
+    labelService.bulkAssign.mockImplementation(() => Promise.reject(apiError(500)));
+    const user = userEvent.setup();
+    renderIntake(<UploadSection />);
+    await settle();
+    await user.click(screen.getByRole('combobox', { name: 'Labels' }));
+    await user.click(await screen.findByRole('option', { name: /Finance/ }));
+    const grid = await addFiles(user, [pdf('a.pdf')]);
+    await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
+    const row = within(grid).getByRole('row', { name: /a\.pdf/ });
+    await waitFor(() => expect(row).toHaveTextContent('Uploaded, but the labels could not be added.'));
+    expect(isLit('document', 'doc-l')).toBe(true);
+  });
+
+  it('does not touch labels when none are chosen', async () => {
+    const user = userEvent.setup();
+    renderIntake(<UploadSection />);
+    await settle();
+    await addFiles(user, [pdf('a.pdf')]);
+    await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
+    await waitFor(() => expect(isLit('document', 'doc-new')).toBe(true));
+    expect(labelService.bulkAssign).not.toHaveBeenCalled();
   });
 
   it('shows a per-row error with Retry, and retrying succeeds', async () => {
