@@ -74,7 +74,18 @@
   white-space: nowrap;
 }
 
-.truncate:focus-visible {
+.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--clamp-lines, 2);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.truncate:focus-visible,
+.clamp:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }

@@ -11,6 +11,7 @@
 
 .titles {
   display: flex;
+  max-width: 100%;
   flex-direction: column;
   gap: var(--s-1);
   min-width: 0;
@@ -54,7 +55,10 @@
   letter-spacing: -0.005em;
   text-transform: uppercase;
   color: var(--fg);
+  min-width: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .meta {

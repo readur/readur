@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Tooltip, TooltipTrigger } from '../Tooltip';
 import { cx } from '../shared/FieldParts';
 import styles from './Pass.module.css';
@@ -6,6 +6,8 @@ import styles from './Pass.module.css';
 export interface TruncatedTextProps {
   children: ReactNode;
   className?: string;
+  /** Wrap onto at most this many lines before the ellipsis (default: a single line). */
+  lines?: number;
 }
 
 function textOf(node: ReactNode): string | null {
@@ -18,7 +20,7 @@ function textOf(node: ReactNode): string | null {
  * whole); when it is visually cut off the span becomes focusable and hovering or focusing it
  * shows the full value in a Tooltip.
  */
-export function TruncatedText({ children, className }: TruncatedTextProps) {
+export function TruncatedText({ children, className, lines = 1 }: TruncatedTextProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const [truncated, setTruncated] = useState(false);
   const [open, setOpen] = useState(false);
@@ -27,13 +29,14 @@ export function TruncatedText({ children, className }: TruncatedTextProps) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || full === null) return undefined;
-    const check = () => setTruncated(el.scrollWidth > el.clientWidth + 1);
+    const check = () =>
+      setTruncated(lines > 1 ? el.scrollHeight > el.clientHeight + 1 : el.scrollWidth > el.clientWidth + 1);
     check();
     if (typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(check);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [full]);
+  }, [full, lines]);
 
   const canTip = truncated && full !== null;
   const show = () => canTip && setOpen(true);
@@ -42,7 +45,9 @@ export function TruncatedText({ children, className }: TruncatedTextProps) {
   const text = (
     <span
       ref={ref}
-      className={cx(styles.truncate, className)}
+      className={cx(lines > 1 ? styles.clamp : styles.truncate, className)}
+      style={lines > 1 ? ({ '--clamp-lines': lines } as CSSProperties) : undefined}
+      title={full ?? undefined}
       tabIndex={canTip ? 0 : undefined}
       onMouseEnter={show}
       onMouseLeave={hide}

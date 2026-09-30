@@ -59,7 +59,7 @@ export function DocumentHeader({
       </nav>
       <PageHeader
         className={styles.pageHeader}
-        title={<TruncatedText className={styles.title}>{doc.original_filename}</TruncatedText>}
+        title={<TruncatedText lines={2} className={styles.title}>{doc.original_filename}</TruncatedText>}
         actions={
           <>
             {failed ? (

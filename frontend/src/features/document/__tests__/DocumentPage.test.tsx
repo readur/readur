@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,6 +59,17 @@ describe('document page: header', () => {
     expect(await title()).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(acknowledge).toHaveBeenCalledWith('document', 'doc-1');
+  });
+
+  it('keeps the full filename in the title attribute and clamps the h1 to two lines', async () => {
+    load();
+    renderPage();
+    const h1 = await title();
+    expect(h1.querySelector('[title="invoice.pdf"]')).not.toBeNull();
+    const css = readFileSync(resolve(__dirname, '../../../ui/Pass/Pass.module.css'), 'utf8');
+    expect(css).toMatch(/\.clamp\s*\{[^}]*-webkit-line-clamp:\s*var\(--clamp-lines, 2\)[^}]*overflow-wrap:\s*anywhere/s);
+    const header = readFileSync(resolve(__dirname, '../../shell/PageHeader.module.css'), 'utf8');
+    expect(header).toMatch(/\.title\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   });
 
   it('links the breadcrumb back to the Library', async () => {
