@@ -112,6 +112,33 @@ interface SnackbarState {
   severity: 'success' | 'error' | 'warning' | 'info';
 }
 
+const createDefaultSourceForm = () => ({
+  name: '',
+  source_type: 'webdav' as 'webdav' | 'local_folder' | 's3',
+  enabled: true,
+  // WebDAV fields
+  server_url: '',
+  username: '',
+  password: '',
+  server_type: 'generic' as 'nextcloud' | 'owncloud' | 'generic',
+  // Local Folder fields
+  recursive: true,
+  follow_symlinks: false,
+  // S3 fields
+  bucket_name: '',
+  region: 'us-east-1',
+  access_key_id: '',
+  secret_access_key: '',
+  endpoint_url: '',
+  force_path_style: 'auto' as 'auto' | 'path' | 'vhost',
+  prefix: '',
+  // Common fields
+  watch_folders: ['/Documents'],
+  file_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
+  auto_sync: false,
+  sync_interval_minutes: 60,
+});
+
 const SourcesPage: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -133,32 +160,7 @@ const SourcesPage: React.FC = () => {
   });
 
   // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    source_type: 'webdav' as 'webdav' | 'local_folder' | 's3',
-    enabled: true,
-    // WebDAV fields
-    server_url: '',
-    username: '',
-    password: '',
-    server_type: 'generic' as 'nextcloud' | 'owncloud' | 'generic',
-    // Local Folder fields
-    recursive: true,
-    follow_symlinks: false,
-    // S3 fields
-    bucket_name: '',
-    region: 'us-east-1',
-    access_key_id: '',
-    secret_access_key: '',
-    endpoint_url: '',
-    force_path_style: 'auto' as 'auto' | 'path' | 'vhost',
-    prefix: '',
-    // Common fields
-    watch_folders: ['/Documents'],
-    file_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
-    auto_sync: false,
-    sync_interval_minutes: 60,
-  });
+  const [formData, setFormData] = useState(createDefaultSourceForm);
 
   // Additional state for enhanced features
   const [newFolder, setNewFolder] = useState('');
@@ -446,32 +448,7 @@ const SourcesPage: React.FC = () => {
 
   const handleCreateSource = () => {
     setEditingSource(null);
-    setFormData({
-      name: '',
-      source_type: 'webdav',
-      enabled: true,
-      // WebDAV fields
-      server_url: '',
-      username: '',
-      password: '',
-      server_type: 'generic',
-      // Local Folder fields
-      recursive: true,
-      follow_symlinks: false,
-      // S3 fields
-      bucket_name: '',
-      region: 'us-east-1',
-      access_key_id: '',
-      secret_access_key: '',
-      endpoint_url: '',
-      force_path_style: 'auto',
-      prefix: '',
-      // Common fields
-      watch_folders: ['/Documents'],
-      file_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
-      auto_sync: false,
-      sync_interval_minutes: 60,
-    });
+    setFormData(createDefaultSourceForm());
     setCrawlEstimate(null);
     setNewFolder('');
     setNewExtension('');

@@ -39,15 +39,17 @@ import {
 import Grid from '@mui/material/GridLegacy';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon, 
          CloudSync as CloudSyncIcon, Folder as FolderIcon,
-         Assessment as AssessmentIcon, PlayArrow as PlayArrowIcon,
-         Pause as PauseIcon, Stop as StopIcon, CheckCircle as CheckCircleIcon,
+         Assessment as AssessmentIcon,
+         CheckCircle as CheckCircleIcon,
          Error as ErrorIcon, Visibility as VisibilityIcon, CreateNewFolder as CreateNewFolderIcon,
          RemoveCircle as RemoveCircleIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { useAuth, isAdmin as isAdminUser } from '../contexts/AuthContext';
 import ChangePasswordForm from '../components/Auth/ChangePasswordForm';
 import RequireAdmin from '../components/Auth/RequireAdmin';
+import OcrQueueControls from '../components/Settings/OcrQueueControls';
+import UserStatusCell from '../components/Settings/UserStatusCell';
 import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
-import api, { queueService, ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
+import api, { ErrorHelper, ErrorCodes, userWatchService, UserWatchDirectoryResponse } from '../services/api';
 import OcrLanguageSelector from '../components/OcrLanguageSelector';
 import LanguageSelector from '../components/LanguageSelector';
 import ApiKeysManager from '../components/ApiKeys/ApiKeysManager';
@@ -278,10 +280,6 @@ const SettingsPage: React.FC = () => {
     password: '' 
   });
   
-  // OCR Admin Controls State
-  const [ocrStatus, setOcrStatus] = useState<{ is_paused: boolean; status: 'paused' | 'running' } | null>(null);
-  const [ocrActionLoading, setOcrActionLoading] = useState(false);
-  
   // Server Configuration State
   const [serverConfig, setServerConfig] = useState<ServerConfiguration | null>(null);
   const [configLoading, setConfigLoading] = useState(false);
@@ -307,7 +305,6 @@ const SettingsPage: React.FC = () => {
     // User management, OCR queue controls and server configuration are admin-only.
     if (isAdmin) {
       fetchUsers();
-      fetchOcrStatus();
       fetchServerConfiguration();
     }
   }, [isAdmin]);
@@ -574,52 +571,6 @@ const SettingsPage: React.FC = () => {
     Object.entries(updates).forEach(([key, value]) => {
       handleSettingsChange(key as keyof Settings, value);
     });
-  };
-
-  const fetchOcrStatus = async (): Promise<void> => {
-    try {
-      const response = await queueService.getOcrStatus();
-      setOcrStatus(response.data);
-    } catch (error: any) {
-      console.error('Error fetching OCR status:', error);
-      // Don't show error for OCR status since it might not be available for non-admin users
-    }
-  };
-
-  const handlePauseOcr = async (): Promise<void> => {
-    setOcrActionLoading(true);
-    try {
-      await queueService.pauseOcr();
-      showSnackbar(t('settings.messages.ocrPaused'), 'success');
-      fetchOcrStatus(); // Refresh status
-    } catch (error: any) {
-      console.error('Error pausing OCR:', error);
-      if (error.response?.status === 403) {
-        showSnackbar(t('settings.messages.ocrPauseFailed'), 'error');
-      } else {
-        showSnackbar(t('settings.messages.ocrPauseFailedGeneric'), 'error');
-      }
-    } finally {
-      setOcrActionLoading(false);
-    }
-  };
-
-  const handleResumeOcr = async (): Promise<void> => {
-    setOcrActionLoading(true);
-    try {
-      await queueService.resumeOcr();
-      showSnackbar(t('settings.messages.ocrResumed'), 'success');
-      fetchOcrStatus(); // Refresh status
-    } catch (error: any) {
-      console.error('Error resuming OCR:', error);
-      if (error.response?.status === 403) {
-        showSnackbar(t('settings.messages.ocrResumeFailed'), 'error');
-      } else {
-        showSnackbar(t('settings.messages.ocrResumeFailedGeneric'), 'error');
-      }
-    } finally {
-      setOcrActionLoading(false);
-    }
   };
 
   const fetchServerConfiguration = async (): Promise<void> => {
@@ -1017,66 +968,7 @@ const SettingsPage: React.FC = () => {
 
               {/* Admin OCR Controls */}
               {isAdmin && (
-              <Card sx={{ mb: 3 }}>
-                <CardContent>
-                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                    <StopIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    {t('settings.general.ocrControls.title')}
-                  </Typography>
-                  <Divider sx={{ mb: 2 }} />
-
-                  <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                    {t('settings.general.ocrControls.description')}
-                  </Typography>
-
-                  <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} md={6}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Button
-                          variant={ocrStatus?.is_paused ? "outlined" : "contained"}
-                          color={ocrStatus?.is_paused ? "success" : "warning"}
-                          startIcon={ocrActionLoading ? <CircularProgress size={16} /> :
-                                   (ocrStatus?.is_paused ? <PlayArrowIcon /> : <PauseIcon />)}
-                          onClick={ocrStatus?.is_paused ? handleResumeOcr : handlePauseOcr}
-                          disabled={ocrActionLoading || loading}
-                          size="large"
-                        >
-                          {ocrActionLoading ? t('common.status.processing') :
-                           ocrStatus?.is_paused ? t('settings.general.ocrControls.resumeOcr') : t('settings.general.ocrControls.pauseOcr')}
-                        </Button>
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12} md={6}>
-                      {ocrStatus && (
-                        <Box>
-                          <Chip
-                            label={t('settings.general.ocrControls.ocrStatusLabel', { status: ocrStatus.status.toUpperCase() })}
-                            color={ocrStatus.is_paused ? "warning" : "success"}
-                            variant="outlined"
-                            icon={ocrStatus.is_paused ? <PauseIcon /> : <PlayArrowIcon />}
-                            size="medium"
-                          />
-                          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
-                            {ocrStatus.is_paused
-                              ? t('settings.general.ocrControls.ocrPausedMessage')
-                              : t('settings.general.ocrControls.ocrActiveMessage')}
-                          </Typography>
-                        </Box>
-                      )}
-                    </Grid>
-                  </Grid>
-
-                  {ocrStatus?.is_paused && (
-                    <Alert severity="warning" sx={{ mt: 2 }}>
-                      <Typography variant="body2">
-                        <strong>{t('settings.general.ocrControls.pausedAlertTitle')}</strong><br />
-                        {t('settings.general.ocrControls.pausedAlertMessage')}
-                      </Typography>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
+                <OcrQueueControls disabled={loading} onMessage={showSnackbar} />
               )}
 
               <Card sx={{ mb: 3 }}>
@@ -1599,49 +1491,12 @@ const SettingsPage: React.FC = () => {
                           {new Date(user.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Tooltip
-                              title={
-                                user.id === currentUser?.id
-                                  ? t('settings.userManagement.cannotDeactivateSelf', 'You cannot deactivate your own account')
-                                  : user.is_active === false
-                                    ? t('settings.userManagement.enableUser', 'Enable account')
-                                    : t('settings.userManagement.disableUser', 'Disable account')
-                              }
-                            >
-                              <span>
-                                <Switch
-                                  size="small"
-                                  checked={user.is_active !== false}
-                                  onChange={(e) => handleSetUserActive(user, e.target.checked)}
-                                  disabled={loading || user.id === currentUser?.id}
-                                  inputProps={{
-                                    'aria-label': t('settings.userManagement.activeToggleLabel', {
-                                      username: user.username,
-                                      defaultValue: 'Account active for {{username}}',
-                                    }),
-                                  }}
-                                />
-                              </span>
-                            </Tooltip>
-                            {user.is_active === false ? (
-                              <Chip
-                                size="small"
-                                color="warning"
-                                label={t('settings.userManagement.statusPending', 'Disabled / pending approval')}
-                              />
-                            ) : (
-                              <Chip
-                                size="small"
-                                color="success"
-                                variant="outlined"
-                                label={t('settings.userManagement.statusActive', 'Active')}
-                              />
-                            )}
-                            {user.role === 'admin' && (
-                              <Chip size="small" variant="outlined" label={t('settings.userManagement.roleAdmin', 'Admin')} />
-                            )}
-                          </Box>
+                          <UserStatusCell
+                            user={user}
+                            isSelf={user.id === currentUser?.id}
+                            disabled={loading}
+                            onChange={(active) => handleSetUserActive(user, active)}
+                          />
                         </TableCell>
                         {perUserWatchEnabled && (
                           <TableCell>

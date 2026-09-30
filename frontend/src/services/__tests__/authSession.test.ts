@@ -1,6 +1,6 @@
-import { describe, test, expect, vi, afterEach } from 'vitest';
-import { api } from '../api';
-import { AUTH_LOGOUT_EVENT, shouldResetSessionOn401 } from '../authEvents';
+import { describe, test, expect, vi } from 'vitest';
+import axios from 'axios';
+import { AUTH_LOGOUT_EVENT, installSessionInterceptor, shouldResetSessionOn401 } from '../authEvents';
 import { isSafeInlineMime, previewSandbox } from '../contentSafety';
 
 describe('shouldResetSessionOn401', () => {
@@ -16,24 +16,21 @@ describe('shouldResetSessionOn401', () => {
   });
 });
 
-describe('api 401 handling', () => {
-  const originalAdapter = api.defaults.adapter;
-
-  afterEach(() => {
-    api.defaults.adapter = originalAdapter;
-  });
-
-  const rejectWith401 = () => {
+describe('session interceptor', () => {
+  const createApi = () => {
+    const api = axios.create({ baseURL: '/api' });
+    installSessionInterceptor(api);
     api.defaults.adapter = (config: any) =>
       Promise.reject({
         config,
         isAxiosError: true,
         response: { status: 401, data: { error: 'Unauthorized' }, headers: {}, config },
       });
+    return api;
   };
 
   test('clears the session when an authenticated request is rejected', async () => {
-    rejectWith401();
+    const api = createApi();
     const listener = vi.fn();
     window.addEventListener(AUTH_LOGOUT_EVENT, listener);
 
@@ -47,7 +44,7 @@ describe('api 401 handling', () => {
   });
 
   test('does not clear the session on a failed login', async () => {
-    rejectWith401();
+    const api = createApi();
     const listener = vi.fn();
     window.addEventListener(AUTH_LOGOUT_EVENT, listener);
 

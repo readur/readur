@@ -45,6 +45,7 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { api, documentService } from '../services/api';
+import { openDocumentInNewTabSafely } from '../services/documentTabs';
 import DocumentViewer from '../components/DocumentViewer';
 import AuthenticatedImage from '../components/AuthenticatedImage';
 
@@ -647,11 +648,7 @@ const DebugPage: React.FC = () => {
                 <Button
                   variant="outlined"
                   size="small"
-                  onClick={() => {
-                    documentService.openInNewTab(uploadedDocumentId).catch((err) => {
-                      console.error('Failed to open document:', err);
-                    });
-                  }}
+                  onClick={() => openDocumentInNewTabSafely(uploadedDocumentId)}
                   startIcon={<PreviewIcon />}
                 >
                   {t('debug.actions.viewDocument')}

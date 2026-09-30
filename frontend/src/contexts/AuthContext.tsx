@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api } from '../services/api'
-import { AUTH_LOGOUT_EVENT } from '../services/authEvents'
+import { AUTH_LOGOUT_EVENT, installSessionInterceptor } from '../services/authEvents'
+
+// Reset the session whenever an authenticated API request is rejected with 401.
+installSessionInterceptor(api)
 
 export type UserRole = 'admin' | 'user'
 
