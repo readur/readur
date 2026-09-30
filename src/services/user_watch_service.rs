@@ -76,24 +76,27 @@ impl UserWatchService {
 
     /// Resolve the watch directory for `username`, refusing names that are
     /// not valid directory names or that would resolve outside `base_dir`.
-    fn resolve_user_directory(&self, username: &str) -> Result<PathBuf> {
+    /// The filesystem checks run on the blocking thread pool.
+    async fn resolve_user_directory(&self, username: &str) -> Result<PathBuf> {
         Self::validate_username(username)?;
+        let base_dir = self.base_dir.clone();
         let user_dir = self.base_dir.join(username);
+        tokio::task::spawn_blocking(move || confine_to_base(&base_dir, user_dir)).await?
+    }
 
-        // A lexical check is not enough if the entry is a symlink, so compare
-        // canonical paths whenever the directory already exists.
-        if user_dir.exists() {
-            let base_canonical = self.base_dir.canonicalize()?;
-            let dir_canonical = user_dir.canonicalize()?;
-            if !dir_canonical.starts_with(&base_canonical) || dir_canonical == base_canonical {
-                return Err(anyhow::anyhow!(
-                    "User watch directory '{}' resolves outside the watch base directory",
-                    user_dir.display()
-                ));
-            }
+    /// The cached directory for `user_id`, if it is still the expected path
+    /// and still a real directory (not replaced by a symlink or removed).
+    async fn cached_directory(&self, user_id: Uuid, expected: &Path) -> Option<PathBuf> {
+        let cached = self.user_directories.read().await.get(&user_id).cloned()?;
+        if cached != expected {
+            return None;
         }
-
-        Ok(user_dir)
+        if is_plain_directory(&cached).await {
+            Some(cached)
+        } else {
+            warn!("Cached user watch directory is no longer usable: {}", cached.display());
+            None
+        }
     }
 
     /// Initialize the service by creating the base directory and discovering existing user directories
@@ -163,28 +166,24 @@ impl UserWatchService {
     /// # Returns
     /// * PathBuf to the user's watch directory
     pub async fn ensure_user_directory(&self, user: &User) -> Result<PathBuf> {
-        // Validate username and confine the path to base_dir
-        let user_dir = self.resolve_user_directory(&user.username)?;
-        // Check cache first (read lock)
-        {
-            let cache = self.user_directories.read().await;
-            if let Some(path) = cache.get(&user.id) {
-                if path.exists() {
-                    debug!("User watch directory found in cache: {}", path.display());
-                    return Ok(path.clone());
-                } else {
-                    warn!("Cached user watch directory no longer exists: {}", path.display());
-                }
-            }
+        // The username check is cheap and always applies; the filesystem
+        // confinement checks only run when the cache cannot answer.
+        Self::validate_username(&user.username)?;
+        let expected = self.base_dir.join(&user.username);
+        if let Some(path) = self.cached_directory(user.id, &expected).await {
+            debug!("User watch directory found in cache: {}", path.display());
+            return Ok(path);
         }
 
-        // Not in cache or doesn't exist, create it (write lock)
+        let user_dir = self.resolve_user_directory(&user.username).await?;
+
+        // Not in cache or no longer usable: create it (write lock)
         let mut cache = self.user_directories.write().await;
-        
-        // Double-check in case another thread created it while we were waiting for the write lock
+
+        // Double-check in case another task created it while we were waiting for the write lock
         if let Some(path) = cache.get(&user.id) {
-            if path.exists() {
-                debug!("User watch directory created by another thread: {}", path.display());
+            if *path == user_dir && is_plain_directory(path).await {
+                debug!("User watch directory created by another task: {}", path.display());
                 return Ok(path.clone());
             }
         }
@@ -199,7 +198,7 @@ impl UserWatchService {
                 {
                     use std::os::unix::fs::PermissionsExt;
                     let permissions = std::fs::Permissions::from_mode(0o755);
-                    if let Err(e) = std::fs::set_permissions(&user_dir, permissions) {
+                    if let Err(e) = tokio::fs::set_permissions(&user_dir, permissions).await {
                         warn!("Failed to set permissions on user watch directory '{}': {}", 
                               user_dir.display(), e);
                         // Don't fail the operation for permission issues
@@ -208,7 +207,7 @@ impl UserWatchService {
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 // Directory already exists, check if it's actually a directory
-                if !user_dir.is_dir() {
+                if !tokio::fs::metadata(&user_dir).await.is_ok_and(|m| m.is_dir()) {
                     return Err(anyhow::anyhow!(
                         "User watch path '{}' exists but is not a directory", 
                         user_dir.display()
@@ -238,8 +237,8 @@ impl UserWatchService {
     /// # Returns
     /// * Option<PathBuf> to the user's watch directory if it exists
     pub async fn get_user_directory(&self, user_id: Uuid) -> Option<PathBuf> {
-        let cache = self.user_directories.read().await;
-        cache.get(&user_id).filter(|path| path.exists()).cloned()
+        let cached = self.user_directories.read().await.get(&user_id).cloned()?;
+        tokio::fs::try_exists(&cached).await.unwrap_or(false).then_some(cached)
     }
 
     /// Get the watch directory path for a user by username
@@ -317,27 +316,22 @@ impl UserWatchService {
     /// # Returns
     /// * Result indicating success or failure
     pub async fn remove_user_directory(&self, user: &User) -> Result<()> {
-        info!("Removing user watch directory for {}", user.username);
-
-        let user_dir = self.resolve_user_directory(&user.username)?;
-
-        if user_dir.exists() {
-            // Remove directory and all contents
-            tokio::fs::remove_dir_all(&user_dir).await
-                .map_err(|e| anyhow::anyhow!(
-                    "Failed to remove user watch directory for '{}' at '{}': {}", 
-                    user.username, user_dir.display(), e
-                ))?;
-            
+        let user_dir = self.resolve_user_directory(&user.username).await?;
+        let removed = remove_dir_if_present(&user_dir).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to remove user watch directory for '{}' at '{}': {}",
+                user.username,
+                user_dir.display(),
+                e
+            )
+        })?;
+        if removed {
             info!("Successfully removed user watch directory for {}", user.username);
         } else {
             debug!("User watch directory for {} did not exist", user.username);
         }
 
-        // Remove from cache
-        let mut cache = self.user_directories.write().await;
-        cache.remove(&user.id);
-        
+        self.user_directories.write().await.remove(&user.id);
         Ok(())
     }
 
@@ -389,6 +383,37 @@ impl UserWatchService {
         cache.clear();
         debug!("User watch directory cache cleared");
     }
+}
+
+/// Refuse `user_dir` if it resolves outside `base_dir` (or to it). A lexical
+/// check is not enough if the entry is a symlink, so canonical paths are
+/// compared whenever the directory already exists. Blocking.
+fn confine_to_base(base_dir: &Path, user_dir: PathBuf) -> Result<PathBuf> {
+    if user_dir.exists() {
+        let base_canonical = base_dir.canonicalize()?;
+        let dir_canonical = user_dir.canonicalize()?;
+        if !dir_canonical.starts_with(&base_canonical) || dir_canonical == base_canonical {
+            return Err(anyhow::anyhow!(
+                "User watch directory '{}' resolves outside the watch base directory",
+                user_dir.display()
+            ));
+        }
+    }
+    Ok(user_dir)
+}
+
+/// Remove `path` and its contents; `Ok(false)` if it did not exist.
+async fn remove_dir_if_present(path: &Path) -> std::io::Result<bool> {
+    match tokio::fs::remove_dir_all(path).await {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// A directory that is not a symlink.
+async fn is_plain_directory(path: &Path) -> bool {
+    tokio::fs::symlink_metadata(path).await.is_ok_and(|m| m.is_dir())
 }
 
 #[cfg(test)]
@@ -470,6 +495,44 @@ mod tests {
 
         service.remove_user_directory(&user).await.unwrap();
         assert!(!user_dir.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_symlinked_user_directory_is_refused_even_after_caching() {
+        let temp_dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let service = UserWatchService::new(temp_dir.path());
+        service.initialize().await.unwrap();
+
+        // A symlink that escapes the base directory is refused.
+        let escaper = create_test_user("escaper");
+        std::os::unix::fs::symlink(outside.path(), temp_dir.path().join("escaper")).unwrap();
+        assert!(service.ensure_user_directory(&escaper).await.is_err());
+
+        // A cached directory later replaced by a symlink is re-checked.
+        let user = create_test_user("cached");
+        let user_dir = service.ensure_user_directory(&user).await.unwrap();
+        assert_eq!(service.ensure_user_directory(&user).await.unwrap(), user_dir);
+        std::fs::remove_dir(&user_dir).unwrap();
+        std::os::unix::fs::symlink(outside.path(), &user_dir).unwrap();
+        assert!(service.ensure_user_directory(&user).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_cached_directory_follows_username_changes() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = UserWatchService::new(temp_dir.path());
+        service.initialize().await.unwrap();
+
+        let mut user = create_test_user("before");
+        service.ensure_user_directory(&user).await.unwrap();
+        user.username = "after".to_string();
+        let renamed = service.ensure_user_directory(&user).await.unwrap();
+        assert_eq!(renamed.file_name().unwrap(), "after");
+
+        user.username = "../escape".to_string();
+        assert!(service.ensure_user_directory(&user).await.is_err());
     }
 
     #[tokio::test]
