@@ -1,0 +1,135 @@
+import { describe, test, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { HighlightedText, bestSnippet, matchRanges } from '../Highlight';
+import { NO_MIME_MATCH, groupOf, mimeTypesFor, shortType } from '../mime';
+import { DEFAULT_SIZE, parseQuery, toParams, type LibraryQuery } from '../urlState';
+import { formatBytes, formatRelative } from '../format';
+
+const parse = (qs: string) => parseQuery(new URLSearchParams(qs));
+
+describe('URL state', () => {
+  test('defaults: newest first, 50 per page, page 1', () => {
+    const q = parse('');
+    expect(q).toMatchObject({ q: '', sort: 'created_at', order: 'desc', sortExplicit: false, page: 1, size: DEFAULT_SIZE });
+  });
+
+  test('reads every parameter', () => {
+    const q = parse('q=tax&sort=file_size&order=asc&type=pdf,image&labels=a,b&status=failed&source=s1,s2&from=2026-01-01&to=2026-02-01&page=3&size=100&mode=fuzzy');
+    expect(q).toEqual({
+      q: 'tax',
+      sort: 'file_size',
+      order: 'asc',
+      sortExplicit: true,
+      types: ['pdf', 'image'],
+      labels: ['a', 'b'],
+      status: 'failed',
+      sources: ['s1', 's2'],
+      from: '2026-01-01',
+      to: '2026-02-01',
+      page: 3,
+      size: 100,
+      mode: 'fuzzy',
+    });
+  });
+
+  test('drops values it does not know', () => {
+    const q = parse('sort=x&order=y&type=pdf,zip&status=weird&from=yesterday&page=-2&size=7&mode=regex');
+    expect(q).toMatchObject({ sort: 'created_at', order: 'desc', sortExplicit: false, types: ['pdf'], status: null, from: null, page: 1, size: 50, mode: null });
+  });
+
+  test('round-trips through the URL, leaving defaults out', () => {
+    const qs = 'q=tax&sort=filename&order=asc&type=office&labels=a&status=pending&source=uploaded&from=2026-01-01&to=2026-01-31&mode=phrase&page=2&size=25';
+    expect(toParams(parse(qs)).toString()).toBe(qs);
+    expect(toParams(parse('')).toString()).toBe('');
+    expect(toParams({ ...parse(''), mode: 'simple' } as LibraryQuery).toString()).toBe('');
+  });
+});
+
+describe('file types', () => {
+  test.each([
+    ['application/pdf', 'pdf'],
+    ['image/tiff', 'image'],
+    ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'office'],
+    ['application/msword', 'office'],
+    ['text/csv', 'text'],
+    ['application/zip', 'other'],
+  ])('%s is in the %s group', (mime, group) => {
+    expect(groupOf(mime)).toBe(group);
+  });
+
+  test('expands groups using the types present in the library', () => {
+    expect(mimeTypesFor(['image'], ['application/pdf', 'image/png', 'image/jpeg'])).toEqual(['image/png', 'image/jpeg']);
+    expect(mimeTypesFor(['other'], ['application/pdf', 'application/zip'])).toEqual(['application/zip']);
+  });
+
+  test('falls back to common types without facets', () => {
+    expect(mimeTypesFor(['pdf'], null)).toEqual(['application/pdf']);
+  });
+
+  test('matches nothing when a group has no types', () => {
+    expect(mimeTypesFor(['other'], ['application/pdf'])).toEqual([NO_MIME_MATCH]);
+    expect(mimeTypesFor([], ['application/pdf'])).toEqual([]);
+  });
+
+  test.each([
+    ['application/pdf', 'PDF'],
+    ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'DOCX'],
+    ['image/heic', 'HEIC'],
+    ['application/x-custom-format', 'FORMAT'],
+    [null, '—'],
+  ])('short type for %s is %s', (mime, short) => {
+    expect(shortType(mime)).toBe(short);
+  });
+});
+
+describe('highlighting', () => {
+  test('wraps the ranges in <mark>', () => {
+    const { container } = render(<HighlightedText text="Invoice total due" ranges={[{ start: 0, end: 7 }, { start: 8, end: 13 }]} />);
+    expect(Array.from(container.querySelectorAll('mark')).map((m) => m.textContent)).toEqual(['Invoice', 'total']);
+    expect(container).toHaveTextContent('Invoice total due');
+  });
+
+  test('tidies overlapping and out-of-range ranges', () => {
+    const { container } = render(<HighlightedText text="abcdef" ranges={[{ start: 2, end: 4 }, { start: 1, end: 3 }, { start: 5, end: 99 }, { start: 4, end: 4 }]} />);
+    expect(Array.from(container.querySelectorAll('mark')).map((m) => m.textContent)).toEqual(['bc', 'd', 'f']);
+    expect(container).toHaveTextContent('abcdef');
+  });
+
+  test('renders plain text without ranges', () => {
+    render(<HighlightedText text="plain" ranges={[]} />);
+    expect(screen.getByText('plain')).toBeInTheDocument();
+  });
+
+  test('picks the snippet with the most matches', () => {
+    const a = { text: 'a', start_offset: 0, end_offset: 1, highlight_ranges: [{ start: 0, end: 1 }] };
+    const b = { text: 'b', start_offset: 0, end_offset: 1, highlight_ranges: [{ start: 0, end: 1 }, { start: 0, end: 1 }] };
+    expect(bestSnippet([a, b])).toBe(b);
+    expect(bestSnippet([])).toBeNull();
+    expect(bestSnippet(undefined)).toBeNull();
+  });
+
+  test('finds query words in text, ignoring case and operators', () => {
+    expect(matchRanges('Total due. TOTAL paid.', 'total & !draft')).toEqual([
+      { start: 0, end: 5 },
+      { start: 11, end: 16 },
+    ]);
+    expect(matchRanges('anything', '')).toEqual([]);
+    expect(matchRanges('and or not', 'and or not')).toEqual([]);
+  });
+});
+
+describe('formatting', () => {
+  test('sizes', () => {
+    expect(formatBytes(512, 'en')).toBe('512 B');
+    expect(formatBytes(2048, 'en')).toBe('2.0 KB');
+    expect(formatBytes(5 * 1024 * 1024, 'en')).toBe('5.0 MB');
+    expect(formatBytes(null)).toBe('—');
+  });
+
+  test('relative dates', () => {
+    const now = Date.parse('2026-09-29T12:00:00Z');
+    expect(formatRelative('2026-09-26T12:00:00Z', 'en', now)).toBe('3 days ago');
+    expect(formatRelative('2026-09-29T11:59:50Z', 'en', now)).toBe('now');
+    expect(formatRelative(null, 'en', now)).toBe('—');
+  });
+});
