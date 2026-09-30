@@ -80,17 +80,13 @@ export const useSyncProgressWebSocket = ({
   // Handle progress updates from WebSocket
   const handleProgress = useCallback((data: SyncProgressInfo) => {
     if (!mountedRef.current) return;
-    
-    console.log('Received sync progress update:', data);
     updateConnectionState({ progressInfo: data });
   }, [updateConnectionState]);
 
   // Handle heartbeat messages from WebSocket
   const handleHeartbeat = useCallback((data: any) => {
     if (!mountedRef.current) return;
-    
-    console.log('Received heartbeat:', data);
-    
+
     // Clear progress info if sync is not active
     if (data && !data.is_active) {
       updateConnectionState({ progressInfo: null });
@@ -136,10 +132,6 @@ export const useSyncProgressWebSocket = ({
 
       // Attempt connection
       await ws.connect();
-      
-      if (mountedRef.current) {
-        console.log(`Successfully connected to sync progress WebSocket for source: ${sourceId}`);
-      }
     } catch (error) {
       console.error('Failed to connect to sync progress WebSocket:', error);
       if (mountedRef.current) {
@@ -152,7 +144,6 @@ export const useSyncProgressWebSocket = ({
   // Disconnect from WebSocket
   const disconnect = useCallback(() => {
     if (wsRef.current) {
-      console.log(`Disconnecting from sync progress WebSocket for source: ${sourceId}`);
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -167,7 +158,6 @@ export const useSyncProgressWebSocket = ({
 
   // Reconnect to WebSocket
   const reconnect = useCallback(() => {
-    console.log(`Manually reconnecting to sync progress WebSocket for source: ${sourceId}`);
     disconnect();
     
     // Use setTimeout to ensure cleanup is complete before reconnecting

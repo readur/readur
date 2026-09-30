@@ -984,7 +984,7 @@
       "userUpdated": "Utilisateur mis à jour avec succès",
       "userDeleted": "Utilisateur supprimé avec succès",
       "cannotDeleteSelf": "Vous ne pouvez pas supprimer votre propre compte",
-      "confirmDeleteUser": "Êtes-vous sûr de vouloir supprimer cet utilisateur ?",
+      "confirmDeleteUser": "Voulez-vous vraiment supprimer {{username}} ({{email}}) ?",
       "duplicateUsername": "Ce nom d'utilisateur est déjà pris. Veuillez choisir un nom d'utilisateur différent.",
       "duplicateEmail": "Cette adresse e-mail est déjà utilisée. Veuillez utiliser une autre adresse e-mail.",
       "invalidPassword": "Le mot de passe doit contenir au moins 8 caractères avec des majuscules, des minuscules et des chiffres.",
@@ -2242,7 +2242,9 @@
       "labelFailed": "Impossible d’ajouter les étiquettes",
       "labelled": "Étiquettes ajoutées à {{count}} documents",
       "labelled_one": "Étiquettes ajoutées à 1 document",
-      "retry": "Relancer l’OCR"
+      "retry": "Relancer l’OCR",
+      "deleteNone": "Aucun document n'a été supprimé",
+      "deletedSome": "{{deleted}} documents sur {{requested}} supprimés"
     },
     "cancel": "Annuler",
     "columns": {
@@ -2868,7 +2870,11 @@
       "retry_one": "Relancer {{count}} document",
       "retry_other": "Relancer {{count}} documents",
       "retryFailed": "Impossible de lancer la nouvelle tentative",
-      "title": "Recommandations de relance"
+      "title": "Recommandations de relance",
+      "nothingQueued": "Rien n'a été mis en file d'attente",
+      "confirmBody": "Cela relance chaque document en échec correspondant à « {{title}} », pas seulement {{name}}.",
+      "confirmTitle_other": "Relancer {{count}} documents dans toute votre bibliothèque ?",
+      "confirmTitle_one": "Relancer 1 document dans toute votre bibliothèque ?"
     },
     "retry": {
       "col": {

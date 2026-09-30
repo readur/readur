@@ -182,7 +182,10 @@ export function setupLibraryMocks() {
   documentService.downloadFile.mockResolvedValue(undefined);
   documentService.retryOcr.mockResolvedValue({ data: {} });
   documentService.delete.mockResolvedValue({ data: {} });
-  documentService.bulkDelete.mockResolvedValue({ data: {} });
+  // Like the API: every requested document deleted.
+  documentService.bulkDelete.mockImplementation(async (ids: string[]) => ({
+    data: { success: true, deleted_count: ids.length, failed_count: 0, deleted_documents: ids },
+  }));
   searchService.enhancedSearch.mockResolvedValue(searchResponse([]));
   sharedLinksService.listByDocument.mockResolvedValue({ data: [] });
   apiClient.get.mockImplementation((url: string) =>

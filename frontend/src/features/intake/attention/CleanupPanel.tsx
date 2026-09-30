@@ -1,6 +1,8 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, useToast } from '../../../ui';
+import { useAuth } from '../../../contexts/AuthContext';
+import { isAdmin } from '../../../auth/roles';
 import { documentService, queueService } from '../../../services/api';
 import { ConfirmDialog, Notice, sharedStyles } from '../shared/parts';
 import type { CleanupResponse } from './cleanupTypes';
@@ -15,6 +17,7 @@ const PREVIEW_IDS = 10;
 export function CleanupPanel() {
   const { t } = useTranslation();
   const toast = useToast();
+  const admin = isAdmin(useAuth().user);
   const ids = { failed: useId(), retry: useId(), requeue: useId() };
   const [pending, setPending] = useState<Pending>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
@@ -128,15 +131,18 @@ export function CleanupPanel() {
         </div>
       </section>
 
-      <section className={styles.action} aria-labelledby={ids.requeue}>
-        <h3 id={ids.requeue} className={sharedStyles.heading}>{t('intake.cleanup.requeueTitle', 'Retry failed jobs only')}</h3>
-        <p className={sharedStyles.lead}>{t('intake.watch.requeueBody', 'Every failed OCR job goes back into the queue.')}</p>
-        <div>
-          <Button onPress={() => setConfirm('requeue')} isPending={pending === 'requeue'}>
-            {t('intake.cleanup.requeueButton', 'Retry failed jobs')}
-          </Button>
-        </div>
-      </section>
+      {/* Requeueing the whole OCR queue is an admin-only endpoint. */}
+      {admin ? (
+        <section className={styles.action} aria-labelledby={ids.requeue}>
+          <h3 id={ids.requeue} className={sharedStyles.heading}>{t('intake.cleanup.requeueTitle', 'Retry failed jobs only')}</h3>
+          <p className={sharedStyles.lead}>{t('intake.watch.requeueBody', 'Every failed OCR job goes back into the queue.')}</p>
+          <div>
+            <Button onPress={() => setConfirm('requeue')} isPending={pending === 'requeue'}>
+              {t('intake.cleanup.requeueButton', 'Retry failed jobs')}
+            </Button>
+          </div>
+        </section>
+      ) : null}
 
       <ConfirmDialog
         isOpen={confirm === 'deleteFailed'}

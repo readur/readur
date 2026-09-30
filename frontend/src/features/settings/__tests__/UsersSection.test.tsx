@@ -110,7 +110,7 @@ describe('UsersSection', () => {
     render();
     await user.click(await screen.findByRole('button', { name: 'Delete bob' }));
     const confirm = await screen.findByRole('alertdialog', { name: 'Delete user' });
-    expect(within(confirm).getByText(/Are you sure you want to delete this user\? bob/)).toBeInTheDocument();
+    expect(within(confirm).getByText('Are you sure you want to delete bob (bob@example.com)?')).toBeInTheDocument();
     expect(apiMock.delete).not.toHaveBeenCalled();
     await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(apiMock.delete).toHaveBeenCalledWith('/users/u2'));

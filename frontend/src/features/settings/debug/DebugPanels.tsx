@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button, TextField } from '../../../ui';
 import { BugReport, CloudUpload, Refresh, Search, Visibility } from '../../../ui/icons';
@@ -12,6 +13,7 @@ const ACCEPT = '.pdf,.png,.jpg,.jpeg,.tiff,.bmp,.txt';
 /** Upload a file and follow it through OCR. */
 export function UploadPanel({ session: s, onShowResults }: { session: DebugSession; onShowResults: () => void }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const failed = s.processingStatus.toLowerCase().includes('failed');
   const previewUrl = useMemo(
@@ -89,7 +91,7 @@ export function UploadPanel({ session: s, onShowResults }: { session: DebugSessi
             <Button
               size="sm"
               icon={<Visibility fontSize="inherit" />}
-              onPress={() => window.open(`/api/documents/${s.uploadedDocumentId}/view`, '_blank', 'noopener,noreferrer')}
+              onPress={() => navigate(`/documents/${s.uploadedDocumentId}`)}
             >
               {t('debug.actions.viewDocument')}
             </Button>

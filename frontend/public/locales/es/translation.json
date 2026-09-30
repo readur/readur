@@ -885,7 +885,7 @@
       "userUpdated": "Usuario actualizado exitosamente",
       "userDeleted": "Usuario eliminado exitosamente",
       "cannotDeleteSelf": "No puedes eliminar tu propia cuenta",
-      "confirmDeleteUser": "¿Estás seguro de que quieres eliminar este usuario?",
+      "confirmDeleteUser": "¿Seguro que quieres eliminar a {{username}} ({{email}})?",
       "duplicateUsername": "Este nombre de usuario ya está en uso. Por favor elige un nombre de usuario diferente.",
       "duplicateEmail": "Esta dirección de correo electrónico ya está en uso. Por favor usa un correo electrónico diferente.",
       "invalidPassword": "La contraseña debe tener al menos 8 caracteres con mayúsculas, minúsculas y números.",
@@ -2242,7 +2242,9 @@
       "labelFailed": "No se pudieron añadir las etiquetas",
       "labelled": "Etiquetas añadidas a {{count}} documentos",
       "labelled_one": "Etiquetas añadidas a 1 documento",
-      "retry": "Reintentar OCR"
+      "retry": "Reintentar OCR",
+      "deleteNone": "No se eliminó ningún documento",
+      "deletedSome": "{{deleted}} de {{requested}} documentos eliminados"
     },
     "cancel": "Cancelar",
     "columns": {
@@ -2868,7 +2870,11 @@
       "retry_one": "Reintentar {{count}} documento",
       "retry_other": "Reintentar {{count}} documentos",
       "retryFailed": "No se pudo iniciar el reintento",
-      "title": "Recomendaciones de reintento"
+      "title": "Recomendaciones de reintento",
+      "nothingQueued": "No se puso nada en cola",
+      "confirmBody": "Esto reintenta todos los documentos fallidos que coinciden con «{{title}}», no solo {{name}}.",
+      "confirmTitle_other": "¿Reintentar {{count}} documentos de toda tu biblioteca?",
+      "confirmTitle_one": "¿Reintentar 1 documento de toda tu biblioteca?"
     },
     "retry": {
       "col": {

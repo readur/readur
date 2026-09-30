@@ -22,7 +22,7 @@ import { useLoader } from '../shared/useLoader';
 import { FailedDocumentPanel } from './FailedDocumentPanel';
 import { attentionKeyOf, failedName, ocrFailureSummary } from './failureLabels';
 import { ImportFailuresPanel } from './ImportFailuresPanel';
-import { outcomeOf, toneOf } from './outcome';
+import { bulkDeleteResult, outcomeOf, toneOf } from './outcome';
 
 export const FAILED_PAGE_SIZE = 25;
 
@@ -97,11 +97,8 @@ export function FailedOcrPanel() {
     setDeleting(true);
     try {
       const res = await documentService.bulkDelete(selectedIds);
-      const body = res.data as { deleted_count?: number; deleted_documents?: string[] } | undefined;
-      const deleted = body?.deleted_count;
-      const outcome = outcomeOf(deleted, selectedIds.length);
       // Only documents the server confirms as deleted are cleared; the rest stay marked and selected.
-      const gone = new Set(body?.deleted_documents ?? (outcome === 'all' ? selectedIds : []));
+      const { outcome, deleted, gone } = bulkDeleteResult(res.data, selectedIds);
       if (outcome === 'none') {
         toast.show({ title: t('intake.attention.deleteNone', 'No documents were deleted'), tone: 'danger' });
       } else {

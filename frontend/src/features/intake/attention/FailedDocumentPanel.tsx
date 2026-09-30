@@ -1,16 +1,17 @@
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Pass, PassCell, SlideOver, StatusMark, useToast } from '../../../ui';
-import { documentService, ocrService, type FailedOcrDocumentRow } from '../../../services/api';
+import { documentService, ocrService, type FailedOcrDocumentRow, type OcrRetryRecommendation } from '../../../services/api';
 import { RetryHistoryList } from '../../../components/RetryHistoryModal';
 import { RetryRecommendations } from '../../../components/RetryRecommendations';
 import LanguageSelector from '../../../components/LanguageSelector';
 import { acknowledge } from '../../board/litStore';
 import { categoryOf, ErrorCodes, hasCode, serverMessage } from '../shared/errors';
 import { formatBytes, formatDateTime } from '../shared/format';
-import { sharedStyles } from '../shared/parts';
+import { ConfirmDialog, sharedStyles } from '../shared/parts';
 import { FailedDocumentPreview } from './FailedDocumentPreview';
 import { attentionKeyOf, canRetry, failedName, ocrFailureSummary, reasonLabel } from './failureLabels';
+import { outcomeOf } from './outcome';
 
 export interface FailedDocumentPanelProps {
   document: FailedOcrDocumentRow | null;
@@ -27,6 +28,9 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
   const [retrying, setRetrying] = useState(false);
   const [languages, setLanguages] = useState<string[]>([]);
   const [primary, setPrimary] = useState<string | undefined>(undefined);
+  /** A recommendation retries matching documents across the whole library: confirm it first. */
+  const [recommended, setRecommended] = useState<OcrRetryRecommendation | null>(null);
+  const [retryingGroup, setRetryingGroup] = useState(false);
 
   if (!doc) return null;
   const lng = i18n.language;
@@ -62,6 +66,30 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
       toast.show({ title: t('intake.attention.retryFailed', 'Could not retry OCR'), description, tone: 'danger' });
     } finally {
       setRetrying(false);
+    }
+  };
+
+  const retryGroup = async () => {
+    if (!recommended) return;
+    setRetryingGroup(true);
+    try {
+      const res = await documentService.bulkRetryOcr({ mode: 'filter', filter: recommended.filter, preview_only: false });
+      const queued = res.data?.queued_count ?? 0;
+      if (outcomeOf(queued, 1) === 'none') {
+        // A 200 with nothing queued is not a success.
+        toast.show({ title: t('intake.recommend.nothingQueued', 'Nothing was queued'), tone: 'danger' });
+      } else {
+        toast.show({
+          title: t('intake.attention.retryQueued', '{{queued}} of {{matched}} documents queued', { queued, matched: res.data?.matched_count ?? queued }),
+          tone: 'success',
+        });
+        onChanged();
+      }
+      setRecommended(null);
+    } catch (error) {
+      toast.show({ title: t('intake.recommend.retryFailed', 'Could not start the retry'), description: serverMessage(error), tone: 'danger' });
+    } finally {
+      setRetryingGroup(false);
     }
   };
 
@@ -151,8 +179,24 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
           <RetryHistoryList documentId={doc.id} enabled={isOpen} />
         </section>
 
-        <RetryRecommendations onRetrySuccess={onChanged} />
+        <RetryRecommendations onRetryClick={setRecommended} />
       </div>
+      <ConfirmDialog
+        isOpen={recommended !== null}
+        onOpenChange={(open) => !open && !retryingGroup && setRecommended(null)}
+        tone="primary"
+        title={t('intake.recommend.confirmTitle', 'Retry {{count}} documents across your library?', { count: recommended?.document_count ?? 0 })}
+        confirmLabel={t('intake.recommend.retry', 'Retry {{count}} documents', { count: recommended?.document_count ?? 0 })}
+        isPending={retryingGroup}
+        onConfirm={retryGroup}
+      >
+        <p>
+          {t('intake.recommend.confirmBody', 'This retries every failed document that matches "{{title}}", not only {{name}}.', {
+            title: recommended?.title ?? '',
+            name,
+          })}
+        </p>
+      </ConfirmDialog>
     </SlideOver>
   );
 }

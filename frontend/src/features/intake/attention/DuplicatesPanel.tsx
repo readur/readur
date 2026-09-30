@@ -95,7 +95,7 @@ export function DuplicatesPanel() {
             size="sm"
             variant="ghost"
             aria-label={t('intake.duplicates.viewFile', 'View {{name}}', { name: r.doc.filename })}
-            onPress={() => window.open(`/api/documents/${r.doc.id}/view`, '_blank', 'noopener,noreferrer')}
+            onPress={() => navigate(`/documents/${r.doc.id}`)}
           >
             {t('intake.duplicates.view', 'View')}
           </Button>

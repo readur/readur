@@ -77,7 +77,9 @@ describe('RetryHistoryModal', () => {
     });
     render(<RetryHistoryModal {...mockProps} />);
     const grid = await screen.findByRole('grid', { name: 'OCR retry history' });
-    const rows = within(grid).getAllByRole('row').slice(1);
+    // The grid can appear before its rows are filled in: wait for the data, then read the rows.
+    await within(grid).findByText('Bulk retry (all)');
+    const rows = (await within(grid).findAllByRole('row')).slice(1);
     expect(rows[0]).toHaveTextContent('Bulk retry (all)');
     expect(rows[0]).toHaveTextContent('Very high (16)');
     expect(rows[0]).toHaveTextContent('Queued · 12345678');

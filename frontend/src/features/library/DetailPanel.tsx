@@ -277,11 +277,12 @@ function DetailActions({ row, onRowChange, onDeleted, panel }: InnerProps) {
         role="alertdialog"
         size="sm"
         isOpen={confirmDelete}
-        onOpenChange={setConfirmDelete}
+        // Stays open while the delete is in flight, so its outcome is not lost.
+        onOpenChange={(open) => busy !== 'delete' && setConfirmDelete(open)}
         title={t('library.detail.deleteTitle', 'Delete this document?')}
         actions={
           <>
-            <Button variant="ghost" onPress={() => setConfirmDelete(false)}>
+            <Button variant="ghost" isDisabled={busy === 'delete'} onPress={() => setConfirmDelete(false)}>
               {t('library.cancel', 'Cancel')}
             </Button>
             <Button variant="danger" isPending={busy === 'delete'} onPress={() => void remove()}>

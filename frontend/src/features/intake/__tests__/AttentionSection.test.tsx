@@ -161,6 +161,12 @@ describe('Needs attention: duplicates', () => {
     expect(screen.getByText(/^1 groups? of identical files$/)).toBeInTheDocument();
     await user.click(within(copy).getByRole('button', { name: 'Download invoice (1).pdf' }));
     expect(documentService.downloadFile).toHaveBeenCalledWith('d2', 'invoice-copy.pdf');
+    // View opens the document page (a bare /api URL would carry no sign-in and fail).
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    await user.click(within(copy).getByRole('button', { name: 'View invoice (1).pdf' }));
+    expect(open).not.toHaveBeenCalled();
+    expect(location()).toBe('/documents/d2');
+    open.mockRestore();
   });
 
   it('shows the empty state', async () => {
@@ -205,5 +211,12 @@ describe('Needs attention: cleanup (each action behind a confirmation)', () => {
     await user.click(screen.getByRole('button', { name: 'Retry failed jobs' }));
     await user.click(within(screen.getByRole('alertdialog', { name: 'Retry failed jobs?' })).getByRole('button', { name: 'Retry jobs' }));
     await waitFor(() => expect(queueService.requeueFailed).toHaveBeenCalled());
+  });
+
+  it('offers retrying failed jobs to admins only', async () => {
+    renderIntake(<AttentionSection />, { path: '/intake?view=cleanup', role: 'user' });
+    expect(await screen.findByRole('button', { name: 'Retry all failed documents' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry failed jobs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Retry failed jobs only' })).not.toBeInTheDocument();
   });
 });

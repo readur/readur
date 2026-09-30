@@ -181,7 +181,7 @@ export default function UsersSection() {
           {confirm?.kind === 'removeDir'
             ? t('settings.userManagement.confirmRemoveDirectory.message', { username: confirm.user.username })
             : confirm
-              ? `${t('settings.messages.confirmDeleteUser')} ${confirm.user.username} (${confirm.user.email})`
+              ? t('settings.messages.confirmDeleteUser', { username: confirm.user.username, email: confirm.user.email })
               : null}
         </p>
       </Dialog>

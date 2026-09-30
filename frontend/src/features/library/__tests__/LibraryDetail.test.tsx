@@ -285,6 +285,23 @@ describe('Library detail panel', () => {
       expect(documentService.listFiltered.mock.calls.length).toBeGreaterThan(1);
       await settle();
     });
+    test('the delete confirmation cannot be dismissed while the delete is in flight', async () => {
+      let finish!: (v: unknown) => void;
+      documentService.delete.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('button', { name: 'Delete' }));
+      const confirm = await screen.findByRole('alertdialog', { name: 'Delete this document?' });
+      await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+      expect(documentService.delete).toHaveBeenCalledWith('d2');
+      expect(within(confirm).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+      await user.keyboard('{Escape}');
+      expect(screen.getByRole('alertdialog', { name: 'Delete this document?' })).toBeInTheDocument();
+      await act(async () => finish({ data: {} }));
+      expect(await screen.findByText('Document deleted')).toBeInTheDocument();
+      await settle();
+    });
   });
 
   describe('deleted documents', () => {

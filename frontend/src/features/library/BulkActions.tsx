@@ -6,6 +6,7 @@ import { labelService } from '../../services/api/labels';
 import { BulkActionBar, Button, Dialog, useToast } from '../../ui';
 import { Delete, Download, Label as LabelIcon, Refresh } from '../../ui/icons';
 import { LabelSelector, toLabelData, type LabelData, type LabelDraft } from '../labels';
+import { bulkDeleteResult, toneOf } from '../intake/attention/outcome';
 import { displayName, type LibraryRow } from './data';
 import styles from './Library.module.css';
 
@@ -58,10 +59,22 @@ export function BulkActions({ selected, onClear, availableLabels, onLabelCreated
   const remove = async () => {
     setBusy(true);
     try {
-      await documentService.bulkDelete(ids);
-      toast.show({ title: t('library.bulk.deleted', { count, defaultValue: '{{count}} documents deleted', defaultValue_one: '1 document deleted' }), tone: 'success' });
+      const res = await documentService.bulkDelete(ids);
+      // Only the documents the server confirms as deleted are reported and passed on.
+      const { outcome, deleted, gone } = bulkDeleteResult(res.data, ids);
+      if (outcome === 'none') {
+        toast.show({ title: t('library.bulk.deleteNone', 'No documents were deleted'), tone: 'danger' });
+        return;
+      }
+      toast.show({
+        title:
+          outcome === 'all'
+            ? t('library.bulk.deleted', { count, defaultValue: '{{count}} documents deleted', defaultValue_one: '1 document deleted' })
+            : t('library.bulk.deletedSome', '{{deleted}} of {{requested}} documents deleted', { deleted, requested: count }),
+        tone: toneOf(outcome),
+      });
       setOpen(null);
-      onDeleted?.(ids);
+      onDeleted?.(ids.filter((id) => gone.has(id)));
       onClear();
       onChanged();
     } catch {

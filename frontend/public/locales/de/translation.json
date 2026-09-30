@@ -984,7 +984,7 @@
       "userUpdated": "Benutzer erfolgreich aktualisiert",
       "userDeleted": "Benutzer erfolgreich gelöscht",
       "cannotDeleteSelf": "Sie können Ihr eigenes Konto nicht löschen",
-      "confirmDeleteUser": "Sind Sie sicher, dass Sie diesen Benutzer löschen möchten?",
+      "confirmDeleteUser": "Möchten Sie {{username}} ({{email}}) wirklich löschen?",
       "duplicateUsername": "Dieser Benutzername ist bereits vergeben. Bitte wählen Sie einen anderen Benutzernamen.",
       "duplicateEmail": "Diese E-Mail-Adresse wird bereits verwendet. Bitte verwenden Sie eine andere E-Mail.",
       "invalidPassword": "Passwort muss mindestens 8 Zeichen mit Groß-, Kleinbuchstaben und Zahlen enthalten.",
@@ -2242,7 +2242,9 @@
       "labelFailed": "Die Labels konnten nicht hinzugefügt werden",
       "labelled": "Labels zu {{count}} Dokumenten hinzugefügt",
       "labelled_one": "Labels zu 1 Dokument hinzugefügt",
-      "retry": "OCR wiederholen"
+      "retry": "OCR wiederholen",
+      "deleteNone": "Es wurden keine Dokumente gelöscht",
+      "deletedSome": "{{deleted}} von {{requested}} Dokumenten gelöscht"
     },
     "cancel": "Abbrechen",
     "columns": {
@@ -2868,7 +2870,11 @@
       "retry_one": "{{count}} Dokument erneut verarbeiten",
       "retry_other": "{{count}} Dokumente erneut verarbeiten",
       "retryFailed": "Die Wiederholung konnte nicht gestartet werden",
-      "title": "Wiederholungsempfehlungen"
+      "title": "Wiederholungsempfehlungen",
+      "nothingQueued": "Es wurde nichts eingereiht",
+      "confirmBody": "Dies verarbeitet jedes fehlgeschlagene Dokument erneut, das zu „{{title}}“ passt, nicht nur {{name}}.",
+      "confirmTitle_other": "{{count}} Dokumente in der gesamten Bibliothek erneut verarbeiten?",
+      "confirmTitle_one": "1 Dokument in der gesamten Bibliothek erneut verarbeiten?"
     },
     "retry": {
       "col": {

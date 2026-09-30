@@ -145,6 +145,34 @@ describe('Library bulk actions', () => {
     expect(screen.queryByRole('toolbar', { name: 'Bulk actions' })).not.toBeInTheDocument();
   });
 
+  test('a partial delete says how many were deleted, and only those count as gone', async () => {
+    documentService.bulkDelete.mockResolvedValue({
+      data: { success: true, deleted_count: 1, failed_count: 1, deleted_documents: ['d1'] },
+    });
+    const user = userEvent.setup();
+    renderLibrary();
+    await select(user, /invoice-march/, /lease\.pdf/);
+    await user.click(within(bar()).getByRole('button', { name: 'Delete' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByText('1 of 2 documents deleted')).toBeInTheDocument();
+    expect(screen.queryByText('2 documents deleted')).not.toBeInTheDocument();
+  });
+
+  test('a delete that removed nothing says so and keeps the selection', async () => {
+    documentService.bulkDelete.mockResolvedValue({
+      data: { success: false, deleted_count: 0, failed_count: 2, deleted_documents: [] },
+    });
+    const user = userEvent.setup();
+    renderLibrary();
+    await select(user, /invoice-march/, /lease\.pdf/);
+    await user.click(within(bar()).getByRole('button', { name: 'Delete' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByText('No documents were deleted')).toBeInTheDocument();
+    expect(screen.queryByText(/documents deleted/)).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(within(bar()).getByText('2')).toBeInTheDocument();
+  });
+
   test('changing a filter clears the selection', async () => {
     const user = userEvent.setup();
     renderLibrary();

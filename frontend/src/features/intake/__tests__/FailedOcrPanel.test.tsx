@@ -270,6 +270,56 @@ describe('Failure details panel (document actions)', () => {
     expect(await screen.findByText('Could not retry OCR')).toBeInTheDocument();
   });
 
+  describe('retry recommendations (they act on the whole library)', () => {
+    const REC = {
+      reason: 'timeout_retry',
+      title: 'Timed out',
+      description: 'Documents that timed out',
+      estimated_success_rate: 0.8,
+      document_count: 14,
+      filter: { failure_reasons: ['ocr_timeout'] },
+    };
+    beforeEach(() => {
+      documentService.getRetryRecommendations.mockImplementation(() => ok({ recommendations: [REC], total_recommendations: 1 }));
+    });
+
+    it('asks first, stating the scope and the count, and cancelling retries nothing', async () => {
+      const user = userEvent.setup();
+      renderIntake(<FailedOcrPanel />);
+      const panel = await openDoc(user, 'scan1.pdf');
+      await user.click(await within(panel).findByRole('button', { name: 'Retry 14 documents' }));
+      const confirm = screen.getByRole('alertdialog', { name: 'Retry 14 documents across your library?' });
+      expect(confirm).toHaveTextContent('This retries every failed document that matches "Timed out", not only scan1.pdf.');
+      await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+      expect(documentService.bulkRetryOcr).not.toHaveBeenCalled();
+    });
+
+    it('retries the matching documents once confirmed', async () => {
+      documentService.bulkRetryOcr.mockImplementation(() => ok({ success: true, queued_count: 14, matched_count: 14, documents: [] }));
+      const user = userEvent.setup();
+      renderIntake(<FailedOcrPanel />);
+      const panel = await openDoc(user, 'scan1.pdf');
+      await user.click(await within(panel).findByRole('button', { name: 'Retry 14 documents' }));
+      const confirm = screen.getByRole('alertdialog', { name: 'Retry 14 documents across your library?' });
+      await user.click(within(confirm).getByRole('button', { name: 'Retry 14 documents' }));
+      await waitFor(() =>
+        expect(documentService.bulkRetryOcr).toHaveBeenCalledWith({ mode: 'filter', filter: REC.filter, preview_only: false }),
+      );
+      expect(await screen.findByText('14 of 14 documents queued')).toBeInTheDocument();
+    });
+
+    it('reports nothing queued as a problem, not a success', async () => {
+      documentService.bulkRetryOcr.mockImplementation(() => ok({ success: true, queued_count: 0, matched_count: 14, documents: [] }));
+      const user = userEvent.setup();
+      renderIntake(<FailedOcrPanel />);
+      const panel = await openDoc(user, 'scan1.pdf');
+      await user.click(await within(panel).findByRole('button', { name: 'Retry 14 documents' }));
+      await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Retry 14 documents' }));
+      expect(await screen.findByText('Nothing was queued')).toBeInTheDocument();
+      expect(screen.queryByText(/documents queued/)).not.toBeInTheDocument();
+    });
+  });
+
   it('downloads and loads history and preview by document id', async () => {
     documentService.getDocumentRetryHistory.mockImplementation(() =>
       ok({
