@@ -34,8 +34,26 @@
 }
 
 .search {
-  padding: var(--s-3);
+  padding: var(--s-2) var(--s-3);
   border-bottom: 1px solid var(--line);
+}
+
+/* A bare, large input: the open palette is its own focus cue, so no box or ring inside it. */
+.search input {
+  min-height: 48px;
+  font-size: var(--fs-lg);
+  background: transparent;
+  border-color: transparent;
+}
+
+.search input:hover,
+.search input[data-focused] {
+  border-color: transparent;
+}
+
+.search input[data-focus-visible],
+.search input:focus-visible {
+  outline: none;
 }
 
 .status {
@@ -88,18 +106,17 @@
   background: var(--accent-soft);
 }
 
-.item[data-focused] .icon {
+/* The focused item is marked by its tint and accent title and icon, not a box. */
+.item[data-focused] .icon,
+.item[data-focused] .title {
   color: var(--accent);
-}
-
-.item[data-focus-visible] {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
 }
 
 .icon {
   display: inline-flex;
   flex: none;
+  justify-content: center;
+  width: 18px;
   color: var(--fg-2);
 }
 

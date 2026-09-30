@@ -92,11 +92,10 @@ export function CommandPalette({ isOpen, onOpenChange, sources, placeholder }: C
                               onOpenChange(false);
                             }}
                           >
-                            {item.icon ? (
-                              <span className={styles.icon} aria-hidden="true">
-                                {item.icon}
-                              </span>
-                            ) : null}
+                            {/* Always present, so titles line up whether or not an item has an icon. */}
+                            <span className={styles.icon} aria-hidden="true">
+                              {item.icon ?? null}
+                            </span>
                             <span className={styles.text}>
                               <Text slot="label" className={styles.title}>
                                 {item.title}
