@@ -199,10 +199,48 @@
   line-height: var(--lh-body);
   color: var(--fg-2);
   white-space: normal;
+}
+
+.detailText {
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+/* Columns dropped on a phone, folded under the first cell as label/value pairs. */
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+}
+
+.detailText + .fields {
+  margin-top: var(--s-1);
+}
+
+.field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fieldLabel {
+  flex: none;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-meta);
+}
+
+.fieldValue {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .data {

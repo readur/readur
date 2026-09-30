@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, type CSSProperties } from 'react';
+import { Fragment, useId, useMemo, useRef, type CSSProperties } from 'react';
 import {
   Cell,
   Column,
@@ -59,6 +59,40 @@ function minTableWidth<T>(columns: BoardColumn<T>[], multiple: boolean): number 
   return total;
 }
 
+function columnName<T>(col: BoardColumn<T>): string | undefined {
+  return col.textValue ?? (typeof col.label === 'string' ? col.label : undefined);
+}
+
+/**
+ * The columns dropped on a phone, as label/value pairs under the row's first cell. They are part
+ * of the row's accessible description, so screen readers still hear them.
+ */
+function FoldedFields<T>({ columns, row }: { columns: BoardColumn<T>[]; row: T }) {
+  return (
+    <span className={styles.fields}>
+      {columns.map((col) => {
+        const name = columnName(col);
+        // The whitespace text nodes separate the pairs in the announced description; the flex
+        // container does not render them.
+        return (
+          <Fragment key={col.id}>
+            <span className={styles.field}>
+              {name ? (
+                <span className={styles.fieldLabel}>
+                  {name}
+                  <span className="visually-hidden">:</span>
+                </span>
+              ) : null}{' '}
+              <span className={cx(styles.fieldValue, isData(col) && styles.data)}>{col.render(row)}</span>
+              <span className="visually-hidden">;</span>
+            </span>{' '}
+          </Fragment>
+        );
+      })}
+    </span>
+  );
+}
+
 /**
  * Dense sortable, selectable table built on the React Aria Table. Sorting and selection are
  * controlled by the parent. Rows reorder with a FLIP animation.
@@ -102,6 +136,11 @@ export function BoardTable<T>({
     [allColumns, narrow, headerId],
   );
   const headerIndex = Math.max(0, columns.findIndex((c) => c.id === headerId));
+  // On a phone the dropped columns are not lost: they fold into the first cell's detail line.
+  const folded = useMemo(
+    () => (narrow ? allColumns.filter((c) => c.hideOnNarrow && c.id !== headerId) : []),
+    [allColumns, narrow, headerId],
+  );
   const showSkeleton = isLoading && rows.length === 0;
 
   const sortDescriptor: SortDescriptor | undefined = sort
@@ -140,7 +179,7 @@ export function BoardTable<T>({
               id={col.id}
               isRowHeader={i === headerIndex}
               allowsSorting={Boolean(col.sortable)}
-              textValue={col.textValue ?? (typeof col.label === 'string' ? col.label : undefined)}
+              textValue={columnName(col)}
               className={cx(styles.column, styles[`align-${col.align ?? 'start'}`])}
               style={widthStyle(col.width)}
             >
@@ -172,7 +211,14 @@ export function BoardTable<T>({
             : rows.map((row, rowIndex) => {
                 const id = ids[rowIndex];
                 const changed = isRowLit?.(row) ?? false;
-                const detail = renderRowDetail?.(row);
+                const custom = renderRowDetail?.(row);
+                const detail =
+                  custom || folded.length > 0 ? (
+                    <>
+                      {custom ? <div className={styles.detailText}>{custom}</div> : null}
+                      {folded.length > 0 ? <FoldedFields columns={folded} row={row} /> : null}
+                    </>
+                  ) : null;
                 const detailId = detail ? `${detailPrefix}-detail-${id}` : undefined;
                 return (
                   <Row

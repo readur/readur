@@ -9,6 +9,7 @@ import { IgnoredSection } from '../ignored/IgnoredSection';
 import { formatBytes } from '../shared/format';
 import { ignoredFilesService, ok, serveDefaults, sourcesService } from './intakeMocks';
 import { renderIntake, resetIntakeState, source } from './intakeTestUtils';
+import { createResponsiveMatchMediaMock } from '../../../test/pwa-test-utils';
 
 function file(id: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -56,6 +57,29 @@ describe('Ignored section (ported from IgnoredFilesPage)', () => {
     expect(row).toHaveTextContent('WebDAV · Office cloud');
     expect(row).toHaveTextContent('1 MB');
     expect(row).toHaveTextContent('deleted by user');
+  });
+
+  it('keeps source, size, date and reason reachable on a phone', async () => {
+    const original = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: createResponsiveMatchMediaMock({ 'max-width: 719px': true }),
+    });
+    try {
+      renderIntake(<IgnoredSection />);
+      const table = await grid();
+      expect(within(table).queryByRole('columnheader', { name: 'Reason' })).not.toBeInTheDocument();
+      const row = within(table).getByRole('row', { name: /a\.pdf/ });
+      expect(within(row).getByText('deleted by user')).toBeVisible();
+      expect(row).toHaveAccessibleDescription(/Source: WebDAV · Office cloud; Size: 1 MB; Ignored: .+; Reason: deleted by user;/);
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: original,
+      });
+    }
   });
 
   it('reads the source filter from the URL and sends it to the server', async () => {

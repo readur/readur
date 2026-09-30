@@ -297,6 +297,25 @@ describe('BoardTable on a narrow screen', () => {
     expect(screen.getByRole('grid')).toHaveStyle({ minWidth: '290px' });
   });
 
+  it('folds the dropped columns into the row detail, visible and announced', () => {
+    setNarrow(true);
+    const columns: BoardColumn<Doc>[] = [
+      { id: 'name', label: 'Name', render: (d) => d.name },
+      { id: 'pages', label: 'Pages', align: 'end', width: 90, hideOnNarrow: true, render: (d) => d.pages },
+      { id: 'type', label: 'Type', width: 80, hideOnNarrow: true, render: () => 'PDF' },
+    ];
+    render(<Harness columns={columns} renderRowDetail={(d) => d.snippet} />);
+    const alphaRow = screen.getByRole('rowheader', { name: 'Alpha.pdf' }).closest('[role="row"]') as HTMLElement;
+    expect(within(alphaRow).getByText('Pages')).toBeVisible();
+    expect(within(alphaRow).getByText('PDF')).toBeVisible();
+    expect(alphaRow).toHaveAccessibleDescription('Pages: 3; Type: PDF;');
+    // The consumer's own detail comes first; the folded fields follow it.
+    const bravoRow = screen.getByRole('rowheader', { name: 'Bravo.pdf' }).closest('[role="row"]') as HTMLElement;
+    expect(bravoRow).toHaveAccessibleDescription('matched invoice total Pages: 12; Type: PDF;');
+    // Folded values stay out of the row header's name.
+    expect(screen.getByRole('rowheader', { name: 'Alpha.pdf' })).toBeInTheDocument();
+  });
+
   it('counts pixel widths given as strings and ignores relative ones', () => {
     setNarrow(true);
     const columns: BoardColumn<Doc>[] = [
