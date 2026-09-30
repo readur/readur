@@ -114,7 +114,6 @@ export type { UpdateLabel } from './UpdateLabel';
 export type { UpdateSettings } from './UpdateSettings';
 export type { UpdateSource } from './UpdateSource';
 export type { UpdateUser } from './UpdateUser';
-export type { User } from './User';
 export type { UserMetrics } from './UserMetrics';
 export type { UserResponse } from './UserResponse';
 export type { UserRole } from './UserRole';

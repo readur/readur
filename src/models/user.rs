@@ -65,8 +65,9 @@ impl TryFrom<String> for AuthProvider {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
-#[ts(export)]
+// Internal DB model (carries password_hash); not exported to TypeScript.
+// Routes return `UserResponse` instead.
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
