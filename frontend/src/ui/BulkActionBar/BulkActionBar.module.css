@@ -3,7 +3,7 @@
   left: 0;
   right: 0;
   bottom: var(--s-5);
-  z-index: 90;
+  z-index: var(--z-dock);
   display: flex;
   justify-content: center;
   padding: 0 var(--s-4);

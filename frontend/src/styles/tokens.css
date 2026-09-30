@@ -46,6 +46,7 @@
 :root {
   /* Layers: the shell sits below every overlay; the palette is topmost. */
   --z-shell: 1100;
+  --z-dock: 1150;
   --z-overlay: 1200;
   --z-toast: 1300;
   --z-palette: 1400;

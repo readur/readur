@@ -41,12 +41,19 @@ describe('layer scale', () => {
     expect(layerOf('ui/CommandPalette/CommandPalette.module.css', '.overlay')).toBe('var(--z-palette)');
   });
 
+  it('seats the BulkActionBar dock above the shell bars and below every overlay', () => {
+    expect(layerOf('ui/BulkActionBar/BulkActionBar.module.css', '.dock')).toBe('var(--z-dock)');
+    expect(scale('z-dock')).toBeGreaterThan(scale('z-shell'));
+    expect(scale('z-dock')).toBeLessThan(scale('z-overlay'));
+  });
+
   it('keeps raw z-index numbers out of the layered stylesheets', () => {
     for (const f of [
       'features/shell/AppShell.module.css',
       'ui/SlideOver/SlideOver.module.css',
       'ui/Dialog/Dialog.module.css',
       'ui/Toast/Toast.module.css',
+      'ui/BulkActionBar/BulkActionBar.module.css',
       'ui/CommandPalette/CommandPalette.module.css',
     ]) {
       expect(read(f), f).not.toMatch(/z-index:\s*\d/);
