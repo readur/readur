@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 
 use crate::{
     auth::AuthUser,
-    models::{SourceType, User},
+    models::{merge_stored_secrets, SourceType, User},
     models::source::WebDAVTestConnection,
     utils::outbound::categorize_connection_error,
     AppState,
@@ -23,6 +23,10 @@ use super::crud::{authorize_source_config, ConfigRejection};
 pub struct TestConnectionRequest {
     pub source_type: SourceType,
     pub config: serde_json::Value,
+    /// When editing an existing source, its ID: stored credentials fill in
+    /// any secret the client leaves empty.
+    #[serde(default)]
+    pub source_id: Option<Uuid>,
 }
 
 /// Test connection for an existing source
@@ -81,7 +85,20 @@ pub async fn test_connection_with_config(
     State(state): State<Arc<AppState>>,
     Json(request): Json<TestConnectionRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    run_connection_test(request.source_type, request.config, &auth_user.user, &state).await
+    let mut config = request.config;
+    if let Some(source_id) = request.source_id {
+        let source = state
+            .db
+            .get_source(auth_user.user.id, source_id)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
+        if source.source_type != request.source_type {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        config = merge_stored_secrets(source.source_type, &source.config, config);
+    }
+    run_connection_test(request.source_type, config, &auth_user.user, &state).await
 }
 
 fn test_result(success: bool, message: impl Into<String>) -> Json<serde_json::Value> {
