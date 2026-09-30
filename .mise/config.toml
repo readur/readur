@@ -189,11 +189,14 @@ description = "Ratchet gate: count of over-threshold functions may not exceed BU
 # when everything is fine. Capturing first separates "clippy could not answer"
 # from "clippy answered, and the answer is none".
 #
-# PLACEHOLDER: BUDGET below is not yet measured. Set it to the COUNT this task
-# prints on a compiling tree before merging (then it only ratchets down).
+# BUDGET was frozen at 121 on 2026-09-29, measured with clippy 1.98.1 (the
+# pinned toolchain). It must only go DOWN. Clippy releases can re-score
+# functions, so after a `rust` bump re-measure and lower it if the count fell;
+# a rise from a toolchain bump alone is the one case that justifies a
+# reviewed increase.
 run = '''
 set -eu
-BUDGET=999999 # PLACEHOLDER -- replace with the measured count before merge
+BUDGET=121
 OUT=$(cargo clippy --all-targets --all-features -q -- -A clippy::all -W clippy::cognitive_complexity 2>&1) || {
   printf '%s\n' "$OUT" >&2
   echo "error: clippy failed to build the crate; the complexity count would be meaningless." >&2
