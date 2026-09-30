@@ -8,7 +8,7 @@ import { UploadSection } from '../upload/UploadSection';
 import { ACCEPTED_EXTENSIONS, MAX_FILE_SIZE } from '../upload/uploadConfig';
 import { isLit } from '../../board/litStore';
 import { api, apiError, ok, serveDefaults } from './intakeMocks';
-import { renderIntake, resetIntakeState } from './intakeTestUtils';
+import { renderIntake, resetIntakeState, settle } from './intakeTestUtils';
 
 const pdf = (name = 'invoice.pdf', size = 2048) => {
   const file = new File(['x'], name, { type: 'application/pdf' });
@@ -31,38 +31,44 @@ beforeEach(() => {
 describe('Add documents: drop area (ported from UploadZone)', () => {
   it('renders the drop area with its title', async () => {
     renderIntake(<UploadSection />);
+    await settle();
     expect(screen.getByRole('group', { name: 'Drop files to add' })).toBeInTheDocument();
     expect(screen.getByText('Drop files to add')).toBeInTheDocument();
   });
 
-  it('lists the accepted file types', () => {
+  it('lists the accepted file types', async () => {
     renderIntake(<UploadSection />);
+    await settle();
     const types = screen.getByText(/PDF · PNG/);
     for (const ext of ['PDF', 'PNG', 'JPG', 'TIFF', 'TXT', 'DOCX']) expect(types).toHaveTextContent(ext);
     expect(ACCEPTED_EXTENSIONS).toEqual(['PDF', 'PNG', 'JPG', 'JPEG', 'GIF', 'BMP', 'TIFF', 'TXT', 'RTF', 'DOC', 'DOCX']);
   });
 
-  it('shows the 50 MB size limit', () => {
+  it('shows the 50 MB size limit', async () => {
     renderIntake(<UploadSection />);
+    await settle();
     expect(screen.getByText('max 50 MB per file')).toBeInTheDocument();
     expect(MAX_FILE_SIZE).toBe(50 * 1024 * 1024);
   });
 
-  it('shows the Choose files button', () => {
+  it('shows the Choose files button', async () => {
     renderIntake(<UploadSection />);
+    await settle();
     expect(screen.getByRole('button', { name: 'Choose files' })).toBeInTheDocument();
   });
 
   it('keeps Choose files enabled and pressable', async () => {
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
+    await settle();
     const button = screen.getByRole('button', { name: 'Choose files' });
     await user.click(button);
     expect(button).toBeEnabled();
   });
 
-  it('has a labelled file input for choosing files', () => {
+  it('has a labelled file input for choosing files', async () => {
     renderIntake(<UploadSection />);
+    await settle();
     expect(fileInput()).toHaveAttribute('type', 'file');
     expect(fileInput()).toHaveAttribute('multiple');
   });
@@ -72,6 +78,7 @@ describe('Add documents: upload board', () => {
   it('lists chosen files as pending with name, size, progress and status', async () => {
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
+    await settle();
     const grid = await addFiles(user, [pdf('a.pdf'), pdf('b.pdf', 1024 * 1024)]);
     const heads = within(grid).getAllByRole('columnheader').map((h) => h.textContent);
     expect(heads.slice(0, 4)).toEqual(['Name', 'Size', 'Progress', 'Status']);
@@ -82,8 +89,9 @@ describe('Add documents: upload board', () => {
     expect(screen.getByRole('button', { name: 'Upload all (2)' })).toBeEnabled();
   });
 
-  it('shows the empty state before any file is chosen', () => {
+  it('shows the empty state before any file is chosen', async () => {
     renderIntake(<UploadSection />);
+    await settle();
     expect(screen.getByRole('heading', { name: 'No files yet' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Upload all (0)' })).toBeDisabled();
   });
@@ -91,6 +99,7 @@ describe('Add documents: upload board', () => {
   it('rejects files over the size limit with a message', async () => {
     const user = userEvent.setup({ applyAccept: false });
     renderIntake(<UploadSection />);
+    await settle();
     await user.upload(fileInput(), [pdf('huge.pdf', MAX_FILE_SIZE + 1)]);
     expect(await screen.findByRole('alert')).toHaveTextContent(/huge\.pdf/);
     expect(screen.queryByRole('row', { name: /huge\.pdf/ })).not.toBeInTheDocument();
@@ -103,6 +112,7 @@ describe('Add documents: upload board', () => {
     });
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
+    await settle();
     const grid = await addFiles(user, [pdf('a.pdf')]);
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
     const row = within(grid).getByRole('row', { name: /a\.pdf/ });
@@ -120,6 +130,7 @@ describe('Add documents: upload board', () => {
     api.post.mockImplementationOnce(() => Promise.reject(apiError(413, 'DOCUMENT_TOO_LARGE', 'too big')));
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
+    await settle();
     const grid = await addFiles(user, [pdf('a.pdf')]);
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
     const row = within(grid).getByRole('row', { name: /a\.pdf/ });
@@ -133,6 +144,7 @@ describe('Add documents: upload board', () => {
   it('removes a pending file and clears finished ones', async () => {
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
+    await settle();
     const grid = await addFiles(user, [pdf('a.pdf'), pdf('b.pdf')]);
     await user.click(within(grid).getByRole('button', { name: 'Remove a.pdf' }));
     expect(within(grid).queryByRole('row', { name: /a\.pdf/ })).not.toBeInTheDocument();
@@ -146,6 +158,7 @@ describe('Add documents: upload board', () => {
     api.post.mockImplementation(() => ok({ id: 'doc-9' }));
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
+    await settle();
     const grid = await addFiles(user, [pdf('a.pdf')]);
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
     await waitFor(() => expect(within(grid).getByRole('row', { name: /a\.pdf/ })).toHaveAttribute('data-changed', 'true'));
@@ -155,6 +168,7 @@ describe('Add documents: upload board', () => {
 
   it('offers the OCR language and label pickers', async () => {
     renderIntake(<UploadSection />);
+    await settle();
     expect(screen.getByRole('heading', { name: 'Apply to these uploads' })).toBeInTheDocument();
     expect(screen.getByText('OCR languages')).toBeInTheDocument();
     expect(screen.getByText('Labels')).toBeInTheDocument();

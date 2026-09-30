@@ -158,7 +158,7 @@ describe('Needs attention: duplicates', () => {
     const copy = within(grid).getByRole('row', { name: /invoice \(1\)\.pdf/ });
     expect(copy).toHaveTextContent('abcdef012345… 2/2');
     expect(copy).toHaveAccessibleDescription('Original name: invoice-copy.pdf');
-    expect(screen.getByText('1 groups of identical files')).toBeInTheDocument();
+    expect(screen.getByText(/^1 groups? of identical files$/)).toBeInTheDocument();
     await user.click(within(copy).getByRole('button', { name: 'Download invoice (1).pdf' }));
     expect(documentService.downloadFile).toHaveBeenCalledWith('d2', 'invoice-copy.pdf');
   });

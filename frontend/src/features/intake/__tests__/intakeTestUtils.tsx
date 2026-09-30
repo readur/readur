@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import i18n from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
@@ -41,6 +41,13 @@ class MemoryStorage implements Storage {
   setItem(key: string, value: string) {
     this.data.set(key, String(value));
   }
+}
+
+/** Lets pending requests resolve and their state updates land inside act(). */
+export async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 }
 
 /** Fresh storage and an empty change-tracking store. */
