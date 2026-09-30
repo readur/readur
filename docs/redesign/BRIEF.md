@@ -103,6 +103,16 @@ Every text/background pair has been checked at ≥4.5:1. Don't invent new colour
   - `frontend/public/locales/**`
   - `frontend/src/services/api/index.ts`
   - Exception: tasks that explicitly own one of these files may edit it.
+- **Generated API types:** `frontend/src/types/generated/**` is generated from the Rust models by [ts-rs](https://github.com/Aleph-Alpha/ts-rs). Import them with `import type` from the `index.ts` barrel in that folder, and never edit them by hand.
+  - Regenerate after changing any Rust type that derives `TS`: `scripts/generate-ts-bindings.sh`, then commit the result. On a host without leptonica/tesseract/libclang/openssl, run `READUR_USE_NIX=1 scripts/generate-ts-bindings.sh` to build inside nix-shell.
+  - `scripts/check-ts-bindings.sh` regenerates and fails if the committed files drift (modified, deleted or new). It takes `READUR_USE_NIX=1` too.
+  - Adding an API type in Rust: derive `TS` next to `ToSchema` and add `#[ts(export)]`. If the TS name would clash with another exported type, add `rename = "..."`.
+  - Mapping rules:
+    - Integers (`i64`, `u64`, `usize`, …) are `number` (`TS_RS_LARGE_INT = "number"` in `.cargo/config.toml`); `bigint` never appears. Dates and UUIDs are `string`. `serde_json::Value` is `JsonValue`.
+    - Response types: a plain `Option<T>` is `T | null` (the key is always present). An `Option<T>` with `skip_serializing_if = "Option::is_none"` gets `#[ts(optional)]` and becomes `field?: T` (the key is omitted, never `null`). A `#[serde(skip_serializing)]` field gets `#[ts(skip)]`.
+    - Request types (JSON bodies and query strings) carry `#[ts(optional_fields)]`, so every `Option<T>` is `field?: T`: serde accepts a missing key. A non-`Option` field with a serde default gets `#[ts(optional = nullable)]`, which makes it `field?: T`.
+    - Comma-separated query params (`deserialize_comma_separated*`) are typed as the wire value, `field?: string` (`#[ts(optional = nullable, type = "string")]`), not the parsed `Vec`. Join the values with `,` before sending.
+    - Enums follow their serde representation, so the string unions match the JSON exactly.
 
 ## 5. Primitive API contracts (built in W2-B; later waves consume them)
 
