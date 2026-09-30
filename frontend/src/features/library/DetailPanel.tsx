@@ -100,6 +100,7 @@ function DetailBody({
   const ocr = useOcrExcerpt(row.id, panel.ocrCache, panel.ocrEpoch);
   const excerpt = ocr.status === 'ready' ? ocr.excerpt : null;
   const confidence = row.ocr_confidence ?? excerpt?.confidence ?? null;
+  const hasConfidence = confidence != null;
   const progress =
     row.ocr_progress_total && row.ocr_progress_total > 0 ? `${row.ocr_progress_current ?? 0}/${row.ocr_progress_total}` : null;
 
@@ -141,20 +142,23 @@ function DetailBody({
           {formatBytes(row.file_size, i18n.language)}
         </PassCell>
         <PassCell label={t('library.columns.source', 'Source')}>{sourceName(row)}</PassCell>
-        <PassCell label={t('library.columns.added', 'Added')} mono>
-          {formatStamp(row.created_at)}
-        </PassCell>
-        <PassCell label={t('library.columns.updated', 'Updated')} mono>
-          {formatStamp(row.updated_at)}
-        </PassCell>
         {excerpt?.language ? (
-          <PassCell label={t('library.detail.language', 'Language')}>{excerpt.language}</PassCell>
+          <PassCell label={t('library.detail.language', 'Language')} wide={!hasConfidence}>
+            {excerpt.language}
+          </PassCell>
         ) : null}
-        {confidence != null ? (
-          <PassCell label={t('library.detail.confidence', 'Confidence')} mono>
+        {hasConfidence ? (
+          <PassCell label={t('library.detail.confidence', 'Confidence')} mono wide={!excerpt?.language}>
             {`${Math.round(confidence)}%`}
           </PassCell>
         ) : null}
+        {/* The dates go last: on a phone each takes a full row, so the cells above stay paired. */}
+        <PassCell label={t('library.columns.added', 'Added')} mono wide>
+          {formatStamp(row.created_at)}
+        </PassCell>
+        <PassCell label={t('library.columns.updated', 'Updated')} mono wide>
+          {formatStamp(row.updated_at)}
+        </PassCell>
       </Pass>
 
       <div className={styles.preview}>

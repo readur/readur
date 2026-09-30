@@ -14,7 +14,8 @@ export interface PassProps {
 /**
  * Segmented grid of labelled cells separated by 1px rules. Rendered as a description list
  * (in a named group when `aria-label` is given);
- * wraps to two columns when its container is narrower than 480px.
+ * wraps to two columns when its container is narrower than 480px, where a last odd cell takes the
+ * whole row.
  */
 export function Pass({ children, variant = 'default', className, 'aria-label': ariaLabel }: PassProps) {
   return (
@@ -37,14 +38,19 @@ export interface PassCellProps {
   mono?: boolean;
   /** Number of grid tracks this cell spans. */
   span?: number;
+  /**
+   * A long value (a timestamp, a path): takes a full row when the container is narrower than
+   * 400px instead of being cut. Callers keep the cells before it paired.
+   */
+  wide?: boolean;
   className?: string;
 }
 
-export function PassCell({ label, children, mono, span, className }: PassCellProps) {
+export function PassCell({ label, children, mono, span, wide, className }: PassCellProps) {
   const style = span && span > 1 ? { gridColumn: `span ${span}` } : undefined;
   const isText = typeof children === 'string' || typeof children === 'number';
   return (
-    <div className={cx(styles.cell, className)} style={style}>
+    <div className={cx(styles.cell, wide && styles.wide, className)} style={style}>
       <dt className={styles.label}>{label}</dt>
       <dd className={cx(styles.value, mono && styles.mono)}>
         {isText ? <TruncatedText>{children}</TruncatedText> : children}

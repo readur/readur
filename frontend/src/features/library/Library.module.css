@@ -398,6 +398,19 @@
   white-space: nowrap;
 }
 
+/* Phones: the status mark gets its own line under the name, so neither is cut. */
+@media (max-width: 719px) {
+  .panelTitle {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-1);
+  }
+
+  .panelName {
+    max-width: 100%;
+  }
+}
+
 .detail {
   display: flex;
   flex-direction: column;

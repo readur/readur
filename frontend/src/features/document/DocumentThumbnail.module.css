@@ -9,8 +9,12 @@
   border-radius: var(--radius);
 }
 
-/* A hairline frame on the raised surface: letterboxes real previews and holds the stub. */
+/*
+ * A hairline frame on the raised surface: holds the type stub, and letterboxes real previews with
+ * the same inset, so an image sits inside the tile like the type code does instead of filling it.
+ */
 .frame {
+  padding: calc(var(--s-1) / 2);
   background: var(--surface-2);
   border: 1px solid var(--line);
 }
@@ -18,7 +22,7 @@
 .row {
   width: 40px;
   height: 28px;
-  border-radius: 2px;
+  border-radius: calc(var(--radius) / 2);
 }
 
 .small {
@@ -46,12 +50,13 @@
   display: block;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   object-fit: contain;
 }
 
 .stub {
   gap: var(--s-2);
-  padding: 2px;
 }
 
 .code {
