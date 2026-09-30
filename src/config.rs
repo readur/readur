@@ -10,7 +10,7 @@ fn s3_storage_enabled(s3_enabled: Option<&str>, storage_backend: Option<&str>) -
 }
 
 /// S3_FORCE_PATH_STYLE with documented legacy alias S3_PATH_STYLE.
-/// None (unset) means auto-detect.
+/// None (unset) means path-style for custom endpoints, virtual-hosted otherwise.
 fn parse_force_path_style(primary: Option<&str>, legacy: Option<&str>) -> Option<bool> {
     primary.or(legacy).map(|v| v.trim().eq_ignore_ascii_case("true"))
 }
@@ -1156,7 +1156,7 @@ mod s3_env_tests {
         assert_eq!(parse_force_path_style(None, Some("true")), Some(true));
         // primary wins over legacy
         assert_eq!(parse_force_path_style(Some("false"), Some("true")), Some(false));
-        // unset -> auto-detect
+        // unset -> default for the endpoint type
         assert_eq!(parse_force_path_style(None, None), None);
     }
 }

@@ -14,6 +14,7 @@ use crate::{
     services::local_folder_service::{authorize_local_folder_paths, LocalFolderService},
     services::s3_service::S3Service,
     services::webdav::{WebDAVService, WebDAVConfig, SyncProgress, SyncPhase},
+    utils::outbound::validate_outbound_url,
 };
 
 #[derive(Clone)]
@@ -98,6 +99,12 @@ impl SourceSyncService {
 
         info!("WebDAV source sync config: server_url={}, username={}, watch_folders={:?}, file_extensions={:?}, server_type={:?}", 
             config.server_url, config.username, config.watch_folders, config.file_extensions, config.server_type);
+
+        // Re-check the destination at connect time; DNS may have changed
+        // since the source was saved.
+        validate_outbound_url(&WebDAVConfig::normalize_server_url(&config.server_url))
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
 
         // Requests to list files in a Nextcloud folder might take > 2 minutes
         // Set timeout to 3 minutes to accommodate large folder structures
@@ -259,6 +266,10 @@ impl SourceSyncService {
     async fn sync_s3_source_with_cancellation(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken) -> Result<usize> {
         let config: S3SourceConfig = serde_json::from_value(source.config.clone())
             .map_err(|e| anyhow!("Invalid S3 config: {}", e))?;
+
+        for url in S3Service::outbound_urls(&config) {
+            validate_outbound_url(&url).await.map_err(|e| anyhow!("{}", e))?;
+        }
 
         let s3_service = S3Service::new(config.clone()).await
             .map_err(|e| anyhow!("Failed to create S3 service: {}", e))?;

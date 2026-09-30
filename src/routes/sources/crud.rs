@@ -15,6 +15,7 @@ use crate::{
         UpdateSource, User, UserRole,
     },
     services::local_folder_service::{authorize_local_folder_paths, LocalFolderPathError},
+    services::s3_service::S3Service,
     services::webdav::WebDAVConfig,
     utils::outbound::{validate_outbound_url, validate_outbound_url_for_config},
     AppState,
@@ -364,7 +365,7 @@ pub async fn authorize_source_config(
 ) -> Result<(), ConfigRejection> {
     let invalid = || ConfigRejection::Invalid(format!("Invalid {} configuration", source_type));
 
-    let url = match source_type {
+    let urls = match source_type {
         SourceType::LocalFolder => {
             let cfg: crate::models::LocalFolderSourceConfig =
                 serde_json::from_value(config.clone()).map_err(|_| invalid())?;
@@ -382,22 +383,22 @@ pub async fn authorize_source_config(
         SourceType::WebDAV => {
             let cfg: crate::models::WebDAVSourceConfig =
                 serde_json::from_value(config.clone()).map_err(|_| invalid())?;
-            WebDAVConfig::normalize_server_url(&cfg.server_url)
+            vec![WebDAVConfig::normalize_server_url(&cfg.server_url)]
         }
         SourceType::S3 => {
             let cfg: crate::models::S3SourceConfig =
                 serde_json::from_value(config.clone()).map_err(|_| invalid())?;
-            match cfg.endpoint_url.filter(|u| !u.trim().is_empty()) {
-                Some(endpoint) => endpoint,
-                None => return Ok(()),
-            }
+            S3Service::outbound_urls(&cfg)
         }
     };
 
-    let result = if strict {
-        validate_outbound_url(&url).await
-    } else {
-        validate_outbound_url_for_config(&url).await
-    };
-    result.map_err(|e| ConfigRejection::Invalid(e.to_string()))
+    for url in urls {
+        let result = if strict {
+            validate_outbound_url(&url).await
+        } else {
+            validate_outbound_url_for_config(&url).await
+        };
+        result.map_err(|e| ConfigRejection::Invalid(e.to_string()))?;
+    }
+    Ok(())
 }

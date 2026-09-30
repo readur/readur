@@ -13,6 +13,8 @@ use crate::{
     AppState,
     models::{SourceType, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
     models::source::WebDAVTestConnection,
+    services::webdav::WebDAVConfig,
+    utils::outbound::{categorize_connection_error, validate_outbound_url},
 };
 use super::source_sync::SourceSyncService;
 
@@ -713,6 +715,19 @@ impl SourceScheduler {
 
         if should_trigger_deep_scan {
             info!("🎯 Intelligent deep scan trigger activated for source {}: {}", source.name, reason);
+
+            let webdav_config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())?;
+            if let Err(e) = validate_outbound_url(&WebDAVConfig::normalize_server_url(&webdav_config.server_url)).await {
+                warn!("Automatic deep scan for source {} not started: {}", source.name, e);
+                if let Err(db_err) = state
+                    .db
+                    .update_source_status(source.id, crate::models::SourceStatus::Error, Some(e.to_string()))
+                    .await
+                {
+                    error!("Failed to update source status: {}", db_err);
+                }
+                return Ok(());
+            }
             
             // Create notification about automatic deep scan
             let notification = crate::models::CreateNotification {
@@ -735,7 +750,6 @@ impl SourceScheduler {
             
             // Trigger the deep scan via the API endpoint
             // We'll reuse the existing deep scan logic from the sources route
-            let webdav_config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())?;
             let webdav_service = crate::services::webdav::WebDAVService::new(
                 crate::services::webdav::WebDAVConfig {
                     server_url: webdav_config.server_url.clone(),
@@ -1024,6 +1038,10 @@ impl SourceScheduler {
         let config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())
             .map_err(|e| format!("Config parse error: {}", e))?;
 
+        validate_outbound_url(&WebDAVConfig::normalize_server_url(&config.server_url))
+            .await
+            .map_err(|e| e.to_string())?;
+
         let webdav_config = crate::services::webdav::WebDAVConfig {
             server_url: config.server_url.clone(),
             username: config.username.clone(),
@@ -1034,8 +1052,10 @@ impl SourceScheduler {
             server_type: config.server_type.clone(),
         };
 
-        let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config)
-            .map_err(|e| format!("Service creation failed: {}", e))?;
+        let _webdav_service = crate::services::webdav::WebDAVService::new(webdav_config).map_err(|e| {
+            warn!("WebDAV health check for source {}: service creation failed: {}", source.id, e);
+            categorize_connection_error(&e.to_string()).to_string()
+        })?;
 
         let test_config = WebDAVTestConnection {
             server_url: config.server_url,
@@ -1044,8 +1064,16 @@ impl SourceScheduler {
             server_type: config.server_type,
         };
         
-        crate::services::webdav::WebDAVService::test_connection_with_config(&test_config).await
-            .map_err(|e| format!("Connection test failed: {}", e))?;
+        let result = crate::services::webdav::WebDAVService::test_connection_with_config(&test_config)
+            .await
+            .map_err(|e| {
+                warn!("WebDAV health check for source {} failed: {}", source.id, e);
+                categorize_connection_error(&e.to_string()).to_string()
+            })?;
+        if !result.success {
+            warn!("WebDAV health check for source {} failed: {}", source.id, result.message);
+            return Err(categorize_connection_error(&result.message).to_string());
+        }
 
         Ok(())
     }
@@ -1056,9 +1084,14 @@ impl SourceScheduler {
         Ok(())
     }
 
-    async fn validate_s3_connectivity(_source: &crate::models::Source) -> Result<(), String> {
-        // Simplified S3 validation - could be enhanced with actual AWS SDK calls
-        // For now, just return OK as S3 validation requires more complex setup
+    async fn validate_s3_connectivity(source: &crate::models::Source) -> Result<(), String> {
+        // Only the endpoint destination is checked here; a full S3 request
+        // requires more setup than a periodic health check warrants.
+        let config: S3SourceConfig = serde_json::from_value(source.config.clone())
+            .map_err(|e| format!("Config parse error: {}", e))?;
+        for url in crate::services::s3_service::S3Service::outbound_urls(&config) {
+            validate_outbound_url(&url).await.map_err(|e| e.to_string())?;
+        }
         Ok(())
     }
 

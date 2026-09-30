@@ -68,6 +68,80 @@ pub async fn validate_outbound_url_for_config(raw: &str) -> Result<(), OutboundU
     }
 }
 
+/// Synchronous part of the destination check: the scheme must be http(s) and
+/// a host given as an IP literal must be permitted. Domain names are checked
+/// when they are resolved (see [`FilteringResolver`]).
+pub fn check_url_without_dns(url: &url::Url) -> Result<(), OutboundUrlError> {
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return Err(OutboundUrlError::UnsupportedScheme);
+    }
+    let blocked = match url.host() {
+        Some(url::Host::Ipv4(ip)) => is_blocked_ip(&IpAddr::V4(ip)),
+        Some(url::Host::Ipv6(ip)) => is_blocked_ip(&IpAddr::V6(ip)),
+        Some(url::Host::Domain(_)) => false,
+        None => return Err(OutboundUrlError::Invalid),
+    };
+    if blocked {
+        Err(OutboundUrlError::BlockedDestination)
+    } else {
+        Ok(())
+    }
+}
+
+/// DNS resolver for clients that connect to user-configured servers. Blocked
+/// addresses are dropped from every lookup, so a host name that later
+/// resolves to a refused address cannot be reached even though it passed
+/// validation when the configuration was saved.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct FilteringResolver;
+
+impl reqwest::dns::Resolve for FilteringResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_string();
+        Box::pin(async move {
+            let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host.as_str(), 0))
+                .await?
+                .filter(|addr| !is_blocked_ip(&addr.ip()))
+                .collect();
+            if addrs.is_empty() {
+                let err: Box<dyn std::error::Error + Send + Sync> =
+                    Box::new(std::io::Error::new(std::io::ErrorKind::PermissionDenied, OutboundUrlError::BlockedDestination.to_string()));
+                return Err(err);
+            }
+            let iter: reqwest::dns::Addrs = Box::new(addrs.into_iter());
+            Ok(iter)
+        })
+    }
+}
+
+/// Maximum number of redirects followed by [`redirect_policy`].
+const MAX_REDIRECTS: usize = 10;
+
+/// Redirect policy for clients that connect to user-configured servers:
+/// each hop must be http(s) and must not target a refused IP literal.
+/// Host names are filtered by [`FilteringResolver`] when connecting.
+pub fn redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            return attempt.error("too many redirects");
+        }
+        match check_url_without_dns(attempt.url()) {
+            Ok(()) => attempt.follow(),
+            Err(e) => attempt.error(e.to_string()),
+        }
+    })
+}
+
+/// HTTP client builder for connections to user-configured servers, with the
+/// destination checks applied to DNS results and redirects.
+pub fn client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .dns_resolver(std::sync::Arc::new(FilteringResolver))
+        .redirect(redirect_policy())
+}
+
+impl std::error::Error for OutboundUrlError {}
+
 pub fn is_blocked_ip(ip: &IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => is_blocked_ipv4(v4),
@@ -148,6 +222,47 @@ mod tests {
     #[tokio::test]
     async fn config_check_tolerates_unresolvable_hosts() {
         assert_eq!(validate_outbound_url_for_config("https://does-not-exist.invalid/").await, Ok(()));
+    }
+
+    #[test]
+    fn url_check_without_dns() {
+        let check = |u: &str| check_url_without_dns(&url::Url::parse(u).unwrap());
+        assert_eq!(check("http://169.254.169.254/"), Err(OutboundUrlError::BlockedDestination));
+        assert_eq!(check("http://[fe80::1]/"), Err(OutboundUrlError::BlockedDestination));
+        assert_eq!(check("file:///etc/passwd"), Err(OutboundUrlError::UnsupportedScheme));
+        assert_eq!(check("https://nextcloud.example/remote.php/dav"), Ok(()));
+        assert_eq!(check("http://192.168.1.10:8080/"), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn resolver_keeps_permitted_addresses() {
+        use reqwest::dns::Resolve;
+        let name: reqwest::dns::Name = "localhost".parse().unwrap();
+        let addrs: Vec<_> = FilteringResolver.resolve(name).await.unwrap().collect();
+        assert!(!addrs.is_empty());
+        assert!(addrs.iter().all(|a| !is_blocked_ip(&a.ip())));
+    }
+
+    #[tokio::test]
+    async fn redirects_to_refused_destinations_are_not_followed() {
+        use wiremock::{matchers::path, Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(path("/start"))
+            .respond_with(ResponseTemplate::new(302).insert_header("location", "http://169.254.169.254/latest/meta-data/"))
+            .mount(&server)
+            .await;
+        Mock::given(path("/hop"))
+            .respond_with(ResponseTemplate::new(302).insert_header("location", "/done"))
+            .mount(&server)
+            .await;
+        Mock::given(path("/done")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
+
+        let client = client_builder().build().unwrap();
+        let err = client.get(format!("{}/start", server.uri())).send().await.unwrap_err();
+        assert!(err.is_redirect(), "{err}");
+
+        let ok = client.get(format!("{}/hop", server.uri())).send().await.unwrap();
+        assert_eq!(ok.status(), 200);
     }
 
     #[test]

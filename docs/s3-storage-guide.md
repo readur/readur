@@ -122,7 +122,7 @@ S3_REGION=us-east-1
 S3_ENDPOINT_URL=http://localhost:9000
 ```
 
-Path-style addressing is auto-detected when a custom endpoint is set; set `S3_FORCE_PATH_STYLE=true` only if you need to force it explicitly.
+Path-style addressing is used by default when a custom endpoint is set; set `S3_FORCE_PATH_STYLE=false` only if your service requires virtual-hosted addressing.
 
 #### Wasabi
 ```bash

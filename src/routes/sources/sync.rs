@@ -13,6 +13,7 @@ use crate::{
     auth::AuthUser,
     models::SourceStatus,
     services::webdav::{SyncProgress, SyncPhase},
+    utils::outbound::validate_outbound_url,
     AppState,
 };
 
@@ -230,6 +231,21 @@ pub async fn trigger_deep_scan(
                     error!("Failed to parse WebDAV config for source {}: {}", source_id, e);
                     StatusCode::INTERNAL_SERVER_ERROR
                 })?;
+
+            // Re-check the destination at connect time; DNS may have changed
+            // since the source was saved.
+            let server_url = crate::services::webdav::WebDAVConfig::normalize_server_url(&config.server_url);
+            if let Err(e) = validate_outbound_url(&server_url).await {
+                error!("Deep scan for source {} not started: {}", source_id, e);
+                if let Err(db_err) = state
+                    .db
+                    .update_source_status(source_id, SourceStatus::Error, Some(e.to_string()))
+                    .await
+                {
+                    error!("Failed to update source status: {}", db_err);
+                }
+                return Err(StatusCode::BAD_REQUEST);
+            }
 
             // Create WebDAV service
             let webdav_config = crate::services::webdav::WebDAVConfig {

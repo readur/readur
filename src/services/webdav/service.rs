@@ -20,6 +20,7 @@ use crate::models::source_error::{ErrorSourceType, ErrorContext};
 use crate::services::source_error_tracker::SourceErrorTracker;
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
+use crate::utils::outbound::{self, check_url_without_dns};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 use super::common::build_user_agent;
@@ -175,8 +176,14 @@ impl WebDAVService {
         // Validate configuration
         config.validate()?;
 
+        // The configured server must be a permitted destination. Host names
+        // are also filtered on every DNS lookup and redirect by the client.
+        if let Ok(url) = url::Url::parse(&WebDAVConfig::normalize_server_url(&config.server_url)) {
+            check_url_without_dns(&url).map_err(|e| anyhow!("{}", e))?;
+        }
+
         // Create HTTP client with timeout
-        let client = Client::builder()
+        let client = outbound::client_builder()
             .timeout(config.timeout())
             .build()?;
 
@@ -660,6 +667,11 @@ impl WebDAVService {
         body: Option<String>,
         headers: Option<Vec<(&str, &str)>>,
     ) -> Result<reqwest::Response> {
+        // URLs may be built from server-provided hrefs; apply the same
+        // destination check as for the configured server.
+        let parsed = url::Url::parse(url).map_err(|_| anyhow!("Invalid request URL"))?;
+        check_url_without_dns(&parsed).map_err(|e| anyhow!("{}", e))?;
+
         let mut attempt = 0;
         let mut delay = self.retry_config.initial_delay_ms;
 
