@@ -40,7 +40,7 @@ All application settings can be configured via environment variables:
 | `ADMIN_USERNAME` | `admin` | Username of the initial admin account |
 | `ADMIN_EMAIL` | `<username>@localhost` | Email of the initial admin account |
 | `ADMIN_PASSWORD` | _(none)_ | Initial admin password (min 8 chars). If unset, a random 24-character password is generated and written to a file instead of the logs |
-| `ADMIN_PASSWORD_FILE` | `<parent of UPLOAD_PATH>/initial-admin-password` | Location of the generated admin password file (mode `0600`); `/app/initial-admin-password` in the Docker image |
+| `ADMIN_PASSWORD_FILE` | `<UPLOAD_PATH>/.readur/initial-admin-password` | Location of the generated admin password file (mode `0600`); `/app/uploads/.readur/initial-admin-password` in the Docker image |
 | `ALLOW_REGISTRATION` | `false` | Enables self-registration. New self-registered accounts are disabled until an administrator approves them in user management |
 | `LOCAL_SOURCE_ALLOWED_PATHS` | _(none)_ | Comma-separated directories local folder sources may use. When set, all local folder sources (including admins') must be inside one of them. When unset, only admins can create local folder sources |
 | `TRUSTED_PROXIES` | _(none)_ | Comma-separated IPs/CIDRs of reverse proxies whose `X-Forwarded-For` header is trusted for the client IP (rate limiting) |

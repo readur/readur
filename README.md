@@ -49,10 +49,10 @@ open http://localhost:8000
 - Username: `admin` (override with `ADMIN_USERNAME`)
 - Password: the value of `ADMIN_PASSWORD` if set; otherwise generated on first run and written to a file
 
-If `ADMIN_PASSWORD` is not set, Readur generates a random 24-character password on first startup and writes it to `initial-admin-password` in the parent directory of `UPLOAD_PATH` (`/app/initial-admin-password` in the Docker image), readable only by the server user. The password is not written to the logs; the log line shows the file path. Set `ADMIN_PASSWORD_FILE` to choose a different location.
+If `ADMIN_PASSWORD` is not set, Readur generates a random 24-character password on first startup and writes it to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in the Docker image), readable only by the server user. The password is not written to the logs; the log line shows the file path. Set `ADMIN_PASSWORD_FILE` to choose a different location.
 
 ```bash
-docker compose exec readur cat /app/initial-admin-password
+docker compose exec readur cat /app/uploads/.readur/initial-admin-password
 ```
 
 Sign in, change the password, then delete the file.

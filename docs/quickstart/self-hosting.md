@@ -135,7 +135,7 @@ CONCURRENT_OCR_JOBS=4
 
 ### Admin Password
 
-If `ADMIN_PASSWORD` is not set, Readur generates a random 24-character admin password on first startup and writes it to `initial-admin-password` in the parent directory of `UPLOAD_PATH` (`/app/initial-admin-password` in the container), with mode `0600`. The password is not written to the logs. Set `ADMIN_PASSWORD_FILE` to write it elsewhere. You can also set the password explicitly in `.env`:
+If `ADMIN_PASSWORD` is not set, Readur generates a random 24-character admin password on first startup and writes it to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in the container), with mode `0600`. The password is not written to the logs. Set `ADMIN_PASSWORD_FILE` to write it elsewhere. You can also set the password explicitly in `.env`:
 
 ```bash
 # Optional: Set a custom admin password (minimum 8 characters)
@@ -185,13 +185,13 @@ Look for these indicators of successful startup:
 **First-time startup**: If you did not set `ADMIN_PASSWORD`, the log shows where the generated password was written:
 
 ```
-🔑 The generated admin password was written to /app/initial-admin-password - sign in, change it, then delete the file
+🔑 The generated admin password was written to /app/uploads/.readur/initial-admin-password - sign in, change it, then delete the file
 ```
 
 Read it with:
 
 ```bash
-docker compose exec readur cat /app/initial-admin-password
+docker compose exec readur cat /app/uploads/.readur/initial-admin-password
 ```
 
 After signing in and changing the password, delete the file.
@@ -238,7 +238,7 @@ You should see the Readur login page.
 **Login credentials:**
 
 - Username: `admin`
-- Password: The password you set in `ADMIN_PASSWORD`, or the generated password from `/app/initial-admin-password`
+- Password: The password you set in `ADMIN_PASSWORD`, or the generated password from `/app/uploads/.readur/initial-admin-password`
 
 **Congratulations!** You now have Readur running. Continue to the next step to upload your first document.
 

@@ -93,7 +93,7 @@ docker-compose up -d
 open http://localhost:8000
 ```
 
-If you did not set `ADMIN_PASSWORD`, read the generated admin password with `docker compose exec readur cat /app/initial-admin-password` (it is not written to the logs). Log in with username `admin` and that password, change it, delete the file, then upload a document and watch Readur extract the text automatically.
+If you did not set `ADMIN_PASSWORD`, read the generated admin password with `docker compose exec readur cat /app/uploads/.readur/initial-admin-password` (it is not written to the logs). Log in with username `admin` and that password, change it, delete the file, then upload a document and watch Readur extract the text automatically.
 
 ## How People Use Readur
 

@@ -28,9 +28,12 @@ async fn test_admin_seed_creates_user_with_auto_password() {
         // Run seed
         seed::seed_admin_user(&ctx.state.db, upload_path.to_str().unwrap()).await?;
 
-        // The generated password is written next to the upload directory,
+        // The generated password is written inside the upload directory,
         // readable only by the owner.
-        let password_file = data_dir.path().join(seed::INITIAL_ADMIN_PASSWORD_FILE);
+        let password_file = upload_path
+            .join(seed::INITIAL_ADMIN_PASSWORD_DIR)
+            .join(seed::INITIAL_ADMIN_PASSWORD_FILE);
+        assert_eq!(password_file, seed::initial_admin_password_path(upload_path.to_str().unwrap()));
         let password = std::fs::read_to_string(&password_file)?.trim().to_string();
         assert_eq!(password.len(), 24, "Generated password should be written to the file");
         #[cfg(unix)]
@@ -64,6 +67,42 @@ async fn test_admin_seed_creates_user_with_auto_password() {
         Ok(())
     }.await;
 
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    result.unwrap();
+}
+
+/// An existing password file is never overwritten; seeding fails instead.
+#[tokio::test]
+async fn test_admin_seed_does_not_overwrite_existing_password_file() {
+    let ctx = TestContext::new().await;
+    let data_dir = tempfile::tempdir().expect("tempdir");
+    let upload_path = data_dir.path().join("uploads");
+    let result: Result<()> = async {
+        clear_seed_env();
+        let password_file = seed::initial_admin_password_path(upload_path.to_str().unwrap());
+        std::fs::create_dir_all(password_file.parent().unwrap())?;
+        std::fs::write(&password_file, "previous-contents\n")?;
+
+        let outcome = seed::seed_admin_user(&ctx.state.db, upload_path.to_str().unwrap()).await;
+        assert!(outcome.is_err(), "seeding must not replace an existing password file");
+        assert_eq!(std::fs::read_to_string(&password_file)?, "previous-contents\n");
+        assert!(ctx.state.db.get_user_by_username("admin").await?.is_none());
+
+        #[cfg(unix)]
+        {
+            // A symlink at the path is not followed either.
+            let target = data_dir.path().join("elsewhere");
+            std::fs::remove_file(&password_file)?;
+            std::os::unix::fs::symlink(&target, &password_file)?;
+            assert!(seed::seed_admin_user(&ctx.state.db, upload_path.to_str().unwrap()).await.is_err());
+            assert!(!target.exists(), "the symlink target must not be created");
+        }
+        Ok(())
+    }.await;
+
+    clear_seed_env();
     if let Err(e) = ctx.cleanup_and_close().await {
         eprintln!("Warning: Test cleanup failed: {}", e);
     }

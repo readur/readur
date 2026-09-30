@@ -138,7 +138,7 @@ S3_ACCESS_KEY_ID=<your-key>
 S3_SECRET_ACCESS_KEY=<your-secret>
 ```
 
-`JWT_SECRET` signs login tokens and is required - generate it using `openssl rand -hex 32`. The server refuses to start if it is unset, shorter than 32 bytes, or a published example value. Choose a strong admin password since this account has full system access; if `ADMIN_PASSWORD` is unset, a random password is written to `initial-admin-password` next to the upload directory instead. The database URL tells Readur how to connect to PostgreSQL, while storage settings determine where uploaded documents are kept.
+`JWT_SECRET` signs login tokens and is required - generate it using `openssl rand -hex 32`. The server refuses to start if it is unset, shorter than 32 bytes, or a published example value. Choose a strong admin password since this account has full system access; if `ADMIN_PASSWORD` is unset, a random password is written to `initial-admin-password` in the `.readur` directory inside the upload directory instead. The database URL tells Readur how to connect to PostgreSQL, while storage settings determine where uploaded documents are kept.
 
 [Complete configuration options →](../configuration-reference.md)
 

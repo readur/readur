@@ -99,7 +99,7 @@ See the [OIDC Setup Guide](oidc-setup.md) for detailed configuration instruction
 
 **Default Admin Account:**
 - Username: from `ADMIN_USERNAME` (default `admin`); email from `ADMIN_EMAIL` (default `<username>@localhost`)
-- Password: `ADMIN_PASSWORD` if set; otherwise generated on first startup and written to `initial-admin-password` in the parent directory of `UPLOAD_PATH` (`/app/initial-admin-password` in Docker, mode `0600`, location configurable with `ADMIN_PASSWORD_FILE`). It is not written to the logs.
+- Password: `ADMIN_PASSWORD` if set; otherwise generated on first startup and written to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in Docker, mode `0600`, location configurable with `ADMIN_PASSWORD_FILE`). It is not written to the logs.
 
 ## Admin User Management
 

@@ -46,10 +46,10 @@ Login with your admin credentials:
 - **Username**: `admin`
 - **Password**: the generated password stored in the container (or your `ADMIN_PASSWORD`, if you set one)
 
-On first startup without `ADMIN_PASSWORD`, Readur generates a random admin password and writes it to `/app/initial-admin-password` inside the container (it is not written to the logs):
+On first startup without `ADMIN_PASSWORD`, Readur generates a random admin password and writes it to `/app/uploads/.readur/initial-admin-password` inside the container (it is not written to the logs):
 
 ```bash
-docker-compose exec readur cat /app/initial-admin-password
+docker-compose exec readur cat /app/uploads/.readur/initial-admin-password
 ```
 
 After signing in and changing the password, delete the file.

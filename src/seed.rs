@@ -9,21 +9,24 @@ use crate::utils::security::generate_secure_password;
 /// File name of the generated first-run admin password.
 pub const INITIAL_ADMIN_PASSWORD_FILE: &str = "initial-admin-password";
 
+/// Directory inside `UPLOAD_PATH` that holds the generated password file.
+/// A subdirectory keeps it apart from files the server manages in the
+/// upload root.
+pub const INITIAL_ADMIN_PASSWORD_DIR: &str = ".readur";
+
 /// Where a generated admin password is written: `ADMIN_PASSWORD_FILE` if set,
-/// otherwise `initial-admin-password` next to the upload directory (so it is
-/// not inside a directory the server serves files from).
+/// otherwise `<UPLOAD_PATH>/.readur/initial-admin-password`. The upload
+/// directory is used because the server can always write there; uploaded
+/// files are only served through the API, never from this directory.
 pub fn initial_admin_password_path(upload_path: &str) -> PathBuf {
     if let Ok(path) = env::var("ADMIN_PASSWORD_FILE") {
         if !path.trim().is_empty() {
             return PathBuf::from(path);
         }
     }
-    let upload = Path::new(upload_path);
-    let parent = upload
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    parent.join(INITIAL_ADMIN_PASSWORD_FILE)
+    Path::new(upload_path)
+        .join(INITIAL_ADMIN_PASSWORD_DIR)
+        .join(INITIAL_ADMIN_PASSWORD_FILE)
 }
 
 /// Default admin email: `ADMIN_EMAIL`, or `<username>@localhost`.
@@ -34,26 +37,41 @@ pub fn admin_email(admin_username: &str) -> String {
         .unwrap_or_else(|| format!("{}@localhost", admin_username))
 }
 
+/// Write a new secret file with mode 0600. An existing file (or a symlink
+/// at the path) is never overwritten: `create_new` opens with
+/// `O_CREAT | O_EXCL`, which fails if anything already exists at the path,
+/// including a symlink.
 fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
     use std::io::Write;
 
     if let Some(dir) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(dir)?;
+        let mut builder = std::fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(dir)?;
     }
     let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(path)?;
-    #[cfg(unix)]
-    {
-        // `mode` only applies when the file is created; tighten a pre-existing one too.
-        use std::os::unix::fs::PermissionsExt;
-        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
-    }
+    let mut file = options.open(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            anyhow::anyhow!(
+                "{} already exists; it may hold a previously generated password. \
+                 Remove it, or set ADMIN_PASSWORD",
+                path.display()
+            )
+        } else {
+            e.into()
+        }
+    })?;
     writeln!(file, "{}", contents)?;
     Ok(())
 }
@@ -75,7 +93,7 @@ pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
         }
         Ok(None) => {}
         Err(e) => {
-            warn!("⚠️  Error checking for admin user: {}", e);
+            return Err(e).context("Failed to check whether the admin user exists");
         }
     }
 
@@ -124,7 +142,13 @@ pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
         Err(e) => {
             warn!("❌ Failed to create admin user: {}", e);
             if let Some(path) = password_file {
-                let _ = std::fs::remove_file(path);
+                if let Err(remove_err) = std::fs::remove_file(&path) {
+                    warn!(
+                        "Failed to remove the unused admin password file {}: {}",
+                        path.display(),
+                        remove_err
+                    );
+                }
             }
         }
     }

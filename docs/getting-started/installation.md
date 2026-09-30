@@ -236,10 +236,10 @@ docker logs -f readur
    - Username: `admin`
    - Password: the value of `ADMIN_PASSWORD`, or the generated password file
 
-   If `ADMIN_PASSWORD` is not set, Readur generates a random password on first startup and writes it to `initial-admin-password` in the parent directory of `UPLOAD_PATH` (`/app/initial-admin-password` in the container, mode `0600`). It is not written to the logs; the log shows the file path. Read it with:
+   If `ADMIN_PASSWORD` is not set, Readur generates a random password on first startup and writes it to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in the container, mode `0600`). It is not written to the logs; the log shows the file path. Read it with:
 
    ```bash
-   docker compose exec readur cat /app/initial-admin-password
+   docker compose exec readur cat /app/uploads/.readur/initial-admin-password
    ```
 
    After signing in and changing the password, delete the file.

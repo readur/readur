@@ -27,7 +27,7 @@ JWT_TTL_HOURS=12  # Login token lifetime (1-720, default 12)
 
 Create and manage users via the API:
 
-The initial admin account is created on first startup from `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` (default `<username>@localhost`) and `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, a random password is written to `initial-admin-password` next to the upload directory (see `ADMIN_PASSWORD_FILE`) rather than to the logs.
+The initial admin account is created on first startup from `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` (default `<username>@localhost`) and `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, a random password is written to `initial-admin-password` in the `.readur` directory inside the upload directory (see `ADMIN_PASSWORD_FILE`) rather than to the logs.
 
 ```bash
 # Create a user via the admin API

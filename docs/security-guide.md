@@ -19,7 +19,7 @@ ALLOW_REGISTRATION: "false"    # self-registration (default false)
 
 The server refuses to start if `JWT_SECRET` is unset, shorter than 32 bytes, or a published example value. `READUR_INSECURE_DEV_MODE=true` relaxes this for throwaway local development only.
 
-Initial admin account: `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` (default `<username>@localhost`) and `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, a random password is written with mode `0600` to `initial-admin-password` in the parent directory of `UPLOAD_PATH` (override with `ADMIN_PASSWORD_FILE`); it is not written to the logs. Delete the file after changing the password.
+Initial admin account: `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` (default `<username>@localhost`) and `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, a random password is written with mode `0600` to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (override with `ADMIN_PASSWORD_FILE`); it is not written to the logs. Delete the file after changing the password.
 
 When `ALLOW_REGISTRATION=true`, self-registered accounts are created inactive and need administrator approval before they can sign in. `POST /api/auth/logout` revokes all of a user's sessions.
 
