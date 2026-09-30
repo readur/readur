@@ -1,0 +1,116 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--ground);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  height: 56px;
+  padding: 0 var(--s-5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+}
+
+.kicker {
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--fg-meta);
+}
+
+.main {
+  display: flex;
+  justify-content: center;
+  flex: 1 1 auto;
+  padding: var(--s-7) var(--s-4);
+}
+
+.card,
+.ready {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  width: 100%;
+}
+
+.card {
+  max-width: 440px;
+  align-self: flex-start;
+  padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.ready {
+  max-width: 960px;
+}
+
+.lock {
+  font-size: var(--fs-2xl);
+  color: var(--fg-meta);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  line-height: var(--lh-display);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.error {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+@media (max-width: 719px) {
+  .header {
+    padding: 0 var(--s-4);
+  }
+
+  .main {
+    padding: var(--s-5) var(--s-4);
+  }
+}
