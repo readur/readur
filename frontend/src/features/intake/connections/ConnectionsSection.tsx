@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { BoardTable, Button, EmptyState, StatusMark, type BoardColumn, type BoardSort } from '../../../ui';
 import { Add, Refresh } from '../../../ui/icons';
@@ -7,12 +8,14 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { isAdmin } from '../../../auth/roles';
 import { acknowledge, isLit, useLitCount } from '../../board/litStore';
 import { formatCount, formatRelative } from '../shared/format';
-import { NameCell, Notice, sharedStyles } from '../shared/parts';
+import { HumanReason } from '../shared/HumanReason';
+import { ChangedTag, Notice, sharedStyles } from '../shared/parts';
+import { ConnectionDot } from './ConnectionDot';
 import { sourceTypeLabel } from '../shared/sourceTypes';
 import { SourceForm } from './form/SourceForm';
 import { OcrControls } from './OcrControls';
 import { SourceDetailPanel } from './SourceDetailPanel';
-import { nextSyncAt, sourceState } from './sourceModel';
+import { isFailing, nextSyncAt, sourceState } from './sourceModel';
 import { useSourceActions } from './useSourceActions';
 import { useSources } from './useSources';
 
@@ -31,11 +34,12 @@ export function ConnectionsSection() {
   const sources = useSources();
   useLitCount('source'); // re-render when a row is acknowledged elsewhere
   const [sort, setSort] = useState<BoardSort>({ column: 'name', direction: 'ascending' });
+  const [params, setParams] = useSearchParams();
   const [openId, setOpenId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SourceResponse | null>(null);
   const actions = useSourceActions(() => void sources.reload(), (id) => {
-    if (openId === id) setOpenId(null);
+    if (openId === id) closeDetail();
   });
 
   const rows = useMemo(() => {
@@ -44,6 +48,22 @@ export function ConnectionsSection() {
     return list;
   }, [sources.data, sort]);
   const open = rows.find((s) => s.id === openId) ?? null;
+
+  // `?source=<id>` (the sidebar's links) opens that connection's details.
+  const wanted = params.get('source');
+  useEffect(() => {
+    if (!wanted || !sources.data?.some((s) => s.id === wanted)) return;
+    acknowledge('source', wanted);
+    setOpenId(wanted);
+  }, [wanted, sources.data]);
+  const closeDetail = () => {
+    setOpenId(null);
+    if (params.has('source')) {
+      const next = new URLSearchParams(params);
+      next.delete('source');
+      setParams(next, { replace: true });
+    }
+  };
   const lng = i18n.language;
 
   const columns: BoardColumn<SourceResponse>[] = [
@@ -51,7 +71,20 @@ export function ConnectionsSection() {
       id: 'name',
       label: t('intake.connections.col.name', 'Name'),
       sortable: true,
-      render: (s) => <NameCell name={s.name} tag={isLit('source', s.id) ? 'changed' : null} />,
+      render: (s) => (
+        <span className={sharedStyles.nameBlock}>
+          <span className={sharedStyles.dotName}>
+            <ConnectionDot id={s.id} type={s.source_type} />
+            <span className={sharedStyles.nameText}>{s.name}</span>
+            {isLit('source', s.id) ? <ChangedTag reason="changed" /> : null}
+          </span>
+          {isFailing(s) && s.last_error ? (
+            <span className={sharedStyles.nameSub}>
+              <HumanReason kind="connection" raw={s.last_error} summaryOnly />
+            </span>
+          ) : null}
+        </span>
+      ),
     },
     { id: 'type', hideOnNarrow: true, label: t('intake.connections.col.type', 'Type'), width: 120, render: (s) => sourceTypeLabel(t, s.source_type) },
     { id: 'status', label: t('intake.connections.col.status', 'Status'), width: 130, render: (s) => <StatusMark state={sourceState(s)} size="sm" /> },
@@ -149,7 +182,7 @@ export function ConnectionsSection() {
       <SourceDetailPanel
         source={open}
         isOpen={Boolean(open)}
-        onOpenChange={(isOpen) => !isOpen && setOpenId(null)}
+        onOpenChange={(isOpen) => !isOpen && closeDetail()}
         onEdit={startEdit}
         actions={actions}
       />

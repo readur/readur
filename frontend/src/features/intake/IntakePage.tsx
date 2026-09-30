@@ -35,6 +35,16 @@ export function revealSelectedTab(scroller: HTMLElement | null) {
   else if (rect.right > box.right) scroller.scrollLeft += rect.right - box.right;
 }
 
+/**
+ * The sidebar links every source as `?section=connections&source=<key>`. The watch folder and
+ * the uploads have no connection panel, so their keys lead to their own section.
+ */
+export function sectionForSource(source: string | null): IntakeSectionId | null {
+  if (source === 'watch') return 'watch';
+  if (source === 'upload' || source === 'uploads') return 'upload';
+  return null;
+}
+
 export function parseSection(value: string | null): IntakeSectionId {
   return (INTAKE_SECTION_IDS as readonly string[]).includes(value ?? '') ? (value as IntakeSectionId) : DEFAULT_INTAKE_SECTION;
 }
@@ -43,7 +53,7 @@ export function parseSection(value: string | null): IntakeSectionId {
 export default function IntakePage() {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
-  const section = parseSection(params.get('section'));
+  const section = sectionForSource(params.get('source')) ?? parseSection(params.get('section'));
   const summary = useIntakeSummary(section);
   const tabScroller = useRef<HTMLDivElement>(null);
 

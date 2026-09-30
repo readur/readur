@@ -31,7 +31,7 @@
   padding: var(--s-2) var(--s-3);
   font-size: var(--fs-sm);
   color: var(--fg);
-  background: var(--danger-bg);
+  background: var(--danger-soft);
   border: 1px solid var(--danger);
   border-radius: var(--radius);
 }

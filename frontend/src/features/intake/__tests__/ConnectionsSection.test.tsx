@@ -86,9 +86,9 @@ describe('Connections board', () => {
     renderIntake(<ConnectionsSection />);
     const grid = await board();
     const names = () => within(grid).getAllByRole('rowheader').map((c) => c.textContent);
-    expect(names()).toEqual(['Archive bucketChanged', 'Office cloud', 'Scanner share']);
+    expect(names()).toEqual(['Archive bucketChangedThe server refused the sign-in. Check the username, password or keys.', 'Office cloud', 'Scanner share']);
     await user.click(within(grid).getByRole('columnheader', { name: /Name/ }));
-    expect(names()).toEqual(['Scanner share', 'Office cloud', 'Archive bucketChanged']);
+    expect(names()).toEqual(['Scanner share', 'Office cloud', 'Archive bucketChangedThe server refused the sign-in. Check the username, password or keys.']);
   });
 
   it('shows the empty state with an add button', async () => {
@@ -436,5 +436,32 @@ describe('Ignored files link (ported from SourcesPage.ignored-files)', () => {
     within(panel).getByRole('button', { name: 'Ignored files' }).focus();
     await user.keyboard('{Enter}');
     expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toContain('section=ignored');
+  });
+});
+
+describe('Connections health and deep links', () => {
+  it("shows the failing connection's last error in plain words under its name", async () => {
+    renderIntake(<ConnectionsSection />);
+    const grid = await board();
+    const row = within(grid).getByRole('row', { name: /Archive bucket/ });
+    expect(within(row).getByText(/server refused the sign-in/i)).toBeInTheDocument();
+    expect(within(grid).getByRole('row', { name: /Office cloud/ })).not.toHaveTextContent(/refused the sign-in/i);
+  });
+
+  it('opens the connection named by ?source= and drops the param on close', async () => {
+    const user = userEvent.setup();
+    renderIntake(<ConnectionsSection />, { path: '/intake?section=connections&source=s2' });
+    const dialog = await screen.findByRole('dialog', { name: 'Archive bucket' });
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('source=s2');
+    await user.click(within(dialog).getByRole('button', { name: /close/i }));
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).not.toContain('source='),
+    );
+  });
+
+  it('ignores a ?source= that matches no connection', async () => {
+    renderIntake(<ConnectionsSection />, { path: '/intake?section=connections&source=nope' });
+    await board();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

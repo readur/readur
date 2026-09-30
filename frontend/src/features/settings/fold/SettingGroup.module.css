@@ -2,6 +2,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
   scroll-margin-top: var(--s-7);
 }
 
@@ -19,14 +20,11 @@
 }
 
 .name {
+  font-family: var(--font-ui);
   margin: 0;
   min-width: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg);
   overflow-wrap: anywhere;
 }

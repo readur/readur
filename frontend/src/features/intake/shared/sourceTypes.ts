@@ -31,3 +31,9 @@ export function ignoredFilesHref(source: { id: string; name: string; source_type
   });
   return `/intake?${params.toString()}`;
 }
+
+/** The kind `sourceHue` expects for a connection's type. */
+export function kindOfSourceType(type?: string | null): 'webdav' | 's3' | 'local' | undefined {
+  if (type === 'webdav' || type === 's3') return type;
+  return type === 'local_folder' ? 'local' : undefined;
+}

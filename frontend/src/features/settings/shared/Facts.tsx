@@ -35,7 +35,7 @@ export function YesNo({ value, yes, no }: { value: boolean | null | undefined; y
   );
 }
 
-/** Small condensed uppercase tag. `tone` changes border/text only; the word always carries the meaning. */
+/** Small tinted tag. `tone` changes border/text only; the word always carries the meaning. */
 export function Tag({ children, tone = 'default' }: { children: ReactNode; tone?: 'default' | 'ok' | 'danger' }) {
   return (
     <span className={styles.tag} data-tone={tone}>

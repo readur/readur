@@ -11,14 +11,11 @@
 }
 
 .segment {
+  font-family: var(--font-ui);
   min-height: 40px;
   padding: 0 var(--s-4);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-2);
   background: transparent;
   border: 0;
@@ -35,8 +32,8 @@
 }
 
 .segment[data-selected] {
-  color: var(--btn-fg);
-  background: var(--btn-bg);
+  color: var(--accent-fg);
+  background: var(--accent);
 }
 
 .segment[data-focus-visible] {

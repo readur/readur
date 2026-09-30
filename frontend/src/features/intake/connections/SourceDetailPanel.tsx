@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { Button, Pass, PassCell, SlideOver, StatusMark } from '../../../ui';
 import type { SourceResponse } from '../../../services/api';
 import { formatBytes, formatCount, formatRelative } from '../shared/format';
+import { HumanReason } from '../shared/HumanReason';
 import { ConfirmDialog, Notice, sharedStyles } from '../shared/parts';
+import { ConnectionDot } from './ConnectionDot';
 import { ignoredFilesHref, sourceTypeLabel } from '../shared/sourceTypes';
 import { SyncProgressDisplay } from '../sync/SyncProgressDisplay';
 import { RecentErrors } from './RecentErrors';
@@ -90,6 +92,7 @@ export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, action
         <div className={sharedStyles.stack}>
           <div className={styles.detailStatus}>
             <StatusMark state={sourceState(source)} />
+            <ConnectionDot id={source.id} type={source.source_type} />
             <span className={sharedStyles.meta}>{sourceTypeLabel(t, source.source_type)}</span>
           </div>
 
@@ -150,7 +153,7 @@ export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, action
 
           {source.last_error ? (
             <Notice tone="danger" title={t('intake.detail.lastError', 'Last sync failed')}>
-              <span>{source.last_error}</span>
+              <HumanReason kind="connection" raw={source.last_error} />
               {source.last_error_at ? (
                 <span className={sharedStyles.meta}> · {formatRelative(source.last_error_at, lng)}</span>
               ) : null}

@@ -4,12 +4,9 @@
 
 .panelTitle,
 .blockTitle {
+  font-family: var(--font-ui);
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg);
 }
 
@@ -148,7 +145,7 @@
   font-size: var(--fs-sm);
   line-height: 1;
   color: var(--fg-2);
-  background: var(--ground);
+  background: var(--bg);
 }
 
 .stepName {
@@ -156,13 +153,10 @@
 }
 
 .stepStatus {
+  font-family: var(--font-ui);
   padding: 0 var(--s-2);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-size: var(--fs-xs);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);

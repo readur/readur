@@ -8,6 +8,7 @@ import LanguageSelector from '../../../components/LanguageSelector';
 import { acknowledge } from '../../board/litStore';
 import { categoryOf, ErrorCodes, hasCode, serverMessage } from '../shared/errors';
 import { formatBytes, formatDateTime } from '../shared/format';
+import { HumanReason } from '../shared/HumanReason';
 import { ConfirmDialog, sharedStyles } from '../shared/parts';
 import { FailedDocumentPreview } from './FailedDocumentPreview';
 import { attentionKeyOf, canRetry, failedName, ocrFailureSummary, reasonLabel } from './failureLabels';
@@ -141,9 +142,11 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
 
         <section className={sharedStyles.stack} aria-labelledby={ids.error}>
           <h3 id={ids.error} className={sharedStyles.heading}>{t('intake.attention.errorMessage', 'Error message')}</h3>
-          <pre className={sharedStyles.codeBlock}>
-            {doc.ocr_error || t('intake.attention.noErrorMessage', 'No error message was recorded.')}
-          </pre>
+          {doc.ocr_error ? (
+            <HumanReason raw={doc.ocr_error} code={doc.ocr_failure_reason} />
+          ) : (
+            <p className={sharedStyles.meta}>{t('intake.attention.noErrorMessage', 'No error message was recorded.')}</p>
+          )}
           {doc.ocr_failure_reason ? (
             <p className={sharedStyles.meta}>
               {t('intake.attention.reasonCode', 'Reason code: {{code}}', { code: reasonLabel(t, doc.ocr_failure_reason) })}

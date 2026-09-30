@@ -39,7 +39,7 @@
   font-size: var(--fs-sm);
   line-height: var(--lh-body);
   color: var(--fg);
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
 }

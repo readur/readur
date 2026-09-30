@@ -30,14 +30,11 @@
 }
 
 .heading {
+  font-family: var(--font-ui);
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-lg);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--fg-2);
+  color: var(--fg);
 }
 
 .lead {
@@ -83,6 +80,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
   min-width: 0;
 }
 
@@ -111,8 +109,8 @@
   font-size: var(--fs-xs);
   line-height: 18px;
   text-align: center;
-  background: var(--signal);
-  color: var(--signal-ink);
+  background: var(--new);
+  color: var(--new-fg);
   border-radius: 999px;
 }
 
@@ -135,7 +133,7 @@
   font-size: var(--fs-sm);
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   max-width: 100%;
 }
 
@@ -161,12 +159,18 @@
 }
 
 .notice[data-tone='danger'] {
-  background: var(--danger-bg);
+  background: var(--danger-soft);
   border-color: var(--danger);
 }
 
 .notice[data-tone='ok'] {
+  background: var(--ok-soft);
   border-color: var(--ok);
+}
+
+.notice[data-tone='warning'] {
+  background: var(--warn-soft);
+  border-color: var(--warn);
 }
 
 .noticeIcon {
@@ -210,7 +214,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  background: var(--fg);
+  background: var(--accent);
   transform-origin: left;
   transition: transform var(--dur-2) var(--ease);
 }
@@ -258,4 +262,60 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* A failure in plain words with the raw text folded away. */
+.reason {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.reasonSummary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reasonDetails {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.reasonDetails summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.reasonDetails summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.reasonDetails[open] summary {
+  margin-bottom: var(--s-1);
+}
+
+.nameBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nameSub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--danger);
+}
+
+.dotName {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
 }

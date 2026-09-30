@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { StatusMark } from '../../../ui';
 import { sourceErrorService } from '../../../services/api';
 import { formatRelative } from '../shared/format';
+import { HumanReason } from '../shared/HumanReason';
 import { Notice, sharedStyles } from '../shared/parts';
 import { useLoader } from '../shared/useLoader';
 import { errorTypeLabel, severityLabel, severityState } from './sourceErrorLabels';
@@ -39,7 +40,11 @@ export function RecentErrors({ sourceId, headingId }: { sourceId: string; headin
             </span>
           </div>
           <span className={`${sharedStyles.mono} ${styles.errorPath}`}>{f.resource_path}</span>
-          {f.error_message ? <span className={styles.errorMessage}>{f.error_message}</span> : null}
+          {f.error_message ? (
+            <span className={styles.errorMessage}>
+              <HumanReason kind="connection" raw={f.error_message} />
+            </span>
+          ) : null}
           <span className={sharedStyles.meta}>
             {t('intake.detail.failureCount', '{{count}} failures · last {{when}}', {
               count: f.failure_count,

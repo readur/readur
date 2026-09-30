@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Pass, PassCell, SlideOver, StatusMark } from '../../../ui';
 import { ocrService, type FailedDocumentRow } from '../../../services/api';
 import { formatBytes, formatDateTime } from '../shared/format';
+import { HumanReason } from '../shared/HumanReason';
 import { sharedStyles } from '../shared/parts';
 import { FailedDocumentPreview } from './FailedDocumentPreview';
 import { confidenceText, failedName, failureSummary, reasonLabel, stageLabel } from './failureLabels';
@@ -55,9 +56,11 @@ export function ImportFailureDetail({ record, isOpen, onOpenChange }: ImportFail
         ) : null}
         <section className={sharedStyles.stack} aria-labelledby={ids.error}>
           <h3 id={ids.error} className={sharedStyles.heading}>{t('intake.attention.errorMessage', 'Error message')}</h3>
-          <pre className={sharedStyles.codeBlock}>
-            {record.error_message || t('intake.attention.noErrorMessage', 'No error message was recorded.')}
-          </pre>
+          {record.error_message ? (
+            <HumanReason raw={record.error_message} code={record.failure_reason} />
+          ) : (
+            <p className={sharedStyles.meta}>{t('intake.attention.noErrorMessage', 'No error message was recorded.')}</p>
+          )}
           <p className={sharedStyles.meta}>{t('intake.attention.reasonCode', 'Reason code: {{code}}', { code: reasonLabel(t, record.failure_reason) })}</p>
         </section>
         {record.tags.length > 0 ? (

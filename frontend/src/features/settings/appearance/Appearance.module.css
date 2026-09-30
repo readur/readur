@@ -5,13 +5,10 @@
 }
 
 .legend {
+  font-family: var(--font-ui);
   margin-bottom: var(--s-2);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-2);
 }
 
@@ -33,7 +30,8 @@
 }
 
 .radio[data-selected] {
-  border-color: var(--line-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .radio[data-focus-visible] {

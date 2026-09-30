@@ -8,13 +8,14 @@
   padding: var(--s-6) var(--s-4);
   text-align: center;
   background: var(--surface);
-  border: 1px dashed var(--line-strong);
+  box-shadow: var(--shadow-1);
+  border: 1px dashed var(--accent);
   border-radius: var(--radius);
   transition: background-color var(--dur-1) var(--ease);
 }
 
 .drop[data-dragging='true'] {
-  background: var(--surface-2);
+  background: var(--accent-soft);
   border-style: solid;
 }
 
@@ -25,14 +26,11 @@
 }
 
 .dropTitle {
+  font-family: var(--font-ui);
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-size: var(--fs-2xl);
   font-weight: 600;
   line-height: var(--lh-display);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg);
 }
 

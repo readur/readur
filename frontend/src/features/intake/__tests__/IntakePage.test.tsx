@@ -9,7 +9,7 @@ vi.mock('../attention/AttentionSection', () => ({ AttentionSection: () => <p>att
 vi.mock('../ignored/IgnoredSection', () => ({ IgnoredSection: () => <p>ignored section</p> }));
 vi.mock('../../../services/api', async () => (await import('./intakeMocks')).apiModule);
 
-import IntakePage, { parseSection, revealSelectedTab } from '../IntakePage';
+import IntakePage, { parseSection, revealSelectedTab, sectionForSource } from '../IntakePage';
 import { ocrDoc, ocrList, renderIntake, resetIntakeState, settle, source } from './intakeTestUtils';
 import { documentService, ok, queueService, serveDefaults, sourcesService } from './intakeMocks';
 
@@ -133,6 +133,14 @@ describe('Intake page', () => {
     expect(parseSection('connections')).toBe('connections');
     expect(parseSection(null)).toBe('upload');
     expect(parseSection('nope')).toBe('upload');
+  });
+
+  it('sends the watch folder and uploads keys to their own section', () => {
+    expect(sectionForSource('watch')).toBe('watch');
+    expect(sectionForSource('upload')).toBe('upload');
+    expect(sectionForSource('uploads')).toBe('upload');
+    expect(sectionForSource('some-uuid')).toBeNull();
+    expect(sectionForSource(null)).toBeNull();
   });
 });
 

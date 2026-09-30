@@ -1,4 +1,5 @@
 .crumbs {
+  font-family: var(--font-ui);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -6,12 +7,8 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
   font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--fg-meta);
 }
 
