@@ -40,7 +40,7 @@ test.describe('OCR Retry Workflow', () => {
 
     const row = failedRow(page, 'broken-a.pdf');
     await expect(row).toBeVisible({ timeout: TIMEOUTS.medium });
-    await expect(row).toContainText('FAILED');
+    await expect(row).toContainText('Failed');
     // The tab carries the count
     await expect(page.getByRole('tab', { name: /Needs attention\s*,\s*1/ })).toBeVisible();
   });

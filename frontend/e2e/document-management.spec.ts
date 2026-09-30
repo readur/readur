@@ -19,8 +19,8 @@ test.describe('Document Management', () => {
 
   const openDocument = async (page: Page) => {
     await page.goto('/documents');
-    await helpers.documentRows().filter({ hasText: 'test1.png' }).getByRole('rowheader').click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Open', exact: true }).click();
+    const panel = await helpers.openDocumentCard('test1.png');
+    await panel.getByRole('button', { name: 'Open', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/documents/${docId}`), { timeout: TIMEOUTS.medium });
     await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
   };
@@ -29,13 +29,19 @@ test.describe('Document Management', () => {
     await page.goto('/documents');
 
     await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
-    await expect(page.getByText('1 document', { exact: true })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Search documents' })).toBeVisible();
 
+    // The default layout lists it as a card, under a month heading carrying the month's count
+    await expect(helpers.documentCard('test1.png')).toBeVisible();
+    await expect(page.getByRole('main').getByRole('heading', { level: 2 }).getByText('1 document', { exact: true })).toBeVisible();
+
+    // The table has no month headings, so the only count left is the Library total
+    await helpers.useLibraryView('table');
+    await expect(page.getByText('1 document', { exact: true })).toBeVisible();
     const row = helpers.documentRows().filter({ hasText: 'test1.png' });
     await expect(row).toBeVisible();
     await expect(row.getByRole('gridcell', { name: 'PNG', exact: true })).toBeVisible();
-    await expect(row.getByRole('gridcell', { name: 'INDEXED', exact: true })).toBeVisible();
+    await expect(row.getByRole('gridcell', { name: 'Indexed', exact: true })).toBeVisible();
   });
 
   test('should navigate to document details', async ({ dynamicUserPage: page }) => {
@@ -48,7 +54,7 @@ test.describe('Document Management', () => {
 
     // One facts line under the name: type, size, source, when it was added and the OCR score.
     const summary = page.getByRole('group', { name: 'Document summary' });
-    await expect(summary).toContainText('INDEXED');
+    await expect(summary).toContainText('Indexed');
     await expect(summary).toContainText('PNG');
     await expect(summary).toContainText(/KB/);
     await expect(summary).toContainText('Upload');
@@ -102,26 +108,29 @@ test.describe('Document Management', () => {
     expect((await deleted).ok()).toBe(true);
 
     await expect(page).toHaveURL(/\/documents(\?|$)/, { timeout: TIMEOUTS.medium });
-    await expect(helpers.documentRows().filter({ hasText: 'test1.png' })).toHaveCount(0);
+    await expect(page.getByText('0 documents', { exact: true })).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(helpers.documentCard('test1.png')).toHaveCount(0);
   });
 
   test('should filter documents by type', async ({ dynamicUserPage: page }) => {
     await helpers.uploadBufferViaAPI('notes.txt', Buffer.from(`plain text ${Date.now()}`), 'text/plain');
     await page.goto('/documents');
-    await expect(helpers.documentRows()).toHaveCount(2);
+    await expect(helpers.documentCards()).toHaveCount(2);
 
     await page.getByRole('search', { name: 'Search and filter' }).getByRole('button', { name: 'Type' }).click();
     await page.getByRole('dialog', { name: 'Type' }).getByText('Images', { exact: true }).click();
     await expect(page).toHaveURL(/type=image/);
     await page.keyboard.press('Escape');
 
-    await expect(helpers.documentRows()).toHaveCount(1);
-    await expect(helpers.documentRows().first()).toContainText('test1.png');
+    await expect(helpers.documentCards()).toHaveCount(1);
+    await expect(helpers.documentCard('test1.png')).toBeVisible();
   });
 
   test('should sort documents', async ({ dynamicUserPage: page }) => {
     await helpers.uploadBufferViaAPI('big.txt', Buffer.from('x'.repeat(20000) + Date.now()), 'text/plain');
     await page.goto('/documents');
+    // Sorting by a column is a table feature
+    await helpers.useLibraryView('table');
     await expect(helpers.documentRows()).toHaveCount(2);
 
     const size = helpers.documentsGrid().getByRole('columnheader', { name: 'Size' });
@@ -136,7 +145,7 @@ test.describe('Document Management', () => {
 
   test('should display OCR status', async ({ dynamicUserPage: page }) => {
     await openDocument(page);
-    await expect(page.getByRole('group', { name: 'Document summary' })).toContainText('INDEXED');
+    await expect(page.getByRole('group', { name: 'Document summary' })).toContainText('Indexed');
   });
 
   test('should search within document content', async ({ dynamicUserPage: page }) => {
@@ -156,8 +165,7 @@ test.describe('Document Management', () => {
 
   test('should show document thumbnails', async ({ dynamicUserPage: page }) => {
     await page.goto('/documents');
-    await helpers.documentRows().filter({ hasText: 'test1.png' }).getByRole('rowheader').click();
-    const panel = page.getByRole('dialog');
+    const panel = await helpers.openDocumentCard('test1.png');
     await expect(panel.locator('img').first()).toBeVisible({ timeout: TIMEOUTS.medium });
 
     await panel.getByRole('button', { name: 'Open', exact: true }).click();

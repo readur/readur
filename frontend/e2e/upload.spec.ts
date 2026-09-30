@@ -42,13 +42,13 @@ test.describe('Document Upload', () => {
     await page.locator('input[type="file"]').first().setInputFiles(TEST_FILES.test1);
 
     await expect(queueRow(page, 'test1.png')).toBeVisible();
-    await expect(queueRow(page, 'test1.png')).toContainText('PENDING');
+    await expect(queueRow(page, 'test1.png')).toContainText('Pending');
     await expect(uploadAll(page)).toHaveText('Upload all (1)');
 
     await uploadQueued(page);
 
     // Uploaded files go straight into the OCR queue and are tagged NEW
-    await expect(queueRow(page, 'test1.png')).toContainText(/OCR|INDEXED/);
+    await expect(queueRow(page, 'test1.png')).toContainText(/OCR|Indexed/);
     await expect(queueRow(page, 'test1.png')).toContainText(/new/i);
   });
 
@@ -59,7 +59,7 @@ test.describe('Document Upload', () => {
     await uploadQueued(page, 3);
 
     for (const name of ['test1.png', 'test2.jpg', 'test3.jpeg']) {
-      await expect(queueRow(page, name)).toContainText(/OCR|INDEXED/);
+      await expect(queueRow(page, name)).toContainText(/OCR|Indexed/);
     }
     await expect(page.getByRole('button', { name: 'Clear finished' })).toBeEnabled();
   });
@@ -87,7 +87,7 @@ test.describe('Document Upload', () => {
     await uploadAll(page).click();
 
     const row = queueRow(page, 'test1.png');
-    await expect(row).toContainText('FAILED');
+    await expect(row).toContainText('Failed');
     await expect(row.getByRole('button', { name: 'Retry test1.png' })).toBeVisible();
 
     // Retrying after the server recovers succeeds
@@ -95,7 +95,7 @@ test.describe('Document Upload', () => {
     const upload = helpers.waitForApiCall('/api/documents', TIMEOUTS.upload);
     await row.getByRole('button', { name: 'Retry test1.png' }).click();
     expect((await upload).status()).toBeLessThan(300);
-    await expect(row).toContainText(/OCR|INDEXED/);
+    await expect(row).toContainText(/OCR|Indexed/);
   });
 
   test('should validate file types', async ({ dynamicUserPage: page }) => {
@@ -128,10 +128,12 @@ test.describe('Document Upload', () => {
     await uploadQueued(page);
 
     // The row moves to the OCR queue; the Library shows the document's status
-    await expect(queueRow(page, 'test5.jpg')).toContainText(/OCR|INDEXED/);
+    await expect(queueRow(page, 'test5.jpg')).toContainText(/OCR|Indexed/);
+    // The Library table's Status column carries every state (cards only flag unfinished ones)
     await page.goto('/documents');
+    await helpers.useLibraryView('table');
     const row = helpers.documentRows().filter({ hasText: 'test5.jpg' });
-    await expect(row).toContainText(/PENDING|OCR|INDEXED/, { timeout: TIMEOUTS.medium });
+    await expect(row).toContainText(/Pending|OCR|Indexed/, { timeout: TIMEOUTS.medium });
 
     // Once OCR finishes the Library reports it as indexed
     await row.click();
@@ -140,7 +142,7 @@ test.describe('Document Upload', () => {
     const docId = page.url().split('/').pop()!.split('?')[0];
     expect((await helpers.waitForOCRComplete(docId)).ocr_status).toBe('completed');
     await page.goto('/documents');
-    await expect(helpers.documentRows().filter({ hasText: 'test5.jpg' })).toContainText('INDEXED');
+    await expect(helpers.documentRows().filter({ hasText: 'test5.jpg' })).toContainText('Indexed');
   });
 
   test('should process OCR and extract correct text content', async ({ dynamicUserPage: page }) => {
@@ -183,14 +185,14 @@ test.describe('Document Upload', () => {
     await page.locator('input[type="file"]').first().setInputFiles(TEST_FILES.testDocx);
     await expect(queueRow(page, 'test_file.docx')).toBeVisible();
     await uploadQueued(page);
-    await expect(queueRow(page, 'test_file.docx')).toContainText(/OCR|INDEXED/);
+    await expect(queueRow(page, 'test_file.docx')).toContainText(/OCR|Indexed/);
   });
 
   test('should upload .doc document successfully', async ({ dynamicUserPage: page }) => {
     await page.locator('input[type="file"]').first().setInputFiles(TEST_FILES.testDoc);
     await expect(queueRow(page, 'test_file.doc')).toBeVisible();
     await uploadQueued(page);
-    await expect(queueRow(page, 'test_file.doc')).toContainText(/OCR|INDEXED/);
+    await expect(queueRow(page, 'test_file.doc')).toContainText(/OCR|Indexed/);
   });
 
   for (const [label, file, name] of [

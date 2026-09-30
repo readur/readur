@@ -111,7 +111,7 @@ test.describe('OCR Multiple Languages', () => {
     await page.getByRole('button', { name: /^Upload all/ }).click();
     expect((await upload).ok()).toBe(true);
     const row = page.getByRole('grid', { name: 'Files to upload' }).getByRole('row', { name: /spanish_test\.pdf/ });
-    await expect(row).toContainText(/OCR|INDEXED/);
+    await expect(row).toContainText(/OCR|Indexed/);
 
     // The document is read with Spanish: its text carries Spanish words
     await row.click();
@@ -137,7 +137,7 @@ test.describe('OCR Multiple Languages', () => {
     await page.getByRole('button', { name: /^Upload all/ }).click();
     expect((await upload).ok()).toBe(true);
 
-    await expect(row).toContainText(/OCR|INDEXED/);
+    await expect(row).toContainText(/OCR|Indexed/);
     await expect(page.getByRole('progressbar', { name: 'Upload progress for english_test.pdf' })).toHaveAttribute('aria-valuenow', '100');
   });
 
@@ -214,8 +214,8 @@ test.describe('OCR Multiple Languages', () => {
     await helpers.waitForOCRComplete(id2);
 
     await page.goto('/documents');
-    const english = helpers.documentRows().filter({ hasText: 'english_test.pdf' });
-    const spanish = helpers.documentRows().filter({ hasText: 'spanish_test.pdf' });
+    const english = helpers.documentCard('english_test.pdf');
+    const spanish = helpers.documentCard('spanish_test.pdf');
     await english.getByRole('checkbox').check({ force: true });
     await spanish.getByRole('checkbox').check({ force: true });
 

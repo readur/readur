@@ -214,14 +214,47 @@ export class TestHelpers {
     await expect(this.page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible({ timeout: 15000 });
   }
 
-  /** The Library grid. */
+  /**
+   * Switch the Library to the given layout. It opens as thumbnail cards; the table (and its
+   * columns, sorting headers and row cells) only exists after choosing "Table". The choice is
+   * remembered in this browser.
+   */
+  async useLibraryView(view: 'table' | 'grid') {
+    await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15000 });
+    const toggle = this.page.getByRole('radiogroup', { name: 'Layout' }).getByRole('radio', { name: view === 'table' ? 'Table' : 'Grid' });
+    if (!(await toggle.isChecked())) await toggle.click();
+    await expect(toggle).toBeChecked();
+  }
+
+  /** The Library table (only in the Table layout; see `useLibraryView`). */
   documentsGrid(): Locator {
     return this.page.getByRole('grid', { name: 'Documents' });
   }
 
-  /** Body rows of the Library grid (header row excluded). */
+  /** Body rows of the Library table (header row excluded). Table layout only. */
   documentRows(): Locator {
     return this.documentsGrid().getByRole('rowgroup').nth(1).getByRole('row');
+  }
+
+  /** Document cards of the Library's default grid layout: one list item per document. */
+  documentCards(): Locator {
+    return this.page
+      .getByRole('main')
+      .getByRole('listitem')
+      .filter({ has: this.page.getByRole('checkbox', { name: /^Select / }) });
+  }
+
+  /** The Library card for one document, by file name. */
+  documentCard(name: string): Locator {
+    return this.documentCards().filter({ has: this.page.getByRole('checkbox', { name: `Select ${name}`, exact: true }) });
+  }
+
+  /** Open a document's slideout from its Library card and return the panel. */
+  async openDocumentCard(name: string): Promise<Locator> {
+    await this.documentCard(name).getByRole('button', { name: new RegExp(escapeRegExp(name)) }).click();
+    const panel = this.page.getByRole('dialog', { name: new RegExp(escapeRegExp(name)) });
+    await expect(panel).toBeVisible();
+    return panel;
   }
 
   /**

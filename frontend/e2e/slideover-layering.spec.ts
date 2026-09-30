@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './fixtures/auth';
-import { TestHelpers, escapeRegExp } from './utils/test-helpers';
+import { TestHelpers } from './utils/test-helpers';
 
 /** The slideout sits above the app bar and tab bar: its header and footer actions are reachable. */
 async function isOnTop(el: Locator): Promise<boolean> {
@@ -16,10 +16,7 @@ async function openSlideout(page: Page): Promise<Locator> {
   const name = `layer-${Math.random().toString(36).slice(2, 6)}.txt`;
   await helpers.uploadBufferViaAPI(name, Buffer.from(`Layering ${Math.random()}`), 'text/plain');
   await page.goto('/documents');
-  await helpers.documentRows().filter({ hasText: name }).getByRole('rowheader').click();
-  const panel = page.getByRole('dialog', { name: new RegExp(escapeRegExp(name)) });
-  await expect(panel).toBeVisible();
-  return panel;
+  return helpers.openDocumentCard(name);
 }
 
 for (const [label, size] of [

@@ -48,9 +48,13 @@ test.describe('No horizontal overflow at 390px', () => {
       await expect(p.getByText(LONG_NAME).first()).toBeVisible({ timeout: TIMEOUTS.medium });
     });
 
+    // The Library opens as cards; the table's folded rows are checked after switching layout.
     await visit(page, '/documents', async () => {
-      await expect(helpers.documentRows()).toHaveCount(2, { timeout: TIMEOUTS.medium });
+      await expect(helpers.documentCards()).toHaveCount(2, { timeout: TIMEOUTS.medium });
     });
+    await helpers.useLibraryView('table');
+    await expect(helpers.documentRows()).toHaveCount(2, { timeout: TIMEOUTS.medium });
+    await expectNoOverflow(page, '/documents (table)');
     // Columns dropped on a phone fold into the row: a visible mono meta line of values
     // (PNG · 2.0 KB · 3 min ago · Upload), announced with their labels as the row's description.
     const row = helpers.documentRows().filter({ hasText: LONG_NAME });

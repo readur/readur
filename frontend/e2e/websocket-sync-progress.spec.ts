@@ -162,8 +162,8 @@ test.describe('WebSocket Sync Progress', () => {
     await helpers.openIntake('connections');
 
     // Both rows report syncing
-    await expect(helpers.connectionRow(a.name)).toContainText('SYNCING');
-    await expect(helpers.connectionRow(b.name)).toContainText('SYNCING');
+    await expect(helpers.connectionRow(a.name)).toContainText('Syncing');
+    await expect(helpers.connectionRow(b.name)).toContainText('Syncing');
 
     for (const s of [a, b]) {
       const panel = await helpers.openConnection(s.name);
@@ -255,10 +255,10 @@ test.describe('WebSocket Sync Progress', () => {
     await expect(statusWord(progressRegion)).toHaveText(/Connected$/);
     await expect(progressRegion).toContainText('Waiting for sync progress information…');
 
-    // An active sync turns it "Live" and marks the region SYNCING
+    // An active sync turns it "Live" and marks the region Syncing
     socket!.send(progress(id));
     await expect(statusWord(progressRegion)).toHaveText(/Live$/);
-    await expect(progressRegion).toContainText('SYNCING');
+    await expect(progressRegion).toContainText('Syncing');
 
     // The region folds away and back
     const collapse = progressRegion.getByRole('button', { name: 'Collapse' });
