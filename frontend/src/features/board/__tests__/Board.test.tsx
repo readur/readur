@@ -223,8 +223,9 @@ describe('Board', () => {
     });
 
     it('lists failed documents and connections in error, all marked', async () => {
+      const failedAt = new Date(Date.now() - 2 * 3600_000).toISOString();
       m.documentService.getFailedOcrDocuments.mockResolvedValue({
-        data: { documents: [{ id: 'f1', filename: 'scan.tiff', failure_reason: 'low_ocr_confidence', created_at: new Date(Date.now() - 2 * 3600_000).toISOString() }] },
+        data: { documents: [{ id: 'f1', filename: 'scan.tiff', failure_reason: 'low_ocr_confidence', created_at: failedAt }] },
       });
       sources = [{ id: 's9', name: 'NAS', enabled: true, status: 'error', last_error: 'Auth failed', last_error_at: new Date(Date.now() - 60_000).toISOString() }];
       await renderBoard();
@@ -243,14 +244,16 @@ describe('Board', () => {
       const srcRow = within(strip).getByRole('row', { name: /NAS/ });
       expect(within(srcRow).getByText('ERROR')).toBeInTheDocument();
       expect(within(srcRow).getByText('Auth failed')).toBeInTheDocument();
-      expect(isLit('attention', 'document:f1')).toBe(true);
+      expect(isLit('attention', `document:f1@${failedAt}`)).toBe(true);
     });
 
     it('retries a failed document', async () => {
       const user = userEvent.setup();
       m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [{ id: 'f1', filename: 'scan.tiff', failure_reason: 'x' }] } });
       await renderBoard();
-      await user.click(await screen.findByRole('button', { name: 'Retry scan.tiff' }));
+      const retry = await screen.findByRole('button', { name: 'Retry scan.tiff' });
+      m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [] } }); // the retry worked
+      await user.click(retry);
       expect(m.documentService.retryOcr).toHaveBeenCalledWith('f1');
       await waitFor(() => expect(screen.queryByRole('row', { name: /scan\.tiff/ })).not.toBeInTheDocument());
     });
@@ -267,6 +270,51 @@ describe('Board', () => {
       await renderBoard();
       await waitFor(() => expect(m.documentService.getFailedOcrDocuments).toHaveBeenCalledTimes(2));
       expect(screen.queryByRole('region', { name: 'Needs attention' })).not.toBeInTheDocument();
+    });
+
+    it('keeps a dismissed failure hidden but shows a newer failure of the same document again', async () => {
+      const user = userEvent.setup();
+      const failure = (at: string) => ({ data: { documents: [{ id: 'f1', filename: 'scan.tiff', failure_reason: 'x', updated_at: at }] } });
+      m.documentService.getFailedOcrDocuments.mockResolvedValue(failure('2026-01-01T10:00:00Z'));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      await renderBoard();
+      await user.click(await screen.findByRole('button', { name: 'Dismiss scan.tiff' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      expect(screen.queryByRole('row', { name: /scan\.tiff/ })).not.toBeInTheDocument();
+
+      m.documentService.getFailedOcrDocuments.mockResolvedValue(failure('2026-01-02T10:00:00Z'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      expect(await screen.findByRole('row', { name: /scan\.tiff/ })).toHaveAttribute('data-changed', 'true');
+    });
+
+    it('shows a document again when its retry fails again', async () => {
+      const user = userEvent.setup();
+      const failure = (at: string) => ({ data: { documents: [{ id: 'f1', filename: 'scan.tiff', failure_reason: 'x', last_retry_at: at }] } });
+      m.documentService.getFailedOcrDocuments.mockResolvedValue(failure('2026-01-01T10:00:00Z'));
+      await renderBoard();
+      const retry = await screen.findByRole('button', { name: 'Retry scan.tiff' });
+      m.documentService.getFailedOcrDocuments.mockResolvedValue(failure('2026-01-01T10:05:00Z')); // failed again
+      await user.click(retry);
+      await waitFor(() => expect(m.documentService.getFailedOcrDocuments).toHaveBeenCalledTimes(2));
+      expect(await screen.findByRole('row', { name: /scan\.tiff/ })).toBeInTheDocument();
+    });
+
+    it('shows a connection again when it errors again after being dismissed', async () => {
+      const user = userEvent.setup();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      sources = [{ id: 's9', name: 'NAS', enabled: true, status: 'error', last_error: 'Auth failed', last_error_at: '2026-01-01T10:00:00Z' }];
+      await renderBoard();
+      await user.click(await screen.findByRole('button', { name: 'Dismiss NAS' }));
+      expect(screen.queryByRole('row', { name: /NAS/ })).not.toBeInTheDocument();
+      sources = [{ id: 's9', name: 'NAS', enabled: true, status: 'error', last_error: 'Auth failed', last_error_at: '2026-01-03T10:00:00Z' }];
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      expect(await screen.findByRole('row', { name: /NAS/ })).toBeInTheDocument();
     });
 
     it('retries a connection through a new sync', async () => {

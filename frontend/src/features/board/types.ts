@@ -31,6 +31,8 @@ export interface FailedOcrDocument {
   failure_reason?: string;
   error_message?: string | null;
   created_at?: string;
+  updated_at?: string;
+  last_retry_at?: string | null;
 }
 
 /** One row of the "Needs attention" strip. */

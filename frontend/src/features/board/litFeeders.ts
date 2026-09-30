@@ -15,35 +15,64 @@ import type { BoardDocument } from './types';
 /** id -> last seen ocr_status of the newest documents. */
 const seen = new Map<string, string | undefined>();
 let baselined = false;
+/** Newest document creation time (server clock, ms) already accounted for; persisted across reloads. */
+let lastSeen: number | undefined;
 const MAX_SEEN = 500;
+const LAST_SEEN_KEY = 'readur.board.lastSeen.v1';
+
+function readLastSeen(): number | undefined {
+  try {
+    const raw = window.localStorage.getItem(LAST_SEEN_KEY);
+    const n = raw === null ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeLastSeen(value: number): void {
+  try {
+    window.localStorage.setItem(LAST_SEEN_KEY, String(value));
+  } catch {
+    /* storage unavailable: the marker lasts for this session only */
+  }
+}
 
 /** Forgets what was seen (tests, sign-out). */
 export function resetDocumentBaseline(): void {
   seen.clear();
   baselined = false;
+  lastSeen = undefined;
 }
 
 /**
  * Compares `docs` with what was seen before and marks the differences:
- * a new id is 'new'; a known id whose OCR status became completed is 'changed', failed is 'failed'.
- * The very first call only records a baseline (nothing that was already there is marked), unless
- * `newerThan` is given: then unseen documents created at or after it are 'new'.
+ * an unseen document created after the last-seen time is 'new'; a known one whose OCR status became
+ * completed is 'changed', failed is 'failed'. The last-seen time is stored, so documents that
+ * arrived while the app was closed are marked on the first sync after a reload. With no stored
+ * time (first ever run) nothing is marked, unless `newerThan` is given.
  */
 export function syncDocuments(docs: BoardDocument[], newerThan?: number): void {
+  if (!baselined && lastSeen === undefined) lastSeen = readLastSeen();
+  const threshold = lastSeen ?? newerThan;
+  let newest = lastSeen;
   for (const doc of docs) {
-    const known = seen.has(doc.id);
-    const previous = seen.get(doc.id);
-    if (!known) {
-      const created = doc.created_at ? Date.parse(doc.created_at) : NaN;
-      const fresh = baselined || (newerThan !== undefined && !Number.isNaN(created) && created >= newerThan);
-      if (fresh) markLit('document', doc.id, 'new');
-    } else if (previous !== doc.ocr_status) {
+    const created = doc.created_at ? Date.parse(doc.created_at) : NaN;
+    if (!Number.isNaN(created) && (newest === undefined || created > newest)) newest = created;
+    if (!seen.has(doc.id)) {
+      // Entering the top of the list (for example after a deletion) is not an arrival.
+      if (threshold !== undefined && !Number.isNaN(created) && created > threshold) markLit('document', doc.id, 'new');
+    } else if (seen.get(doc.id) !== doc.ocr_status) {
       if (doc.ocr_status === 'completed') markLit('document', doc.id, 'changed');
       else if (doc.ocr_status === 'failed') markLit('document', doc.id, 'failed');
     }
     seen.set(doc.id, doc.ocr_status);
   }
   baselined = true;
+  if (newest !== undefined && newest !== lastSeen) {
+    lastSeen = newest;
+    writeLastSeen(newest);
+  }
   while (seen.size > MAX_SEEN) seen.delete(seen.keys().next().value as string);
 }
 

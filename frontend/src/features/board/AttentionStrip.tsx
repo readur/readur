@@ -16,9 +16,12 @@ export interface AttentionStripProps {
   sources: Resource<BoardSource[]>;
 }
 
+/** Dismissals are per failure occurrence: a newer failure of the same item gets a new key. */
+const occurrenceKey = (base: string, occurrence?: string | null) => (occurrence ? `${base}@${occurrence}` : base);
+
 export function buildAttentionItems(failed: FailedOcrDocument[], sources: BoardSource[]): AttentionItem[] {
   const docs = failed.map<AttentionItem>((d) => ({
-    key: `document:${d.id}`,
+    key: occurrenceKey(`document:${d.id}`, d.last_retry_at || d.updated_at || d.created_at),
     kind: 'document',
     id: d.id,
     name: docName(d),
@@ -29,7 +32,7 @@ export function buildAttentionItems(failed: FailedOcrDocument[], sources: BoardS
   const bad = sources
     .filter((s) => s.enabled !== false && s.status === 'error')
     .map<AttentionItem>((s) => ({
-      key: `source:${s.id}`,
+      key: occurrenceKey(`source:${s.id}`, s.last_error_at),
       kind: 'source',
       id: s.id,
       name: s.name,
@@ -72,13 +75,13 @@ export function AttentionStrip({ failed, sources }: AttentionStripProps) {
           await sourcesService.triggerSync(item.id);
           sources.reload();
         }
-        dismiss(item.key);
+        // No dismissal: a repeat failure is a new occurrence and shows up again by itself.
         toast.show({ title: t('board.attention.retryQueued', 'Retry started'), description: item.name, tone: 'success' });
       } catch {
         toast.show({ title: t('board.attention.retryFailed', 'Could not retry'), description: item.name, tone: 'danger' });
       }
     },
-    [failed, sources, dismiss, toast, t],
+    [failed, sources, toast, t],
   );
 
   const open = useCallback(

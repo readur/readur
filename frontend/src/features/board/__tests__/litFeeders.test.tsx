@@ -90,9 +90,41 @@ describe('syncDocuments', () => {
 
   it('marks unseen documents as new after the baseline', () => {
     syncDocuments([doc('a')]);
-    syncDocuments([doc('b'), doc('a')]);
+    syncDocuments([doc('b', { created_at: new Date().toISOString() }), doc('a')]);
     expect(isLit('document', 'b')).toBe(true);
     expect(isLit('document', 'a')).toBe(false);
+  });
+
+  it('does not mark an older document that only entered the list after another was deleted', () => {
+    syncDocuments([doc('a'), doc('b', { created_at: '2020-01-01T00:00:00Z' })].slice(0, 1));
+    syncDocuments([doc('a'), doc('older', { created_at: '2021-01-01T00:00:00Z' })]);
+    expect(isLit('document', 'older')).toBe(false);
+  });
+
+  it('with a stored last-seen time, the first sync marks only newer documents and stores the new time', () => {
+    const t0 = Date.parse('2026-01-01T10:00:00Z');
+    window.localStorage.setItem('readur.board.lastSeen.v1', String(t0));
+    syncDocuments([
+      doc('newer', { created_at: '2026-01-01T11:00:00Z' }),
+      doc('same', { created_at: '2026-01-01T10:00:00Z' }),
+      doc('older', { created_at: '2025-12-31T10:00:00Z' }),
+    ]);
+    expect(isLit('document', 'newer')).toBe(true);
+    expect(isLit('document', 'same')).toBe(false);
+    expect(isLit('document', 'older')).toBe(false);
+    expect(window.localStorage.getItem('readur.board.lastSeen.v1')).toBe(String(Date.parse('2026-01-01T11:00:00Z')));
+  });
+
+  it('without a stored time, the first sync marks nothing but stores a baseline time', () => {
+    syncDocuments([doc('a', { created_at: '2026-01-01T11:00:00Z' })]);
+    expect(isLit('document', 'a')).toBe(false);
+    expect(window.localStorage.getItem('readur.board.lastSeen.v1')).toBe(String(Date.parse('2026-01-01T11:00:00Z')));
+  });
+
+  it('survives unavailable storage', () => {
+    const broken = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); } };
+    Object.defineProperty(window, 'localStorage', { value: broken, configurable: true, writable: true });
+    expect(() => syncDocuments([doc('a')])).not.toThrow();
   });
 
   it('marks a finished OCR as changed and a failed one as failed, once', () => {
