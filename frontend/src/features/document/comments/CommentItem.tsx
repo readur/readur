@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CommentWithAuthor } from '../../../services/api';
+import { isAdminRole } from '../../../auth/roles';
+import type { UserRole } from '../../../types/generated';
 import { IconButton } from '../../../ui';
 import { Delete, Edit, Reply } from '../../../ui/icons';
 import { CommentForm } from './CommentForm';
@@ -10,7 +12,7 @@ import styles from './Comments.module.css';
 export interface CommentItemProps {
   comment: CommentWithAuthor;
   currentUserId: string;
-  currentUserRole: string;
+  currentUserRole: UserRole;
   onReply?: () => void;
   onEdit: (commentId: string, content: string) => Promise<void>;
   onDelete: (commentId: string) => Promise<void>;
@@ -22,7 +24,7 @@ export function CommentItem({ comment, currentUserId, currentUserRole, onReply, 
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const isAuthor = currentUserId === comment.user_id;
-  const canDelete = isAuthor || currentUserRole === 'Admin';
+  const canDelete = isAuthor || isAdminRole(currentUserRole);
 
   const remove = async () => {
     setDeleting(true);

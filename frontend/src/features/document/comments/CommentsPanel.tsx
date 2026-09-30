@@ -95,7 +95,7 @@ export function CommentsPanel({ documentId }: { documentId: string }) {
               thread={thread}
               documentId={documentId}
               currentUserId={user?.id ?? ''}
-              currentUserRole={user?.role ?? 'User'}
+              currentUserRole={user?.role ?? 'user'}
               onChanged={fetchComments}
             />
           ))}

@@ -32,8 +32,8 @@ vi.mock('../../features/auth/CallbackRoute', async () => ({ default: (await impo
 
 /** Auth provider whose login really flips the user, like the app's. */
 function StatefulAuth({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<null | { id: string; username: string; email: string; role: 'User' }>(null);
-  const login = async (username: string) => setUser({ id: '1', username, email: 'a@b.c', role: 'User' });
+  const [user, setUser] = useState<null | { id: string; username: string; email: string; role: 'user' }>(null);
+  const login = async (username: string) => setUser({ id: '1', username, email: 'a@b.c', role: 'user' });
   return (
     <AuthContext.Provider value={{ user, loading: false, login, register: vi.fn(), logout: () => setUser(null) }}>
       {children}

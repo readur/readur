@@ -6,6 +6,7 @@ import { AuthContext } from '../../../contexts/AuthContext';
 import type { Document, OcrResponse } from '../../../services/api';
 import { createResponsiveMatchMediaMock } from '../../../test/pwa-test-utils';
 import { ToastProvider } from '../../../ui';
+import type { UserRole } from '../../../types/generated';
 import { DocumentPage } from '../DocumentPage';
 
 export const makeDocument = (overrides: Partial<Document> = {}): Document => ({
@@ -40,7 +41,7 @@ export const makeOcr = (overrides: Partial<OcrResponse> = {}): OcrResponse => ({
   ...overrides,
 });
 
-export const testUser = { id: 'user-1', username: 'ada', email: 'ada@example.com', role: 'User' as const };
+export const testUser = { id: 'user-1', username: 'ada', email: 'ada@example.com', role: 'user' as UserRole };
 
 /** Media queries: wide desktop layout (two columns) unless `narrow` is set. */
 export function setViewport(wide = true) {

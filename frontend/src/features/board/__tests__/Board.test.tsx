@@ -20,6 +20,7 @@ vi.mock('../../../services/api', () => ({
 import Board from '../Board';
 import { isLit, markLit } from '../litStore';
 import { doc, renderPage, resetBoardState } from './boardTestUtils';
+import type { UserRole } from '../../../types/generated';
 
 const STATS = {
   pending_count: 7,
@@ -61,7 +62,7 @@ function serve() {
 const region = (name: string) => screen.getByRole('region', { name });
 const loc = () => screen.getByRole('status', { name: 'location' }, { hidden: true }).textContent;
 
-async function renderBoard(role: 'Admin' | 'User' = 'Admin') {
+async function renderBoard(role: UserRole = 'admin') {
   const view = renderPage(<Board />, role);
   await screen.findByText('d1.pdf');
   return view;
@@ -389,7 +390,7 @@ describe('Board', () => {
 
     it('lets an admin pause OCR', async () => {
       const user = userEvent.setup();
-      await renderBoard('Admin');
+      await renderBoard('admin');
       await user.click(await within(region('Processing')).findByRole('button', { name: 'Pause OCR' }));
       expect(m.queueService.pauseOcr).toHaveBeenCalled();
     });
@@ -397,14 +398,14 @@ describe('Board', () => {
     it('lets an admin resume paused OCR and shows the state', async () => {
       const user = userEvent.setup();
       m.queueService.getOcrStatus.mockResolvedValue({ data: { is_paused: true, status: 'paused' } });
-      await renderBoard('Admin');
+      await renderBoard('admin');
       expect(await within(region('Processing')).findByText('OFF')).toBeInTheDocument();
       await user.click(within(region('Processing')).getByRole('button', { name: 'Resume OCR' }));
       expect(m.queueService.resumeOcr).toHaveBeenCalled();
     });
 
     it('hides pause and resume from non-admins', async () => {
-      await renderBoard('User');
+      await renderBoard('user');
       await within(region('Processing')).findByText('HEALTHY');
       expect(screen.queryByRole('button', { name: 'Pause OCR' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Resume OCR' })).not.toBeInTheDocument();

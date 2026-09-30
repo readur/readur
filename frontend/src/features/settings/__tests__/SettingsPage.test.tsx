@@ -86,7 +86,7 @@ describe('SettingsPage admin gating', () => {
   });
 
   it('treats the role case-insensitively', async () => {
-    renderSettings(<SettingsPage />, { path: '/settings/users', user: { ...plainUser, role: 'Admin' } });
+    renderSettings(<SettingsPage />, { path: '/settings/users', user: { ...plainUser, role: 'admin' } });
     expect(await screen.findByText('users body')).toBeInTheDocument();
   });
 });

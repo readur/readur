@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Pass, PassCell, Skeleton, StatusMark, useToast } from '../../ui';
 import { useAuth } from '../../contexts/AuthContext';
+import { isAdmin } from '../../auth/roles';
 import { queueService } from '../../services/api';
 import { POLL_MS } from './data';
 import { formatCount, formatMinutes } from './format';
@@ -14,7 +15,7 @@ export function ProcessingPanel() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
-  const isAdmin = user?.role === 'Admin';
+  const canManage = isAdmin(user);
   const stats = useResource(() => queueService.getStats().then((r) => r.data), POLL_MS);
   const ocr = useResource(() => queueService.getOcrStatus().then((r) => r.data), POLL_MS);
   const [busy, setBusy] = useState(false);
@@ -63,7 +64,7 @@ export function ProcessingPanel() {
             {t('board.processing.ocr', 'OCR')}
             <StatusMark state={paused ? 'disabled' : 'healthy'} size="sm" />
           </span>
-          {isAdmin ? (
+          {canManage ? (
             <Button size="sm" variant="secondary" isPending={busy} onPress={() => void toggle(!paused)}>
               {paused ? t('board.processing.resume', 'Resume OCR') : t('board.processing.pause', 'Pause OCR')}
             </Button>

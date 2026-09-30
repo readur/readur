@@ -21,7 +21,7 @@ const thread = (overrides: Partial<CommentThread> = {}): CommentThread => ({
   created_at: new Date(Date.now() - 5 * 60_000).toISOString(),
   updated_at: new Date().toISOString(),
   username: 'ada',
-  user_role: 'User',
+  user_role: 'user',
   reply_count: 0,
   replies: [],
   ...overrides,
@@ -117,7 +117,7 @@ describe('comments', () => {
 
   it('lets an admin delete anyone’s comment', async () => {
     m.commentsService.list.mockResolvedValue({ data: [thread({ user_id: 'user-2', username: 'bob' })] });
-    renderPanel({ ...testUser, role: 'Admin' as 'User' });
+    renderPanel({ ...testUser, role: 'admin' as const });
     await screen.findByRole('article', { name: 'Comment by bob' });
     expect(screen.getByRole('button', { name: 'Delete comment' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit comment' })).not.toBeInTheDocument();

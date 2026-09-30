@@ -4,6 +4,7 @@ import { BoardTable, Button, Pass, PassCell, StatusMark, useToast, type BoardCol
 import { Refresh } from '../../../ui/icons';
 import { queueService, userWatchService } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
+import { isAdmin } from '../../../auth/roles';
 import { FeatureFlagsContext } from '../../../contexts/FeatureFlagsContext';
 import { formatCount, formatMinutes } from '../shared/format';
 import { ConfirmDialog, Notice, sharedStyles } from '../shared/parts';
@@ -151,7 +152,7 @@ export function WatchSection() {
 
       <section className={sharedStyles.stack} aria-labelledby={locationsId}>
         <h2 id={locationsId} className={sharedStyles.heading}>{t('intake.watch.locations', 'Watched folders')}</h2>
-        {user?.role !== 'Admin' ? (
+        {!isAdmin(user) ? (
           <p className={sharedStyles.lead}>
             {t('intake.watch.systemInfo', 'The server folder is set by your administrator and applies to everyone.')}
           </p>

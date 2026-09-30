@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import i18n from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { AuthContext } from '../../../contexts/AuthContext';
+import type { UserRole } from '../../../types/generated';
 import { acknowledgeAll, flushLit } from '../litStore';
 import { resetDocumentBaseline } from '../litFeeders';
 
@@ -58,7 +59,7 @@ export function LocationProbe() {
   );
 }
 
-export function renderPage(page: ReactNode, role: 'Admin' | 'User' = 'Admin') {
+export function renderPage(page: ReactNode, role: UserRole = 'admin') {
   const auth = {
     user: { id: '1', username: 'ada', email: 'ada@example.com', role },
     loading: false,

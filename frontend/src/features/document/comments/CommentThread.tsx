@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { commentsService, type CommentThread as Thread, type CommentWithAuthor } from '../../../services/api';
 import { Button, useToast } from '../../../ui';
 import { ExpandLess, ExpandMore } from '../../../ui/icons';
+import type { UserRole } from '../../../types/generated';
 import { CommentForm } from './CommentForm';
 import { CommentItem } from './CommentItem';
 import styles from './Comments.module.css';
@@ -11,7 +12,7 @@ export interface CommentThreadProps {
   thread: Thread;
   documentId: string;
   currentUserId: string;
-  currentUserRole: string;
+  currentUserRole: UserRole;
   onChanged: () => void;
 }
 

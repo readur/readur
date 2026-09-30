@@ -78,7 +78,7 @@ describe('Watch folder section', () => {
   });
 
   it('explains the server folder to regular users', async () => {
-    renderIntake(<WatchSection />, { role: 'User' });
+    renderIntake(<WatchSection />, { role: 'user' });
     expect(await screen.findByText('The server folder is set by your administrator and applies to everyone.')).toBeInTheDocument();
   });
 });

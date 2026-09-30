@@ -124,7 +124,7 @@ describe('Connections board', () => {
   });
 
   it('hides the OCR switch from regular users', async () => {
-    renderIntake(<ConnectionsSection />, { role: 'User' });
+    renderIntake(<ConnectionsSection />, { role: 'user' });
     await board();
     expect(screen.queryByRole('button', { name: /pause ocr|resume ocr/i })).not.toBeInTheDocument();
   });

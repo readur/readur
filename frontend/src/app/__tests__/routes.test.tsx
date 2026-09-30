@@ -23,7 +23,7 @@ vi.mock('../../features/settings', async () => ({ default: (await import('./rout
 vi.mock('../../features/auth/LoginRoute', async () => ({ default: (await import('./routeProbe')).probe('login') }));
 vi.mock('../../features/auth/CallbackRoute', async () => ({ default: (await import('./routeProbe')).probe('callback') }));
 
-const user = { id: '1', username: 'ada', email: 'ada@example.com', role: 'Admin' as const };
+const user = { id: '1', username: 'ada', email: 'ada@example.com', role: 'admin' as const };
 
 function renderAt(path: string, signedIn = true) {
   const auth = { user: signedIn ? user : null, loading: false, login: vi.fn(), register: vi.fn(), logout: vi.fn() };

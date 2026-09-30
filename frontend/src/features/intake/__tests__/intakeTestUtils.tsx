@@ -5,6 +5,7 @@ import i18n from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { vi } from 'vitest';
 import { AuthContext } from '../../../contexts/AuthContext';
+import type { UserRole } from '../../../types/generated';
 import { FeatureFlagsContext } from '../../../contexts/FeatureFlagsContext';
 import { NotificationProvider } from '../../../contexts/NotificationContext';
 import { ToastProvider } from '../../../ui';
@@ -69,12 +70,12 @@ export function LocationProbe() {
 
 export interface RenderIntakeOptions {
   path?: string;
-  role?: 'Admin' | 'User';
+  role?: UserRole;
   perUserWatch?: boolean;
   signedIn?: boolean;
 }
 
-export function renderIntake(ui: ReactNode, { path = '/intake', role = 'Admin', perUserWatch = false, signedIn = true }: RenderIntakeOptions = {}) {
+export function renderIntake(ui: ReactNode, { path = '/intake', role = 'admin', perUserWatch = false, signedIn = true }: RenderIntakeOptions = {}) {
   const auth = {
     user: signedIn ? { id: '1', username: 'ada', email: 'ada@example.com', role } : null,
     loading: false,

@@ -4,6 +4,7 @@ import { BoardTable, Button, EmptyState, StatusMark, type BoardColumn, type Boar
 import { Add, Refresh } from '../../../ui/icons';
 import type { SourceResponse } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
+import { isAdmin } from '../../../auth/roles';
 import { acknowledge, isLit, useLitCount } from '../../board/litStore';
 import { formatCount, formatRelative } from '../shared/format';
 import { NameCell, Notice, sharedStyles } from '../shared/parts';
@@ -101,7 +102,7 @@ export function ConnectionsSection() {
         >
           {sources.isAutoRefreshing ? t('intake.connections.autoRefreshing', 'Refreshing while syncing') : t('intake.actions.refresh', 'Refresh')}
         </Button>
-        {user?.role === 'Admin' ? (
+        {isAdmin(user) ? (
           <div className={sharedStyles.toolbarEnd}>
             <OcrControls />
           </div>

@@ -74,7 +74,7 @@ function Seeder({ items }: { items: SeedNotification[] }) {
   return null;
 }
 
-export const testUser = { id: '1', username: 'ada', email: 'ada@example.com', role: 'Admin' as const };
+export const testUser = { id: '1', username: 'ada', email: 'ada@example.com', role: 'admin' as const };
 
 export interface RenderShellOptions {
   path?: string;

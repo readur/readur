@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api } from '../services/api'
+import type { UserRole } from '../types/generated'
+
+export { isAdmin } from '../auth/roles'
 
 interface User {
   id: string
   username: string
   email: string
-  role: 'Admin' | 'User'
+  role: UserRole
 }
 
 interface AuthContextType {
