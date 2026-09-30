@@ -58,6 +58,8 @@ export interface LitStore {
   reasonOf(kind: LitKind, id: string): LitReason | undefined;
   count(kind?: LitKind): number;
   subscribe(listener: () => void): () => void;
+  /** Writes any pending change to storage now (writes are otherwise batched per tick). */
+  flush(): void;
 }
 
 /** Creates an isolated store. The app uses the module-level singleton below. */
@@ -105,8 +107,28 @@ export function createLitStore(): LitStore {
     }
   };
 
-  const commit = (map: Map<string, Entry>) => {
-    persist(map);
+  // Writes are coalesced: any number of changes in one tick cost a single storage write.
+  let dirty = false;
+  const flush = () => {
+    if (!dirty) return;
+    dirty = false;
+    if (entries) persist(entries);
+  };
+
+  const commit = (_map: Map<string, Entry>) => {
+    if (!dirty) {
+      dirty = true;
+      queueMicrotask(flush);
+    }
+    listeners.forEach((l) => l());
+  };
+
+  // Another tab changed the stored entries: drop the in-memory copy and re-read on next use.
+  const onStorage = (e: StorageEvent) => {
+    if (e.key !== null && e.key !== LIT_STORAGE_KEY) return;
+    if (e.storageArea && e.storageArea !== getStorage()) return;
+    dirty = false;
+    entries = null;
     listeners.forEach((l) => l());
   };
 
@@ -151,11 +173,14 @@ export function createLitStore(): LitStore {
       return n;
     },
     subscribe(listener) {
+      if (listeners.size === 0 && typeof window !== 'undefined') window.addEventListener('storage', onStorage);
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
+        if (listeners.size === 0 && typeof window !== 'undefined') window.removeEventListener('storage', onStorage);
       };
     },
+    flush,
   };
 }
 
@@ -166,6 +191,8 @@ export const markLit = (kind: LitKind, id: string, reason: LitReason): void =>
 export const acknowledge = (kind: LitKind, id: string): void => store.acknowledge(kind, id);
 export const acknowledgeAll = (kind?: LitKind): void => store.acknowledgeAll(kind);
 export const isLit = (kind: LitKind, id: string): boolean => store.isLit(kind, id);
+/** Writes pending changes to localStorage immediately. */
+export const flushLit = (): void => store.flush();
 
 /** Whether one item is currently marked as changed, and why. */
 export function useLit(kind: LitKind, id: string): LitState {

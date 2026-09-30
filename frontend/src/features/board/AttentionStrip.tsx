@@ -1,0 +1,173 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { BoardTable, Button, StatusMark, useToast, type BoardColumn } from '../../ui';
+import { documentService, sourcesService } from '../../services/api';
+import { loadDismissed, saveDismissed } from './dismissed';
+import { formatAge, humanizeReason } from './format';
+import { acknowledge, markLit } from './litStore';
+import { ChangedTag, Region, RegionError } from './Region';
+import { docName, type AttentionItem, type BoardSource, type FailedOcrDocument } from './types';
+import type { Resource } from './useResource';
+import styles from './Board.module.css';
+
+export interface AttentionStripProps {
+  failed: Resource<FailedOcrDocument[]>;
+  sources: Resource<BoardSource[]>;
+}
+
+export function buildAttentionItems(failed: FailedOcrDocument[], sources: BoardSource[]): AttentionItem[] {
+  const docs = failed.map<AttentionItem>((d) => ({
+    key: `document:${d.id}`,
+    kind: 'document',
+    id: d.id,
+    name: docName(d),
+    reason: d.error_message || humanizeReason(d.failure_reason),
+    at: d.created_at,
+    state: 'failed',
+  }));
+  const bad = sources
+    .filter((s) => s.enabled !== false && s.status === 'error')
+    .map<AttentionItem>((s) => ({
+      key: `source:${s.id}`,
+      kind: 'source',
+      id: s.id,
+      name: s.name,
+      reason: s.last_error || '',
+      at: s.last_error_at ?? undefined,
+      state: 'error',
+    }));
+  return [...bad, ...docs];
+}
+
+/** Failed OCR documents and connections in error. Renders nothing when there is nothing to do. */
+export function AttentionStrip({ failed, sources }: AttentionStripProps) {
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [dismissed, setDismissed] = useState<string[]>(loadDismissed);
+
+  const items = useMemo(
+    () => buildAttentionItems(failed.data ?? [], sources.data ?? []).filter((i) => !dismissed.includes(i.key)),
+    [failed.data, sources.data, dismissed],
+  );
+
+  // Every listed item is unseen until dismissed.
+  useEffect(() => {
+    items.forEach((i) => markLit('attention', i.key, 'failed'));
+  }, [items]);
+
+  const dismiss = useCallback((key: string) => {
+    acknowledge('attention', key);
+    setDismissed((prev) => saveDismissed(prev.includes(key) ? prev : [...prev, key]));
+  }, []);
+
+  const retry = useCallback(
+    async (item: AttentionItem) => {
+      try {
+        if (item.kind === 'document') {
+          await documentService.retryOcr(item.id);
+          failed.reload();
+        } else {
+          await sourcesService.triggerSync(item.id);
+          sources.reload();
+        }
+        dismiss(item.key);
+        toast.show({ title: t('board.attention.retryQueued', 'Retry started'), description: item.name, tone: 'success' });
+      } catch {
+        toast.show({ title: t('board.attention.retryFailed', 'Could not retry'), description: item.name, tone: 'danger' });
+      }
+    },
+    [failed, sources, dismiss, toast, t],
+  );
+
+  const open = useCallback(
+    (id: string) => {
+      const item = items.find((i) => i.key === id);
+      navigate(item?.kind === 'source' ? '/intake?section=connections' : '/intake?section=attention');
+    },
+    [items, navigate],
+  );
+
+  const columns = useMemo<BoardColumn<AttentionItem>[]>(
+    () => [
+      {
+        id: 'name',
+        label: t('board.col.name', 'Name'),
+        isRowHeader: true,
+        render: (i) => (
+          <span className={styles.name}>
+            <ChangedTag reason="new" />
+            <span className={styles.nameText}>{i.name}</span>
+          </span>
+        ),
+      },
+      {
+        id: 'status',
+        label: t('board.col.status', 'Status'),
+        width: 110,
+        render: (i) => <StatusMark state={i.state} size="sm" />,
+      },
+      {
+        id: 'reason',
+        label: t('board.col.reason', 'Reason'),
+        render: (i) => <span className={styles.reason}>{i.reason || '—'}</span>,
+      },
+      { id: 'age', label: t('board.col.age', 'Age'), width: 80, align: 'end', mono: true, render: (i) => formatAge(i.at, i18n.language) },
+      {
+        id: 'actions',
+        label: <span className={styles.srOnly}>{t('board.col.actions', 'Actions')}</span>,
+        textValue: t('board.col.actions', 'Actions'),
+        width: 170,
+        align: 'end',
+        render: (i) => (
+          <span className={styles.rowActions}>
+            <Button size="sm" variant="secondary" aria-label={t('board.attention.retryNamed', 'Retry {{name}}', { name: i.name })} onPress={() => void retry(i)}>
+              {t('board.retry', 'Retry')}
+            </Button>
+            <Button size="sm" variant="ghost" aria-label={t('board.attention.dismissNamed', 'Dismiss {{name}}', { name: i.name })} onPress={() => dismiss(i.key)}>
+              {t('board.attention.dismiss', 'Dismiss')}
+            </Button>
+          </span>
+        ),
+      },
+    ],
+    [t, i18n.language, retry, dismiss],
+  );
+
+  const failedError = Boolean(failed.error) || Boolean(sources.error);
+  if (items.length === 0 && !failedError) return null;
+
+  return (
+    <Region
+      className={styles.attention}
+      title={t('board.attention.title', 'Needs attention')}
+      headerAction={
+        <Link className={styles.link} to="/intake?section=attention">
+          {t('board.viewAll', 'View all')}
+        </Link>
+      }
+    >
+      {failedError ? (
+        <RegionError
+          message={t('board.attention.error', 'Some items that need attention could not be loaded.')}
+          onRetry={() => {
+            if (failed.error) failed.reload();
+            if (sources.error) sources.reload();
+          }}
+        />
+      ) : null}
+      {items.length > 0 ? (
+        <BoardTable
+          aria-label={t('board.attention.title', 'Needs attention')}
+          density="compact"
+          columns={columns}
+          rows={items}
+          getRowId={(i) => i.key}
+          isRowLit={() => true}
+          onRowAction={open}
+        />
+      ) : null}
+    </Region>
+  );
+}

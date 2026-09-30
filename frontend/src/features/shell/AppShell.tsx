@@ -3,6 +3,7 @@ import { Link, Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CommandPalette, Skeleton, useCommandPaletteShortcut } from '../../ui';
 import { cx } from '../../ui/shared/FieldParts';
+import { useLitFeeders } from '../board/litFeeders';
 import { AlertsButton } from './AlertsButton';
 import { LanguageMenu } from './LanguageMenu';
 import { PrimaryNav } from './PrimaryNav';
@@ -47,6 +48,7 @@ export function AppShell({ children }: AppShellProps) {
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const sources = usePaletteSources();
   useCommandPaletteShortcut(openPalette);
+  useLitFeeders();
 
   // The installed app always gets the tab bar (CSS still hides it on wide screens).
   const showBottomBar = isNarrow || isStandalone;

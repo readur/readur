@@ -1,0 +1,112 @@
+import { act, render, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const m = vi.hoisted(() => ({
+  documentService: { listWithPagination: vi.fn() },
+}));
+
+vi.mock('../../../services/api', () => ({
+  default: {},
+  documentService: m.documentService,
+}));
+
+import { NotificationProvider, useNotifications } from '../../../contexts/NotificationContext';
+import { resetDocumentBaseline, syncDocuments, useLitFeeders } from '../litFeeders';
+import { isLit, useLit } from '../litStore';
+import { doc, resetBoardState } from './boardTestUtils';
+
+type AddFn = ReturnType<typeof useNotifications>['addNotification'];
+let add: AddFn;
+
+function Harness() {
+  const { addNotification } = useNotifications();
+  add = addNotification;
+  useLitFeeders();
+  const state = useLit('document', '42');
+  return <output aria-label="lit">{state.lit ? state.reason : 'off'}</output>;
+}
+
+const mount = () =>
+  render(
+    <NotificationProvider>
+      <Harness />
+    </NotificationProvider>,
+  );
+
+beforeEach(() => {
+  resetBoardState();
+  vi.clearAllMocks();
+  m.documentService.listWithPagination.mockResolvedValue({ data: { documents: [], pagination: { total: 0 } } });
+});
+
+describe('useLitFeeders', () => {
+  it('marks the document named by a success notification as changed', async () => {
+    const view = mount();
+    act(() => add({ type: 'success', title: 'OCR Complete', message: 'done', metadata: { documentId: 42 } }));
+    await waitFor(() => expect(view.getByLabelText('lit')).toHaveTextContent('changed'));
+    expect(isLit('document', '42')).toBe(true);
+    expect(m.documentService.listWithPagination).not.toHaveBeenCalled();
+  });
+
+  it('marks the document named by an error notification as failed', async () => {
+    const view = mount();
+    act(() => add({ type: 'error', title: 'OCR Failed', message: 'nope', metadata: { documentId: 42 } }));
+    await waitFor(() => expect(view.getByLabelText('lit')).toHaveTextContent('failed'));
+  });
+
+  it('diffs the newest documents when a notification carries no id', async () => {
+    m.documentService.listWithPagination.mockResolvedValue({
+      data: { documents: [doc('42', { created_at: new Date().toISOString() }), doc('old', { created_at: '2020-01-01T00:00:00Z' })], pagination: { total: 2 } },
+    });
+    const view = mount();
+    act(() => add({ type: 'success', title: 'File Uploaded', message: 'a.pdf uploaded successfully' }));
+    await waitFor(() => expect(view.getByLabelText('lit')).toHaveTextContent('new'));
+    expect(m.documentService.listWithPagination).toHaveBeenCalledWith(10, 0);
+    expect(isLit('document', 'old')).toBe(false);
+  });
+
+  it('ignores a failing refresh', async () => {
+    m.documentService.listWithPagination.mockRejectedValue(new Error('down'));
+    const view = mount();
+    act(() => add({ type: 'success', title: 'File Uploaded', message: 'x' }));
+    await waitFor(() => expect(m.documentService.listWithPagination).toHaveBeenCalled());
+    expect(view.getByLabelText('lit')).toHaveTextContent('off');
+  });
+
+  it('does nothing until a notification arrives', () => {
+    mount();
+    expect(m.documentService.listWithPagination).not.toHaveBeenCalled();
+  });
+});
+
+describe('syncDocuments', () => {
+  beforeEach(() => resetDocumentBaseline());
+
+  it('only records a baseline the first time', () => {
+    syncDocuments([doc('a'), doc('b')]);
+    expect(isLit('document', 'a')).toBe(false);
+    expect(isLit('document', 'b')).toBe(false);
+  });
+
+  it('marks unseen documents as new after the baseline', () => {
+    syncDocuments([doc('a')]);
+    syncDocuments([doc('b'), doc('a')]);
+    expect(isLit('document', 'b')).toBe(true);
+    expect(isLit('document', 'a')).toBe(false);
+  });
+
+  it('marks a finished OCR as changed and a failed one as failed, once', () => {
+    syncDocuments([doc('a', { ocr_status: 'processing' }), doc('b', { ocr_status: 'processing' }), doc('c', { ocr_status: 'pending' })]);
+    syncDocuments([doc('a', { ocr_status: 'completed' }), doc('b', { ocr_status: 'failed' }), doc('c', { ocr_status: 'processing' })]);
+    expect(isLit('document', 'a')).toBe(true);
+    expect(isLit('document', 'b')).toBe(true);
+    expect(isLit('document', 'c')).toBe(false);
+  });
+
+  it('treats unseen documents created after `newerThan` as new even on the first call', () => {
+    const now = Date.now();
+    syncDocuments([doc('fresh', { created_at: new Date(now).toISOString() }), doc('stale', { created_at: new Date(now - 3600_000).toISOString() })], now - 1000);
+    expect(isLit('document', 'fresh')).toBe(true);
+    expect(isLit('document', 'stale')).toBe(false);
+  });
+});

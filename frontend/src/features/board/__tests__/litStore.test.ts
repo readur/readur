@@ -120,6 +120,7 @@ describe('litStore', () => {
     lit.markLit('document', 'a', 'new');
     lit.markLit('source', 's', 'failed');
     lit.acknowledge('document', 'a');
+    lit.flushLit();
     expect(storage.getItem(lit.LIT_STORAGE_KEY)).not.toBeNull();
 
     lit = await loadModule();
@@ -133,6 +134,7 @@ describe('litStore', () => {
     const lit = await loadModule();
     expect(lit.LIT_STORAGE_KEY).toBe('readur.lit.v1');
     lit.markLit('attention', 'q', 'failed');
+    lit.flushLit();
     expect(storage.getItem('readur.lit.v1')).toContain('"q"');
   });
 
@@ -146,6 +148,7 @@ describe('litStore', () => {
     expect(lit.isLit('document', 'd5')).toBe(true);
     expect(lit.isLit('document', 'd2004')).toBe(true);
 
+    lit.flushLit();
     lit = await loadModule();
     expect(lit.isLit('document', 'd4')).toBe(false);
     expect(lit.isLit('document', 'd2004')).toBe(true);
@@ -167,6 +170,7 @@ describe('litStore', () => {
     expect(lit.isLit('document', 'a')).toBe(false);
     lit.markLit('document', 'a', 'new');
     expect(lit.isLit('document', 'a')).toBe(true);
+    lit.flushLit();
 
     storage.setItem('readur.lit.v1', JSON.stringify([['bogus', 1], ['document', 'ok', 'new', 1]]));
     lit = await loadModule();
@@ -191,9 +195,68 @@ describe('litStore', () => {
     const { createLitStore } = await loadModule();
     const one = createLitStore();
     one.markLit('source', 's', 'changed');
+    one.flush();
     const two = createLitStore();
     expect(two.isLit('source', 's')).toBe(true);
     expect(two.reasonOf('source', 's')).toBe('changed');
     expect(two.count('source')).toBe(1);
+  });
+
+  it('coalesces N marks in one tick into a single storage write', async () => {
+    const lit = await loadModule();
+    const setItem = vi.spyOn(storage, 'setItem');
+    for (let i = 0; i < 50; i += 1) lit.markLit('document', `d${i}`, 'new');
+    lit.acknowledge('document', 'd0');
+    expect(setItem).not.toHaveBeenCalled();
+    // In-memory state is current straight away.
+    expect(lit.isLit('document', 'd49')).toBe(true);
+    await Promise.resolve();
+    expect(setItem).toHaveBeenCalledTimes(1);
+    const stored = JSON.parse(storage.getItem('readur.lit.v1') as string) as unknown[][];
+    expect(stored).toHaveLength(49);
+
+    lit.markLit('document', 'later', 'changed');
+    await Promise.resolve();
+    expect(setItem).toHaveBeenCalledTimes(2);
+  });
+
+  it('flush writes pending changes at once and is a no-op when clean', async () => {
+    const lit = await loadModule();
+    const setItem = vi.spyOn(storage, 'setItem');
+    lit.markLit('document', 'a', 'new');
+    lit.flushLit();
+    expect(setItem).toHaveBeenCalledTimes(1);
+    lit.flushLit();
+    await Promise.resolve();
+    expect(setItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('picks up changes made by another tab through the storage event', async () => {
+    const lit = await loadModule();
+    const { result } = renderHook(() => lit.useLitCount('document'));
+    expect(result.current).toBe(0);
+
+    storage.setItem('readur.lit.v1', JSON.stringify([['document', 'remote', 'new', 1]]));
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'readur.lit.v1' }));
+    });
+    expect(result.current).toBe(1);
+    expect(lit.isLit('document', 'remote')).toBe(true);
+
+    storage.setItem('readur.lit.v1', '[]');
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'readur.lit.v1' }));
+    });
+    expect(result.current).toBe(0);
+  });
+
+  it('ignores storage events for other keys', async () => {
+    const lit = await loadModule();
+    lit.markLit('document', 'a', 'new');
+    storage.setItem('other', 'x');
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'other' }));
+    });
+    expect(lit.isLit('document', 'a')).toBe(true);
   });
 });
