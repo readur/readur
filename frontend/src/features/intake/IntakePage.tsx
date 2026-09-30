@@ -82,10 +82,18 @@ export default function IntakePage() {
     summary.processing !== null ? t('intake.meta.processing', '{{count}} processing', { count: summary.processing }) : null,
   ].filter(Boolean);
 
+  const figure =
+    summary.attention
+      ? t('intake.meta.attention', '{{count}} need attention', { count: summary.attention })
+      : summary.connections !== null
+        ? t('intake.meta.connections', '{{count}} connections', { count: summary.connections })
+        : undefined;
+
   return (
     <div className={styles.page}>
       <PageHeader
         title={t('intake.title', 'Intake')}
+        figure={figure}
         meta={meta.length > 0 ? <span>{meta.join(' · ')}</span> : undefined}
       />
       <Tabs selectedKey={section} onSelectionChange={select}>

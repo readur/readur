@@ -1889,6 +1889,10 @@
     "addDocuments": "Dokumente hinzufügen",
     "retry": "Erneut versuchen",
     "viewAll": "Alle anzeigen",
+    "figure": {
+      "inQueue": "{{formatted}} in der Warteschlange",
+      "zero": "0 in der Warteschlange"
+    },
     "markAllSeen": "Alle als gesehen markieren",
     "loading": "Wird geladen",
     "tag": {

@@ -4,7 +4,7 @@ import { Button, Skeleton, StatusMark, useToast } from '../../ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAdmin } from '../../auth/roles';
 import { queueService } from '../../services/api';
-import { fetchQueueFigures, POLL_MS, type FailedOcrPage } from './data';
+import { POLL_MS, type FailedOcrPage, type QueueFigures } from './data';
 import { Figure, Figures } from './Figures';
 import { formatCount, formatMinutes } from './format';
 import { Region, RegionError } from './Region';
@@ -17,15 +17,16 @@ export interface ProcessingPanelProps {
    * and the list always agree (the OCR queue's own failure count tracks queue jobs, not documents).
    */
   failed: Resource<FailedOcrPage>;
+  /** The queue figures (owned by the Board, which also reads them for the headline figure). */
+  stats: Resource<QueueFigures | null>;
 }
 
 /** OCR queue at a glance, as one segment of the Board's pass strip; admins can pause and resume it. */
-export function ProcessingPanel({ failed }: ProcessingPanelProps) {
+export function ProcessingPanel({ failed, stats }: ProcessingPanelProps) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
   const canManage = isAdmin(user);
-  const stats = useResource(fetchQueueFigures, POLL_MS);
   const ocr = useResource(() => queueService.getOcrStatus().then((r) => r.data), POLL_MS);
   const [busy, setBusy] = useState(false);
 

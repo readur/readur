@@ -125,6 +125,7 @@ export function Library() {
     <div className={styles.page}>
       <PageHeader
         title={t('library.title', 'Library')}
+        figure={status === 'loading' && total === 0 ? undefined : formatCount(total, i18n.language)}
         meta={
           <span aria-live="polite">
             {status === 'loading' && total === 0

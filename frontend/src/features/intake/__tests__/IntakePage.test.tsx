@@ -84,6 +84,21 @@ describe('Intake page', () => {
     expect(await screen.findByText('3 connections · 2 need attention · 14 processing')).toBeInTheDocument();
   });
 
+  it('shows the needs-attention count as the headline figure, else the connections count', async () => {
+    renderIntake(<IntakePage />);
+    await settle();
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Intake' });
+    expect(within(h1.parentElement as HTMLElement).getByText('2 need attention')).toBeInTheDocument();
+  });
+
+  it('falls back to the connections count when nothing needs attention', async () => {
+    documentService.getFailedOcrDocuments.mockImplementation(() => ok(ocrList([])));
+    renderIntake(<IntakePage />);
+    await settle();
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Intake' });
+    expect(within(h1.parentElement as HTMLElement).getByText('3 connections')).toBeInTheDocument();
+  });
+
   it('badges the Needs attention tab with the count', async () => {
     renderIntake(<IntakePage />);
     await settle();

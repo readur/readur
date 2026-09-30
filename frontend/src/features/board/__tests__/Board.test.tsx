@@ -92,6 +92,19 @@ describe('Board', () => {
     expect(region('Library')).toBeInTheDocument();
   });
 
+  it('shows pending plus processing as the headline figure', async () => {
+    await renderBoard();
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Board' });
+    expect(await within(h1.parentElement as HTMLElement).findByText('9 in queue')).toBeInTheDocument();
+  });
+
+  it('reads "0 in queue" when the queue is empty', async () => {
+    m.queueService.getStats.mockResolvedValue({ data: { ...STATS, pending_count: 0, processing_count: 0 } });
+    await renderBoard();
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Board' });
+    expect(await within(h1.parentElement as HTMLElement).findByText('0 in queue')).toBeInTheDocument();
+  });
+
   it('shows loading placeholders before anything has arrived', () => {
     const never = new Promise(() => {});
     m.documentService.listWithPagination.mockReturnValue(never);

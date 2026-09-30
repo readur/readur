@@ -25,6 +25,13 @@ describe('Library', () => {
       expect(await screen.findByText('12,408 documents')).toBeInTheDocument();
     });
 
+    test('shows the document total as the headline figure beside the title', async () => {
+      documentService.listFiltered.mockResolvedValue(listResponse(DOCS, 12408));
+      renderLibrary();
+      const h1 = screen.getByRole('heading', { level: 1, name: 'Library' });
+      expect(await within(h1.parentElement as HTMLElement).findByText('12,408')).toBeInTheDocument();
+    });
+
     test('"Add documents" goes to the upload section', async () => {
       const user = userEvent.setup();
       documentService.listFiltered.mockResolvedValue(listResponse(DOCS, 3));

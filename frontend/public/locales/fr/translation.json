@@ -1889,6 +1889,10 @@
     "addDocuments": "Ajouter des documents",
     "retry": "Réessayer",
     "viewAll": "Tout afficher",
+    "figure": {
+      "inQueue": "{{formatted}} en file",
+      "zero": "0 en file"
+    },
     "markAllSeen": "Tout marquer comme vu",
     "loading": "Chargement",
     "tag": {
