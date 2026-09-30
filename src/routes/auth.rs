@@ -25,7 +25,7 @@ use crate::{
 };
 
 const OIDC_STATE_COOKIE: &str = "readur_oidc_state";
-const OIDC_COOKIE_PATH: &str = "/api/auth/oidc";
+const DEFAULT_OIDC_COOKIE_PATH: &str = "/api/auth/oidc";
 const EPHEMERAL_OIDC_STATE: &str = "oidc_state";
 const EPHEMERAL_OIDC_HANDOFF: &str = "oidc_handoff";
 
@@ -361,12 +361,29 @@ fn oidc_cookie_is_secure(state: &AppState) -> bool {
         .unwrap_or(true)
 }
 
+/// Path scope of the OIDC state cookie: the directory of `OIDC_REDIRECT_URI`
+/// (e.g. `/readur/api/auth/oidc` when served under `/readur`), so the cookie
+/// reaches the callback behind a path prefix. Falls back to `/api/auth/oidc`.
+fn oidc_cookie_path(redirect_uri: Option<&str>) -> String {
+    let parent = redirect_uri
+        .and_then(|uri| url::Url::parse(uri).ok())
+        .and_then(|url| url.path().rsplit_once('/').map(|(parent, _)| parent.to_string()));
+    match parent {
+        Some(path)
+            if path.starts_with('/') && path.bytes().all(|b| b.is_ascii_graphic() && b != b';' && b != b',') =>
+        {
+            path
+        }
+        _ => DEFAULT_OIDC_COOKIE_PATH.to_string(),
+    }
+}
+
 fn oidc_state_cookie(state: &AppState, value: &str, max_age_secs: i64) -> String {
     format!(
         "{}={}; Path={}; Max-Age={}; HttpOnly; SameSite=Lax{}",
         OIDC_STATE_COOKIE,
         value,
-        OIDC_COOKIE_PATH,
+        oidc_cookie_path(state.config.oidc_redirect_uri.as_deref()),
         max_age_secs,
         if oidc_cookie_is_secure(state) { "; Secure" } else { "" }
     )
@@ -813,6 +830,17 @@ mod tests {
         h.insert(header::COOKIE, "a=1; readur_oidc_state=xyz; b=2".parse().unwrap());
         assert_eq!(read_cookie(&h, OIDC_STATE_COOKIE), Some("xyz"));
         assert_eq!(read_cookie(&h, "missing"), None);
+    }
+
+    #[test]
+    fn oidc_cookie_path_follows_the_redirect_uri() {
+        assert_eq!(oidc_cookie_path(Some("https://h/api/auth/oidc/callback")), "/api/auth/oidc");
+        assert_eq!(oidc_cookie_path(Some("https://h/readur/api/auth/oidc/callback")), "/readur/api/auth/oidc");
+        assert_eq!(oidc_cookie_path(Some("https://h/readur/api/auth/oidc/callback?x=1")), "/readur/api/auth/oidc");
+        // Unusable values fall back to the default path.
+        for uri in [None, Some("not a url"), Some("https://h/callback"), Some("https://h/a;b/callback")] {
+            assert_eq!(oidc_cookie_path(uri), DEFAULT_OIDC_COOKIE_PATH, "{uri:?}");
+        }
     }
 
     #[test]
