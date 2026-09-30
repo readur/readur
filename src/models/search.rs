@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
-use utoipa::{ToSchema, IntoParams};
-use uuid::Uuid;
 use ts_rs::TS;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 
 use super::responses::EnhancedDocumentResponse;
 
@@ -17,7 +17,9 @@ const MAX_COMMA_SEPARATED_ITEMS: usize = 50;
 /// - Trims whitespace from each value
 /// - Filters empty values
 /// - Returns None if result is empty or input exceeds limits
-pub(crate) fn deserialize_comma_separated<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+pub(crate) fn deserialize_comma_separated<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -35,7 +37,11 @@ where
             .take(MAX_COMMA_SEPARATED_ITEMS)
             .collect();
 
-        if vec.is_empty() { None } else { Some(vec) }
+        if vec.is_empty() {
+            None
+        } else {
+            Some(vec)
+        }
     }))
 }
 
@@ -281,7 +287,6 @@ impl Default for SearchMode {
     }
 }
 
-
 #[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct SearchResponse {
@@ -303,6 +308,17 @@ pub struct FacetItem {
 pub struct SearchFacetsResponse {
     pub mime_types: Vec<FacetItem>,
     pub tags: Vec<FacetItem>,
+}
+
+/// Number of search matches created in one UTC calendar month
+/// (`GET /api/search/timeline`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
+pub struct MonthCount {
+    /// UTC calendar month, `YYYY-MM`
+    #[schema(example = "2026-09")]
+    pub month: String,
+    pub count: i64,
 }
 
 #[cfg(test)]
@@ -371,7 +387,9 @@ mod sort_filter_tests {
 
     #[test]
     fn rejects_oversized_uuid_lists() {
-        let many: Vec<String> = (0..MAX_COMMA_SEPARATED_ITEMS + 1).map(|_| Uuid::new_v4().to_string()).collect();
+        let many: Vec<String> = (0..MAX_COMMA_SEPARATED_ITEMS + 1)
+            .map(|_| Uuid::new_v4().to_string())
+            .collect();
         assert!(parse(&format!("label_ids={}", many.join(","))).is_err());
     }
 
@@ -383,19 +401,34 @@ mod sort_filter_tests {
         )
         .unwrap();
         let filters = req.filters();
-        assert_eq!(filters.source_types, Some(vec!["direct_upload".to_string(), "webdav".to_string()]));
-        assert_eq!(filters.mime_types, Some(vec!["application/pdf".to_string()]));
-        assert_eq!(filters.created_from.unwrap().to_rfc3339(), "2026-01-01T00:00:00+00:00");
+        assert_eq!(
+            filters.source_types,
+            Some(vec!["direct_upload".to_string(), "webdav".to_string()])
+        );
+        assert_eq!(
+            filters.mime_types,
+            Some(vec!["application/pdf".to_string()])
+        );
+        assert_eq!(
+            filters.created_from.unwrap().to_rfc3339(),
+            "2026-01-01T00:00:00+00:00"
+        );
         assert!(filters.validate().is_ok());
         assert!(parse("created_from=yesterday").is_err());
     }
 
     #[test]
     fn validate_rejects_unknown_ocr_status_and_inverted_range() {
-        let bad_status = DocumentFilters { ocr_status: Some("done".to_string()), ..Default::default() };
+        let bad_status = DocumentFilters {
+            ocr_status: Some("done".to_string()),
+            ..Default::default()
+        };
         assert!(bad_status.validate().is_err());
         for status in FILTERABLE_OCR_STATUSES {
-            let ok = DocumentFilters { ocr_status: Some(status.to_string()), ..Default::default() };
+            let ok = DocumentFilters {
+                ocr_status: Some(status.to_string()),
+                ..Default::default()
+            };
             assert!(ok.validate().is_ok());
         }
         let inverted = DocumentFilters {

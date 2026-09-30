@@ -2,6 +2,7 @@ import api from './client'
 import { SyncProgressWebSocket } from './syncProgress'
 import type {
   CreateSource,
+  SourceArrivals,
   SourceResponse,
   TestConnectionRequest,
   UpdateSource,
@@ -10,6 +11,8 @@ import type {
 
 export type {
   CreateSource,
+  DayCount,
+  SourceArrivals,
   SourceResponse,
   TestConnectionRequest,
   UpdateSource,
@@ -37,6 +40,18 @@ export interface CrawlEstimateConfig {
 export const sourcesService = {
   list: () => {
     return api.get<SourceResponse[]>('/sources')
+  },
+
+  /**
+   * GET /sources/arrivals: one lane per visible source, then the watch folder
+   * (key "watch") and uploads (key "upload"), each with `days` zero-filled UTC
+   * day counts ending today. The backend accepts 1-60 days (default 14).
+   */
+  getArrivals: (days?: number) => {
+    return api.get<SourceArrivals[]>(
+      '/sources/arrivals',
+      days === undefined ? undefined : { params: { days } },
+    )
   },
 
   create: (source: CreateSource) => {
@@ -89,3 +104,6 @@ export const sourcesService = {
     return new SyncProgressWebSocket(sourceId);
   },
 }
+
+/** Alias of `sourcesService`; the Home lanes use `sourceService.getArrivals`. */
+export const sourceService = sourcesService

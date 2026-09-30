@@ -179,6 +179,8 @@ export const queueService = {
 
 // Mock sources service
 export const sourcesService = {
+  list: vi.fn(),
+  getArrivals: vi.fn(),
   triggerSync: vi.fn(),
   triggerDeepScan: vi.fn(),
   stopSync: vi.fn(),
@@ -187,6 +189,13 @@ export const sourcesService = {
   createSyncProgressWebSocket: vi.fn((sourceId: string) => {
     return new MockSyncProgressWebSocket(sourceId);
   }),
+}
+export const sourceService = sourcesService
+
+// Mock search service
+export const searchService = {
+  enhancedSearch: vi.fn(),
+  getTimeline: vi.fn(),
 }
 
 // Export helper functions for tests
