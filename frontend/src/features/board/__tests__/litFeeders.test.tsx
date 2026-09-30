@@ -157,6 +157,13 @@ describe('syncDocuments', () => {
     expect(litReason('document', 'b')).toBe('failed');
   });
 
+  it('marks an arrival whose OCR already failed as failed, so it reads CHANGED like Needs attention', () => {
+    const now = Date.now();
+    syncDocuments([doc('old', { created_at: new Date(now - 3600_000).toISOString() })]);
+    syncDocuments([doc('bad', { created_at: new Date(now).toISOString(), ocr_status: 'failed' })]);
+    expect(litReason('document', 'bad')).toBe('failed');
+  });
+
   it(`raises one summary instead of lighting rows when more than ${BULK_THRESHOLD} documents arrive at once`, () => {
     const now = Date.now();
     syncDocuments([doc('old', { created_at: new Date(now - 3600_000).toISOString() })], undefined, 1);

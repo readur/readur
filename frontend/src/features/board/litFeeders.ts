@@ -99,7 +99,7 @@ export function resetDocumentBaseline(): void {
 
 /**
  * Compares `docs` with what was seen before and marks the differences:
- * - an unseen document created after the last-seen time is 'new';
+ * - an unseen document created after the last-seen time is 'new' ('failed' if its OCR already failed);
  * - a known one whose OCR failed is 'failed';
  * - a known one whose OCR completed is 'changed', unless it is still unseen as 'new' (an arrival
  *   stays NEW until the user has seen it).
@@ -138,7 +138,10 @@ export function syncDocuments(docs: BoardDocument[], newerThan?: number, total?:
     arrivals.forEach((id) => quiet.add(id));
     setBulk(readBulk() + arrived);
   } else {
-    arrivals.forEach((id) => markLit('document', id, 'new'));
+    // An arrival whose OCR already failed carries the failure, so it reads CHANGED (with ▲ FAILED)
+    // here exactly as it does in Needs attention.
+    const failed = new Set(docs.filter((d) => d.ocr_status === 'failed').map((d) => d.id));
+    arrivals.forEach((id) => markLit('document', id, failed.has(id) ? 'failed' : 'new'));
   }
 
   baselined = true;
