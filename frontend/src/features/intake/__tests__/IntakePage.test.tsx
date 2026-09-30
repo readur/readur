@@ -78,10 +78,23 @@ describe('Intake page', () => {
     await settle();
   });
 
-  it('summarizes connections, attention and processing in the header', async () => {
+  it('states each header number once: the figure, then the other counts on the line under it', async () => {
     renderIntake(<IntakePage />);
     await settle();
-    expect(await screen.findByText('3 connections · 2 need attention · 14 processing')).toBeInTheDocument();
+    expect(await screen.findByText('3 connections · 14 processing')).toBeInTheDocument();
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Intake' });
+    const header = h1.closest('div')?.parentElement?.parentElement as HTMLElement;
+    expect(within(header).getAllByText(/need attention/)).toHaveLength(1);
+  });
+
+  it('keeps the needs-attention count on the line under the title when connections is the figure', async () => {
+    documentService.getFailedOcrDocuments.mockImplementation(() => ok(ocrList([])));
+    renderIntake(<IntakePage />);
+    await settle();
+    expect(await screen.findByText('0 need attention · 14 processing')).toBeInTheDocument();
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Intake' });
+    const header = h1.closest('div')?.parentElement?.parentElement as HTMLElement;
+    expect(within(header).getAllByText(/connections/)).toHaveLength(1);
   });
 
   it('shows the needs-attention count as the headline figure, else the connections count', async () => {
@@ -110,7 +123,9 @@ describe('Intake page', () => {
     documentService.getFailedOcrDocuments.mockImplementation(() => Promise.reject(new Error('down')));
     renderIntake(<IntakePage />);
     await settle();
-    expect(await screen.findByText('3 connections · 14 processing')).toBeInTheDocument();
+    expect(await screen.findByText('14 processing')).toBeInTheDocument();
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Intake' });
+    expect(within(h1.parentElement as HTMLElement).getByText('3 connections')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Needs attention' })).toBeInTheDocument();
   });
 

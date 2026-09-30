@@ -74,26 +74,24 @@ export default function IntakePage() {
     setParams({ section: next });
   };
 
-  const meta = [
+  const connections =
     summary.connections !== null
       ? t('intake.meta.connections', '{{count}} connections', { count: summary.connections })
-      : null,
-    summary.attention !== null ? t('intake.meta.attention', '{{count}} need attention', { count: summary.attention }) : null,
-    summary.processing !== null ? t('intake.meta.processing', '{{count}} processing', { count: summary.processing }) : null,
-  ].filter(Boolean);
+      : null;
+  const attention =
+    summary.attention !== null ? t('intake.meta.attention', '{{count}} need attention', { count: summary.attention }) : null;
+  const processing =
+    summary.processing !== null ? t('intake.meta.processing', '{{count}} processing', { count: summary.processing }) : null;
 
-  const figure =
-    summary.attention
-      ? t('intake.meta.attention', '{{count}} need attention', { count: summary.attention })
-      : summary.connections !== null
-        ? t('intake.meta.connections', '{{count}} connections', { count: summary.connections })
-        : undefined;
+  // The headline states one number; the line under it carries the others, never the same one twice.
+  const figure = summary.attention ? attention : connections;
+  const meta = [connections, attention, processing].filter((part): part is string => Boolean(part) && part !== figure);
 
   return (
     <div className={styles.page}>
       <PageHeader
         title={t('intake.title', 'Intake')}
-        figure={figure}
+        figure={figure ?? undefined}
         meta={meta.length > 0 ? <span>{meta.join(' · ')}</span> : undefined}
       />
       <Tabs selectedKey={section} onSelectionChange={select}>

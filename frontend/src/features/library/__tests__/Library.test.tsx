@@ -29,7 +29,10 @@ describe('Library', () => {
       documentService.listFiltered.mockResolvedValue(listResponse(DOCS, 12408));
       renderLibrary();
       const h1 = screen.getByRole('heading', { level: 1, name: 'Library' });
-      expect(await within(h1.parentElement as HTMLElement).findByText('12,408')).toBeInTheDocument();
+      expect(await within(h1.parentElement as HTMLElement).findByText('12,408 documents')).toBeInTheDocument();
+      // The number is stated once: no second count line under the title.
+      const header = h1.parentElement?.parentElement as HTMLElement;
+      expect(within(header).getAllByText(/12,408/)).toHaveLength(1);
     });
 
     test('"Add documents" goes to the upload section', async () => {
