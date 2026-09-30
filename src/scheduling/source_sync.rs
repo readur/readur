@@ -9,9 +9,9 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    models::{FileIngestionInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
+    models::{FileIngestionInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, UserRole, WebDAVSourceConfig},
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
-    services::local_folder_service::LocalFolderService,
+    services::local_folder_service::{authorize_local_folder_paths, LocalFolderService},
     services::s3_service::S3Service,
     services::webdav::{WebDAVService, WebDAVConfig, SyncProgress, SyncPhase},
 };
@@ -198,6 +198,21 @@ impl SourceSyncService {
     async fn sync_local_folder_source_with_cancellation(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken) -> Result<usize> {
         let config: LocalFolderSourceConfig = serde_json::from_value(source.config.clone())
             .map_err(|e| anyhow!("Invalid LocalFolder config: {}", e))?;
+
+        // Re-check against the current configuration: the allowlist or the
+        // owner's role may have changed since the source was saved.
+        let owner_is_admin = self
+            .state
+            .db
+            .get_user_by_id(source.user_id)
+            .await?
+            .is_some_and(|owner| owner.role == UserRole::Admin);
+        authorize_local_folder_paths(
+            &config.watch_folders,
+            owner_is_admin,
+            &self.state.config.security.local_source_allowed_paths,
+        )
+        .map_err(|e| anyhow!("Local folder source is not permitted: {}", e))?;
 
         let local_service = LocalFolderService::new(config.clone())
             .map_err(|e| anyhow!("Failed to create LocalFolder service: {}", e))?;

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 use anyhow::{anyhow, Result};
 use chrono::DateTime;
@@ -8,6 +8,74 @@ use sha2::{Sha256, Digest};
 use serde_json;
 
 use crate::models::{FileIngestionInfo, LocalFolderSourceConfig};
+
+/// Why a set of local folder paths was refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LocalFolderPathError {
+    /// The caller may not use these paths. Deliberately carries no detail so
+    /// the response does not reveal whether a path exists.
+    Forbidden,
+    /// The paths are permitted but unusable (empty, relative, not a directory).
+    Invalid(String),
+}
+
+impl std::fmt::Display for LocalFolderPathError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Forbidden => write!(f, "Local folder path is not permitted"),
+            Self::Invalid(reason) => write!(f, "{}", reason),
+        }
+    }
+}
+
+/// Check that `watch_folders` may be used by a local folder source owned by
+/// a user with the given role, returning their canonical forms.
+///
+/// With a non-empty `allowed_roots` every folder, for admins too, must resolve
+/// under one of those roots. With an empty list only admins may use local
+/// folders at all. The role check happens before any filesystem access, and
+/// non-admins receive the same `Forbidden` whether or not a path exists.
+pub fn authorize_local_folder_paths(
+    watch_folders: &[String],
+    is_admin: bool,
+    allowed_roots: &[PathBuf],
+) -> std::result::Result<Vec<PathBuf>, LocalFolderPathError> {
+    if allowed_roots.is_empty() && !is_admin {
+        return Err(LocalFolderPathError::Forbidden);
+    }
+    if watch_folders.is_empty() {
+        return Err(LocalFolderPathError::Invalid("At least one watch folder is required".into()));
+    }
+
+    let mut canonical = Vec::with_capacity(watch_folders.len());
+    for folder in watch_folders {
+        let path = Path::new(folder);
+        if !path.is_absolute() {
+            return Err(LocalFolderPathError::Invalid(format!("Watch folder must be an absolute path: {}", folder)));
+        }
+
+        let resolved = match path.canonicalize() {
+            Ok(p) => p,
+            Err(_) if is_admin => {
+                return Err(LocalFolderPathError::Invalid(format!("Watch folder does not exist: {}", folder)));
+            }
+            Err(_) => return Err(LocalFolderPathError::Forbidden),
+        };
+
+        if !allowed_roots.is_empty() && !is_under_any_root(&resolved, allowed_roots) {
+            return Err(LocalFolderPathError::Forbidden);
+        }
+        if !resolved.is_dir() {
+            return Err(LocalFolderPathError::Invalid(format!("Watch folder is not a directory: {}", folder)));
+        }
+        canonical.push(resolved);
+    }
+    Ok(canonical)
+}
+
+fn is_under_any_root(path: &Path, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| path.starts_with(root))
+}
 
 #[derive(Debug, Clone)]
 pub struct LocalFolderService {
@@ -32,13 +100,10 @@ impl LocalFolderService {
 
     /// Discover files in a specific folder
     pub async fn discover_files_in_folder(&self, folder_path: &str) -> Result<Vec<FileIngestionInfo>> {
-        let path = Path::new(folder_path);
-        if !path.exists() {
-            return Err(anyhow!("Folder does not exist: {}", folder_path));
-        }
+        let root = Path::new(folder_path)
+            .canonicalize()
+            .map_err(|_| anyhow!("Folder does not exist: {}", folder_path))?;
 
-        let files: Vec<FileIngestionInfo> = Vec::new();
-        
         info!("Scanning local folder: {} (recursive: {})", folder_path, self.config.recursive);
 
         // Use tokio::task::spawn_blocking for file system operations
@@ -67,6 +132,15 @@ impl LocalFolderService {
                         // Skip directories and the root folder itself
                         if path.is_dir() {
                             continue;
+                        }
+
+                        // Symlinks (or a swapped directory) must not lead outside the watch folder.
+                        match path.canonicalize() {
+                            Ok(resolved) if resolved.starts_with(&root) => {}
+                            _ => {
+                                warn!("Skipping file outside watch folder: {}", path.display());
+                                continue;
+                            }
                         }
 
                         // Check file extension
@@ -299,6 +373,105 @@ mod tests {
         let txt_file = files.iter().find(|f| f.name == "test.txt").unwrap();
         assert_eq!(txt_file.mime_type, "text/plain");
         assert_eq!(txt_file.size, 12);
+    }
+
+    fn path_string(p: &Path) -> String {
+        p.to_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn empty_allowlist_is_admin_only() {
+        let dir = TempDir::new().unwrap();
+        let folders = vec![path_string(dir.path())];
+
+        assert_eq!(authorize_local_folder_paths(&folders, false, &[]), Err(LocalFolderPathError::Forbidden));
+        let resolved = authorize_local_folder_paths(&folders, true, &[]).unwrap();
+        assert_eq!(resolved, vec![dir.path().canonicalize().unwrap()]);
+    }
+
+    #[test]
+    fn non_admin_cannot_probe_for_existence() {
+        let allowed = TempDir::new().unwrap();
+        let roots = vec![allowed.path().canonicalize().unwrap()];
+        let missing = vec!["/definitely/not/here".to_string()];
+        let existing_outside = vec!["/".to_string()];
+
+        assert_eq!(authorize_local_folder_paths(&missing, false, &roots), Err(LocalFolderPathError::Forbidden));
+        assert_eq!(authorize_local_folder_paths(&existing_outside, false, &roots), Err(LocalFolderPathError::Forbidden));
+        assert!(matches!(
+            authorize_local_folder_paths(&missing, true, &roots),
+            Err(LocalFolderPathError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn allowlist_applies_to_admins_too() {
+        let allowed = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let inside = allowed.path().join("scans");
+        std::fs::create_dir(&inside).unwrap();
+        let roots = vec![allowed.path().canonicalize().unwrap()];
+
+        assert!(authorize_local_folder_paths(&[path_string(&inside)], false, &roots).is_ok());
+        assert_eq!(
+            authorize_local_folder_paths(&[path_string(outside.path())], true, &roots),
+            Err(LocalFolderPathError::Forbidden)
+        );
+        // `..` segments are resolved before the prefix check.
+        let dotdot = format!("{}/..", path_string(&inside));
+        assert!(authorize_local_folder_paths(&[dotdot], false, &roots).is_ok());
+        let escape = format!("{}/../..", path_string(&inside));
+        assert_eq!(authorize_local_folder_paths(&[escape], false, &roots), Err(LocalFolderPathError::Forbidden));
+    }
+
+    #[test]
+    fn relative_paths_are_rejected() {
+        let result = authorize_local_folder_paths(&["relative/dir".to_string()], true, &[]);
+        assert!(matches!(result, Err(LocalFolderPathError::Invalid(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_watch_folder_outside_allowlist_is_rejected() {
+        let allowed = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let link = allowed.path().join("link");
+        std::os::unix::fs::symlink(outside.path(), &link).unwrap();
+        let roots = vec![allowed.path().canonicalize().unwrap()];
+
+        assert_eq!(
+            authorize_local_folder_paths(&[path_string(&link)], true, &roots),
+            Err(LocalFolderPathError::Forbidden)
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn discovery_skips_symlinks_escaping_the_watch_folder() {
+        let watch = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+
+        File::create(watch.path().join("inside.txt")).unwrap().write_all(b"ok").unwrap();
+        File::create(outside.path().join("secret.txt")).unwrap().write_all(b"no").unwrap();
+        std::fs::create_dir(outside.path().join("dir")).unwrap();
+        File::create(outside.path().join("dir/nested.txt")).unwrap().write_all(b"no").unwrap();
+
+        std::os::unix::fs::symlink(outside.path().join("secret.txt"), watch.path().join("file-link.txt")).unwrap();
+        std::os::unix::fs::symlink(outside.path().join("dir"), watch.path().join("dir-link")).unwrap();
+
+        let config = LocalFolderSourceConfig {
+            watch_folders: vec![path_string(watch.path())],
+            file_extensions: vec!["txt".to_string()],
+            auto_sync: false,
+            sync_interval_minutes: 60,
+            recursive: true,
+            follow_symlinks: true,
+        };
+        let service = LocalFolderService::new(config).unwrap();
+        let files = service.discover_files_in_folder(&path_string(watch.path())).await.unwrap();
+
+        let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, vec!["inside.txt"]);
     }
 
     #[tokio::test]
