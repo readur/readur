@@ -11,6 +11,7 @@ pub mod models;
 pub mod monitoring;
 pub mod ocr;
 pub mod oidc;
+pub mod http_security;
 pub mod routes;
 pub mod scheduling;
 pub mod seed;

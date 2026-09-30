@@ -1,13 +1,12 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode, header::CONTENT_TYPE},
+    http::{StatusCode, header::CONTENT_TYPE},
     response::{Json, Response},
     body::Body,
     routing::{get, post, delete},
     Router,
 };
 use serde::Deserialize;
-use std::net::IpAddr;
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
@@ -49,56 +48,6 @@ fn generate_token() -> String {
     base64ct::Base64UrlUnpadded::encode_string(&bytes)
 }
 
-/// Extract client IP from request headers, checking X-Forwarded-For first (for reverse proxies),
-/// then X-Real-Ip, falling back to a default.
-fn extract_client_ip(headers: &HeaderMap) -> IpAddr {
-    if let Some(forwarded) = headers.get("x-forwarded-for") {
-        if let Ok(val) = forwarded.to_str() {
-            // X-Forwarded-For can contain multiple IPs; first one is the client
-            if let Some(first_ip) = val.split(',').next() {
-                if let Ok(ip) = first_ip.trim().parse::<IpAddr>() {
-                    return ip;
-                }
-            }
-        }
-    }
-    if let Some(real_ip) = headers.get("x-real-ip") {
-        if let Ok(val) = real_ip.to_str() {
-            if let Ok(ip) = val.trim().parse::<IpAddr>() {
-                return ip;
-            }
-        }
-    }
-    // Fallback — treat as localhost if we can't determine IP
-    IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-}
-
-/// Sanitize a filename for use in Content-Disposition headers.
-/// Strips characters that could enable header injection or path traversal.
-fn sanitize_filename(name: &str) -> String {
-    let sanitized: String = name
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ' ') {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    // Truncate to 255 characters and trim whitespace
-    let truncated = if sanitized.len() > 255 {
-        &sanitized[..255]
-    } else {
-        &sanitized
-    };
-    let result = truncated.trim().to_string();
-    if result.is_empty() {
-        "download".to_string()
-    } else {
-        result
-    }
-}
 
 fn get_base_url(state: &AppState) -> String {
     // Use the configured public URL or fall back to server address
@@ -274,11 +223,11 @@ pub async fn revoke_shared_link(
 
 pub async fn get_shared_document_metadata(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    client_ip: crate::utils::client_ip::ClientIp,
     Path(token): Path<String>,
 ) -> Result<Json<SharedDocumentMetadata>, SharedLinkError> {
     // Rate limit public access per IP
-    let client_ip = extract_client_ip(&headers);
+    let client_ip = client_ip.or_unspecified();
     if let Err(retry_after) = state.rate_limiters.shared_link_public.check(&client_ip).await {
         return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
     }
@@ -323,12 +272,12 @@ pub struct PasswordPayload {
 
 pub async fn verify_shared_link_password(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    client_ip: crate::utils::client_ip::ClientIp,
     Path(token): Path<String>,
     Json(payload): Json<SharedLinkPasswordRequest>,
 ) -> Result<Json<serde_json::Value>, SharedLinkError> {
     // Rate limit password verification attempts per IP
-    let client_ip = extract_client_ip(&headers);
+    let client_ip = client_ip.or_unspecified();
     if let Err(retry_after) = state.rate_limiters.shared_link_password.check(&client_ip).await {
         warn!("Rate limited shared link password attempt from {}", client_ip);
         return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
@@ -362,12 +311,12 @@ pub async fn verify_shared_link_password(
 
 pub async fn download_shared_document(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    client_ip: crate::utils::client_ip::ClientIp,
     Path(token): Path<String>,
     Json(payload): Json<PasswordPayload>,
 ) -> Result<Response<Body>, SharedLinkError> {
     // Rate limit public access per IP (general limit + password-specific limit if password provided)
-    let client_ip = extract_client_ip(&headers);
+    let client_ip = client_ip.or_unspecified();
     if let Err(retry_after) = state.rate_limiters.shared_link_public.check(&client_ip).await {
         warn!("Rate limited shared link download from {}", client_ip);
         return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
@@ -419,7 +368,7 @@ pub async fn download_shared_document(
         .header(CONTENT_TYPE, &document.mime_type)
         .header(
             "Content-Disposition",
-            format!("attachment; filename=\"{}\"", sanitize_filename(&document.original_filename)),
+            format!("attachment; filename=\"{}\"", crate::utils::security::content_disposition_filename(&document.original_filename)),
         )
         .header("Content-Length", file_data.len().to_string())
         .body(Body::from(file_data))
@@ -433,12 +382,12 @@ pub async fn download_shared_document(
 
 pub async fn view_shared_document(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    client_ip: crate::utils::client_ip::ClientIp,
     Path(token): Path<String>,
     Json(payload): Json<PasswordPayload>,
 ) -> Result<Response<Body>, SharedLinkError> {
     // Rate limit public access per IP (general limit + password-specific limit if password provided)
-    let client_ip = extract_client_ip(&headers);
+    let client_ip = client_ip.or_unspecified();
     if let Err(retry_after) = state.rate_limiters.shared_link_public.check(&client_ip).await {
         warn!("Rate limited shared link view from {}", client_ip);
         return Err(SharedLinkError::RateLimited { retry_after_secs: retry_after });
@@ -490,7 +439,7 @@ pub async fn view_shared_document(
         .header(CONTENT_TYPE, &document.mime_type)
         .header(
             "Content-Disposition",
-            format!("inline; filename=\"{}\"", sanitize_filename(&document.original_filename)),
+            format!("inline; filename=\"{}\"", crate::utils::security::content_disposition_filename(&document.original_filename)),
         )
         .header("Content-Length", file_data.len().to_string())
         .body(Body::from(file_data))

@@ -1,92 +1,133 @@
 use axum::{
     extract::{Query, State},
-    http::{StatusCode, HeaderMap},
-    response::{IntoResponse, Json, Response, Redirect},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    response::{IntoResponse, Json, Redirect, Response},
     routing::{get, post},
     Router,
 };
+use chrono::Duration;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use uuid::Uuid;
 
 use crate::{
-    auth::{create_jwt, AuthUser},
-    models::{CreateUser, LoginRequest, LoginResponse, User, UserResponse, UserRole},
-    oidc::OidcUserInfo,
+    auth::{create_jwt_with_ttl, sha256_hex, AuthUser},
+    models::{
+        ChangePasswordRequest, CreateUser, LoginRequest, LoginResponse, RegisterRequest, User,
+        UserResponse, UserRole,
+    },
+    oidc::{OidcUserInfo, PendingLogin},
+    utils::{
+        client_ip::ClientIp,
+        security::{constant_time_eq, validate_account_username, validate_email, validate_password},
+    },
     AppState,
 };
+
+const OIDC_STATE_COOKIE: &str = "readur_oidc_state";
+const OIDC_COOKIE_PATH: &str = "/api/auth/oidc";
+const EPHEMERAL_OIDC_STATE: &str = "oidc_state";
+const EPHEMERAL_OIDC_HANDOFF: &str = "oidc_handoff";
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/register", post(register))
         .route("/login", post(login))
+        .route("/logout", post(logout))
+        .route("/password", post(change_password))
         .route("/me", get(me))
         .route("/config", get(get_auth_config))
         .route("/oidc/login", get(oidc_login))
         .route("/oidc/callback", get(oidc_callback))
+        .route("/oidc/exchange", post(oidc_exchange))
         .nest("/keys", crate::routes::api_keys::router())
+}
+
+fn json_error(status: StatusCode, message: &str) -> Response {
+    (status, Json(serde_json::json!({ "error": message }))).into_response()
+}
+
+fn rate_limited(retry_after: u64) -> Response {
+    let mut response = json_error(StatusCode::TOO_MANY_REQUESTS, "Too many attempts, try again later");
+    if let Ok(value) = HeaderValue::from_str(&retry_after.to_string()) {
+        response.headers_mut().insert(header::RETRY_AFTER, value);
+    }
+    response
+}
+
+fn issue_session(state: &AppState, user: User) -> Response {
+    match create_jwt_with_ttl(&user, &state.config.jwt_secret, state.config.security.jwt_ttl_hours) {
+        Ok(token) => Json(LoginResponse { token, user: user.into() }).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to create session token: {}", e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+        }
+    }
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct AuthConfig {
     allow_local_auth: bool,
+    allow_registration: bool,
     oidc_enabled: bool,
     enable_per_user_watch: bool,
 }
-
 
 #[utoipa::path(
     post,
     path = "/api/auth/register",
     tag = "auth",
-    request_body = CreateUser,
+    request_body = RegisterRequest,
     responses(
-        (status = 200, description = "User registered successfully", body = UserResponse),
-        (status = 400, description = "Bad request - username/email already exists or invalid data"),
-        (status = 500, description = "Internal server error")
+        (status = 200, description = "Account created; it may require administrator approval before it can sign in", body = UserResponse),
+        (status = 400, description = "Invalid data, or the account could not be created"),
+        (status = 403, description = "Self-registration is disabled"),
+        (status = 429, description = "Too many registrations from this client")
     )
 )]
 async fn register(
     State(state): State<Arc<AppState>>,
-    Json(user_data): Json<CreateUser>,
+    client_ip: ClientIp,
+    Json(request): Json<RegisterRequest>,
 ) -> Response {
-    // Check if local authentication is enabled
-    if !state.config.allow_local_auth.unwrap_or(true) {
-        tracing::warn!("Local registration attempt rejected - local auth is disabled");
-        return (
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({
-                "error": "Local registration is disabled",
-                "details": "This instance only allows OIDC authentication. Please contact your administrator."
-            }))
-        ).into_response();
+    if !state.config.allow_local_auth.unwrap_or(true) || !state.config.security.allow_registration {
+        return json_error(StatusCode::FORBIDDEN, "Self-registration is disabled");
     }
 
-    match state.db.create_user(user_data).await {
+    if let Some(ip) = client_ip.0 {
+        if let Err(retry_after) = state.rate_limiters.registration_by_ip.check(&ip).await {
+            return rate_limited(retry_after);
+        }
+    }
+
+    if let Err(message) = validate_account_username(&request.username)
+        .and_then(|_| validate_email(&request.email))
+        .and_then(|_| validate_password(&request.password))
+    {
+        return json_error(StatusCode::BAD_REQUEST, message);
+    }
+
+    let new_user = CreateUser {
+        username: request.username,
+        email: request.email,
+        password: request.password,
+        role: Some(UserRole::User),
+    };
+    let active = !state.config.security.registration_requires_approval;
+
+    match state.db.create_user_with_status(new_user, active).await {
         Ok(user) => {
-            let user_response: UserResponse = user.into();
-            (StatusCode::OK, Json(user_response)).into_response()
+            if !active {
+                tracing::info!(user_id = %user.id, "New account registered; awaiting administrator approval");
+            }
+            (StatusCode::OK, Json(UserResponse::from(user))).into_response()
         }
         Err(e) => {
-            tracing::error!("User registration failed: {}", e);
-            
-            // Check for specific database constraint violations
-            let error_message = if e.to_string().contains("users_username_key") {
-                "Username already exists"
-            } else if e.to_string().contains("users_email_key") {
-                "Email already exists"
-            } else if e.to_string().contains("duplicate key") {
-                "User with this username or email already exists"
-            } else {
-                "Registration failed due to invalid data"
-            };
-            
-            (
-                StatusCode::BAD_REQUEST, 
-                Json(serde_json::json!({
-                    "error": error_message,
-                    "details": e.to_string()
-                }))
-            ).into_response()
+            tracing::warn!("User registration failed: {}", e);
+            json_error(
+                StatusCode::BAD_REQUEST,
+                "Could not create an account with the supplied username or email",
+            )
         }
     }
 }
@@ -99,17 +140,23 @@ async fn register(
         (status = 200, description = "Authentication configuration", body = AuthConfig),
     )
 )]
-async fn get_auth_config(
-    State(state): State<Arc<AppState>>,
-) -> Json<AuthConfig> {
+async fn get_auth_config(State(state): State<Arc<AppState>>) -> Json<AuthConfig> {
     let allow_local_auth = state.config.allow_local_auth.unwrap_or(true);
-    let oidc_enabled = state.oidc_client.is_some();
-    let enable_per_user_watch = state.config.enable_per_user_watch;
-
     Json(AuthConfig {
         allow_local_auth,
-        oidc_enabled,
-        enable_per_user_watch,
+        allow_registration: allow_local_auth && state.config.security.allow_registration,
+        oidc_enabled: state.oidc_client.is_some(),
+        enable_per_user_watch: state.config.enable_per_user_watch,
+    })
+}
+
+/// A valid bcrypt hash of a random string, verified against when the user
+/// doesn't exist so response time does not reveal which usernames exist.
+fn dummy_password_hash() -> &'static str {
+    static HASH: OnceLock<String> = OnceLock::new();
+    HASH.get_or_init(|| {
+        bcrypt::hash(crate::oidc::random_urlsafe(24), crate::db::users::BCRYPT_COST)
+            .expect("bcrypt hash of random string")
     })
 }
 
@@ -120,45 +167,132 @@ async fn get_auth_config(
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Login successful", body = LoginResponse),
-        (status = 401, description = "Unauthorized - invalid credentials"),
-        (status = 500, description = "Internal server error")
+        (status = 401, description = "Invalid credentials"),
+        (status = 403, description = "Local login disabled, or account disabled / awaiting approval"),
+        (status = 429, description = "Too many failed attempts")
     )
 )]
 async fn login(
     State(state): State<Arc<AppState>>,
+    client_ip: ClientIp,
     Json(login_data): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, StatusCode> {
-    // Check if local authentication is enabled
+) -> Response {
     if !state.config.allow_local_auth.unwrap_or(true) {
-        tracing::warn!("Local authentication attempt rejected - local auth is disabled");
-        return Err(StatusCode::FORBIDDEN);
+        return json_error(StatusCode::FORBIDDEN, "Local login is disabled");
     }
 
-    let user = state
-        .db
-        .get_user_by_username(&login_data.username)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-
-    let password_hash = user.password_hash
-        .as_ref()
-        .ok_or(StatusCode::UNAUTHORIZED)?; // OIDC users don't have passwords
-        
-    let is_valid = bcrypt::verify(&login_data.password, password_hash)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if !is_valid {
-        return Err(StatusCode::UNAUTHORIZED);
+    let limiters = &state.rate_limiters;
+    let username_key = login_data.username.to_lowercase();
+    if let Err(retry_after) = limiters.login_failures_by_username.peek(&username_key).await {
+        return rate_limited(retry_after);
+    }
+    if let Some(ip) = client_ip.0 {
+        if let Err(retry_after) = limiters.login_failures_by_ip.peek(&ip).await {
+            return rate_limited(retry_after);
+        }
     }
 
-    let token = create_jwt(&user, &state.config.jwt_secret)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user = match state.db.get_user_by_username(&login_data.username).await {
+        Ok(user) => user,
+        Err(e) => {
+            tracing::error!("Database error during login: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
+        }
+    };
 
-    Ok(Json(LoginResponse {
-        token,
-        user: user.into(),
-    }))
+    // Always run exactly one bcrypt verification (OIDC-only accounts have no
+    // password hash and can never log in locally).
+    let stored_hash = user.as_ref().and_then(|u| u.password_hash.as_deref());
+    let password_ok = bcrypt::verify(&login_data.password, stored_hash.unwrap_or(dummy_password_hash()))
+        .unwrap_or(false)
+        && stored_hash.is_some();
+
+    let user = match (user, password_ok) {
+        (Some(user), true) => user,
+        _ => {
+            limiters.login_failures_by_username.record(&username_key).await;
+            if let Some(ip) = client_ip.0 {
+                limiters.login_failures_by_ip.record(&ip).await;
+            }
+            return json_error(StatusCode::UNAUTHORIZED, "Invalid username or password");
+        }
+    };
+
+    if !user.is_active {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "This account is disabled or awaiting administrator approval",
+        );
+    }
+
+    issue_session(&state, user)
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/auth/logout",
+    tag = "auth",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 204, description = "All of the user's sessions were revoked"),
+        (status = 401, description = "Not authenticated")
+    )
+)]
+async fn logout(State(state): State<Arc<AppState>>, auth_user: AuthUser) -> Response {
+    match state.db.revoke_user_sessions(auth_user.user.id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            tracing::error!("Failed to revoke sessions: {}", e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+        }
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/auth/password",
+    tag = "auth",
+    security(("bearer_auth" = [])),
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 200, description = "Password changed; other sessions revoked; a fresh session is returned", body = LoginResponse),
+        (status = 400, description = "New password rejected, or account has no local password"),
+        (status = 401, description = "Current password incorrect"),
+        (status = 429, description = "Too many attempts")
+    )
+)]
+async fn change_password(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(request): Json<ChangePasswordRequest>,
+) -> Response {
+    let user = auth_user.user;
+    let Some(current_hash) = user.password_hash.as_deref() else {
+        return json_error(StatusCode::BAD_REQUEST, "This account does not use a local password");
+    };
+
+    let username_key = user.username.to_lowercase();
+    let limiter = &state.rate_limiters.login_failures_by_username;
+    if let Err(retry_after) = limiter.peek(&username_key).await {
+        return rate_limited(retry_after);
+    }
+
+    if !bcrypt::verify(&request.current_password, current_hash).unwrap_or(false) {
+        limiter.record(&username_key).await;
+        return json_error(StatusCode::UNAUTHORIZED, "Current password is incorrect");
+    }
+
+    if let Err(message) = validate_password(&request.new_password) {
+        return json_error(StatusCode::BAD_REQUEST, message);
+    }
+
+    match state.db.set_user_password(user.id, &request.new_password).await {
+        Ok(updated) => issue_session(&state, updated),
+        Err(e) => {
+            tracing::error!("Failed to change password: {}", e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+        }
+    }
 }
 
 #[utoipa::path(
@@ -178,11 +312,67 @@ async fn me(auth_user: AuthUser) -> Json<UserResponse> {
     Json(auth_user.user.into())
 }
 
+// ---------------------------------------------------------------------------
+// OIDC
+// ---------------------------------------------------------------------------
+
 #[derive(Deserialize)]
 struct OidcCallbackQuery {
     code: Option<String>,
     state: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+struct OidcExchangeRequest {
+    code: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct OidcHandoff {
+    user_id: Uuid,
+    token_version: i32,
+}
+
+/// Base URL of the web UI. Derived from configuration only — never from
+/// request headers, which an attacker can influence.
+fn frontend_base_url(state: &AppState) -> Option<String> {
+    if let Some(public_url) = &state.config.public_url {
+        return Some(public_url.trim_end_matches('/').to_string());
+    }
+    let redirect = url::Url::parse(state.config.oidc_redirect_uri.as_deref()?).ok()?;
+    Some(redirect.origin().ascii_serialization())
+}
+
+fn oidc_cookie_is_secure(state: &AppState) -> bool {
+    state
+        .config
+        .oidc_redirect_uri
+        .as_deref()
+        .map(|u| u.starts_with("https://"))
+        .unwrap_or(true)
+}
+
+fn oidc_state_cookie(state: &AppState, value: &str, max_age_secs: i64) -> String {
+    format!(
+        "{}={}; Path={}; Max-Age={}; HttpOnly; SameSite=Lax{}",
+        OIDC_STATE_COOKIE,
+        value,
+        OIDC_COOKIE_PATH,
+        max_age_secs,
+        if oidc_cookie_is_secure(state) { "; Secure" } else { "" }
+    )
+}
+
+fn read_cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+    headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(';'))
+        .filter_map(|pair| pair.trim().split_once('='))
+        .find(|(k, _)| *k == name)
+        .map(|(_, v)| v)
 }
 
 #[utoipa::path(
@@ -195,17 +385,38 @@ struct OidcCallbackQuery {
         (status = 500, description = "Internal server error")
     )
 )]
-async fn oidc_login(State(state): State<Arc<AppState>>) -> Result<Redirect, StatusCode> {
-    let oidc_client = state
-        .oidc_client
-        .as_ref()
-        .ok_or(StatusCode::BAD_REQUEST)?;
+async fn oidc_login(State(state): State<Arc<AppState>>) -> Response {
+    let Some(oidc_client) = state.oidc_client.as_ref() else {
+        return json_error(StatusCode::BAD_REQUEST, "OIDC is not configured");
+    };
 
-    let (auth_url, _csrf_token) = oidc_client
-        .get_authorization_url()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let start = match oidc_client.begin_login() {
+        Ok(start) => start,
+        Err(e) => {
+            tracing::error!("Failed to build OIDC authorization request: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
+        }
+    };
 
-    Ok(Redirect::to(auth_url.as_str()))
+    let payload = match serde_json::to_value(&start.pending) {
+        Ok(v) => v,
+        Err(_) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+    };
+    if let Err(e) = state
+        .db
+        .put_auth_ephemeral(&start.state, EPHEMERAL_OIDC_STATE, &payload, Duration::minutes(10))
+        .await
+    {
+        tracing::error!("Failed to persist OIDC login state: {}", e);
+        return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
+    }
+
+    let cookie = oidc_state_cookie(&state, &start.state, 600);
+    (
+        [(header::SET_COOKIE, cookie)],
+        Redirect::to(start.authorization_url.as_str()),
+    )
+        .into_response()
 }
 
 #[utoipa::path(
@@ -213,9 +424,10 @@ async fn oidc_login(State(state): State<Arc<AppState>>) -> Result<Redirect, Stat
     path = "/api/auth/oidc/callback",
     tag = "auth",
     responses(
-        (status = 200, description = "OIDC authentication successful", body = LoginResponse),
-        (status = 400, description = "Bad request - missing or invalid parameters"),
-        (status = 401, description = "Authentication failed"),
+        (status = 303, description = "Redirect to the web UI with a one-time code in the URL fragment"),
+        (status = 400, description = "Missing or mismatched state / code"),
+        (status = 401, description = "Authentication with the provider failed"),
+        (status = 403, description = "No permitted local account for this identity"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -223,208 +435,281 @@ async fn oidc_callback(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Query(params): Query<OidcCallbackQuery>,
-) -> Result<Redirect, StatusCode> {
-    tracing::info!("OIDC callback called with params: code={:?}, state={:?}, error={:?}", 
-        params.code, params.state, params.error);
-    
+) -> Response {
+    let clear_cookie = [(header::SET_COOKIE, oidc_state_cookie(&state, "", 0))];
+
     if let Some(error) = params.error {
-        tracing::error!("OIDC callback error: {}", error);
-        return Err(StatusCode::UNAUTHORIZED);
+        tracing::warn!("OIDC provider returned an error: {}", error);
+        return (clear_cookie, json_error(StatusCode::UNAUTHORIZED, "Authentication failed")).into_response();
     }
 
-    let code = params.code.ok_or(StatusCode::BAD_REQUEST)?;
-    
-    let oidc_client = state
-        .oidc_client
-        .as_ref()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (Some(code), Some(query_state)) = (params.code, params.state) else {
+        return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "Missing code or state")).into_response();
+    };
 
-    // Exchange authorization code for access token
-    let access_token = oidc_client
-        .exchange_code(&code, params.state.as_deref())
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to exchange code: {}", e);
-            StatusCode::UNAUTHORIZED
-        })?;
+    // The state must match the value bound to this browser at login start
+    // (prevents login CSRF), and must still be pending server-side.
+    let cookie_matches = read_cookie(&headers, OIDC_STATE_COOKIE)
+        .map(|c| constant_time_eq(c.as_bytes(), query_state.as_bytes()))
+        .unwrap_or(false);
+    if !cookie_matches {
+        tracing::warn!("OIDC callback state did not match the browser's state cookie");
+        return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "Invalid login state")).into_response();
+    }
 
-    // Get user info from OIDC provider
-    let user_info = oidc_client
-        .get_user_info(&access_token)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get user info: {}", e);
-            StatusCode::UNAUTHORIZED
-        })?;
-
-    // Find or create user in database with email-based syncing
-    let issuer_url = state.config.oidc_issuer_url.as_ref().unwrap();
-    tracing::debug!("Looking up user by OIDC subject: {} and issuer: {}", user_info.sub, issuer_url);
-
-    let user = match state.db.get_user_by_oidc_subject(&user_info.sub, issuer_url).await {
-        Ok(Some(existing_user)) => {
-            tracing::debug!("Found existing OIDC user: {}", existing_user.username);
-            existing_user
+    let pending: PendingLogin = match state.db.take_auth_ephemeral(&query_state, EPHEMERAL_OIDC_STATE).await {
+        Ok(Some(value)) => match serde_json::from_value(value) {
+            Ok(p) => p,
+            Err(_) => return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "Invalid login state")).into_response(),
         },
         Ok(None) => {
-            // No OIDC user found, check if there's an existing local user with this email
-            let email = user_info.email.clone();
-
-            if let Some(email_addr) = &email {
-                tracing::debug!("Checking for existing local user with email: {}", email_addr);
-                match state.db.get_user_by_email(email_addr).await {
-                    Ok(Some(existing_local_user)) => {
-                        // Found existing local user with matching email - link to OIDC
-                        tracing::info!(
-                            "Found existing local user '{}' with email '{}', linking to OIDC identity",
-                            existing_local_user.username,
-                            email_addr
-                        );
-
-                        match state.db.link_user_to_oidc(
-                            existing_local_user.id,
-                            &user_info.sub,
-                            issuer_url,
-                            email_addr,
-                        ).await {
-                            Ok(linked_user) => {
-                                tracing::info!(
-                                    "Successfully linked user '{}' to OIDC identity",
-                                    linked_user.username
-                                );
-                                linked_user
-                            },
-                            Err(e) => {
-                                tracing::error!("Failed to link existing user to OIDC: {}", e);
-                                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                            }
-                        }
-                    },
-                    Ok(None) => {
-                        // No existing user with this email
-                        if state.config.oidc_auto_register.unwrap_or(false) {
-                            // Auto-registration is enabled, create new OIDC user
-                            tracing::debug!("No existing user with this email, creating new OIDC user (auto-registration enabled)");
-                            create_new_oidc_user(
-                                &state,
-                                &user_info,
-                                issuer_url,
-                                email.as_deref(),
-                            ).await?
-                        } else {
-                            // Auto-registration is disabled, reject login
-                            tracing::warn!(
-                                "OIDC login attempted for unregistered email '{}', but auto-registration is disabled",
-                                email_addr
-                            );
-                            return Err(StatusCode::FORBIDDEN);
-                        }
-                    },
-                    Err(e) => {
-                        tracing::error!("Database error during email lookup: {}", e);
-                        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                    }
-                }
-            } else {
-                // No email provided by OIDC provider
-                if state.config.oidc_auto_register.unwrap_or(false) {
-                    // Auto-registration is enabled, create new user without email sync
-                    tracing::debug!("No email provided by OIDC, creating new user (auto-registration enabled)");
-                    create_new_oidc_user(
-                        &state,
-                        &user_info,
-                        issuer_url,
-                        None,
-                    ).await?
-                } else {
-                    // Auto-registration is disabled and no email to sync
-                    tracing::warn!(
-                        "OIDC login attempted without email claim, but auto-registration is disabled"
-                    );
-                    return Err(StatusCode::FORBIDDEN);
-                }
-            }
+            return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "Login state expired or already used"))
+                .into_response()
         }
         Err(e) => {
-            tracing::error!("Database error during OIDC lookup: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            tracing::error!("Failed to load OIDC login state: {}", e);
+            return (clear_cookie, json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"))
+                .into_response();
         }
     };
 
-    // Create JWT token
-    let token = create_jwt(&user, &state.config.jwt_secret)
-        .map_err(|e| {
-            tracing::error!("Failed to create JWT token: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let Some(oidc_client) = state.oidc_client.as_ref() else {
+        return (clear_cookie, json_error(StatusCode::BAD_REQUEST, "OIDC is not configured")).into_response();
+    };
 
-    // Redirect to frontend with token in URL fragment
-    // The frontend should extract the token and store it
-    // Use absolute URL to ensure hash fragment is handled correctly by the browser
-    let host = headers
-        .get("host")
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("localhost:8000");
+    let user_info = match oidc_client.complete_login(&code, &pending).await {
+        Ok(info) => info,
+        Err(e) => {
+            tracing::warn!("OIDC login failed: {}", e);
+            return (clear_cookie, json_error(StatusCode::UNAUTHORIZED, "Authentication failed")).into_response();
+        }
+    };
 
-    // Check if behind a proxy (X-Forwarded-Proto header)
-    let protocol = headers
-        .get("x-forwarded-proto")
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("https");
+    let user = match resolve_oidc_user(&state, &user_info).await {
+        Ok(user) => user,
+        Err(response) => return (clear_cookie, response).into_response(),
+    };
 
-    let redirect_url = format!(
-        "{}://{}/auth/callback?token={}",
-        protocol,
-        host,
-        urlencoding::encode(&token)
-    );
-    tracing::info!("OIDC authentication successful for user: {}, redirecting to callback", user.username);
+    if !user.is_active {
+        return (
+            clear_cookie,
+            json_error(StatusCode::FORBIDDEN, "This account is disabled or awaiting administrator approval"),
+        )
+            .into_response();
+    }
 
-    Ok(Redirect::to(&redirect_url))
+    // Hand the session to the SPA via a short-lived single-use code in the
+    // URL fragment (never sent to servers or leaked via Referer). The SPA
+    // redeems it at /oidc/exchange.
+    let handoff_code = crate::oidc::random_urlsafe(32);
+    let handoff = OidcHandoff { user_id: user.id, token_version: user.token_version };
+    let stored = match serde_json::to_value(&handoff) {
+        Ok(payload) => state
+            .db
+            .put_auth_ephemeral(&handoff_code, EPHEMERAL_OIDC_HANDOFF, &payload, Duration::seconds(60))
+            .await
+            .map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    };
+    if let Err(e) = stored {
+        tracing::error!("Failed to persist OIDC handoff: {}", e);
+        return (clear_cookie, json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")).into_response();
+    }
+
+    let Some(base) = frontend_base_url(&state) else {
+        tracing::error!("Cannot determine frontend URL: set PUBLIC_URL or a valid OIDC_REDIRECT_URI");
+        return (clear_cookie, json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")).into_response();
+    };
+
+    tracing::info!(user_id = %user.id, "OIDC authentication successful");
+    let redirect_url = format!("{}/auth/callback#code={}", base, handoff_code);
+    (clear_cookie, Redirect::to(&redirect_url)).into_response()
 }
 
-// Helper function to create a new OIDC user
+#[utoipa::path(
+    post,
+    path = "/api/auth/oidc/exchange",
+    tag = "auth",
+    request_body = OidcExchangeRequest,
+    responses(
+        (status = 200, description = "Session issued", body = LoginResponse),
+        (status = 401, description = "Code invalid, expired or already used"),
+        (status = 429, description = "Too many attempts")
+    )
+)]
+async fn oidc_exchange(
+    State(state): State<Arc<AppState>>,
+    client_ip: ClientIp,
+    Json(request): Json<OidcExchangeRequest>,
+) -> Response {
+    if let Some(ip) = client_ip.0 {
+        if let Err(retry_after) = state.rate_limiters.auth_misc_by_ip.check(&ip).await {
+            return rate_limited(retry_after);
+        }
+    }
+
+    let invalid = || json_error(StatusCode::UNAUTHORIZED, "Invalid or expired code");
+
+    let handoff: OidcHandoff = match state.db.take_auth_ephemeral(&request.code, EPHEMERAL_OIDC_HANDOFF).await {
+        Ok(Some(value)) => match serde_json::from_value(value) {
+            Ok(h) => h,
+            Err(_) => return invalid(),
+        },
+        Ok(None) => return invalid(),
+        Err(e) => {
+            tracing::error!("Failed to load OIDC handoff: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
+        }
+    };
+
+    match state.db.get_user_by_id(handoff.user_id).await {
+        Ok(Some(user)) if user.is_active && user.token_version == handoff.token_version => {
+            issue_session(&state, user)
+        }
+        Ok(_) => invalid(),
+        Err(e) => {
+            tracing::error!("Database error during OIDC exchange: {}", e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+        }
+    }
+}
+
+/// Map a verified external identity to a local account.
+///
+/// 1. An account already bound to (issuer, subject) is used.
+/// 2. Otherwise, an existing account with the same email is only linked when
+///    `OIDC_LINK_EXISTING_BY_EMAIL=true` and the provider asserts the email
+///    is verified, and that account is not bound to another identity.
+/// 3. Otherwise a new account is created if `OIDC_AUTO_REGISTER=true`.
+async fn resolve_oidc_user(state: &Arc<AppState>, info: &OidcUserInfo) -> Result<User, Response> {
+    let internal = || json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
+    let forbidden = || {
+        json_error(
+            StatusCode::FORBIDDEN,
+            "No account is available for this identity. Contact your administrator.",
+        )
+    };
+
+    let Some(issuer) = state.oidc_client.as_ref().map(|c| c.get_discovery().issuer.clone()) else {
+        return Err(internal());
+    };
+
+    match state.db.get_user_by_oidc_subject(&info.sub, &issuer).await {
+        Ok(Some(user)) => return Ok(user),
+        Ok(None) => {}
+        Err(e) => {
+            tracing::error!("Database error during OIDC lookup: {}", e);
+            return Err(internal());
+        }
+    }
+
+    if let Some(email) = info.email.as_deref() {
+        match state.db.get_user_by_email(email).await {
+            Ok(Some(existing)) => {
+                let may_link = state.config.security.oidc_link_existing_by_email
+                    && info.email_verified == Some(true)
+                    && existing.oidc_subject.is_none();
+                if !may_link {
+                    tracing::warn!(
+                        user_id = %existing.id,
+                        "OIDC identity matches an existing account's email but linking is not permitted"
+                    );
+                    return Err(forbidden());
+                }
+                return state
+                    .db
+                    .link_user_to_oidc(existing.id, &info.sub, &issuer, email)
+                    .await
+                    .map(|user| {
+                        tracing::info!(user_id = %user.id, "Linked existing account to OIDC identity");
+                        user
+                    })
+                    .map_err(|e| {
+                        tracing::error!("Failed to link account to OIDC identity: {}", e);
+                        internal()
+                    });
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::error!("Database error during OIDC email lookup: {}", e);
+                return Err(internal());
+            }
+        }
+    }
+
+    if !state.config.oidc_auto_register.unwrap_or(false) {
+        tracing::warn!("OIDC login for unknown identity rejected: auto-registration is disabled");
+        return Err(forbidden());
+    }
+
+    create_new_oidc_user(state, info, &issuer).await
+}
+
+/// Deterministic fallback username derived from the external identity.
+fn fallback_oidc_username(issuer: &str, sub: &str) -> String {
+    format!("oidc_{}", &sha256_hex(&format!("{}|{}", issuer, sub))[..12])
+}
+
 async fn create_new_oidc_user(
     state: &Arc<AppState>,
-    user_info: &OidcUserInfo,
-    issuer_url: &str,
-    email: Option<&str>,
-) -> Result<User, StatusCode> {
-    tracing::debug!("Creating new OIDC user");
+    info: &OidcUserInfo,
+    issuer: &str,
+) -> Result<User, Response> {
+    let fallback = fallback_oidc_username(issuer, &info.sub);
 
-    let username = user_info.preferred_username
+    // Prefer the provider's username when it is valid and not already taken;
+    // never attach to an existing account by username.
+    let mut username = info
+        .preferred_username
         .clone()
-        .or_else(|| email.map(|e| e.to_string()))
-        .unwrap_or_else(|| format!("oidc_user_{}", &user_info.sub[..8]));
+        .or_else(|| info.email.clone())
+        .filter(|u| validate_account_username(u).is_ok())
+        .unwrap_or_else(|| fallback.clone());
+    if matches!(state.db.get_user_by_username(&username).await, Ok(Some(_))) {
+        username = fallback;
+    }
 
-    let user_email = email
-        .map(|e| e.to_string())
-        .unwrap_or_else(|| format!("{}@oidc.local", username));
-
-    tracing::debug!("New user details - username: {}, email: {}", username, user_email);
+    let user_email = info
+        .email
+        .clone()
+        .unwrap_or_else(|| format!("{}@oidc.invalid", username));
 
     let create_user = CreateUser {
         username,
         email: user_email.clone(),
-        password: "".to_string(), // Not used for OIDC users
+        password: String::new(), // Not used for OIDC users
         role: Some(UserRole::User),
     };
 
-    let result = state.db.create_oidc_user(
-        create_user,
-        &user_info.sub,
-        issuer_url,
-        &user_email,
-    ).await;
-
-    match result {
+    match state.db.create_oidc_user(create_user, &info.sub, issuer, &user_email).await {
         Ok(user) => {
-            tracing::info!("Successfully created OIDC user: {}", user.username);
+            tracing::info!(user_id = %user.id, "Created account for new OIDC identity");
             Ok(user)
-        },
-        Err(e) => {
-            tracing::error!("Failed to create OIDC user: {} (full error: {:#})", e, e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
+        Err(e) => {
+            tracing::error!("Failed to create OIDC user: {:#}", e);
+            Err(json_error(StatusCode::FORBIDDEN, "Could not create an account for this identity"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cookie_parsing() {
+        let mut h = HeaderMap::new();
+        h.insert(header::COOKIE, "a=1; readur_oidc_state=xyz; b=2".parse().unwrap());
+        assert_eq!(read_cookie(&h, OIDC_STATE_COOKIE), Some("xyz"));
+        assert_eq!(read_cookie(&h, "missing"), None);
+    }
+
+    #[test]
+    fn fallback_username_is_valid_and_stable() {
+        let a = fallback_oidc_username("https://idp", "1");
+        assert_eq!(a, fallback_oidc_username("https://idp", "1"));
+        assert_ne!(a, fallback_oidc_username("https://idp", "2"));
+        assert!(validate_account_username(&a).is_ok());
     }
 }

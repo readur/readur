@@ -169,6 +169,7 @@ mod tests {
             username: Some(updated_username.clone()),
             email: Some(updated_email.clone()),
             password: None,
+            is_active: None,
         };
 
         let response = ctx.app.clone()
@@ -211,6 +212,7 @@ mod tests {
             username: None,
             email: None,
             password: Some("newpassword456".to_string()),
+            is_active: None,
         };
 
         let response = ctx.app

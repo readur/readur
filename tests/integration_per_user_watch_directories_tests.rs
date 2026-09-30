@@ -222,6 +222,8 @@ async fn test_user_watch_service_security() -> Result<()> {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::user::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
 
     // Test 1: Normal username works
@@ -244,6 +246,8 @@ async fn test_user_watch_service_security() -> Result<()> {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::user::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
 
     let malicious_result = user_watch_service.ensure_user_directory(&malicious_user).await;
@@ -266,6 +270,8 @@ async fn test_user_watch_service_security() -> Result<()> {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::user::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
 
     let null_result = user_watch_service.ensure_user_directory(&null_user).await;
@@ -317,6 +323,8 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::user::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
 
     // Insert user into database

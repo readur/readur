@@ -58,6 +58,199 @@ pub struct Config {
 
     // Public URL for generating shared links
     pub public_url: Option<String>,
+
+    // Authentication / authorization hardening knobs
+    pub security: SecurityConfig,
+}
+
+/// Values shipped in example configs, compose files and docs. A JWT secret
+/// equal to any of these is treated as unset.
+const KNOWN_WEAK_JWT_SECRETS: &[&str] = &[
+    "your-secret-key",
+    "your-secret-key-change-this",
+    "your-secret-key-change-this-in-production",
+    "your-super-secret-jwt-key-change-this-in-production",
+    "dev-secret-key-change-in-production",
+    "change-this-in-production",
+    "change-me",
+    "changeme",
+    "secret",
+    "test-secret",
+    "test-secret-key",
+    "test-jwt-secret-key",
+    "test-jwt-secret-key-not-for-production",
+];
+
+/// Minimum JWT secret length in bytes (HS256 key should be >= 256 bits).
+pub const MIN_JWT_SECRET_BYTES: usize = 32;
+
+/// Reject missing, short or well-known JWT signing secrets.
+pub fn validate_jwt_secret(secret: &str) -> Result<()> {
+    let trimmed = secret.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow::anyhow!("JWT_SECRET must be set"));
+    }
+    if KNOWN_WEAK_JWT_SECRETS.iter().any(|weak| trimmed.eq_ignore_ascii_case(weak)) {
+        return Err(anyhow::anyhow!(
+            "JWT_SECRET is set to a published example value; generate a random secret (e.g. `openssl rand -hex 32`)"
+        ));
+    }
+    if trimmed.len() < MIN_JWT_SECRET_BYTES {
+        return Err(anyhow::anyhow!(
+            "JWT_SECRET must be at least {} bytes; generate one with `openssl rand -hex 32`",
+            MIN_JWT_SECRET_BYTES
+        ));
+    }
+    Ok(())
+}
+
+fn env_flag(name: &str, default: bool) -> bool {
+    match env::var(name) {
+        Ok(val) => match val.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => true,
+            "false" | "0" | "no" | "off" => false,
+            _ => {
+                println!("⚠️  {}: Invalid value '{}', using default ({})", name, val, default);
+                default
+            }
+        },
+        Err(_) => default,
+    }
+}
+
+fn env_list(name: &str) -> Vec<String> {
+    env::var(name)
+        .map(|v| {
+            v.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Authentication and authorization settings. `Default` is the most
+/// restrictive configuration.
+#[derive(Clone)]
+pub struct SecurityConfig {
+    /// Allow unauthenticated self-registration (`ALLOW_REGISTRATION`).
+    pub allow_registration: bool,
+    /// Self-registered accounts start disabled until an admin enables them.
+    /// Always on in production; only test harnesses turn it off.
+    pub registration_requires_approval: bool,
+    /// Lifetime of issued session tokens (`JWT_TTL_HOURS`).
+    pub jwt_ttl_hours: i64,
+    /// Canonicalized roots under which local-folder sources may point
+    /// (`LOCAL_SOURCE_ALLOWED_PATHS`). Empty means admin-only, any path.
+    pub local_source_allowed_paths: Vec<std::path::PathBuf>,
+    /// Reverse proxies whose `X-Forwarded-For` is trusted (`TRUSTED_PROXIES`).
+    pub trusted_proxies: Vec<ipnet::IpNet>,
+    /// Origins allowed to make cross-origin requests (`CORS_ALLOWED_ORIGINS`).
+    pub cors_allowed_origins: Vec<String>,
+    /// Bearer token accepted on `/metrics` (`METRICS_TOKEN`).
+    pub metrics_token: Option<String>,
+    /// Link an OIDC identity to an existing local account with the same
+    /// verified email (`OIDC_LINK_EXISTING_BY_EMAIL`).
+    pub oidc_link_existing_by_email: bool,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            allow_registration: false,
+            registration_requires_approval: true,
+            jwt_ttl_hours: 12,
+            local_source_allowed_paths: Vec::new(),
+            trusted_proxies: Vec::new(),
+            cors_allowed_origins: Vec::new(),
+            metrics_token: None,
+            oidc_link_existing_by_email: false,
+        }
+    }
+}
+
+impl std::fmt::Debug for SecurityConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecurityConfig")
+            .field("allow_registration", &self.allow_registration)
+            .field("registration_requires_approval", &self.registration_requires_approval)
+            .field("jwt_ttl_hours", &self.jwt_ttl_hours)
+            .field("local_source_allowed_paths", &self.local_source_allowed_paths)
+            .field("trusted_proxies", &self.trusted_proxies)
+            .field("cors_allowed_origins", &self.cors_allowed_origins)
+            .field("metrics_token", &self.metrics_token.as_ref().map(|_| "***"))
+            .field("oidc_link_existing_by_email", &self.oidc_link_existing_by_email)
+            .finish()
+    }
+}
+
+impl SecurityConfig {
+    pub fn from_env() -> Result<Self> {
+        let defaults = Self::default();
+
+        let allow_registration = env_flag("ALLOW_REGISTRATION", defaults.allow_registration);
+        println!("🔑 ALLOW_REGISTRATION: {}", allow_registration);
+
+        let jwt_ttl_hours = match env::var("JWT_TTL_HOURS") {
+            Ok(v) => match v.trim().parse::<i64>() {
+                Ok(h) if (1..=24 * 30).contains(&h) => h,
+                _ => return Err(anyhow::anyhow!("JWT_TTL_HOURS must be an integer between 1 and 720")),
+            },
+            Err(_) => defaults.jwt_ttl_hours,
+        };
+        println!("🔑 JWT_TTL_HOURS: {}", jwt_ttl_hours);
+
+        let mut local_source_allowed_paths = Vec::new();
+        for raw in env_list("LOCAL_SOURCE_ALLOWED_PATHS") {
+            let canonical = std::path::Path::new(&raw).canonicalize().map_err(|e| {
+                anyhow::anyhow!("LOCAL_SOURCE_ALLOWED_PATHS entry '{}' is not accessible: {}", raw, e)
+            })?;
+            local_source_allowed_paths.push(canonical);
+        }
+        if local_source_allowed_paths.is_empty() {
+            println!("📂 LOCAL_SOURCE_ALLOWED_PATHS: not set (local folder sources are admin-only)");
+        } else {
+            println!("📂 LOCAL_SOURCE_ALLOWED_PATHS: {:?}", local_source_allowed_paths);
+        }
+
+        let mut trusted_proxies = Vec::new();
+        for raw in env_list("TRUSTED_PROXIES") {
+            let net = raw
+                .parse::<ipnet::IpNet>()
+                .or_else(|_| raw.parse::<std::net::IpAddr>().map(ipnet::IpNet::from))
+                .map_err(|_| anyhow::anyhow!("TRUSTED_PROXIES entry '{}' is not an IP or CIDR", raw))?;
+            trusted_proxies.push(net);
+        }
+        println!("🌐 TRUSTED_PROXIES: {:?}", trusted_proxies);
+
+        let cors_allowed_origins = env_list("CORS_ALLOWED_ORIGINS");
+        println!("🌐 CORS_ALLOWED_ORIGINS: {:?}", cors_allowed_origins);
+
+        let metrics_token = env::var("METRICS_TOKEN").ok().filter(|t| !t.trim().is_empty());
+        if let Some(token) = &metrics_token {
+            if token.len() < 16 {
+                return Err(anyhow::anyhow!("METRICS_TOKEN must be at least 16 characters"));
+            }
+        }
+        println!(
+            "📈 METRICS_TOKEN: {}",
+            if metrics_token.is_some() { "configured" } else { "not set (/metrics requires an admin session)" }
+        );
+
+        let oidc_link_existing_by_email =
+            env_flag("OIDC_LINK_EXISTING_BY_EMAIL", defaults.oidc_link_existing_by_email);
+
+        Ok(Self {
+            allow_registration,
+            registration_requires_approval: true,
+            jwt_ttl_hours,
+            local_source_allowed_paths,
+            trusted_proxies,
+            cors_allowed_origins,
+            metrics_token,
+            oidc_link_existing_by_email,
+        })
+    }
 }
 
 impl Config {
@@ -185,19 +378,22 @@ impl Config {
                     }
                 }
             },
-            jwt_secret: match env::var("JWT_SECRET") {
-                Ok(secret) => {
-                    if secret == "your-secret-key" {
-                        println!("⚠️  JWT_SECRET: Using default value (SECURITY RISK in production!)");
-                    } else {
+            jwt_secret: {
+                let secret = env::var("JWT_SECRET").unwrap_or_default();
+                match validate_jwt_secret(&secret) {
+                    Ok(()) => {
                         println!("✅ JWT_SECRET: ***hidden*** (loaded from env, {} chars)", secret.len());
+                        secret
                     }
-                    secret
-                }
-                Err(_) => {
-                    let default_secret = "your-secret-key".to_string();
-                    println!("⚠️  JWT_SECRET: Using default value (SECURITY RISK - env var not set!)");
-                    default_secret
+                    // Escape hatch for throwaway local/CI environments only.
+                    Err(e) if env_flag("READUR_INSECURE_DEV_MODE", false) && !secret.is_empty() => {
+                        println!("🚨 JWT_SECRET: {} (allowed because READUR_INSECURE_DEV_MODE=true — never use in production)", e);
+                        secret
+                    }
+                    Err(e) => {
+                        println!("❌ JWT_SECRET: {}", e);
+                        return Err(e);
+                    }
                 }
             },
             upload_path: match env::var("UPLOAD_PATH") {
@@ -647,6 +843,7 @@ impl Config {
                 println!("✅ PUBLIC_URL: {} (loaded from env)", url);
                 url
             }),
+            security: SecurityConfig::from_env()?,
         };
 
         println!("\n🔍 CONFIGURATION VALIDATION:");
@@ -694,9 +891,6 @@ impl Config {
         // Warning checks
         println!("\n⚠️  CONFIGURATION WARNINGS:");
         println!("{}", "=".repeat(50));
-        if config.jwt_secret == "your-secret-key" {
-            println!("🚨 SECURITY WARNING: Using default JWT secret! Set JWT_SECRET environment variable in production!");
-        }
         if config.server_address.starts_with("0.0.0.0") {
             println!("🌍 INFO: Server will listen on all interfaces (0.0.0.0)");
         }
@@ -715,7 +909,7 @@ impl Config {
                 println!("❌ OIDC_CLIENT_ID is required when OIDC is enabled");
             }
             if config.oidc_client_secret.is_none() {
-                println!("❌ OIDC_CLIENT_SECRET is required when OIDC is enabled");
+                println!("ℹ️  OIDC_CLIENT_SECRET not set: using public-client (PKCE-only) flow");
             }
             if config.oidc_issuer_url.is_none() {
                 println!("❌ OIDC_ISSUER_URL is required when OIDC is enabled");

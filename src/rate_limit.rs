@@ -29,9 +29,25 @@ impl<K: std::hash::Hash + Eq + Clone> RateLimiter<K> {
         }
     }
 
-    /// Check if a request is allowed for the given key.
+    /// Check if a request is allowed for the given key, and count it.
     /// Returns Ok(()) if allowed, Err(remaining_seconds) if rate limited.
     pub async fn check(&self, key: &K) -> Result<(), u64> {
+        self.check_inner(key, true).await
+    }
+
+    /// Check whether the key is currently limited without counting an event.
+    /// Pair with [`RateLimiter::record`] to limit only failed attempts.
+    pub async fn peek(&self, key: &K) -> Result<(), u64> {
+        self.check_inner(key, false).await
+    }
+
+    /// Count an event for the key (e.g. a failed login).
+    pub async fn record(&self, key: &K) {
+        let mut entries = self.entries.lock().await;
+        entries.entry(key.clone()).or_insert_with(Vec::new).push(Instant::now());
+    }
+
+    async fn check_inner(&self, key: &K, count: bool) -> Result<(), u64> {
         let mut entries = self.entries.lock().await;
         let now = Instant::now();
         let cutoff = now - self.window;
@@ -48,7 +64,9 @@ impl<K: std::hash::Hash + Eq + Clone> RateLimiter<K> {
             return Err(retry_after.as_secs().max(1));
         }
 
-        timestamps.push(now);
+        if count {
+            timestamps.push(now);
+        }
         Ok(())
     }
 
@@ -76,11 +94,24 @@ pub struct RateLimiters {
     pub shared_link_creation: RateLimiter<Uuid>,
     /// User-based limiter for API key creation (10/hour per user)
     pub api_key_creation: RateLimiter<Uuid>,
+    /// Failed logins per (lowercased) username (10 per 15 min)
+    pub login_failures_by_username: RateLimiter<String>,
+    /// Failed logins per client IP (50 per 15 min)
+    pub login_failures_by_ip: RateLimiter<IpAddr>,
+    /// Self-registrations per client IP (10/hour)
+    pub registration_by_ip: RateLimiter<IpAddr>,
+    /// Session-bound auth endpoints (OIDC handoff exchange, password change),
+    /// per client IP (30/min)
+    pub auth_misc_by_ip: RateLimiter<IpAddr>,
 }
 
 impl RateLimiters {
     pub fn new() -> Self {
         Self {
+            login_failures_by_username: RateLimiter::new(10, Duration::from_secs(900)),
+            login_failures_by_ip: RateLimiter::new(50, Duration::from_secs(900)),
+            registration_by_ip: RateLimiter::new(10, Duration::from_secs(3600)),
+            auth_misc_by_ip: RateLimiter::new(30, Duration::from_secs(60)),
             shared_link_password: RateLimiter::new(10, Duration::from_secs(60)),
             shared_link_public: RateLimiter::new(60, Duration::from_secs(60)),
             comment_creation: RateLimiter::new(10, Duration::from_secs(60)),
@@ -96,6 +127,10 @@ impl RateLimiters {
         self.comment_creation.cleanup().await;
         self.shared_link_creation.cleanup().await;
         self.api_key_creation.cleanup().await;
+        self.login_failures_by_username.cleanup().await;
+        self.login_failures_by_ip.cleanup().await;
+        self.registration_by_ip.cleanup().await;
+        self.auth_misc_by_ip.cleanup().await;
     }
 }
 

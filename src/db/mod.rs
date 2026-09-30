@@ -18,6 +18,7 @@ pub mod ocr_retry;
 pub mod shared_links;
 pub mod comments;
 pub mod api_keys;
+pub mod auth_ephemeral;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DatabasePoolHealth {

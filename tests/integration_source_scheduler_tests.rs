@@ -197,6 +197,7 @@ async fn create_test_app_state() -> Arc<AppState> {
             max_pdf_size_mb: 100,
             max_office_document_size_mb: 100,
         public_url: None,
+        security: Default::default(),
     };
 
     // Use smaller connection pool for tests to avoid exhaustion  

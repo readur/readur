@@ -4,7 +4,7 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
-use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{info, error, warn};
 use anyhow;
 use sqlx::Column;
@@ -574,7 +574,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Using index.html file: {}", index_file.display());
     
     // Create the router with the updated state
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/api/health", get(readur::health_check))
         .nest("/api/auth", readur::routes::auth::router())
         .nest("/api/documents", readur::routes::documents::router())
@@ -603,8 +603,11 @@ async fn main() -> anyhow::Result<()> {
                 .fallback(ServeFile::new(&index_file))
         )
         .layer(DefaultBodyLimit::max(config.max_file_size_mb as usize * 1024 * 1024))
-        .layer(CorsLayer::permissive())
+        .layer(readur::http_security::cors_layer(&config))
         .with_state(web_state.clone());
+    for layer in readur::http_security::security_header_layers(&config) {
+        app = app.layer(layer);
+    }
 
     println!("\n🌐 STARTING HTTP SERVER:");
     println!("{}", "=".repeat(50));
@@ -645,7 +648,12 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    axum::serve(listener, app).await?;
+    // Connection info feeds client IP resolution (rate limiting, audit logs).
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
     
     Ok(())
 }
