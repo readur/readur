@@ -1,57 +1,114 @@
 ---
 name: Readur
-description: A self-hosted document archive that reads like a live board you scan, sort, and clear.
+description: A calm, colourful document archive you can read at a glance; every colour carries a job.
 colors:
-  ground: "#EEF0F2"
+  bg: "#F3F5F8"
   surface: "#FFFFFF"
-  surface-2: "#F6F7F8"
-  line: "#D5D9DE"
-  ink: "#0B0D10"
-  fg-2: "#3B424A"
-  fg-meta: "#5A6169"
-  signal: "#FFD400"
+  surface-2: "#F7F9FB"
+  surface-sunken: "#EBEEF2"
+  line: "#E0E5EB"
+  line-strong: "#7E8895"
+  fg: "#141A22"
+  fg-2: "#3F4854"
+  fg-meta: "#5A6472"
+  accent: "#2F62A6"
+  accent-hover: "#244F8A"
+  accent-soft: "#E4ECF7"
+  accent-fg: "#FFFFFF"
+  new: "#B23F18"
+  new-fill: "#E8633C"
+  new-soft: "#FCE9E2"
+  new-fg: "#FFFFFF"
+  ok: "#1D7337"
+  ok-soft: "#E2F2E6"
+  warn: "#8F5400"
+  warn-fill: "#F8A840"
+  warn-soft: "#FDF0D9"
   danger: "#B42318"
-  danger-bg: "#FDECEA"
-  ok: "#1F7A3A"
-  night-ground: "#0B0D10"
-  night-surface: "#15191E"
-  night-surface-2: "#1C2127"
-  night-line: "#262B31"
-  night-fg: "#E8EAED"
-  night-fg-2: "#B5BBC2"
-  night-fg-meta: "#9AA0A6"
-  night-danger: "#F97066"
-  night-danger-bg: "#2A1414"
-  night-ok: "#4ADE80"
+  danger-soft: "#FCE8E6"
+  danger-fg: "#FFFFFF"
+  src-1-teal: "#107064"
+  src-2-purple: "#9636BC"
+  src-3-green: "#22732C"
+  src-4-olive: "#5A6B13"
+  src-5-orange: "#9A5111"
+  src-6-rose: "#BA2859"
+  src-7-magenta: "#A83198"
+  src-8-indigo: "#6151CC"
+  src-1-soft: "#E3F7F4"
+  src-2-soft: "#F1E3F7"
+  src-3-soft: "#E3F7E6"
+  src-4-soft: "#F3F7E3"
+  src-5-soft: "#F7ECE3"
+  src-6-soft: "#F7E3EA"
+  src-7-soft: "#F7E3F4"
+  src-8-soft: "#E6E3F7"
+  selection: "#C9DAF1"
+  scrollbar: "#C3CAD3"
+  dark-bg: "#0F1318"
+  dark-surface: "#161B22"
+  dark-surface-2: "#1C232C"
+  dark-surface-sunken: "#0B0E12"
+  dark-line: "#29313C"
+  dark-line-strong: "#627080"
+  dark-fg: "#E7EBF0"
+  dark-fg-2: "#BAC3CE"
+  dark-fg-meta: "#96A1AE"
+  dark-accent: "#8DB3EA"
+  dark-accent-hover: "#A9C6F0"
+  dark-accent-soft: "#1D2D44"
+  dark-accent-fg: "#0F1318"
+  dark-new: "#FF9A76"
+  dark-new-soft: "#3A2119"
+  dark-new-fg: "#1A0B05"
+  dark-ok: "#5BD48A"
+  dark-ok-soft: "#15301F"
+  dark-warn: "#F8B85A"
+  dark-warn-soft: "#33280F"
+  dark-danger: "#F97066"
+  dark-danger-soft: "#3A1A18"
+  dark-src-1-teal: "#36C0AD"
+  dark-src-2-purple: "#C79ED7"
+  dark-src-3-green: "#66C072"
+  dark-src-4-olive: "#9EB739"
+  dark-src-5-orange: "#DBA16E"
+  dark-src-6-rose: "#DC9AB0"
+  dark-src-7-magenta: "#D59ACD"
+  dark-src-8-indigo: "#ADA7DA"
+  dark-selection: "#27406A"
+  dark-scrollbar: "#3A4452"
 typography:
-  display:
+  page-title:
     fontFamily: "Archivo Variable, system-ui, sans-serif"
-    fontSize: "40px"
-    fontWeight: 800
-    lineHeight: 1
-    letterSpacing: "-0.005em"
-    fontVariation: "'wdth' 68"
-  headline:
-    fontFamily: "Archivo Variable, system-ui, sans-serif"
-    fontSize: "28px"
-    fontWeight: 600
-    lineHeight: 1.1
-    letterSpacing: "0.06em"
-    fontVariation: "'wdth' 75"
-  title:
+    fontSize: "26px"
+    fontWeight: 650
+    lineHeight: 1.2
+    letterSpacing: "-0.015em"
+  section-title:
     fontFamily: "Archivo Variable, system-ui, sans-serif"
     fontSize: "16px"
     fontWeight: 600
-    lineHeight: 1.1
-    letterSpacing: "0.06em"
-    fontVariation: "'wdth' 75"
+    lineHeight: 1.2
+    letterSpacing: "normal"
   body:
     fontFamily: "Archivo Variable, system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.45
     letterSpacing: "normal"
-  label:
+  meta:
+    fontFamily: "Archivo Variable, system-ui, sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+    lineHeight: 1.45
+    letterSpacing: "normal"
+  reading:
+    fontFamily: "Archivo Variable, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.6
+    letterSpacing: "normal"
+  table-head:
     fontFamily: "Archivo Variable, system-ui, sans-serif"
     fontSize: "11px"
     fontWeight: 600
@@ -64,15 +121,11 @@ typography:
     fontWeight: 400
     lineHeight: 1.45
     fontFeature: "'tnum' 1"
-  figure:
-    fontFamily: "Martian Mono Variable, ui-monospace, monospace"
-    fontSize: "20px"
-    fontWeight: 600
-    lineHeight: 1
-    fontFeature: "'tnum' 1"
 rounded:
-  tag: "2px"
-  base: "4px"
+  sm: "6px"
+  md: "8px"
+  lg: "12px"
+  pill: "999px"
 spacing:
   s-1: "4px"
   s-2: "8px"
@@ -83,284 +136,299 @@ spacing:
   s-7: "48px"
 components:
   button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.surface}"
-    typography: "{typography.label}"
-    rounded: "{rounded.base}"
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.accent-fg}"
+    rounded: "{rounded.sm}"
     padding: "0 16px"
     height: "40px"
   button-primary-hover:
-    backgroundColor: "{colors.fg-2}"
-    textColor: "{colors.surface}"
+    backgroundColor: "{colors.accent-hover}"
+    textColor: "{colors.accent-fg}"
   button-secondary:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.base}"
+    backgroundColor: "{colors.surface-2}"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.sm}"
     padding: "0 16px"
     height: "40px"
   button-secondary-hover:
-    backgroundColor: "{colors.surface-2}"
+    backgroundColor: "{colors.surface-sunken}"
   button-ghost:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.base}"
-    padding: "0 16px"
-    height: "40px"
-  button-danger:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.danger}"
-    typography: "{typography.label}"
-    rounded: "{rounded.base}"
-    padding: "0 16px"
-    height: "40px"
-  button-sm:
-    padding: "0 12px"
-    height: "32px"
-  input-field:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.base}"
-    padding: "0 12px"
-    height: "40px"
-  filter-chip:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.base}"
-    padding: "0 8px"
-    height: "28px"
-  filter-chip-active:
-    backgroundColor: "{colors.surface}"
-  change-tag:
-    backgroundColor: "{colors.signal}"
-    textColor: "{colors.ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.tag}"
-    padding: "0 4px"
-  board-table-head:
-    backgroundColor: "{colors.surface-2}"
-    textColor: "{colors.fg-meta}"
-    typography: "{typography.label}"
-    padding: "0 12px"
-    height: "32px"
-  board-table-row:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    padding: "0 12px"
-    height: "40px"
-  board-table-row-compact:
-    height: "32px"
-  pass-cell:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    padding: "8px 12px"
-  slide-over:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    width: "440px"
-    padding: "24px"
-  command-palette:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.base}"
-    width: "600px"
-  bulk-action-bar:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.surface}"
-    rounded: "{rounded.base}"
-    padding: "8px 12px"
-  top-bar:
-    backgroundColor: "{colors.surface}"
     textColor: "{colors.fg-2}"
-    height: "56px"
+    rounded: "{rounded.sm}"
     padding: "0 16px"
+    height: "40px"
+  button-ghost-hover:
+    backgroundColor: "{colors.surface-sunken}"
+    textColor: "{colors.fg}"
+  button-danger:
+    textColor: "{colors.danger}"
+    rounded: "{rounded.sm}"
+    padding: "0 16px"
+    height: "40px"
+  button-danger-hover:
+    backgroundColor: "{colors.danger-soft}"
+  button-danger-solid:
+    backgroundColor: "{colors.danger}"
+    textColor: "{colors.danger-fg}"
+    rounded: "{rounded.sm}"
+  button-sm:
+    height: "32px"
+    padding: "0 12px"
+  status-pill-indexed:
+    backgroundColor: "{colors.ok-soft}"
+    textColor: "{colors.ok}"
+    rounded: "{rounded.pill}"
+    height: "22px"
+    padding: "0 8px"
+  status-pill-processing:
+    backgroundColor: "{colors.accent-soft}"
+    textColor: "{colors.accent}"
+    rounded: "{rounded.pill}"
+    height: "22px"
+  status-pill-pending:
+    backgroundColor: "{colors.surface-sunken}"
+    textColor: "{colors.fg-2}"
+    rounded: "{rounded.pill}"
+    height: "22px"
+  status-pill-check:
+    backgroundColor: "{colors.warn-soft}"
+    textColor: "{colors.warn}"
+    rounded: "{rounded.pill}"
+    height: "22px"
+  status-pill-failed:
+    backgroundColor: "{colors.danger-soft}"
+    textColor: "{colors.danger}"
+    rounded: "{rounded.pill}"
+    height: "22px"
+  new-tag:
+    backgroundColor: "{colors.new}"
+    textColor: "{colors.new-fg}"
+    rounded: "{rounded.pill}"
+    height: "18px"
+    padding: "0 7px"
+  quiet-pill:
+    backgroundColor: "{colors.warn-fill}"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.pill}"
+    height: "22px"
+    padding: "0 8px"
+  source-badge:
+    backgroundColor: "{colors.src-1-soft}"
+    textColor: "{colors.src-1-teal}"
+    rounded: "{rounded.pill}"
+    padding: "2px 8px"
+  field:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.sm}"
+  panel:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.md}"
+    padding: "16px"
+  dialog:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.lg}"
+  nav-item:
+    textColor: "{colors.fg-2}"
+    rounded: "{rounded.sm}"
+    height: "38px"
+  nav-item-active:
+    backgroundColor: "{colors.accent-soft}"
+    textColor: "{colors.accent}"
+  table-row-selected:
+    backgroundColor: "{colors.accent-soft}"
 ---
 
 # Design System: Readur
 
 ## Overview
 
-**Creative North Star: "The Paperwork Board"**
+**Creative North Star: "The Colour-Coded Archive"**
 
-Readur reads like a live departure board for documents. Every surface is a board you scan top to bottom: condensed uppercase column heads, one hairline per row, numbers in a monospaced data face that never jitters. A document's facts are laid out as a segmented strip of labelled cells (internally, a "pass"). When something changes (OCR finishes, a sync fails) the row is marked and stays marked until the person has seen it. That persistent mark is the one moment of colour the system allows itself.
+Readur is a calm, colourful archive you can read at a glance. Every colour does one job. Blue means you can act. Coral means new. Amber means quiet or warning. Each source has its own hue, and your collections keep the colours you gave them. The palette comes from the logo: steel blue (#4878B8), coral (#F07048) and amber (#F8A840), each shifted in lightness until it passes AA. Content sits on raised white panels over a faintly blue-grey ground. In dark mode the panels are lighter surface steps rather than flat black. Type is Archivo at its normal width, in sentence case, with filenames shown exactly as they are named.
 
-The palette is ink on cool paper by day and pale type on a night board after dark, with a single signal yellow and a red kept for failure. Depth is flat: hairlines and tonal steps separate things, and shadows appear only on elements that float above the page. Density is high but calm. Rows are 40px (32px compact), labels are small and tracked, and whitespace comes from a 4px module rather than from padded cards. The system turns down the stat-card-grid SaaS dashboard with an indigo accent. Figures sit in strips and tables, never in isolated tiles.
+Density is operational but unhurried. Home answers "is it still flowing?" in one line, then a strip of real page thumbnails, then the busiest source lanes, each with a 14-day arrival strip in the source's own colour. Search tells a story over time: results come grouped by month under a timeline of every match. The document page is for reading. It has a compact header with one facts line, the viewer and the OCR text side by side, and no nested scrolling.
 
-The metaphor words (departure board, pass, lit, gate, boarding) belong to design documents and code comments only. User copy says what things are: "Needs attention", "Mark all seen", "New", "Changed", "Indexed", "Failed". The shipped navigation tab "Board" is the only exception (its newest-documents region is titled "Recently added"), and it should not become a precedent for more metaphor in copy.
+This system rejects two looks by name. One is the grey wireframe: v1's all-caps monochrome board, which the user called "very empty and plain". The other is the stat-tile SaaS dashboard.
 
 **Key Characteristics:**
-- Condensed, uppercase, tracked Archivo for every label, head, tab, and button. Normal-width Archivo for reading text.
-- Martian Mono with tabular figures for every number, size, date, count, and type code.
-- 1px hairlines and a 4px radius everywhere. No gradients.
-- Signal yellow only as a filled tag with ink text, a 3px edge bar, a search-match highlight, or a count badge.
-- Every state is a shape plus a word (○ ◐ ■ ▲ ◆ —). Colour alone never carries meaning.
-- Light and night themes share one token set. Only values change, never structure.
+- Colour is semantic: accent for action, coral for new, amber for warn and quiet, one hue per source, the user's colours for labels.
+- Raised `--surface` panels over a tinted `--bg`. Shadows in light mode, surface steps in dark.
+- Archivo at normal width in sentence case. Condensed caps only in table heads and tiny meta labels.
+- Martian Mono only for numbers in dense data, plus literal code, paths and tokens.
+- Status is always a tinted pill with a shape glyph and a word, never colour alone.
+- Radii of 6px for controls, 8px for panels, cards and anchored popovers, and 12px for modal overlays.
+
+**History.** v1, the "departure board", was monochrome, set in condensed caps with hairline rules and a single yellow signal. The user rejected it as "very empty and plain … not just blacks and grays". It also made the document page hard to read. v2, "warm it up", kept v1's information architecture: the destinations, the Library slideout, the litStore new-and-changed semantics (now drawn in coral instead of yellow), and the test suite. v2 replaced v1's visual world completely. Older token names (`--ground`, `--signal`, `--btn-bg` and others) survive only as aliases for code that has not been converted yet. New code does not use them.
 
 ## Colors
 
-The system is ink and cool greys, with one signal yellow and one functional red and green for outcomes.
+A cool neutral ground carrying four signal colours from the logo, plus an eight-hue source wheel that deliberately avoids blue.
 
 ### Primary
-- **Board Ink** (ink): the text, the strong hairline under table heads and around overlays, the primary button fill, and the active-tab underline. On the night board the ink pair inverts: primary buttons and the bulk bar become pale (night-fg) with ink text.
+- **Logo Steel Blue** (accent; dark theme: dark-accent): primary buttons, the active nav item, links, the focus ring, the caret, the selected table row (accent-soft), the processing pill and the Search timeline bars (which are clickable). Hover deepens it in light mode and lightens it in dark mode (accent-hover). Blue on screen always means "you can act here" or "this is where you are".
 
 ### Secondary
-- **Signal Yellow** (signal): the "something changed" colour. It appears in four places only: the NEW / CHANGED tag (filled, ink text), the 3px left edge bar on a changed row, the search-match highlight inside OCR snippets, and the unread count badge on the alerts bell. It is also the text-selection colour and the night-mode focus ring. It never tints a surface, never carries body text, and never marks success.
+- **Logo Coral** (new, new-fill, new-soft): the new/changed signal driven by litStore. It appears as the pill-shaped "New" tag (white on the deeper coral), as a 6px dot beside changed table rows and unread notifications (new-fill), as a 1px coral ring on changed "Just arrived" thumbnails, and as the notification count badge. It replaces v1's yellow `--signal`.
 
 ### Tertiary
-- **Failure Red** (danger / night-danger): failed OCR, sync errors, destructive buttons (outlined red on surface), invalid fields, and danger toasts on the danger-bg tint. Red never decorates.
-- **Indexed Green** (ok / night-ok): the ■ INDEXED and ■ HEALTHY marks and success toast icons. It is used as text colour only, never as a fill.
+- **Logo Amber** (warn, warn-fill, warn-soft): warnings and "Quiet". A quiet source lane is tinted warn-soft and carries a warn-fill "Quiet" pill with ink text. "Check" pills use warn on warn-soft. warn-fill is never used as text colour.
+
+### Status
+- **Indexed green** (ok / ok-soft): indexed and healthy.
+- **Danger red** (danger / danger-soft / danger-fg): failed, error and destructive actions. It is text-only until the confirm dialog, where it becomes a filled button.
+
+### Source hues
+- **Teal, purple, green, olive, orange, rose, magenta, indigo** (src-1 … src-8, each with a -soft tint): one stable hue per source. Uploads always get slot 1 (teal) and the watch folder always gets slot 2 (purple). Every configured source hashes its id (FNV-1a) into slots 3–8, so it keeps the same hue on every screen and across reloads (`lib/sourceColor.ts`). They are used for sidebar source dots, Home lane dots and arrival bars, and source badges (hue on its own tint).
+
+### Label colours
+- Collections keep the user's chosen colour. It shows as a sidebar dot, and as a chip tinted 14% toward the label colour with a 40% border, while the chip text stays `--fg`. Label colours are user data. The system does not police their hue.
 
 ### Neutral
-- **Cool Paper** (ground): the page behind every board. Night: night-ground, which is the same value as ink.
-- **Panel White** (surface): tables, strips, regions, fields, and overlays. Night: night-surface.
-- **Row Tint** (surface-2): table heads, hover and selected rows, the search trigger, disabled fields, and the key-cap background. Night: night-surface-2.
-- **Hairline** (line): every 1px divider between rows, cells, and regions. Night: night-line.
-- **Second Ink** (fg-2): secondary text, snippets, field labels, and the primary-button hover fill.
-- **Meta Grey** (fg-meta): column heads, small labels, placeholders, and mono meta lines. It passes AA on both surface and ground in both themes.
+- **Blue-grey ground** (bg): the page behind the panels.
+- **Panel white** (surface): every panel, card, table, popover and dialog.
+- **Quiet fill** (surface-2): secondary buttons, table heads, row hover and field lookalikes.
+- **Sunken well** (surface-sunken): document viewers, image letterboxes, pending pills and ghost hover.
+- **Hairline** (line) and **Control edge** (line-strong): dividers and panel borders, and borders that must reach 3:1 (control edges, scrollbar hover).
+- **Ink / Secondary ink / Meta ink** (fg, fg-2, fg-meta): body text, supporting text, and timestamps and counts.
+- **Selection** and **Scrollbar**: text selection is tinted blue; scrollbar thumbs are a neutral pill.
 
 ### Named Rules
-**The Lit Until Seen Rule.** Yellow means "changed since you last looked", and nothing else. A marked row keeps its edge bar through sorting, paging, and reduced motion until the person opens it or marks everything seen.
+**The Every Colour Has A Job Rule.** Blue for action, coral for new, amber for quiet or warning, green and red for state, a hue per source, and the user's colours for collections. A colour with no job does not ship.
 
-**The Two Placements Rule.** Signal yellow is either a fill with ink text on top or a 3px bar. It is never yellow text, a yellow border, or a yellow surface.
+**The Blue Is Taken Rule.** No source hue may sit within 25° of the accent's hue in either theme. `scripts/contrast-check.mjs` enforces this. Today the nearest is indigo, at 32–34°. A source badge must never read as a button.
 
-**The Red Is Failure Rule.** Red is only for failed, error, invalid, or destructive states.
+**The AA Both Ways Rule.** Every text/ground pair must reach 4.5:1 in both themes, and every UI mark (focus ring, control edge, new-fill dot) must reach 3:1. This covers every source hue on every ground and on its own tint. `scripts/contrast-check.mjs` checks all 83 pairs. A new token is not finished until it passes.
 
 ## Typography
 
-**Display Font:** Archivo Variable at 68% width (with system-ui)
-**Body Font:** Archivo Variable at normal width (with system-ui, sans-serif)
-**Label/Mono Font:** Archivo Variable at 75% width for labels; Martian Mono Variable (with ui-monospace) for data
+**Display Font:** none. There is no display face. Page titles are Archivo.
+**Body Font:** Archivo Variable (with system-ui, sans-serif), self-hosted via @fontsource.
+**Label/Mono Font:** Martian Mono Variable (with ui-monospace, monospace).
 
-**Character:** A condensed grotesk shouting in caps at gate-board scale, paired with a wide, even monospace that makes every figure sit in a column. Body text stays normal-width Archivo so OCR snippets and descriptions read comfortably. Both families are self-hosted through @fontsource-variable, with no CDN.
+**Character:** Archivo at its normal width is sturdy and plain-spoken. It reads like a well-kept office, not a terminal. Martian Mono appears only where digits need to line up.
 
 ### Hierarchy
-- **Display** (800, 40px, line-height 1, 68% width, uppercase, -0.005em): the page title in the page header (BOARD, LIBRARY, a document's filename). There is one per page. It wraps anywhere rather than truncating.
-- **Headline** (600, 28px, 1.1, 75% width, uppercase, 0.06em): standalone titles such as the sign-in panel, the upload drop zone, and the shared-document title.
-- **Title** (600, 16px, 75% width, uppercase, tracked): slide-over and dialog titles and the wordmark (at 700).
-- **Body** (400, 14px, 1.45): reading text, row names (at 500), OCR excerpts, and field values. Secondary copy is 12px.
-- **Label** (600, 11–12px, 75% width, uppercase, 0.06em): column heads, pass-cell labels, chip labels, tabs, buttons (12px), field labels (12px, fg-2), region titles (12px, 700), and status words.
-- **Data** (Martian Mono, 11–12px, tabular): sizes, dates, relative ages, counts, type codes, the "synced" readout, key caps, and meta lines. Pass-cell values in a document header step up to 20px.
-- **Figure** (Martian Mono 600, 20px, line-height 1): the count set beside the display title ("892 documents", "0 in queue"). In board strips, figures run at 16px.
+- **Page title** (650, 26px, 1.2, -0.015em, balanced wrap): one per page, in sentence case ("Good afternoon, admin", a collection's name, a document's real filename clamped to two lines). The document title drops to 22px on phones.
+- **Section title** (600, 16px): panel heads such as "Just arrived", "Coming in" and "Processing", and Search month headings.
+- **Body** (400, 14px, 1.45): the default for rows, forms and lines.
+- **Meta** (400, 12px): source kind, "Last arrival 5m ago", counts beside month headings and sidebar list heads (600).
+- **Reading** (400, 15px, 1.6, max 72ch): the OCR text pane. The Monospace view option switches to 13px/1.65 within 88ch.
+- **Table head** (600, 11px, 0.06em tracking, uppercase, 75% width): only table column heads and tiny meta labels of 12px or less.
+- **Data** (Martian Mono, 12px, tabular figures): sizes, counts, dates in dense rows and IDs, plus literal code, paths, URLs and API tokens.
 
 ### Named Rules
-**The Every Number Is Mono Rule.** Numbers, sizes, dates, durations, counts, and file-type codes are set in Martian Mono with tabular figures. This applies in tables, chips, badges, pass cells, and the bulk-bar count.
+**The Sentence Case Rule.** Titles, headings, buttons, nav, pills and status words are in sentence case ("Indexed", "Check", "Quiet"). Filenames always show their real case. Caps are reserved for table column heads and tiny meta labels.
 
-**The Width Carries Rank Rule.** Hierarchy comes from width and case before size. Condensed caps mean structure (heads, labels, controls). Normal width means content. Don't set reading text in condensed caps, and don't set labels in normal-width sentence case.
+**The Numbers-Only Mono Rule.** Martian Mono is for figures that need to align, and for literal machine strings. Never use it for names, sources, headings or prose.
 
 ## Layout
 
-Content sits in a 1440px maximum column with 24px padding (16px on phones), under a sticky 56px top bar. Spacing follows a 4px module (4 / 8 / 12 / 16 / 24 / 32 / 48). Most gaps between regions are 16px. Cell padding is 8×12. Overlays and dialogs pad by 24px.
+The shell is a two-column grid: a fixed 248px sidebar and the content column. The sidebar sits on `--surface` with a hairline right edge and scrolls on its own. Top to bottom it holds the logo and wordmark; a Quick find field lookalike that opens the ⌘K palette; the destinations Home, Search, Library, Intake and Settings; Collections (label dots and counts, top ~8, "All collections"); Sources (source dots with health pills, plus a "synced … ago" readout); and a footer with the user, notifications, language and theme.
 
-The board uses one 12-column grid with a 16px gap. The attention list and the totals strip span all 12 columns. Recent documents take 8 columns and the side stack (processing, connections) takes 4, and all of them go to full width below 900px. The library is one full-width table under a single-row filter strip (search, facet chips, view controls pushed to the end).
+Below 900px the sidebar becomes a left drawer (at most 320px or 86vw, with a 12px trailing radius and the overlay shadow). It opens from a slim 56px top bar. A 60px bottom tab bar keeps Home, Search, Library and Intake, with 44px targets. Below 720px, tables that are still too wide scroll inside their own panel and never the page, and some rows restack. At 390px there is no horizontal overflow.
 
-**Narrow-screen folding** (breakpoint 720px, with sub-steps at 600, 480, and 400):
-- The top nav becomes a fixed 56px bottom tab bar with icon-over-label items (44px minimum targets, safe-area inset). The search field collapses to a 20px icon, and the "synced" readout hides.
-- A board table stacks each row instead of scrolling sideways. Line 1 is the checkbox and the name at full width (two lines at most). Line 2 is the change tag, the status mark, and one mono meta line of the folded columns separated by "·". Long text and any kept action column follow. Heads of folded columns stay in the grid for assistive tech only. The changed-row edge bar moves from the first cell to the row.
-- Column sorting moves from the heads to a sort select. The density toggle hides.
-- A pass (container query) drops to two columns below 480px, with hairlines drawn as 1px gaps over the line colour. A cell left alone on the last row spans both columns, and cells marked wide (timestamps) take a full row below 400px.
-- Board strips turn each segment vertical below 600px and set figures in two columns below 480px.
-- The slide-over goes full width. The bulk bar docks above the bottom tab bar.
+Spacing uses a 4px module (4, 8, 12, 16, 24, 32, 48). Page sections stack 24px apart. Panels pad 16–24px.
 
-### Named Rules
-**The Stack, Never Scroll Rule.** On phones a table row folds into lines; the page never scrolls sideways. A table only scrolls inside its own box if it is still wider than the screen after folding.
+Key surface patterns:
+- **Home:** the page title is a greeting, with one summary line beneath it: "1,311 arrived this week · nothing waiting · ▲ 190 failed Review". Below it come a "Just arrived" panel of real page thumbnails with name, source dot and relative time; a "Coming in" panel of the five most active source lanes (dot and name, 14-day bar strip, today's count, last arrival, health pill), with the rest behind a more row; and a Processing panel with one line per state and humanised failure reasons (raw text behind a disclosure).
+- **Search:** a large search field, then the result count, a month timeline of every match (click a bar to filter the date range), and facets. Results are grouped under month headings with counts, newest first, with relevance order toggleable. Each result shows a thumbnail, filename, source badge, date, highlighted OCR snippet and a checkbox. Selecting results reveals "Save as collection", and the new collection appears in the sidebar immediately.
+- **Library:** Grid ⇄ Table (persisted). Grid cards are grouped by month. A collection route (`?label=`) shows the collection's name and colour as the header. Both views share the slideout.
+- **Document:** a compact header with breadcrumb, the real-case title (two lines at most), a status pill and one facts line ("PDF · 1 page · 2.1 KB · Scanner inbox · Added … · OCR 85%", with empty values hidden). A filled Download button, secondary Share, a Comments toggle and an overflow menu. Label chips, and a collapsible Details section. The body fills the viewport with a Document | Side by side | Text switch. Side by side is the default from 1200px up (viewer ~60%) and is allowed from 960px. Arriving with `?q=` pre-fills find, highlights every match and lands on the first one.
+
+Relative times come from one formatter (`lib/relativeTime.ts`): "21 min. ago" or "now" in the UI language. Past seven days it shows the calendar date ("30 Sep 2026").
 
 ## Elevation & Depth
 
-The system is flat. Depth at rest comes from tonal steps (ground, then surface, then surface-2) and 1px hairlines. The strong ink hairline marks structure that matters: the line under table heads, selected rows, the active tab, and overlay edges. There is one shadow, and it belongs only to things that float above the page.
+This is a hybrid system. In light mode, content panels are lifted off the ground by one soft, blurred, offset shadow. Dark mode has no panel shadow (`--shadow-1: none`). Depth there comes from surface steps: the ground (dark-bg), then the panel (dark-surface), then the quiet fill (dark-surface-2), with the sunken well going darker still. Overlays get a heavier shadow and a scrim in both themes.
 
 ### Shadow Vocabulary
-- **Overlay** (`box-shadow: 0 8px 24px rgba(11, 13, 16, 0.16)`; night `0 8px 24px rgba(0, 0, 0, 0.6)`): slide-over, dialog, command palette, popover, menu, toast, and the bulk action bar.
-
-Focus is not a shadow. It is a 2px outline with a 2px offset in ink by day and signal yellow by night. Inside tables it is inset (a -2px offset, or 2px inset strokes along a focused row).
-
-Stacking uses named layers, and nothing invents its own z-index: shell 1100 < dock 1150 < overlay 1200 < toast 1300 < palette 1400 < skip link 1500. Sticky table heads use a local z-index of 1.
+- **Raised panel** (`box-shadow: 0 1px 2px rgba(20,26,34,0.05), 0 2px 8px rgba(20,26,34,0.06)`): panels, tables, grid cards, thumbnails and the primary button. Dark: none.
+- **Overlay** (`box-shadow: 0 12px 32px rgba(20,26,34,0.16), 0 2px 6px rgba(20,26,34,0.08)`; dark `0 16px 40px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4)`): dialogs, slideouts, the drawer, popovers, menus, toasts and the palette.
+- **Scrim** (`rgba(20,26,34,0.28)`; dark `rgba(5,7,10,0.6)`): behind modal overlays and the drawer.
 
 ### Named Rules
-**The Only Floaters Cast Rule.** A shadow means "this sits above the page". Tables, regions, strips, and cards at rest have none.
+**The One Lift Rule.** A panel is lifted once. Never put a card inside a card. Inside a panel, group with hairlines, surface-2 fills or whitespace.
 
 ## Shapes
 
-Corners are small and consistent: 4px on every button, field, chip, table container, region, pass, overlay, key cap, and label tag. The NEW / CHANGED tag (one shared style on every surface) and search-match highlights use a tighter 2px. Label colour swatches are 8px squares with a 2px radius. Circles are reserved for things that are round by function: the spinner, radio and status dots, and the 16px count badge on the alerts bell. Borders are always 1px. The heavier strokes are the 2px active-tab underline, the 2px bottom edge on key caps, and the 3px signal edge bar. Segmented surfaces (passes, board strips) draw their dividers as 1px gaps over the line colour, so hairlines stay continuous however the cells reflow.
+Corners are gently rounded and tied to role. Controls (buttons, fields, nav items, chips, the Quick find trigger) use 6px. Panels, cards, tables, anchored popovers, menus, listboxes and toasts use 8px. Modal overlays (dialogs, the command palette, the mobile drawer's trailing edge) use 12px. Pills (status, source badges, the New tag, count badges, filter chips, switches, scrollbar thumbs) are fully round. Dots are 8px circles (10px in the medium size), with a 6px circle for the changed-row marker. Arrival bars have 2px top corners and Search timeline bars 3px. Checkboxes use 4px. Borders are 1px hairlines. There are no thick or coloured edges.
 
 ## Components
 
 ### Buttons
-Condensed caps on flat blocks, with no drop shadows.
-- **Shape:** 4px radius, 1px border, 40px tall (32px small), 16px horizontal padding (12px small), 8px icon gap.
-- **Primary:** ink fill with white label on light, and the inverse on night. There is one per view: "Add documents" at the top right of the page header.
-- **Hover / Focus:** primary hover shifts to fg-2. Secondary and ghost hover to surface-2. Pressed moves down 1px (none under reduced motion). Focus is the 2px outline token. Transitions are 120ms on colour only.
-- **Secondary:** surface fill with an ink border. **Ghost:** transparent (for example "Mark all seen"). **Danger:** surface fill with a red border and red text, tinting danger-bg on hover. **Disabled:** meta text on surface-2 with a hairline border.
-- **Icon buttons** are square (32 or 40px). Top-bar tool icons are 20px. Inside table rows, controls shrink to 28px tall so they sit inside the hairlines.
+Filled where it matters, quiet elsewhere, so nothing reads as a wall of outline boxes.
+- **Shape:** gently rounded (6px). 40px tall by default, 32px small, 600 weight, 14px.
+- **Primary:** filled accent with white text and the raised-panel shadow. Use one per view for the main action (Add documents, Download, Save).
+- **Secondary:** surface-2 fill with a 1px hairline. On hover the fill sinks and the border strengthens.
+- **Ghost:** transparent with fg-2 text. Hover adds a sunken fill.
+- **Danger:** red text only. Hover adds a danger-soft fill. The filled red version (dangerSolid) appears only in the confirm dialog.
+- **States:** pressed moves the button down 1px (not under reduced motion). The focus ring is 2px accent at a 2px offset. Disabled buttons use meta ink on surface-2. Pending shows a small spinner, which is static under reduced motion.
 
-### Chips
-- **Filter chip:** 28px tall, transparent with a hairline border. A condensed caps facet label (TYPE, LABEL, STATUS, SOURCE, ADDED), then a mono value, a chevron, and, once active, a clear button separated by a hairline. Active chips move to surface with an ink border.
-- **Label tag:** 20/24/28px tall on surface-2 with a hairline border, an 8px colour swatch, a normal-width name, and a mono count. The user-assigned label colour appears only in the swatch.
+### Status pills
+- **Style:** a 20–22px pill with a shape glyph and a 600-weight word, in sentence case. Tones: Indexed/Healthy ■ ok on ok-soft; OCR/Syncing ◐ accent on accent-soft; Pending ○ and Off — fg-2 on sunken; Check ◆ warn on warn-soft; Failed/Error ▲ danger on danger-soft. Processing can show progress ("OCR 3/12").
+- **Quiet:** Home's lane-level pill uses warn-fill with ink text on a warn-soft lane. "Idle" is an outlined neutral pill.
+
+### Chips and badges
+- **Source badge:** a pill in the source's tint with its hue as text, led by an 8px dot. The source name uses Archivo, never mono.
+- **Label chip:** a 6px-radius chip tinted toward the label's colour with a slightly stronger border. The text stays ink. It comes in 20, 24 and 28px heights.
+- **New tag:** an 18px coral pill with the word "New", bold, in white on the deeper coral.
+- **Filter chips:** pills in the Search and Library facet strip.
 
 ### Cards / Containers
-- **Region:** surface with a hairline border and 4px radius. The head is 40px tall with a condensed caps title (12px, 700) and one text action ("View all", underlined caps). The body pads 12px or is flush for tables.
-- **Background:** surface on ground. There are no nested cards; sub-structure is drawn with hairlines.
-- **Shadow Strategy:** none at rest (see Elevation & Depth).
+- **Corner Style:** 8px.
+- **Background:** surface over bg.
+- **Shadow Strategy:** raised panel in light mode, surface step in dark (see Elevation).
+- **Border:** a 1px hairline on tables and panels that need an edge.
+- **Internal Padding:** 16–24px. Panel heads pair a 16px section title with a right-aligned text link ("Open library", "Manage sources").
+- **Grid card:** a thumbnail above the name and meta. Hover strengthens its border to line-strong. Selected gets an accent-soft fill with an accent border.
+
+### Tables (BoardTable)
+- A raised panel with a sticky surface-2 head in caps table-head type. Rows are 40px (32px in compact mode) and use sentence-case cells. Hover tints to surface-2 and selected rows use accent-soft. Keyboard focus draws a 2px accent inset outline around the whole row. Changed rows carry a 6px coral dot. Numbers, sizes and dense dates use Martian Mono with tabular figures.
 
 ### Inputs / Fields
-- **Style:** 40px minimum height, surface fill, hairline border, 4px radius, 12px horizontal padding. The label sits above in 12px condensed caps (fg-2). Placeholders are fg-meta.
-- **Focus:** hover darkens the border to ink. Keyboard focus adds the 2px outline token.
-- **Error / Disabled:** invalid fields take a red border with red 12px error text below. Disabled fields are surface-2 with meta text.
-- **Search trigger (top bar):** a 32px field-shaped button on surface-2 with a mono key cap (Ctrl K / ⌘K). It opens the command palette.
+- **Style:** a 1px border on surface with a 6px radius. The Quick find lookalike uses a surface-2 fill and shows its shortcut in a Kbd chip.
+- **Focus:** the 2px accent ring at a 2px offset, the same everywhere. The caret is accent.
+- **Error / Disabled:** error text in danger; disabled in meta ink.
 
 ### Navigation
-- **Top bar:** 56px, surface, with a hairline bottom border. Left to right: the wordmark (logo plus READUR in 16px condensed caps at 700), then tabs in 14px condensed caps (fg-2, turning ink on hover), then the centred search trigger (420px maximum), then the mono "synced" readout, then alerts, language, theme, and user icons. The active tab shows ink text and a 2px ink underline.
-- **Mobile:** a fixed bottom tab bar with 56px icon-over-label items in 11px caps. The active tab carries a 2px ink bar along its top edge.
-- **Page header:** the display title, with a mono figure beside it on the same baseline, actions pushed right, and a hairline beneath. Document pages add a small caps breadcrumb above the title.
+- **Sidebar items:** 38px tall, 14px at weight 500, fg-2, with an 18px icon. Hover uses surface-2. The active item is accent-soft with accent text at 600. Collections and Sources rows are 32px, led by a colour dot, with a right-aligned count or health pill.
+- **Mobile:** a slim top bar with the drawer button, a drawer that slides in from the left (200ms, expo out), and bottom tabs with 44px targets.
 
-### Board Table (signature)
-The sortable, selectable grid that every list uses.
-- **Head:** a sticky 32px row on surface-2 in 11px condensed caps (fg-meta) with an ink hairline beneath. The sort arrow (▲/▼) shows on hover and stays on the sorted column, which is ink.
-- **Rows:** 40px (32px compact) on surface with a hairline between rows. The name is in body at 500, beside a 40×28 type stub or thumbnail. Type, size, and age are mono, with sizes right-aligned. Hover turns the row surface-2. Selected rows are surface-2 with inset ink hairlines above and below. Keyboard focus draws a 2px inset frame around the whole row.
-- **Changed rows:** a 3px signal bar on the left edge plus a NEW or CHANGED tag beside the name. Both persist until seen. When sorting or live updates change the order, rows re-rank in place (FLIP), and under reduced motion they reorder instantly while the mark stays.
-- **Detail rows:** an optional second line with an OCR snippet (12px, fg-2, clamped to two lines), with matches highlighted in signal.
-- **Loading / empty:** skeleton rows at row height. An empty state pads 32×16.
+### Overlays
+- **Dialog:** surface with a 12px radius, the overlay shadow and a scrim. Widths are 400, 560 and 800px.
+- **Slideout (Library detail):** an edge-attached surface panel with the overlay shadow. It holds the real-case title, a status pill with one facts line, a letterboxed preview on the sunken well, and a filled Open button.
+- **Command palette:** 12px radius, topmost layer.
+- **Popover / Menu / Toast:** surface with an 8px radius and the overlay shadow. Items use 6px.
 
-### Pass (signature)
-A document's facts as a segmented strip: surface with a hairline border and 4px radius, and cells divided by 1px hairlines. Each cell is an 11px condensed caps label above a value. Values are mono when they are data and normal-width body when they are words. In the document page header, cells pad 12×16 and values step up to 20px. Long values truncate or clamp and reveal the full text only when clipped. Board totals use the same construction: a segment head followed by figure cells with labels above 16px mono values.
+### Arrival strip (signature)
+Each Home lane draws 14 day-bars in its source hue: past days at 55% opacity, today at full strength, and zero days as a 3px stub in the source's soft tint. On first paint the bars grow up from the baseline (480ms, expo out, staggered 18ms per bar). Under reduced motion they are static. This is the one authored motion moment.
 
-### Status Mark (signature)
-A shape plus a condensed caps word, never colour alone: ○ PENDING, ◐ OCR (or OCR 3/12 with known progress), ■ INDEXED, ▲ FAILED, ■ HEALTHY, ◐ SYNCING, ◆ CHECK, ▲ ERROR, — OFF. The glyph is set in the mono face. Green is for INDEXED and HEALTHY, red for FAILED and ERROR, and fg-2 for everything else. It comes in two sizes, 11px and 12px, and its words are translated.
-
-### NEW / CHANGED Tag
-An inline tag in condensed caps with signal fill and ink text. NEW marks a document added since last seen. CHANGED marks a state change since last seen, such as OCR finishing or a failure. On phones it leads the row's meta line.
-
-### Slide-Over
-A 440px panel from the right on a light scrim (ink at 20%, or 50% at night) so the board stays readable behind it. It has an ink left edge and the overlay shadow, and slides in over 200ms (instant under reduced motion). The sticky header is 56px with a title in condensed caps and the status mark beside it. The body pads 24px. The sticky footer holds right-aligned actions. ↑/↓ move between rows and Esc closes it. On phones it takes the full width and the status mark wraps under the name.
-
-### Command Palette
-Opened with ⌘K / Ctrl K. It is a 600px surface panel 12vh from the top with an ink border, 4px radius, and the overlay shadow, on the palette layer. A search field sits above sections with 11px caps headings. Items are 40px with an icon, title, and fg-2 subtitle. The focused item turns surface-2 with a 3px ink left edge.
-
-### Bulk Action Bar
-A floating ink bar (inverted at night) docked 24px above the bottom edge, centred, with the overlay shadow. It shows a mono count and a caps word ("3 SELECTED"), then actions and a clear button. Focus rings on the bar use the bar's text colour. On phones it docks above the bottom tab bar.
-
-### Overlays: Dialog, Popover, Menu, Toast
-All four are surface panels with an ink border, 4px radius, and the overlay shadow. Dialogs are 400, 560, or 800px wide, with a title in condensed caps and a hairline under it, a 24px body, and right-aligned actions above a hairline. Toasts are 360px, bottom right, and move aside or up when a slide-over is open. A danger toast takes a red border on danger-bg.
+### Motion
+Durations are 120ms (state changes), 200ms (drawers, overlays) and 480ms (the arrival strip). Easing is `cubic-bezier(.2,.8,.2,1)` for state and `cubic-bezier(.16,1,.3,1)` for entrances. `prefers-reduced-motion` sets every duration to 0 and turns off the spinner, pressed-state translation and bar growth.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** set every number, size, date, count, and type code in Martian Mono with tabular figures.
-- **Do** pair every state with its shape and word (○ ◐ ■ ▲ ◆ —) through the status mark.
-- **Do** mark changes with the 3px signal edge bar plus a NEW / CHANGED tag, and keep both until the person has seen the item.
-- **Do** build facts as passes and totals as segmented strips: labels above values, hairlines drawn as 1px gaps.
-- **Do** use condensed (75%) uppercase tracked Archivo for heads, labels, tabs, and buttons, and 68% width at 800 for the one page title.
-- **Do** take every layer from the z-index tokens and every value from tokens.css. Surfaces never hard-code a colour.
-- **Do** fold table rows into lines on phones rather than scrolling sideways.
-- **Do** keep the metaphor vocabulary (departure board, pass, lit, gate) out of user-facing copy in all four locales.
+- **Do** use the accent only for things you can act on or where you are: primary buttons, links, active nav, focus, selection and clickable timeline bars.
+- **Do** mark new and changed items with coral (the New tag, a 6px dot or a 1px thumbnail ring), driven by litStore.
+- **Do** give every source its `sourceHue()` slot, and use the same dot, bar and badge colour for it everywhere.
+- **Do** show status as a tinted pill with a shape glyph and a sentence-case word.
+- **Do** put content on one raised surface panel over bg: shadow-1 in light mode, a surface step in dark.
+- **Do** use 6px radii on controls, 8px on panels, cards and anchored popovers, and 12px on modal overlays.
+- **Do** keep titles in sentence case and filenames in their real case, with titles clamped to two lines.
+- **Do** run `node scripts/contrast-check.mjs` after any token change. Both themes must pass.
+- **Do** humanise failure reasons and put raw error text behind a disclosure.
+- **Do** use `formatRelativeTime` for every "ago" and switch to the calendar date after seven days.
 
 ### Don't:
-- **Don't** build a stat-card grid or tint an accent indigo. Figures belong in strips and tables.
-- **Don't** use signal yellow as text, a border, a surface tint, or a success colour.
-- **Don't** use red for anything but failure, error, invalid, or destructive states.
-- **Don't** add shadows to anything that rests on the page, and don't use gradients.
+- **Don't** use coloured side stripes or thick coloured borders on rows, cards, lanes or callouts. Use a tint, pill or dot instead.
+- **Don't** build hero-metric tiles or stat-card rows. Home states its numbers in one summary line.
+- **Don't** put eyebrow or kicker labels above headings.
+- **Don't** use gradient text.
+- **Don't** set titles, headings, buttons or status words in caps, or use condensed caps anywhere except table heads and tiny meta labels.
+- **Don't** use Martian Mono for names, sources, headings or prose.
+- **Don't** give a source a blue hue, or anything within 25° of the accent.
 - **Don't** convey state by colour alone.
-- **Don't** put a small caps kicker or eyebrow above a page title. The breadcrumb on document pages is navigation, not a kicker.
-- **Don't** set reading text in condensed caps.
+- **Don't** nest cards inside cards.
+- **Don't** return to v1's monochrome, hairline-only, all-caps board, or to v1's yellow signal.
