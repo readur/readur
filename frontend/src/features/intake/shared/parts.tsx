@@ -80,7 +80,7 @@ export function ProgressCell({ value, label }: { value: number; label: string })
         aria-valuemax={100}
         aria-valuenow={pct}
       >
-        <span className={styles.barFill} style={{ width: `${pct}%` }} />
+        <span className={styles.barFill} style={{ transform: `scaleX(${pct / 100})` }} />
       </span>
       <span className={`${styles.mono} ${styles.progressValue}`} aria-hidden="true">
         {pct}%
