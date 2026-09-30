@@ -370,9 +370,8 @@ export class E2ETestAuthHelper {
    */
   private generateUniqueId(): string {
     const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
-    const processId = typeof process !== 'undefined' ? process.pid : Math.floor(Math.random() * 10000);
-    return `${timestamp}_${processId}_${random}`;
+    const random = crypto.randomUUID().replace(/-/g, '').substring(0, 12);
+    return `${timestamp}_${random}`;
   }
 
   /**
