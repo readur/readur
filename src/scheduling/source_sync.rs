@@ -14,7 +14,7 @@ use crate::{
     services::local_folder_service::{authorize_local_folder_paths, LocalFolderService},
     services::s3_service::S3Service,
     services::webdav::{WebDAVService, WebDAVConfig, SyncProgress, SyncPhase},
-    utils::outbound::validate_outbound_url,
+    utils::outbound::{validate_outbound_url, validate_outbound_url_for_config},
 };
 
 #[derive(Clone)]
@@ -101,8 +101,11 @@ impl SourceSyncService {
             config.server_url, config.username, config.watch_folders, config.file_extensions, config.server_type);
 
         // Re-check the destination at connect time; DNS may have changed
-        // since the source was saved.
-        validate_outbound_url(&WebDAVConfig::normalize_server_url(&config.server_url))
+        // since the source was saved. A host that does not resolve right now
+        // is left to the WebDAV client: its resolver applies the same address
+        // checks, and its retry and error handling report the failure through
+        // the sync progress like any other connection problem.
+        validate_outbound_url_for_config(&WebDAVConfig::normalize_server_url(&config.server_url))
             .await
             .map_err(|e| anyhow!("{}", e))?;
 
