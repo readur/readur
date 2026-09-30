@@ -8,10 +8,7 @@ vi.mock('../../../services/api', () => ({
   default: { get: vi.fn() },
   api: { defaults: { headers: { common: {} } } },
   documentService: { enhancedSearch: vi.fn() },
-}));
-
-vi.mock('date-fns', () => ({
-  formatDistanceToNow: vi.fn(() => '2 minutes ago'),
+  labelService: { list: vi.fn(() => new Promise(() => {})) },
 }));
 
 const seed: SeedNotification[] = [
@@ -76,7 +73,22 @@ describe('notification panel', () => {
     const failed = within(list).getByRole('button', { name: 'New: Error: OCR failed' });
     expect(failed).toHaveAccessibleDescription('scan.pdf could not be read');
     expect(within(list).getByRole('button', { name: 'New: Success: Upload complete' })).toBeInTheDocument();
-    expect(within(list).getAllByText('2 minutes ago')).toHaveLength(2);
+    // Just added, so the shared relative-time formatter says "now".
+    expect(within(list).getAllByText('now')).toHaveLength(2);
+  });
+
+  it('marks unread items with a dot, not a side bar', async () => {
+    const user = userEvent.setup();
+    renderShell({ notifications: seed });
+    const panel = await openPanel(user, /2 unread/);
+    const items = within(panel).getAllByRole('listitem');
+    expect(items[0]).toHaveAttribute('data-unread', 'true');
+    expect(items[0].querySelector('[data-unread-dot]')).not.toBeNull();
+    const css = (await import('node:fs')).readFileSync(
+      (await import('node:path')).resolve(__dirname, '../NotificationPanel.module.css'),
+      'utf8',
+    );
+    expect(css).not.toMatch(/\[data-unread\]::before/);
   });
 
   it('marks one notification as read when pressed', async () => {

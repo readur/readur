@@ -31,20 +31,15 @@
 
 .title {
   margin: 0;
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-md);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
+  font-size: var(--fs-lg);
+  font-weight: 650;
   color: var(--fg);
 }
 
 .count {
-  font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-xs);
-  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
 }
 
 .close {
@@ -85,12 +80,13 @@
   border-bottom: 0;
 }
 
-.item[data-unread]::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--signal);
+/* Unread items carry a coral dot beside the title; the accessible name starts with "New". */
+.unreadDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--new-fill);
 }
 
 .itemBody {
@@ -113,7 +109,7 @@
 }
 
 .itemBody[data-focus-visible] {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -131,6 +127,10 @@
 
 .icon[data-type='error'] {
   color: var(--danger);
+}
+
+.icon[data-type='warning'] {
+  color: var(--warn);
 }
 
 .text {
@@ -153,20 +153,6 @@
   font-weight: 400;
 }
 
-.newTag {
-  flex-shrink: 0;
-  padding: 0 var(--s-1);
-  border-radius: var(--radius);
-  background: var(--signal);
-  color: var(--signal-ink);
-  font-family: var(--font-label);
-  font-stretch: var(--font-label-stretch);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
 .message {
   color: var(--fg-2);
   font-size: var(--fs-sm);
@@ -174,9 +160,8 @@
 }
 
 .time {
-  font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--fg-meta);
 }
 

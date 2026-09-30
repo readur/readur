@@ -258,7 +258,7 @@ describe('synced readout', () => {
       ],
     } as never);
     renderShell();
-    expect(await screen.findByText('synced 2m ago')).toBeInTheDocument();
+    expect(await screen.findByText('synced 2 min. ago')).toBeInTheDocument();
     expect(mockedGet).toHaveBeenCalledWith('/sources');
     expect(sourcesCalls()).toBe(1);
   });

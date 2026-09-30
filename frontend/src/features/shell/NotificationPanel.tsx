@@ -1,10 +1,10 @@
 import type { ReactElement } from 'react';
 import { Button as RACButton, Heading } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
-import { formatDistanceToNow } from 'date-fns';
 import { Button, IconButton } from '../../ui';
 import { CheckCircle, Close, Error as ErrorIcon, Info, Warning } from '../../ui/icons';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { formatRelativeTime } from '../../lib/relativeTime';
 import type { NotificationType } from '../../types/notification';
 import styles from './NotificationPanel.module.css';
 
@@ -80,17 +80,15 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
                     </span>
                     <span className={styles.text}>
                       <span className={styles.itemTitle}>
-                        {n.read ? null : (
-                          <span className={styles.newTag}>{t('shell.alerts.new', 'New')}</span>
-                        )}
+                        {n.read ? null : <span className={styles.unreadDot} data-unread-dot aria-hidden="true" />}
                         {n.title}
                       </span>
                       <span id={`notification-${n.id}-message`} className={styles.message}>
                         {n.message}
                       </span>
-                      <span className={styles.time}>
-                        {formatDistanceToNow(n.timestamp, { addSuffix: true })}
-                      </span>
+                      <time className={styles.time} dateTime={new Date(n.timestamp).toISOString()}>
+                        {formatRelativeTime(n.timestamp)}
+                      </time>
                     </span>
                   </RACButton>
                   <IconButton
