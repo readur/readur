@@ -61,10 +61,8 @@ test.describe('OCR Retry Workflow', () => {
 
     // The server keeps auto-retrying a failed job for a while and refuses a manual retry
     // (500, "queue item already exists") until it gives up, so press Retry until it is accepted.
+    // The error toasts from refused attempts sit beside the panel, clear of its footer.
     await expect(async () => {
-      // An error toast from the previous attempt sits over the panel footer; dismiss it first.
-      const errorToasts = helpers.toasts().getByRole('alertdialog').getByRole('button', { name: 'Close' });
-      while (await errorToasts.count()) await errorToasts.first().click();
       const retry = page.waitForResponse(
         (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
         { timeout: TIMEOUTS.medium },
@@ -86,8 +84,6 @@ test.describe('OCR Retry Workflow', () => {
     // the server refused with 415). The server may refuse a manual retry with 500 while its own
     // automatic retries are pending, so press Retry until it is accepted, as above.
     await expect(async () => {
-      const errorToasts = helpers.toasts().getByRole('alertdialog').getByRole('button', { name: 'Close' });
-      while (await errorToasts.count()) await errorToasts.first().click();
       const retry = page.waitForResponse(
         (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
         { timeout: TIMEOUTS.medium },

@@ -49,11 +49,9 @@ test.describe('OCR Multiple Languages', () => {
     }
 
     // The server refuses a manual retry while its own automatic retries are pending,
-    // so press Retry until it is accepted (dismissing the error toast in between).
+    // so press Retry until it is accepted. The error toasts sit beside the panel, clear of its footer.
     let body: Record<string, unknown> = {};
     await expect(async () => {
-      const close = helpers.toasts().getByRole('alertdialog').getByRole('button', { name: 'Close' });
-      while (await close.count()) await close.first().click();
       const retry = page.waitForResponse(
         (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
         { timeout: TIMEOUTS.medium },

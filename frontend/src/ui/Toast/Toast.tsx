@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   Button,
   Text,
@@ -40,10 +40,51 @@ const TONE_ICON = { info: Info, success: CheckCircle, danger: ErrorIcon } as con
 
 const ToastContext = createContext<ToastApi | null>(null);
 
-/** Mount once near the app root. Renders the toast region (bottom-right). */
+/**
+ * Space an open overlay (a SlideOver) claims at the screen's right or bottom edge. The toast
+ * region moves out of it so toasts never cover the overlay's controls.
+ */
+export interface ToastInset {
+  right: number;
+  bottom: number;
+}
+
+type InsetReporter = (owner: symbol, inset: ToastInset | null) => void;
+
+const ToastInsetContext = createContext<InsetReporter | null>(null);
+
+/** Lets an overlay claim screen space the toasts must avoid; `null` releases it. No-op outside a provider. */
+export function useToastInsetReporter(): InsetReporter {
+  return useContext(ToastInsetContext) ?? NOOP_REPORTER;
+}
+
+const NOOP_REPORTER: InsetReporter = () => undefined;
+
+/** Mount once near the app root. Renders the toast region (bottom-right, clear of an open SlideOver). */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const [queue] = useState(() => new ToastQueue<ToastContentValue>({ maxVisibleToasts: 5 }));
+  const [insets, setInsets] = useState<ReadonlyMap<symbol, ToastInset>>(() => new Map());
+  const reportInset = useCallback<InsetReporter>((owner, inset) => {
+    setInsets((prev) => {
+      const current = prev.get(owner);
+      if (inset ? current?.right === inset.right && current?.bottom === inset.bottom : !current) return prev;
+      const next = new Map(prev);
+      if (inset) next.set(owner, inset);
+      else next.delete(owner);
+      return next;
+    });
+  }, []);
+  let right = 0;
+  let bottom = 0;
+  for (const inset of insets.values()) {
+    right = Math.max(right, inset.right);
+    bottom = Math.max(bottom, inset.bottom);
+  }
+  const regionStyle = {
+    '--toast-inset-right': `${right}px`,
+    '--toast-inset-bottom': `${bottom}px`,
+  } as CSSProperties;
   const api = useMemo<ToastApi>(
     () => ({
       show: ({ title, description, tone = 'info', timeout = DEFAULT_TIMEOUT }) => {
@@ -55,8 +96,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   return (
     <ToastContext.Provider value={api}>
-      {children}
-      <ToastRegion queue={queue} className={styles.region} aria-label={t('ui.notifications', 'Notifications')}>
+      <ToastInsetContext.Provider value={reportInset}>{children}</ToastInsetContext.Provider>
+      <ToastRegion
+        queue={queue}
+        className={styles.region}
+        style={regionStyle}
+        aria-label={t('ui.notifications', 'Notifications')}
+      >
         {({ toast }) => (
           <RACToast toast={toast} className={cx(styles.toast, styles[toast.content.tone])}>
             <span className={styles.toneIcon} aria-hidden="true">

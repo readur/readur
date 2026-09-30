@@ -1,7 +1,11 @@
+/*
+ * The insets come from an open SlideOver: beside a side panel, above a full-width panel's footer.
+ * The region itself lets pointer events through; only the toasts take them.
+ */
 .region {
   position: fixed;
-  right: var(--s-4);
-  bottom: var(--s-4);
+  right: calc(var(--s-4) + var(--toast-inset-right, 0px));
+  bottom: calc(var(--s-4) + var(--toast-inset-bottom, 0px));
   z-index: 200;
   display: flex;
   flex-direction: column-reverse;
@@ -10,6 +14,7 @@
   margin: 0;
   padding: 0;
   outline: none;
+  pointer-events: none;
 }
 
 .region[data-focus-visible] {
@@ -19,6 +24,7 @@
 
 .toast {
   box-sizing: border-box;
+  pointer-events: auto;
   display: flex;
   align-items: flex-start;
   gap: var(--s-3);

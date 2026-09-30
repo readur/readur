@@ -1,2 +1,2 @@
-export { ToastProvider, useToast } from './Toast';
-export type { ToastApi, ToastOptions, ToastTone } from './Toast';
+export { ToastProvider, useToast, useToastInsetReporter } from './Toast';
+export type { ToastApi, ToastInset, ToastOptions, ToastTone } from './Toast';

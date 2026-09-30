@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Dialog as RACDialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../IconButton';
 import { Close } from '../icons';
 import { cx } from '../shared/FieldParts';
+import { useToastInsetReporter } from '../Toast';
 import styles from './SlideOver.module.css';
 
 export interface SlideOverProps {
@@ -22,6 +23,9 @@ export interface SlideOverProps {
   onNavigate?: (direction: 'previous' | 'next') => void;
   className?: string;
 }
+
+/** Room a toast needs beside the panel: the 360px region plus its 16px gutters. */
+const TOAST_CLEARANCE = 360 + 2 * 16;
 
 const EDITABLE =
   'input, textarea, select, [contenteditable="true"], [role="listbox"], [role="menu"], [role="grid"], [role="slider"]';
@@ -42,8 +46,34 @@ export function SlideOver({
 }: SlideOverProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLElement>(null);
   const navigateRef = useRef(onNavigate);
   navigateRef.current = onNavigate;
+  const reportToastInset = useToastInsetReporter();
+  const [owner] = useState(() => Symbol('SlideOver'));
+  const hasFooter = Boolean(footer);
+
+  // Keep toasts off the panel: beside it when there is room, else above its footer (phones).
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!isOpen || !panel) return undefined;
+    const measure = () => {
+      const width = panel.offsetWidth;
+      if (window.innerWidth - width >= TOAST_CLEARANCE) reportToastInset(owner, { right: width, bottom: 0 });
+      else reportToastInset(owner, { right: 0, bottom: footerRef.current?.offsetHeight ?? 0 });
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(panel);
+    if (footerRef.current) observer?.observe(footerRef.current);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+      reportToastInset(owner, null);
+    };
+  }, [isOpen, hasFooter, owner, reportToastInset]);
 
   // When swapped content removes the focused element, keep focus inside the panel.
   useLayoutEffect(() => {
@@ -80,7 +110,7 @@ export function SlideOver({
 
   return (
     <ModalOverlay className={styles.overlay} isOpen={isOpen} onOpenChange={onOpenChange} isDismissable>
-      <Modal className={cx(styles.panel, className)} style={style}>
+      <Modal ref={panelRef} className={cx(styles.panel, className)} style={style}>
         <RACDialog ref={dialogRef} className={styles.dialog}>
           <header className={styles.header}>
             <Heading slot="title" className={styles.title}>
@@ -94,7 +124,11 @@ export function SlideOver({
             />
           </header>
           <div className={styles.body}>{children}</div>
-          {footer ? <footer className={styles.footer}>{footer}</footer> : null}
+          {footer ? (
+            <footer ref={footerRef} className={styles.footer}>
+              {footer}
+            </footer>
+          ) : null}
         </RACDialog>
       </Modal>
     </ModalOverlay>
