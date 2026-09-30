@@ -74,6 +74,7 @@ Ported from AtvikSecurity tyrfing's `scripts/lint-file-length.py`.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -126,7 +127,7 @@ MIN_SCANNED = 300
 BASELINE: dict[str, int] = {
     "frontend/src/pages/SourcesPage.tsx": 2761,
     "tests/integration_documents_database_tests.rs": 2702,
-    "src/services/webdav/service.rs": 2693,
+    "src/services/webdav/service.rs": 2609,
     "frontend/src/pages/DocumentManagementPage.tsx": 2458,
     "src/ocr/enhanced.rs": 1952,
     "frontend/src/pages/SettingsPage.tsx": 1894,
@@ -138,9 +139,9 @@ BASELINE: dict[str, int] = {
     "src/ocr/xml_extractor.rs": 1429,
     "src/ocr/queue.rs": 1305,
     "frontend/src/services/api.ts": 1226,
-    "src/scheduling/source_scheduler.rs": 1184,
-    "src/config.rs": 1154,
-    "src/services/s3_service.rs": 1123,
+    "src/scheduling/source_scheduler.rs": 1153,
+    "src/config.rs": 1068,
+    "src/services/s3_service.rs": 1103,
     "frontend/src/pages/DocumentsPage.tsx": 1112,
     "frontend/src/pages/DebugPage.tsx": 1078,
     "tests/integration_ocrmypdf_strategy_validation_tests.rs": 1037,
@@ -317,11 +318,19 @@ def _tracked_files(root: Path) -> list[str] | None:
         return None
 
 
+def _git_required() -> bool:
+    """Is the git cross-check mandatory? Yes whenever `CI` is set to a truthy
+    value: a CI checkout always has git, so `git ls-files` failing there means
+    the backstop silently stopped running, not that this is a tarball."""
+    return os.environ.get("CI", "").strip().lower() not in ("", "0", "false", "no")
+
+
 def _cross_check_against_git(root: Path, findings: list[Finding]) -> list[str]:
     """Tracked source files this walker dropped without an attributable reason.
 
     Returns an empty list when git is unavailable (a tarball checkout) rather
-    than failing -- the check is a backstop, not a dependency.
+    than failing -- the check is a backstop, not a dependency. Outside CI only:
+    `main` fails the gate when git is unavailable and `_git_required()`.
     """
     tracked = _tracked_files(root)
     if tracked is None:
@@ -579,6 +588,13 @@ def main(argv: list[str] | None = None) -> int:
     dupes = _duplicate_baseline_keys(root)
     if dupes:
         failures.append(f"lint-file-length: {dupes}")
+
+    if _git_required() and _tracked_files(root) is None:
+        failures.append(
+            "lint-file-length: `git ls-files` failed while CI is set, so the "
+            "cross-check against\ntracked files could not run. Refusing to pass "
+            "without it."
+        )
 
     unattributed = _cross_check_against_git(root, findings)
     if unattributed:

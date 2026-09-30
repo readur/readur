@@ -20,6 +20,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import os
 import subprocess
 import tempfile
 import unittest
@@ -534,10 +535,16 @@ class TestMain(unittest.TestCase):
         self._min_scanned = lfl.MIN_SCANNED
         lfl.BASELINE = {}
         lfl.MIN_SCANNED = 3
+        # Synthetic trees are not git checkouts; run these as a local checkout
+        # unless a test opts into CI behaviour explicitly.
+        self._ci = os.environ.pop("CI", None)
 
     def tearDown(self):
         lfl.BASELINE = self._baseline
         lfl.MIN_SCANNED = self._min_scanned
+        os.environ.pop("CI", None)
+        if self._ci is not None:
+            os.environ["CI"] = self._ci
 
     def _tree(self, root: Path, n: int = 5) -> None:
         for i in range(n):
@@ -616,6 +623,26 @@ class TestMain(unittest.TestCase):
             self._tree(root)
             rc = self._main(d)
         self.assertEqual(rc, 0)
+
+    def test_without_git_in_ci_the_gate_fails(self):
+        """A non-git tree skips the cross-check locally, but under CI a failing
+        `git ls-files` must not be mistaken for a tarball checkout."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            self._tree(root)
+            self.assertEqual(self._main(d), 0, "local run without git is tolerated")
+            os.environ["CI"] = "true"
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                rc = lfl.main(["--repo", d])
+        self.assertEqual(rc, 1)
+        self.assertIn("git ls-files", err.getvalue())
+
+    def test_ci_flag_values(self):
+        for value, expected in [("true", True), ("1", True), ("", False), ("false", False), ("0", False)]:
+            os.environ["CI"] = value
+            self.assertEqual(lfl._git_required(), expected, value)
+        os.environ.pop("CI", None)
+        self.assertFalse(lfl._git_required())
 
 
 if __name__ == "__main__":
