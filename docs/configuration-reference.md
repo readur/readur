@@ -39,7 +39,7 @@ This document provides a comprehensive reference for all configuration options a
 
 ### Security and Access Control
 
-These settings are read at startup. Invalid values (for example a malformed CIDR or an out-of-range `JWT_TTL_HOURS`) stop the server with an error.
+These settings are read at startup. Invalid values (for example a malformed CIDR, an out-of-range `JWT_TTL_HOURS`, an invalid CORS origin, or a Boolean other than `true`/`false`/`1`/`0`/`yes`/`no`/`on`/`off`) stop the server with an error.
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
@@ -53,7 +53,7 @@ These settings are read at startup. Invalid values (for example a malformed CIDR
 | `ALLOW_REGISTRATION` | Boolean | `false` | Enables self-registration. Self-registered accounts are created disabled and must be approved (enabled) by an administrator in user management before they can sign in | No |
 | `LOCAL_SOURCE_ALLOWED_PATHS` | String | - | Comma-separated directories that local folder sources may use. When set, every local folder source (including those created by admins) must be inside one of these directories; each entry must exist at startup. When unset, only admins can create local folder sources | No |
 | `TRUSTED_PROXIES` | String | - | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` header is trusted when determining the client IP (used for rate limiting). When unset, the direct peer address is used | No |
-| `CORS_ALLOWED_ORIGINS` | String | - (none) | Comma-separated origins allowed to make cross-origin requests. The bundled frontend is same-origin and needs no entry | No |
+| `CORS_ALLOWED_ORIGINS` | String | - (none) | Comma-separated origins allowed to make cross-origin requests, each as `scheme://host[:port]` (a trailing slash is ignored). The server refuses to start if an entry is not a valid http(s) origin. The bundled frontend is same-origin and needs no entry | No |
 | `METRICS_TOKEN` | String | - | Bearer token (min 16 chars) for Prometheus scrapes of `/metrics`. Without it, `/metrics` requires an admin session or admin API key | No |
 | `PUBLIC_URL` | String | - | Public base URL of the Readur instance (e.g. `https://readur.example.com`). Used to build the post-login OIDC redirect and shared-link URLs; request headers are not used for this. When unset, OIDC falls back to the origin of `OIDC_REDIRECT_URI` and shared links fall back to `http://<SERVER_ADDRESS>` | Recommended behind a proxy |
 | `OIDC_LINK_EXISTING_BY_EMAIL` | Boolean | `false` | Link an OIDC login to an existing local account with the same email address. Only applies when the identity provider reports `email_verified: true` | No |
@@ -215,7 +215,7 @@ Related API behavior:
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
 | `CORS_ENABLED` | Boolean | `true` | Enable CORS | No |
-| `CORS_ALLOWED_ORIGINS` | String | - (none) | Comma-separated origins allowed to make cross-origin requests. Not needed for the bundled frontend, which is served from the same origin | No |
+| `CORS_ALLOWED_ORIGINS` | String | - (none) | Comma-separated origins (`scheme://host[:port]`) allowed to make cross-origin requests; invalid entries stop startup. Not needed for the bundled frontend, which is served from the same origin | No |
 | `CORS_ALLOWED_METHODS` | String | `GET,POST,PUT,DELETE,OPTIONS` | Allowed HTTP methods | No |
 | `CORS_ALLOWED_HEADERS` | String | `*` | Allowed headers | No |
 | `CORS_MAX_AGE` | Integer | `3600` | CORS preflight cache (seconds) | No |

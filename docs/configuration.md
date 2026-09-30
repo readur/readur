@@ -44,7 +44,7 @@ All application settings can be configured via environment variables:
 | `ALLOW_REGISTRATION` | `false` | Enables self-registration. New self-registered accounts are disabled until an administrator approves them in user management |
 | `LOCAL_SOURCE_ALLOWED_PATHS` | _(none)_ | Comma-separated directories local folder sources may use. When set, all local folder sources (including admins') must be inside one of them. When unset, only admins can create local folder sources |
 | `TRUSTED_PROXIES` | _(none)_ | Comma-separated IPs/CIDRs of reverse proxies whose `X-Forwarded-For` header is trusted for the client IP (rate limiting) |
-| `CORS_ALLOWED_ORIGINS` | _(none)_ | Comma-separated origins allowed for cross-origin requests. The bundled frontend is same-origin and needs none |
+| `CORS_ALLOWED_ORIGINS` | _(none)_ | Comma-separated origins (`scheme://host[:port]`) allowed for cross-origin requests; invalid entries stop startup. The bundled frontend is same-origin and needs none |
 | `METRICS_TOKEN` | _(none)_ | Bearer token (min 16 chars) for Prometheus scrapes of `/metrics`. Without it, `/metrics` requires an admin session or API key |
 | `PUBLIC_URL` | _(none)_ | Public base URL (e.g. `https://readur.example.com`) used for the OIDC redirect and shared links. OIDC falls back to the origin of `OIDC_REDIRECT_URI` |
 | `OIDC_LINK_EXISTING_BY_EMAIL` | `false` | Link an OIDC login to an existing local account with the same email, only when the IdP reports `email_verified` |

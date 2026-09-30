@@ -56,11 +56,21 @@ pub fn user_content_headers(
         (header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")),
     ];
 
-    let is_pdf = mime_type.trim().to_ascii_lowercase().starts_with("application/pdf");
+    let is_pdf = is_pdf_media_type(mime_type);
     if !is_pdf {
         headers.push((header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(USER_CONTENT_CSP)));
     }
     headers
+}
+
+/// True when the essence of `mime_type` (ignoring parameters) is exactly
+/// `application/pdf`.
+fn is_pdf_media_type(mime_type: &str) -> bool {
+    mime_type
+        .split(';')
+        .next()
+        .map(|essence| essence.trim().eq_ignore_ascii_case("application/pdf"))
+        .unwrap_or(false)
 }
 
 /// A 200 response carrying a user-uploaded file with [`user_content_headers`].
@@ -81,6 +91,7 @@ pub fn user_content_response(
 
 /// Cross-origin requests are denied unless origins are listed in
 /// `CORS_ALLOWED_ORIGINS`. The bundled frontend is same-origin and needs none.
+/// Origins are normalized and validated when the configuration is loaded.
 pub fn cors_layer(config: &Config) -> CorsLayer {
     let origins: Vec<HeaderValue> = config
         .security
@@ -141,4 +152,25 @@ pub fn security_header_layers(config: &Config) -> Vec<SetResponseHeaderLayer<Hea
     }
 
     layers
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn has_csp(mime: &str) -> bool {
+        user_content_headers(mime, "file", true)
+            .iter()
+            .any(|(name, _)| name == header::CONTENT_SECURITY_POLICY)
+    }
+
+    #[test]
+    fn only_exact_pdf_media_type_skips_the_sandbox() {
+        assert!(!has_csp("application/pdf"));
+        assert!(!has_csp("Application/PDF; charset=binary"));
+        assert!(has_csp("application/pdfx"));
+        assert!(has_csp("application/pdf+xml"));
+        assert!(has_csp("text/html"));
+        assert!(has_csp(""));
+    }
 }

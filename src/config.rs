@@ -3,6 +3,10 @@ use std::env;
 
 use crate::models::S3SourceConfig;
 
+mod parsing;
+use parsing::{env_flag, env_list, normalize_cors_origin};
+pub use parsing::{validate_jwt_secret, MIN_JWT_SECRET_BYTES};
+
 /// S3 storage is enabled by S3_ENABLED=true or the documented STORAGE_BACKEND=s3.
 fn s3_storage_enabled(s3_enabled: Option<&str>, storage_backend: Option<&str>) -> bool {
     s3_enabled.map(|v| v.trim().eq_ignore_ascii_case("true")).unwrap_or(false)
@@ -61,80 +65,6 @@ pub struct Config {
 
     // Authentication / authorization hardening knobs
     pub security: SecurityConfig,
-}
-
-/// Values shipped in example configs, compose files and docs. A JWT secret
-/// equal to any of these is treated as unset.
-const KNOWN_WEAK_JWT_SECRETS: &[&str] = &[
-    "your-secret-key",
-    "your-secret-key-change-this",
-    "your-secret-key-change-this-in-production",
-    "your-super-secret-jwt-key-change-this-in-production",
-    "dev-secret-key-change-in-production",
-    "change-this-in-production",
-    "change-me",
-    "changeme",
-    "secret",
-    "test-secret",
-    "test-secret-key",
-    "test-jwt-secret-key",
-    "test-jwt-secret-key-not-for-production",
-    // Values committed in this repository for development, tests and CI.
-    "readur-local-development-only-jwt-secret-0123456789",
-    "readur-local-testing-only-jwt-secret-0123456789",
-    "readur-test-environment-only-jwt-secret-0123456789",
-    "readur-ci-testing-only-jwt-secret-0123456789",
-    "55d90d87f068819258508dec17e962cdf8d2d458c90589c4978e2dc5cb96e5e7",
-    "9b3f6c1e2a7d4058b6e1c3f2a9d8e7b4c5a6f1e0d2b3c4a5f6e7d8c9b0a1f2e3",
-];
-
-/// Minimum JWT secret length in bytes (HS256 key should be >= 256 bits).
-pub const MIN_JWT_SECRET_BYTES: usize = 32;
-
-/// Reject missing, short or well-known JWT signing secrets.
-pub fn validate_jwt_secret(secret: &str) -> Result<()> {
-    let trimmed = secret.trim();
-    if trimmed.is_empty() {
-        return Err(anyhow::anyhow!("JWT_SECRET must be set"));
-    }
-    let is_placeholder = trimmed.starts_with('<') && trimmed.ends_with('>');
-    if is_placeholder || KNOWN_WEAK_JWT_SECRETS.iter().any(|weak| trimmed.eq_ignore_ascii_case(weak)) {
-        return Err(anyhow::anyhow!(
-            "JWT_SECRET is set to a published example value; generate a random secret (e.g. `openssl rand -hex 32`)"
-        ));
-    }
-    if trimmed.len() < MIN_JWT_SECRET_BYTES {
-        return Err(anyhow::anyhow!(
-            "JWT_SECRET must be at least {} bytes; generate one with `openssl rand -hex 32`",
-            MIN_JWT_SECRET_BYTES
-        ));
-    }
-    Ok(())
-}
-
-fn env_flag(name: &str, default: bool) -> bool {
-    match env::var(name) {
-        Ok(val) => match val.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" | "yes" | "on" => true,
-            "false" | "0" | "no" | "off" => false,
-            _ => {
-                println!("⚠️  {}: Invalid value '{}', using default ({})", name, val, default);
-                default
-            }
-        },
-        Err(_) => default,
-    }
-}
-
-fn env_list(name: &str) -> Vec<String> {
-    env::var(name)
-        .map(|v| {
-            v.split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /// Authentication and authorization settings. `Default` is the most
@@ -196,7 +126,7 @@ impl SecurityConfig {
     pub fn from_env() -> Result<Self> {
         let defaults = Self::default();
 
-        let allow_registration = env_flag("ALLOW_REGISTRATION", defaults.allow_registration);
+        let allow_registration = env_flag("ALLOW_REGISTRATION", defaults.allow_registration)?;
         println!("🔑 ALLOW_REGISTRATION: {}", allow_registration);
 
         let jwt_ttl_hours = match env::var("JWT_TTL_HOURS") {
@@ -231,7 +161,10 @@ impl SecurityConfig {
         }
         println!("🌐 TRUSTED_PROXIES: {:?}", trusted_proxies);
 
-        let cors_allowed_origins = env_list("CORS_ALLOWED_ORIGINS");
+        let cors_allowed_origins = env_list("CORS_ALLOWED_ORIGINS")
+            .iter()
+            .map(|origin| normalize_cors_origin(origin))
+            .collect::<Result<Vec<_>>>()?;
         println!("🌐 CORS_ALLOWED_ORIGINS: {:?}", cors_allowed_origins);
 
         let metrics_token = env::var("METRICS_TOKEN").ok().filter(|t| !t.trim().is_empty());
@@ -246,7 +179,7 @@ impl SecurityConfig {
         );
 
         let oidc_link_existing_by_email =
-            env_flag("OIDC_LINK_EXISTING_BY_EMAIL", defaults.oidc_link_existing_by_email);
+            env_flag("OIDC_LINK_EXISTING_BY_EMAIL", defaults.oidc_link_existing_by_email)?;
 
         Ok(Self {
             allow_registration,
@@ -388,13 +321,14 @@ impl Config {
             },
             jwt_secret: {
                 let secret = env::var("JWT_SECRET").unwrap_or_default();
+                let insecure_dev_mode = env_flag("READUR_INSECURE_DEV_MODE", false)?;
                 match validate_jwt_secret(&secret) {
                     Ok(()) => {
                         println!("✅ JWT_SECRET: ***hidden*** (loaded from env, {} chars)", secret.len());
                         secret
                     }
                     // Escape hatch for throwaway local/CI environments only.
-                    Err(e) if env_flag("READUR_INSECURE_DEV_MODE", false) && !secret.is_empty() => {
+                    Err(e) if insecure_dev_mode && !secret.is_empty() => {
                         println!("🚨 JWT_SECRET: {} (allowed because READUR_INSECURE_DEV_MODE=true — never use in production)", e);
                         secret
                     }
@@ -1130,141 +1064,5 @@ impl Config {
 }
 
 #[cfg(test)]
-mod s3_env_tests {
-    use super::*;
-
-    #[test]
-    fn s3_enabled_by_s3_enabled_var() {
-        assert!(s3_storage_enabled(Some("true"), None));
-        assert!(s3_storage_enabled(Some("TRUE"), None));
-        assert!(!s3_storage_enabled(Some("false"), None));
-        assert!(!s3_storage_enabled(None, None));
-    }
-
-    #[test]
-    fn s3_enabled_by_storage_backend_alias() {
-        assert!(s3_storage_enabled(None, Some("s3")));
-        assert!(s3_storage_enabled(None, Some("S3")));
-        assert!(!s3_storage_enabled(None, Some("local")));
-    }
-
-    #[test]
-    fn force_path_style_parsing() {
-        assert_eq!(parse_force_path_style(Some("true"), None), Some(true));
-        assert_eq!(parse_force_path_style(Some("false"), None), Some(false));
-        // legacy documented alias S3_PATH_STYLE
-        assert_eq!(parse_force_path_style(None, Some("true")), Some(true));
-        // primary wins over legacy
-        assert_eq!(parse_force_path_style(Some("false"), Some("true")), Some(false));
-        // unset -> default for the endpoint type
-        assert_eq!(parse_force_path_style(None, None), None);
-    }
-}
-
-#[cfg(test)]
-mod jwt_secret_tests {
-    use super::*;
-    use std::path::{Path, PathBuf};
-
-    #[test]
-    fn rejects_empty_short_placeholder_and_known_values() {
-        assert!(validate_jwt_secret("").is_err());
-        assert!(validate_jwt_secret("short").is_err());
-        assert!(validate_jwt_secret("<output of: openssl rand -hex 32>").is_err());
-        for weak in KNOWN_WEAK_JWT_SECRETS {
-            assert!(validate_jwt_secret(weak).is_err(), "{weak} should be rejected");
-        }
-        assert!(validate_jwt_secret("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a6978").is_ok());
-    }
-
-    /// Extract the literal value assigned to a `JWT_SECRET`-like key on a
-    /// line, if any. Returns `None` for lines without an assignment and for
-    /// values computed at runtime (`$VAR`, `$(cmd)`, `${VAR}`, templates).
-    /// For `${VAR:-default}` the default is returned.
-    fn literal_jwt_secret(line: &str) -> Option<String> {
-        let idx = line.find("JWT_SECRET")?;
-        let rest = line[idx + "JWT_SECRET".len()..].trim_start();
-        let rest = rest.strip_prefix('=').or_else(|| rest.strip_prefix(':'))?;
-        let mut value = rest.trim();
-        if let Some(pos) = value.find(" #") {
-            value = value[..pos].trim();
-        }
-        let value = value.trim_matches(|c| c == '"' || c == '\'').trim();
-        if value.is_empty() {
-            return None;
-        }
-        if let Some(inner) = value.strip_prefix("${").and_then(|v| v.strip_suffix('}')) {
-            let (_, default) = inner.split_once(":-")?;
-            return Some(default.trim_matches(|c| c == '"' || c == '\'').to_string());
-        }
-        if value.starts_with('$') || value.starts_with("{{") {
-            return None;
-        }
-        Some(value.to_string())
-    }
-
-    fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
-        for entry in walkdir::WalkDir::new(dir)
-            .into_iter()
-            .filter_entry(|e| e.file_name() != "node_modules")
-            .filter_map(|e| e.ok())
-        {
-            if entry.file_type().is_file() {
-                out.push(entry.into_path());
-            }
-        }
-    }
-
-    #[test]
-    fn literal_extraction() {
-        assert_eq!(literal_jwt_secret("JWT_SECRET=abc"), Some("abc".into()));
-        assert_eq!(literal_jwt_secret("  JWT_SECRET: \"abc\"  # note"), Some("abc".into()));
-        assert_eq!(literal_jwt_secret("JWT_SECRET: ${JWT_SECRET:-dflt}"), Some("dflt".into()));
-        assert_eq!(literal_jwt_secret("JWT_SECRET: ${JWT_SECRET:?required}"), None);
-        assert_eq!(literal_jwt_secret("JWT_SECRET: ${{ env.CI_JWT_SECRET }}"), None);
-        assert_eq!(literal_jwt_secret("JWT_SECRET=$(openssl rand -hex 32)"), None);
-        assert_eq!(literal_jwt_secret("JWT_SECRET: {{ .Values.x | b64enc }}"), None);
-        assert_eq!(literal_jwt_secret("`JWT_SECRET` is required"), None);
-        assert_eq!(literal_jwt_secret("JWT_SECRET="), None);
-    }
-
-    /// Every JWT secret value committed to the repository (compose files,
-    /// env files, docs, CI workflows, Helm chart) must be refused at startup.
-    #[test]
-    fn committed_jwt_secrets_are_rejected() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let mut files = Vec::new();
-        for entry in std::fs::read_dir(root).expect("read repository root").flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let is_compose = name.starts_with("docker-compose")
-                && (name.ends_with(".yml") || name.ends_with(".yaml"));
-            let wanted = is_compose || name.starts_with(".env") || name.ends_with(".md");
-            if wanted && entry.path().is_file() {
-                files.push(entry.path());
-            }
-        }
-        for dir in ["docs", ".github", "charts"] {
-            collect_files(&root.join(dir), &mut files);
-        }
-
-        let mut checked = 0;
-        let mut accepted = Vec::new();
-        for file in &files {
-            let Ok(content) = std::fs::read_to_string(file) else { continue };
-            for (n, line) in content.lines().enumerate() {
-                if let Some(value) = literal_jwt_secret(line) {
-                    checked += 1;
-                    if validate_jwt_secret(&value).is_ok() {
-                        accepted.push(format!("{}:{}: {}", file.display(), n + 1, value));
-                    }
-                }
-            }
-        }
-        assert!(checked > 0, "expected to find JWT_SECRET examples in the repository");
-        assert!(
-            accepted.is_empty(),
-            "committed JWT_SECRET values must be listed in KNOWN_WEAK_JWT_SECRETS:\n{}",
-            accepted.join("\n")
-        );
-    }
-}
+#[path = "config_tests.rs"]
+mod tests;
