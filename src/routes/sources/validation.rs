@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::Json,
+    response::{IntoResponse, Json, Response},
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 
 use crate::{
     auth::AuthUser,
-    models::{merge_stored_secrets, SourceType, User},
+    models::{merge_stored_secrets, SecretReuseRefused, SourceType, User},
     models::source::WebDAVTestConnection,
     utils::outbound::categorize_connection_error,
     AppState,
@@ -74,7 +74,7 @@ pub async fn test_connection(
     request_body = TestConnectionRequest,
     responses(
         (status = 200, description = "Connection test result", body = serde_json::Value),
-        (status = 400, description = "Bad request - invalid configuration"),
+        (status = 400, description = "Bad request - invalid configuration, or a stored credential would be reused for a different server or account"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Configuration not permitted"),
         (status = 500, description = "Internal server error")
@@ -84,7 +84,7 @@ pub async fn test_connection_with_config(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Json(request): Json<TestConnectionRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Response, StatusCode> {
     let mut config = request.config;
     if let Some(source_id) = request.source_id {
         let source = state
@@ -96,9 +96,18 @@ pub async fn test_connection_with_config(
         if source.source_type != request.source_type {
             return Err(StatusCode::BAD_REQUEST);
         }
-        config = merge_stored_secrets(source.source_type, &source.config, config);
+        config = match merge_stored_secrets(source.source_type, &source.config, config) {
+            Ok(config) => config,
+            Err(refused) => return Ok(secret_reuse_refused(refused)),
+        };
     }
-    run_connection_test(request.source_type, config, &auth_user.user, &state).await
+    run_connection_test(request.source_type, config, &auth_user.user, &state)
+        .await
+        .map(IntoResponse::into_response)
+}
+
+pub(super) fn secret_reuse_refused(refused: SecretReuseRefused) -> Response {
+    (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": refused.to_string() }))).into_response()
 }
 
 fn test_result(success: bool, message: impl Into<String>) -> Json<serde_json::Value> {

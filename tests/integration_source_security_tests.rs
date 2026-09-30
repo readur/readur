@@ -116,20 +116,57 @@ async fn source_credentials_are_redacted_and_preserved() {
 
     // Update without a password (as the UI sends it back) keeps the stored one.
     let mut config = created["config"].clone();
-    config["username"] = json!("alice2");
+    config["watch_folders"] = json!(["/Documents", "/Scans"]);
     config["password"] = json!("");
     let (status, _, body) = send(&ctx, "PUT", &format!("/api/sources/{}", id), &user_token, Some(json!({"config": config}))).await;
     assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
     assert_eq!(json_body(&body)["config"]["has_password"], json!(true));
 
-    let row: (Value,) = sqlx::query_as("SELECT config FROM sources WHERE id = $1")
-        .bind(uuid::Uuid::parse_str(&id).unwrap())
-        .fetch_one(&ctx.state().db.pool)
-        .await
-        .unwrap();
-    assert_eq!(row.0["password"], json!("stored-secret"));
-    assert_eq!(row.0["username"], json!("alice2"));
-    assert!(row.0.get("has_password").is_none());
+    let stored_config = || async {
+        let row: (Value,) = sqlx::query_as("SELECT config FROM sources WHERE id = $1")
+            .bind(uuid::Uuid::parse_str(&id).unwrap())
+            .fetch_one(&ctx.state().db.pool)
+            .await
+            .unwrap();
+        row.0
+    };
+    let row = stored_config().await;
+    assert_eq!(row["password"], json!("stored-secret"));
+    assert_eq!(row["watch_folders"], json!(["/Documents", "/Scans"]));
+    assert!(row.get("has_password").is_none());
+
+    // Changing the account or server without re-entering the password is refused,
+    // both for updates and for connection tests against the stored source.
+    for (field, value) in [("username", json!("alice2")), ("server_url", json!("https://192.168.1.21/remote.php/dav"))] {
+        let mut changed = config.clone();
+        changed[field] = value;
+        let (status, _, body) =
+            send(&ctx, "PUT", &format!("/api/sources/{}", id), &user_token, Some(json!({"config": changed.clone()}))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "update with changed {}", field);
+        assert_eq!(json_body(&body)["error"], json!("Re-enter the password when changing the server or account"));
+
+        let (status, _, body) = send(
+            &ctx,
+            "POST",
+            "/api/sources/test/connection",
+            &user_token,
+            Some(json!({"source_type": "webdav", "source_id": id, "config": changed})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "test connection with changed {}", field);
+        assert_eq!(json_body(&body)["error"], json!("Re-enter the password when changing the server or account"));
+    }
+    assert_eq!(stored_config().await["username"], json!("alice"));
+
+    // Re-entering the password allows the change.
+    let mut changed = config.clone();
+    changed["username"] = json!("alice2");
+    changed["password"] = json!("new-secret");
+    let (status, _, body) = send(&ctx, "PUT", &format!("/api/sources/{}", id), &user_token, Some(json!({"config": changed}))).await;
+    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    let row = stored_config().await;
+    assert_eq!(row["username"], json!("alice2"));
+    assert_eq!(row["password"], json!("new-secret"));
 
     let (status, _, body) = send(&ctx, "GET", &format!("/api/sources/{}", id), &user_token, None).await;
     assert_eq!(status, StatusCode::OK);
@@ -138,6 +175,7 @@ async fn source_credentials_are_redacted_and_preserved() {
     let (status, _, body) = send(&ctx, "GET", "/api/sources", &user_token, None).await;
     assert_eq!(status, StatusCode::OK);
     assert!(!String::from_utf8_lossy(&body).contains("stored-secret"));
+    assert!(!String::from_utf8_lossy(&body).contains("new-secret"));
 
     let _ = ctx.cleanup_and_close().await;
 }
@@ -224,6 +262,18 @@ async fn settings_never_return_the_webdav_password() {
     let (status, _, body) = send(&ctx, "PUT", "/api/settings", &user_token, Some(json!({"webdav_password": ""}))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json_body(&body)["has_webdav_password"], json!(true));
+
+    // ...but not when the server changes at the same time.
+    let (status, _, body) = send(
+        &ctx,
+        "PUT",
+        "/api/settings",
+        &user_token,
+        Some(json!({"webdav_password": "", "webdav_server_url": "https://192.168.1.30/remote.php/dav"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json_body(&body)["error"], json!("Re-enter the password when changing the server or account"));
 
     let (status, _, body) = send(&ctx, "GET", "/api/settings", &user_token, None).await;
     assert_eq!(status, StatusCode::OK);

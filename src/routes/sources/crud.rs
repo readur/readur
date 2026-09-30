@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::Json,
+    response::{IntoResponse, Json, Response},
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -215,7 +215,7 @@ pub async fn get_source(
     request_body = UpdateSource,
     responses(
         (status = 200, description = "Source updated successfully", body = SourceResponse),
-        (status = 400, description = "Bad request - invalid update data"),
+        (status = 400, description = "Bad request - invalid update data, or a stored credential would be reused for a different server or account"),
         (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
         (status = 500, description = "Internal server error")
@@ -226,7 +226,7 @@ pub async fn update_source(
     Path(source_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
     Json(mut update_data): Json<UpdateSource>,
-) -> Result<Json<SourceResponse>, StatusCode> {
+) -> Result<Response, StatusCode> {
     info!("Updating source {}", source_id);
 
     // Check if source exists
@@ -239,7 +239,10 @@ pub async fn update_source(
 
     // Validate config if provided
     if let Some(config) = update_data.config.take() {
-        let config = merge_stored_secrets(existing.source_type, &existing.config, config);
+        let config = match merge_stored_secrets(existing.source_type, &existing.config, config) {
+            Ok(config) => config,
+            Err(refused) => return Ok(super::validation::secret_reuse_refused(refused)),
+        };
         if let Err(validation_error) = validate_config_for_type(&existing.source_type, &config) {
             error!("Config validation failed for source {}: {}", source_id, validation_error);
             return Err(StatusCode::BAD_REQUEST);
@@ -277,7 +280,7 @@ pub async fn update_source(
     response.total_documents_ocr = total_documents_ocr;
 
     info!("Successfully updated source {}: {}", source_id, response.name);
-    Ok(Json(response))
+    Ok(Json(response).into_response())
 }
 
 /// Delete a source

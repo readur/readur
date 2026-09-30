@@ -605,32 +605,93 @@ pub fn redact_source_config(source_type: SourceType, mut config: serde_json::Val
     config
 }
 
+/// A stored credential may only be reused for the server and account it was
+/// entered for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SecretReuseRefused;
+
+impl SecretReuseRefused {
+    pub const MESSAGE: &'static str = "Re-enter the password when changing the server or account";
+}
+
+impl std::fmt::Display for SecretReuseRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(Self::MESSAGE)
+    }
+}
+
+impl std::error::Error for SecretReuseRefused {}
+
+/// Normalized form of a server URL for comparing configurations: protocol
+/// defaulted to https, surrounding whitespace and trailing slashes removed,
+/// scheme and host lower-cased.
+pub fn normalize_endpoint_for_comparison(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let with_scheme = if trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{}", trimmed)
+    };
+    match url::Url::parse(&with_scheme) {
+        Ok(url) => url.as_str().trim_end_matches('/').to_string(),
+        Err(_) => with_scheme.trim_end_matches('/').to_string(),
+    }
+}
+
+/// Fields that identify where a stored secret is used. A stored secret is
+/// only carried over when all of them are unchanged.
+fn secret_target(source_type: SourceType, config: &serde_json::Value) -> Vec<String> {
+    let text = |field: &str| {
+        config
+            .get(field)
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default()
+    };
+    let endpoint = |field: &str| normalize_endpoint_for_comparison(&text(field));
+    match source_type {
+        SourceType::WebDAV => vec![endpoint("server_url"), text("username")],
+        SourceType::S3 => vec![endpoint("endpoint_url"), text("access_key_id"), text("bucket_name")],
+        SourceType::LocalFolder => Vec::new(),
+    }
+}
+
 /// Prepare an incoming configuration for storage: carry over stored
 /// credentials the client omitted or sent empty, and drop the response-only
 /// flags. Clients never receive stored secrets, so an omitted secret means
-/// "unchanged".
+/// "unchanged" — which is only accepted while the server and account the
+/// secret belongs to are unchanged.
 pub fn merge_stored_secrets(
     source_type: SourceType,
     stored: &serde_json::Value,
     mut incoming: serde_json::Value,
-) -> serde_json::Value {
+) -> Result<serde_json::Value, SecretReuseRefused> {
+    let same_target = secret_target(source_type, stored) == secret_target(source_type, &incoming);
     if let Some(obj) = incoming.as_object_mut() {
         for (field, flag) in secret_config_fields(source_type) {
             obj.remove(*flag);
             let provided = obj.get(*field).and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty());
-            if !provided {
-                match stored.get(*field) {
-                    Some(v) => {
-                        obj.insert((*field).to_string(), v.clone());
-                    }
-                    None => {
-                        obj.remove(*field);
-                    }
+            if provided {
+                continue;
+            }
+            let stored_secret = stored
+                .get(*field)
+                .filter(|v| v.as_str().map_or(!v.is_null(), |s| !s.is_empty()));
+            match stored_secret {
+                Some(v) if same_target => {
+                    obj.insert((*field).to_string(), v.clone());
+                }
+                Some(_) => return Err(SecretReuseRefused),
+                None => {
+                    obj.remove(*field);
                 }
             }
         }
     }
-    incoming
+    Ok(incoming)
 }
 
 /// Copy of `config` with every known secret field masked, for Debug output.
@@ -747,16 +808,90 @@ mod secret_tests {
 
     #[test]
     fn merge_keeps_stored_secret_when_omitted_or_empty() {
-        let stored = json!({"password": "old"});
-        let omitted = merge_stored_secrets(SourceType::WebDAV, &stored, json!({"username": "u", "has_password": true}));
+        let stored = json!({"server_url": "https://dav.example", "username": "u", "password": "old"});
+        let omitted = merge_stored_secrets(
+            SourceType::WebDAV,
+            &stored,
+            json!({"server_url": "https://dav.example", "username": "u", "has_password": true}),
+        )
+        .unwrap();
         assert_eq!(omitted["password"], json!("old"));
         assert!(omitted.get("has_password").is_none());
 
-        let empty = merge_stored_secrets(SourceType::WebDAV, &stored, json!({"password": ""}));
+        let empty = merge_stored_secrets(
+            SourceType::WebDAV,
+            &stored,
+            json!({"server_url": "https://dav.example", "username": "u", "password": ""}),
+        )
+        .unwrap();
         assert_eq!(empty["password"], json!("old"));
 
-        let replaced = merge_stored_secrets(SourceType::WebDAV, &stored, json!({"password": "new"}));
+        let replaced = merge_stored_secrets(SourceType::WebDAV, &stored, json!({"password": "new"})).unwrap();
         assert_eq!(replaced["password"], json!("new"));
+    }
+
+    #[test]
+    fn merge_tolerates_equivalent_server_urls() {
+        let stored = json!({"server_url": "https://dav.example/remote.php/dav/", "username": "u", "password": "old"});
+        let merged = merge_stored_secrets(
+            SourceType::WebDAV,
+            &stored,
+            json!({"server_url": " HTTPS://Dav.Example/remote.php/dav", "username": "u"}),
+        )
+        .unwrap();
+        assert_eq!(merged["password"], json!("old"));
+
+        let scheme_less = json!({"server_url": "dav.example", "username": "u", "password": "old"});
+        assert!(merge_stored_secrets(
+            SourceType::WebDAV,
+            &scheme_less,
+            json!({"server_url": "https://dav.example/", "username": "u"}),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn merge_refuses_stored_secret_for_a_different_target() {
+        let stored = json!({"server_url": "https://dav.example", "username": "u", "password": "old"});
+        for incoming in [
+            json!({"server_url": "https://other.example", "username": "u"}),
+            json!({"server_url": "https://dav.example", "username": "someone-else"}),
+            json!({"server_url": "http://dav.example", "username": "u", "password": ""}),
+        ] {
+            assert_eq!(merge_stored_secrets(SourceType::WebDAV, &stored, incoming), Err(SecretReuseRefused));
+        }
+        // Supplying the secret again is always accepted.
+        let changed = merge_stored_secrets(
+            SourceType::WebDAV,
+            &stored,
+            json!({"server_url": "https://other.example", "username": "u", "password": "new"}),
+        )
+        .unwrap();
+        assert_eq!(changed["password"], json!("new"));
+
+        let s3 = json!({"endpoint_url": "http://minio:9000", "access_key_id": "AK", "bucket_name": "b", "secret_access_key": "sk"});
+        let same = json!({"endpoint_url": "http://minio:9000/", "access_key_id": "AK", "bucket_name": "b"});
+        assert_eq!(merge_stored_secrets(SourceType::S3, &s3, same).unwrap()["secret_access_key"], json!("sk"));
+        for incoming in [
+            json!({"endpoint_url": "http://other:9000", "access_key_id": "AK", "bucket_name": "b"}),
+            json!({"endpoint_url": "http://minio:9000", "access_key_id": "AK2", "bucket_name": "b"}),
+            json!({"endpoint_url": "http://minio:9000", "access_key_id": "AK", "bucket_name": "b2"}),
+            json!({"access_key_id": "AK", "bucket_name": "b"}),
+        ] {
+            assert_eq!(merge_stored_secrets(SourceType::S3, &s3, incoming), Err(SecretReuseRefused));
+        }
+    }
+
+    #[test]
+    fn merge_without_stored_secret_is_unaffected_by_target_changes() {
+        let stored = json!({"server_url": "https://dav.example", "username": "u"});
+        let merged = merge_stored_secrets(
+            SourceType::WebDAV,
+            &stored,
+            json!({"server_url": "https://other.example", "username": "v"}),
+        )
+        .unwrap();
+        assert!(merged.get("password").is_none());
     }
 
     #[test]
