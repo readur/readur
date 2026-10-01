@@ -241,7 +241,7 @@ mod tests {
     }
 
     #[test]
-    fn test_jwt_secret_is_optional_but_validated_when_set() {
+    fn test_jwt_secret_is_optional_and_weak_values_are_ignored() {
         run_with_env_isolation(|| {
             env::set_var("DATABASE_URL", "postgresql://test:test@localhost/test");
 
@@ -251,11 +251,24 @@ mod tests {
             env::set_var("JWT_SECRET", "  ");
             assert!(Config::from_env().unwrap().jwt_secret.is_empty());
 
-            // An explicit value must still be strong.
-            for weak in ["secret", "change-me", "too-short"] {
+            // A malformed dev-mode flag does not matter without a secret.
+            env::set_var("READUR_INSECURE_DEV_MODE", "maybe");
+            assert!(Config::from_env().unwrap().jwt_secret.is_empty());
+            env::remove_var("READUR_INSECURE_DEV_MODE");
+
+            // A weak value (including the one shipped in the v2.9.x compose
+            // file) is ignored, so the stored signing key is used instead.
+            for weak in ["secret", "change-me", "too-short", "your-secret-key-change-this-in-production"] {
                 env::set_var("JWT_SECRET", weak);
-                assert!(Config::from_env().is_err(), "{weak} should be rejected");
+                let config = Config::from_env().unwrap_or_else(|e| panic!("{weak} should not block startup: {e}"));
+                assert!(config.jwt_secret.is_empty(), "{weak} should be ignored");
             }
+
+            // Dev mode keeps a weak value for throwaway environments.
+            env::set_var("READUR_INSECURE_DEV_MODE", "true");
+            env::set_var("JWT_SECRET", "too-short");
+            assert_eq!(Config::from_env().unwrap().jwt_secret, "too-short");
+            env::remove_var("READUR_INSECURE_DEV_MODE");
 
             env::set_var("JWT_SECRET", "config-test-jwt-secret-0123456789abcdef");
             assert_eq!(Config::from_env().unwrap().jwt_secret, "config-test-jwt-secret-0123456789abcdef");
