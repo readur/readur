@@ -50,20 +50,20 @@ mod jwt_secret_tests {
     #[test]
     fn weak_configured_secret_falls_back_to_stored_key() {
         // Shipped by the v2.9.x docker-compose.yml; upgrades must keep starting.
-        assert_eq!(resolve_jwt_secret("your-secret-key-change-this-in-production", false), "");
+        assert_eq!(resolve_jwt_setting("your-secret-key-change-this-in-production", false), "");
         for weak in KNOWN_WEAK_JWT_SECRETS {
-            assert_eq!(resolve_jwt_secret(weak, false), "", "{weak} should be ignored");
+            assert_eq!(resolve_jwt_setting(weak, false), "", "{weak} should be ignored");
         }
-        assert_eq!(resolve_jwt_secret("my-own-secret-123", false), "");
-        assert_eq!(resolve_jwt_secret("<output of: openssl rand -hex 32>", false), "");
-        assert_eq!(resolve_jwt_secret("   ", false), "");
+        assert_eq!(resolve_jwt_setting("my-own-secret-123", false), "");
+        assert_eq!(resolve_jwt_setting("<output of: openssl rand -hex 32>", false), "");
+        assert_eq!(resolve_jwt_setting("   ", false), "");
     }
 
     #[test]
     fn strong_secret_is_used_and_dev_mode_keeps_weak_one() {
         let strong = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a6978";
-        assert_eq!(resolve_jwt_secret(strong, false), strong);
-        assert_eq!(resolve_jwt_secret("short", true), "short");
+        assert_eq!(resolve_jwt_setting(strong, false), strong);
+        assert_eq!(resolve_jwt_setting("short", true), "short");
     }
 
     /// Extract the literal value assigned to a `JWT_SECRET`-like key on a
