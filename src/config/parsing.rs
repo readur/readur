@@ -58,24 +58,36 @@ pub fn validate_jwt_secret(secret: &str) -> Result<()> {
 /// with a key stored in the database (see `crate::jwt_signing_key`).
 pub(super) fn read_jwt_setting() -> Result<String> {
     let value = env::var("JWT_SECRET").unwrap_or_default();
+    // The dev-mode flag only matters for a configured secret, so a malformed
+    // flag cannot block startup when JWT_SECRET is unset.
+    let insecure_dev_mode =
+        !value.trim().is_empty() && env_flag("READUR_INSECURE_DEV_MODE", false)?;
+    Ok(resolve_jwt_setting(&value, insecure_dev_mode))
+}
+
+/// The JWT signing secret to use for a configured `JWT_SECRET` value. A
+/// weak value (published example, placeholder or too short) is ignored rather
+/// than refused, so installations upgraded from compose files that shipped an
+/// example secret keep starting; they switch to the stored signing key.
+pub(super) fn resolve_jwt_setting(value: &str, insecure_dev_mode: bool) -> String {
     if value.trim().is_empty() {
         println!("🔐 JWT_SECRET: not set (a signing key stored in the database is used)");
-        return Ok(String::new());
+        return String::new();
     }
-    let insecure_dev_mode = env_flag("READUR_INSECURE_DEV_MODE", false)?;
-    match validate_jwt_secret(&value) {
+    match validate_jwt_secret(value) {
         Ok(()) => {
             println!("✅ JWT_SECRET: set (loaded from env)");
-            Ok(value)
+            value.to_string()
         }
         // Escape hatch for throwaway local/CI environments only.
         Err(e) if insecure_dev_mode => {
             println!("🚨 JWT_SECRET: {} (allowed because READUR_INSECURE_DEV_MODE=true — never use in production)", e);
-            Ok(value)
+            value.to_string()
         }
         Err(e) => {
-            println!("❌ JWT_SECRET: {}", e);
-            Err(e)
+            println!("⚠️  JWT_SECRET: ignored: {}", e);
+            println!("🔐 JWT_SECRET: a signing key stored in the database is used instead; remove JWT_SECRET from your configuration to silence this warning");
+            String::new()
         }
     }
 }

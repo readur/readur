@@ -166,12 +166,12 @@ JWT_SECRET=<output of: openssl rand -hex 32>  # Optional, min 32 bytes when set
 JWT_TTL_HOURS=12                              # Optional
 ```
 
-The server refuses to start if `JWT_SECRET` is unset, shorter than 32 bytes, or a published example value. Generate a secret with:
+When `JWT_SECRET` is unset, a signing key is generated on first start and stored in the database. A value shorter than 32 bytes or a published example value (such as the one in older `docker-compose.yml` templates) is ignored with a startup warning, and the stored key is used instead. To manage the secret yourself, generate one with:
 ```bash
 openssl rand -hex 32
 ```
 
-For throwaway local development only, `READUR_INSECURE_DEV_MODE=true` allows startup with a weak secret. Do not set it in production.
+For throwaway local development only, `READUR_INSECURE_DEV_MODE=true` makes the server use a weak `JWT_SECRET` instead of ignoring it. Do not set it in production.
 
 Tokens are stored in the browser's `localStorage` and sent as `Authorization: Bearer <token>` headers on API requests.
 
